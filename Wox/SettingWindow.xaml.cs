@@ -1,17 +1,29 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Security.Permissions;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Forms;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using Microsoft.Win32;
 using Wox.Helper;
 using Wox.Infrastructure;
 using Wox.Infrastructure.UserSettings;
+using MessageBox = System.Windows.MessageBox;
 
 namespace Wox
 {
     public partial class SettingWidow : Window
     {
         private MainWindow mainWindow;
+
+        public SettingWidow()
+        {
+            InitializeComponent();
+        }
 
         public SettingWidow(MainWindow mainWindow)
         {
@@ -41,6 +53,7 @@ namespace Wox
             themeComboBox.SelectedItem = CommonStorage.Instance.UserSetting.Theme;
             cbReplaceWinR.IsChecked = CommonStorage.Instance.UserSetting.ReplaceWinR;
             webSearchView.ItemsSource = CommonStorage.Instance.UserSetting.WebSearches;
+            cbStartWithWindows.IsChecked = CommonStorage.Instance.UserSetting.StartWoxOnSystemStartup;
         }
 
         public void ReloadWebSearchView()
@@ -98,5 +111,53 @@ namespace Wox
                 MessageBox.Show("Please select a web search");
             }
         }
+
+        private void CbStartWithWindows_OnChecked(object sender, RoutedEventArgs e)
+        {
+            if (!CommonStorage.Instance.UserSetting.StartWoxOnSystemStartup)
+            {
+                CommonStorage.Instance.UserSetting.StartWoxOnSystemStartup = true;
+                OnStartWithWindowsChecked();
+                CommonStorage.Instance.Save();
+            }
+        }
+
+        private void CbStartWithWindows_OnUnchecked(object sender, RoutedEventArgs e)
+        {
+            CommonStorage.Instance.UserSetting.StartWoxOnSystemStartup = false;
+            OnStartWithWindowUnChecked();
+            CommonStorage.Instance.Save();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void OnStartWithWindowUnChecked()
+        {
+            UAC.ExecuteAdminMethod(() => SetStartup(false));
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void OnStartWithWindowsChecked()
+        {
+            UAC.ExecuteAdminMethod(() => SetStartup(true));
+        }
+
+        private void SetStartup(bool startup)
+        {
+            RegistryKey rk = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+
+            if (rk != null)
+            {
+                if (startup)
+                {
+                    rk.SetValue("Wox", Path.Combine(Directory.GetCurrentDirectory(), "Wox.exe startHide"));
+                }
+                else
+                {
+                    rk.DeleteValue("Wox", false);
+                }
+            }
+        }
+
+
     }
 }
