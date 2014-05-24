@@ -24,6 +24,11 @@ namespace Wox.Plugin.SystemPlugins.FileSystem {
 
 		#region Misc
 
+	    public override bool IsAvailable(Query query)
+	    {
+	        return true;
+	    }
+
 	    public override void Init(PluginInitContext context) {
 			this.context = context;
 

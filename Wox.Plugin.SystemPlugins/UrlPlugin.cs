@@ -6,29 +6,30 @@ namespace Wox.Plugin.SystemPlugins
 {
     public class UrlPlugin : BaseSystemPlugin
     {
+        public override bool IsAvailable(Query query)
+        {
+            Uri uri;
+            return Uri.TryCreate(query.RawQuery, UriKind.Absolute, out uri);
+        }
+
         public override List<Result> Query(Query query)
         {
             var raw = query.RawQuery;
-            Uri uri;
-            if (Uri.TryCreate(raw, UriKind.Absolute, out uri))
+            return new List<Result>
             {
-                return new List<Result>
+                new Result
                 {
-                    new Result
+                    Title = raw,
+                    SubTitle = "Open the typed URL...",
+                    IcoPath = "Images/url1.png",
+                    Score = 8,
+                    Action = _ =>
                     {
-                        Title = raw,
-                        SubTitle = "Open the typed URL...",
-                        IcoPath = "Images/url1.png",
-                        Score = 8,
-                        Action = _ =>
-                        {
-                            Process.Start(raw);
-                            return true;
-                        }
+                        Process.Start(raw);
+                        return true;
                     }
-                };
-            }
-            return new List<Result>(0);
+                }
+            };
         }
 
         public override string Name { get { return "URL handler"; } }

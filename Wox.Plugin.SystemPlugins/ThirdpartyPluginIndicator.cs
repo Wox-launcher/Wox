@@ -13,10 +13,14 @@ namespace Wox.Plugin.SystemPlugins
         private List<PluginPair> allPlugins = new List<PluginPair>();
         private Action<string> changeQuery;
 
+        public override bool IsAvailable(Query query)
+        {
+            return true;
+        }
+
         public override List<Result> Query(Query query)
         {
             List<Result> results = new List<Result>();
-            if (string.IsNullOrEmpty(query.RawQuery)) return results;
 
             foreach (PluginMetadata metadata in allPlugins.Select(o => o.Metadata))
             {

@@ -15,10 +15,14 @@ namespace Wox.Plugin.SystemPlugins
     {
         private PluginInitContext context;
 
+        public override bool IsAvailable(Query query)
+        {
+            return !string.IsNullOrEmpty(query.ActionName);
+        }
+
         public override List<Result> Query(Query query)
         {
             List<Result> results = new List<Result>();
-            if (string.IsNullOrEmpty(query.ActionName)) return results;
 
             WebSearch webSearch =
                 UserSettingStorage.Instance.WebSearches.FirstOrDefault(o => o.ActionWord == query.ActionName && o.Enabled);

@@ -1,13 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
-using Newtonsoft.Json;
 using Wox.Infrastructure;
 
 namespace Wox.Plugin.SystemPlugins
@@ -17,10 +13,13 @@ namespace Wox.Plugin.SystemPlugins
         private PluginInitContext context;
         private List<Bookmark> bookmarks = new List<Bookmark>();
 
+        public override bool IsAvailable(Query query)
+        {
+            return !query.RawQuery.EndsWith(" ") || query.RawQuery.Length >= 1;
+        }
+
         public override List<Result> Query(Query query)
         {
-            if (string.IsNullOrEmpty(query.RawQuery) || query.RawQuery.EndsWith(" ") || query.RawQuery.Length <= 1) return new List<Result>();
-
             var fuzzyMather = FuzzyMatcher.Create(query.RawQuery);
             List<Bookmark> returnList = bookmarks.Where(o => MatchProgram(o, fuzzyMather)).ToList();
             returnList = returnList.OrderByDescending(o => o.Score).ToList();
@@ -38,25 +37,26 @@ namespace Wox.Plugin.SystemPlugins
                 }
             }).ToList();
         }
+
         private bool MatchProgram(Bookmark bookmark, FuzzyMatcher matcher)
         {
             if ((bookmark.Score = matcher.Evaluate(bookmark.Name).Score) > 0) return true;
             if ((bookmark.Score = matcher.Evaluate(bookmark.PinyinName).Score) > 0) return true;
-            if ((bookmark.Score = matcher.Evaluate(bookmark.Url).Score / 10) > 0) return true;
+            if ((bookmark.Score = matcher.Evaluate(bookmark.Url).Score/10) > 0) return true;
 
             return false;
         }
 
         public override void Init(PluginInitContext context)
         {
-			if (!Wox.Infrastructure.Storage.UserSettings.UserSettingStorage.Instance.EnableBookmarkPlugin) 
-			{
-				return;
-			}
+            if (!Wox.Infrastructure.Storage.UserSettings.UserSettingStorage.Instance.EnableBookmarkPlugin)
+            {
+                return;
+            }
 
             bookmarks.Clear();
             LoadChromeBookmarks();
-         
+
             bookmarks = bookmarks.Distinct().ToList();
             this.context = context;
         }
@@ -109,7 +109,8 @@ namespace Wox.Plugin.SystemPlugins
             foreach (var profile in paths)
             {
                 if (File.Exists(Path.Combine(profile, "Bookmarks")))
-                    ParseChromeBookmarks(Path.Combine(profile, "Bookmarks"), name + (Path.GetFileName(profile) == "Default" ? "" : (" (" + Path.GetFileName(profile) + ")")));
+                    ParseChromeBookmarks(Path.Combine(profile, "Bookmarks"),
+                        name + (Path.GetFileName(profile) == "Default" ? "" : (" (" + Path.GetFileName(profile) + ")")));
             }
         }
 
@@ -124,7 +125,7 @@ namespace Wox.Plugin.SystemPlugins
         private String DecodeUnicode(String dataStr)
         {
             Regex reg = new Regex(@"(?i)\\[uU]([0-9a-f]{4})");
-            return reg.Replace(dataStr, m => ((char)Convert.ToInt32(m.Groups[1].Value, 16)).ToString());
+            return reg.Replace(dataStr, m => ((char) Convert.ToInt32(m.Groups[1].Value, 16)).ToString());
         }
 
         public override string Name
@@ -146,22 +147,24 @@ namespace Wox.Plugin.SystemPlugins
     public class Bookmark : IEquatable<Bookmark>, IEqualityComparer<Bookmark>
     {
         private string m_Name;
-        public string Name { 
-            get{
-                return m_Name;
-            }
+
+        public string Name
+        {
+            get { return m_Name; }
             set
             {
                 m_Name = value;
                 PinyinName = m_Name.Unidecode();
             }
         }
+
         public string PinyinName { get; private set; }
         public string Url { get; set; }
         public string Source { get; set; }
         public int Score { get; set; }
 
         /* TODO: since Source maybe unimportant, we just need to compare Name and Url */
+
         public bool Equals(Bookmark other)
         {
             return Equals(this, other);

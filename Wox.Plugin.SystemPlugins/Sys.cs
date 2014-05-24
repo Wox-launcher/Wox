@@ -23,10 +23,13 @@ namespace Wox.Plugin.SystemPlugins
         [DllImport("user32")]
         public static extern void LockWorkStation();
 
+        public override bool IsAvailable(Query query)
+        {
+            return !query.RawQuery.EndsWith(" ") || query.RawQuery.Length >= 1;
+        }
+
         public override List<Result> Query(Query query)
         {
-            if (string.IsNullOrEmpty(query.RawQuery) || query.RawQuery.EndsWith(" ") || query.RawQuery.Length <= 1) return new List<Result>();
-
             List<Result> results = new List<Result>();
 
             foreach (Result availableResult in availableResults)

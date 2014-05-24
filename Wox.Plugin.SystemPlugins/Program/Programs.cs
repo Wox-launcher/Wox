@@ -49,10 +49,13 @@ namespace Wox.Plugin.SystemPlugins.Program
         };
         private PluginInitContext context;
 
+        public override bool IsAvailable(Query query)
+        {
+            return !query.RawQuery.EndsWith(" ") || query.RawQuery.Length >= 1;
+        }
+
         public override List<Result> Query(Query query)
         {
-            if (string.IsNullOrEmpty(query.RawQuery) || query.RawQuery.EndsWith(" ") || query.RawQuery.Length <= 1) return new List<Result>();
-
             var fuzzyMather = FuzzyMatcher.Create(query.RawQuery);
             List<Program> returnList = installedList.Where(o => MatchProgram(o, fuzzyMather)).ToList();
             returnList.ForEach(ScoreFilter);

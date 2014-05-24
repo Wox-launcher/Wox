@@ -11,6 +11,11 @@ namespace Wox.Plugin.SystemPlugins.CMD
     {
         private PluginInitContext context;
 
+        public override bool IsAvailable(Query query)
+        {
+            return query.RawQuery.StartsWith(">");
+        }
+
         public override List<Result> Query(Query query)
         {
             List<Result> results = new List<Result>();
@@ -33,7 +38,7 @@ namespace Wox.Plugin.SystemPlugins.CMD
                 results.AddRange(history);
             }
             
-            if (query.RawQuery.StartsWith(">") && query.RawQuery.Length > 1)
+            if (query.RawQuery.Length > 1)
             {
                 string cmd = query.RawQuery.Substring(1);
                 Result result = new Result
