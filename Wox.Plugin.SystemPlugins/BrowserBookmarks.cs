@@ -15,12 +15,12 @@ namespace Wox.Plugin.SystemPlugins
 
         public override bool IsAvailable(Query query)
         {
-            return !query.RawQuery.EndsWith(" ") || query.RawQuery.Length >= 1;
+            return !query.Raw.EndsWith(" ") || query.Raw.Length >= 1;
         }
 
         public override List<Result> Query(Query query)
         {
-            var fuzzyMather = FuzzyMatcher.Create(query.RawQuery);
+            var fuzzyMather = FuzzyMatcher.Create(query.Raw);
             List<Bookmark> returnList = bookmarks.Where(o => MatchProgram(o, fuzzyMather)).ToList();
             returnList = returnList.OrderByDescending(o => o.Score).ToList();
             return returnList.Select(c => new Result()

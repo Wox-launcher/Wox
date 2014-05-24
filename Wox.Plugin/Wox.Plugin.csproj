@@ -45,6 +45,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AllowedLanguage.cs" />
+    <Compile Include="Properties\Annotations.cs" />
+    <Compile Include="ArrayExtensions.cs" />
     <Compile Include="IPlugin.cs" />
     <Compile Include="ISettingProvider.cs" />
     <Compile Include="PluginPair.cs" />

@@ -25,7 +25,7 @@ namespace Wox.Plugin.SystemPlugins
 
         public override bool IsAvailable(Query query)
         {
-            return !query.RawQuery.EndsWith(" ") || query.RawQuery.Length >= 1;
+            return !query.Raw.EndsWith(" ") || query.Raw.Length >= 1;
         }
 
         public override List<Result> Query(Query query)
@@ -34,7 +34,7 @@ namespace Wox.Plugin.SystemPlugins
 
             foreach (Result availableResult in availableResults)
             {
-                if (availableResult.Title.ToLower().StartsWith(query.RawQuery.ToLower()))
+                if (availableResult.Title.ToLower().StartsWith(query.Raw.ToLower()))
                 {
                     results.Add(availableResult);
                 }

@@ -46,7 +46,7 @@ namespace Wox.Plugin.SystemPlugins.FileSystem {
 
 	    public override List<Result> Query(Query query) {
 			var results = new List<Result>();
-			var input = query.RawQuery.ToLower();
+			var input = query.Raw.ToLower();
 			var inputName = input.Split(new string[] { @"\" }, StringSplitOptions.None).First().ToLower();
 			var link = UserSettingStorage.Instance.FolderLinks.FirstOrDefault(x => x.Nickname.Equals(inputName, StringComparison.OrdinalIgnoreCase));
 			var currentPath = link == null ? input : link.Path + input.Remove(0, inputName.Length);

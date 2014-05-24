@@ -13,14 +13,14 @@ namespace Wox.Plugin.SystemPlugins.CMD
 
         public override bool IsAvailable(Query query)
         {
-            return query.RawQuery.StartsWith(">");
+            return query.Raw.StartsWith(">");
         }
 
         public override List<Result> Query(Query query)
         {
             List<Result> results = new List<Result>();
             List<Result> pushedResults = new List<Result>();
-            if (query.RawQuery == ">")
+            if (query.Raw == ">")
             {
                 IEnumerable<Result> history = CMDStorage.Instance.CMDHistory.OrderByDescending(o => o.Value)
                  .Select(m => new Result
@@ -38,9 +38,9 @@ namespace Wox.Plugin.SystemPlugins.CMD
                 results.AddRange(history);
             }
             
-            if (query.RawQuery.Length > 1)
+            if (query.Raw.Length > 1)
             {
-                string cmd = query.RawQuery.Substring(1);
+                string cmd = query.Raw.Substring(1);
                 Result result = new Result
                 {
                     Title = cmd,

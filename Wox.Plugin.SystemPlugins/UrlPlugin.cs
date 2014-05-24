@@ -9,12 +9,12 @@ namespace Wox.Plugin.SystemPlugins
         public override bool IsAvailable(Query query)
         {
             Uri uri;
-            return Uri.TryCreate(query.RawQuery, UriKind.Absolute, out uri);
+            return Uri.TryCreate(query.Raw, UriKind.Absolute, out uri);
         }
 
         public override List<Result> Query(Query query)
         {
-            var raw = query.RawQuery;
+            var raw = query.Raw;
             return new List<Result>
             {
                 new Result

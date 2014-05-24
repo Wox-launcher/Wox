@@ -462,7 +462,7 @@ namespace Wox {
 					waitShowResultList.AddRange(list);
 				}
 				Dispatcher.DelayInvoke("ShowResult", k => resultCtrl.Dispatcher.Invoke(new Action(() => {
-					List<Result> l = waitShowResultList.Where(o => o.OriginQuery != null && o.OriginQuery.RawQuery == lastQuery).ToList();
+					List<Result> l = waitShowResultList.Where(o => o.OriginQuery != null && o.OriginQuery.Raw == lastQuery).ToList();
 					waitShowResultList.Clear();
 					resultCtrl.AddResults(l);
 				})), TimeSpan.FromMilliseconds(isCMDMode ? 0 : 50));

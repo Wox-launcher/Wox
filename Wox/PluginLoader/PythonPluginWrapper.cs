@@ -57,7 +57,7 @@ namespace Wox.PluginLoader
 
         public bool IsAvailable(Query query)
         {
-            jsonResult = InvokeFunc("query", query.RawQuery);
+            jsonResult = InvokeFunc("query", query.Raw);
             return !string.IsNullOrEmpty(jsonResult);
         }
 

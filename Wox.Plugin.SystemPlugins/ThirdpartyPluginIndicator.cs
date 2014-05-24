@@ -24,7 +24,7 @@ namespace Wox.Plugin.SystemPlugins
 
             foreach (PluginMetadata metadata in allPlugins.Select(o => o.Metadata))
             {
-                if (metadata.ActionKeyword.StartsWith(query.RawQuery))
+                if (metadata.ActionKeyword.StartsWith(query.Raw))
                 {
                     PluginMetadata metadataCopy = metadata;
                     Result result = new Result
@@ -43,7 +43,7 @@ namespace Wox.Plugin.SystemPlugins
                 }
             }
 
-            results.AddRange(UserSettingStorage.Instance.WebSearches.Where(o => o.ActionWord.StartsWith(query.RawQuery) && o.Enabled).Select(n => new Result()
+            results.AddRange(UserSettingStorage.Instance.WebSearches.Where(o => o.ActionWord.StartsWith(query.Raw) && o.Enabled).Select(n => new Result()
             {
                 Title = n.ActionWord,
                 SubTitle = string.Format("Activate {0} web search", n.ActionWord),

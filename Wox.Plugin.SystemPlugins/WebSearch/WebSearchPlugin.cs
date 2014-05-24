@@ -17,7 +17,7 @@ namespace Wox.Plugin.SystemPlugins
 
         public override bool IsAvailable(Query query)
         {
-            return !string.IsNullOrEmpty(query.ActionName);
+            return !string.IsNullOrEmpty(query.Command);
         }
 
         public override List<Result> Query(Query query)
@@ -25,11 +25,11 @@ namespace Wox.Plugin.SystemPlugins
             List<Result> results = new List<Result>();
 
             WebSearch webSearch =
-                UserSettingStorage.Instance.WebSearches.FirstOrDefault(o => o.ActionWord == query.ActionName && o.Enabled);
+                UserSettingStorage.Instance.WebSearches.FirstOrDefault(o => o.ActionWord == query.Command && o.Enabled);
 
             if (webSearch != null)
             {
-                string keyword = query.ActionParameters.Count > 0 ? query.GetAllRemainingParameter() : "";
+                string keyword = query.Arguments.Length > 0 ? query.Modificator : "";
                 string title = keyword;
                 string subtitle = "Search " + webSearch.Title;
                 if (string.IsNullOrEmpty(keyword))

@@ -1,48 +1,93 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using JetBrains.Annotations;
 
 namespace Wox.Plugin
 {
-    public class Query
+    /// <summary>
+    /// Query structure:
+    ///   * Command
+    ///   * Modificator
+    ///   * Options
+    /// </summary>
+    /// <example>
+    /// npm install express
+    /// </example>
+    public sealed class Query
     {
-        public string RawQuery { get; set; }
-        public string ActionName { get; private set; }
-        public List<string> ActionParameters { get; private set; }
-
-        public Query(string rawQuery)
+        public Query([CanBeNull] string raw)
         {
-            RawQuery = rawQuery;
-            ActionParameters = new List<string>();
-            ParseQuery();
+            if (raw == null)
+                throw new ArgumentNullException("raw");
+            
+            Raw = raw.Trim();
+            Parse();
         }
 
-        private void ParseQuery()
+        /// <summary>
+        /// Raw query representation
+        /// </summary>
+        [NotNull]
+        public string Raw { get; private set; }
+
+        /// <summary>
+        /// Query arguments
+        /// </summary>
+        public string[] Arguments { get; private set; }
+
+        /// <summary>
+        /// Query tail (everything except first argument)
+        /// </summary>
+        [CanBeNull]
+        public string Tail { get; private set; }
+
+        /// <summary>
+        /// Query keyword (first argument)
+        /// </summary>
+        [NotNull]
+        public string Command { get; private set; }
+
+        /// <summary>
+        /// Query decorator (second argument)
+        /// </summary>
+        [CanBeNull]
+        public string Modificator { get; private set; }
+
+        /// <summary>
+        /// Query options (everything except first and second arguments)
+        /// </summary>
+        [CanBeNull]
+        public string[] Options { get; private set; }
+
+        /// <summary>
+        /// Query options length
+        /// </summary>
+        private int Length { get; set; }
+
+        public bool IsEmpty()
         {
-            if (string.IsNullOrEmpty(RawQuery)) return;
+            return Raw == string.Empty;
+        }
 
-            string[] strings = RawQuery.Split(' ');
-            //todo:not exactly correct. query that didn't containing a space should be a valid query
-            if (strings.Length == 1) return; //we consider a valid query must contain a space
+        private void Parse()
+        {
+            Arguments = Raw.Split(' ');
+            Length = Arguments.Length;
 
-            ActionName = strings[0];
-            for (int i = 1; i < strings.Length; i++)
+            if (Length > 0)
             {
-                if (!string.IsNullOrEmpty(strings[i]))
+                Command = Arguments[0]; // car
+
+                if(Length > 1)
                 {
-                    ActionParameters.Add(strings[i]);
+                    Tail = string.Join(" ", Arguments.SubArray(1, Arguments.Length - 1)); // cdr
+                    Modificator = Arguments[1];
+
+                    if (Length > 2)
+                    {
+                        Options = Arguments.SubArray(2, Arguments.Length - 2);
+                    }
                 }
             }
-        }
-
-        public string GetAllRemainingParameter()
-        {
-
-            string[] strings = RawQuery.Split(new char[]{ ' ' }, 2, System.StringSplitOptions.None);
-            if (strings.Length > 1)
-            {
-                return strings[1];
-            }
-
-            return string.Empty;
         }
     }
 }

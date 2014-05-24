@@ -17,9 +17,9 @@ namespace Wox.Commands
         public override void Dispatch(Query query)
         {
             // todo: workaround
-            if (string.IsNullOrEmpty(query.RawQuery)) return;
+            if (query.IsEmpty()) return;
 
-            PluginPair thirdPlugin = Plugins.AllPlugins.FirstOrDefault(o => o.Metadata.ActionKeyword == query.ActionName);
+            PluginPair thirdPlugin = Plugins.AllPlugins.FirstOrDefault(o => o.Metadata.ActionKeyword == query.Command);
             if (thirdPlugin != null && !string.IsNullOrEmpty(thirdPlugin.Metadata.ActionKeyword))
             {
                 if (thirdPlugin.Metadata.Language == AllowedLanguage.Python)

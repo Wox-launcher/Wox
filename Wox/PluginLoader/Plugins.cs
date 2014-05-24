@@ -87,9 +87,9 @@ namespace Wox.PluginLoader {
 		}
 
 		public static bool HitThirdpartyKeyword(Query query) {
-			if (string.IsNullOrEmpty(query.ActionName)) return false;
+			if (string.IsNullOrEmpty(query.Command)) return false;
 
-			return plugins.Any(o => o.Metadata.PluginType == PluginType.ThirdParty && o.Metadata.ActionKeyword == query.ActionName);
+			return plugins.Any(o => o.Metadata.PluginType == PluginType.ThirdParty && o.Metadata.ActionKeyword == query.Command);
 		}
 
 		public static void ActivatePluginDebugger(string path) {

@@ -39,7 +39,7 @@ namespace Wox.Plugin.PluginManagement
         public List<Result> Query(Query query)
         {
             List<Result> results = new List<Result>();
-            if (query.ActionParameters.Count == 0)
+            if (query.Arguments.Length == 0)
             {
                 results.Add(new Result("wpm install <pluginName>", "Images\\plugin.png",
                     "search and install wox plugins")
@@ -69,10 +69,10 @@ namespace Wox.Plugin.PluginManagement
                 return results;
             }
 
-            if (query.ActionParameters.Count > 0)
+            if (query.Arguments.Length > 0)
             {
                 bool hit = false;
-                switch (query.ActionParameters[0].ToLower())
+                switch (query.Arguments[0].ToLower())
                 {
                     case "list":
                         hit = true;
@@ -86,7 +86,7 @@ namespace Wox.Plugin.PluginManagement
 
                     case "install":
                         hit = true;
-                        if (query.ActionParameters.Count > 1)
+                        if (query.Arguments.Length > 1)
                         {
                             results = InstallPlugin(query);
                         }
@@ -95,7 +95,7 @@ namespace Wox.Plugin.PluginManagement
 
                 if (!hit)
                 {
-                    if ("install".Contains(query.ActionParameters[0].ToLower()))
+                    if ("install".Contains(query.Arguments[0].ToLower()))
                     {
                         results.Add(new Result("wpm install <pluginName>", "Images\\plugin.png",
                             "search and install wox plugins")
@@ -107,7 +107,7 @@ namespace Wox.Plugin.PluginManagement
                             }
                         });
                     }
-                    if ("uninstall".Contains(query.ActionParameters[0].ToLower()))
+                    if ("uninstall".Contains(query.Arguments[0].ToLower()))
                     {
                         results.Add(new Result("wpm uninstall <pluginName>", "Images\\plugin.png", "uninstall plugin")
                         {
@@ -118,7 +118,7 @@ namespace Wox.Plugin.PluginManagement
                             }
                         });
                     }
-                    if ("list".Contains(query.ActionParameters[0].ToLower()))
+                    if ("list".Contains(query.Arguments[0].ToLower()))
                     {
                         results.Add(new Result("wpm list", "Images\\plugin.png", "list plugins installed")
                         {
@@ -137,13 +137,13 @@ namespace Wox.Plugin.PluginManagement
 
         public bool IsAvailable(Query query)
         {
-            return query.ActionParameters.Count >= 0;
+            return query.Arguments.Length >= 0;
         }
 
         private List<Result> InstallPlugin(Query query)
         {
             List<Result> results = new List<Result>();
-            HttpWebResponse response = HttpRequest.CreateGetHttpResponse(pluginSearchUrl + query.ActionParameters[1],
+            HttpWebResponse response = HttpRequest.CreateGetHttpResponse(pluginSearchUrl + query.Arguments[1],
                 null, null, null);
             Stream s = response.GetResponseStream();
             if (s != null)
@@ -204,9 +204,9 @@ namespace Wox.Plugin.PluginManagement
         {
             List<Result> results = new List<Result>();
             List<PluginMetadata> allInstalledPlugins = ParseThirdPartyPlugins();
-            if (query.ActionParameters.Count > 1)
+            if (query.Arguments.Length > 1)
             {
-                string pluginName = query.ActionParameters[1];
+                string pluginName = query.Arguments[1];
                 allInstalledPlugins =
                     allInstalledPlugins.Where(o => o.Name.ToLower().Contains(pluginName.ToLower())).ToList();
             }

@@ -51,12 +51,12 @@ namespace Wox.Plugin.SystemPlugins.Program
 
         public override bool IsAvailable(Query query)
         {
-            return !query.RawQuery.EndsWith(" ") || query.RawQuery.Length >= 1;
+            return !query.Raw.EndsWith(" ") || query.Raw.Length >= 1;
         }
 
         public override List<Result> Query(Query query)
         {
-            var fuzzyMather = FuzzyMatcher.Create(query.RawQuery);
+            var fuzzyMather = FuzzyMatcher.Create(query.Raw);
             List<Program> returnList = installedList.Where(o => MatchProgram(o, fuzzyMather)).ToList();
             returnList.ForEach(ScoreFilter);
             //return ordered list instead of return the score, because programs scores will affect other

@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System.Linq;
 using System.Threading;
 using Wox.Plugin;
 using Wox.PluginLoader;
@@ -13,7 +10,7 @@ namespace Wox.Commands
         public override void Dispatch(Query query)
         {
             // todo: workaround
-            if (string.IsNullOrEmpty(query.RawQuery)) return;
+            if (query.IsEmpty()) return;
 
             foreach (PluginPair pair in Plugins.AllPlugins.Where(o => o.Metadata.PluginType == PluginType.System))
             {

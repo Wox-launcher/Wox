@@ -22,7 +22,7 @@ namespace Wox.Plugin.SystemPlugins
         {
             try
             {
-                queryContext = yampContext.Run(query.RawQuery);
+                queryContext = yampContext.Run(query.Raw);
                 return queryContext.Output != null &&
                        !string.IsNullOrEmpty(queryContext.Result);
             }
