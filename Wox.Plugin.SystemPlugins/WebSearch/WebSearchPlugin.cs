@@ -29,7 +29,7 @@ namespace Wox.Plugin.SystemPlugins
 
             if (webSearch != null)
             {
-                string keyword = query.Arguments.Length > 0 ? query.Modificator : "";
+                string keyword = query.Arguments.Length > 0 ? query.Tail : "";
                 string title = keyword;
                 string subtitle = "Search " + webSearch.Title;
                 if (string.IsNullOrEmpty(keyword))
