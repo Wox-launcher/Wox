@@ -3,6 +3,7 @@ using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
 using Newtonsoft.Json;
+using Wox.Core.Data;
 
 namespace Wox.Infrastructure.Storage.UserSettings
 {
@@ -147,13 +148,5 @@ namespace Wox.Infrastructure.Storage.UserSettings
 	        LeaveCmdOpen = false;
             HideWhenDeactive = false;
         }
-
-    }
-
-    public enum OpacityMode
-    {
-        Normal = 0,
-        LayeredWindow = 1,
-        DWM = 2
     }
 }

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Globalization;
 
-namespace Wox.Converters
+namespace Wox.Core.Converters
 {
     public class StringEmptyConverter : ConvertorBase<StringEmptyConverter>
     {

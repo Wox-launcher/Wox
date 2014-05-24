@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:converters="clr-namespace:Wox.Converters"
+             xmlns:converters="clr-namespace:Wox.Core.Converters;assembly=Wox.Core"
              mc:Ignorable="d" d:DesignWidth="100" d:DesignHeight="100">
     <UserControl.Resources>
         <converters:ImagePathConverter x:Key="ImagePathConverter"/>

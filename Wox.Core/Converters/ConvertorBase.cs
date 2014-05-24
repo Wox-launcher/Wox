@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Windows.Data;
 using System.Windows.Markup;
 
-namespace Wox.Converters
+namespace Wox.Core.Converters
 {
     public abstract class ConvertorBase<T> : MarkupExtension, IValueConverter where T : class, new()
     {

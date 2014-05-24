@@ -2,7 +2,7 @@ using System;
 using System.Globalization;
 using System.Windows;
 
-namespace Wox.Converters
+namespace Wox.Core.Converters
 {
     public class StringNullOrEmptyToVisibilityConverter : ConvertorBase<StringNullOrEmptyToVisibilityConverter>
     {

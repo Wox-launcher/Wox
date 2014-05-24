@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Wox.UAC", "Wox.UAC\Wox.UAC.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Wox.Plugin.PluginManagement", "Plugins\Wox.Plugin.PluginManagement\Wox.Plugin.PluginManagement.csproj", "{049490F0-ECD2-4148-9B39-2135EC346EBE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Wox.Core", "Wox.Core\Wox.Core.csproj", "{DE47AFA8-08C5-40F6-AA23-9AA988219214}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -59,6 +61,10 @@ Global
 		{049490F0-ECD2-4148-9B39-2135EC346EBE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{049490F0-ECD2-4148-9B39-2135EC346EBE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{049490F0-ECD2-4148-9B39-2135EC346EBE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DE47AFA8-08C5-40F6-AA23-9AA988219214}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DE47AFA8-08C5-40F6-AA23-9AA988219214}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DE47AFA8-08C5-40F6-AA23-9AA988219214}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DE47AFA8-08C5-40F6-AA23-9AA988219214}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

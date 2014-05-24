@@ -64,8 +64,6 @@
     <Compile Include="Storage\UserSettings\PluginHotkey.cs" />
     <Compile Include="Storage\UserSettings\ProgramSource.cs" />
     <Compile Include="Storage\UserSettings\WebSearch.cs" />
-    <Compile Include="StringEmptyConverter.cs" />
-    <Compile Include="StringNullOrEmptyToVisibilityConverter.cs" />
     <Compile Include="Unidecoder.cs" />
     <Compile Include="WindowsShellRun.cs" />
   </ItemGroup>
@@ -73,6 +71,10 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Wox.Core\Wox.Core.csproj">
+      <Project>{de47afa8-08c5-40f6-aa23-9aa988219214}</Project>
+      <Name>Wox.Core</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Wox.Plugin\Wox.Plugin.csproj">
       <Project>{8451ecdd-2ea4-4966-bb0a-7bbc40138e80}</Project>
       <Name>Wox.Plugin</Name>

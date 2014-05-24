@@ -17,6 +17,7 @@ using WindowsInput.Native;
 using NHotkey;
 using NHotkey.Wpf;
 using Wox.Commands;
+using Wox.Core.Data;
 using Wox.Helper;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Storage;

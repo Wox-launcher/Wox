@@ -5,7 +5,8 @@
 		xmlns:UserSettings="clr-namespace:Wox.Infrastructure.Storage.UserSettings;assembly=Wox.Infrastructure" x:Class="Wox.SettingWindow"
 		xmlns:woxPlugin="clr-namespace:Wox.Plugin;assembly=Wox.Plugin"
 		xmlns:system="clr-namespace:Wox.Plugin.SystemPlugins;assembly=Wox.Plugin.SystemPlugins"
-		xmlns:converters="clr-namespace:Wox.Converters"
+		xmlns:converters="clr-namespace:Wox.Core.Converters;assembly=Wox.Core"
+		xmlns:data="clr-namespace:Wox.Core.Data;assembly=Wox.Core"
 		Icon="Images\app.png"
 		Title="Wox Setting"
 		ResizeMode="NoResize"
@@ -211,9 +212,9 @@
 					<StackPanel Orientation="Vertical" Grid.Row="1" Grid.Column="1" Margin="10">
 						<TextBlock Text="Window Mode:" />
 						<ComboBox Name="CbOpacityMode" SelectionChanged="CbOpacityMode_OnSelectionChanged">
-							<UserSettings:OpacityMode>Normal</UserSettings:OpacityMode>
-							<UserSettings:OpacityMode>LayeredWindow</UserSettings:OpacityMode>
-							<UserSettings:OpacityMode>DWM</UserSettings:OpacityMode>
+							<data:OpacityMode>Normal</data:OpacityMode>
+							<data:OpacityMode>LayeredWindow</data:OpacityMode>
+							<data:OpacityMode>DWM</data:OpacityMode>
 							<ComboBox.ItemTemplate>
 								<DataTemplate>
 									<TextBlock Text="{Binding Converter={converters:OpacityModeConverter}}" />

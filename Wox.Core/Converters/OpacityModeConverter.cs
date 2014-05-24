@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Globalization;
-using Wox.Infrastructure.Storage.UserSettings;
+using Wox.Core.Data;
 
-namespace Wox.Converters
+namespace Wox.Core.Converters
 {
     public class OpacityModeConverter : ConvertorBase<OpacityModeConverter>
     {
