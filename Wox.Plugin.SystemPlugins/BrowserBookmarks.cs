@@ -4,7 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
-using Wox.Infrastructure;
+using Wox.Core;
+using Wox.Core.Data.Storage.UserSettings;
 
 namespace Wox.Plugin.SystemPlugins
 {
@@ -49,7 +50,7 @@ namespace Wox.Plugin.SystemPlugins
 
         public override void Init(PluginInitContext context)
         {
-            if (!Wox.Infrastructure.Storage.UserSettings.UserSettingStorage.Instance.EnableBookmarkPlugin)
+            if (!UserSettingStorage.Instance.EnableBookmarkPlugin)
             {
                 return;
             }

@@ -4,8 +4,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
-using Wox.Infrastructure;
-using Wox.Infrastructure.Storage.UserSettings;
+using Wox.Core;
+using Wox.Core.Data.Storage.UserSettings;
 
 namespace Wox.Plugin.SystemPlugins.FileSystem {
 

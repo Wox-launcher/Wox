@@ -3,9 +3,8 @@ using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
 using Newtonsoft.Json;
-using Wox.Core.Data;
 
-namespace Wox.Infrastructure.Storage.UserSettings
+namespace Wox.Core.Data.Storage.UserSettings
 {
     public class UserSettingStorage : BaseStorage<UserSettingStorage>
     {

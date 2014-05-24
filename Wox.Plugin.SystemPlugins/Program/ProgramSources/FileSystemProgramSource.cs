@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Wox.Infrastructure.Storage.UserSettings;
+using Wox.Core.Data.Storage.UserSettings;
 
 namespace Wox.Plugin.SystemPlugins.Program.ProgramSources
 {

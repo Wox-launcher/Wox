@@ -1,10 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using Newtonsoft.Json;
 
-namespace Wox.Infrastructure.Storage.UserSettings {
+namespace Wox.Core.Data.Storage.UserSettings {
 	public class FolderLink {
         [JsonProperty]
 		public string Path { get; set; }

@@ -2,9 +2,8 @@ using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Wox.Plugin;
 
-namespace Wox.Infrastructure
+namespace Wox.Core
 {
     public enum KeyEvent : int
     {

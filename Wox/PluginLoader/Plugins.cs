@@ -1,13 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading;
-using Microsoft.CSharp;
+using Wox.Core.Data.Storage.UserSettings;
 using Wox.Helper;
-using Wox.Infrastructure;
-using Wox.Infrastructure.Storage;
-using Wox.Infrastructure.Storage.UserSettings;
 using Wox.Plugin;
 
 namespace Wox.PluginLoader {

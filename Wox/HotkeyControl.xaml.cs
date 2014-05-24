@@ -1,14 +1,10 @@
 ﻿using System;
-using System.Drawing;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using NHotkey;
 using NHotkey.Wpf;
-using Wox.Helper;
-using Wox.Infrastructure;
-using Wox.Plugin;
+using Wox.Core;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using UserControl = System.Windows.Controls.UserControl;
 

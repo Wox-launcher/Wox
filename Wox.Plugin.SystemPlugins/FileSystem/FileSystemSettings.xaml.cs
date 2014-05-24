@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using Wox.Infrastructure.Storage.UserSettings;
+using Wox.Core.Data.Storage.UserSettings;
 
 namespace Wox.Plugin.SystemPlugins.FileSystem {
 	/// <summary>
@@ -12,7 +12,7 @@ namespace Wox.Plugin.SystemPlugins.FileSystem {
 	public partial class FileSystemSettings : UserControl {
 		public FileSystemSettings() {
 			InitializeComponent();
-			lbxFolders.ItemsSource = Wox.Infrastructure.Storage.UserSettings.UserSettingStorage.Instance.FolderLinks;
+			lbxFolders.ItemsSource = UserSettingStorage.Instance.FolderLinks;
 		}
 
 		private void btnDelete_Click(object sender, RoutedEventArgs e) {
@@ -55,7 +55,7 @@ namespace Wox.Plugin.SystemPlugins.FileSystem {
 		private void btnAdd_Click(object sender, RoutedEventArgs e) {
 			var folderBrowserDialog = new System.Windows.Forms.FolderBrowserDialog();
 			if (folderBrowserDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK) {
-				var newFolder = new Wox.Infrastructure.Storage.UserSettings.FolderLink() {
+				var newFolder = new FolderLink() {
 					Path = folderBrowserDialog.SelectedPath
 				};
 

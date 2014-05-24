@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Wox.Plugin
+namespace Wox.Core.Extensions
 {
     public static class ArrayExtensions
     {

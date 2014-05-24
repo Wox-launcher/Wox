@@ -1,6 +1,6 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
-using Wox.Infrastructure.Storage.UserSettings;
+using Wox.Core.Data.Storage.UserSettings;
 
 namespace Wox.Plugin.SystemPlugins.Program
 {

@@ -2,7 +2,7 @@
 using System.IO;
 using System.Runtime.InteropServices;
 
-namespace Wox.Infrastructure
+namespace Wox.Core
 {
 	// Source: http://code.cheesydesign.com/?p=572
 	/// <summary>

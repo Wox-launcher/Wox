@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Wox.Infrastructure
+namespace Wox.Core
 {
     /*
      *  Original character transliteration tables on Perl:

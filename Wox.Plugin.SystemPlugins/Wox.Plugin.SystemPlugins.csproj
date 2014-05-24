@@ -80,7 +80,6 @@
     <Compile Include="WebSearch\WebSearchPlugin.cs" />
     <Compile Include="CMD\CMD.cs" />
     <Compile Include="FileSystem\FileSystemPlugin.cs" />
-    <Compile Include="ISystemPlugin.cs" />
     <Compile Include="Program\Programs.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Sys.cs" />
@@ -96,9 +95,9 @@
       <Project>{DE47AFA8-08C5-40F6-AA23-9AA988219214}</Project>
       <Name>Wox.Core</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Wox.Infrastructure\Wox.Infrastructure.csproj">
+    <ProjectReference Include="..\Wox.Core.Data\Wox.Core.Data.csproj">
       <Project>{4FD29318-A8AB-4D8F-AA47-60BC241B8DA3}</Project>
-      <Name>Wox.Infrastructure</Name>
+      <Name>Wox.Core.Data</Name>
     </ProjectReference>
     <ProjectReference Include="..\Wox.Plugin\Wox.Plugin.csproj">
       <Project>{8451ECDD-2EA4-4966-BB0A-7BBC40138E80}</Project>

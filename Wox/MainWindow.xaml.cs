@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,32 +9,28 @@ using System.Windows.Forms;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media.Animation;
-using System.Windows.Shapes;
 using WindowsInput;
 using WindowsInput.Native;
 using NHotkey;
 using NHotkey.Wpf;
 using Wox.Commands;
+using Wox.Core;
 using Wox.Core.Data;
+using Wox.Core.Data.Storage;
+using Wox.Core.Data.Storage.UserSettings;
 using Wox.Helper;
-using Wox.Infrastructure;
-using Wox.Infrastructure.Storage;
-using Wox.Infrastructure.Storage.UserSettings;
 using Wox.Plugin;
 using Wox.PluginLoader;
-using Wox.Properties;
 using Application = System.Windows.Application;
 using Brushes = System.Windows.Media.Brushes;
 using Color = System.Windows.Media.Color;
 using ContextMenu = System.Windows.Forms.ContextMenu;
-using Control = System.Windows.Controls.Control;
 using FontFamily = System.Windows.Media.FontFamily;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using MenuItem = System.Windows.Forms.MenuItem;
 using MessageBox = System.Windows.MessageBox;
 using MouseButton = System.Windows.Input.MouseButton;
 using Path = System.IO.Path;
-using Point = System.Drawing.Point;
 using Rectangle = System.Drawing.Rectangle;
 using TextBox = System.Windows.Controls.TextBox;
 using ToolTip = System.Windows.Controls.ToolTip;
@@ -509,7 +503,7 @@ namespace Wox {
 				if (string.IsNullOrEmpty(cmd))
 					throw new ArgumentNullException();
 
-				Wox.Infrastructure.WindowsShellRun.Start(cmd);
+                WindowsShellRun.Start(cmd, false, UserSettingStorage.Instance.LeaveCmdOpen);
 				return true;
 			}
 			catch (Exception ex) {

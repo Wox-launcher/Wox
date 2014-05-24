@@ -1,8 +1,8 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using Wox.Infrastructure;
-using Wox.Infrastructure.Storage.UserSettings;
+using Wox.Core;
+using Wox.Core.Data.Storage.UserSettings;
 using Wox.Plugin.SystemPlugins.Program.ProgramSources;
 
 namespace Wox.Plugin.SystemPlugins.Program

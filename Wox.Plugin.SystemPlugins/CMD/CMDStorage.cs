@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
-using Wox.Infrastructure.Storage;
+using Wox.Core.Data.Storage;
 
 namespace Wox.Plugin.SystemPlugins.CMD
 {

@@ -3,7 +3,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using Wox.Infrastructure.Storage.UserSettings;
+using Wox.Core.Data.Storage.UserSettings;
 using MessageBox = System.Windows.MessageBox;
 
 namespace Wox.Plugin.SystemPlugins.Program

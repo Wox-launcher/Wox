@@ -2,13 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Xml;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
-using Wox.Infrastructure;
-using YAMP.Numerics;
+using Wox.Core;
 
 namespace Wox.Plugin.SystemPlugins.SuggestionSources
 {

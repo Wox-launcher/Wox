@@ -1,12 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 using Newtonsoft.Json;
 
-namespace Wox.Infrastructure.Storage
+namespace Wox.Core.Data.Storage
 {
     public abstract class BaseStorage<T> where T : class, new()
     {

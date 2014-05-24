@@ -1,12 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Runtime.InteropServices;
+using System.Diagnostics;
 using System.IO;
-using Wox.Infrastructure.Storage.UserSettings;
+using System.Runtime.InteropServices;
+using System.Text;
 
-namespace Wox.Infrastructure
+namespace Wox.Core
 {
     /*
      * http://undoc.airesoft.co.uk/shell32.dll/ShellExecCmdLine.php
@@ -78,7 +76,7 @@ namespace Wox.Infrastructure
         [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
         static extern bool UrlIs(string pszUrl, int UrlIs);
 
-        static void ShellExecCmdLine(IntPtr hInstance, IntPtr hwnd, string command, string startDir, global::System.Diagnostics.ProcessWindowStyle nShow, ShellExecCmdLineFlags dwSeclFlags)
+        static void ShellExecCmdLine(IntPtr hInstance, IntPtr hwnd, string command, string startDir, ProcessWindowStyle nShow, ShellExecCmdLineFlags dwSeclFlags, bool leaveCmdOpen)
         {
 	        string cmd = command;
             string args = null;
@@ -103,7 +101,7 @@ namespace Wox.Infrastructure
                     startDir = dir;
             }
 
-	        if (UserSettingStorage.Instance.LeaveCmdOpen && File.Exists(cmd))
+            if (leaveCmdOpen && File.Exists(cmd))
 	        {
 		        bool needsCommandLine;
 
@@ -287,10 +285,15 @@ namespace Wox.Infrastructure
 
         public static void Start(string cmd, bool showErrorDialog)
         {
-            Start(cmd, false, IntPtr.Zero);
+            Start(cmd, false, false);
         }
 
-        public static void Start(string cmd, bool showErrorDialog, IntPtr errorDialogHwnd)
+        public static void Start(string cmd, bool showErrorDialog, bool leaveCmdOpen)
+        {
+            Start(cmd, showErrorDialog, IntPtr.Zero, leaveCmdOpen);
+        }
+
+        public static void Start(string cmd, bool showErrorDialog, IntPtr errorDialogHwnd, bool leaveCmdOpen)
         {
             cmd = cmd.Trim(); // PathRemoveBlanks
             cmd = Environment.ExpandEnvironmentVariables(cmd); // SHExpandEnvironmentStrings
@@ -303,7 +306,8 @@ namespace Wox.Infrastructure
                     cmd,
                     null, // i have no ideas about this field
                     global::System.Diagnostics.ProcessWindowStyle.Normal,
-                    ShellExecCmdLineFlags.SECL__IGNORE_ERROR | ShellExecCmdLineFlags.SECL_USE_IDLIST | ShellExecCmdLineFlags.SECL_LOG_USAGE | (showErrorDialog ? 0 : ShellExecCmdLineFlags.SECL_NO_UI)
+                    ShellExecCmdLineFlags.SECL__IGNORE_ERROR | ShellExecCmdLineFlags.SECL_USE_IDLIST | ShellExecCmdLineFlags.SECL_LOG_USAGE | (showErrorDialog ? 0 : ShellExecCmdLineFlags.SECL_NO_UI),
+                    leaveCmdOpen
                 );
             }
             else

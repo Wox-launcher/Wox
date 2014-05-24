@@ -1,5 +1,6 @@
 ﻿using System;
 using JetBrains.Annotations;
+using Wox.Core.Extensions;
 
 namespace Wox.Plugin
 {

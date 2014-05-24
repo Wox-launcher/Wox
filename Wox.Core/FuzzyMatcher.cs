@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
+﻿using System.Text;
 
-namespace Wox.Infrastructure
+namespace Wox.Core
 {
     /// <summary>
     /// refer to https://github.com/mattyork/fuzzy

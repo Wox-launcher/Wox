@@ -1,9 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 
-namespace Wox.Infrastructure
+namespace Wox.Core
 {
     public static partial class Unidecoder
     {

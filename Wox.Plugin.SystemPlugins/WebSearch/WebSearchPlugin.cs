@@ -1,12 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using Newtonsoft.Json;
-using Wox.Infrastructure;
-using Wox.Infrastructure.Storage;
-using Wox.Infrastructure.Storage.UserSettings;
+using Wox.Core.Data.Storage.UserSettings;
 using Wox.Plugin.SystemPlugins.SuggestionSources;
 
 namespace Wox.Plugin.SystemPlugins

@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // 有关程序集的常规信息通过以下
 // 特性集控制。更改这些特性值可修改
 // 与程序集关联的信息。
-[assembly: AssemblyTitle("Wox.Infrastructure")]
+[assembly: AssemblyTitle("Wox.Core.Data")]
 [assembly: AssemblyDescription("https://github.com/qianlifeng/Wox")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("Wox.Infrastructure")]
+[assembly: AssemblyProduct("Wox.Core.Data")]
 [assembly: AssemblyCopyright("The MIT License (MIT)")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

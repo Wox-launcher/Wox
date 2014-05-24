@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 
-namespace Wox.Infrastructure
+namespace Wox.Core
 {
     public static class ChineseToPinYin
     {

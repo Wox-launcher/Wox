@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
-using Wox.Infrastructure;
+using Wox.Core;
 
 namespace Wox.Tests
 {

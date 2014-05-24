@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Net.Security;
 using System.Reflection;
@@ -9,7 +8,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
 //From:http://blog.csdn.net/zhoufoxcn/article/details/6404236
-namespace Wox.Infrastructure
+namespace Wox.Core
 {
     /// <summary>
     /// 有关HTTP请求的辅助类
