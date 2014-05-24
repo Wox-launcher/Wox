@@ -45,6 +45,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AllowedLanguage.cs" />
+    <Compile Include="BaseSystemPlugin.cs" />
     <Compile Include="ISystemPlugin.cs" />
     <Compile Include="Properties\Annotations.cs" />
     <Compile Include="IPlugin.cs" />

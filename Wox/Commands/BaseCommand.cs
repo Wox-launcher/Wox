@@ -1,10 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System.Collections.Generic;
 using Wox.Core;
-using Wox.Plugin;
-using Wox.Plugins;
 
 namespace Wox.Commands
 {

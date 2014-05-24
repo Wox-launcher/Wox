@@ -1,8 +1,7 @@
 ﻿using System.Collections.Generic;
 using Wox.Core;
-using Wox.Plugins;
 
-namespace Wox.Plugin.SystemPlugins
+namespace Wox.Plugins
 {
     public abstract class BaseSystemPlugin : ISystemPlugin
     {

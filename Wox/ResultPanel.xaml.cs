@@ -5,8 +5,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using Wox.Core;
-using Wox.Plugin;
-using Wox.Plugins;
 using UserControl = System.Windows.Controls.UserControl;
 
 namespace Wox
