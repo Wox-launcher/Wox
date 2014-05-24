@@ -1,11 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
+﻿using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using Python.Runtime;
-using Wox.Plugin;
 using Wox.Helper;
+using Wox.Plugins;
 
 namespace Wox.PluginLoader
 {

@@ -1,6 +1,5 @@
 ﻿using System.Collections.Generic;
 using Newtonsoft.Json;
-using Wox.Plugin;
 
 namespace Wox.Core.Data
 {

@@ -2,6 +2,7 @@
 using System.Linq;
 using NUnit.Framework;
 using Wox.Core;
+using Wox.Plugins;
 
 namespace Wox.Tests
 {
@@ -21,10 +22,10 @@ namespace Wox.Tests
             };
 
 
-            var results = new List<Wox.Plugin.Result>();
+            var results = new List<Result>();
             foreach (var str in sources)
             {
-                results.Add(new Plugin.Result()
+                results.Add(new Result()
                 {
                     Title = str,
                     Score = FuzzyMatcher.Create("inst").Evaluate(str).Score

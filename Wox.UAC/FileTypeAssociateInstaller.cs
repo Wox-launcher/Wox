@@ -1,12 +1,7 @@
 ﻿using System;
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Windows;
-using ICSharpCode.SharpZipLib.Zip;
 using Microsoft.Win32;
-using Newtonsoft.Json;
-using Wox.Plugin;
 
 namespace Wox.UAC
 {

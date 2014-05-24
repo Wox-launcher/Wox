@@ -1,8 +1,10 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using Wox.Core;
 using Wox.Core.Data.UserSettings;
 using Wox.Plugin.SystemPlugins.SuggestionSources;
+using Wox.Plugins;
 
 namespace Wox.Plugin.SystemPlugins
 {

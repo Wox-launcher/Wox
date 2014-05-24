@@ -1,4 +1,4 @@
-﻿namespace Wox.Plugin.SystemPlugins
+﻿namespace Wox.Plugins
 {
     public interface ISystemPlugin : IPlugin
     {

@@ -2,7 +2,7 @@
 using JetBrains.Annotations;
 using Wox.Core.Extensions;
 
-namespace Wox.Plugin
+namespace Wox.Core
 {
     /// <summary>
     /// Query structure:

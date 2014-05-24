@@ -3,10 +3,10 @@
 		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 		xmlns:wox="clr-namespace:Wox"
         x:Class="Wox.SettingWindow"
-		xmlns:woxPlugin="clr-namespace:Wox.Plugin;assembly=Wox.Plugin"
 		xmlns:system="clr-namespace:Wox.Plugin.SystemPlugins;assembly=Wox.Plugin.SystemPlugins"
 		xmlns:converters="clr-namespace:Wox.Core.Converters;assembly=Wox.Core"
 		xmlns:data="clr-namespace:Wox.Core.Data;assembly=Wox.Core"
+		xmlns:plugins="clr-namespace:Wox.Plugins;assembly=Wox.Plugins"
 		Icon="Images\app.png"
 		Title="Wox Setting"
 		ResizeMode="NoResize"
@@ -78,7 +78,7 @@
 								<CheckBox Content="Enabled" />
 							</Grid>
 						</DataTemplate>
-						<DataTemplate DataType="{x:Type woxPlugin:PluginPair}">
+						<DataTemplate DataType="{x:Type plugins:PluginPair}">
 							<Grid Height="36" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="3">
 								<Grid.ColumnDefinitions>
 									<ColumnDefinition Width="32"></ColumnDefinition>

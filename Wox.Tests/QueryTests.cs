@@ -1,7 +1,6 @@
 ﻿using System;
 using NUnit.Framework;
-using Wox.Plugin;
-
+using Wox.Core;
 namespace Wox.Tests
 {
     [TestFixture]

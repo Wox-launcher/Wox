@@ -1,6 +1,4 @@
-﻿using Wox.Core;
-
-namespace Wox.Plugin
+﻿namespace Wox.Core
 {
     public class ActionContext
     {

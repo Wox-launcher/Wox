@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Wox.Core;
+using Wox.Plugins;
 
 namespace Wox.Plugin.SystemPlugins
 {

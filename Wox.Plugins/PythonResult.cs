@@ -1,9 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using Wox.Core;
 
-namespace Wox.Plugin
+namespace Wox.Plugins
 {
     public class PythonResult : Result
     {

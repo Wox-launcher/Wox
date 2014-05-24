@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using Python.Runtime;
+using Wox.Core;
 using Wox.Helper;
-using Wox.Plugin;
+using Wox.Plugins;
 
 namespace Wox.PluginLoader
 {

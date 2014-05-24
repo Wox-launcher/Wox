@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Windows.Forms;
+using Wox.Core;
+using Wox.Plugins;
 
 namespace Wox.Plugin.SystemPlugins.CMD
 {

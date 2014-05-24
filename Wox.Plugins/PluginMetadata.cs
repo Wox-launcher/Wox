@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
+﻿using System.IO;
 
-namespace Wox.Plugin
+namespace Wox.Plugins
 {
     public class PluginMetadata
     {

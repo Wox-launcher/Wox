@@ -18,8 +18,6 @@ using Wox.Core;
 using Wox.Core.Data;
 using Wox.Core.Data.UserSettings;
 using Wox.Helper;
-using Wox.Plugin;
-using Wox.PluginLoader;
 using Application = System.Windows.Application;
 using Brushes = System.Windows.Media.Brushes;
 using Color = System.Windows.Media.Color;
@@ -142,7 +140,7 @@ namespace Wox {
 			Left = (SystemParameters.PrimaryScreenWidth - ActualWidth) / 2;
 			Top = (SystemParameters.PrimaryScreenHeight - ActualHeight) / 3;
 
-			Plugins.Init();
+			PluginLoader.Plugins.Init();
 
 			InitProgressbarAnimation();
 
@@ -236,7 +234,7 @@ namespace Wox {
 					var q = new Query(lastQuery);
 					CommandFactory.DispatchCommand(q);
 					queryHasReturn = false;
-					if (Plugins.HitThirdpartyKeyword(q)) {
+					if (PluginLoader.Plugins.HitThirdpartyKeyword(q)) {
 						Dispatcher.DelayInvoke("ShowProgressbar", originQuery => {
 							if (!queryHasReturn && originQuery == lastQuery) {
 								StartProgress();
@@ -283,7 +281,7 @@ namespace Wox {
 			if (args != null && args.Length > 0) {
 				switch (args[0].ToLower()) {
 					case "reloadplugin":
-						Plugins.Init();
+						PluginLoader.Plugins.Init();
 						break;
 
 					case "query":

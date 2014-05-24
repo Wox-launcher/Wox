@@ -60,17 +60,16 @@
     <Compile Include="UserSettings\WebSearch.cs" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <WCFMetadata Include="Service References\" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Wox.Core\Wox.Core.csproj">
       <Project>{de47afa8-08c5-40f6-aa23-9aa988219214}</Project>
       <Name>Wox.Core</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Wox.Plugin\Wox.Plugin.csproj">
-      <Project>{8451ecdd-2ea4-4966-bb0a-7bbc40138e80}</Project>
-      <Name>Wox.Plugin</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="$(SolutionDir)\.nuget\NuGet.targets" Condition="Exists('$(SolutionDir)\.nuget\NuGet.targets')" />

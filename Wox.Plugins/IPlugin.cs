@@ -1,11 +1,12 @@
 ﻿using System.Collections.Generic;
+using Wox.Core;
 
-namespace Wox.Plugin
+namespace Wox.Plugins
 {
     public interface IPlugin
     {
-        List<Result> Query(Query query);
         bool IsAvailable(Query query);
+        List<Result> Query(Query query);
 
         // todo: inject context via .ctor
         void Init(PluginInitContext context); 

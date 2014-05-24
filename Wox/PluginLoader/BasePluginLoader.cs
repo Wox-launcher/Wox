@@ -1,13 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Windows.Forms;
 using Newtonsoft.Json;
 using Wox.Helper;
-using Wox.Plugin;
-using Wox.Plugin.SystemPlugins;
+using Wox.Plugins;
 
 namespace Wox.PluginLoader {
 	public abstract class BasePluginLoader {

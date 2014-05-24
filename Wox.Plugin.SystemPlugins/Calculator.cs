@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
+using Wox.Core;
+using Wox.Plugins;
 using YAMP;
 
 namespace Wox.Plugin.SystemPlugins

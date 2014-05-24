@@ -5,8 +5,7 @@ using System.Linq;
 using System.Windows;
 using ICSharpCode.SharpZipLib.Zip;
 using Newtonsoft.Json;
-using Wox.Plugin;
-using Wox.PluginLoader;
+using Wox.Plugins;
 
 namespace Wox.Helper
 {
@@ -47,7 +46,7 @@ namespace Wox.Helper
                 string content = string.Format(
                         "Do you want to install following plugin?\r\n\r\nName: {0}\r\nVersion: {1}\r\nAuthor: {2}",
                         plugin.Name, plugin.Version, plugin.Author);
-                PluginPair existingPlugin = Plugins.AllPlugins.FirstOrDefault(o => o.Metadata.ID == plugin.ID);
+                PluginPair existingPlugin = PluginLoader.Plugins.AllPlugins.FirstOrDefault(o => o.Metadata.ID == plugin.ID);
 
                 if (existingPlugin != null)
                 {

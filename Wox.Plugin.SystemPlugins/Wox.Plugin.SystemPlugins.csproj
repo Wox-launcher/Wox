@@ -93,20 +93,6 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Wox.Core\Wox.Core.csproj">
-      <Project>{DE47AFA8-08C5-40F6-AA23-9AA988219214}</Project>
-      <Name>Wox.Core</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Wox.Core.Data\Wox.Core.Data.csproj">
-      <Project>{4FD29318-A8AB-4D8F-AA47-60BC241B8DA3}</Project>
-      <Name>Wox.Core.Data</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Wox.Plugin\Wox.Plugin.csproj">
-      <Project>{8451ECDD-2EA4-4966-BB0A-7BBC40138E80}</Project>
-      <Name>Wox.Plugin</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
     <Page Include="FileSystem\FileSystemSettings.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -130,6 +116,20 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Wox.Core.Data\Wox.Core.Data.csproj">
+      <Project>{4fd29318-a8ab-4d8f-aa47-60bc241b8da3}</Project>
+      <Name>Wox.Core.Data</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Wox.Core\Wox.Core.csproj">
+      <Project>{de47afa8-08c5-40f6-aa23-9aa988219214}</Project>
+      <Name>Wox.Core</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Wox.Plugins\Wox.Plugins.csproj">
+      <Project>{8451ecdd-2ea4-4966-bb0a-7bbc40138e80}</Project>
+      <Name>Wox.Plugins</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

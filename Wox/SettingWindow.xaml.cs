@@ -8,12 +8,14 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using IWshRuntimeLibrary;
+using Wox.Core;
 using Wox.Core.Converters;
 using Wox.Core.Data;
 using Wox.Core.Data.UserSettings;
 using Wox.Plugin;
 using Wox.Helper;
 using Wox.Plugin.SystemPlugins;
+using Wox.Plugins;
 using Application = System.Windows.Forms.Application;
 using File = System.IO.File;
 using MessageBox = System.Windows.MessageBox;
@@ -199,7 +201,7 @@ namespace Wox
                     Collection =
                         PluginLoader.Plugins.AllPlugins.Where(o => o.Metadata.PluginType == PluginType.System)
                             .Select(o => o.Plugin)
-                            .Cast<Wox.Plugin.SystemPlugins.ISystemPlugin>()
+                            .Cast<ISystemPlugin>()
                 },
                 FindResource("FeatureBoxSeperator"),
                 new CollectionContainer()

@@ -2,7 +2,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Wox.Core;
 using Wox.Plugin;
+using Wox.Plugins;
 
 namespace Wox.Commands
 {

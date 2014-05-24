@@ -2,9 +2,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using Wox.Core;
 using Wox.Core.Data.UserSettings;
 using Wox.Helper;
-using Wox.Plugin;
+using Wox.Plugins;
 
 namespace Wox.PluginLoader {
 	public static class Plugins {

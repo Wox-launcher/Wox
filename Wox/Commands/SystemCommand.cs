@@ -1,7 +1,7 @@
 ﻿using System.Linq;
 using System.Threading;
-using Wox.Plugin;
-using Wox.PluginLoader;
+using Wox.Core;
+using Wox.Plugins;
 
 namespace Wox.Commands
 {
@@ -12,7 +12,7 @@ namespace Wox.Commands
             // todo: workaround
             if (query.IsEmpty()) return;
 
-            foreach (PluginPair pair in Plugins.AllPlugins.Where(o => o.Metadata.PluginType == PluginType.System))
+            foreach (PluginPair pair in PluginLoader.Plugins.AllPlugins.Where(o => o.Metadata.PluginType == PluginType.System))
             {
                 PluginPair pair1 = pair;
                 ThreadPool.QueueUserWorkItem(state =>

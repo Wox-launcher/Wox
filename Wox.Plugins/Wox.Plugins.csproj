@@ -4,72 +4,65 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{FF742965-9A80-41A5-B042-D6C7D3A21708}</ProjectGuid>
+    <ProjectGuid>{8451ECDD-2EA4-4966-BB0A-7BBC40138E80}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Wox.Tests</RootNamespace>
-    <AssemblyName>Wox.Tests</AssemblyName>
+    <RootNamespace>Wox.Plugins</RootNamespace>
+    <AssemblyName>Wox.Plugins</AssemblyName>
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
-    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
-    <RestorePackages>true</RestorePackages>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
+    <OutputPath>..\Output\Debug\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
+    <OutputPath>..\Output\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="nunit.framework">
-      <HintPath>..\packages\NUnit.2.6.3\lib\nunit.framework.dll</HintPath>
-    </Reference>
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="WindowsFormsIntegration" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="FuzzyMatcherTest.cs" />
-    <Compile Include="QueryTests.cs" />
+    <Compile Include="AllowedLanguage.cs" />
+    <Compile Include="ISystemPlugin.cs" />
+    <Compile Include="Properties\Annotations.cs" />
+    <Compile Include="IPlugin.cs" />
+    <Compile Include="ISettingProvider.cs" />
+    <Compile Include="PluginPair.cs" />
+    <Compile Include="PluginInitContext.cs" />
+    <Compile Include="PluginMetadata.cs" />
+    <Compile Include="PluginType.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="PythonResult.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Pythonnet.Runtime\Python.Runtime.csproj">
-      <Project>{097B4AC0-74E9-4C58-BCF8-C69746EC8271}</Project>
-      <Name>Python.Runtime</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Wox.Core.Data\Wox.Core.Data.csproj">
-      <Project>{4fd29318-a8ab-4d8f-aa47-60bc241b8da3}</Project>
-      <Name>Wox.Core.Data</Name>
-    </ProjectReference>
     <ProjectReference Include="..\Wox.Core\Wox.Core.csproj">
       <Project>{de47afa8-08c5-40f6-aa23-9aa988219214}</Project>
       <Name>Wox.Core</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Wox.Plugins\Wox.Plugins.csproj">
-      <Project>{8451ecdd-2ea4-4966-bb0a-7bbc40138e80}</Project>
-      <Name>Wox.Plugins</Name>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <Import Project="$(SolutionDir)\.nuget\nuget.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">

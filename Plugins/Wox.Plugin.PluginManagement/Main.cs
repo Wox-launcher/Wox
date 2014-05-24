@@ -7,6 +7,8 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using Newtonsoft.Json;
+using Wox.Core;
+using Wox.Plugins;
 
 namespace Wox.Plugin.PluginManagement
 {

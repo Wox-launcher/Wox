@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using Python.Runtime;
+using Wox.Core;
 using Wox.Helper;
-using Wox.Plugin;
-using Wox.PluginLoader;
+using Wox.Plugins;
 
 namespace Wox.Commands
 {
@@ -19,7 +19,7 @@ namespace Wox.Commands
             // todo: workaround
             if (query.IsEmpty()) return;
 
-            PluginPair thirdPlugin = Plugins.AllPlugins.FirstOrDefault(o => o.Metadata.ActionKeyword == query.Command);
+            PluginPair thirdPlugin = PluginLoader.Plugins.AllPlugins.FirstOrDefault(o => o.Metadata.ActionKeyword == query.Command);
             if (thirdPlugin != null && !string.IsNullOrEmpty(thirdPlugin.Metadata.ActionKeyword))
             {
                 if (thirdPlugin.Metadata.Language == AllowedLanguage.Python)
