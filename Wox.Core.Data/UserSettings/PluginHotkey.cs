@@ -1,4 +1,4 @@
-﻿namespace Wox.Core.Data.Storage.UserSettings
+﻿namespace Wox.Core.Data.UserSettings
 {
     public class CustomPluginHotkey
     {

@@ -2,7 +2,7 @@
 using Newtonsoft.Json;
 using Wox.Plugin;
 
-namespace Wox.Core.Data.Storage
+namespace Wox.Core.Data
 {
     public class UserSelectedRecordStorage : BaseStorage<UserSelectedRecordStorage>
     {

@@ -10,7 +10,7 @@ using System.Windows.Media.Imaging;
 using IWshRuntimeLibrary;
 using Wox.Core.Converters;
 using Wox.Core.Data;
-using Wox.Core.Data.Storage.UserSettings;
+using Wox.Core.Data.UserSettings;
 using Wox.Plugin;
 using Wox.Helper;
 using Wox.Plugin.SystemPlugins;

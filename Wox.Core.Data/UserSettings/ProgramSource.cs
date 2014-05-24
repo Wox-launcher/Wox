@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace Wox.Core.Data.Storage.UserSettings
+namespace Wox.Core.Data.UserSettings
 {
     [Serializable]
     public class ProgramSource

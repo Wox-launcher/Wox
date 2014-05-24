@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using Wox.Core;
-using Wox.Core.Data.Storage.UserSettings;
+using Wox.Core.Data.UserSettings;
 
 namespace Wox.Plugin.SystemPlugins.FileSystem {
 

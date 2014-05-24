@@ -2,7 +2,7 @@
 using System.Linq;
 using System.Windows;
 using System.Windows.Media.Imaging;
-using Wox.Core.Data.Storage.UserSettings;
+using Wox.Core.Data.UserSettings;
 using MessageBox = System.Windows.MessageBox;
 
 namespace Wox.Plugin.SystemPlugins

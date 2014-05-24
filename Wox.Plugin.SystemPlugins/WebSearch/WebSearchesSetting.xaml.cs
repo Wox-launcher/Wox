@@ -11,7 +11,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
-using Wox.Core.Data.Storage.UserSettings;
+using Wox.Core.Data.UserSettings;
 
 namespace Wox.Plugin.SystemPlugins
 {

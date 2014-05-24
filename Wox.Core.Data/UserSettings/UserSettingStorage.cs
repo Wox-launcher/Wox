@@ -4,7 +4,7 @@ using System.IO;
 using System.Windows.Forms;
 using Newtonsoft.Json;
 
-namespace Wox.Core.Data.Storage.UserSettings
+namespace Wox.Core.Data.UserSettings
 {
     public class UserSettingStorage : BaseStorage<UserSettingStorage>
     {

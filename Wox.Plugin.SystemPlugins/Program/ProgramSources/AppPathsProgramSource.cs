@@ -1,5 +1,5 @@
 ﻿using System.Collections.Generic;
-using Wox.Core.Data.Storage.UserSettings;
+using Wox.Core.Data.UserSettings;
 
 namespace Wox.Plugin.SystemPlugins.Program.ProgramSources
 {

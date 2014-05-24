@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using Wox.Core.Data.Storage.UserSettings;
+using Wox.Core.Data.UserSettings;
 using Wox.Plugin.SystemPlugins.SuggestionSources;
 
 namespace Wox.Plugin.SystemPlugins

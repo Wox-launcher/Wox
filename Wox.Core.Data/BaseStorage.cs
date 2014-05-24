@@ -3,7 +3,7 @@ using System.IO;
 using System.Windows.Forms;
 using Newtonsoft.Json;
 
-namespace Wox.Core.Data.Storage
+namespace Wox.Core.Data
 {
     public abstract class BaseStorage<T> where T : class, new()
     {
