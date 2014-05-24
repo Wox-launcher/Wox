@@ -12,6 +12,9 @@ namespace Wox.Commands
     {
         public override void Dispatch(Query query)
         {
+            // todo: workaround
+            if (string.IsNullOrEmpty(query.RawQuery)) return;
+
             foreach (PluginPair pair in Plugins.AllPlugins.Where(o => o.Metadata.PluginType == PluginType.System))
             {
                 PluginPair pair1 = pair;
@@ -29,8 +32,11 @@ namespace Wox.Commands
                         UpdateResultView(r);
                     };
 
-                    List<Result> results = pair1.Plugin.Query(query);
-                    pair1.InitContext.PushResults(query, results);
+                    if(pair1.Plugin.IsAvailable(query))
+                    {
+                        var results = pair1.Plugin.Query(query);
+                        pair1.InitContext.PushResults(query, results);
+                    }
                 });
             }
         }

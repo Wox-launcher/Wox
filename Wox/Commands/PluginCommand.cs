@@ -14,9 +14,12 @@ namespace Wox.Commands
         private string currentPythonModulePath = string.Empty;
         private IntPtr GIL;
 
-        public override void Dispatch(Query q)
+        public override void Dispatch(Query query)
         {
-            PluginPair thirdPlugin = Plugins.AllPlugins.FirstOrDefault(o => o.Metadata.ActionKeyword == q.ActionName);
+            // todo: workaround
+            if (string.IsNullOrEmpty(query.RawQuery)) return;
+
+            PluginPair thirdPlugin = Plugins.AllPlugins.FirstOrDefault(o => o.Metadata.ActionKeyword == query.ActionName);
             if (thirdPlugin != null && !string.IsNullOrEmpty(thirdPlugin.Metadata.ActionKeyword))
             {
                 if (thirdPlugin.Metadata.Language == AllowedLanguage.Python)
@@ -36,8 +39,11 @@ namespace Wox.Commands
                             });
                             UpdateResultView(r);
                         };
-                        List<Result> results = thirdPlugin.Plugin.Query(q) ?? new List<Result>();
-                        thirdPlugin.InitContext.PushResults(q, results);
+                        if(thirdPlugin.Plugin.IsAvailable(query))
+                        {
+                            var results = thirdPlugin.Plugin.Query(query) ?? new List<Result>();
+                            thirdPlugin.InitContext.PushResults(query, results);
+                        }
                     }
                     catch (Exception queryException)
                     {
