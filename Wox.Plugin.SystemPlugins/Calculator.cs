@@ -31,7 +31,7 @@ namespace Wox.Plugin.SystemPlugins
             Parser.UseScripting = false;
         }
 
-        protected override List<Result> QueryInternal(Query query)
+        public override List<Result> Query(Query query)
         {
             if (string.IsNullOrEmpty(query.RawQuery)
                 || query.RawQuery.Length <= 2          // don't affect when user only input "e" or "i" keyword
@@ -81,7 +81,7 @@ namespace Wox.Plugin.SystemPlugins
             return leftBracketCount == 0;
         }
 
-        protected override void InitInternal(PluginInitContext context)
+        public override void Init(PluginInitContext context)
         {
             this.context = context;
         }

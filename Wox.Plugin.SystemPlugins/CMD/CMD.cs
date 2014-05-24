@@ -11,7 +11,7 @@ namespace Wox.Plugin.SystemPlugins.CMD
     {
         private PluginInitContext context;
 
-        protected override List<Result> QueryInternal(Query query)
+        public override List<Result> Query(Query query)
         {
             List<Result> results = new List<Result>();
             List<Result> pushedResults = new List<Result>();
@@ -143,7 +143,7 @@ namespace Wox.Plugin.SystemPlugins.CMD
                 CMDStorage.Instance.AddCmdHistory(cmd);
         }
 
-        protected override void InitInternal(PluginInitContext context)
+        public override void Init(PluginInitContext context)
         {
             this.context = context;
         }

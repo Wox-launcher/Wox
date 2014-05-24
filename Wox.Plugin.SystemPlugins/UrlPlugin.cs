@@ -6,7 +6,7 @@ namespace Wox.Plugin.SystemPlugins
 {
     public class UrlPlugin : BaseSystemPlugin
     {
-        protected override List<Result> QueryInternal(Query query)
+        public override List<Result> Query(Query query)
         {
             var raw = query.RawQuery;
             Uri uri;
@@ -35,7 +35,7 @@ namespace Wox.Plugin.SystemPlugins
         public override string Description { get { return "Open the typed URL..."; } }
         public override string IcoPath { get { return "Images/url2.png"; } }
 
-        protected override void InitInternal(PluginInitContext context)
+        public override void Init(PluginInitContext context)
         {
         }
     }

@@ -13,7 +13,7 @@ namespace Wox.Plugin.SystemPlugins
         private List<PluginPair> allPlugins = new List<PluginPair>();
         private Action<string> changeQuery;
 
-        protected override List<Result> QueryInternal(Query query)
+        public override List<Result> Query(Query query)
         {
             List<Result> results = new List<Result>();
             if (string.IsNullOrEmpty(query.RawQuery)) return results;
@@ -55,7 +55,7 @@ namespace Wox.Plugin.SystemPlugins
             return results;
         }
 
-        protected override void InitInternal(PluginInitContext context)
+        public override void Init(PluginInitContext context)
         {
             allPlugins = context.Plugins;
             changeQuery = context.ChangeQuery;

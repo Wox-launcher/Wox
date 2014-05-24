@@ -15,7 +15,7 @@ namespace Wox.Plugin.SystemPlugins
     {
         private PluginInitContext context;
 
-        protected override List<Result> QueryInternal(Query query)
+        public override List<Result> Query(Query query)
         {
             List<Result> results = new List<Result>();
             if (string.IsNullOrEmpty(query.ActionName)) return results;
@@ -74,7 +74,7 @@ namespace Wox.Plugin.SystemPlugins
             return results;
         }
 
-        protected override void InitInternal(PluginInitContext context)
+        public override void Init(PluginInitContext context)
         {
             this.context = context;
 

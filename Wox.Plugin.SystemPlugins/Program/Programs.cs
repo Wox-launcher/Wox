@@ -49,7 +49,7 @@ namespace Wox.Plugin.SystemPlugins.Program
         };
         private PluginInitContext context;
 
-        protected override List<Result> QueryInternal(Query query)
+        public override List<Result> Query(Query query)
         {
             if (string.IsNullOrEmpty(query.RawQuery) || query.RawQuery.EndsWith(" ") || query.RawQuery.Length <= 1) return new List<Result>();
 
@@ -85,7 +85,7 @@ namespace Wox.Plugin.SystemPlugins.Program
             return false;
         }
 
-        protected override void InitInternal(PluginInitContext context)
+        public override void Init(PluginInitContext context)
         {
             this.context = context;
 

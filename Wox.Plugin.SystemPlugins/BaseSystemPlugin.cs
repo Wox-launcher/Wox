@@ -21,20 +21,8 @@ namespace Wox.Plugin.SystemPlugins
             get { return "System workflow"; }
         }
 
-        public List<Result> Query(Query query)
-        {
-            return QueryInternal(query);
-        }
-
         public abstract bool IsAvailable(Query query);
-
-        public void Init(PluginInitContext context)
-        {
-            InitInternal(context);
-        }
-
-        protected abstract List<Result> QueryInternal(Query query);
-
-        protected abstract void InitInternal(PluginInitContext context);
+        public abstract List<Result> Query(Query query);
+        public abstract void Init(PluginInitContext context);
     }
 }

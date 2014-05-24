@@ -24,7 +24,7 @@ namespace Wox.Plugin.SystemPlugins.FileSystem {
 
 		#region Misc
 
-		protected override void InitInternal(PluginInitContext context) {
+	    public override void Init(PluginInitContext context) {
 			this.context = context;
 
 			if (UserSettingStorage.Instance.FolderLinks == null) {
@@ -39,7 +39,7 @@ namespace Wox.Plugin.SystemPlugins.FileSystem {
 
 		#endregion Misc
 
-		protected override List<Result> QueryInternal(Query query) {
+	    public override List<Result> Query(Query query) {
 			var results = new List<Result>();
 			var input = query.RawQuery.ToLower();
 			var inputName = input.Split(new string[] { @"\" }, StringSplitOptions.None).First().ToLower();

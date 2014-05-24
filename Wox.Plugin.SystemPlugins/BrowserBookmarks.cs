@@ -17,7 +17,7 @@ namespace Wox.Plugin.SystemPlugins
         private PluginInitContext context;
         private List<Bookmark> bookmarks = new List<Bookmark>();
 
-        protected override List<Result> QueryInternal(Query query)
+        public override List<Result> Query(Query query)
         {
             if (string.IsNullOrEmpty(query.RawQuery) || query.RawQuery.EndsWith(" ") || query.RawQuery.Length <= 1) return new List<Result>();
 
@@ -47,7 +47,7 @@ namespace Wox.Plugin.SystemPlugins
             return false;
         }
 
-        protected override void InitInternal(PluginInitContext context)
+        public override void Init(PluginInitContext context)
         {
 			if (!Wox.Infrastructure.Storage.UserSettings.UserSettingStorage.Instance.EnableBookmarkPlugin) 
 			{
