@@ -13,6 +13,8 @@ namespace Wox.PluginLoader
         private PluginMetadata metadata;
         private string moduleName;
 
+        private string jsonResult;
+
         public PythonPluginWrapper(PluginMetadata metadata)
         {
             this.metadata = metadata;
@@ -23,12 +25,6 @@ namespace Wox.PluginLoader
         {
             try
             {
-                string jsonResult = InvokeFunc("query", query.RawQuery);
-                if (string.IsNullOrEmpty(jsonResult))
-                {
-                    return new List<Result>();
-                }
-
                 List<PythonResult> o = JsonConvert.DeserializeObject<List<PythonResult>>(jsonResult);
                 List<Result> r = new List<Result>();
                 foreach (PythonResult pythonResult in o)
@@ -57,6 +53,12 @@ namespace Wox.PluginLoader
             }
 
             return new List<Result>();
+        }
+
+        public bool IsAvailable(Query query)
+        {
+            jsonResult = InvokeFunc("query", query.RawQuery);
+            return !string.IsNullOrEmpty(jsonResult);
         }
 
         private PyObject GetPythonActionContext(ActionContext context)
