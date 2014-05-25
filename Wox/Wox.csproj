@@ -64,6 +64,11 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\packages\SharpZipLib.0.86.0\lib\20\ICSharpCode.SharpZipLib.dll</HintPath>
     </Reference>
+    <Reference Include="Interop.IWshRuntimeLibrary, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+      <HintPath>..\lib\interop\Interop.IWshRuntimeLibrary.dll</HintPath>
+    </Reference>
     <Reference Include="log4net">
       <HintPath>..\packages\log4net.2.0.3\lib\net35-full\log4net.dll</HintPath>
     </Reference>
@@ -260,9 +265,9 @@
       <Project>{de47afa8-08c5-40f6-aa23-9aa988219214}</Project>
       <Name>Wox.Core</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Wox.Plugin.SystemPlugins\Wox.Plugins.System.csproj">
+    <ProjectReference Include="..\Wox.Plugins.Internal\Wox.Plugins.Internal.csproj">
       <Project>{69ce0206-cb41-453d-88af-df86092ef9b8}</Project>
-      <Name>Wox.Plugins.System</Name>
+      <Name>Wox.Plugins.Internal</Name>
     </ProjectReference>
     <ProjectReference Include="..\Wox.Plugins\Wox.Plugins.csproj">
       <Project>{8451ecdd-2ea4-4966-bb0a-7bbc40138e80}</Project>
@@ -284,9 +289,6 @@
     <Resource Include="app.ico">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Resource>
-  </ItemGroup>
-  <ItemGroup>
-    <WCFMetadata Include="Service References\" />
   </ItemGroup>
   <ItemGroup>
     <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
@@ -339,15 +341,6 @@
     </Resource>
   </ItemGroup>
   <ItemGroup>
-    <COMReference Include="IWshRuntimeLibrary">
-      <Guid>{F935DC20-1CF0-11D0-ADB9-00C04FD58A0B}</Guid>
-      <VersionMajor>1</VersionMajor>
-      <VersionMinor>0</VersionMinor>
-      <Lcid>0</Lcid>
-      <WrapperTool>tlbimp</WrapperTool>
-      <Isolated>False</Isolated>
-      <EmbedInteropTypes>True</EmbedInteropTypes>
-    </COMReference>
     <COMReference Include="Shell32">
       <Guid>{50A7E9B0-70EF-11D1-B75A-00A0C90564FE}</Guid>
       <VersionMajor>1</VersionMajor>
