@@ -3,15 +3,14 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using Wox.Core.Data.UserSettings;
-using MessageBox = System.Windows.MessageBox;
 
-namespace Wox.Plugin.SystemPlugins
+namespace Wox.Plugins.Internal.WebSearch
 {
     public partial class WebSearchSetting : Window
     {
         private WebSearchesSetting settingWindow;
         private bool update;
-        private WebSearch updateWebSearch;
+        private Core.Data.UserSettings.WebSearch updateWebSearch;
 
         public WebSearchSetting(WebSearchesSetting settingWidow)
         {
@@ -19,7 +18,7 @@ namespace Wox.Plugin.SystemPlugins
             InitializeComponent();
         }
 
-        public void UpdateItem(WebSearch webSearch)
+        public void UpdateItem(Core.Data.UserSettings.WebSearch webSearch)
         {
             updateWebSearch = UserSettingStorage.Instance.WebSearches.FirstOrDefault(o => o == webSearch);
             if (updateWebSearch == null || string.IsNullOrEmpty(updateWebSearch.Url))
@@ -86,7 +85,7 @@ namespace Wox.Plugin.SystemPlugins
                     MessageBox.Show("ActionWord has existed, please input a new one.");
                     return;
                 }
-                UserSettingStorage.Instance.WebSearches.Add(new WebSearch()
+                UserSettingStorage.Instance.WebSearches.Add(new Core.Data.UserSettings.WebSearch()
                 {
                     ActionWord = action,
                     Enabled = cbEnable.IsChecked ?? false,

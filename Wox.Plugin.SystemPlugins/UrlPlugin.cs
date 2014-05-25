@@ -2,9 +2,8 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using Wox.Core;
-using Wox.Plugins;
 
-namespace Wox.Plugin.SystemPlugins
+namespace Wox.Plugins.Internal
 {
     public class UrlPlugin : BaseSystemPlugin
     {

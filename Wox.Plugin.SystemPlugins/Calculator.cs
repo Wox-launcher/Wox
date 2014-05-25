@@ -2,10 +2,9 @@
 using System.Collections.Generic;
 using System.Windows.Forms;
 using Wox.Core;
-using Wox.Plugins;
 using YAMP;
 
-namespace Wox.Plugin.SystemPlugins
+namespace Wox.Plugins.Internal
 {
     public class Calculator : BaseSystemPlugin
     {

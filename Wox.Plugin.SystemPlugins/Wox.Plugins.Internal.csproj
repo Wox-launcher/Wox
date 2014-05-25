@@ -7,8 +7,8 @@
     <ProjectGuid>{69CE0206-CB41-453D-88AF-DF86092EF9B8}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Wox.Plugins.System</RootNamespace>
-    <AssemblyName>Wox.Plugins.System</AssemblyName>
+    <RootNamespace>Wox.Plugins.Internal</RootNamespace>
+    <AssemblyName>Wox.Plugins.Internal</AssemblyName>
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>

@@ -6,9 +6,8 @@ using System.Linq;
 using System.Windows.Forms;
 using Wox.Core;
 using Wox.Core.Data.UserSettings;
-using Wox.Plugins;
 
-namespace Wox.Plugin.SystemPlugins.FileSystem {
+namespace Wox.Plugins.Internal.FileSystem {
 
 	public class FileSystemPlugin : BaseSystemPlugin, ISettingProvider {
 

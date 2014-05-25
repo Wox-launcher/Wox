@@ -2,12 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.Serialization.Formatters.Binary;
-using System.Windows.Forms;
 using Wox.Core;
-using Wox.Plugins;
 
-namespace Wox.Plugin.SystemPlugins.CMD
+namespace Wox.Plugins.Internal.CMD
 {
     public class CMD : BaseSystemPlugin
     {

@@ -3,10 +3,9 @@ using System.Diagnostics;
 using System.Linq;
 using Wox.Core;
 using Wox.Core.Data.UserSettings;
-using Wox.Plugin.SystemPlugins.SuggestionSources;
-using Wox.Plugins;
+using Wox.Plugins.Internal.SuggestionSources;
 
-namespace Wox.Plugin.SystemPlugins
+namespace Wox.Plugins.Internal.WebSearch
 {
     public class WebSearchPlugin : BaseSystemPlugin, ISettingProvider
     {
@@ -21,7 +20,7 @@ namespace Wox.Plugin.SystemPlugins
         {
             List<Result> results = new List<Result>();
 
-            WebSearch webSearch =
+            Core.Data.UserSettings.WebSearch webSearch =
                 UserSettingStorage.Instance.WebSearches.FirstOrDefault(o => o.ActionWord == query.Command && o.Enabled);
 
             if (webSearch != null)

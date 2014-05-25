@@ -1,11 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System.Collections.Generic;
 using Newtonsoft.Json;
 using Wox.Core.Data;
 
-namespace Wox.Plugin.SystemPlugins.CMD
+namespace Wox.Plugins.Internal.CMD
 {
     public class CMDStorage : BaseStorage<CMDStorage>
     {

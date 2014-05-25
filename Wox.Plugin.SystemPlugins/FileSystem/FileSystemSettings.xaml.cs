@@ -1,11 +1,10 @@
 ﻿using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Wox.Core.Data.UserSettings;
 
-namespace Wox.Plugin.SystemPlugins.FileSystem {
+namespace Wox.Plugins.Internal.FileSystem {
 	/// <summary>
 	/// Interaction logic for FileSystemSettings.xaml
 	/// </summary>

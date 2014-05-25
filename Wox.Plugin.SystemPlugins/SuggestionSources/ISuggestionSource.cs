@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
+﻿using System.Collections.Generic;
 
-namespace Wox.Plugin.SystemPlugins.SuggestionSources
+namespace Wox.Plugins.Internal.SuggestionSources
 {
     public interface ISuggestionSource
     {

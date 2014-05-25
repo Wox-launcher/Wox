@@ -2,7 +2,7 @@
 using System.Windows.Controls;
 using Wox.Core.Data.UserSettings;
 
-namespace Wox.Plugin.SystemPlugins.Program
+namespace Wox.Plugins.Internal.Program
 {
     /// <summary>
     /// Interaction logic for ProgramSetting.xaml

@@ -63,9 +63,6 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <WCFMetadata Include="Service References\" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\Wox.Core\Wox.Core.csproj">
       <Project>{de47afa8-08c5-40f6-aa23-9aa988219214}</Project>
       <Name>Wox.Core</Name>

@@ -1,14 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Windows.Forms;
 using Wox.Core;
-using Wox.Plugins;
 
-namespace Wox.Plugin.SystemPlugins
+namespace Wox.Plugins.Internal
 {
     public class Sys : BaseSystemPlugin
     {

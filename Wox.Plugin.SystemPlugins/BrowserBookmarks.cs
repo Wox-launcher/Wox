@@ -6,9 +6,8 @@ using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using Wox.Core;
 using Wox.Core.Data.UserSettings;
-using Wox.Plugins;
 
-namespace Wox.Plugin.SystemPlugins
+namespace Wox.Plugins.Internal
 {
     public class BrowserBookmarks : BaseSystemPlugin
     {

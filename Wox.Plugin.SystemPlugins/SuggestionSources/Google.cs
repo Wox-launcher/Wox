@@ -6,7 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Wox.Core;
 
-namespace Wox.Plugin.SystemPlugins.SuggestionSources
+namespace Wox.Plugins.Internal.SuggestionSources
 {
     public class Google : AbstractSuggestionSource
     {

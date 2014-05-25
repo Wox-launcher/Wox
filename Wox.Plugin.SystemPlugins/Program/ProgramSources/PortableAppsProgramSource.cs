@@ -4,7 +4,7 @@ using System.IO;
 using System.Text;
 using Wox.Core.Data.UserSettings;
 
-namespace Wox.Plugin.SystemPlugins.Program.ProgramSources
+namespace Wox.Plugins.Internal.Program.ProgramSources
 {
     public class PortableAppsProgramSource : AbstractProgramSource
     {

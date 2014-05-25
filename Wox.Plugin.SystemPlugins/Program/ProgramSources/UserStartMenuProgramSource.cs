@@ -1,7 +1,7 @@
 ﻿using System;
 using Wox.Core.Data.UserSettings;
 
-namespace Wox.Plugin.SystemPlugins.Program.ProgramSources
+namespace Wox.Plugins.Internal.Program.ProgramSources
 {
     [global::System.ComponentModel.Browsable(false)]
     public class UserStartMenuProgramSource : FileSystemProgramSource

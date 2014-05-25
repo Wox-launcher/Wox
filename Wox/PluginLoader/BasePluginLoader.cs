@@ -32,7 +32,7 @@ namespace Wox.PluginLoader {
 				Version = "1.0",
 				PluginType = PluginType.System,
 				ActionKeyword = "*",
-				ExecuteFileName = "Wox.Plugin.SystemPlugins.dll",
+				ExecuteFileName = "Wox.Plugins.Internal.dll",
 				PluginDirecotry = Path.GetDirectoryName(System.Windows.Forms.Application.ExecutablePath)
 			});
 		}

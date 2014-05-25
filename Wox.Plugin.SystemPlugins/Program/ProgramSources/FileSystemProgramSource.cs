@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using Wox.Core.Data.UserSettings;
 
-namespace Wox.Plugin.SystemPlugins.Program.ProgramSources
+namespace Wox.Plugins.Internal.Program.ProgramSources
 {
     public class FileSystemProgramSource : AbstractProgramSource
     {
