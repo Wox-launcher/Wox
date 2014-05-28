@@ -51,10 +51,6 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Pythonnet.Runtime\Python.Runtime.csproj">
-      <Project>{097B4AC0-74E9-4C58-BCF8-C69746EC8271}</Project>
-      <Name>Python.Runtime</Name>
-    </ProjectReference>
     <ProjectReference Include="..\Wox.Core.Data\Wox.Core.Data.csproj">
       <Project>{4fd29318-a8ab-4d8f-aa47-60bc241b8da3}</Project>
       <Name>Wox.Core.Data</Name>

@@ -53,7 +53,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <PropertyGroup>
-    <ApplicationIcon>app.ico</ApplicationIcon>
+    <ApplicationIcon>Images\app.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject>Wox.EntryPoint</StartupObject>
@@ -280,7 +280,7 @@
     </Resource>
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="app.ico">
+    <Resource Include="Images\app.ico">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Resource>
   </ItemGroup>
