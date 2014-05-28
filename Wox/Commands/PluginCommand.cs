@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
-using Python.Runtime;
+//using Python.Runtime;
 using Wox.Core;
 using Wox.Helper;
 using Wox.Plugins;
@@ -22,10 +22,10 @@ namespace Wox.Commands
             PluginPair thirdPlugin = PluginLoader.Plugins.AllPlugins.FirstOrDefault(o => o.Metadata.ActionKeyword == query.Command);
             if (thirdPlugin != null && !string.IsNullOrEmpty(thirdPlugin.Metadata.ActionKeyword))
             {
-                if (thirdPlugin.Metadata.Language == AllowedLanguage.Python)
+                /*if (thirdPlugin.Metadata.Language == AllowedLanguage.Python)
                 {
                     SwitchPythonEnv(thirdPlugin);
-                }
+                }*/
                 ThreadPool.QueueUserWorkItem(t =>
                 {
                     try
@@ -59,6 +59,7 @@ namespace Wox.Commands
             }
         }
 
+/*
         private void SwitchPythonEnv(PluginPair thirdPlugin)
         {
             if (currentPythonModulePath != thirdPlugin.Metadata.PluginDirecotry)
@@ -77,5 +78,6 @@ namespace Wox.Commands
                 GIL = PythonEngine.BeginAllowThreads();
             }
         }
+*/
     }
 }

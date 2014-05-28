@@ -22,9 +22,9 @@ namespace Wox.PluginLoader {
 			plugins.Clear();
 			BasePluginLoader.ParsePluginsConfig();
 		
-			if (UserSettingStorage.Instance.EnablePythonPlugins) {
+			/*if (UserSettingStorage.Instance.EnablePythonPlugins) {
 				plugins.AddRange(new PythonPluginLoader().LoadPlugin());
-			}
+			}*/
 
 			plugins.AddRange(new CSharpPluginLoader().LoadPlugin());
 			Forker forker = new Forker();
