@@ -1,6 +1,7 @@
 ﻿<Window x:Class="Wox.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:wox="clr-namespace:Wox"
+        xmlns:input="clr-namespace:System.Windows.Input;assembly=PresentationCore"
         Title="Wox"
         Topmost="True"
         Loaded="MainWindow_OnLoaded"
@@ -20,7 +21,7 @@
     </Window.Resources>
     <Border Style="{DynamicResource WindowBorderStyle}" MouseDown="Border_OnMouseDown">
         <StackPanel Orientation="Vertical">
-            <TextBox Style="{DynamicResource QueryBoxStyle}" PreviewDragOver="TbQuery_OnPreviewDragOver" AllowDrop="True" Grid.Row="0"  x:Name="tbQuery" PreviewKeyDown="TbQuery_OnPreviewKeyDown" TextChanged="TextBoxBase_OnTextChanged" />
+            <TextBox Style="{DynamicResource QueryBoxStyle}" PreviewDragOver="TbQuery_OnPreviewDragOver" AllowDrop="True" Grid.Row="0"  x:Name="tbQuery" PreviewKeyDown="TbQuery_OnPreviewKeyDown" TextChanged="TextBoxBase_OnTextChanged" input:InputMethod.IsInputMethodEnabled="False"/>
             <Line Style="{DynamicResource PendingLineStyle}" x:Name="progressBar" Y1="0" Y2="0" X2="100" Grid.Row="1" Height="2" StrokeThickness="1"></Line>
             <wox:ResultPanel x:Name="resultCtrl" Grid.Row="2"/>
         </StackPanel>
