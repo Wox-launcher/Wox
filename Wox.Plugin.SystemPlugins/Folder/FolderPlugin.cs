@@ -110,8 +110,9 @@ namespace Wox.Plugin.SystemPlugins.Folder {
 
 			var parentDirKey = input.TrimEnd('\\', '/');
 			if (!parentDirectories.ContainsKey(parentDirKey)) parentDirectories.Add(parentDirKey, dirs);
-
-			var fuzzy = FuzzyMatcher.Create(Path.GetFileName(currentPath).ToLower());
+			
+			var fileName = Path.GetFileName(currentPath).ToLower().Trim();
+			var fuzzy = FuzzyMatcher.Create(fileName);
 			foreach (var dir in dirs) {				//.Where(x => (x.Attributes & FileAttributes.Hidden) != 0)) {
 				if ((dir.Attributes & FileAttributes.Hidden) == FileAttributes.Hidden) continue;
 
@@ -123,7 +124,7 @@ namespace Wox.Plugin.SystemPlugins.Folder {
 					}
 				};
 
-				if (Path.GetFileName(currentPath).ToLower() != "") {
+				if (fileName != "") {
 					var matchResult = fuzzy.Evaluate(dir.Name);
 					result.Score = matchResult.Score;
 					if (!matchResult.Success) continue;
@@ -154,7 +155,7 @@ namespace Wox.Plugin.SystemPlugins.Folder {
 						}
 					};
 
-					if (Path.GetFileName(currentPath) != "") {
+					if (fileName != "") {
 						var matchResult = fuzzy.Evaluate(dir.Name);
 						result.Score = matchResult.Score;
 						if (!matchResult.Success) continue;
