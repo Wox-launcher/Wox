@@ -8,9 +8,6 @@ namespace Wox.Plugin.BrowserBookmark {
 	public class Bookmark : IEquatable<Bookmark>, IEqualityComparer<Bookmark> {
 		public string Name { get; set; }
 		public string PinyinName { get { return Name.Unidecode(); } }
-
-
-		public string PinyinName { get; private set; }
 		public string Url { get; set; }
 		public string Source { get; set; }
 		public int Score { get; set; }
