@@ -19,8 +19,12 @@ namespace Wox.Plugin.SystemPlugins.Folder {
             var selectedFolder = lbxFolders.SelectedItem as FolderLink;
             if (selectedFolder != null)
             {
-                UserSettingStorage.Instance.FolderLinks.Remove(selectedFolder);
-                lbxFolders.Items.Refresh();
+                if (MessageBox.Show("Are your sure to delete " + selectedFolder.Path, "Delete folder link",
+                    MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+                {
+                    UserSettingStorage.Instance.FolderLinks.Remove(selectedFolder);
+                    lbxFolders.Items.Refresh();
+                }
             }
             else
             {
@@ -69,5 +73,46 @@ namespace Wox.Plugin.SystemPlugins.Folder {
 
 			lbxFolders.Items.Refresh();
 		}
+
+        private void lbxFolders_Drop(object sender, DragEventArgs e)
+        {
+            string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+
+            if (files != null && files.Count() > 0)
+            {
+                foreach (string s in files) 
+                {
+                    if (System.IO.Directory.Exists(s) == true)
+                    {
+                        var newFolder = new FolderLink()
+                        {
+                            Path = s
+                        };
+
+                        if (UserSettingStorage.Instance.FolderLinks == null)
+                        {
+                            UserSettingStorage.Instance.FolderLinks = new List<FolderLink>();
+                        }
+
+                        UserSettingStorage.Instance.FolderLinks.Add(newFolder);
+                        UserSettingStorage.Instance.Save();
+                    }
+
+                    lbxFolders.Items.Refresh();
+                }
+            }
+        }
+
+        private void lbxFolders_DragEnter(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                e.Effects = DragDropEffects.Link;
+            }
+            else
+            {
+                e.Effects = DragDropEffects.None;
+            }
+        }
 	}
 }
