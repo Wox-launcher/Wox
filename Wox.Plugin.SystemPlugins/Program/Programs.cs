@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Windows.Forms;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Storage.UserSettings;
 using Wox.Plugin.SystemPlugins.Program.ProgramSources;
@@ -10,7 +14,6 @@ namespace Wox.Plugin.SystemPlugins.Program
 {
     public class Programs : BaseSystemPlugin, ISettingProvider
     {
-        private static bool initing;
         private static object lockObject = new object();
         private static List<Program> programs = new List<Program>();
         private static List<IProgramSource> sources = new List<IProgramSource>();
@@ -42,6 +45,20 @@ namespace Wox.Plugin.SystemPlugins.Program
                     context.API.HideApp();
                     context.API.ShellRun(c.ExecutePath);
                     return true;
+                },
+                ContextMenu = new List<Result>()
+                {
+                    new Result()
+                    {
+                        Title = "Run As Administrator",
+                        Action = _ =>
+                        {
+                            context.API.HideApp();
+                            context.API.ShellRun(c.ExecutePath,true);
+                            return true;
+                        },
+                        IcoPath = "Images/cmd.png"
+                    }
                 }
             }).ToList();
         }
@@ -59,59 +76,58 @@ namespace Wox.Plugin.SystemPlugins.Program
         protected override void InitInternal(PluginInitContext context)
         {
             this.context = context;
-            IndexPrograms();
+            programs = ProgramCacheStorage.Instance.Programs;
+            using (new Timeit("Program Index"))
+            {
+                IndexPrograms();
+            }
         }
 
         public static void IndexPrograms()
         {
-            if (!initing)
+            lock (lockObject)
             {
-                lock (lockObject)
+                List<ProgramSource> programSources = new List<ProgramSource>();
+                programSources.AddRange(LoadDeaultProgramSources());
+                if (UserSettingStorage.Instance.ProgramSources != null &&
+                    UserSettingStorage.Instance.ProgramSources.Count(o => o.Enabled) > 0)
                 {
-                    initing = true;
-
-                    List<ProgramSource> programSources = new List<ProgramSource>();
-                    programSources.AddRange(LoadDeaultProgramSources());
-                    if (UserSettingStorage.Instance.ProgramSources != null &&
-                        UserSettingStorage.Instance.ProgramSources.Count(o => o.Enabled) > 0)
-                    {
-                        programSources.AddRange(UserSettingStorage.Instance.ProgramSources.Where(o => o.Enabled));
-                    }
-
-                    sources.Clear();
-                    programSources.ForEach(source =>
-                    {
-                        Type sourceClass;
-                        if (SourceTypes.TryGetValue(source.Type, out sourceClass))
-                        {
-                            ConstructorInfo constructorInfo = sourceClass.GetConstructor(new[] {typeof (ProgramSource)});
-                            if (constructorInfo != null)
-                            {
-                                IProgramSource programSource =
-                                    constructorInfo.Invoke(new object[] {source}) as IProgramSource;
-                                sources.Add(programSource);
-                            }
-                        }
-                    });
-
-                    var tempPrograms = new List<Program>();
-                    foreach (var source in sources)
-                    {
-                        var list = source.LoadPrograms();
-                        list.ForEach(o =>
-                        {
-                            o.Source = source;
-                        });
-                        tempPrograms.AddRange(list);
-                    }
-
-                    // filter duplicate program
-                    tempPrograms = tempPrograms.GroupBy(x => new {x.ExecutePath, x.ExecuteName})
-                        .Select(g => g.First()).ToList();
-
-                    programs = tempPrograms;
-                    initing = false;
+                    programSources.AddRange(UserSettingStorage.Instance.ProgramSources.Where(o => o.Enabled));
                 }
+
+                sources.Clear();
+                programSources.ForEach(source =>
+                {
+                    Type sourceClass;
+                    if (SourceTypes.TryGetValue(source.Type, out sourceClass))
+                    {
+                        ConstructorInfo constructorInfo = sourceClass.GetConstructor(new[] { typeof(ProgramSource) });
+                        if (constructorInfo != null)
+                        {
+                            IProgramSource programSource =
+                                constructorInfo.Invoke(new object[] { source }) as IProgramSource;
+                            sources.Add(programSource);
+                        }
+                    }
+                });
+
+                var tempPrograms = new List<Program>();
+                foreach (var source in sources)
+                {
+                    var list = source.LoadPrograms();
+                    list.ForEach(o =>
+                    {
+                        o.Source = source;
+                    });
+                    tempPrograms.AddRange(list);
+                }
+
+                // filter duplicate program
+                programs = tempPrograms.GroupBy(x => new { x.ExecutePath, x.ExecuteName })
+                    .Select(g => g.First()).ToList();
+
+                ProgramCacheStorage.Instance.Programs = programs;
+                ProgramCacheStorage.Instance.Save();
             }
         }
 

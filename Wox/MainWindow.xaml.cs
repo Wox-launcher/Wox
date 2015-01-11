@@ -16,11 +16,14 @@ using NHotkey;
 using NHotkey.Wpf;
 using Wox.Commands;
 using Wox.Helper;
+using Wox.ImageLoader;
 using Wox.Infrastructure;
+using Wox.Infrastructure.Hotkey;
 using Wox.Infrastructure.Storage;
 using Wox.Infrastructure.Storage.UserSettings;
 using Wox.Plugin;
 using Wox.PluginLoader;
+using Wox.Update;
 using Application = System.Windows.Application;
 using Brushes = System.Windows.Media.Brushes;
 using Color = System.Windows.Media.Color;
@@ -140,13 +143,19 @@ namespace Wox
             results.ForEach(o =>
             {
                 o.PluginDirectory = plugin.PluginDirectory;
+                if (o.ContextMenu != null)
+                {
+                    o.ContextMenu.ForEach(t =>
+                    {
+                        t.PluginDirectory = plugin.PluginDirectory;
+                    });
+                }
                 o.OriginQuery = query;
             });
             OnUpdateResultView(results);
         }
 
         #endregion
-
 
         public MainWindow()
         {
@@ -159,7 +168,9 @@ namespace Wox
 
             progressBar.ToolTip = toolTip;
             InitialTray();
-            resultCtrl.OnMouseClickItem += AcceptSelect;
+            pnlResult.LeftMouseClickEvent += SelectResult;
+            pnlContextMenu.LeftMouseClickEvent += SelectResult;
+            pnlResult.RightMouseClickEvent += pnlResult_RightMouseClickEvent;
 
             ThreadPool.SetMaxThreads(30, 10);
             try
@@ -176,7 +187,43 @@ namespace Wox
 
             globalHotkey.hookedKeyboardCallback += KListener_hookedKeyboardCallback;
 
-            this.Closing += MainWindow_Closing;
+            Closing += MainWindow_Closing;
+            //since MainWIndow implement IPublicAPI, so we need to finish ctor MainWindow object before
+            //PublicAPI invoke in plugin init methods. E.g FolderPlugin
+            ThreadPool.QueueUserWorkItem(o =>
+            {
+                Thread.Sleep(50);
+                Plugins.Init();
+            });
+            ThreadPool.QueueUserWorkItem(o =>
+            {
+                Thread.Sleep(50);
+                PreLoadImages();
+            });
+            ThreadPool.QueueUserWorkItem(o => CheckUpdate());
+        }
+
+        private void PreLoadImages()
+        {
+            ImageLoader.ImageLoader.PreloadImages();
+        }
+
+        void pnlResult_RightMouseClickEvent(Result result)
+        {
+            ShowContextMenu(result);
+        }
+
+        void CheckUpdate()
+        {
+            Release release = new UpdateChecker().CheckUpgrade();
+            if (release != null && !UserSettingStorage.Instance.DontPromptUpdateMsg)
+            {
+                Dispatcher.Invoke(new Action(() =>
+                {
+                    NewVersionWindow newVersinoWindow = new NewVersionWindow();
+                    newVersinoWindow.Show();
+                }));
+            }
         }
 
         void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -203,8 +250,6 @@ namespace Wox
                 Left = UserSettingStorage.Instance.WindowLeft;
                 Top = UserSettingStorage.Instance.WindowTop;
             }
-
-            Plugins.Init();
 
             InitProgressbarAnimation();
 
@@ -299,21 +344,22 @@ namespace Wox
 
             lastQuery = tbQuery.Text;
             toolTip.IsOpen = false;
-            resultCtrl.Dirty = true;
+            pnlResult.Dirty = true;
             Dispatcher.DelayInvoke("UpdateSearch",
                 o =>
                 {
                     Dispatcher.DelayInvoke("ClearResults", i =>
                     {
-                        // first try to use clear method inside resultCtrl, which is more closer to the add new results
+                        // first try to use clear method inside pnlResult, which is more closer to the add new results
                         // and this will not bring splash issues.After waiting 30ms, if there still no results added, we
                         // must clear the result. otherwise, it will be confused why the query changed, but the results
                         // didn't.
-                        if (resultCtrl.Dirty) resultCtrl.Clear();
+                        if (pnlResult.Dirty) pnlResult.Clear();
                     }, TimeSpan.FromMilliseconds(100), null);
                     queryHasReturn = false;
                     var q = new Query(lastQuery);
                     CommandFactory.DispatchCommand(q);
+                    BackToResultMode();
                     if (Plugins.HitThirdpartyKeyword(q))
                     {
                         Dispatcher.DelayInvoke("ShowProgressbar", originQuery =>
@@ -325,6 +371,12 @@ namespace Wox
                         }, TimeSpan.FromSeconds(0), lastQuery);
                     }
                 }, TimeSpan.FromMilliseconds(ShouldNotDelayQuery ? 0 : 150));
+        }
+
+        private void BackToResultMode()
+        {
+            pnlResult.Visibility = Visibility.Visible;
+            pnlContextMenu.Visibility = Visibility.Collapsed;
         }
 
         private bool ShouldNotDelayQuery
@@ -392,42 +444,6 @@ namespace Wox
             if (selectAll) tbQuery.SelectAll();
         }
 
-        public void ParseArgs(string[] args)
-        {
-            if (args != null && args.Length > 0)
-            {
-                switch (args[0].ToLower())
-                {
-                    case "reloadplugin":
-                        Plugins.Init();
-                        break;
-
-                    case "query":
-                        if (args.Length > 1)
-                        {
-                            string query = args[1];
-                            tbQuery.Text = query;
-                            tbQuery.SelectAll();
-                        }
-                        break;
-
-                    case "hidestart":
-                        HideApp();
-                        break;
-
-                    case "installplugin":
-                        var path = args[1];
-                        if (!File.Exists(path))
-                        {
-                            MessageBox.Show("Plugin " + path + " didn't exist");
-                            return;
-                        }
-                        PluginInstaller.Install(path);
-                        break;
-                }
-            }
-        }
-
         private void MainWindow_OnDeactivated(object sender, EventArgs e)
         {
             if (UserSettingStorage.Instance.HideWhenDeactive)
@@ -462,7 +478,7 @@ namespace Wox
             ShowWox(false);
             if (!tbQuery.Text.StartsWith(">"))
             {
-                resultCtrl.Clear();
+                pnlResult.Clear();
                 ChangeQuery(">");
             }
             tbQuery.CaretIndex = tbQuery.Text.Length;
@@ -472,7 +488,7 @@ namespace Wox
 
         private void updateCmdMode()
         {
-            var currentSelectedItem = resultCtrl.GetActiveResult();
+            var currentSelectedItem = pnlResult.GetActiveResult();
             if (currentSelectedItem != null)
             {
                 ignoreTextChange = true;
@@ -488,7 +504,14 @@ namespace Wox
             switch (key)
             {
                 case Key.Escape:
-                    HideWox();
+                    if (IsInContextMenuMode)
+                    {
+                        BackToResultMode();
+                    }
+                    else
+                    {
+                        HideWox();
+                    }
                     e.Handled = true;
                     break;
 
@@ -515,14 +538,14 @@ namespace Wox
                     break;
 
                 case Key.PageDown:
-                    resultCtrl.SelectNextPage();
+                    pnlResult.SelectNextPage();
                     if (IsCMDMode) updateCmdMode();
                     toolTip.IsOpen = false;
                     e.Handled = true;
                     break;
 
                 case Key.PageUp:
-                    resultCtrl.SelectPrevPage();
+                    pnlResult.SelectPrevPage();
                     if (IsCMDMode) updateCmdMode();
                     toolTip.IsOpen = false;
                     e.Handled = true;
@@ -544,29 +567,68 @@ namespace Wox
                     break;
 
                 case Key.Enter:
-                    AcceptSelect(resultCtrl.GetActiveResult());
+                    Result activeResult = GetActiveResult();
+                    if (globalHotkey.CheckModifiers().ShiftPressed)
+                    {
+                        ShowContextMenu(activeResult);
+                    }
+                    else
+                    {
+                        SelectResult(activeResult);                        
+                    }
                     e.Handled = true;
                     break;
             }
         }
 
+        private bool IsInContextMenuMode
+        {
+            get { return pnlContextMenu.Visibility == Visibility.Visible; }
+        }
+
+        private Result GetActiveResult()
+        {
+            if (IsInContextMenuMode)
+            {
+                return pnlContextMenu.GetActiveResult();
+            }
+            else
+            {
+                return pnlResult.GetActiveResult();
+            }
+        } 
+
         private void SelectPrevItem()
         {
-            resultCtrl.SelectPrev();
-            if (IsCMDMode) updateCmdMode();
+            if (IsInContextMenuMode)
+            {
+                pnlContextMenu.SelectPrev();
+            }
+            else
+            {
+                pnlResult.SelectPrev();
+                if (IsCMDMode) updateCmdMode();
+            }
             toolTip.IsOpen = false;
         }
 
         private void SelectNextItem()
         {
-            resultCtrl.SelectNext();
-            if (IsCMDMode) updateCmdMode();
+            if (IsInContextMenuMode)
+            {
+                pnlContextMenu.SelectNext();
+            }
+            else
+            {
+                pnlResult.SelectNext();
+                if (IsCMDMode) updateCmdMode();
+            }
             toolTip.IsOpen = false;
         }
 
-        private void AcceptSelect(Result result)
+        private void SelectResult(Result result)
         {
-            if (!resultCtrl.Dirty && result != null)
+            if (result != null)
             {
                 if (result.Action != null)
                 {
@@ -595,10 +657,23 @@ namespace Wox
                 list.ForEach(
                     o =>
                     {
-                        if (o.AutoAjustScore) o.Score += UserSelectedRecordStorage.Instance.GetSelectedCount(o);
+                        if (o.AutoAjustScore) o.Score += UserSelectedRecordStorage.Instance.GetSelectedCount(o) * 5;
                     });
                 List<Result> l = list.Where(o => o.OriginQuery != null && o.OriginQuery.RawQuery == lastQuery).ToList();
-                Dispatcher.Invoke(new Action(() => resultCtrl.AddResults(l)));
+                Dispatcher.Invoke(new Action(() =>
+                   pnlResult.AddResults(l))
+                );
+            }
+        }
+
+        private void ShowContextMenu(Result result)
+        {
+            if (result.ContextMenu != null && result.ContextMenu.Count > 0)
+            {
+                pnlContextMenu.Clear();
+                pnlContextMenu.AddResults(result.ContextMenu);
+                pnlContextMenu.Visibility = Visibility.Visible;
+                pnlResult.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -640,14 +715,14 @@ namespace Wox
             this.Opacity = this.AllowsTransparency ? UserSettingStorage.Instance.Opacity : 1;
         }
 
-        public bool ShellRun(string cmd)
+        public bool ShellRun(string cmd, bool runAsAdministrator = false)
         {
             try
             {
                 if (string.IsNullOrEmpty(cmd))
                     throw new ArgumentNullException();
 
-                Wox.Infrastructure.WindowsShellRun.Start(cmd);
+                WindowsShellRun.Start(cmd, runAsAdministrator);
                 return true;
             }
             catch (Exception ex)

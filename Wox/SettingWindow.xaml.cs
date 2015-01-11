@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -10,20 +11,16 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using IWshRuntimeLibrary;
-using Microsoft.VisualBasic.ApplicationServices;
-using Wox.Converters;
-using Wox.Infrastructure;
-using Wox.Infrastructure.Storage;
 using Wox.Infrastructure.Storage.UserSettings;
 using Wox.Plugin;
 using Wox.Helper;
 using Wox.Plugin.SystemPlugins;
 using Wox.PluginLoader;
+using Wox.Update;
 using Application = System.Windows.Forms.Application;
 using File = System.IO.File;
 using MessageBox = System.Windows.MessageBox;
 using System.Windows.Data;
-using Label = System.Windows.Forms.Label;
 
 namespace Wox
 {
@@ -43,8 +40,7 @@ namespace Wox
 
         private void Setting_Loaded(object sender, RoutedEventArgs ev)
         {
-            ctlHotkey.OnHotkeyChanged += ctlHotkey_OnHotkeyChanged;
-            ctlHotkey.SetHotkey(UserSettingStorage.Instance.Hotkey, false);
+            #region General
 
             cbHideWhenDeactive.Checked += (o, e) =>
             {
@@ -58,11 +54,25 @@ namespace Wox
                 UserSettingStorage.Instance.Save();
             };
 
-            lvCustomHotkey.ItemsSource = UserSettingStorage.Instance.CustomPluginHotkeys;
+            cbDontPromptUpdateMsg.Checked += (o, e) =>
+            {
+                UserSettingStorage.Instance.DontPromptUpdateMsg = true;
+                UserSettingStorage.Instance.Save();
+            };
+
+            cbDontPromptUpdateMsg.Unchecked += (o, e) =>
+            {
+                UserSettingStorage.Instance.DontPromptUpdateMsg = false;
+                UserSettingStorage.Instance.Save();
+            };
+
             cbStartWithWindows.IsChecked = File.Exists(woxLinkPath);
             cbHideWhenDeactive.IsChecked = UserSettingStorage.Instance.HideWhenDeactive;
+            cbDontPromptUpdateMsg.IsChecked = UserSettingStorage.Instance.DontPromptUpdateMsg;
 
-            #region Load Theme
+            #endregion
+
+            #region Theme
 
             if (!string.IsNullOrEmpty(UserSettingStorage.Instance.QueryBoxFont) &&
                 Fonts.SystemFontFamilies.Count(o => o.FamilyNames.Values.Contains(UserSettingStorage.Instance.QueryBoxFont)) > 0)
@@ -160,9 +170,17 @@ namespace Wox
                 var wallpaperColor = WallpaperPathRetrieval.GetWallpaperColor();
                 PreviewPanel.Background = new SolidColorBrush(wallpaperColor);
             }
+
+            //PreviewPanel
+            App.Window.SetTheme(UserSettingStorage.Instance.Theme);
+
             #endregion
 
-            #region Load Plugin
+            #region Plugin
+
+            ctlHotkey.OnHotkeyChanged += ctlHotkey_OnHotkeyChanged;
+            ctlHotkey.SetHotkey(UserSettingStorage.Instance.Hotkey, false);
+            lvCustomHotkey.ItemsSource = UserSettingStorage.Instance.CustomPluginHotkeys;
 
             var plugins = new CompositeCollection
             {
@@ -205,9 +223,22 @@ namespace Wox
 
             #endregion
 
-            //PreviewPanel
+            #region About
+
+            tbVersion.Text = ConfigurationManager.AppSettings["version"];
+            Release newRelease = new UpdateChecker().CheckUpgrade();
+            if (newRelease == null)
+            {
+                tbNewVersionAvailable.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                tbNewVersionAvailable.Text = newRelease.version + " available";
+            }
+
+            #endregion
+
             settingsLoaded = true;
-            App.Window.SetTheme(UserSettingStorage.Instance.Theme);
         }
 
         private void EnableProxy()
@@ -451,7 +482,7 @@ namespace Wox
                 pluginAuthor.Text = "By: " + pair.Metadata.Author;
                 pluginSubTitle.Text = pair.Metadata.Description;
                 pluginId = pair.Metadata.ID;
-                pluginIcon.Source = ImageLoader.Load(pair.Metadata.FullIcoPath);
+                pluginIcon.Source = ImageLoader.ImageLoader.Load(pair.Metadata.FullIcoPath);
             }
             else
             {
@@ -468,7 +499,7 @@ namespace Wox
                     tbOpenPluginDirecoty.Visibility = Visibility.Collapsed;
                     pluginActionKeywordTitle.Visibility = Visibility.Collapsed;
                     pluginTitle.Cursor = Cursors.Arrow;
-                    pluginIcon.Source = ImageLoader.Load(sys.FullIcoPath);
+                    pluginIcon.Source = ImageLoader.ImageLoader.Load(sys.FullIcoPath);
                 }
             }
 
@@ -682,6 +713,20 @@ namespace Wox
             catch
             {
                 MessageBox.Show("Proxy connect failed.");
+            }
+        }
+
+        private void tbWebsite_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            Process.Start("http://www.getwox.com");
+        }
+
+        private void tbNewVersionAvailable_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            Release newRelease = new UpdateChecker().CheckUpgrade();
+            if (newRelease != null)
+            {
+                Process.Start("http://www.getwox.com/release/version/" + newRelease.version);
             }
         }
     }

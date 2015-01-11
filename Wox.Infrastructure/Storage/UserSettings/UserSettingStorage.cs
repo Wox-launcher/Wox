@@ -6,8 +6,11 @@ using Newtonsoft.Json;
 
 namespace Wox.Infrastructure.Storage.UserSettings
 {
-    public class UserSettingStorage : BaseStorage<UserSettingStorage>
+    public class UserSettingStorage : JsonStrorage<UserSettingStorage>
     {
+        [JsonProperty]
+        public bool DontPromptUpdateMsg { get; set; }
+
         [JsonProperty]
         public string Hotkey { get; set; }
 
@@ -54,7 +57,7 @@ namespace Wox.Infrastructure.Storage.UserSettings
         public List<ProgramSource> ProgramSources { get; set; }
 
         [JsonProperty]
-        public List<FolderLink> FolderLinks { get; set; }	//Aaron
+        public List<FolderLink> FolderLinks { get; set; }
 
         public List<CustomizedPluginConfig> CustomizedPluginConfigs { get; set; }
 
@@ -143,8 +146,9 @@ namespace Wox.Infrastructure.Storage.UserSettings
             get { return "config"; }
         }
 
-        protected override UserSettingStorage LoadDefaultConfig()
+        protected override UserSettingStorage LoadDefault()
         {
+            DontPromptUpdateMsg = false;
             Theme = "Dark";
             ReplaceWinR = true;
             WebSearches = LoadDefaultWebSearches();
@@ -161,7 +165,7 @@ namespace Wox.Infrastructure.Storage.UserSettings
             return this;
         }
 
-        protected override void OnAfterLoadConfig(UserSettingStorage storage)
+        protected override void OnAfterLoad(UserSettingStorage storage)
         {
             if (storage.CustomizedPluginConfigs == null)
             {

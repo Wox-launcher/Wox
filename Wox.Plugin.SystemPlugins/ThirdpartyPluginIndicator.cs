@@ -35,7 +35,7 @@ namespace Wox.Plugin.SystemPlugins
                         Title = metadata.ActionKeyword,
                         SubTitle = string.Format("Activate {0} plugin", metadata.Name),
                         Score = 100,
-                        IcoPath = "Images/work.png",
+                        IcoPath = metadata.FullIcoPath,
                         Action = (c) =>
                         {
                             context.API.ChangeQuery(metadataCopy.ActionKeyword + " ");
@@ -80,7 +80,7 @@ namespace Wox.Plugin.SystemPlugins
 
         public override string IcoPath
         {
-            get { return @"Images\list.png"; }
+            get { return @"Images\work.png"; }
         }
 
         public override string Description
