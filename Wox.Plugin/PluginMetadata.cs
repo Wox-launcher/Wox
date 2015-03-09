@@ -38,7 +38,7 @@ namespace Wox.Plugin
         public string PluginDirectory { get; set; }
 
         [Obsolete("This property has been obsoleted, use PluginDirectory instead")]
-        public string PluginDirecotry
+        public string PluginDirectory
         {
             get { return PluginDirectory; }
         }
