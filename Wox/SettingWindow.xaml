@@ -19,8 +19,8 @@
         </ListBoxItem>
         <converters:ImagePathConverter x:Key="ImageConverter" />
     </Window.Resources>
-    <TabControl Height="auto" x:Name="settingTab">
-        <TabItem Header="{DynamicResource general}">
+    <TabControl Height="auto" x:Name="settingTab" Margin="5">
+        <TabItem Header="{DynamicResource general}" Padding="10 5">
             <StackPanel Orientation="Vertical" Margin="10">
                 <CheckBox x:Name="cbStartWithWindows"  Unchecked="CbStartWithWindows_OnUnchecked" Checked="CbStartWithWindows_OnChecked" Margin="10">
                     <TextBlock Text="{DynamicResource startWoxOnSystemStartup}" ></TextBlock>
@@ -40,7 +40,7 @@
                 </StackPanel>
             </StackPanel>
         </TabItem>
-        <TabItem Header="{DynamicResource plugin}" x:Name="tabPlugin" PreviewMouseLeftButtonDown="TabPlugin_OnPreviewMouseLeftButtonDown">
+        <TabItem Header="{DynamicResource plugin}" x:Name="tabPlugin" PreviewMouseLeftButtonDown="TabPlugin_OnPreviewMouseLeftButtonDown" Padding="10 5">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="200"/>
@@ -48,7 +48,7 @@
                 </Grid.ColumnDefinitions>
                 <DockPanel Grid.Column="0" >
                     <TextBlock DockPanel.Dock="Top" Margin="6" HorizontalAlignment="Left" Cursor="Hand" MouseUp="tbMorePlugins_MouseUp" x:Name="tbMorePlugins" Foreground="Blue" Text="{DynamicResource browserMorePlugins}"></TextBlock>
-                    <ListBox x:Name="lbPlugins" Margin="0" SelectionChanged="lbPlugins_OnSelectionChanged" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" Grid.IsSharedSizeScope="True" >
+                    <ListBox x:Name="lbPlugins" Margin="6 0 0 0" SelectionChanged="lbPlugins_OnSelectionChanged" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" Grid.IsSharedSizeScope="True" >
                         <ListBox.Resources>
                             <DataTemplate DataType="{x:Type woxPlugin:PluginPair}">
                                 <Grid Height="36" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="3">
@@ -91,19 +91,21 @@
                                 </Grid.RowDefinitions>
                                 <DockPanel Grid.Row="0">
                                     <TextBlock x:Name="pluginTitle" Text="Plugin Title" Cursor="Hand" MouseUp="PluginTitle_OnMouseUp" ToolTip="{Binding Source=pluginTitle, Path=Text}" FontSize="24"></TextBlock>
-                                    <TextBlock Opacity="0.5" VerticalAlignment="Bottom" HorizontalAlignment="Right" x:Name="pluginAuthor" Text="{DynamicResource author}"></TextBlock>
+                                    <TextBlock VerticalAlignment="Bottom" HorizontalAlignment="Right" x:Name="pluginAuthor" Text="{DynamicResource author}"></TextBlock>
                                 </DockPanel>
-                                <TextBlock Grid.Row="1" x:Name="pluginSubTitle" Opacity="0.5" ToolTip="{Binding Source=pluginSubTitle, Path=Text}" Visibility="{Binding Source=pluginSubTitle, Path=Text, Converter={converters:StringNullOrEmptyToVisibilityConverter}}" ></TextBlock>
+                                <TextBlock Grid.Row="1" x:Name="pluginSubTitle"
+                                           Visibility="{Binding Source=pluginSubTitle, Path=Text, Converter={converters:StringNullOrEmptyToVisibilityConverter}}"
+                                           ToolTip="{Binding Source=pluginSubTitle, Path=Text}"></TextBlock>
                                 <DockPanel Grid.Row="2" Margin="0 8 0 0">
-                                    <CheckBox x:Name="cbDisablePlugin" Click="CbDisablePlugin_OnClick">
+                                    <CheckBox x:Name="cbDisablePlugin" Click="CbDisablePlugin_OnClick" Margin="0 0 0 0">
                                         <TextBlock Text="{DynamicResource disable}"></TextBlock>
                                     </CheckBox>
-                                    <TextBlock x:Name="pluginActionKeywordTitle" Margin="20 -2 0 0">
+                                    <TextBlock x:Name="pluginActionKeywordTitle" Margin="20 0 0 0">
                                         <TextBlock Text="{DynamicResource actionKeyword}"></TextBlock>
                                     </TextBlock>
-                                    <TextBlock Margin="5 -2 0 0" ToolTip="Change Action Keyword" Cursor="Hand" MouseUp="PluginActionKeyword_OnMouseUp" Foreground="Blue" Text="key" x:Name="pluginActionKeyword"></TextBlock>
-                                    <TextBlock Margin="20 -2 0 0" Text="Init time: 0ms" x:Name="pluginInitTime"></TextBlock>
-                                    <TextBlock Margin="20 -2 0 0" Text="Query time: 0ms" x:Name="pluginQueryTime"></TextBlock>
+                                    <TextBlock Margin="5 0 0 0" ToolTip="Change Action Keyword" Cursor="Hand" MouseUp="PluginActionKeyword_OnMouseUp" Foreground="Blue" Text="key" x:Name="pluginActionKeyword"></TextBlock>
+                                    <TextBlock Margin="20 0 0 0" Text="Init time: 0ms" x:Name="pluginInitTime" Opacity="0.4"></TextBlock>
+                                    <TextBlock Margin="20 0 0 0" Text="Query time: 0ms" x:Name="pluginQueryTime" Opacity="0.4"></TextBlock>
                                     <TextBlock HorizontalAlignment="Right" Cursor="Hand" MouseUp="tbOpenPluginDirecoty_MouseUp" Foreground="Blue" Text="{DynamicResource pluginDirectory}" x:Name="tbOpenPluginDirecoty"></TextBlock>
                                 </DockPanel>
                             </Grid>
@@ -116,7 +118,7 @@
                 </Grid>
             </Grid>
         </TabItem>
-        <TabItem Header="{DynamicResource theme}" PreviewMouseLeftButtonDown="TabTheme_OnPreviewMouseLeftButtonDown"  x:Name="tabTheme">
+        <TabItem Header="{DynamicResource theme}" PreviewMouseLeftButtonDown="TabTheme_OnPreviewMouseLeftButtonDown"  x:Name="tabTheme" Padding="10 5">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="200"/>
@@ -124,17 +126,14 @@
                 </Grid.ColumnDefinitions>
                 <DockPanel Grid.Column="0" >
                     <TextBlock DockPanel.Dock="Top" Margin="6" HorizontalAlignment="Left" Cursor="Hand" MouseUp="tbMoreThemes_MouseUp" x:Name="tbMoreThemes" Foreground="Blue" Text="{DynamicResource browserMoreThemes}"></TextBlock>
-                    <ListBox x:Name="themeComboBox" Margin="0" SelectionChanged="ThemeComboBox_OnSelectionChanged" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Width="180"/>
+                    <ListBox x:Name="themeComboBox" Margin="6 0 0 0" SelectionChanged="ThemeComboBox_OnSelectionChanged" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
                 </DockPanel>
                 <Grid Margin="0" Grid.Column="1">
                     <Grid.RowDefinitions>
                         <RowDefinition />
                         <RowDefinition Height="100"/>
                     </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel x:Name="PreviewPanel" Grid.Row="0" Margin="0">
+                    <StackPanel x:Name="PreviewPanel" Grid.Row="0" Margin="10 0 0 0">
                         <StackPanel x:Name="PreviewMainPanel" Orientation="Horizontal" Margin="10" HorizontalAlignment="Center" VerticalAlignment="Center">
                             <StackPanel.Resources>
                                 <ResourceDictionary Source="/PresentationFramework.Classic,Version=3.0.0.0,Culture=neutral,PublicKeyToken=31bf3856ad364e35,processorArchitecture=MSIL;component/themes/Classic.xaml"/>
@@ -151,14 +150,40 @@
                             </Border>
                         </StackPanel>
                     </StackPanel>
+                    <Grid Grid.Row="1" Margin="10 20 0 10" >
+                        <Grid.RowDefinitions>
+                            <RowDefinition />
+                            <RowDefinition />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"></ColumnDefinition>
+                            <ColumnDefinition Width="Auto"></ColumnDefinition>
+                            <ColumnDefinition Width="Auto"></ColumnDefinition>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Grid.Row="0" Text="{DynamicResource queryBoxFont}"   />
+                        <ComboBox Grid.Column="1" Grid.Row="0" Margin="10 -2 5 0" x:Name="cbQueryBoxFont" ItemsSource="{x:Static Fonts.SystemFontFamilies}" SelectionChanged="CbQueryBoxFont_OnSelectionChanged" HorizontalAlignment="Left" VerticalAlignment="Top" Width="160"/>
+                        <ComboBox Grid.Column="2" Grid.Row="0"  Margin="0 -2 0 0"
+                    			x:Name="cbQueryBoxFontFaces"
+                    			ItemsSource="{Binding SelectedValue.FamilyTypefaces, ElementName=cbQueryBoxFont}" SelectionChanged="CbQueryBoxFontFaces_OnSelectionChanged" HorizontalAlignment="Left" VerticalAlignment="Top" Width="120">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <ItemsControl ItemsSource="{Binding AdjustedFaceNames}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Value}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
 
-                    <StackPanel Grid.Row="1" Margin="0 10 0 10" Orientation="Vertical">
-                        <StackPanel Orientation="Horizontal" Margin="2">
-                            <TextBlock Text="{DynamicResource queryBoxFont}" />
-                            <ComboBox Margin="10 -2 5 0" x:Name="cbQueryBoxFont" ItemsSource="{x:Static Fonts.SystemFontFamilies}" SelectionChanged="CbQueryBoxFont_OnSelectionChanged" HorizontalAlignment="Left" VerticalAlignment="Top" Width="160"/>
-                            <ComboBox Margin="0 -2 0 0"
-								x:Name="cbQueryBoxFontFaces"
-								ItemsSource="{Binding SelectedValue.FamilyTypefaces, ElementName=cbQueryBoxFont}" SelectionChanged="CbQueryBoxFontFaces_OnSelectionChanged" HorizontalAlignment="Left" VerticalAlignment="Top" Width="120">
+
+                        <TextBlock Grid.Column="0" Grid.Row="1" Text="{DynamicResource resultItemFont}"  />
+                        <ComboBox Grid.Column="1" Grid.Row="1" Margin="10 -2 5 0" x:Name="cbResultItemFont" ItemsSource="{x:Static Fonts.SystemFontFamilies}" SelectionChanged="CbResultItemFont_OnSelectionChanged" HorizontalAlignment="Left" VerticalAlignment="Top" Width="160"/>
+                        <ComboBox Grid.Column="2" Grid.Row="1" Margin="0 -2 0 0"
+                    			x:Name="cbResultItemFontFaces"
+                    			ItemsSource="{Binding SelectedValue.FamilyTypefaces, ElementName=cbResultItemFont}" SelectionChanged="CbResultItemFontFaces_OnSelectionChanged" HorizontalAlignment="Left" VerticalAlignment="Top" Width="120">
                                 <ComboBox.ItemTemplate>
                                     <DataTemplate>
                                         <ItemsControl ItemsSource="{Binding AdjustedFaceNames}">
@@ -171,32 +196,13 @@
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="2">
-                            <TextBlock Text="{DynamicResource resultItemFont}" />
-                            <ComboBox Margin="5 -2 5 0" x:Name="cbResultItemFont" ItemsSource="{x:Static Fonts.SystemFontFamilies}" SelectionChanged="CbResultItemFont_OnSelectionChanged" HorizontalAlignment="Left" VerticalAlignment="Top" Width="160"/>
-                            <ComboBox Margin="0 -2 0 0"
-								x:Name="cbResultItemFontFaces"
-								ItemsSource="{Binding SelectedValue.FamilyTypefaces, ElementName=cbResultItemFont}" SelectionChanged="CbResultItemFontFaces_OnSelectionChanged" HorizontalAlignment="Left" VerticalAlignment="Top" Width="120">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <ItemsControl ItemsSource="{Binding AdjustedFaceNames}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <TextBlock Text="{Binding Value}" />
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-                        </StackPanel>
-                    </StackPanel>
+                        
+                    </Grid>
 
                 </Grid>
             </Grid>
         </TabItem>
-        <TabItem Header="{DynamicResource hotkey}" x:Name="tabHotkey" PreviewMouseLeftButtonDown="TabHotkey_OnPreviewMouseLeftButtonDown">
+        <TabItem Header="{DynamicResource hotkey}" x:Name="tabHotkey" PreviewMouseLeftButtonDown="TabHotkey_OnPreviewMouseLeftButtonDown" Padding="10 5">
             <Grid Margin="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="30"/>
@@ -242,15 +248,15 @@
                 </StackPanel>
             </Grid>
         </TabItem>
-        <TabItem Header="{DynamicResource proxy}">
+        <TabItem Header="{DynamicResource proxy}" Padding="10 5">
             <StackPanel>
-                <CheckBox x:Name="cbEnableProxy" Margin="10">
+                <CheckBox x:Name="cbEnableProxy" Margin="20 20 0 0">
                     <TextBlock Text="{DynamicResource enableProxy}"></TextBlock>
                 </CheckBox>
-                <Grid Margin="10">
+                <Grid Margin="120 0 0 0">
                     <Grid.RowDefinitions>
-                        <RowDefinition ></RowDefinition>
-                        <RowDefinition ></RowDefinition>
+                        <RowDefinition></RowDefinition>
+                        <RowDefinition></RowDefinition>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="80"></ColumnDefinition>
@@ -258,38 +264,38 @@
                         <ColumnDefinition Width="80"></ColumnDefinition>
                         <ColumnDefinition></ColumnDefinition>
                     </Grid.ColumnDefinitions>
-                    <Border Grid.Row="0" Grid.Column="0" Padding="5">
+                    <Border Grid.Row="0" Grid.Column="0" Padding="0 10">
                         <TextBlock Text="{DynamicResource server}"></TextBlock>
                     </Border>
-                    <Border Grid.Row="0" Grid.Column="1" Padding="5">
+                    <Border Grid.Row="0" Grid.Column="1" Padding="0 10">
                         <TextBox  Width="200" HorizontalAlignment="Left" x:Name="tbProxyServer"></TextBox>
                     </Border>
-                    <Border Grid.Row="0" Grid.Column="2" Padding="5">
+                    <Border Grid.Row="0" Grid.Column="2" Padding="0 10">
                         <TextBlock Text="{DynamicResource port}"></TextBlock>
                     </Border>
-                    <Border Grid.Row="0" Grid.Column="3" Padding="5">
+                    <Border Grid.Row="0" Grid.Column="3" Padding="0 10">
                         <TextBox Width="50" HorizontalAlignment="Left" x:Name="tbProxyPort"></TextBox>
                     </Border>
-                    <Border Grid.Row="1" Grid.Column="0" Padding="5">
+                    <Border Grid.Row="1" Grid.Column="0" Padding="0 10">
                         <TextBlock Text="{DynamicResource userName}"></TextBlock>
                     </Border>
-                    <Border Grid.Row="1" Grid.Column="1" Padding="5">
+                    <Border Grid.Row="1" Grid.Column="1" Padding="0 10">
                         <TextBox Width="200" HorizontalAlignment="Left" x:Name="tbProxyUserName"></TextBox>
                     </Border>
-                    <Border Grid.Row="1" Grid.Column="2" Padding="5">
+                    <Border Grid.Row="1" Grid.Column="2" Padding="0 10">
                         <TextBlock Text="{DynamicResource password}"></TextBlock>
                     </Border>
-                    <Border Grid.Row="1" Grid.Column="3" Padding="5">
+                    <Border Grid.Row="1" Grid.Column="3" Padding="0 10">
                         <PasswordBox Width="200" HorizontalAlignment="Left" x:Name="tbProxyPassword" />
                     </Border>
                 </Grid>
-                <StackPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" Margin="110 10 0 0">
                     <Button x:Name="btnTestProxy" Width="80" HorizontalAlignment="Left" Margin="10" Click="btnTestProxy_Click" Content="{DynamicResource testProxy}"></Button>
                     <Button x:Name="btnSaveProxy" Width="80" HorizontalAlignment="Left" Margin="10" Click="btnSaveProxy_Click" Content="{DynamicResource save}"></Button>
                 </StackPanel>
             </StackPanel>
         </TabItem>
-        <TabItem Header="{DynamicResource about}">
+        <TabItem Header="{DynamicResource about}" Padding="10 5">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="80"></ColumnDefinition>
@@ -308,7 +314,7 @@
                 <StackPanel Grid.Column="1" Grid.Row="1" Orientation="Horizontal">
                     <TextBlock  Margin="6" HorizontalAlignment="Left" x:Name="tbVersion" Text="1.0.0"></TextBlock>
                 </StackPanel>
-                
+
                 <TextBlock x:Name="tbActivatedTimes" Grid.Row="2" Margin="6" Grid.ColumnSpan="2" Text="{DynamicResource about_activate_times}"></TextBlock>
             </Grid>
         </TabItem>

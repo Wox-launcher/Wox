@@ -18,14 +18,14 @@
     <system:String x:Key="woxsettings">Wox Settings</system:String>
     <system:String x:Key="general">General</system:String>
     <system:String x:Key="startWoxOnSystemStartup">Start Wox on system startup</system:String>
-    <system:String x:Key="hideWoxWhenLoseFocus">Hide Wox when loses focus</system:String>
-    <system:String x:Key="dontPromptUpdateMsg">Don't show upgrade msg if new version available</system:String>
+    <system:String x:Key="hideWoxWhenLoseFocus">Hide Wox when it loses focus</system:String>
+    <system:String x:Key="dontPromptUpdateMsg">Don't show upgrade message if new version is available</system:String>
     <system:String x:Key="rememberLastLocation">Remember last launch location</system:String>
     <system:String x:Key="language">Language</system:String>
     
 
     <!--Setting Plugin-->
-    <system:String x:Key="plugin">Plugin</system:String>
+    <system:String x:Key="plugin">Plugins</system:String>
     <system:String x:Key="browserMorePlugins">Browse more plugins</system:String>
     <system:String x:Key="disable">Disable</system:String>
     <system:String x:Key="actionKeyword">Action keyword</system:String>
@@ -39,14 +39,14 @@
     <system:String x:Key="browserMoreThemes">Browse more themes</system:String>
     <system:String x:Key="helloWox">Hello Wox</system:String>
     <system:String x:Key="queryBoxFont">Query Box Font</system:String>
-    <system:String x:Key="resultItemFont">Result Item Font</system:String>
+    <system:String x:Key="resultItemFont">Result List Font</system:String>
     <system:String x:Key="windowMode">Window Mode</system:String>
     <system:String x:Key="opacity">Opacity</system:String>
     
     <!--Setting Hotkey-->
-    <system:String x:Key="hotkey">Hotkey</system:String>
+    <system:String x:Key="hotkey">Hotkeys</system:String>
     <system:String x:Key="woxHotkey">Wox Hotkey</system:String>
-    <system:String x:Key="customQueryHotkey">Custom Query Hotkey</system:String>
+    <system:String x:Key="customQueryHotkey">Custom Query Hotkeys</system:String>
     <system:String x:Key="delete">Delete</system:String>
     <system:String x:Key="edit">Edit</system:String>
     <system:String x:Key="add">Add</system:String>
@@ -79,12 +79,12 @@
     <system:String x:Key="oldActionKeyword">Old Action Keyword</system:String>
     <system:String x:Key="newActionKeyword">New Action Keyword</system:String>
     <system:String x:Key="cancel">Cancel</system:String>
-    <system:String x:Key="done">Done</system:String>
+    <system:String x:Key="done">OK</system:String>
     <system:String x:Key="cannotFindSpecifiedPlugin">Can't find specified plugin</system:String>
     <system:String x:Key="newActionKeywordCannotBeEmpty">New Action Keyword can't be empty</system:String>
-    <system:String x:Key="newActionKeywordHasBeenAssigned">New ActionKeyword has been assigned to other plugin, please assign another new action keyword</system:String>
+    <system:String x:Key="newActionKeywordHasBeenAssigned">New Action Keyword has been assigned to another plugin, please assign a different action keyword</system:String>
     <system:String x:Key="succeed">Succeed</system:String>
-    <system:String x:Key="actionkeyword_tips">Use * if you don't want to specify a action keyword</system:String>
+    <system:String x:Key="actionkeyword_tips">Use * if you don't want to specify an action keyword</system:String>
     
     
     <!--Custom Query Hotkey Dialog-->
