@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -64,18 +65,12 @@ namespace Wox
                 text += "Ctrl + Alt";
             }
 
-            if (IsKeyACharOrNumber(key))
-            {
-                text += " + " + key;
-            }
-            else if (key == Key.Space)
-            {
-                text += " + Space";
-            }
-            else
+            if (IsModifierKey(key))
             {
                 return;
             }
+
+            text += " + " + key;
 
             if (text == tbHotkey.Text)
             {
@@ -133,9 +128,10 @@ namespace Wox
 
         }
 
-        private static bool IsKeyACharOrNumber(Key key)
+        private static bool IsModifierKey(Key key)
         {
-            return (key >= Key.A && key <= Key.Z) || (key >= Key.D0 && key <= Key.D9);
+            return (key == Key.LeftAlt || key == Key.LeftCtrl || key == Key.LeftShift || key == Key.LWin ||
+                    key == Key.RightAlt || key == Key.RightCtrl || key == Key.RightShift || key == Key.RWin);
         }
     }
 }
