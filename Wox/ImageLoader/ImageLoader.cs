@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -13,7 +14,6 @@ namespace Wox.ImageLoader
     public class ImageLoader
     {
         private static readonly Dictionary<string, ImageSource> imageCache = new Dictionary<string, ImageSource>();
-        private static object locker = new object();
 
         private static readonly List<string> imageExts = new List<string>
         {
@@ -38,19 +38,17 @@ namespace Wox.ImageLoader
 
         private static ImageSource GetIcon(string fileName)
         {
-            if (System.IO.File.Exists(fileName) == false)
+            try
             {
-                return null;
+                if (File.Exists(fileName) == false) return null;
+                Icon icon = GetFileIcon(fileName) ?? Icon.ExtractAssociatedIcon(fileName);
+                if (icon != null)
+                {
+                    return System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(icon.Handle,
+                        new Int32Rect(0, 0, icon.Width, icon.Height), BitmapSizeOptions.FromEmptyOptions());
+                }
             }
-            
-            Icon icon = GetFileIcon(fileName);
-            if (icon == null) icon = Icon.ExtractAssociatedIcon(fileName);
-
-            if (icon != null)
-            {
-                return System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(icon.Handle,
-                    new Int32Rect(0, 0, icon.Width, icon.Height), BitmapSizeOptions.FromEmptyOptions());
-            }
+            catch{}
 
             return null;
         }
@@ -59,23 +57,20 @@ namespace Wox.ImageLoader
         {
             //ImageCacheStroage.Instance.TopUsedImages can be changed during foreach, so we need to make a copy
             var imageList = new Dictionary<string, int>(ImageCacheStroage.Instance.TopUsedImages);
-            using (new Timeit(string.Format("Preload {0} images",imageList.Count)))
+            using (new Timeit(string.Format("Preload {0} images", imageList.Count)))
             {
                 foreach (var image in imageList)
                 {
-                    ImageSource img = Load(image.Key, false);
-                    if (img != null)
+                    if (!imageCache.ContainsKey(image.Key))
                     {
-                        img.Freeze(); //to make it copy to UI thread
-                        if (!imageCache.ContainsKey(image.Key))
+                        ImageSource img = Load(image.Key, false);
+                        if (img != null)
                         {
-                            lock (locker)
+                            img.Freeze(); //to make it copy to UI thread
+                            if (!imageCache.ContainsKey(image.Key))
                             {
-                                if (!imageCache.ContainsKey(image.Key))
-                                {
-                                    KeyValuePair<string, int> copyedImg = image;
-                                    App.Window.Dispatcher.Invoke(new Action(() => imageCache.Add(copyedImg.Key, img)));
-                                }
+                                KeyValuePair<string, int> copyedImg = image;
+                                App.Window.Dispatcher.Invoke(new Action(() => imageCache.Add(copyedImg.Key, img)));
                             }
                         }
                     }
@@ -83,50 +78,51 @@ namespace Wox.ImageLoader
             }
         }
 
-        public static ImageSource Load(string path,bool addToCache = true)
+        public static ImageSource Load(string path, bool addToCache = true)
         {
+            Stopwatch sw = new Stopwatch();
+            sw.Start();
+
             if (string.IsNullOrEmpty(path)) return null;
             if (addToCache)
             {
                 ImageCacheStroage.Instance.Add(path);
             }
 
+            ImageSource img = null;
             if (imageCache.ContainsKey(path))
             {
-                return imageCache[path];
+                img = imageCache[path];
             }
-
-            ImageSource img = null;
-            string ext = Path.GetExtension(path).ToLower();
-
-            if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            else
             {
-                img = new BitmapImage(new Uri(path));
-            }
-            else if (selfExts.Contains(ext))
-            {
-                img = GetIcon(path);
-            }
-            else if (!string.IsNullOrEmpty(path) && imageExts.Contains(ext) && File.Exists(path))
-            {
-                img = new BitmapImage(new Uri(path));
-            }
+                string ext = Path.GetExtension(path).ToLower();
 
-
-            if (img != null && addToCache)
-            {
-                if (!imageCache.ContainsKey(path))
+                if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
                 {
-                    lock (locker)
+                    img = new BitmapImage(new Uri(path));
+                }
+                else if (selfExts.Contains(ext) && File.Exists(path))
+                {
+                    img = GetIcon(path);
+                }
+                else if (!string.IsNullOrEmpty(path) && imageExts.Contains(ext) && File.Exists(path))
+                {
+                    img = new BitmapImage(new Uri(path));
+                }
+
+
+                if (img != null && addToCache)
+                {
+                    if (!imageCache.ContainsKey(path))
                     {
-                        if (!imageCache.ContainsKey(path))
-                        {
-                            imageCache.Add(path, img);
-                        }
+                        imageCache.Add(path, img);
                     }
                 }
             }
 
+            sw.Stop();
+            DebugHelper.WriteLine(string.Format("Loading image path: {0} - {1}ms",path,sw.ElapsedMilliseconds));
             return img;
         }
 

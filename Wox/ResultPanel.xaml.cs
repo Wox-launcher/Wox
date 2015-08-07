@@ -1,13 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using Wox.Helper;
+using Wox.Core.UserSettings;
 using Wox.Plugin;
+using Wox.Storage;
 using UserControl = System.Windows.Controls.UserControl;
 
 namespace Wox
@@ -16,6 +15,7 @@ namespace Wox
     {
         public event Action<Result> LeftMouseClickEvent;
         public event Action<Result> RightMouseClickEvent;
+        public event Action<Result, IDataObject, DragEventArgs> ItemDropEvent;
 
         protected virtual void OnRightMouseClick(Result result)
         {
@@ -31,9 +31,10 @@ namespace Wox
 
         public bool Dirty { get; set; }
 
+        public int MaxResultsToShow { get { return UserSettingStorage.Instance.MaxResultsToShow * 50; } }
+
         public void AddResults(List<Result> results)
         {
-
             if (Dirty)
             {
                 Dirty = false;
@@ -41,11 +42,28 @@ namespace Wox
             }
             foreach (var result in results)
             {
-                int position = GetInsertLocation(result.Score);
+                int position = 0;
+                if (IsTopMostResult(result))
+                {
+                    result.Score = int.MaxValue;
+                }
+                else
+                {
+                    if (result.Score >= int.MaxValue)
+                    {
+                        result.Score = int.MaxValue - 1;
+                    }
+                    position = GetInsertLocation(result.Score);
+                }
                 lbResults.Items.Insert(position, result);
             }
             lbResults.Margin = lbResults.Items.Count > 0 ? new Thickness { Top = 8 } : new Thickness { Top = 0 };
             SelectFirst();
+        }
+
+        private bool IsTopMostResult(Result result)
+        {
+            return TopMostRecordStorage.Instance.IsTopMost(result);
         }
 
         private int GetInsertLocation(int currentScore)
@@ -110,6 +128,79 @@ namespace Wox
             }
         }
 
+        public List<Result> GetVisibleResults()
+        {
+            List<Result> visibleElements = new List<Result>();
+            VirtualizingStackPanel virtualizingStackPanel = GetInnerStackPanel(lbResults);
+            for (int i = (int)virtualizingStackPanel.VerticalOffset; i <= virtualizingStackPanel.VerticalOffset + virtualizingStackPanel.ViewportHeight; i++)
+            {
+                ListBoxItem item = lbResults.ItemContainerGenerator.ContainerFromIndex(i) as ListBoxItem;
+                if (item != null)
+                {
+                    visibleElements.Add(item.DataContext as Result);
+                }
+            }
+            return visibleElements;
+        }
+
+        private void UpdateItemNumber()
+        {
+            //VirtualizingStackPanel virtualizingStackPanel = GetInnerStackPanel(lbResults);
+            //int index = 0;
+            //for (int i = (int)virtualizingStackPanel.VerticalOffset; i <= virtualizingStackPanel.VerticalOffset + virtualizingStackPanel.ViewportHeight; i++)
+            //{
+            //    index++;
+            //    ListBoxItem item = lbResults.ItemContainerGenerator.ContainerFromIndex(i) as ListBoxItem;
+            //    if (item != null)
+            //    {
+            //        ContentPresenter myContentPresenter = FindVisualChild<ContentPresenter>(item);
+            //        if (myContentPresenter != null)
+            //        {
+            //            DataTemplate dataTemplate = myContentPresenter.ContentTemplate;
+            //            TextBlock tbItemNumber = (TextBlock)dataTemplate.FindName("tbItemNumber", myContentPresenter);
+            //            tbItemNumber.Text = index.ToString();
+            //        }
+            //    }
+            //}
+        }
+
+        private childItem FindVisualChild<childItem>(DependencyObject obj) where childItem : DependencyObject
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(obj); i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(obj, i);
+                if (child != null && child is childItem)
+                    return (childItem)child;
+                else
+                {
+                    childItem childOfChild = FindVisualChild<childItem>(child);
+                    if (childOfChild != null)
+                        return childOfChild;
+                }
+            }
+            return null;
+        }
+
+        private VirtualizingStackPanel GetInnerStackPanel(FrameworkElement element)
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(element); i++)
+            {
+                var child = VisualTreeHelper.GetChild(element, i) as FrameworkElement;
+
+                if (child == null) continue;
+
+                if (child is VirtualizingStackPanel) return child as VirtualizingStackPanel;
+
+                var panel = GetInnerStackPanel(child);
+
+                if (panel != null)
+                    return panel;
+            }
+
+            return null;
+
+        }
+
         public Result GetActiveResult()
         {
             int index = lbResults.SelectedIndex;
@@ -134,6 +225,10 @@ namespace Wox
             if (e.AddedItems.Count > 0 && e.AddedItems[0] != null)
             {
                 lbResults.ScrollIntoView(e.AddedItems[0]);
+                Dispatcher.DelayInvoke("UpdateItemNumber", o =>
+                {
+                    UpdateItemNumber();
+                }, TimeSpan.FromMilliseconds(3));
             }
         }
 
@@ -170,6 +265,21 @@ namespace Wox
                 index = 0;
             }
             Select(index);
+        }
+
+        private void ListBoxItem_OnDrop(object sender, DragEventArgs e)
+        {
+            var item = ItemsControl.ContainerFromElement(lbResults, e.OriginalSource as DependencyObject) as ListBoxItem;
+            if (item != null)
+            {
+                OnItemDropEvent(item.DataContext as Result, e.Data, e);
+            }
+        }
+
+        protected virtual void OnItemDropEvent(Result obj, IDataObject data, DragEventArgs e)
+        {
+            var handler = ItemDropEvent;
+            if (handler != null) handler(obj, data, e);
         }
     }
 }
