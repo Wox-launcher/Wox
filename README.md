@@ -20,6 +20,13 @@ Download
 
 Download from [release page](https://github.com/qianlifeng/Wox/releases).
 
+
+Installation
+=========
+1. Install [Chocolatey](http://chocolatey.org/)
+2. `choco install wox`
+
+
 Contribute  
 =========
 
