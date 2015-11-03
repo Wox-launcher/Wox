@@ -20,6 +20,13 @@ Download
 
 You can download the latest version on the [release page](https://github.com/qianlifeng/Wox/releases).
 
+
+Installation
+=========
+1. Install [Chocolatey](http://chocolatey.org/)
+2. `choco install wox`
+
+
 Contribute  
 =========
 
