@@ -121,4 +121,6 @@ Wox/Wox.csproj
 
 *.sublime-*
 *.dgml
+
 migrateToAutomaticPackageRestore.ps1
++PythonHome/* linguist-vendored
