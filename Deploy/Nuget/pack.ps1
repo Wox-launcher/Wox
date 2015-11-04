@@ -1,13 +1,5 @@
-$root = (split-path -parent $MyInvocation.MyCommand.Definition) + '\..\..'
+$root = $env:APPVEYOR_BUILD_FOLDER
 Write-Host $root
 $version = [System.Reflection.Assembly]::LoadFile("$root\Output\Release\Wox.Plugin.dll").GetName().Version
 $versionStr = "{0}.{1}.{2}.{3}" -f ($version.Major, $version.Minor, $version.Build, $version.Revision)
-
-Write-Host "Setting .nuspec version tag to $versionStr"
-
-$content = (Get-Content $root\Deploy\NuGet\wox.plugin.nuspec) 
-$content = $content -replace '\$version\$',$versionStr
-
-$content | Out-File $root\deploy\nuget\wox.plugin.nuspec
-
-& $root\.nuget\NuGet.exe pack $root\deploy\nuget\wox.plugin.nuspec
+& nuget pack $root\deploy\nuget\wox.plugin.nuspec -Version $versionStr
