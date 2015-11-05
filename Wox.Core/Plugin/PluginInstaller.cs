@@ -85,7 +85,7 @@ namespace Wox.Core.Plugin
                             MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                     {
                         ProcessStartInfo Info = new ProcessStartInfo();
-                        Info.Arguments = "/C ping 127.0.0.1 -n 1 && \"" +
+                        Info.Arguments = "/C ping 127.0.0.1 -n 3 && \"" +
                                          System.Windows.Forms.Application.ExecutablePath + "\"";
                         Info.WindowStyle = ProcessWindowStyle.Hidden;
                         Info.CreateNoWindow = true;
