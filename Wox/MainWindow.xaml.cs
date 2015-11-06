@@ -240,11 +240,9 @@ namespace Wox
 
         void MainWindow_Closing(object sender, CancelEventArgs e)
         {
-            UserSettingStorage.Instance.WindowLeft = Left;
-            UserSettingStorage.Instance.WindowTop = Top;
-            UserSettingStorage.Instance.Save();
             this.HideWox();
             e.Cancel = true;
+            UserSettingStorage.Instance.Save();
         }
 
         private void MainWindow_OnLoaded(object sender, RoutedEventArgs e)
@@ -257,35 +255,31 @@ namespace Wox
             CheckUpdate();
         }
 
+        private bool IsPointInScreenBounds(double x, double y)
+        {
+            return Screen.AllScreens.Any(screen => screen.Bounds.Contains((int) x, (int) y));
+        }
         private double GetWindowsLeft()
         {
             var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
-            if (UserSettingStorage.Instance.RememberLastLaunchLocation)
+            
+            if (!UserSettingStorage.Instance.RememberLastLaunchLocation ||
+                !IsPointInScreenBounds(UserSettingStorage.Instance.WindowLeft + Width / 2, UserSettingStorage.Instance.WindowTop))
             {
-                var origScreen = Screen.FromRectangle(new Rectangle((int)Left, (int)Top, (int)ActualWidth, (int)ActualHeight));
-                var coordX = (Left - origScreen.WorkingArea.Left) / (origScreen.WorkingArea.Width - ActualWidth);
-                UserSettingStorage.Instance.WindowLeft = (screen.WorkingArea.Width - ActualWidth) * coordX + screen.WorkingArea.Left;
+                UserSettingStorage.Instance.WindowLeft = (screen.WorkingArea.Width - ActualWidth)/2 +
+                                                         screen.WorkingArea.Left;
             }
-            else
-            {
-                UserSettingStorage.Instance.WindowLeft = (screen.WorkingArea.Width - ActualWidth) / 2 + screen.WorkingArea.Left;
-            }
-
             return UserSettingStorage.Instance.WindowLeft;
         }
-
+        
         private double GetWindowsTop()
         {
             var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
-            if (UserSettingStorage.Instance.RememberLastLaunchLocation)
+            if (!UserSettingStorage.Instance.RememberLastLaunchLocation ||
+                !IsPointInScreenBounds(UserSettingStorage.Instance.WindowLeft + Width / 2, UserSettingStorage.Instance.WindowTop))
             {
-                var origScreen = Screen.FromRectangle(new Rectangle((int)Left, (int)Top, (int)ActualWidth, (int)ActualHeight));
-                var coordY = (Top - origScreen.WorkingArea.Top) / (origScreen.WorkingArea.Height - ActualHeight);
-                UserSettingStorage.Instance.WindowTop = (screen.WorkingArea.Height - ActualHeight) * coordY + screen.WorkingArea.Top;
-            }
-            else
-            {
-                UserSettingStorage.Instance.WindowTop = (screen.WorkingArea.Height - tbQuery.ActualHeight) / 4 + screen.WorkingArea.Top;
+                UserSettingStorage.Instance.WindowTop = (screen.WorkingArea.Height - tbQuery.ActualHeight)/4 +
+                                                        screen.WorkingArea.Top;
             }
             return UserSettingStorage.Instance.WindowTop;
         }
@@ -512,6 +506,8 @@ namespace Wox
 
         private void HideWox()
         {
+            UserSettingStorage.Instance.WindowLeft = Left;
+            UserSettingStorage.Instance.WindowTop = Top;
             if (IsInContextMenuMode)
             {
                 BackToResultMode();
