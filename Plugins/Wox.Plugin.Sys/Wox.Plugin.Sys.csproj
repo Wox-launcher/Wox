@@ -63,6 +63,8 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Images\recyclebin.png" />
+    <Content Include="Images\restartcomp.png" />
     <Content Include="Images\sleep.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
@@ -130,4 +132,3 @@
   </Target>
   -->
 </Project>
-
