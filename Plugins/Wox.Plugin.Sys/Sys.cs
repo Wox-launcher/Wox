@@ -121,7 +121,7 @@ namespace Wox.Plugin.Sys
                     IcoPath = "Images\\recyclebin.png",
                     Action = (c) =>
                     {
-                        // Using 0 for the last part, let's us use all the windows pop-up and sounds for the trashcan
+                        // Using 0 for the last part, let's us use all the windows pop-up and sounds
                         uint result = SHEmptyRecycleBin(System.IntPtr.Zero, null, 0);
                         return true;
                     }
