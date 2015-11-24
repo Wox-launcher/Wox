@@ -14,6 +14,16 @@ namespace Wox.Plugin.Sys
         List<Result> availableResults = new List<Result>();
         private PluginInitContext context;
 
+        enum RecycleFlag : uint
+        {
+            SHERB_NOCONFIRMATION = 0x00000001, // No confirmation, when emptying
+            SHERB_NOPROGRESSUI = 0x00000002, // No progress tracking window during the emptying of the recycle bin
+
+            // If we don't want the trashcan to play any sound when emptying we should uncomment the code below! 
+            // SHERB_NOSOUND = 0x00000004 // No sound when the emptying of the recycle bin is complete
+        }
+
+
         #region DllImport
 
         internal const int EWX_LOGOFF = 0x00000000;
@@ -26,6 +36,8 @@ namespace Wox.Plugin.Sys
         private static extern bool ExitWindowsEx(uint uFlags, uint dwReason);
         [DllImport("user32")]
         private static extern void LockWorkStation();
+        [DllImport("Shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern uint SHEmptyRecycleBin(System.IntPtr hwnd, string pszRootPath, RecycleFlag dwFlags);
 
         #endregion
 
@@ -74,6 +86,19 @@ namespace Wox.Plugin.Sys
                 },
                 new Result
                 {
+                    Title = "Restart",
+                    SubTitle = context.API.GetTranslation("wox_plugin_sys_restart_computer"),
+                    IcoPath = "Images\\restartcomp.png",
+                    Action = (c) =>
+                    {
+                        if (MessageBox.Show("Are you sure you want to restart the computer?","Restart Computer?",MessageBoxButtons.YesNo,MessageBoxIcon.Warning) == DialogResult.Yes) {
+                            Process.Start("shutdown", "/r /t 0");
+                        }
+                        return true;
+                    }
+                },
+                new Result
+                {
                     Title = "Log off",
                     SubTitle = context.API.GetTranslation("wox_plugin_sys_log_off"),
                     IcoPath = "Images\\logoff.png",
@@ -96,6 +121,19 @@ namespace Wox.Plugin.Sys
                     SubTitle = context.API.GetTranslation("wox_plugin_sys_sleep"),
                     IcoPath = "Images\\sleep.png",
                     Action = (c) => Application.SetSuspendState(PowerState.Suspend, false, false)
+                },
+                new Result
+                {
+                    Title = "Empty Recycle Bin",
+                    SubTitle = context.API.GetTranslation("wox_plugin_sys_emptyrecyclebin"),
+                    IcoPath = "Images\\recyclebin.png",
+                    Action = (c) =>
+                    {
+                        if (MessageBox.Show("Are you sure that you want to permanently delete all items in your recycle bin?","Empty recycle bin?",MessageBoxButtons.YesNo,MessageBoxIcon.Warning) == DialogResult.Yes) {
+                                uint result = SHEmptyRecycleBin(System.IntPtr.Zero, null, RecycleFlag.SHERB_NOCONFIRMATION | RecycleFlag.SHERB_NOPROGRESSUI);
+                        }
+                        return true;
+                    }
                 },
                 new Result
                 {
