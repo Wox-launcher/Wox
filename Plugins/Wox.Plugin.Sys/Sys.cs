@@ -121,8 +121,16 @@ namespace Wox.Plugin.Sys
                     IcoPath = "Images\\recyclebin.png",
                     Action = (c) =>
                     {
-                        // Using 0 for the last part, let's us use all the windows pop-up and sounds
-                        uint result = SHEmptyRecycleBin(System.IntPtr.Zero, null, 0);
+                        try
+                        {
+                            // Using 0 for the last part, let's us use all the windows pop-up and sounds
+                            uint result = SHEmptyRecycleBin(System.IntPtr.Zero, null, 0);
+                        }
+                        catch (System.Exception ex)
+                        {
+                            MessageBox.Show("Error emptying recycle bin. \n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                        
                         return true;
                     }
                 },
