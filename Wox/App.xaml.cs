@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+using System.Windows;
 using Wox.CommandArgs;
+using Wox.Core.Plugin;
 using Wox.Helper;
-using Application = System.Windows.Application;
-using MessageBox = System.Windows.MessageBox;
-using StartupEventArgs = System.Windows.StartupEventArgs;
+using Stopwatch = Wox.Infrastructure.Stopwatch;
 
 namespace Wox
 {
@@ -30,18 +30,36 @@ namespace Wox
 
         protected override void OnStartup(StartupEventArgs e)
         {
-            base.OnStartup(e);
-            DispatcherUnhandledException += ErrorReporting.DispatcherUnhandledException;
-            AppDomain.CurrentDomain.UnhandledException += ErrorReporting.UnhandledExceptionHandle;
+            Stopwatch.Debug("Startup Time", () =>
+            {
+                base.OnStartup(e);
+                RegisterUnhandledException();
+                ThreadPool.QueueUserWorkItem(o => { ImageLoader.ImageLoader.PreloadImages(); });
+                Window = new MainWindow();
+                PluginManager.Init(Window);
+                CommandArgsFactory.Execute(e.Args.ToList());
+            });
 
-            Window = new MainWindow();
-            CommandArgsFactory.Execute(e.Args.ToList());
         }
 
-        public bool OnActivate(IList<string> args)
+        [Conditional("RELEASE")]
+        private void RegisterUnhandledException()
         {
-            CommandArgsFactory.Execute(args);
-            return true;
+            // let exception throw as normal is better for Debug
+            DispatcherUnhandledException += ErrorReporting.DispatcherUnhandledException;
+            AppDomain.CurrentDomain.UnhandledException += ErrorReporting.UnhandledExceptionHandle;
+        }
+
+        public void OnActivate(IList<string> args)
+        {
+            if (args.Count > 0 && args[0] == SingleInstance<App>.Restart)
+            {
+                Window.CloseApp();
+            }
+            else
+            {
+                CommandArgsFactory.Execute(args);
+            }
         }
     }
 }

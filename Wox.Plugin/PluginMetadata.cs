@@ -1,9 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Security.RightsManagement;
-using System.Text;
+using System.Collections.Generic;
 
 namespace Wox.Plugin
 {
@@ -27,7 +24,10 @@ namespace Wox.Plugin
 
         public string PluginDirectory { get; set; }
 
+        [Obsolete("Use ActionKeywords instead, because Wox now support multiple action keywords. This will be remove in v1.3.0")]
         public string ActionKeyword { get; set; }
+
+        public List<string> ActionKeywords { get; set; }
 
         public string IcoPath { get; set; }
 

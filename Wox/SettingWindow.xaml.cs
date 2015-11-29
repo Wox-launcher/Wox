@@ -1,34 +1,26 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Wox.Core.Plugin;
-using Wox.Plugin;
-using Wox.Helper;
-using Application = System.Windows.Forms.Application;
-using File = System.IO.File;
-using MessageBox = System.Windows.MessageBox;
-using System.Windows.Data;
-using System.Windows.Forms;
 using Microsoft.Win32;
 using Wox.Core.i18n;
+using Wox.Core.Plugin;
 using Wox.Core.Theme;
 using Wox.Core.Updater;
 using Wox.Core.UserSettings;
-using Wox.Infrastructure;
-using CheckBox = System.Windows.Controls.CheckBox;
-using Control = System.Windows.Controls.Control;
-using Cursors = System.Windows.Input.Cursors;
-using HorizontalAlignment = System.Windows.HorizontalAlignment;
+using Wox.Helper;
+using Wox.Infrastructure.Exception;
+using Wox.Plugin;
+using Application = System.Windows.Forms.Application;
+using Stopwatch = Wox.Infrastructure.Stopwatch;
 
 namespace Wox
 {
@@ -49,7 +41,6 @@ namespace Wox
         private void Setting_Loaded(object sender, RoutedEventArgs ev)
         {
             #region General
-
             cbHideWhenDeactive.Checked += (o, e) =>
             {
                 UserSettingStorage.Instance.HideWhenDeactive = true;
@@ -86,6 +77,20 @@ namespace Wox
                 UserSettingStorage.Instance.Save();
             };
 
+            cbIgnoreHotkeysOnFullscreen.Checked += (o, e) =>
+            {
+                UserSettingStorage.Instance.IgnoreHotkeysOnFullscreen = true;
+                UserSettingStorage.Instance.Save();
+            };
+
+
+            cbIgnoreHotkeysOnFullscreen.Unchecked += (o, e) =>
+            {
+                UserSettingStorage.Instance.IgnoreHotkeysOnFullscreen = false;
+                UserSettingStorage.Instance.Save();
+            };
+
+
             cbStartWithWindows.IsChecked = CheckApplicationIsStartupWithWindow();
             comboMaxResultsToShow.SelectionChanged += (o, e) =>
             {
@@ -97,6 +102,7 @@ namespace Wox
             cbHideWhenDeactive.IsChecked = UserSettingStorage.Instance.HideWhenDeactive;
             cbDontPromptUpdateMsg.IsChecked = UserSettingStorage.Instance.DontPromptUpdateMsg;
             cbRememberLastLocation.IsChecked = UserSettingStorage.Instance.RememberLastLaunchLocation;
+            cbIgnoreHotkeysOnFullscreen.IsChecked = UserSettingStorage.Instance.IgnoreHotkeysOnFullscreen;
 
             LoadLanguages();
             comboMaxResultsToShow.ItemsSource = Enumerable.Range(2, 16);
@@ -111,7 +117,10 @@ namespace Wox
             cbEnableProxy.Unchecked += (o, e) => DisableProxy();
             cbEnableProxy.IsChecked = UserSettingStorage.Instance.ProxyEnabled;
             tbProxyServer.Text = UserSettingStorage.Instance.ProxyServer;
-            tbProxyPort.Text = UserSettingStorage.Instance.ProxyPort.ToString();
+            if (UserSettingStorage.Instance.ProxyPort != 0)
+            {
+                tbProxyPort.Text = UserSettingStorage.Instance.ProxyPort.ToString();
+            }
             tbProxyUserName.Text = UserSettingStorage.Instance.ProxyUserName;
             tbProxyPassword.Password = UserSettingStorage.Instance.ProxyPassword;
             if (UserSettingStorage.Instance.ProxyEnabled)
@@ -159,6 +168,25 @@ namespace Wox
                 case "about":
                     settingTab.SelectedIndex = 5;
                     break;
+            }
+        }
+
+        private void settingTab_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Update controls inside the selected tab
+            if (e.OriginalSource != settingTab) return;
+
+            if (tabPlugin.IsSelected)
+            {
+                OnPluginTabSelected();
+            }
+            else if (tabTheme.IsSelected)
+            {
+                OnThemeTabSelected();
+            }
+            else if (tabHotkey.IsSelected)
+            {
+                OnHotkeyTabSelected();
             }
         }
 
@@ -241,17 +269,6 @@ namespace Wox
             }
         }
 
-
-        private void TabHotkey_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            var tabItem = sender as TabItem;
-            var clickingBody = (tabItem.Content as UIElement).IsMouseOver;
-            if (!clickingBody)
-            {
-                OnHotkeyTabSelected();
-            }
-        }
-
         private void OnHotkeyTabSelected()
         {
             ctlHotkey.HotkeyChanged += ctlHotkey_OnHotkeyChanged;
@@ -314,10 +331,10 @@ namespace Wox
 
         private void OnThemeTabSelected()
         {
-            using (new Timeit("theme load"))
+            Stopwatch.Debug("theme load", () =>
             {
                 var s = Fonts.SystemFontFamilies;
-            }
+            });
 
             if (themeTabLoaded) return;
 
@@ -395,7 +412,7 @@ namespace Wox
                     IcoPath = "Images/app.png",
                     PluginDirectory = Path.GetDirectoryName(Application.ExecutablePath)
                 }
-            });
+            }, "test id");
 
             foreach (string theme in ThemeManager.Theme.LoadAvailableThemes())
             {
@@ -420,22 +437,10 @@ namespace Wox
 
         }
 
-        private void TabTheme_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            var tabItem = sender as TabItem;
-            var clickingBody = (tabItem.Content as UIElement).IsMouseOver;
-            if (!clickingBody)
-            {
-                OnThemeTabSelected();
-            }
-        }
-
         private void ThemeComboBox_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             string themeName = themeComboBox.SelectedItem.ToString();
-            UserSettingStorage.Instance.Theme = themeName;
-            DelayChangeTheme();
-            UserSettingStorage.Instance.Save();
+            ThemeManager.Theme.ChangeTheme(themeName);
         }
 
         private void CbQueryBoxFont_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -444,16 +449,8 @@ namespace Wox
             string queryBoxFontName = cbQueryBoxFont.SelectedItem.ToString();
             UserSettingStorage.Instance.QueryBoxFont = queryBoxFontName;
             this.cbQueryBoxFontFaces.SelectedItem = ((FontFamily)cbQueryBoxFont.SelectedItem).ChooseRegularFamilyTypeface();
-            DelayChangeTheme();
             UserSettingStorage.Instance.Save();
-        }
-
-        private void DelayChangeTheme()
-        {
-            Dispatcher.DelayInvoke("delayChangeTheme", o =>
-            {
-                ThemeManager.Theme.ChangeTheme(UserSettingStorage.Instance.Theme);
-            }, TimeSpan.FromMilliseconds(100));
+            ThemeManager.Theme.ChangeTheme(UserSettingStorage.Instance.Theme);
         }
 
         private void CbQueryBoxFontFaces_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -473,7 +470,7 @@ namespace Wox
                 UserSettingStorage.Instance.QueryBoxFontWeight = typeface.Weight.ToString();
                 UserSettingStorage.Instance.QueryBoxFontStyle = typeface.Style.ToString();
                 UserSettingStorage.Instance.Save();
-                DelayChangeTheme();
+                ThemeManager.Theme.ChangeTheme(UserSettingStorage.Instance.Theme);
             }
         }
 
@@ -483,9 +480,8 @@ namespace Wox
             string resultItemFont = cbResultItemFont.SelectedItem.ToString();
             UserSettingStorage.Instance.ResultItemFont = resultItemFont;
             this.cbResultItemFontFaces.SelectedItem = ((FontFamily)cbResultItemFont.SelectedItem).ChooseRegularFamilyTypeface();
-
             UserSettingStorage.Instance.Save();
-            DelayChangeTheme();
+            ThemeManager.Theme.ChangeTheme(UserSettingStorage.Instance.Theme);
         }
 
         private void CbResultItemFontFaces_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -503,7 +499,7 @@ namespace Wox
                 UserSettingStorage.Instance.ResultItemFontWeight = typeface.Weight.ToString();
                 UserSettingStorage.Instance.ResultItemFontStyle = typeface.Style.ToString();
                 UserSettingStorage.Instance.Save();
-                DelayChangeTheme();
+                ThemeManager.Theme.ChangeTheme(UserSettingStorage.Instance.Theme);
             }
         }
 
@@ -511,42 +507,64 @@ namespace Wox
 
         #region Plugin
 
-        private void lbPlugins_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void lbPlugins_OnSelectionChanged(object sender, SelectionChangedEventArgs _)
         {
-            ISettingProvider provider = null;
+
             var pair = lbPlugins.SelectedItem as PluginPair;
             string pluginId = string.Empty;
-
-            if (pair != null)
+            List<string> actionKeywords = null;
+            if (pair == null) return;
+            actionKeywords = pair.Metadata.ActionKeywords;
+            pluginAuthor.Visibility = Visibility.Visible;
+            pluginInitTime.Text =
+                string.Format(InternationalizationManager.Instance.GetTranslation("plugin_init_time"), pair.InitTime);
+            pluginQueryTime.Text =
+                string.Format(InternationalizationManager.Instance.GetTranslation("plugin_query_time"), pair.AvgQueryTime);
+            if (actionKeywords.Count > 1)
             {
-                provider = pair.Plugin as ISettingProvider;
-                pluginAuthor.Visibility = Visibility.Visible;
-                pluginActionKeyword.Visibility = Visibility.Visible;
-                pluginInitTime.Text =
-                    string.Format(InternationalizationManager.Instance.GetTranslation("plugin_init_time"), pair.InitTime);
-                pluginQueryTime.Text =
-                    string.Format(InternationalizationManager.Instance.GetTranslation("plugin_query_time"), pair.AvgQueryTime);
-                pluginActionKeywordTitle.Visibility = Visibility.Visible;
-                tbOpenPluginDirecoty.Visibility = Visibility.Visible;
-                pluginTitle.Text = pair.Metadata.Name;
-                pluginTitle.Cursor = Cursors.Hand;
-                pluginActionKeyword.Text = pair.Metadata.ActionKeyword;
-                pluginAuthor.Text = InternationalizationManager.Instance.GetTranslation("author") + ": " + pair.Metadata.Author;
-                pluginSubTitle.Text = pair.Metadata.Description;
-                pluginId = pair.Metadata.ID;
-                pluginIcon.Source = ImageLoader.ImageLoader.Load(pair.Metadata.FullIcoPath);
+                pluginActionKeywordsTitle.Visibility = Visibility.Collapsed;
+                pluginActionKeywords.Visibility = Visibility.Collapsed;
             }
+            else
+            {
+                pluginActionKeywordsTitle.Visibility = Visibility.Visible;
+                pluginActionKeywords.Visibility = Visibility.Visible;
+            }
+            tbOpenPluginDirecoty.Visibility = Visibility.Visible;
+            pluginTitle.Text = pair.Metadata.Name;
+            pluginTitle.Cursor = Cursors.Hand;
+            pluginActionKeywords.Text = string.Join(Query.ActionKeywordSeperater, actionKeywords.ToArray());
+            pluginAuthor.Text = InternationalizationManager.Instance.GetTranslation("author") + ": " + pair.Metadata.Author;
+            pluginSubTitle.Text = pair.Metadata.Description;
+            pluginId = pair.Metadata.ID;
+            pluginIcon.Source = ImageLoader.ImageLoader.Load(pair.Metadata.FullIcoPath);
 
             var customizedPluginConfig = UserSettingStorage.Instance.CustomizedPluginConfigs.FirstOrDefault(o => o.ID == pluginId);
             cbDisablePlugin.IsChecked = customizedPluginConfig != null && customizedPluginConfig.Disabled;
 
             PluginContentPanel.Content = null;
-            if (provider != null)
+            var settingProvider = pair.Plugin as ISettingProvider;
+            if (settingProvider != null)
             {
-                Control control = null;
-                if (!featureControls.TryGetValue(provider, out control))
-                    featureControls.Add(provider, control = provider.CreateSettingPanel());
+                Control control;
+                if (!featureControls.TryGetValue(settingProvider, out control))
+                {
+                    var multipleActionKeywordsProvider = settingProvider as IMultipleActionKeywords;
+                    if (multipleActionKeywordsProvider != null)
+                    {
+                        multipleActionKeywordsProvider.ActionKeywordsChanged += (o, e) =>
+                        {
+                            // update in-memory data
+                            PluginManager.UpdateActionKeywordForPlugin(pair, e.OldActionKeyword, e.NewActionKeyword);
+                            // update persistant data
+                            UserSettingStorage.Instance.UpdateActionKeyword(pair.Metadata);
 
+                            MessageBox.Show(InternationalizationManager.Instance.GetTranslation("succeed"));
+                        };
+                    }
+
+                    featureControls.Add(settingProvider, control = settingProvider.CreateSettingPanel());
+                }
                 PluginContentPanel.Content = control;
                 control.HorizontalAlignment = HorizontalAlignment.Stretch;
                 control.VerticalAlignment = VerticalAlignment.Stretch;
@@ -572,12 +590,13 @@ namespace Wox
             var customizedPluginConfig = UserSettingStorage.Instance.CustomizedPluginConfigs.FirstOrDefault(o => o.ID == id);
             if (customizedPluginConfig == null)
             {
+                // todo when this part will be invoked
                 UserSettingStorage.Instance.CustomizedPluginConfigs.Add(new CustomizedPluginConfig()
                 {
                     Disabled = cbDisabled.IsChecked ?? true,
                     ID = id,
                     Name = name,
-                    Actionword = string.Empty
+                    ActionKeywords = null
                 });
             }
             else
@@ -587,7 +606,7 @@ namespace Wox
             UserSettingStorage.Instance.Save();
         }
 
-        private void PluginActionKeyword_OnMouseUp(object sender, MouseButtonEventArgs e)
+        private void PluginActionKeywords_OnMouseUp(object sender, MouseButtonEventArgs e)
         {
             if (e.ChangedButton == MouseButton.Left)
             {
@@ -596,10 +615,10 @@ namespace Wox
                 {
                     //third-party plugin
                     string id = pair.Metadata.ID;
-                    ActionKeyword changeKeywordWindow = new ActionKeyword(id);
-                    changeKeywordWindow.ShowDialog();
-                    PluginPair plugin = PluginManager.GetPlugin(id);
-                    if (plugin != null) pluginActionKeyword.Text = plugin.Metadata.ActionKeyword;
+                    ActionKeywords changeKeywordsWindow = new ActionKeywords(id);
+                    changeKeywordsWindow.ShowDialog();
+                    PluginPair plugin = PluginManager.GetPluginForId(id);
+                    if (plugin != null) pluginActionKeywords.Text = string.Join(Query.ActionKeywordSeperater, pair.Metadata.ActionKeywords.ToArray());
                 }
             }
         }
@@ -663,17 +682,6 @@ namespace Wox
             lbPlugins.ItemsSource = plugins;
             lbPlugins.SelectedIndex = 0;
         }
-
-        private void TabPlugin_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            var tabItem = sender as TabItem;
-            var clickingBody = (tabItem.Content as UIElement).IsMouseOver;
-            if (!clickingBody)
-            {
-                OnPluginTabSelected();
-            }
-        }
-
 
         #endregion
 
@@ -786,5 +794,14 @@ namespace Wox
         }
 
         #endregion
+
+        private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            // Hide window with ESC, but make sure it is not pressed as a hotkey
+            if (e.Key == Key.Escape && !ctlHotkey.IsFocused)
+            {
+                Close();
+            }
+        }
     }
 }

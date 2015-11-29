@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Windows.Documents;
+﻿using System.Collections.Generic;
 
 namespace Wox.Plugin
 {
@@ -52,6 +50,11 @@ namespace Wox.Plugin
         /// Close Wox
         /// </summary>
         void CloseApp();
+
+        /// <summary>
+        /// Restart Wox
+        /// </summary>
+        void RestarApp();
 
         /// <summary>
         /// Hide Wox

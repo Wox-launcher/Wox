@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 
@@ -43,12 +42,28 @@ namespace Wox.Plugin
         /// </summary>
         public string PluginDirectory { get; internal set; }
 
-        public new bool Equals(object obj)
+        public override bool Equals(object obj)
         {
-            if (obj == null || !(obj is Result)) return false;
+            Result r = obj as Result;
+            if (r != null)
+            {
+                var equality = string.Equals(r.Title, Title) &&
+                               string.Equals(r.SubTitle, SubTitle) &&
+                               r.Score == Score;
+                return equality;
+            }
+            else
+            {
+                return false;
+            }
+        }
 
-            Result r = (Result)obj;
-            return r.Title == Title && r.SubTitle == SubTitle;
+        public override int GetHashCode()
+        {
+            var hashcode = (Title?.GetHashCode() ?? 0) ^
+                           (SubTitle?.GetHashCode() ?? 0) ^
+                           (Score.GetHashCode());
+            return hashcode;
         }
 
         public override string ToString()

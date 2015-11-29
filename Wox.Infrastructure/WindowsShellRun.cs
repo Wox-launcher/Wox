@@ -1,9 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Runtime.InteropServices;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Wox.Infrastructure
 {
@@ -117,7 +115,7 @@ namespace Wox.Infrastructure
 				        needsCommandLine = peHeaderReader.OptionalHeader64.Subsystem == 3;
 		        }
 
-		        catch (Exception)
+		        catch (System.Exception)
 		        {
 			        // Error reading the headers. We will try to run the command the standard way.
 			        needsCommandLine = false;
@@ -151,7 +149,7 @@ namespace Wox.Infrastructure
             {
                 global::System.Diagnostics.Process.Start(startInfo);
             }
-            catch (Exception e)
+            catch (System.Exception e)
             {
                 if (!startInfo.ErrorDialog)
                     throw e;

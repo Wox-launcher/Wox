@@ -3,11 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using System.Windows;
-using Wox.Core.Exception;
 using Wox.Core.UI;
 using Wox.Core.UserSettings;
+using Wox.Infrastructure.Exception;
 using Wox.Infrastructure.Logger;
 using Wox.Plugin;
 
@@ -15,7 +14,8 @@ namespace Wox.Core.i18n
 {
     public class Internationalization : IInternationalization, IUIResource
     {
-        private static string DefaultLanguageDirectory = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Languages");
+        public const string DirectoryName = "Languages";
+        private static readonly string DefaultDirectory = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), DirectoryName);
 
         static Internationalization()
         {
@@ -24,15 +24,15 @@ namespace Wox.Core.i18n
 
         private static void MakesureThemeDirectoriesExist()
         {
-            if (!Directory.Exists(DefaultLanguageDirectory))
+            if (!Directory.Exists(DefaultDirectory))
             {
                 try
                 {
-                    Directory.CreateDirectory(DefaultLanguageDirectory);
+                    Directory.CreateDirectory(DefaultDirectory);
                 }
                 catch (System.Exception e)
                 {
-                    Log.Error(e.Message);
+                    Log.Error(e);
                 }
             }
         }
@@ -70,15 +70,14 @@ namespace Wox.Core.i18n
 
             UserSettingStorage.Instance.Language = language.LanguageCode;
             UserSettingStorage.Instance.Save();
-            ResourceMerger.ApplyResources();
-            UpdateAllPluginMetadataTranslations();
+            ResourceMerger.UpdateResources(this);
         }
 
         public ResourceDictionary GetResourceDictionary()
         {
             return new ResourceDictionary
             {
-                Source = new Uri(GetLanguageFile(DefaultLanguageDirectory), UriKind.Absolute)
+                Source = new Uri(GetLanguageFile(DefaultDirectory), UriKind.Absolute)
             };
         }
 
@@ -89,20 +88,15 @@ namespace Wox.Core.i18n
 
         public string GetTranslation(string key)
         {
-            try
+            var translation = Application.Current.TryFindResource(key);
+            if (translation is string)
             {
-                object translation = Application.Current.FindResource(key);
-                if (translation == null)
-                {
-                    return "NoTranslation";
-                }
                 return translation.ToString();
             }
-            catch
+            else
             {
                 return "NoTranslation";
             }
-
         }
 
         private string GetLanguagePath(string languageCode)
@@ -111,15 +105,6 @@ namespace Wox.Core.i18n
             return GetLanguagePath(language);
         }
 
-
-        internal void UpdateAllPluginMetadataTranslations()
-        {
-            List<KeyValuePair<PluginPair, IPluginI18n>> plugins = AssemblyHelper.LoadPluginInterfaces<IPluginI18n>();
-            foreach (var plugin in plugins)
-            {
-                UpdatePluginMetadataTranslations(plugin.Key);
-            }
-        }
 
         internal void UpdatePluginMetadataTranslations(PluginPair pluginPair)
         {
@@ -132,18 +117,14 @@ namespace Wox.Core.i18n
             }
             catch (System.Exception e)
             {
-                Log.Warn("Update Plugin metadata translation failed:" + e.Message);
-#if (DEBUG)
-                {
-                    throw;
-                }
-#endif
+                var woxPluginException = new WoxPluginException(pluginPair.Metadata.Name, "Update Plugin metadata translation failed:", e);
+                Log.Error(woxPluginException);
             }
         }
 
         private string GetLanguagePath(Language language)
         {
-            string path = Path.Combine(DefaultLanguageDirectory, language.LanguageCode + ".xaml");
+            string path = Path.Combine(DefaultDirectory, language.LanguageCode + ".xaml");
             if (File.Exists(path))
             {
                 return path;

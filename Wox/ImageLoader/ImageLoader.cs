@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Wox.Infrastructure;
+using Stopwatch = Wox.Infrastructure.Stopwatch;
 
 namespace Wox.ImageLoader
 {
@@ -48,7 +49,7 @@ namespace Wox.ImageLoader
                         new Int32Rect(0, 0, icon.Width, icon.Height), BitmapSizeOptions.FromEmptyOptions());
                 }
             }
-            catch{}
+            catch { }
 
             return null;
         }
@@ -57,7 +58,7 @@ namespace Wox.ImageLoader
         {
             //ImageCacheStroage.Instance.TopUsedImages can be changed during foreach, so we need to make a copy
             var imageList = new Dictionary<string, int>(ImageCacheStroage.Instance.TopUsedImages);
-            using (new Timeit(string.Format("Preload {0} images", imageList.Count)))
+            Stopwatch.Debug($"Preload {imageList.Count} images", () =>
             {
                 foreach (var image in imageList)
                 {
@@ -70,59 +71,58 @@ namespace Wox.ImageLoader
                             if (!imageCache.ContainsKey(image.Key))
                             {
                                 KeyValuePair<string, int> copyedImg = image;
-                                App.Window.Dispatcher.Invoke(new Action(() => imageCache.Add(copyedImg.Key, img)));
+                                imageCache.Add(copyedImg.Key, img);
                             }
                         }
                     }
                 }
-            }
+            });
         }
 
         public static ImageSource Load(string path, bool addToCache = true)
         {
-            Stopwatch sw = new Stopwatch();
-            sw.Start();
-
             if (string.IsNullOrEmpty(path)) return null;
-            if (addToCache)
-            {
-                ImageCacheStroage.Instance.Add(path);
-            }
-
             ImageSource img = null;
-            if (imageCache.ContainsKey(path))
+            Stopwatch.Debug($"Loading image path: {path}", () =>
             {
-                img = imageCache[path];
-            }
-            else
-            {
-                string ext = Path.GetExtension(path).ToLower();
 
-                if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                if (addToCache)
                 {
-                    img = new BitmapImage(new Uri(path));
-                }
-                else if (selfExts.Contains(ext) && File.Exists(path))
-                {
-                    img = GetIcon(path);
-                }
-                else if (!string.IsNullOrEmpty(path) && imageExts.Contains(ext) && File.Exists(path))
-                {
-                    img = new BitmapImage(new Uri(path));
+                    ImageCacheStroage.Instance.Add(path);
                 }
 
 
-                if (img != null && addToCache)
+                if (imageCache.ContainsKey(path))
                 {
-                    if (!imageCache.ContainsKey(path))
+                    img = imageCache[path];
+                }
+                else
+                {
+                    string ext = Path.GetExtension(path).ToLower();
+
+                    if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
                     {
-                        imageCache.Add(path, img);
+                        img = new BitmapImage(new Uri(path));
+                    }
+                    else if (selfExts.Contains(ext) && File.Exists(path))
+                    {
+                        img = GetIcon(path);
+                    }
+                    else if (!string.IsNullOrEmpty(path) && imageExts.Contains(ext) && File.Exists(path))
+                    {
+                        img = new BitmapImage(new Uri(path));
+                    }
+
+
+                    if (img != null && addToCache)
+                    {
+                        if (!imageCache.ContainsKey(path))
+                        {
+                            imageCache.Add(path, img);
+                        }
                     }
                 }
-            }
-
-            sw.Stop();
-            DebugHelper.WriteLine(string.Format("Loading image path: {0} - {1}ms",path,sw.ElapsedMilliseconds));
+            });
             return img;
         }
 

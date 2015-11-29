@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
 
@@ -28,7 +25,7 @@ namespace Wox.Infrastructure.Storage
                 {
                     serializedObject = JsonConvert.DeserializeObject<T>(json);
                 }
-                catch (Exception)
+                catch (System.Exception)
                 {
                     serializedObject = LoadDefault();
                 }

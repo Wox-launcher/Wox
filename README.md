@@ -1,41 +1,45 @@
-Wox   [![Build status](https://ci.appveyor.com/api/projects/status/bfktntbivg32e103)](https://ci.appveyor.com/project/qianlifeng/wox) <a href="https://chocolatey.org/packages/wox"><img src="https://img.shields.io/badge/chocolatey-wox-b4884f.svg?style=flat" style="height:auto; width: 100%"></a> [![Bountysource](https://www.bountysource.com/badge/team?team_id=39433&style=raised)](https://www.bountysource.com/teams/wox?utm_source=Wox&utm_medium=shield&utm_campaign=raised)
+Wox   [![Build status](https://ci.appveyor.com/api/projects/status/bfktntbivg32e103)](https://ci.appveyor.com/project/qianlifeng/wox) [![Bountysource](https://www.bountysource.com/badge/team?team_id=39433&style=raised)](https://www.bountysource.com/teams/wox?utm_source=Wox&utm_medium=shield&utm_campaign=raised) [![Issue Stats](http://issuestats.com/github/Wox-launcher/Wox/badge/pr)](http://issuestats.com/github/Wox-launcher/Wox)
 =========
-[Wox](http://www.getwox.com) is a launcher for windows, which was inspired by [Alfred](http://www.alfredapp.com/) and [Launchy](http://www.launchy.net/). Wox provide an entry to search everything you want. 
-
-Features
-=========
-1. Search applications, files and browser bookmarks (via plugin)
-2. Search web contents with shortcuts (e.g. search google with `g keyword` or `youtube keyword`)
-3. Themes support, get more themes from [http://www.getwox.com/theme/builder](http://www.getwox.com/theme/builder)
-4. Plugin support, get more plugins from [http://www.getwox.com/plugin](http://www.getwox.com/plugin)
+[Wox](https://www.getwox.com/) is a launcher for Windows, an alternative to [Alfred](https://www.alfredapp.com/) or [Launchy](http://www.launchy.net/). You can launch everything with just a few keystrokes!
 
 Screenshot
 =========
 
-<a href="https://github.com/qianlifeng/Wox/wiki/Screenshot">More screenshot</a>
+<a href="https://github.com/Wox-launcher/Wox/wiki/Screenshot">More screenshots</a>
 <img src="http://ww3.sinaimg.cn/large/dce48faejw1eihx6ffo8eg20zk0m8hdt.gif" />
 
-Download
+Features
+=========
+1. Search all applications, folders, files, [bookmarks](https://www.getwox.com/plugin/16).
+2. Search Web using keyword (e.g. search google with `g search_term`)
+3. Build custom themes in [https://www.getwox.com/theme/builder](https://www.getwox.com/theme/builder)
+4. Install plugins from [https://www.getwox.com/plugin](https://www.getwox.com/plugin)
+
+Installation
 =========
 
-Download from [release page](https://github.com/qianlifeng/Wox/releases).
+1. Download
+  1. Latest stable version: [release page](https://github.com/Wox-launcher/Wox/releases).
+  2. Latest build: [English guide](https://github.com/Wox-launcher/Wox/wiki/FAQ-English#how-to-install-latest-build),  [中文说明](https://github.com/Wox-launcher/Wox/wiki/FAQ-%E4%B8%AD%E6%96%87#%E5%A6%82%E4%BD%95%E5%AE%89%E8%A3%85%E6%9C%80%E6%96%B0-build)
+2. Unzip it and put it into your user directory (`C:\Users\YOUUSERNAME` or `%userprofile%`)
+3. Windows 10 user, please have a look at https://github.com/Wox-launcher/Wox/issues/279
+
+
+Simple Usage
+=========
+- Launch: <kbd>Alt</kbd>+<kbd>Space</kbd>
+- Install/Uninstall plugin: type `wpm install/uninstall`
 
 Contribute  
 =========
 
-If you are a developer, feel free to send a pull request to **Dev** branch. We still have a lot functions and bugs need to do now. Just pick one from [issues page](https://github.com/qianlifeng/Wox/issues) that you think you can fix.  
+If you are a developer, please feel free to send a pull request to the **Dev** branch. We still have a lot of features and bugs to resolve. Take a look at [issues page](https://github.com/Wox-launcher/Wox/issues) if you want to contribute :)
 
-If you are not a developer, you can also help Wox by contributing the [Wox doc](http://doc.getwox.com).
+If you are not a developer, please install the [Latest build](https://ci.appveyor.com/project/qianlifeng/wox/history) and report bugs (how to: [English](https://github.com/Wox-launcher/Wox/wiki/FAQ-English) [中文](https://github.com/Wox-launcher/Wox/wiki/FAQ-%E4%B8%AD%E6%96%87)). Feedback is always welcome!
 
-
-
-Doc
+Docs
 =========
 
-If you have any questions about how to use Wox, please read [Wox Documentation](http://doc.getwox.com) first. Wox documentation is a good place for users to understand Wox.
+Full documentation can be found here [Wox doc](http://doc.getwox.com). This is a good place to start if you are installing Wox for the first time.
 
-
-Discussion
-=========
-
-We build a [Wox Fourms](http://discussion.getwox.com), so users can talk about everything about Wox there.
+In the future, all of the documentation will be moved back to Github wiki.

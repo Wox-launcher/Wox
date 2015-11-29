@@ -1,11 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Runtime.Serialization.Formatters;
 using System.Runtime.Serialization.Formatters.Binary;
-using System.Text;
 using System.Threading;
 using Wox.Infrastructure.Logger;
 
@@ -45,7 +42,7 @@ namespace Wox.Infrastructure.Storage
                             serializedObject = LoadDefault();
 #if (DEBUG)
                             {
-                                throw new Exception("deserialize failed");
+                                throw new System.Exception("deserialize failed");
                             }
 #endif
                         }
@@ -56,7 +53,7 @@ namespace Wox.Infrastructure.Storage
                     }
                 }
             }
-            catch (Exception e)
+            catch (System.Exception e)
             {
                 Log.Error(e);
                 serializedObject = LoadDefault();
@@ -104,7 +101,7 @@ namespace Wox.Infrastructure.Storage
                         binaryFormatter.Serialize(fileStream, serializedObject);
                         fileStream.Close();
                     }
-                    catch (Exception e)
+                    catch (System.Exception e)
                     {
                         Log.Error(e);
 #if (DEBUG)

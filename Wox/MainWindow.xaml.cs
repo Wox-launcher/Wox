@@ -10,7 +10,6 @@ using System.Reflection;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Forms;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
 using NHotkey;
@@ -24,16 +23,12 @@ using Wox.Helper;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Hotkey;
 using Wox.Plugin;
-using Wox.ShellContext;
 using Wox.Storage;
 using ContextMenu = System.Windows.Forms.ContextMenu;
-using DataFormats = System.Windows.DataFormats;
-using DragEventArgs = System.Windows.DragEventArgs;
-using IDataObject = System.Windows.IDataObject;
-using KeyEventArgs = System.Windows.Input.KeyEventArgs;
+using NotifyIcon = System.Windows.Forms.NotifyIcon;
+using Screen = System.Windows.Forms.Screen;
 using MenuItem = System.Windows.Forms.MenuItem;
-using MessageBox = System.Windows.MessageBox;
-using ToolTip = System.Windows.Controls.ToolTip;
+using Stopwatch = Wox.Infrastructure.Stopwatch;
 
 namespace Wox
 {
@@ -44,11 +39,11 @@ namespace Wox
 
         private readonly Storyboard progressBarStoryboard = new Storyboard();
         private NotifyIcon notifyIcon;
-        private bool queryHasReturn;
-        private string lastQuery;
+        private bool _queryHasReturn;
+        private Query _lastQuery = new Query();
         private ToolTip toolTip = new ToolTip();
 
-        private bool ignoreTextChange = false;
+        private bool _ignoreTextChange = false;
         private List<Result> CurrentContextMenus = new List<Result>();
         private string textBeforeEnterContextMenuMode;
 
@@ -64,7 +59,7 @@ namespace Wox
                 tbQuery.CaretIndex = tbQuery.Text.Length;
                 if (requery)
                 {
-                    TextBoxBase_OnTextChanged(null, null);
+                    TbQuery_OnTextChanged(null, null);
                 }
             }));
         }
@@ -73,7 +68,7 @@ namespace Wox
         {
             Dispatcher.Invoke(new Action(() =>
             {
-                ignoreTextChange = true;
+                _ignoreTextChange = true;
                 tbQuery.Text = query;
                 tbQuery.CaretIndex = tbQuery.Text.Length;
                 if (selectAll)
@@ -85,12 +80,17 @@ namespace Wox
 
         public void CloseApp()
         {
-            Dispatcher.Invoke(new Action(() =>
+            Application.Current.Shutdown();
+        }
+
+        public void RestarApp()
+        {
+            ProcessStartInfo info = new ProcessStartInfo
             {
-                notifyIcon.Visible = false;
-                Close();
-                Environment.Exit(0);
-            }));
+                FileName = Application.ResourceAssembly.Location,
+                Arguments = SingleInstance<App>.Restart
+            };
+            Process.Start(info);
         }
 
         public void HideApp()
@@ -148,7 +148,7 @@ namespace Wox
 
         public List<PluginPair> GetAllPlugins()
         {
-            return PluginManager.AllPlugins;
+            return PluginManager.AllPlugins.ToList();
         }
 
         public event WoxKeyDownEventHandler BackKeyDownEvent;
@@ -163,7 +163,7 @@ namespace Wox
                 o.PluginID = plugin.ID;
                 o.OriginQuery = query;
             });
-            UpdateResultView(results);
+            UpdateResultView(results, plugin, query);
         }
 
         public void ShowContextMenu(PluginMetadata plugin, List<Result> results)
@@ -177,7 +177,7 @@ namespace Wox
                     o.ContextMenu = null;
                 });
                 pnlContextMenu.Clear();
-                pnlContextMenu.AddResults(results);
+                pnlContextMenu.AddResults(results, plugin.ID);
                 pnlContextMenu.Visibility = Visibility.Visible;
                 pnlResult.Visibility = Visibility.Collapsed;
             }
@@ -198,27 +198,12 @@ namespace Wox
             pnlResult.ItemDropEvent += pnlResult_ItemDropEvent;
             pnlContextMenu.LeftMouseClickEvent += SelectResult;
             pnlResult.RightMouseClickEvent += pnlResult_RightMouseClickEvent;
+            Closing += MainWindow_Closing;
 
-            ThemeManager.Theme.ChangeTheme(UserSettingStorage.Instance.Theme);
-            InternationalizationManager.Instance.ChangeLanguage(UserSettingStorage.Instance.Language);
 
             SetHotkey(UserSettingStorage.Instance.Hotkey, OnHotkey);
             SetCustomPluginHotkey();
             InitialTray();
-
-            Closing += MainWindow_Closing;
-            //since MainWIndow implement IPublicAPI, so we need to finish ctor MainWindow object before
-            //PublicAPI invoke in plugin init methods. E.g FolderPlugin
-            ThreadPool.QueueUserWorkItem(o =>
-            {
-                Thread.Sleep(50);
-                PluginManager.Init(this);
-            });
-            ThreadPool.QueueUserWorkItem(o =>
-            {
-                Thread.Sleep(50);
-                PreLoadImages();
-            });
         }
 
         void pnlResult_ItemDropEvent(Result result, IDataObject dropDataObject, DragEventArgs args)
@@ -245,11 +230,6 @@ namespace Wox
             return true;
         }
 
-        private void PreLoadImages()
-        {
-            ImageLoader.ImageLoader.PreloadImages();
-        }
-
         void pnlResult_RightMouseClickEvent(Result result)
         {
             ShowContextMenu(result);
@@ -266,6 +246,9 @@ namespace Wox
 
         private void MainWindow_OnLoaded(object sender, RoutedEventArgs e)
         {
+            ThemeManager.Theme.ChangeTheme(UserSettingStorage.Instance.Theme);
+            InternationalizationManager.Instance.ChangeLanguage(UserSettingStorage.Instance.Language);
+
             Left = GetWindowsLeft();
             Top = GetWindowsTop();
 
@@ -356,6 +339,20 @@ namespace Wox
             }
         }
 
+        /// <summary>
+        /// Checks if Wox should ignore any hotkeys
+        /// </summary>
+        /// <returns></returns>
+        private bool ShouldIgnoreHotkeys()
+        {
+            //double if to omit calling win32 function
+            if (UserSettingStorage.Instance.IgnoreHotkeysOnFullscreen)
+                if (WindowIntelopHelper.IsWindowFullscreen())
+                    return true;
+
+            return false;
+        }
+
         private void SetCustomPluginHotkey()
         {
             if (UserSettingStorage.Instance.CustomPluginHotkeys == null) return;
@@ -364,6 +361,7 @@ namespace Wox
                 CustomPluginHotkey hotkey1 = hotkey;
                 SetHotkey(hotkey.Hotkey, delegate
                 {
+                    if (ShouldIgnoreHotkeys()) return;
                     ShowApp();
                     ChangeQuery(hotkey1.ActionKeyword, true);
                 });
@@ -372,6 +370,7 @@ namespace Wox
 
         private void OnHotkey(object sender, HotkeyEventArgs e)
         {
+            if (ShouldIgnoreHotkeys()) return;
             ToggleWox();
             e.Handled = true;
         }
@@ -419,11 +418,12 @@ namespace Wox
 
         private void QueryContextMenu()
         {
+            var contextMenuId = "Context Menu Id";
             pnlContextMenu.Clear();
             var query = tbQuery.Text.ToLower();
             if (string.IsNullOrEmpty(query))
             {
-                pnlContextMenu.AddResults(CurrentContextMenus);
+                pnlContextMenu.AddResults(CurrentContextMenus, contextMenuId);
             }
             else
             {
@@ -436,73 +436,76 @@ namespace Wox
                         filterResults.Add(contextMenu);
                     }
                 }
-                pnlContextMenu.AddResults(filterResults);
+                pnlContextMenu.AddResults(filterResults, contextMenuId);
             }
         }
 
-        private void TextBoxBase_OnTextChanged(object sender, TextChangedEventArgs e)
+        private void TbQuery_OnTextChanged(object sender, TextChangedEventArgs e)
         {
-            if (ignoreTextChange) { ignoreTextChange = false; return; }
+            if (_ignoreTextChange) { _ignoreTextChange = false; return; }
 
             toolTip.IsOpen = false;
-            pnlResult.Dirty = true;
-
             if (IsInContextMenuMode)
             {
                 QueryContextMenu();
                 return;
             }
 
-            lastQuery = tbQuery.Text;
-            int searchDelay = GetSearchDelay(lastQuery);
-
-            Dispatcher.DelayInvoke("UpdateSearch",
-                o =>
-                {
-                    Dispatcher.DelayInvoke("ClearResults", i =>
-                    {
-                        // first try to use clear method inside pnlResult, which is more closer to the add new results
-                        // and this will not bring splash issues.After waiting 100ms, if there still no results added, we
-                        // must clear the result. otherwise, it will be confused why the query changed, but the results
-                        // didn't.
-                        if (pnlResult.Dirty) pnlResult.Clear();
-                    }, TimeSpan.FromMilliseconds(100), null);
-                    queryHasReturn = false;
-                    Query query = new Query(lastQuery);
-                    query.IsIntantQuery = searchDelay == 0;
-                    Query(query);
-                    Dispatcher.DelayInvoke("ShowProgressbar", originQuery =>
-                    {
-                        if (!queryHasReturn && originQuery == tbQuery.Text && !string.IsNullOrEmpty(lastQuery))
-                        {
-                            StartProgress();
-                        }
-                    }, TimeSpan.FromMilliseconds(150), tbQuery.Text);
-                    //reset query history index after user start new query
-                    ResetQueryHistoryIndex();
-                }, TimeSpan.FromMilliseconds(searchDelay));
+            string query = tbQuery.Text.Trim();
+            if (!string.IsNullOrEmpty(query))
+            {
+                Query(query);
+                //reset query history index after user start new query
+                ResetQueryHistoryIndex();
+            }
+            else
+            {
+                pnlResult.Clear();
+            }
         }
 
         private void ResetQueryHistoryIndex()
         {
+            pnlResult.RemoveResultsFor(QueryHistoryStorage.MetaData);
             QueryHistoryStorage.Instance.Reset();
         }
-
-        private int GetSearchDelay(string query)
+        private void Query(string text)
         {
-            if (!string.IsNullOrEmpty(query) && PluginManager.IsInstantQuery(query))
+            _queryHasReturn = false;
+            var query = PluginManager.QueryInit(text);
+            if (query != null)
             {
-                DebugHelper.WriteLine("execute query without delay");
-                return 0;
+                // handle the exclusiveness of plugin using action keyword
+                string lastKeyword = _lastQuery.ActionKeyword;
+                string keyword = query.ActionKeyword;
+                if (string.IsNullOrEmpty(lastKeyword))
+                {
+                    if (!string.IsNullOrEmpty(keyword))
+                    {
+                        pnlResult.RemoveResultsExcept(PluginManager.NonGlobalPlugins[keyword].Metadata);
+                    }
+                }
+                else
+                {
+                    if (string.IsNullOrEmpty(keyword))
+                    {
+                        pnlResult.RemoveResultsFor(PluginManager.NonGlobalPlugins[lastKeyword].Metadata);
+                    }
+                    else if (lastKeyword != keyword)
+                    {
+                        pnlResult.RemoveResultsExcept(PluginManager.NonGlobalPlugins[keyword].Metadata);
+                    }
+                }
+                _lastQuery = query;
+                Dispatcher.DelayInvoke("ShowProgressbar", () =>
+                {
+                    if (!string.IsNullOrEmpty(query.RawQuery) && query.RawQuery == _lastQuery.RawQuery && !_queryHasReturn)
+                    {
+                        StartProgress();
+                    }
+                }, TimeSpan.FromMilliseconds(150));
+                PluginManager.QueryForAllPlugins(query);
             }
-
-            DebugHelper.WriteLine("execute query with 200ms delay");
-            return 200;
-        }
-
-        private void Query(Query q)
-        {
-            PluginManager.Query(q);
             StopProgress();
         }
 
@@ -737,10 +740,11 @@ namespace Wox
         {
             if (history != null)
             {
+                var historyMetadata = QueryHistoryStorage.MetaData;
                 ChangeQueryText(history.Query, true);
-                pnlResult.Dirty = true;
                 var executeQueryHistoryTitle = GetTranslation("executeQuery");
                 var lastExecuteTime = GetTranslation("lastExecuteTime");
+                pnlResult.RemoveResultsExcept(historyMetadata);
                 UpdateResultViewInternal(new List<Result>()
                 {
                     new Result(){
@@ -753,7 +757,7 @@ namespace Wox
                             return false;
                         }
                     }
-                });
+                }, historyMetadata);
             }
         }
 
@@ -834,28 +838,27 @@ namespace Wox
             }
         }
 
-        private void UpdateResultView(List<Result> list)
+        private void UpdateResultView(List<Result> list, PluginMetadata metadata, Query originQuery)
         {
-            queryHasReturn = true;
+            _queryHasReturn = true;
             progressBar.Dispatcher.Invoke(new Action(StopProgress));
-            if (list == null || list.Count == 0) return;
 
-            if (list.Count > 0)
+            list.ForEach(o =>
             {
-                list.ForEach(o =>
-                {
-                    o.Score += UserSelectedRecordStorage.Instance.GetSelectedCount(o) * 5;
-                });
-                List<Result> l = list.Where(o => o.OriginQuery != null && o.OriginQuery.RawQuery == lastQuery).ToList();
-                UpdateResultViewInternal(l);
+                o.Score += UserSelectedRecordStorage.Instance.GetSelectedCount(o) * 5;
+            });
+            if (originQuery.RawQuery == _lastQuery.RawQuery)
+            {
+                UpdateResultViewInternal(list, metadata);
             }
         }
 
-        private void UpdateResultViewInternal(List<Result> list)
+        private void UpdateResultViewInternal(List<Result> list, PluginMetadata metadata)
         {
             Dispatcher.Invoke(new Action(() =>
             {
-                pnlResult.AddResults(list);
+                Stopwatch.Normal($"UI update cost for {metadata.Name}",
+                    () => { pnlResult.AddResults(list, metadata.ID); });
             }));
         }
 
@@ -891,10 +894,10 @@ namespace Wox
 
         private void ShowContextMenu(Result result)
         {
-            List<Result> results = PluginManager.GetPluginContextMenus(result);
+            List<Result> results = PluginManager.GetContextMenusForPlugin(result);
             results.ForEach(o =>
             {
-                o.PluginDirectory = PluginManager.GetPlugin(result.PluginID).Metadata.PluginDirectory;
+                o.PluginDirectory = PluginManager.GetPluginForId(result.PluginID).Metadata.PluginDirectory;
                 o.PluginID = result.PluginID;
                 o.OriginQuery = result.OriginQuery;
             });
@@ -904,7 +907,7 @@ namespace Wox
             textBeforeEnterContextMenuMode = tbQuery.Text;
             ChangeQueryText("");
             pnlContextMenu.Clear();
-            pnlContextMenu.AddResults(results);
+            pnlContextMenu.AddResults(results, result.PluginID);
             CurrentContextMenus = results;
             pnlContextMenu.Visibility = Visibility.Visible;
             pnlResult.Visibility = Visibility.Collapsed;

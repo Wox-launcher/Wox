@@ -1,14 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
 using Newtonsoft.Json;
+using Wox.Infrastructure.Exception;
 using Wox.Infrastructure.Logger;
 using Wox.Plugin;
-using Wox.Core.Exception;
 
 namespace Wox.Core.Plugin
 {
@@ -75,7 +74,7 @@ namespace Wox.Core.Plugin
                 }
                 catch (System.Exception e)
                 {
-                    Log.Error(e.Message);
+                    Log.Error(e);
                 }
             }
             return null;

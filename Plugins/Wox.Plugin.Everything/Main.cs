@@ -3,11 +3,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.ServiceProcess;
 using Wox.Infrastructure;
-using System.Reflection;
 using Wox.Plugin.Everything.Everything;
-using Wox.Plugin.Features;
 
 namespace Wox.Plugin.Everything
 {
@@ -48,12 +47,6 @@ namespace Wox.Plugin.Everything
                 try
                 {
                     var searchList = api.Search(keyword, maxCount: ContextMenuStorage.Instance.MaxSearchCount).ToList();
-                    var fuzzyMather = FuzzyMatcher.Create(keyword);
-                    searchList.Sort(
-                        (x, y) =>
-                            fuzzyMather.Evaluate(Path.GetFileName(y.FullPath)).Score -
-                            fuzzyMather.Evaluate(Path.GetFileName(x.FullPath)).Score);
-
                     foreach (var s in searchList)
                     {
                         var path = s.FullPath;

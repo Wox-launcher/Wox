@@ -1,9 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Text;
 using Newtonsoft.Json;
 using Wox.Infrastructure.Storage;
 
@@ -43,8 +40,8 @@ namespace Wox.Plugin.WebSearch
             WebSearch googleWebSearch = new WebSearch()
             {
                 Title = "Google",
-                ActionWord = "g",
-                IconPath = @"Images\websearch\google.png",
+                ActionKeyword = "g",
+                IconPath = @"Images\google.png",
                 Url = "https://www.google.com/search?q={q}",
                 Enabled = true
             };
@@ -54,8 +51,8 @@ namespace Wox.Plugin.WebSearch
             WebSearch wikiWebSearch = new WebSearch()
             {
                 Title = "Wikipedia",
-                ActionWord = "wiki",
-                IconPath = @"Images\websearch\wiki.png",
+                ActionKeyword = "wiki",
+                IconPath = @"Images\wiki.png",
                 Url = "http://en.wikipedia.org/wiki/{q}",
                 Enabled = true
             };
@@ -64,8 +61,8 @@ namespace Wox.Plugin.WebSearch
             WebSearch findIcon = new WebSearch()
             {
                 Title = "FindIcon",
-                ActionWord = "findicon",
-                IconPath = @"Images\websearch\pictures.png",
+                ActionKeyword = "findicon",
+                IconPath = @"Images\pictures.png",
                 Url = "http://findicons.com/search/{q}",
                 Enabled = true
             };

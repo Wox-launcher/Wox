@@ -1,12 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Xml;
 using Microsoft.Win32;
 
-namespace Wox.Core.Exception
+namespace Wox.Infrastructure.Exception
 {
     public class ExceptionFormatter
     {

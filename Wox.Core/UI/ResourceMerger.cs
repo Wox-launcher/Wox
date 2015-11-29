@@ -1,48 +1,54 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using Wox.Core.i18n;
 using Wox.Core.Plugin;
-using Wox.Core.Theme;
 using Wox.Plugin;
 
 namespace Wox.Core.UI
 {
-    public class ResourceMerger
+    public static class ResourceMerger
     {
-        internal static void ApplyResources()
+        private static void RemoveResource(string directoryName)
         {
-            Application.Current.Resources.MergedDictionaries.Clear();
-            ApplyPluginLanguages();
-            ApplyThemeAndLanguageResources();
-        }
-
-        internal static void ApplyThemeAndLanguageResources()
-        {
-            var UIResources = AssemblyHelper.LoadInterfacesFromAppDomain<IUIResource>();
-            foreach (var uiResource in UIResources)
+            directoryName = $"{Path.DirectorySeparatorChar}{directoryName}";
+            var dictionaries = Application.Current.Resources.MergedDictionaries;
+            foreach (var resource in dictionaries)
             {
-                Application.Current.Resources.MergedDictionaries.Add(uiResource.GetResourceDictionary());
-            }
-        }
-
-        internal static void ApplyPluginLanguages()
-        {
-            var pluginI18ns = AssemblyHelper.LoadInterfacesFromAppDomain<IPluginI18n>();
-            foreach (var pluginI18n in pluginI18ns)
-            {
-                string languageFile = InternationalizationManager.Instance.GetLanguageFile(pluginI18n.GetLanguagesFolder());
-                if (!string.IsNullOrEmpty(languageFile))
+                string currentDirectoryName = Path.GetDirectoryName(resource.Source.AbsolutePath);
+                if (currentDirectoryName == directoryName)
                 {
-                    Application.Current.Resources.MergedDictionaries.Add(new ResourceDictionary
-                    {
-                        Source = new Uri(languageFile, UriKind.Absolute)
-                    });
+                    dictionaries.Remove(resource);
+                    break;
                 }
             }
         }
 
-      
+        public static void UpdateResource(Theme.Theme t)
+        {
+            RemoveResource(Theme.Theme.DirectoryName);
+            Application.Current.Resources.MergedDictionaries.Add(t.GetResourceDictionary());
+        }
+
+        public static void UpdateResources(Internationalization i)
+        {
+            RemoveResource(Internationalization.DirectoryName);
+            Application.Current.Resources.MergedDictionaries.Add(i.GetResourceDictionary());
+        }
+
+        internal static void UpdatePluginLanguages()
+        {
+            RemoveResource(PluginManager.DirectoryName);
+            foreach (var languageFile in PluginManager.GetPluginsForInterface<IPluginI18n>().
+                Select(plugin => InternationalizationManager.Instance.GetLanguageFile(((IPluginI18n)plugin.Plugin).GetLanguagesFolder())).
+                Where(file => !string.IsNullOrEmpty(file)))
+            {
+                Application.Current.Resources.MergedDictionaries.Add(new ResourceDictionary
+                {
+                    Source = new Uri(languageFile, UriKind.Absolute)
+                });
+            }
+        }
     }
 }
