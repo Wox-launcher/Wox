@@ -260,16 +260,8 @@ namespace Wox
         private double GetWindowsLeft()
         {
             var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
-            if (UserSettingStorage.Instance.RememberLastLaunchLocation)
-            {
-                var origScreen = Screen.FromRectangle(new Rectangle((int)Left, (int)Top, (int)ActualWidth, (int)ActualHeight));
-                var coordX = (Left - origScreen.WorkingArea.Left) / (origScreen.WorkingArea.Width - ActualWidth);
-                UserSettingStorage.Instance.WindowLeft = (screen.WorkingArea.Width - ActualWidth) * coordX + screen.WorkingArea.Left;
-            }
-            else
-            {
+            if (!UserSettingStorage.Instance.RememberLastLaunchLocation)
                 UserSettingStorage.Instance.WindowLeft = (screen.WorkingArea.Width - ActualWidth) / 2 + screen.WorkingArea.Left;
-            }
 
             return UserSettingStorage.Instance.WindowLeft;
         }
@@ -277,16 +269,9 @@ namespace Wox
         private double GetWindowsTop()
         {
             var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
-            if (UserSettingStorage.Instance.RememberLastLaunchLocation)
-            {
-                var origScreen = Screen.FromRectangle(new Rectangle((int)Left, (int)Top, (int)ActualWidth, (int)ActualHeight));
-                var coordY = (Top - origScreen.WorkingArea.Top) / (origScreen.WorkingArea.Height - ActualHeight);
-                UserSettingStorage.Instance.WindowTop = (screen.WorkingArea.Height - ActualHeight) * coordY + screen.WorkingArea.Top;
-            }
-            else
-            {
+            if (!UserSettingStorage.Instance.RememberLastLaunchLocation)
                 UserSettingStorage.Instance.WindowTop = (screen.WorkingArea.Height - tbQuery.ActualHeight) / 4 + screen.WorkingArea.Top;
-            }
+			
             return UserSettingStorage.Instance.WindowTop;
         }
 
@@ -543,8 +528,6 @@ namespace Wox
         private void ShowWox(bool selectAll = true)
         {
             UserSettingStorage.Instance.IncreaseActivateTimes();
-            Left = GetWindowsLeft();
-            Top = GetWindowsTop();
 
             Show();
             Activate();
