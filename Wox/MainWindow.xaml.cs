@@ -548,6 +548,7 @@ namespace Wox
             Top = GetWindowsTop();
 
             Show();
+            Activate();
             tbQuery.Focus();
             ResetQueryHistoryIndex();
             if (selectAll) tbQuery.SelectAll();
