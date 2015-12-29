@@ -16,7 +16,7 @@ namespace Wox.Plugin
             get
             {
                 if (string.IsNullOrEmpty(IcoPath)) return string.Empty;
-                if (IcoPath.StartsWith("data:"))
+                if (IcoPath.StartsWith("data:") || IcoPath.StartsWith("http:")) // GitHub issue#443 (https://github.com/Wox-launcher/Wox/issues/443#issue-124230397)
                 {
                     return IcoPath;
                 }
