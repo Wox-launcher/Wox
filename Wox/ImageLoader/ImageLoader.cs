@@ -67,7 +67,10 @@ namespace Wox.ImageLoader
                         ImageSource img = Load(image.Key, false);
                         if (img != null)
                         {
-                            img.Freeze(); //to make it copy to UI thread
+                            if (img.CanFreeze == true) // GitHub issue#443 (https://github.com/Wox-launcher/Wox/issues/443#issue-124230397)
+                            {
+                                img.Freeze(); //to make it copy to UI thread
+                            }
                             if (!imageCache.ContainsKey(image.Key))
                             {
                                 KeyValuePair<string, int> copyedImg = image;
@@ -109,6 +112,11 @@ namespace Wox.ImageLoader
                         img = GetIcon(path);
                     }
                     else if (!string.IsNullOrEmpty(path) && imageExts.Contains(ext) && File.Exists(path))
+                    {
+                        img = new BitmapImage(new Uri(path));
+                    }
+                    // GitHub issue#443 (https://github.com/Wox-launcher/Wox/issues/443#issue-124230397)
+                    else if (!string.IsNullOrEmpty(path) && imageExts.Contains(ext) && path.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                     {
                         img = new BitmapImage(new Uri(path));
                     }
