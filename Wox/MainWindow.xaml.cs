@@ -894,6 +894,8 @@ namespace Wox
 
         private void ShowContextMenu(Result result)
         {
+            if (result == null) return;
+
             List<Result> results = PluginManager.GetContextMenusForPlugin(result);
             results.ForEach(o =>
             {
