@@ -260,21 +260,34 @@ namespace Wox
 
         private double GetWindowsLeft()
         {
-            if (UserSettingStorage.Instance.RememberLastLaunchLocation) return UserSettingStorage.Instance.WindowLeft;
-
             var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
-            var dipPoint = WindowIntelopHelper.TransformPixelsToDIP(this, screen.WorkingArea.Width, 0);
-            UserSettingStorage.Instance.WindowLeft = (dipPoint.X - ActualWidth)/2;
+            if (UserSettingStorage.Instance.RememberLastLaunchLocation)
+            {
+                var origScreen = Screen.FromRectangle(new Rectangle((int)Left, (int)Top, (int)ActualWidth, (int)ActualHeight));
+                var coordX = (Left - origScreen.WorkingArea.Left) / (origScreen.WorkingArea.Width - ActualWidth);
+                UserSettingStorage.Instance.WindowLeft = (screen.WorkingArea.Width - ActualWidth) * coordX + screen.WorkingArea.Left;
+            }
+            else
+            {
+                UserSettingStorage.Instance.WindowLeft = (screen.WorkingArea.Width - ActualWidth) / 2 + screen.WorkingArea.Left;
+            }
+
             return UserSettingStorage.Instance.WindowLeft;
         }
 
         private double GetWindowsTop()
         {
-            if (UserSettingStorage.Instance.RememberLastLaunchLocation) return UserSettingStorage.Instance.WindowTop;
-
             var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
-            var dipPoint = WindowIntelopHelper.TransformPixelsToDIP(this, 0, screen.WorkingArea.Height);
-            UserSettingStorage.Instance.WindowTop = (dipPoint.Y - tbQuery.ActualHeight)/4;
+            if (UserSettingStorage.Instance.RememberLastLaunchLocation)
+            {
+                var origScreen = Screen.FromRectangle(new Rectangle((int)Left, (int)Top, (int)ActualWidth, (int)ActualHeight));
+                var coordY = (Top - origScreen.WorkingArea.Top) / (origScreen.WorkingArea.Height - ActualHeight);
+                UserSettingStorage.Instance.WindowTop = (screen.WorkingArea.Height - ActualHeight) * coordY + screen.WorkingArea.Top;
+            }
+            else
+            {
+                UserSettingStorage.Instance.WindowTop = (screen.WorkingArea.Height - tbQuery.ActualHeight) / 4 + screen.WorkingArea.Top;
+            }
             return UserSettingStorage.Instance.WindowTop;
         }
 
@@ -521,8 +534,6 @@ namespace Wox
 
         private void HideWox()
         {
-            UserSettingStorage.Instance.WindowLeft = Left;
-            UserSettingStorage.Instance.WindowTop = Top;
             if (IsInContextMenuMode)
             {
                 BackToResultMode();
@@ -885,6 +896,7 @@ namespace Wox
         private void ShowContextMenu(Result result)
         {
             if (result == null) return;
+
             List<Result> results = PluginManager.GetContextMenusForPlugin(result);
             results.ForEach(o =>
             {

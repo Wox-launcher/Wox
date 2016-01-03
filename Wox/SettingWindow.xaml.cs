@@ -544,7 +544,8 @@ namespace Wox
             pluginId = pair.Metadata.ID;
             pluginIcon.Source = ImageLoader.ImageLoader.Load(pair.Metadata.FullIcoPath);
 
-            var customizedPluginConfig = UserSettingStorage.Instance.CustomizedPluginConfigs.FirstOrDefault(o => o.ID == pluginId);
+            var customizedPluginConfig = UserSettingStorage.Instance.CustomizedPluginConfigs.ContainsKey(pluginId) ? null : UserSettingStorage.Instance.CustomizedPluginConfigs[pluginId];
+
             cbDisablePlugin.IsChecked = customizedPluginConfig != null && customizedPluginConfig.Disabled;
 
             PluginContentPanel.Content = null;
@@ -592,11 +593,12 @@ namespace Wox
                 id = pair.Metadata.ID;
                 name = pair.Metadata.Name;
             }
-            var customizedPluginConfig = UserSettingStorage.Instance.CustomizedPluginConfigs.FirstOrDefault(o => o.ID == id);
+            var customizedPluginConfig = UserSettingStorage.Instance.CustomizedPluginConfigs.ContainsKey(id) ? null : UserSettingStorage.Instance.CustomizedPluginConfigs[id];
+
             if (customizedPluginConfig == null)
             {
                 // todo when this part will be invoked
-                UserSettingStorage.Instance.CustomizedPluginConfigs.Add(new CustomizedPluginConfig()
+                UserSettingStorage.Instance.CustomizedPluginConfigs.Add(id, new CustomizedPluginConfig()
                 {
                     Disabled = cbDisabled.IsChecked ?? true,
                     ID = id,
