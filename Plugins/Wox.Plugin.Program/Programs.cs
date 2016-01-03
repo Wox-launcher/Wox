@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Windows;
-using IWshRuntimeLibrary;
 using Wox.Infrastructure;
 using Wox.Plugin.Program.ProgramSources;
 using Wox.Infrastructure.Logger;
@@ -30,9 +29,9 @@ namespace Wox.Plugin.Program
         {
 
             var fuzzyMather = FuzzyMatcher.Create(query.Search);
-            var results = programs.Where(o => MatchProgram(o, fuzzyMather)).
+            var results = programs.Where(p => MatchProgram(p, fuzzyMather)).
                                    Select(ScoreFilter).
-                                   OrderByDescending(o => o.Score)
+                                   OrderByDescending(p => p.Score)
                                    .Select(c => new Result()
                                    {
                                        Title = c.Title,
@@ -50,20 +49,11 @@ namespace Wox.Plugin.Program
             return results;
         }
 
-        static string ResolveShortcut(string filePath)
-        {
-            // IWshRuntimeLibrary is in the COM library "Windows Script Host Object Model"
-            WshShell shell = new WshShell();
-            IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(filePath);
-            return shortcut.TargetPath;
-        }
-
         private bool MatchProgram(Program program, FuzzyMatcher matcher)
         {
             var scores = new List<string> { program.Title, program.PinyinTitle, program.AbbrTitle, program.ExecuteName };
             program.Score = scores.Select(s => matcher.Evaluate(s ?? string.Empty).Score).Max();
-            if (program.Score > 0) return true;
-            else return false;
+            return program.Score > 0;
         }
 
         public void Init(PluginInitContext context)
@@ -224,7 +214,9 @@ namespace Wox.Plugin.Program
                         if (Path.EndsWith(".lnk"))
                         {
                             //get location of shortcut
-                            Path = ResolveShortcut(Path);
+                            var resolved = ShortcutHelper.ResolveShortcut(Path);
+                            if(!string.IsNullOrEmpty(resolved))
+                                Path = resolved;
                         }
                         //get parent folder
                         Path = Directory.GetParent(Path).FullName;

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using Wox.Core.i18n;
 using Wox.Core.UI;
@@ -27,7 +28,7 @@ namespace Wox.Core.Plugin
         /// </summary>
         private static List<string> pluginDirectories = new List<string>();
 
-        public static IEnumerable<PluginPair> AllPlugins { get; private set; }
+        public static Dictionary<string, PluginPair> AllPlugins { get; private set; }
 
         public static List<PluginPair> GlobalPlugins { get; } = new List<PluginPair>();
         public static Dictionary<string, PluginPair> NonGlobalPlugins { get; set; } = new Dictionary<string, PluginPair>();
@@ -75,13 +76,14 @@ namespace Wox.Core.Plugin
             API = api;
 
             var metadatas = PluginConfig.Parse(pluginDirectories);
-            AllPlugins = (new CSharpPluginLoader().LoadPlugin(metadatas)).
-                Concat(new JsonRPCPluginLoader<PythonPlugin>().LoadPlugin(metadatas));
+
+            IEnumerable<PluginPair> allPluginsAsEnumerable = (new CSharpPluginLoader().LoadPlugin(metadatas)).Concat(new JsonRPCPluginLoader<PythonPlugin>().LoadPlugin(metadatas));
+            AllPlugins = allPluginsAsEnumerable.ToDictionary(pair => pair.Metadata.ID, pair => pair);
 
             //load plugin i18n languages
             ResourceMerger.UpdatePluginLanguages();
 
-            foreach (PluginPair pluginPair in AllPlugins)
+            foreach (PluginPair pluginPair in AllPlugins.Values)
             {
                 PluginPair pair = pluginPair;
                 ThreadPool.QueueUserWorkItem(o =>
@@ -104,7 +106,7 @@ namespace Wox.Core.Plugin
             {
                 InstantQueryPlugins = GetPluginsForInterface<IInstantQuery>();
                 contextMenuPlugins = GetPluginsForInterface<IContextMenu>();
-                foreach (var plugin in AllPlugins)
+                foreach (var plugin in AllPlugins.Values)
                 {
                     if (IsGlobalPlugin(plugin.Metadata))
                     {
@@ -222,12 +224,12 @@ namespace Wox.Core.Plugin
         /// <returns></returns>
         public static PluginPair GetPluginForId(string id)
         {
-            return AllPlugins.FirstOrDefault(o => o.Metadata.ID == id);
+            return AllPlugins.ContainsKey(id) ? null : AllPlugins[id];
         }
 
         public static IEnumerable<PluginPair> GetPluginsForInterface<T>() where T : IFeatures
         {
-            return AllPlugins.Where(p => p.Plugin is T);
+            return AllPlugins.Values.Where(p => p.Plugin is T);
         }
 
         public static List<Result> GetContextMenusForPlugin(Result result)
