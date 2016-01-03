@@ -16,7 +16,7 @@ namespace Wox.Plugin.PluginIndicator
             var results = from keyword in PluginManager.NonGlobalPlugins.Keys
                           where keyword.StartsWith(query.Terms[0])
                           let metadata = PluginManager.NonGlobalPlugins[keyword].Metadata
-                          let customizedPluginConfig = UserSettingStorage.Instance.CustomizedPluginConfigs.ContainsKey(metadata.ID) ? null : UserSettingStorage.Instance.CustomizedPluginConfigs[metadata.ID] 
+                          let customizedPluginConfig = UserSettingStorage.Instance.CustomizedPluginConfigs.ContainsKey(metadata.ID) ? UserSettingStorage.Instance.CustomizedPluginConfigs[metadata.ID] : null 
                           where customizedPluginConfig == null || !customizedPluginConfig.Disabled
                           select new Result
                           {

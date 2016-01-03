@@ -544,7 +544,7 @@ namespace Wox
             pluginId = pair.Metadata.ID;
             pluginIcon.Source = ImageLoader.ImageLoader.Load(pair.Metadata.FullIcoPath);
 
-            var customizedPluginConfig = UserSettingStorage.Instance.CustomizedPluginConfigs.ContainsKey(pluginId) ? null : UserSettingStorage.Instance.CustomizedPluginConfigs[pluginId];
+            var customizedPluginConfig = UserSettingStorage.Instance.CustomizedPluginConfigs.ContainsKey(pluginId) ? UserSettingStorage.Instance.CustomizedPluginConfigs[pluginId] : null;
 
             cbDisablePlugin.IsChecked = customizedPluginConfig != null && customizedPluginConfig.Disabled;
 
@@ -593,7 +593,7 @@ namespace Wox
                 id = pair.Metadata.ID;
                 name = pair.Metadata.Name;
             }
-            var customizedPluginConfig = UserSettingStorage.Instance.CustomizedPluginConfigs.ContainsKey(id) ? null : UserSettingStorage.Instance.CustomizedPluginConfigs[id];
+            var customizedPluginConfig = UserSettingStorage.Instance.CustomizedPluginConfigs.ContainsKey(id) ? UserSettingStorage.Instance.CustomizedPluginConfigs[id] : null;
 
             if (customizedPluginConfig == null)
             {

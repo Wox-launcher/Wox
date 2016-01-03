@@ -165,8 +165,7 @@ namespace Wox.Core.Plugin
             {
                 var customizedPluginConfig =
                     UserSettingStorage.Instance.CustomizedPluginConfigs.ContainsKey(plugin.Metadata.ID)
-                        ? null
-                        : UserSettingStorage.Instance.CustomizedPluginConfigs[plugin.Metadata.ID];
+                        ? UserSettingStorage.Instance.CustomizedPluginConfigs[plugin.Metadata.ID] : null;
                 if (customizedPluginConfig != null && customizedPluginConfig.Disabled) continue;
                 if (IsInstantQueryPlugin(plugin))
                 {
@@ -228,7 +227,7 @@ namespace Wox.Core.Plugin
         /// <returns></returns>
         public static PluginPair GetPluginForId(string id)
         {
-            return AllPlugins.ContainsKey(id) ? null : AllPlugins[id];
+            return AllPlugins.ContainsKey(id) ? AllPlugins[id] : null;
         }
 
         public static IEnumerable<PluginPair> GetPluginsForInterface<T>() where T : IFeatures
