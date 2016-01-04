@@ -1,10 +1,9 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
-using System.Linq;
 using System.Reflection;
-using Newtonsoft.Json;
 using Wox.Infrastructure.Storage;
 using Wox.Plugin;
 
@@ -17,7 +16,6 @@ namespace Wox.Core.UserSettings
 
         [JsonProperty]
         public int ActivateTimes { get; set; }
-
 
         [JsonProperty]
         public bool EnableUpdateLog { get; set; }
@@ -61,7 +59,7 @@ namespace Wox.Core.UserSettings
         [JsonProperty]
         public double WindowTop { get; set; }
 
-        public List<CustomizedPluginConfig> CustomizedPluginConfigs { get; set; }
+        public Dictionary<string, CustomizedPluginConfig> CustomizedPluginConfigs { get; set; }
 
         [JsonProperty]
         public List<CustomPluginHotkey> CustomPluginHotkeys { get; set; }
@@ -117,8 +115,6 @@ namespace Wox.Core.UserSettings
             get { return "config"; }
         }
 
-        
-
         public void IncreaseActivateTimes()
         {
             ActivateTimes++;
@@ -133,7 +129,7 @@ namespace Wox.Core.UserSettings
             DontPromptUpdateMsg = false;
             Theme = "Dark";
             Language = "en";
-            CustomizedPluginConfigs = new List<CustomizedPluginConfig>();
+            CustomizedPluginConfigs = new Dictionary<string, CustomizedPluginConfig>();
             Hotkey = "Alt + Space";
             QueryBoxFont = FontFamily.GenericSansSerif.Name;
             ResultItemFont = FontFamily.GenericSansSerif.Name;
@@ -151,7 +147,7 @@ namespace Wox.Core.UserSettings
         {
             if (storage.CustomizedPluginConfigs == null)
             {
-                storage.CustomizedPluginConfigs = new List<CustomizedPluginConfig>();
+                storage.CustomizedPluginConfigs = new Dictionary<string, CustomizedPluginConfig>();
             }
             if (storage.QueryBoxFont == null)
             {
@@ -169,20 +165,22 @@ namespace Wox.Core.UserSettings
 
         public void UpdateActionKeyword(PluginMetadata metadata)
         {
-            var customizedPluginConfig = CustomizedPluginConfigs.FirstOrDefault(o => o.ID == metadata.ID);
-            if (customizedPluginConfig == null)
+            if (CustomizedPluginConfigs.ContainsKey(metadata.ID))
             {
-                CustomizedPluginConfigs.Add(new CustomizedPluginConfig()
+                var customizedPluginConfig = CustomizedPluginConfigs[metadata.ID];
+                customizedPluginConfig.ActionKeywords = metadata.ActionKeywords;
+            }
+            else
+            {
+                var customizedPluginConfig = new CustomizedPluginConfig()
                 {
                     Disabled = false,
                     ID = metadata.ID,
                     Name = metadata.Name,
                     ActionKeywords = metadata.ActionKeywords
-                });
-            }
-            else
-            {
-                customizedPluginConfig.ActionKeywords = metadata.ActionKeywords;
+                };
+
+                CustomizedPluginConfigs.Add(metadata.ID, customizedPluginConfig);
             }
             Save();
         }

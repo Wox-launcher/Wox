@@ -20,19 +20,22 @@ namespace Wox.Core.Plugin
     public static class PluginManager
     {
         public const string DirectoryName = "Plugins";
-        private static IEnumerable<PluginPair> contextMenuPlugins;
+
+        private static Dictionary<string, PluginPair> contextMenuPlugins;
 
         /// <summary>
         /// Directories that will hold Wox plugin directory
         /// </summary>
         private static List<string> pluginDirectories = new List<string>();
 
-        public static IEnumerable<PluginPair> AllPlugins { get; private set; }
+        public static Dictionary<string, PluginPair> AllPlugins { get; private set; }
 
         public static List<PluginPair> GlobalPlugins { get; } = new List<PluginPair>();
+
         public static Dictionary<string, PluginPair> NonGlobalPlugins { get; set; } = new Dictionary<string, PluginPair>();
 
-        private static IEnumerable<PluginPair> InstantQueryPlugins { get; set; }
+        private static Dictionary<string, PluginPair> InstantQueryPlugins { get; set; }
+
         public static IPublicAPI API { private set; get; }
 
         public static string PluginDirectory
@@ -75,13 +78,14 @@ namespace Wox.Core.Plugin
             API = api;
 
             var metadatas = PluginConfig.Parse(pluginDirectories);
-            AllPlugins = (new CSharpPluginLoader().LoadPlugin(metadatas)).
-                Concat(new JsonRPCPluginLoader<PythonPlugin>().LoadPlugin(metadatas));
+
+            IEnumerable<PluginPair> allPluginsAsEnumerable = (new CSharpPluginLoader().LoadPlugin(metadatas)).Concat(new JsonRPCPluginLoader<PythonPlugin>().LoadPlugin(metadatas));
+            AllPlugins = allPluginsAsEnumerable.ToDictionary(pair => pair.Metadata.ID, pair => pair);
 
             //load plugin i18n languages
             ResourceMerger.UpdatePluginLanguages();
 
-            foreach (PluginPair pluginPair in AllPlugins)
+            foreach (PluginPair pluginPair in AllPlugins.Values)
             {
                 PluginPair pair = pluginPair;
                 ThreadPool.QueueUserWorkItem(o =>
@@ -102,9 +106,9 @@ namespace Wox.Core.Plugin
 
             ThreadPool.QueueUserWorkItem(o =>
             {
-                InstantQueryPlugins = GetPluginsForInterface<IInstantQuery>();
-                contextMenuPlugins = GetPluginsForInterface<IContextMenu>();
-                foreach (var plugin in AllPlugins)
+                InstantQueryPlugins = GetPluginsForInterface<IInstantQuery>().ToDictionary(instantQueryPlugin => instantQueryPlugin.Metadata.ID, instantQueryPlugin => instantQueryPlugin);
+                contextMenuPlugins = GetPluginsForInterface<IContextMenu>().ToDictionary(contextMenu => contextMenu.Metadata.ID, contextMenu => contextMenu);
+                foreach (var plugin in AllPlugins.Values)
                 {
                     if (IsGlobalPlugin(plugin.Metadata))
                     {
@@ -159,8 +163,9 @@ namespace Wox.Core.Plugin
                 new List<PluginPair> { NonGlobalPlugins[query.ActionKeyword] } : GlobalPlugins;
             foreach (var plugin in pluginPairs)
             {
-                var customizedPluginConfig = UserSettingStorage.Instance.
-                    CustomizedPluginConfigs.FirstOrDefault(o => o.ID == plugin.Metadata.ID);
+                var customizedPluginConfig =
+                    UserSettingStorage.Instance.CustomizedPluginConfigs.ContainsKey(plugin.Metadata.ID)
+                        ? UserSettingStorage.Instance.CustomizedPluginConfigs[plugin.Metadata.ID] : null;
                 if (customizedPluginConfig != null && customizedPluginConfig.Disabled) continue;
                 if (IsInstantQueryPlugin(plugin))
                 {
@@ -212,7 +217,7 @@ namespace Wox.Core.Plugin
             //any plugin that takes more than 200ms for AvgQueryTime won't be treated as IInstantQuery plugin anymore.
             return plugin.AvgQueryTime < 200 &&
                    plugin.Plugin is IInstantQuery &&
-                   InstantQueryPlugins.Any(p => p.Metadata.ID == plugin.Metadata.ID);
+                   InstantQueryPlugins.ContainsKey(plugin.Metadata.ID);
         }
 
         /// <summary>
@@ -222,17 +227,22 @@ namespace Wox.Core.Plugin
         /// <returns></returns>
         public static PluginPair GetPluginForId(string id)
         {
-            return AllPlugins.FirstOrDefault(o => o.Metadata.ID == id);
+            return AllPlugins.ContainsKey(id) ? AllPlugins[id] : null;
         }
 
         public static IEnumerable<PluginPair> GetPluginsForInterface<T>() where T : IFeatures
         {
-            return AllPlugins.Where(p => p.Plugin is T);
+            return AllPlugins.Values.Where(p => p.Plugin is T);
         }
 
         public static List<Result> GetContextMenusForPlugin(Result result)
         {
-            var pluginPair = contextMenuPlugins.FirstOrDefault(o => o.Metadata.ID == result.PluginID);
+            if (!contextMenuPlugins.ContainsKey(result.PluginID))
+            {
+                return new List<Result>();
+            }
+
+            var pluginPair = contextMenuPlugins[result.PluginID];
             var plugin = (IContextMenu)pluginPair?.Plugin;
             if (plugin != null)
             {
@@ -300,8 +310,6 @@ namespace Wox.Core.Plugin
                     NonGlobalPlugins[newActionKeyword] = plugin;
                 }
             }
-
         }
-
     }
 }

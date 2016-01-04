@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using NAppUpdate.Framework.Common;
 using Newtonsoft.Json;
 using Wox.Core.UserSettings;
 using Wox.Infrastructure.Exception;
@@ -100,7 +101,7 @@ namespace Wox.Core.Plugin
             }
 
             //replace action keyword if user customized it.
-            var customizedPluginConfig = UserSettingStorage.Instance.CustomizedPluginConfigs.FirstOrDefault(o => o.ID == metadata.ID);
+            var customizedPluginConfig = UserSettingStorage.Instance.CustomizedPluginConfigs.ContainsKey(metadata.ID) ? UserSettingStorage.Instance.CustomizedPluginConfigs[metadata.ID] : null;
             if (customizedPluginConfig?.ActionKeywords?.Count > 0)
             {
                 metadata.ActionKeywords = customizedPluginConfig.ActionKeywords;
