@@ -202,13 +202,13 @@ namespace Wox
         {
             UserSettingStorage.Instance.WindowLeft = this.MainVM.Left;
             UserSettingStorage.Instance.WindowTop = this.MainVM.Top;
-            this.MainVM.IsVisible = false;
+            this.MainVM.WindowVisibility = Visibility.Hidden;
         }
 
         private void ShowWox(bool selectAll = true)
         {
             UserSettingStorage.Instance.IncreaseActivateTimes();
-            this.MainVM.IsVisible = true;
+            this.MainVM.WindowVisibility = Visibility.Visible;
             this.MainVM.SelectAllText = true;
         }
 
@@ -278,7 +278,7 @@ namespace Wox
 
         private void ToggleWox()
         {
-            if (!MainVM.IsVisible)
+            if (MainVM.WindowVisibility == Visibility.Hidden)
             {
                 ShowWox();
             }

@@ -31,7 +31,6 @@ namespace Wox
         public MainWindow()
         {
             InitializeComponent();
-            
             Closing += MainWindow_Closing;
         }
 
@@ -76,7 +75,7 @@ namespace Wox
                 }
                 else if(eve.PropertyName == "IsVisible")
                 {
-                    if (vm.IsVisible)
+                    if (vm.WindowVisibility == System.Windows.Visibility.Visible)
                     {
                         this.tbQuery.Focus();
                     }

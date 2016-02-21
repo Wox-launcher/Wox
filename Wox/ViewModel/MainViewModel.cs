@@ -24,7 +24,7 @@ namespace Wox.ViewModel
         private ResultPanelViewModel _searchResultPanel;
         private ResultPanelViewModel _actionPanel;
         private string _queryText;
-        private bool _isVisible;
+
         private bool _isSearchResultPanelVisible;
         private bool _isActionPanelVisible;
         private bool _isProgressBarVisible;
@@ -33,6 +33,8 @@ namespace Wox.ViewModel
         private int _caretIndex;
         private double _left;
         private double _top;
+
+        private Visibility _windowVisibility;
 
         private bool _queryHasReturn;
         private Query _lastQuery = new Query();
@@ -114,24 +116,6 @@ namespace Wox.ViewModel
             }
         }
 
-        public bool IsVisible
-        {
-            get
-            {
-                return this._isVisible;
-            }
-            set
-            {
-                this._isVisible = value;
-                OnPropertyChanged("IsVisible");
-
-                if (!value && this.IsActionPanelVisible)
-                {
-                    this.BackToSearchMode();
-                }
-            }
-        }
-
         public bool IsSearchResultPanelVisible
         {
             get
@@ -207,6 +191,24 @@ namespace Wox.ViewModel
             {
                 this._top = value;
                 OnPropertyChanged("Top");
+            }
+        }
+
+        public Visibility WindowVisibility
+        {
+            get
+            {
+                return this._windowVisibility;
+            }
+            set
+            {
+                this._windowVisibility = value;
+                OnPropertyChanged("WindowVisibility");
+
+                if (value == Visibility.Hidden && this.IsActionPanelVisible)
+                {
+                    this.BackToSearchMode();
+                }
             }
         }
 
@@ -297,7 +299,7 @@ namespace Wox.ViewModel
                 }
                 else
                 {
-                    this.IsVisible = false;
+                    this.WindowVisibility = Visibility.Hidden;
                 }
 
             });
