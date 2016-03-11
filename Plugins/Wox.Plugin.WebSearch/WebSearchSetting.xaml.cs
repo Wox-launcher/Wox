@@ -25,6 +25,7 @@ namespace Wox.Plugin.WebSearch
             _context = settingWidow.Context;
             _settingWindow = settingWidow;
             InitializeComponent();
+            Loaded += (sender, e) => MoveFocus(new System.Windows.Input.TraversalRequest(System.Windows.Input.FocusNavigationDirection.Next));
         }
 
         public void UpdateItem(WebSearch webSearch)

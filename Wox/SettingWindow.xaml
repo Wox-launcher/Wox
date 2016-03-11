@@ -130,7 +130,7 @@
                 </Grid.ColumnDefinitions>
                 <DockPanel Grid.Column="0" >
                     <TextBlock DockPanel.Dock="Top" Margin="6" HorizontalAlignment="Left" Cursor="Hand" MouseUp="tbMoreThemes_MouseUp" x:Name="tbMoreThemes" Foreground="Blue" Text="{DynamicResource browserMoreThemes}"></TextBlock>
-                    <ListBox x:Name="themeComboBox" Margin="0" SelectionChanged="ThemeComboBox_OnSelectionChanged" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Width="180"/>
+                    <ListBox x:Name="themeComboBox" Margin="10" SelectionChanged="ThemeComboBox_OnSelectionChanged" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
                 </DockPanel>
                 <Grid Margin="0" Grid.Column="1">
                     <Grid.RowDefinitions>

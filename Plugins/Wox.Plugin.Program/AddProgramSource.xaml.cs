@@ -13,6 +13,7 @@ namespace Wox.Plugin.Program
         public AddProgramSource()
         {
             InitializeComponent();
+            Loaded += (sender, e) => MoveFocus(new System.Windows.Input.TraversalRequest(System.Windows.Input.FocusNavigationDirection.Next));
         }
 
         public AddProgramSource(ProgramSource edit) : this()
