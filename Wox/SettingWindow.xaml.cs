@@ -41,6 +41,12 @@ namespace Wox
             Loaded += Setting_Loaded;
         }
 
+        private void cbEnableProxy_Change(object sender, RoutedEventArgs e)
+        {
+            UserSettingStorage.Instance.ProxyEnabled = cbEnableProxy.IsChecked ?? false;
+            UserSettingStorage.Instance.Save();
+        }
+
         private void Setting_Loaded(object sender, RoutedEventArgs ev)
         {
             #region General

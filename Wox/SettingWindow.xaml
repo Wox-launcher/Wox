@@ -247,7 +247,7 @@
         </TabItem>
         <TabItem Header="{DynamicResource proxy}">
             <StackPanel>
-                <CheckBox x:Name="cbEnableProxy" Margin="10">
+                <CheckBox x:Name="cbEnableProxy" Margin="10" Checked="cbEnableProxy_Change" Unchecked="cbEnableProxy_Change">
                     <TextBlock Text="{DynamicResource enableProxy}"></TextBlock>
                 </CheckBox>
                 <Grid Margin="10" IsEnabled="{Binding IsChecked, ElementName=cbEnableProxy}">
