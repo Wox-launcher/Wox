@@ -250,7 +250,7 @@
                 <CheckBox x:Name="cbEnableProxy" Margin="10">
                     <TextBlock Text="{DynamicResource enableProxy}"></TextBlock>
                 </CheckBox>
-                <Grid Margin="10">
+                <Grid Margin="10" IsEnabled="{Binding IsChecked, ElementName=cbEnableProxy}">
                     <Grid.RowDefinitions>
                         <RowDefinition ></RowDefinition>
                         <RowDefinition ></RowDefinition>
@@ -286,7 +286,7 @@
                         <PasswordBox Width="200" HorizontalAlignment="Left" x:Name="tbProxyPassword" />
                     </Border>
                 </Grid>
-                <StackPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" IsEnabled="{Binding IsChecked, ElementName=cbEnableProxy}">
                     <Button x:Name="btnTestProxy" Width="80" HorizontalAlignment="Left" Margin="10" Click="btnTestProxy_Click" Content="{DynamicResource testProxy}"></Button>
                     <Button x:Name="btnSaveProxy" Width="80" HorizontalAlignment="Left" Margin="10" Click="btnSaveProxy_Click" Content="{DynamicResource save}"></Button>
                 </StackPanel>

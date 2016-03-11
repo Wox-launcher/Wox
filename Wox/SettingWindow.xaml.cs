@@ -116,8 +116,6 @@ namespace Wox
 
             #region Proxy
 
-            cbEnableProxy.Checked += (o, e) => EnableProxy();
-            cbEnableProxy.Unchecked += (o, e) => DisableProxy();
             cbEnableProxy.IsChecked = UserSettingStorage.Instance.ProxyEnabled;
             tbProxyServer.Text = UserSettingStorage.Instance.ProxyServer;
             if (UserSettingStorage.Instance.ProxyPort != 0)
@@ -126,14 +124,6 @@ namespace Wox
             }
             tbProxyUserName.Text = UserSettingStorage.Instance.ProxyUserName;
             tbProxyPassword.Password = UserSettingStorage.Instance.ProxyPassword;
-            if (UserSettingStorage.Instance.ProxyEnabled)
-            {
-                EnableProxy();
-            }
-            else
-            {
-                DisableProxy();
-            }
 
             #endregion
 
@@ -794,22 +784,6 @@ namespace Wox
             {
                 MessageBox.Show(InternationalizationManager.Instance.GetTranslation("proxyConnectFailed"));
             }
-        }
-
-        private void EnableProxy()
-        {
-            tbProxyPassword.IsEnabled = true;
-            tbProxyServer.IsEnabled = true;
-            tbProxyUserName.IsEnabled = true;
-            tbProxyPort.IsEnabled = true;
-        }
-
-        private void DisableProxy()
-        {
-            tbProxyPassword.IsEnabled = false;
-            tbProxyServer.IsEnabled = false;
-            tbProxyUserName.IsEnabled = false;
-            tbProxyPort.IsEnabled = false;
         }
 
         #endregion
