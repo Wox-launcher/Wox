@@ -14,7 +14,7 @@ namespace Wox.Plugin.Caculator
                         @"eigval|eigvec|eig|sum|polar|plot|round|sort|real|zeta|" +
                         @"bin2dec|hex2dec|oct2dec|" +
                         @"==|~=|&&|\|\||" +
-                        @"[ei]|[0-9]|[\+\-\*\/\^\., ""]|[\(\)\|\!\[\]]" +
+                        @"[a-f]|[A-F]|[ei]|[0-9]|[\+\-\*\/\^\., ""]|[\(\)\|\!\[\]]" +
                         @")+$", RegexOptions.Compiled);
         private static Regex regBrackets = new Regex(@"[\(\)\[\]]", RegexOptions.Compiled);
         private static ParseContext yampContext;
@@ -61,8 +61,11 @@ namespace Wox.Plugin.Caculator
                     } };
                 }
             }
-            catch
-            {}
+            catch (ExternalException e)
+            {
+                MessageBox.Show(e.ToString());
+                return new List<Result>();
+            }
 
             return new List<Result>();
         }
