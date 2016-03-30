@@ -85,18 +85,10 @@
     <Content Include="Images\warning.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="PortableEverything\x64\Everything.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="PortableEverything\x64\Everything.exe">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="PortableEverything\x86\Everything.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="PortableEverything\x86\Everything.exe">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <Content Include="PortableEverything\x64\Everything.dll" />
+    <Content Include="PortableEverything\x64\Everything.exe" />
+    <Content Include="PortableEverything\x86\Everything.dll" />
+    <Content Include="PortableEverything\x86\Everything.exe" />
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
@@ -146,6 +138,9 @@
   <PropertyGroup>
     <PostBuildEvent>
     </PostBuildEvent>
+  </PropertyGroup>
+  <PropertyGroup>
+    <PreBuildEvent>xcopy /Y /E $(ProjectDir)PortableEverything\* $(TargetDir)PortableEverything\</PreBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
