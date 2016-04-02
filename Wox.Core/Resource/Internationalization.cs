@@ -12,7 +12,18 @@ namespace Wox.Core.Resource
 {
     public class Internationalization : Resource
     {
-        public UserSettingStorage Settings { get; set; }
+
+        private UserSettingStorage mSettings;
+
+        public UserSettingStorage Settings {
+            get {
+                return mSettings;
+            }
+            set {
+                mSettings = value;
+                ChangeLanguage(mSettings.Language); 
+            }
+        }
 
         public Internationalization()
         {
