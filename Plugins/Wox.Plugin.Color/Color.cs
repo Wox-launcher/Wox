@@ -5,6 +5,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Text.RegularExpressions;
 
 namespace Wox.Plugin.Color
 {
@@ -13,6 +14,7 @@ namespace Wox.Plugin.Color
         private string DIR_PATH = Path.Combine(Path.GetTempPath(), @"Plugins\Colors\");
         private PluginInitContext context;
         private const int IMG_SIZE = 32;
+        private const string RGB_PATTERN = ("rgb\\( *([0-9]{1,3}) *, *([0-9]{1,3}) *, *([0-9]{1,3}) *\\)");
 
         private DirectoryInfo ColorsDirectory { get; set; }
 
@@ -34,15 +36,28 @@ namespace Wox.Plugin.Color
             if (!IsAvailable(raw)) return new List<Result>(0);
             try
             {
-                var cached = Find(raw);
+                System.Drawing.Color color;
+                Match rgbMatch = Regex.Match(raw, RGB_PATTERN, RegexOptions.IgnoreCase);
+                if (rgbMatch.Success)
+                {
+                    color = System.Drawing.Color.FromArgb(Convert.ToInt16(rgbMatch.Groups[1].Value), Convert.ToInt16(rgbMatch.Groups[2].Value),
+                        Convert.ToInt16(rgbMatch.Groups[3].Value));
+                }
+                else
+                {
+                    color = ColorTranslator.FromHtml(raw);
+                }
+                var cached = Find(color);
                 if (cached.Length == 0)
                 {
-                    var path = CreateImage(raw);
+                    var path = CreateImage(color);
                     return new List<Result>
                     {
                         new Result
                         {
                             Title = raw,
+                            SubTitle = rgbMatch.Success ? $"#{color.Name.Remove(0, 2).ToUpper()}" :
+                                $"RGB({color.R},{color.G},{color.B})",
                             IcoPath = path,
                             Action = _ =>
                             {
@@ -55,6 +70,8 @@ namespace Wox.Plugin.Color
                 return cached.Select(x => new Result
                 {
                     Title = raw,
+                    SubTitle = rgbMatch.Success ? $"#{color.Name.Remove(0, 2).ToUpper()}" :
+                                $"RGB({color.R},{color.G},{color.B})",
                     IcoPath = x.FullName,
                     Action = _ =>
                     {
@@ -72,26 +89,25 @@ namespace Wox.Plugin.Color
 
         private bool IsAvailable(string query)
         {
-            // todo: rgb, names
-            var length = query.Length - 1; // minus `#` sign
-            return query.StartsWith("#") && (length == 3 || length == 6);
+            // todo: names
+            var hexLength = query.Length - 1; // minus `#` sign
+            return (query.StartsWith("#") && (hexLength == 3 || hexLength == 6)) || (query.ToLower().StartsWith("rgb") && Regex.IsMatch(query, RGB_PATTERN, RegexOptions.IgnoreCase));
         }
 
-        public FileInfo[] Find(string name)
+        public FileInfo[] Find(System.Drawing.Color color)
         {
-            var file = string.Format("{0}.png", name.Substring(1));
+            var file = string.Format("{0}.png", color.Name.Remove(0,2));
             return ColorsDirectory.GetFiles(file, SearchOption.TopDirectoryOnly);
         }
 
-        private string CreateImage(string name)
+        private string CreateImage(System.Drawing.Color color)
         {
             using (var bitmap = new Bitmap(IMG_SIZE, IMG_SIZE))
             using (var graphics = Graphics.FromImage(bitmap))
             {
-                var color = ColorTranslator.FromHtml(name);
                 graphics.Clear(color);
 
-                var path = CreateFileName(name);
+                var path = CreateFileName(color.Name.Remove(0, 2));
                 bitmap.Save(path, ImageFormat.Png);
                 return path;
             }
@@ -99,7 +115,7 @@ namespace Wox.Plugin.Color
 
         private string CreateFileName(string name)
         {
-            return string.Format("{0}{1}.png", ColorsDirectory.FullName, name.Substring(1));
+            return string.Format("{0}{1}.png", ColorsDirectory.FullName, name);
         }
 
         public void Init(PluginInitContext context)
