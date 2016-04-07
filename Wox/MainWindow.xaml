@@ -1,4 +1,4 @@
-﻿<Window x:Class="Wox.MainWindow"
+<Window x:Class="Wox.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wox="clr-namespace:Wox"
@@ -36,7 +36,7 @@
                      Text="{Binding QueryText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      PreviewDragOver="OnPreviewDragOver"
                      AllowDrop="True"
-                     x:Name="QueryTextBox" />
+                     x:Name="QueryTextBox">
                 <TextBox.ContextMenu>
                     <ContextMenu>
                         <MenuItem Command="ApplicationCommands.Cut"/>
