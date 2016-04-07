@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Wox.Plugin
 {
@@ -13,13 +14,8 @@ namespace Wox.Plugin
         /// <param name="query"></param>
         /// <param name="plugin"></param>
         /// <param name="results"></param>
+        [Obsolete("This method will be removed in Wox 1.3")]
         void PushResults(Query query, PluginMetadata plugin, List<Result> results);
-
-        /// <summary>
-        /// Show context menu with giving results
-        /// </summary>
-        /// <param name="results"></param>
-        void ShowContextMenu(PluginMetadata plugin, List<Result> results);
 
         /// <summary>
         /// Change Wox query
@@ -106,20 +102,9 @@ namespace Wox.Plugin
         List<PluginPair> GetAllPlugins();
 
         /// <summary>
-        /// Fired after Back key down in the Wox query box
-        /// </summary>
-        event WoxKeyDownEventHandler BackKeyDownEvent;
-
-        /// <summary>
         /// Fired after global keyboard events
         /// if you want to hook something like Ctrl+R, you should use this event
         /// </summary>
         event WoxGlobalKeyboardEventHandler GlobalKeyboardEvent;
-
-        /// <summary>
-        /// Fired after drop to result item of current plugin 
-        /// </summary>
-        /// todo: ResultItem -> Result
-        event ResultItemDropEventHandler ResultItemDropEvent;
     }
 }

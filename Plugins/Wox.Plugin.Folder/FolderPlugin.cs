@@ -12,74 +12,21 @@ namespace Wox.Plugin.Folder
     {
         private static List<string> driverNames;
         private PluginInitContext context;
+        private FolderStorage _settings = FolderStorage.Instance;
 
         public Control CreateSettingPanel()
         {
-            return new FileSystemSettings(context.API);
+            return new FileSystemSettings(context.API, _settings);
         }
 
         public void Init(PluginInitContext context)
         {
             this.context = context;
-            this.context.API.BackKeyDownEvent += ApiBackKeyDownEvent;
-            this.context.API.ResultItemDropEvent += ResultDropEvent;
             InitialDriverList();
-            if (FolderStorage.Instance.FolderLinks == null)
+            if (_settings.FolderLinks == null)
             {
-                FolderStorage.Instance.FolderLinks = new List<FolderLink>();
-                FolderStorage.Instance.Save();
-            }
-        }
-
-        void ResultDropEvent(Result result, IDataObject dropObject, DragEventArgs e)
-        {
-            if (dropObject.GetDataPresent(DataFormats.FileDrop))
-            {
-                HanldeFilesDrop(result, dropObject);
-            }
-            e.Handled = true;
-        }
-
-        private void HanldeFilesDrop(Result targetResult, IDataObject dropObject)
-        {
-            List<string> files = ((string[])dropObject.GetData(DataFormats.FileDrop, false)).ToList();
-            context.API.ShowContextMenu(context.CurrentPluginMetadata, GetContextMenusForFileDrop(targetResult, files));
-        }
-
-        private static List<Result> GetContextMenusForFileDrop(Result targetResult, List<string> files)
-        {
-            List<Result> contextMenus = new List<Result>();
-            string folderPath = ((FolderLink) targetResult.ContextData).Path;
-            contextMenus.Add(new Result
-            {
-                Title = "Copy to this folder",
-                IcoPath = "Images/copy.png",
-                Action = _ =>
-                {
-                    MessageBox.Show("Copy");
-                    return true;
-                }
-            });
-            return contextMenus;
-        }
-
-        private void ApiBackKeyDownEvent(WoxKeyDownEventArgs e)
-        {
-            string query = e.Query;
-            if (Directory.Exists(query))
-            {
-                if (query.EndsWith("\\"))
-                {
-                    query = query.Remove(query.Length - 1);
-                }
-
-                if (query.Contains("\\"))
-                {
-                    int index = query.LastIndexOf("\\");
-                    query = query.Remove(index) + "\\";
-                }
-
-                context.API.ChangeQuery(query);
+                _settings.FolderLinks = new List<FolderLink>();
+                _settings.Save();
             }
         }
 
@@ -87,7 +34,7 @@ namespace Wox.Plugin.Folder
         {
             string input = query.Search.ToLower();
 
-            List<FolderLink> userFolderLinks = FolderStorage.Instance.FolderLinks.Where(
+            List<FolderLink> userFolderLinks = _settings.FolderLinks.Where(
                 x => x.Nickname.StartsWith(input, StringComparison.OrdinalIgnoreCase)).ToList();
             List<Result> results =
                 userFolderLinks.Select(

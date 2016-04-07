@@ -4,110 +4,115 @@ using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
+using System.Windows.Controls;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
 using Wox.Core.Updater;
 using Wox.Core.UserSettings;
 using Wox.Helper;
 using Wox.Infrastructure.Hotkey;
+using Wox.ViewModel;
 using DataFormats = System.Windows.DataFormats;
 using DragEventArgs = System.Windows.DragEventArgs;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using MessageBox = System.Windows.MessageBox;
-using Wox.ViewModel;
-using Wox.Plugin;
 
 namespace Wox
 {
     public partial class MainWindow
     {
 
-        #region Properties
+        #region Private Fields
 
-        private readonly Storyboard progressBarStoryboard = new Storyboard();            
+        private readonly Storyboard _progressBarStoryboard = new Storyboard();
+        private UserSettingStorage _settings;
 
         #endregion
-        
+
+        public MainWindow(UserSettingStorage settings, MainViewModel mainVM)
+        {
+            DataContext = mainVM;
+            InitializeComponent();
+            _settings = settings;
+        }
         public MainWindow()
         {
             InitializeComponent();
-            
-            Closing += MainWindow_Closing;
+        }
+        private void OnClosing(object sender, CancelEventArgs e)
+        {
+            _settings.WindowLeft = Left;
+            _settings.WindowTop = Top;
+            _settings.Save();
         }
 
-        void MainWindow_Closing(object sender, CancelEventArgs e)
+        private void OnLoaded(object sender, RoutedEventArgs _)
         {
-            UserSettingStorage.Instance.WindowLeft = Left;
-            UserSettingStorage.Instance.WindowTop = Top;
-            UserSettingStorage.Instance.Save();
-            e.Cancel = true;
-        }
+            CheckUpdate();
 
-        private void MainWindow_OnLoaded(object sender, RoutedEventArgs e)
-        {
-            ThemeManager.Theme.ChangeTheme(UserSettingStorage.Instance.Theme);
-            InternationalizationManager.Instance.ChangeLanguage(UserSettingStorage.Instance.Language);
+            ThemeManager.Instance.ChangeTheme(_settings.Theme);
+            InternationalizationManager.Instance.ChangeLanguage(_settings.Language);
 
             InitProgressbarAnimation();
             WindowIntelopHelper.DisableControlBox(this);
-            CheckUpdate();
 
-            var vm = DataContext as MainViewModel;
-            vm.PropertyChanged += (o, eve) =>
+            var vm = (MainViewModel)DataContext;
+            vm.TextBoxSelected += (o, e) => QueryTextBox.SelectAll();
+            vm.CursorMovedToEnd += (o, e) =>
             {
-                if(eve.PropertyName == "SelectAllText")
+                QueryTextBox.Focus();
+                QueryTextBox.CaretIndex = QueryTextBox.Text.Length;
+            };
+            vm.MainWindowVisibilityChanged += (o, e) =>
+            {
+                if (vm.MainWindowVisibility.IsVisible())
                 {
-                    if (vm.SelectAllText)
-                    {
-                        tbQuery.SelectAll();
-                    }
+                    Activate();
+                    QueryTextBox.Focus();
+                    Left = GetWindowsLeft();
+                    Top = GetWindowsTop();
+                    _settings.IncreaseActivateTimes();
                 }
-                else if(eve.PropertyName == "CaretIndex")
+                else
                 {
-                    tbQuery.CaretIndex = vm.CaretIndex;
-                }
-                else if(eve.PropertyName == "Left")
-                {
-                    Left = vm.Left;
-                }
-                else if(eve.PropertyName == "Top")
-                {
-                    Top = vm.Top;
-                }
-                else if(eve.PropertyName == "IsVisible")
-                {
-                    if (vm.MainWindowVisibility.IsVisible())
-                    {
-                        tbQuery.Focus();
-                    }
+                    _settings.WindowLeft = Left;
+                    _settings.WindowTop = Top;
+                    _settings.Save();
                 }
             };
 
+            // happlebao todo delete
             vm.Left = GetWindowsLeft();
             vm.Top = GetWindowsTop();
-            Activate();
-            Focus();
-            tbQuery.Focus();
+            vm.MainWindowVisibility = Visibility.Visible;
         }
 
         private double GetWindowsLeft()
         {
-            if (UserSettingStorage.Instance.RememberLastLaunchLocation) return UserSettingStorage.Instance.WindowLeft;
+            if (_settings.RememberLastLaunchLocation)
+            {
+                return _settings.WindowLeft;
+            }
 
             var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
-            var dipPoint = WindowIntelopHelper.TransformPixelsToDIP(this, screen.WorkingArea.Width, 0);
-            UserSettingStorage.Instance.WindowLeft = (dipPoint.X - ActualWidth)/2;
-            return UserSettingStorage.Instance.WindowLeft;
+            var dip1 = WindowIntelopHelper.TransformPixelsToDIP(this, screen.WorkingArea.X, 0);
+            var dip2 = WindowIntelopHelper.TransformPixelsToDIP(this, screen.WorkingArea.Width, 0);
+            var left = (dip2.X - ActualWidth) / 2 + dip1.X;
+            return left;
         }
 
         private double GetWindowsTop()
         {
-            if (UserSettingStorage.Instance.RememberLastLaunchLocation) return UserSettingStorage.Instance.WindowTop;
+            if (_settings.RememberLastLaunchLocation)
+            {
+                return _settings.WindowTop;
+            }
 
             var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
-            var dipPoint = WindowIntelopHelper.TransformPixelsToDIP(this, 0, screen.WorkingArea.Height);
-            UserSettingStorage.Instance.WindowTop = (dipPoint.Y - tbQuery.ActualHeight)/4;
-            return UserSettingStorage.Instance.WindowTop;
+            var dip1 = WindowIntelopHelper.TransformPixelsToDIP(this, 0, screen.WorkingArea.Y);
+            var dip2 = WindowIntelopHelper.TransformPixelsToDIP(this, 0, screen.WorkingArea.Height);
+            var top = (dip2.Y - ActualHeight) / 4 + dip1.Y;
+            return top;
         }
 
         private void CheckUpdate()
@@ -133,34 +138,33 @@ namespace Wox
 
         private void InitProgressbarAnimation()
         {
-            var da = new DoubleAnimation(progressBar.X2, ActualWidth + 100, new Duration(new TimeSpan(0, 0, 0, 0, 1600)));
-            var da1 = new DoubleAnimation(progressBar.X1, ActualWidth, new Duration(new TimeSpan(0, 0, 0, 0, 1600)));
+            var da = new DoubleAnimation(ProgressBar.X2, ActualWidth + 100, new Duration(new TimeSpan(0, 0, 0, 0, 1600)));
+            var da1 = new DoubleAnimation(ProgressBar.X1, ActualWidth, new Duration(new TimeSpan(0, 0, 0, 0, 1600)));
             Storyboard.SetTargetProperty(da, new PropertyPath("(Line.X2)"));
             Storyboard.SetTargetProperty(da1, new PropertyPath("(Line.X1)"));
-            progressBarStoryboard.Children.Add(da);
-            progressBarStoryboard.Children.Add(da1);
-            progressBarStoryboard.RepeatBehavior = RepeatBehavior.Forever;
-            progressBar.Visibility = Visibility.Hidden;
-            progressBar.BeginStoryboard(progressBarStoryboard);
+            _progressBarStoryboard.Children.Add(da);
+            _progressBarStoryboard.Children.Add(da1);
+            _progressBarStoryboard.RepeatBehavior = RepeatBehavior.Forever;
+            ProgressBar.Visibility = Visibility.Hidden;
+            ProgressBar.BeginStoryboard(_progressBarStoryboard);
         }
 
-        private void Border_OnMouseDown(object sender, MouseButtonEventArgs e)
+        private void OnMouseDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ChangedButton == MouseButton.Left) DragMove();
         }
 
-        private void MainWindow_OnDeactivated(object sender, EventArgs e)
+        private void OnDeactivated(object sender, EventArgs e)
         {
-            if (UserSettingStorage.Instance.HideWhenDeactive)
+            if (_settings.HideWhenDeactive)
             {
                 App.API.HideApp();
             }
         }
 
-        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        private void OnPreviewKeyDown(object sender, KeyEventArgs e)
         {
             var vm = DataContext as MainViewModel;
-
             if (null == vm) return;
             //when alt is pressed, the real key should be e.SystemKey
             var key = (e.Key == Key.System ? e.SystemKey : e.Key);
@@ -202,8 +206,20 @@ namespace Wox
                 case Key.O:
                     if (GlobalHotkey.Instance.CheckModifiers().CtrlPressed)
                     {
-                        vm.CtrlOCommand.Execute(null);
+                        vm.LoadContextMenuCommand.Execute(null);
                     }
+                    break;
+
+                case Key.Enter:
+                    if (GlobalHotkey.Instance.CheckModifiers().ShiftPressed)
+                    {
+                        vm.LoadContextMenuCommand.Execute(null);
+                    }
+                    else
+                    {
+                        vm.OpenResultCommand.Execute(null);
+                    }
+                    e.Handled = true;
                     break;
 
                 case Key.Down:
@@ -262,18 +278,6 @@ namespace Wox
                     vm.StartHelpCommand.Execute(null);
                     break;
 
-                case Key.Enter:
-                    if (GlobalHotkey.Instance.CheckModifiers().ShiftPressed)
-                    {
-                        vm.ShiftEnterCommand.Execute(null);
-                    }
-                    else
-                    {
-                        vm.OpenResultCommand.Execute(null);
-                    }
-                    e.Handled = true;
-                    break;
-
                 case Key.D1:
 
                     if (GlobalHotkey.Instance.CheckModifiers().AltPressed)
@@ -315,11 +319,46 @@ namespace Wox
                         vm.OpenResultCommand.Execute(5);
                     }
                     break;
-
             }
         }
 
-        private void MainWindow_OnDrop(object sender, DragEventArgs e)
+        private void OnPreviewMouseButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender != null && e.OriginalSource != null)
+            {
+                var r = (ResultListBox)sender;
+                var d = (DependencyObject)e.OriginalSource;
+                var item = ItemsControl.ContainerFromElement(r, d) as ListBoxItem;
+                var result = (ResultViewModel)item?.DataContext;
+                if (result != null)
+                {
+                    var vm = DataContext as MainViewModel;
+                    if (vm != null)
+                    {
+                        if (vm.ContextMenuVisibility.IsVisible())
+                        {
+                            vm.ContextMenu.SelectResult(result);
+                        }
+                        else
+                        {
+                            vm.Results.SelectResult(result);
+                        }
+
+                        if (e.ChangedButton == MouseButton.Left)
+                        {
+                            vm.OpenResultCommand.Execute(null);
+                        }
+                        else if (e.ChangedButton == MouseButton.Right)
+                        {
+                            vm.LoadContextMenuCommand.Execute(null);
+                        }
+                    }
+                }
+            }
+        }
+
+
+        private void OnDrop(object sender, DragEventArgs e)
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
@@ -337,7 +376,7 @@ namespace Wox
             e.Handled = false;
         }
 
-        private void TbQuery_OnPreviewDragOver(object sender, DragEventArgs e)
+        private void OnPreviewDragOver(object sender, DragEventArgs e)
         {
             e.Handled = true;
         }

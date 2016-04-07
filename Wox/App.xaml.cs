@@ -8,12 +8,12 @@ using System.Threading;
 using System.Windows;
 using Wox.CommandArgs;
 using Wox.Core.Plugin;
+using Wox.Core.Resource;
+using Wox.Core.UserSettings;
 using Wox.Helper;
 using Wox.Infrastructure;
-using Wox.Plugin;
 using Wox.ViewModel;
 using Stopwatch = Wox.Infrastructure.Stopwatch;
-
 
 namespace Wox
 {
@@ -22,7 +22,7 @@ namespace Wox
         private const string Unique = "Wox_Unique_Application_Mutex";
         public static MainWindow Window { get; private set; }
 
-        public static IPublicAPI API { get; private set; }
+        public static PublicAPIInstance API { get; private set; }
 
         [STAThread]
         public static void Main()
@@ -48,14 +48,23 @@ namespace Wox
                 ThreadPool.SetMinThreads(10, 5);
                 ThreadPool.QueueUserWorkItem(_ => { ImageLoader.ImageLoader.PreloadImages(); });
 
-                MainViewModel mainVM = new MainViewModel();
-                API = new PublicAPIInstance(mainVM);
-                Window = new MainWindow {DataContext = mainVM};
+                PluginManager.Initialize();
+                UserSettingStorage settings = UserSettingStorage.Instance;
 
+                // happlebao temp fix for instance code logic
+                HttpProxy.Instance.Settings = settings;
+                InternationalizationManager.Instance.Settings = settings;
+                ThemeManager.Instance.Settings = settings;
+
+                MainViewModel mainVM = new MainViewModel(settings);
+                API = new PublicAPIInstance(mainVM, settings);
+                PluginManager.InitializePlugins(API);
+
+                Window = new MainWindow (settings, mainVM);
                 NotifyIconManager notifyIconManager = new NotifyIconManager(API);
-
-                PluginManager.Init(API);
                 CommandArgsFactory.Execute(e.Args.ToList());
+
+
             });
 
         }

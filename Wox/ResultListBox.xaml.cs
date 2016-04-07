@@ -1,15 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Remoting.Contexts;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
-using Wox.Core.UserSettings;
-using Wox.Helper;
 using Wox.Plugin;
-using Wox.Storage;
 using Wox.ViewModel;
 
 namespace Wox
@@ -17,10 +11,12 @@ namespace Wox
     [Synchronization]
     public partial class ResultListBox
     {
-        public void AddResults(List<Result> newResults, string resultId)
+        public void AddResults(List<Result> newRawResults)
         {
             var vm = DataContext as ResultsViewModel;
-            vm.AddResults(newResults, resultId);
+            var newResults = newRawResults.Select(r => new ResultViewModel(r)).ToList();
+            vm.Results.Update(newResults);
+            vm.SelectedResult = vm.Results[0];
         }
         
 
