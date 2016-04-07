@@ -1,4 +1,4 @@
-<Window x:Class="Wox.MainWindow"
+﻿<Window x:Class="Wox.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wox="clr-namespace:Wox"
@@ -43,7 +43,7 @@
                         <MenuItem Command="ApplicationCommands.Copy"/>
                         <MenuItem Command="ApplicationCommands.Paste"/>
                         <Separator />
-                        <MenuItem Header="Settings" Click="menuSettings_Click" />
+                        <MenuItem Header="Settings" Click="OnContextMenusForSettingsClick" />
                     </ContextMenu>
                 </TextBox.ContextMenu>
             </TextBox>
