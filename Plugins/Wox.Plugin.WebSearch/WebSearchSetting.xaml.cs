@@ -17,19 +17,21 @@ namespace Wox.Plugin.WebSearch
         private bool _isUpdate;
         private WebSearch _updateWebSearch;
         private readonly PluginInitContext _context;
-        private readonly WebSearchPlugin _plguin;
+        private readonly WebSearchPlugin _plugin;
+        private WebSearchStorage _settings;
 
-        public WebSearchSetting(WebSearchesSetting settingWidow)
+        public WebSearchSetting(WebSearchesSetting settingWidow, WebSearchStorage settings)
         {
-            _plguin = settingWidow.Plugin;
+            _plugin = settingWidow.Plugin;
             _context = settingWidow.Context;
             _settingWindow = settingWidow;
             InitializeComponent();
+            _settings = settings;
         }
 
         public void UpdateItem(WebSearch webSearch)
         {
-            _updateWebSearch = WebSearchStorage.Instance.WebSearches.FirstOrDefault(o => o == webSearch);
+            _updateWebSearch = _settings.WebSearches.FirstOrDefault(o => o == webSearch);
             if (_updateWebSearch == null || string.IsNullOrEmpty(_updateWebSearch.Url))
             {
 
@@ -85,7 +87,7 @@ namespace Wox.Plugin.WebSearch
             {
                 try
                 {
-                    _plguin.NotifyActionKeywordsUpdated(_updateWebSearch.ActionKeyword, newActionKeyword);
+                    _plugin.NotifyActionKeywordsUpdated(_updateWebSearch.ActionKeyword, newActionKeyword);
                 }
                 catch (WoxPluginException exception)
                 {
@@ -103,14 +105,14 @@ namespace Wox.Plugin.WebSearch
             {
                 try
                 {
-                    _plguin.NotifyActionKeywordsAdded(newActionKeyword);
+                    _plugin.NotifyActionKeywordsAdded(newActionKeyword);
                 }
                 catch (WoxPluginException exception)
                 {
                     MessageBox.Show(exception.Message);
                     return;
                 }
-                WebSearchStorage.Instance.WebSearches.Add(new WebSearch
+                _settings.WebSearches.Add(new WebSearch
                 {
                     ActionKeyword = newActionKeyword,
                     Enabled = cbEnable.IsChecked ?? false,
@@ -120,7 +122,7 @@ namespace Wox.Plugin.WebSearch
                 });
             }
 
-            WebSearchStorage.Instance.Save();
+            _settings.Save();
             _settingWindow.ReloadWebSearchView();
             Close();
         }

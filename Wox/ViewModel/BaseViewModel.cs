@@ -1,9 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
 namespace Wox.ViewModel
@@ -11,12 +8,9 @@ namespace Wox.ViewModel
     public class BaseViewModel : INotifyPropertyChanged
     {
 
-        protected void OnPropertyChanged(string propertyName)
+        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
-            if (null != PropertyChanged)
-            {
-                PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
-            }
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -41,10 +35,7 @@ namespace Wox.ViewModel
 
         public virtual void Execute(object parameter)
         {
-            if (null != _action)
-            {
-                _action(parameter);
-            }
+            _action?.Invoke(parameter);
         }
     }
 }
