@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Exception;
+using System.Windows.Input;
 
 namespace Wox.Plugin.WebSearch
 {
@@ -27,7 +28,8 @@ namespace Wox.Plugin.WebSearch
             _settingWindow = settingWidow;
             InitializeComponent();
             _settings = settings;
-            Loaded += (sender, e) => MoveFocus(new System.Windows.Input.TraversalRequest(System.Windows.Input.FocusNavigationDirection.Next));
+            // Focus first textbox
+            Loaded += (sender, e) => MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
         }
 
         public void UpdateItem(WebSearch webSearch)
