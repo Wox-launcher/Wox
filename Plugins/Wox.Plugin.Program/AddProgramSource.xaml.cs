@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Forms;
+using System.Windows.Input;
 
 namespace Wox.Plugin.Program
 {
@@ -17,6 +18,8 @@ namespace Wox.Plugin.Program
             _settings = settings;
             InitializeComponent();
             Suffixes.Text = string.Join(";", settings.ProgramSuffixes);
+            // Focus first textbox
+            Loaded += (sender, e) => MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
         }
 
         public AddProgramSource(ProgramSource edit, Settings settings)
