@@ -60,7 +60,6 @@
     <Compile Include="Exception\WoxI18nException.cs" />
     <Compile Include="Exception\WoxJsonRPCException.cs" />
     <Compile Include="Exception\WoxPluginException.cs" />
-    <Compile Include="Helper.cs" />
     <Compile Include="Hotkey\InterceptKeys.cs" />
     <Compile Include="Hotkey\KeyEvent.cs" />
     <Compile Include="Logger\Log.cs" />
