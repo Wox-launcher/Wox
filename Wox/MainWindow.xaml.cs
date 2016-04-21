@@ -378,5 +378,10 @@ namespace Wox
         {
             e.Handled = true;
         }
+
+        private void OnContextMenusForSettingsClick(object sender, RoutedEventArgs e)
+        {
+            App.API.OpenSettingDialog();
+        }
     }
 }

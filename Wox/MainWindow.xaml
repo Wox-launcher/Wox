@@ -36,7 +36,17 @@
                      Text="{Binding QueryText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      PreviewDragOver="OnPreviewDragOver"
                      AllowDrop="True"
-                     x:Name="QueryTextBox" />
+                     x:Name="QueryTextBox">
+                <TextBox.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Command="ApplicationCommands.Cut"/>
+                        <MenuItem Command="ApplicationCommands.Copy"/>
+                        <MenuItem Command="ApplicationCommands.Paste"/>
+                        <Separator />
+                        <MenuItem Header="Settings" Click="OnContextMenusForSettingsClick" />
+                    </ContextMenu>
+                </TextBox.ContextMenu>
+            </TextBox>
             <Line Style="{DynamicResource PendingLineStyle}" x:Name="ProgressBar" Y1="0" Y2="0" X2="100" Height="2"
                   StrokeThickness="1"
                   Visibility="{Binding ProgressBarVisibility}" HorizontalAlignment="Right" Width="752">
