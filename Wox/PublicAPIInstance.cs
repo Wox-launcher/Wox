@@ -19,10 +19,10 @@ namespace Wox
 {
     public class PublicAPIInstance : IPublicAPI
     {
-        private UserSettingStorage _settings;
+        private UserSettings _settings;
         #region Constructor
 
-        public PublicAPIInstance(MainViewModel mainVM, UserSettingStorage settings)
+        public PublicAPIInstance(MainViewModel mainVM, UserSettings settings)
         {
             MainVM = mainVM;
             _settings = settings;

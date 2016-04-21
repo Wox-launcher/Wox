@@ -20,10 +20,10 @@ namespace Wox.ViewModel
         private Thickness _margin;
 
         private readonly object _resultsUpdateLock = new object();
-        private UserSettingStorage _settings;
-        private TopMostRecordStorage _topMostRecord;
+        private UserSettings _settings;
+        private TopMostRecord _topMostRecord;
 
-        public ResultsViewModel(UserSettingStorage settings, TopMostRecordStorage topMostRecord)
+        public ResultsViewModel(UserSettings settings, TopMostRecord topMostRecord)
         {
             _settings = settings;
             _topMostRecord = topMostRecord;
