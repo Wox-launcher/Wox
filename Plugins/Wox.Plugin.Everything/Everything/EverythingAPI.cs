@@ -9,7 +9,7 @@ namespace Wox.Plugin.Everything.Everything
     public sealed class EverythingAPI
     {
         #region DllImport
-        [DllImport(EVERYTHING_DLL_NAME)]
+        [DllImport(EVERYTHING_DLL_NAME, EntryPoint = "Everything_SetSearchW", CharSet = CharSet.Unicode)]
         private static extern int Everything_SetSearch(string lpSearchString);
         [DllImport(EVERYTHING_DLL_NAME)]
         private static extern void Everything_SetMatchPath(bool bEnable);
@@ -65,7 +65,7 @@ namespace Wox.Plugin.Everything.Everything
         private static extern bool Everything_IsFolderResult(int nIndex);
         [DllImport(EVERYTHING_DLL_NAME)]
         private static extern bool Everything_IsFileResult(int nIndex);
-        [DllImport(EVERYTHING_DLL_NAME)]
+        [DllImport(EVERYTHING_DLL_NAME, EntryPoint = "Everything_GetResultFullPathNameW", CharSet = CharSet.Unicode)]
         private static extern void Everything_GetResultFullPathName(int nIndex, StringBuilder lpString, int nMaxCount);
         [DllImport(EVERYTHING_DLL_NAME)]
         private static extern void Everything_Reset();
