@@ -86,7 +86,7 @@ namespace Wox.ViewModel
         {
             foreach (var pair in PluginManager.GetPluginsForInterface<IResultUpdated>())
             {
-                var plugin = (IResultUpdated) pair.Plugin;
+                var plugin = (IResultUpdated)pair.Plugin;
                 plugin.ResultsUpdated += (s, e) =>
                 {
                     PluginManager.UpdatePluginMetadata(e.Results, pair.Metadata, e.Query);
@@ -455,18 +455,20 @@ namespace Wox.ViewModel
                 }, _updateToken);
 
                 var plugins = PluginManager.ValidPluginsForQuery(query);
-                foreach (var plugin in plugins)
+                Task.Run(() =>
                 {
-                    var config = _settings.PluginSettings.Plugins[plugin.Metadata.ID];
-                    if (!config.Disabled)
+                    Parallel.ForEach(plugins, plugin =>
                     {
-                        Task.Factory.StartNew(() =>
+                        var config = _settings.PluginSettings.Plugins[plugin.Metadata.ID];
+                        if (!config.Disabled)
                         {
+
                             var results = PluginManager.QueryForPlugin(plugin, query);
                             UpdateResultView(results, plugin.Metadata, query);
-                        }, _updateToken);
-                    }
-                }
+                        }
+                    });
+                }, _updateToken);
+
 
 
             }
