@@ -16,7 +16,7 @@ namespace Wox
             var vm = DataContext as ResultsViewModel;
             var newResults = newRawResults.Select(r => new ResultViewModel(r)).ToList();
             vm.Results.Update(newResults);
-            vm.SelectedResult = vm.Results[0];
+            vm.SelectedIndex = 0;
         }
         
 
@@ -25,13 +25,12 @@ namespace Wox
             InitializeComponent();
         }
 
-        private void lbResults_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (e.AddedItems.Count > 0 && e.AddedItems[0] != null)
             {
                 ScrollIntoView(e.AddedItems[0]);
             }
         }
-
     }
 }

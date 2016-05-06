@@ -177,7 +177,7 @@ namespace Wox.ViewModel
                     results.SelectResult(index);
                 }
 
-                var result = results.SelectedResult.RawResult;
+                var result = results[results.SelectedIndex].RawResult;
                 bool hideWindow = result.Action(new ActionContext
                 {
                     SpecialKeyState = GlobalHotkey.Instance.CheckModifiers()
@@ -198,7 +198,7 @@ namespace Wox.ViewModel
             {
                 if (!ContextMenuVisibility.IsVisible())
                 {
-                    var result = Results.SelectedResult.RawResult;
+                    var result = Results[Results.SelectedIndex].RawResult;
                     var id = result.PluginID;
 
                     var menus = PluginManager.GetContextMenusForPlugin(result);
