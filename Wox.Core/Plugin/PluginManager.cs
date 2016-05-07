@@ -62,7 +62,8 @@ namespace Wox.Core.Plugin
             var metadatas = PluginConfig.Parse(Directories);
             var plugins1 = PluginsLoader.CSharpPlugins(metadatas);
             var plugins2 = PluginsLoader.PythonPlugins(metadatas, _settings.PythonDirectory);
-            AllPlugins = plugins1.Concat(plugins2).ToList();
+            var plugins3 = PluginsLoader.ExecutablePlugins(metadatas);
+            AllPlugins = plugins1.Concat(plugins2).Concat(plugins3).ToList();
             _settings.UpdatePluginSettings(AllPlugins);
 
             //load plugin i18n languages
