@@ -9,7 +9,7 @@ namespace Wox.Test
         [Test]
         public void URLMatchTest()
         {
-            UrlPlugin urlPlugin = new UrlPlugin();
+            var urlPlugin = new Wox.Plugin.Url.Main();
             Assert.IsTrue(urlPlugin.IsURL("http://www.google.com"));
             Assert.IsTrue(urlPlugin.IsURL("https://www.google.com"));
             Assert.IsTrue(urlPlugin.IsURL("http://google.com"));
