@@ -4,7 +4,6 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Windows;
 
 namespace Wox.Plugin.Color
@@ -108,11 +107,6 @@ namespace Wox.Plugin.Color
             this.context = context;
         }
 
-
-        public string GetLanguagesFolder()
-        {
-            return Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Languages");
-        }
 
         public string GetTranslatedPluginTitle()
         {

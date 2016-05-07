@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Wox.Plugin
 {
@@ -13,22 +14,8 @@ namespace Wox.Plugin
         /// <param name="query"></param>
         /// <param name="plugin"></param>
         /// <param name="results"></param>
+        [Obsolete("This method will be removed in Wox 1.3")]
         void PushResults(Query query, PluginMetadata plugin, List<Result> results);
-
-        /// <summary>
-        /// Show context menu with giving results
-        /// </summary>
-        /// <param name="results"></param>
-        void ShowContextMenu(PluginMetadata plugin, List<Result> results);
-
-        /// <summary>
-        /// Execute command
-        /// a replacement to RUN(win+r) function
-        /// </summary>
-        /// <param name="cmd">command that want to execute</param>
-        /// <param name="runAsAdministrator">run as administrator</param>
-        /// <returns></returns>
-        bool ShellRun(string cmd, bool runAsAdministrator = false);
 
         /// <summary>
         /// Change Wox query
@@ -50,6 +37,11 @@ namespace Wox.Plugin
         /// Close Wox
         /// </summary>
         void CloseApp();
+
+        /// <summary>
+        /// Restart Wox
+        /// </summary>
+        void RestarApp();
 
         /// <summary>
         /// Hide Wox
@@ -91,11 +83,6 @@ namespace Wox.Plugin
         void InstallPlugin(string path);
 
         /// <summary>
-        /// Reload all plugins
-        /// </summary>
-        void ReloadPlugins();
-
-        /// <summary>
         /// Get translation of current language
         /// You need to implement IPluginI18n if you want to support multiple languages for your plugin
         /// </summary>
@@ -110,19 +97,9 @@ namespace Wox.Plugin
         List<PluginPair> GetAllPlugins();
 
         /// <summary>
-        /// Fired after Back key down in the Wox query box
-        /// </summary>
-        event WoxKeyDownEventHandler BackKeyDownEvent;
-
-        /// <summary>
         /// Fired after global keyboard events
         /// if you want to hook something like Ctrl+R, you should use this event
         /// </summary>
         event WoxGlobalKeyboardEventHandler GlobalKeyboardEvent;
-
-        /// <summary>
-        /// Fired after drop to result item of current plugin 
-        /// </summary>
-        event ResultItemDropEventHandler ResultItemDropEvent;
     }
 }

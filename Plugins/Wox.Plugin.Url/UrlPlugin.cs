@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
-using System.Reflection;
 using System.Text.RegularExpressions;
 
 namespace Wox.Plugin.Url
@@ -101,11 +99,6 @@ namespace Wox.Plugin.Url
         public void Init(PluginInitContext context)
         {
             this.context = context;
-        }
-
-        public string GetLanguagesFolder()
-        {
-            return Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Languages");
         }
 
         public string GetTranslatedPluginTitle()

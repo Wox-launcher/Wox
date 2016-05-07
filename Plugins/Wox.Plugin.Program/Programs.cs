@@ -1,168 +1,165 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Windows;
-using IWshRuntimeLibrary;
+using System.Windows.Controls;
 using Wox.Infrastructure;
+using Wox.Infrastructure.Logger;
+using Wox.Infrastructure.Storage;
 using Wox.Plugin.Program.ProgramSources;
+using Stopwatch = Wox.Infrastructure.Stopwatch;
 
 namespace Wox.Plugin.Program
 {
-    public class Programs : ISettingProvider, IPlugin, IPluginI18n, IContextMenu
+    public class Programs : ISettingProvider, IPlugin, IPluginI18n, IContextMenu, ISavable
     {
         private static object lockObject = new object();
-        private static List<Program> programs = new List<Program>();
-        private static List<IProgramSource> sources = new List<IProgramSource>();
-        private static Dictionary<string, Type> SourceTypes = new Dictionary<string, Type>() { 
+        private static List<Program> _programs = new List<Program>();
+        private static List<IProgramSource> _sources = new List<IProgramSource>();
+        private static readonly Dictionary<string, Type> SourceTypes = new Dictionary<string, Type>
+        {
             {"FileSystemProgramSource", typeof(FileSystemProgramSource)},
             {"CommonStartMenuProgramSource", typeof(CommonStartMenuProgramSource)},
             {"UserStartMenuProgramSource", typeof(UserStartMenuProgramSource)},
-            {"AppPathsProgramSource", typeof(AppPathsProgramSource)},
+            {"AppPathsProgramSource", typeof(AppPathsProgramSource)}
         };
-        private PluginInitContext context;
+
+        private PluginInitContext _context;
+
+        private static ProgramIndexCache _cache;
+        private static BinaryStorage<ProgramIndexCache> _cacheStorage;
+        private static Settings _settings;
+        private readonly PluginJsonStorage<Settings> _settingsStorage;
+
+        public Programs()
+        {
+            _settingsStorage = new PluginJsonStorage<Settings>();
+            _settings = _settingsStorage.Load();
+            _cacheStorage = new BinaryStorage<ProgramIndexCache>();
+            _cache = _cacheStorage.Load();
+        }
+
+        public void Save()
+        {
+            _settingsStorage.Save();
+            _cacheStorage.Save();
+        }
 
         public List<Result> Query(Query query)
         {
-            
-            var fuzzyMather = FuzzyMatcher.Create(query.Search);
-            List<Program> returnList = programs.Where(o => MatchProgram(o, fuzzyMather)).ToList();
-            returnList.ForEach(ScoreFilter);
-            returnList = returnList.OrderByDescending(o => o.Score).ToList();
-
-            return returnList.Select(c => new Result()
-            {
-                Title = c.Title,
-                SubTitle = c.ExecutePath,
-                IcoPath = c.IcoPath,
-                Score = c.Score,
-                ContextData = c,
-                Action = (e) =>
-                {
-                    context.API.HideApp();
-                    context.API.ShellRun(c.ExecutePath);
-                    return true;
-                }
-            }).ToList();
+            var results = _programs.AsParallel()
+                                   .Where(p => Score(p, query.Search) > 0)
+                                   .Select(ScoreFilter)
+                                   .OrderByDescending(p => p.Score)
+                                   .Select(p => new Result
+                                   {
+                                       Title = p.Title,
+                                       SubTitle = p.Path,
+                                       IcoPath = p.IcoPath,
+                                       Score = p.Score,
+                                       ContextData = p,
+                                       Action = e =>
+                                       {
+                                           var info = new ProcessStartInfo
+                                           {
+                                               FileName = p.Path,
+                                               WorkingDirectory = p.Directory
+                                           };
+                                           var hide = StartProcess(info);
+                                           return hide;
+                                       }
+                                   }).ToList();
+            return results;
         }
 
-        static string ResolveShortcut(string filePath)
+        private int Score(Program program, string query)
         {
-            // IWshRuntimeLibrary is in the COM library "Windows Script Host Object Model"
-            WshShell shell = new WshShell();
-            IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(filePath);
-            return shortcut.TargetPath;
-        }
-
-        private bool MatchProgram(Program program, FuzzyMatcher matcher)
-        {
-            if ((program.Score = matcher.Evaluate(program.Title).Score) > 0) return true;
-            if ((program.Score = matcher.Evaluate(program.PinyinTitle).Score) > 0) return true;
-            if (program.AbbrTitle != null && (program.Score = matcher.Evaluate(program.AbbrTitle).Score) > 0) return true;
-            if (program.ExecuteName != null && (program.Score = matcher.Evaluate(program.ExecuteName).Score) > 0) return true;
-
-            return false;
+            var score1 = StringMatcher.Score(program.Title, query);
+            var score2 = StringMatcher.ScoreForPinyin(program.Title, query);
+            var score3 = StringMatcher.Score(program.ExecutableName, query);
+            var score = new[] { score1, score2, score3 }.Max();
+            program.Score = score;
+            return score;
         }
 
         public void Init(PluginInitContext context)
         {
-            this.context = context;
-            this.context.API.ResultItemDropEvent += API_ResultItemDropEvent;
-            using (new Timeit("Preload programs"))
+            _context = context;
+            Stopwatch.Debug("Preload programs", () =>
             {
-                programs = ProgramCacheStorage.Instance.Programs;
-            }
-            Debug.WriteLine(string.Format("Preload {0} programs from cache", programs.Count));
-            using (new Timeit("Program Index"))
-            {
-                IndexPrograms();
-            }
-        }
-
-        void API_ResultItemDropEvent(Result result, IDataObject dropObject, DragEventArgs e)
-        {
-
-            e.Handled = true;
+                _programs = _cache.Programs;
+            });
+            Log.Info($"Preload {_programs.Count} programs from cache");
+            Stopwatch.Debug("Program Index", IndexPrograms);
         }
 
         public static void IndexPrograms()
         {
+            // todo why there is a lock??
             lock (lockObject)
             {
-                List<ProgramSource> programSources = new List<ProgramSource>();
-                programSources.AddRange(LoadDeaultProgramSources());
-                if (ProgramStorage.Instance.ProgramSources != null &&
-                    ProgramStorage.Instance.ProgramSources.Count(o => o.Enabled) > 0)
+                var sources = DefaultProgramSources();
+                if (_settings.ProgramSources != null &&
+                    _settings.ProgramSources.Count(o => o.Enabled) > 0)
                 {
-                    programSources.AddRange(ProgramStorage.Instance.ProgramSources);
+                    sources.AddRange(_settings.ProgramSources);
                 }
 
-                sources.Clear();
-                foreach(var source in programSources.Where(o => o.Enabled))
-                {
-                    Type sourceClass;
-                    if (SourceTypes.TryGetValue(source.Type, out sourceClass))
-                    {
-                        ConstructorInfo constructorInfo = sourceClass.GetConstructor(new[] { typeof(ProgramSource) });
-                        if (constructorInfo != null)
-                        {
-                            IProgramSource programSource =
-                                constructorInfo.Invoke(new object[] { source }) as IProgramSource;
-                            sources.Add(programSource);
-                        }
-                    }
-                }
+                _sources = sources.AsParallel()
+                                  .Where(s => s.Enabled && SourceTypes.ContainsKey(s.Type))
+                                  .Select(s =>
+                                  {
+                                      var sourceClass = SourceTypes[s.Type];
+                                      var constructorInfo = sourceClass.GetConstructor(new[] { typeof(ProgramSource) });
+                                      var programSource = constructorInfo?.Invoke(new object[] { s }) as IProgramSource;
+                                      return programSource;
+                                  })
+                                  .Where(s => s != null).ToList();
 
-                var tempPrograms = new List<Program>();
-                foreach (var source in sources)
-                {
-                    var list = source.LoadPrograms();
-                    list.ForEach(o =>
-                    {
-                        o.Source = source;
-                    });
-                    tempPrograms.AddRange(list);
-                }
+                _programs = _sources.AsParallel()
+                                    .SelectMany(s => s.LoadPrograms())
+                                    // filter duplicate program
+                                    .GroupBy(x => new { ExecutePath = x.Path, ExecuteName = x.ExecutableName })
+                                    .Select(g => g.First())
+                                    .ToList();
 
-                // filter duplicate program
-                programs = tempPrograms.GroupBy(x => new { x.ExecutePath, x.ExecuteName })
-                    .Select(g => g.First()).ToList();
-
-                ProgramCacheStorage.Instance.Programs = programs;
-                ProgramCacheStorage.Instance.Save();
+                _cache.Programs = _programs;
             }
         }
 
         /// <summary>
         /// Load program sources that wox always provide
         /// </summary>
-        private static List<ProgramSource> LoadDeaultProgramSources()
+        private static List<ProgramSource> DefaultProgramSources()
         {
-            var list = new List<ProgramSource>();
-            list.Add(new ProgramSource()
+            var list = new List<ProgramSource>
             {
-                BonusPoints = 0,
-                Enabled = ProgramStorage.Instance.EnableStartMenuSource,
-                Type = "CommonStartMenuProgramSource"
-            });
-            list.Add(new ProgramSource()
-            {
-                BonusPoints = 0,
-                Enabled = ProgramStorage.Instance.EnableStartMenuSource,
-                Type = "UserStartMenuProgramSource"
-            });
-            list.Add(new ProgramSource()
-            {
-                BonusPoints = -10,
-                Enabled = ProgramStorage.Instance.EnableRegistrySource,
-                Type = "AppPathsProgramSource"
-            });
+                new ProgramSource
+                {
+                    BonusPoints = 0,
+                    Enabled = _settings.EnableStartMenuSource,
+                    Type = "CommonStartMenuProgramSource"
+                },
+                new ProgramSource
+                {
+                    BonusPoints = 0,
+                    Enabled = _settings.EnableStartMenuSource,
+                    Type = "UserStartMenuProgramSource"
+                },
+                new ProgramSource
+                {
+                    BonusPoints = -10,
+                    Enabled = _settings.EnableRegistrySource,
+                    Type = "AppPathsProgramSource"
+                }
+            };
             return list;
         }
 
-        private void ScoreFilter(Program p)
+        private Program ScoreFilter(Program p)
         {
             p.Score += p.Source.BonusPoints;
 
@@ -174,70 +171,79 @@ namespace Wox.Plugin.Program
 
             if (p.Title.Contains("卸载") || p.Title.ToLower().Contains("uninstall"))
                 p.Score -= 20;
+            return p;
         }
 
         #region ISettingProvider Members
 
-        public System.Windows.Controls.Control CreateSettingPanel()
+        public Control CreateSettingPanel()
         {
-            return new ProgramSetting(context);
+            return new ProgramSetting(_context, _settings);
         }
 
         #endregion
 
-        public string GetLanguagesFolder()
-        {
-            return Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Languages");
-        }
         public string GetTranslatedPluginTitle()
         {
-            return context.API.GetTranslation("wox_plugin_program_plugin_name");
+            return _context.API.GetTranslation("wox_plugin_program_plugin_name");
         }
 
         public string GetTranslatedPluginDescription()
         {
-            return context.API.GetTranslation("wox_plugin_program_plugin_description");
+            return _context.API.GetTranslation("wox_plugin_program_plugin_description");
         }
 
         public List<Result> LoadContextMenus(Result selectedResult)
         {
             Program p = selectedResult.ContextData as Program;
-            List<Result> contextMenus = new List<Result>()
+            List<Result> contextMenus = new List<Result>
             {
-                new Result()
+                new Result
                 {
-                    Title = context.API.GetTranslation("wox_plugin_program_run_as_administrator"),
+                    Title = _context.API.GetTranslation("wox_plugin_program_run_as_administrator"),
                     Action = _ =>
                     {
-                        context.API.HideApp();
-                        context.API.ShellRun(p.ExecutePath, true);
-                        return true;
+                        var info = new ProcessStartInfo
+                        {
+                            FileName = p.Path,
+                            WorkingDirectory = p.Directory,
+                            Verb = "runas"
+                        };
+                        var hide = StartProcess(info);
+                        return hide;
                     },
                     IcoPath = "Images/cmd.png"
                 },
-                new Result()
+                new Result
                 {
-                    Title = context.API.GetTranslation("wox_plugin_program_open_containing_folder"),
+                    Title = _context.API.GetTranslation("wox_plugin_program_open_containing_folder"),
                     Action = _ =>
                     {
-                        context.API.HideApp();
-                        String Path = p.ExecutePath;
-                        //check if shortcut
-                        if (Path.EndsWith(".lnk"))
-                        {
-                            //get location of shortcut
-                            Path = ResolveShortcut(Path);
-                        }
-                        //get parent folder
-                        Path = Directory.GetParent(Path).FullName;
-                        //open the folder
-                        context.API.ShellRun("explorer.exe " + Path, false);
-                        return true;
+                        var hide = StartProcess(new ProcessStartInfo(p.Directory));
+                        return hide;
                     },
                     IcoPath = "Images/folder.png"
                 }
             };
             return contextMenus;
+        }
+
+        private bool StartProcess(ProcessStartInfo info)
+        {
+            bool hide;
+            try
+            {
+                Process.Start(info);
+                hide = true;
+            }
+            catch (Win32Exception)
+            {
+                var name = $"Plugin: {_context.CurrentPluginMetadata.Name}";
+                var message = "Can't open this file";
+                _context.API.ShowMsg(name, message, string.Empty);
+                hide = false;
+            }
+            return hide;
         }
     }
 }

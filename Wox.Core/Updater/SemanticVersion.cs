@@ -1,5 +1,5 @@
 ﻿using System;
-using Wox.Core.Exception;
+using Wox.Infrastructure.Exception;
 
 namespace Wox.Core.Updater
 {
@@ -9,7 +9,7 @@ namespace Wox.Core.Updater
         public int MINOR { get; set; }
         public int PATCH { get; set; }
 
-        public SemanticVersion(System.Version version)
+        public SemanticVersion(Version version)
         {
             MAJOR = version.Major;
             MINOR = version.Minor;

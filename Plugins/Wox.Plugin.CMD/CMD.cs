@@ -1,42 +1,52 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Windows.Forms;
 using WindowsInput;
 using WindowsInput.Native;
 using Wox.Infrastructure.Hotkey;
 using Wox.Infrastructure.Logger;
+using Wox.Infrastructure.Storage;
 using Control = System.Windows.Controls.Control;
 
 namespace Wox.Plugin.CMD
 {
-    public class CMD : IPlugin, ISettingProvider, IPluginI18n, IInstantQuery, IExclusiveQuery, IContextMenu
+    public class CMD : IPlugin, ISettingProvider, IPluginI18n, IContextMenu
     {
         private PluginInitContext context;
         private bool WinRStroked;
         private readonly KeyboardSimulator keyboardSimulator = new KeyboardSimulator(new InputSimulator());
 
+        private readonly CMDHistory _settings;
+        private readonly PluginJsonStorage<CMDHistory> _storage;
+
+        public CMD()
+        {
+            _storage = new PluginJsonStorage<CMDHistory>();
+            _settings = _storage.Load();
+        }
+
+        ~CMD()
+        {
+            _storage.Save();
+        }
+
         public List<Result> Query(Query query)
         {
             List<Result> results = new List<Result>();
-            List<Result> pushedResults = new List<Result>();
             string cmd = query.Search;
             if (string.IsNullOrEmpty(cmd))
             {
-                return GetAllHistoryCmds();
+                return ResultsFromlHistory();
             }
             else
             {
                 var queryCmd = GetCurrentCmd(cmd);
-                context.API.PushResults(query, context.CurrentPluginMetadata, new List<Result>() { queryCmd });
-                pushedResults.Add(queryCmd);
-
+                results.Add(queryCmd);
                 var history = GetHistoryCmds(cmd, queryCmd);
-                context.API.PushResults(query, context.CurrentPluginMetadata, history);
-                pushedResults.AddRange(history);
-
+                results.AddRange(history);
 
                 try
                 {
@@ -57,15 +67,19 @@ namespace Wox.Plugin.CMD
 
                     if (basedir != null)
                     {
-                        List<string> autocomplete = Directory.GetFileSystemEntries(basedir).Select(o => dir + Path.GetFileName(o)).Where(o => o.StartsWith(cmd, StringComparison.OrdinalIgnoreCase) && !results.Any(p => o.Equals(p.Title, StringComparison.OrdinalIgnoreCase)) && !pushedResults.Any(p => o.Equals(p.Title, StringComparison.OrdinalIgnoreCase))).ToList();
+                        var autocomplete = Directory.GetFileSystemEntries(basedir).
+                            Select(o => dir + Path.GetFileName(o)).
+                            Where(o => o.StartsWith(cmd, StringComparison.OrdinalIgnoreCase) &&
+                                       !results.Any(p => o.Equals(p.Title, StringComparison.OrdinalIgnoreCase)) &&
+                                       !results.Any(p => o.Equals(p.Title, StringComparison.OrdinalIgnoreCase))).ToList();
                         autocomplete.Sort();
-                        results.AddRange(autocomplete.ConvertAll(m => new Result()
+                        results.AddRange(autocomplete.ConvertAll(m => new Result
                         {
                             Title = m,
                             IcoPath = "Images/cmd.png",
-                            Action = (c) =>
+                            Action = c =>
                             {
-                                ExecuteCmd(m);
+                                ExecuteCMD(m);
                                 return true;
                             }
                         }));
@@ -81,7 +95,7 @@ namespace Wox.Plugin.CMD
 
         private List<Result> GetHistoryCmds(string cmd, Result result)
         {
-            IEnumerable<Result> history = CMDStorage.Instance.CMDHistory.Where(o => o.Key.Contains(cmd))
+            IEnumerable<Result> history = _settings.Count.Where(o => o.Key.Contains(cmd))
                 .OrderByDescending(o => o.Value)
                 .Select(m =>
                 {
@@ -94,11 +108,11 @@ namespace Wox.Plugin.CMD
                     var ret = new Result
                     {
                         Title = m.Key,
-                        SubTitle =  string.Format(context.API.GetTranslation("wox_plugin_cmd_cmd_has_been_executed_times"), m.Value),
+                        SubTitle = string.Format(context.API.GetTranslation("wox_plugin_cmd_cmd_has_been_executed_times"), m.Value),
                         IcoPath = "Images/cmd.png",
-                        Action = (c) =>
+                        Action = c =>
                         {
-                            ExecuteCmd(m.Key);
+                            ExecuteCMD(m.Key);
                             return true;
                         }
                     };
@@ -115,9 +129,9 @@ namespace Wox.Plugin.CMD
                 Score = 5000,
                 SubTitle = context.API.GetTranslation("wox_plugin_cmd_execute_through_shell"),
                 IcoPath = "Images/cmd.png",
-                Action = (c) =>
+                Action = c =>
                 {
-                    ExecuteCmd(cmd);
+                    ExecuteCMD(cmd);
                     return true;
                 }
             };
@@ -125,27 +139,43 @@ namespace Wox.Plugin.CMD
             return result;
         }
 
-        private List<Result> GetAllHistoryCmds()
+        private List<Result> ResultsFromlHistory()
         {
-            IEnumerable<Result> history = CMDStorage.Instance.CMDHistory.OrderByDescending(o => o.Value)
+            IEnumerable<Result> history = _settings.Count.OrderByDescending(o => o.Value)
                 .Select(m => new Result
                 {
                     Title = m.Key,
-                    SubTitle =  string.Format(context.API.GetTranslation("wox_plugin_cmd_cmd_has_been_executed_times"), m.Value),
+                    SubTitle = string.Format(context.API.GetTranslation("wox_plugin_cmd_cmd_has_been_executed_times"), m.Value),
                     IcoPath = "Images/cmd.png",
-                    Action = (c) =>
+                    Action = c =>
                     {
-                        ExecuteCmd(m.Key);
+                        ExecuteCMD(m.Key);
                         return true;
                     }
                 }).Take(5);
             return history.ToList();
         }
 
-        private void ExecuteCmd(string cmd, bool runAsAdministrator = false)
+        private void ExecuteCMD(string cmd, bool runAsAdministrator = false)
         {
-            if (context.API.ShellRun(cmd, runAsAdministrator))
-                CMDStorage.Instance.AddCmdHistory(cmd);
+            var arguments = _settings.LeaveCmdOpen ? $"/k {cmd}" : $"/c {cmd} & pause";
+            var info = new ProcessStartInfo
+            {
+                UseShellExecute = true,
+                FileName = "cmd.exe",
+                WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                Arguments = arguments,
+                Verb = runAsAdministrator ? "runas" : ""
+            };
+            try
+            {
+                Process.Start(info);
+                _settings.AddCmdHistory(cmd);
+            }
+            catch (FileNotFoundException e)
+            {
+                MessageBox.Show($"Command not found: {e.Message}");
+            }
         }
 
         public void Init(PluginInitContext context)
@@ -156,7 +186,7 @@ namespace Wox.Plugin.CMD
 
         bool API_GlobalKeyboardEvent(int keyevent, int vkcode, SpecialKeyState state)
         {
-            if (CMDStorage.Instance.ReplaceWinR)
+            if (_settings.ReplaceWinR)
             {
                 if (keyevent == (int)KeyEvent.WM_KEYDOWN && vkcode == (int)Keys.R && state.WinPressed)
                 {
@@ -177,17 +207,12 @@ namespace Wox.Plugin.CMD
         private void OnWinRPressed()
         {
             context.API.ShowApp();
-            context.API.ChangeQuery(">");
+            context.API.ChangeQuery($"{context.CurrentPluginMetadata.ActionKeywords[0]}{Plugin.Query.TermSeperater}");
         }
 
         public Control CreateSettingPanel()
         {
-            return new CMDSetting();
-        }
-
-        public string GetLanguagesFolder()
-        {
-            return Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Languages");
+            return new CMDSetting(_settings);
         }
 
         public string GetTranslatedPluginTitle()
@@ -202,22 +227,17 @@ namespace Wox.Plugin.CMD
 
         public bool IsInstantQuery(string query) => false;
 
-        public bool IsExclusiveQuery(Query query)
-        {
-            return query.Search.StartsWith(">");
-        }
-
         public List<Result> LoadContextMenus(Result selectedResult)
         {
-            return new List<Result>()
-                     {
-                        new Result()
+            return new List<Result>
+            {
+                        new Result
                         {
                             Title = context.API.GetTranslation("wox_plugin_cmd_run_as_administrator"),
                             Action = c =>
                             {
                                 context.API.HideApp();
-                                ExecuteCmd(selectedResult.Title, true);
+                                ExecuteCMD(selectedResult.Title, true);
                                 return true;
                             },
                             IcoPath = "Images/cmd.png"

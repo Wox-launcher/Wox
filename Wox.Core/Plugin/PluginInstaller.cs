@@ -1,7 +1,6 @@
 ﻿using System;
-using System.Diagnostics;
 using System.IO;
-using System.Windows.Forms;
+using System.Windows;
 using ICSharpCode.SharpZipLib.Zip;
 using Newtonsoft.Json;
 using Wox.Plugin;
@@ -35,7 +34,7 @@ namespace Wox.Core.Plugin
                     return;
                 }
 
-                string pluginFolerPath = PluginManager.PluginDirectory;
+                string pluginFolerPath = Infrastructure.Wox.UserDirectory;
 
                 string newPluginName = plugin.Name
                     .Replace("/", "_")
@@ -47,22 +46,24 @@ namespace Wox.Core.Plugin
                     .Replace("*", "_")
                     .Replace("|", "_")
                     + "-" + Guid.NewGuid();
-                string newPluginPath = Path.Combine(pluginFolerPath,newPluginName);
-                string content = string.Format(
-                        "Do you want to install following plugin?\r\n\r\nName: {0}\r\nVersion: {1}\r\nAuthor: {2}",
-                        plugin.Name, plugin.Version, plugin.Author);
-                PluginPair existingPlugin = PluginManager.GetPlugin(plugin.ID);
+                string newPluginPath = Path.Combine(pluginFolerPath, newPluginName);
+                string content = $"Do you want to install following plugin?{Environment.NewLine}{Environment.NewLine}" +
+                                 $"Name: {plugin.Name}{Environment.NewLine}" +
+                                 $"Version: {plugin.Version}{Environment.NewLine}" +
+                                 $"Author: {plugin.Author}";
+                PluginPair existingPlugin = PluginManager.GetPluginForId(plugin.ID);
 
                 if (existingPlugin != null)
                 {
-                        content = string.Format(
-                        "Do you want to update following plugin?\r\n\r\nName: {0}\r\nOld Version: {1}\r\nNew Version: {2}\r\nAuthor: {3}",
-                        plugin.Name, existingPlugin.Metadata.Version, plugin.Version, plugin.Author);
+                    content = $"Do you want to update following plugin?{Environment.NewLine}{Environment.NewLine}" +
+                              $"Name: {plugin.Name}{Environment.NewLine}" +
+                              $"Old Version: {existingPlugin.Metadata.Version}" +
+                              $"{Environment.NewLine}New Version: {plugin.Version}" +
+                              $"{Environment.NewLine}Author: {plugin.Author}";
                 }
 
-                DialogResult result = System.Windows.Forms.MessageBox.Show(content, "Install plugin", MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question);
-                if (result == DialogResult.Yes)
+                var result = MessageBox.Show(content, "Install plugin", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (result == MessageBoxResult.Yes)
                 {
                     if (existingPlugin != null && Directory.Exists(existingPlugin.Metadata.PluginDirectory))
                     {
@@ -79,19 +80,13 @@ namespace Wox.Core.Plugin
                     //current solution is to restart wox. Ugly.
                     //if (MainWindow.Initialized)
                     //{
-                    //    Plugins.Init();
+                    //    Plugins.Initialize();
                     //}
-                    if (MessageBox.Show("You have installed plugin " + plugin.Name + " successfully.\r\n Restart Wox to take effect?", "Install plugin",
-                            MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                    if (MessageBox.Show($"You have installed plugin {plugin.Name} successfully.{Environment.NewLine}" +
+                                        " Restart Wox to take effect?",
+                                        "Install plugin", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                     {
-                        ProcessStartInfo Info = new ProcessStartInfo();
-                        Info.Arguments = "/C ping 127.0.0.1 -n 1 && \"" +
-                                         System.Windows.Forms.Application.ExecutablePath + "\"";
-                        Info.WindowStyle = ProcessWindowStyle.Hidden;
-                        Info.CreateNoWindow = true;
-                        Info.FileName = "cmd.exe";
-                        Process.Start(Info);
-                        PluginManager.API.CloseApp();
+                        PluginManager.API.RestarApp();
                     }
                 }
             }
@@ -112,12 +107,12 @@ namespace Wox.Core.Plugin
                 metadata = JsonConvert.DeserializeObject<PluginMetadata>(File.ReadAllText(configPath));
                 metadata.PluginDirectory = pluginDirectory;
             }
-            catch (System.Exception)
+            catch (Exception)
             {
-                string error = string.Format("Parse plugin config {0} failed: json format is not valid", configPath);
+                string error = $"Parse plugin config {configPath} failed: json format is not valid";
 #if (DEBUG)
                 {
-                    throw new System.Exception(error);
+                    throw new Exception(error);
                 }
 #endif
                 return null;
@@ -126,22 +121,20 @@ namespace Wox.Core.Plugin
 
             if (!AllowedLanguage.IsAllowed(metadata.Language))
             {
-                string error = string.Format("Parse plugin config {0} failed: invalid language {1}", configPath,
-                    metadata.Language);
+                string error = $"Parse plugin config {configPath} failed: invalid language {metadata.Language}";
 #if (DEBUG)
                 {
-                    throw new System.Exception(error);
+                    throw new Exception(error);
                 }
 #endif
                 return null;
             }
             if (!File.Exists(metadata.ExecuteFilePath))
             {
-                string error = string.Format("Parse plugin config {0} failed: ExecuteFile {1} didn't exist", configPath,
-                    metadata.ExecuteFilePath);
+                string error = $"Parse plugin config {configPath} failed: ExecuteFile {metadata.ExecuteFilePath} didn't exist";
 #if (DEBUG)
                 {
-                    throw new System.Exception(error);
+                    throw new Exception(error);
                 }
 #endif
                 return null;

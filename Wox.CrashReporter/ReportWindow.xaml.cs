@@ -1,9 +1,10 @@
 ﻿using System;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Documents;
 using Exceptionless;
-using Wox.Core.i18n;
+using Wox.Core.Resource;
 using Wox.Core.Updater;
 
 namespace Wox.CrashReporter
@@ -40,17 +41,17 @@ namespace Wox.CrashReporter
         private void SendReport()
         {
             Hide();
-            ThreadPool.QueueUserWorkItem(o =>
+            Task.Run(() =>
             {
                 string reproduceSteps = new TextRange(tbReproduceSteps.Document.ContentStart, tbReproduceSteps.Document.ContentEnd).Text;
                 exception.ToExceptionless()
                     .SetUserDescription(reproduceSteps)
                     .Submit();
                 ExceptionlessClient.Current.ProcessQueue();
-                Dispatcher.Invoke(new Action(() =>
+                Dispatcher.Invoke(() =>
                 {
                     Close();
-                }));
+                });
             });
         }
 

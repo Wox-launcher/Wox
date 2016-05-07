@@ -2,13 +2,14 @@
 using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using NAppUpdate.Framework;
 using NAppUpdate.Framework.Common;
 using NAppUpdate.Framework.Sources;
 using NAppUpdate.Framework.Tasks;
 using Newtonsoft.Json;
-using Wox.Core.i18n;
+using Wox.Core.Resource;
 using Wox.Core.UserSettings;
 using Wox.Infrastructure.Http;
 using Wox.Infrastructure.Logger;
@@ -18,10 +19,11 @@ namespace Wox.Core.Updater
     public class UpdaterManager
     {
         private static UpdaterManager instance;
-        private const string VersionCheckURL = "https://api.getwox.com/release/latest/";
+        private const string VersionCheckURL = "http://api.getwox.com/release/latest/";
         private const string UpdateFeedURL = "http://upgrade.getwox.com/update.xml";
         //private const string UpdateFeedURL = "http://127.0.0.1:8888/update.xml";
         private static SemanticVersion currentVersion;
+        public UserSettings.Settings Settings { get; set; }
 
         public event EventHandler PrepareUpdateReady;
         public event EventHandler UpdateError;
@@ -79,7 +81,7 @@ namespace Wox.Core.Updater
 
         public void CheckUpdate()
         {
-            ThreadPool.QueueUserWorkItem(o =>
+            Task.Run(() =>
             {
                 string json = HttpRequest.Get(VersionCheckURL, HttpProxy.Instance);
                 if (!string.IsNullOrEmpty(json))
@@ -87,12 +89,12 @@ namespace Wox.Core.Updater
                     try
                     {
                         NewRelease = JsonConvert.DeserializeObject<Release>(json);
-                        if (IsNewerThanCurrent(NewRelease) && !UserSettingStorage.Instance.DontPromptUpdateMsg)
+                        if (IsNewerThanCurrent(NewRelease) && !Settings.DontPromptUpdateMsg)
                         {
                             StartUpdate();
                         }
                     }
-                    catch (System.Exception e)
+                    catch (Exception e)
                     {
                         Log.Error(e);
                     }
@@ -112,10 +114,10 @@ namespace Wox.Core.Updater
                     {
                         ((UpdateProcessAsyncResult)asyncResult).EndInvoke();
                     }
-                    catch (System.Exception e)
+                    catch (Exception e)
                     {
-                        Log.Error(e);
                         updManager.CleanUp();
+                        Log.Error(e);
                         return;
                     }
 
@@ -146,9 +148,9 @@ namespace Wox.Core.Updater
             // get out of the way so the console window isn't obstructed
             try
             {
-                UpdateManager.Instance.ApplyUpdates(true, UserSettingStorage.Instance.EnableUpdateLog, false);
+                UpdateManager.Instance.ApplyUpdates(true, Settings.EnableUpdateLog, false);
             }
-            catch (System.Exception e)
+            catch (Exception e)
             {
                 string updateError = InternationalizationManager.Instance.GetTranslation("update_wox_update_error");
                 Log.Error(e);

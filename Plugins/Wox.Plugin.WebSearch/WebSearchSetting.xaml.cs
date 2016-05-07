@@ -1,153 +1,149 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Windows;
-using System.Windows.Media.Imaging;
 using Microsoft.Win32;
+using Wox.Infrastructure.Exception;
+using Wox.Infrastructure.Image;
 
 namespace Wox.Plugin.WebSearch
 {
-    public partial class WebSearchSetting : Window
+    public partial class WebSearchSetting
     {
-        private string defaultWebSearchImageDirectory = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Images\\websearch");
-        private WebSearchesSetting settingWindow;
-        private bool update;
-        private WebSearch updateWebSearch;
-        private PluginInitContext context;
+        private readonly WebSearchesSetting _settingWindow;
+        private bool _isUpdate;
+        private WebSearch _webSearch;
+        private readonly PluginInitContext _context;
+        private readonly WebSearchPlugin _plugin;
+        private readonly Settings _settings;
 
-        public WebSearchSetting(WebSearchesSetting settingWidow,PluginInitContext context)
+        public WebSearchSetting(WebSearchesSetting settingWidow, Settings settings)
         {
-            this.context = context;
-            this.settingWindow = settingWidow;
             InitializeComponent();
+            WebSearchName.Focus();
+            _plugin = settingWidow.Plugin;
+            _context = settingWidow.Context;
+            _settingWindow = settingWidow;
+            _settings = settings;
         }
 
         public void UpdateItem(WebSearch webSearch)
         {
-            updateWebSearch = WebSearchStorage.Instance.WebSearches.FirstOrDefault(o => o == webSearch);
-            if (updateWebSearch == null || string.IsNullOrEmpty(updateWebSearch.Url))
+            _webSearch = _settings.WebSearches.FirstOrDefault(o => o == webSearch);
+            if (_webSearch == null || string.IsNullOrEmpty(_webSearch.Url))
             {
 
-                string warning = context.API.GetTranslation("wox_plugin_websearch_invalid_web_search");
+                string warning = _context.API.GetTranslation("wox_plugin_websearch_invalid_web_search");
                 MessageBox.Show(warning);
                 Close();
                 return;
             }
 
-            update = true;
-            lblAdd.Text = "Update";
-            tbIconPath.Text = webSearch.IconPath;
-            ShowIcon(webSearch.IconPath);
-            cbEnable.IsChecked = webSearch.Enabled;
-            tbTitle.Text = webSearch.Title;
-            tbUrl.Text = webSearch.Url;
-            tbActionword.Text = webSearch.ActionWord;
+            _isUpdate = true;
+            ConfirmButton.Content = "Update";
+            WebSearchIcon.Source = ImageLoader.Load(webSearch.IconPath);
+            EnableCheckBox.IsChecked = webSearch.Enabled;
+            WebSearchName.Text = webSearch.Title;
+            Url.Text = webSearch.Url;
+            Actionword.Text = webSearch.ActionKeyword;
         }
 
-        private void ShowIcon(string path)
+        public void AddItem(WebSearch webSearch)
         {
-            try
-            {
-                imgIcon.Source = new BitmapImage(new Uri(path));
-            }
-            catch (Exception)
-            {
-            }
+            _webSearch = webSearch;
+            WebSearchIcon.Source = ImageLoader.Load(webSearch.IconPath);
         }
 
-        private void BtnCancel_OnClick(object sender, RoutedEventArgs e)
+        private void CancelButtonOnClick(object sender, RoutedEventArgs e)
         {
             Close();
         }
 
-        private void btnAdd_OnClick(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// Confirm button for both add and update
+        /// </summary>
+        private void ConfirmButtonOnClick(object sender, RoutedEventArgs e)
         {
-            string title = tbTitle.Text;
+            string title = WebSearchName.Text;
             if (string.IsNullOrEmpty(title))
             {
-                string warning = context.API.GetTranslation("wox_plugin_websearch_input_title");
+                string warning = _context.API.GetTranslation("wox_plugin_websearch_input_title");
                 MessageBox.Show(warning);
                 return;
             }
 
-            string url = tbUrl.Text;
+            string url = Url.Text;
             if (string.IsNullOrEmpty(url))
             {
-                string warning = context.API.GetTranslation("wox_plugin_websearch_input_url");
+                string warning = _context.API.GetTranslation("wox_plugin_websearch_input_url");
                 MessageBox.Show(warning);
                 return;
             }
 
-            string action = tbActionword.Text;
-            if (string.IsNullOrEmpty(action))
+            string newActionKeyword = Actionword.Text.Trim();
+            
+            if (_isUpdate)
             {
-                string warning = context.API.GetTranslation("wox_plugin_websearch_input_action_keyword");
-                MessageBox.Show(warning);
-                return;
-            }
-
-
-            if (!update)
-            {
-                if (WebSearchStorage.Instance.WebSearches.Exists(o => o.ActionWord == action))
+                try
                 {
-                    string warning = context.API.GetTranslation("wox_plugin_websearch_action_keyword_exist");
-                    MessageBox.Show(warning);
+                    _plugin.NotifyActionKeywordsUpdated(_webSearch.ActionKeyword, newActionKeyword);
+                }
+                catch (WoxPluginException exception)
+                {
+                    MessageBox.Show(exception.Message);
                     return;
                 }
-                WebSearchStorage.Instance.WebSearches.Add(new WebSearch()
-                {
-                    ActionWord = action,
-                    Enabled = cbEnable.IsChecked ?? false,
-                    IconPath = tbIconPath.Text,
-                    Url = url,
-                    Title = title
-                });
-                string msg = context.API.GetTranslation("wox_plugin_websearch_succeed");
-                MessageBox.Show(msg);
             }
             else
             {
-                if (WebSearchStorage.Instance.WebSearches.Exists(o => o.ActionWord == action && o != updateWebSearch))
+                try
                 {
-                    string warning = context.API.GetTranslation("wox_plugin_websearch_action_keyword_exist");
-                    MessageBox.Show(warning);
+                    _plugin.NotifyActionKeywordsAdded(newActionKeyword);
+                }
+                catch (WoxPluginException exception)
+                {
+                    MessageBox.Show(exception.Message);
                     return;
                 }
-                updateWebSearch.ActionWord = action;
-                updateWebSearch.IconPath = tbIconPath.Text;
-                updateWebSearch.Enabled = cbEnable.IsChecked ?? false;
-                updateWebSearch.Url = url;
-                updateWebSearch.Title= title;
-                string msg = context.API.GetTranslation("wox_plugin_websearch_succeed");
-                MessageBox.Show(msg);
+
+                _settings.WebSearches.Add(_webSearch);
             }
-            WebSearchStorage.Instance.Save();
-            settingWindow.ReloadWebSearchView();
+
+            _webSearch.ActionKeyword = newActionKeyword;
+            _webSearch.Enabled = EnableCheckBox.IsChecked ?? false;
+            _webSearch.Url = url;
+            _webSearch.Title = title;
+
+            _settingWindow.ReloadWebSearchView();
             Close();
         }
 
-        private void BtnSelectIcon_OnClick(object sender, RoutedEventArgs e)
+        private void SelectIconButtonOnClick(object sender, RoutedEventArgs e)
         {
-            if(!Directory.Exists(defaultWebSearchImageDirectory))
-            {
-                defaultWebSearchImageDirectory =
-                    Path.GetDirectoryName(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location));
-            }
-
+            var directory = Path.Combine(WebSearchPlugin.PluginDirectory, WebSearchPlugin.ImageDirectory);
             var dlg = new OpenFileDialog
             {
-                InitialDirectory = defaultWebSearchImageDirectory,
-                Filter ="Image files (*.jpg, *.jpeg, *.gif, *.png, *.bmp) |*.jpg; *.jpeg; *.gif; *.png; *.bmp"
+                InitialDirectory = directory,
+                Filter = "Image files (*.jpg, *.jpeg, *.gif, *.png, *.bmp) |*.jpg; *.jpeg; *.gif; *.png; *.bmp"
             };
 
             bool? result = dlg.ShowDialog();
-            if (result == true)
+            if (result != null && result == true)
             {
-                string filename = dlg.FileName;
-                tbIconPath.Text = filename;
-                ShowIcon(filename);
+                string fullpath = dlg.FileName;
+                if (fullpath != null)
+                {
+                    _webSearch.Icon = Path.GetFileName(fullpath);
+                    if (File.Exists(_webSearch.IconPath))
+                    {
+                        WebSearchIcon.Source = ImageLoader.Load(_webSearch.IconPath);
+                    }
+                    else
+                    {
+                        _webSearch.Icon = WebSearch.DefaultIcon;
+                        MessageBox.Show($"The file should be put under {directory}");
+                    }
+                }
             }
         }
     }

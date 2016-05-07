@@ -3,19 +3,18 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using Wox.Infrastructure;
 
 namespace Wox.Plugin.ControlPanel
 {
-    public class ControlPanel : IPlugin,IPluginI18n
+    public class ControlPanel : IPlugin, IPluginI18n
     {
         private PluginInitContext context;
         private List<ControlPanelItem> controlPanelItems = new List<ControlPanelItem>();
         private string iconFolder;
         private string fileType;
 
-        public  void Init(PluginInitContext context)
+        public void Init(PluginInitContext context)
         {
             this.context = context;
             controlPanelItems = ControlPanelList.Create(48);
@@ -39,33 +38,34 @@ namespace Wox.Plugin.ControlPanel
 
         public List<Result> Query(Query query)
         {
-            string myQuery = query.Search.Trim();
             List<Result> results = new List<Result>();
 
             foreach (var item in controlPanelItems)
             {
-                var fuzzyMather = FuzzyMatcher.Create(myQuery);
-                if (MatchProgram(item, fuzzyMather))
+                item.Score = Score(item, query.Search);
+                if (item.Score > 0)
                 {
-                    results.Add(new Result()
+                    var result = new Result
                     {
                         Title = item.LocalizedString,
                         SubTitle = item.InfoTip,
                         Score = item.Score,
-                        IcoPath = Path.Combine(context.CurrentPluginMetadata.PluginDirectory, @"Images\\ControlPanelIcons\\" + item.GUID + fileType),
+                        IcoPath = Path.Combine(context.CurrentPluginMetadata.PluginDirectory,
+                        @"Images\\ControlPanelIcons\\" + item.GUID + fileType),
                         Action = e =>
-                        {
-                            try
                             {
-                                Process.Start(item.ExecutablePath);
+                                try
+                                {
+                                    Process.Start(item.ExecutablePath);
+                                }
+                                catch (Exception)
+                                {
+                                    //Silently Fail for now.. todo
+                                }
+                                return true;
                             }
-                            catch (Exception)
-                            {
-                                //Silently Fail for now..
-                            }
-                            return true;
-                        }
-                    });
+                    };
+                    results.Add(result);
                 }
             }
 
@@ -73,19 +73,22 @@ namespace Wox.Plugin.ControlPanel
             return panelItems;
         }
 
-        private bool MatchProgram(ControlPanelItem item, FuzzyMatcher matcher)
+        private int Score(ControlPanelItem item, string query)
         {
-            if (item.LocalizedString != null && (item.Score = matcher.Evaluate(item.LocalizedString).Score) > 0) return true;
-            if (item.InfoTip != null && (item.Score = matcher.Evaluate(item.InfoTip).Score) > 0) return true;
-
-            if (item.LocalizedString != null && (item.Score = matcher.Evaluate(item.LocalizedString.Unidecode()).Score) > 0) return true;
-
-            return false;
-        }
-
-        public string GetLanguagesFolder()
-        {
-            return Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Languages");
+            var scores = new List<int>();
+            if (item.LocalizedString != null)
+            {
+                var score1 = StringMatcher.Score(item.LocalizedString, query);
+                var socre2 = StringMatcher.ScoreForPinyin(item.LocalizedString, query);
+                scores.Add(Math.Max(score1, socre2));
+            }
+            if (item.InfoTip != null)
+            {
+                // todo should we add pinyin score for infotip also?
+                var score = StringMatcher.Score(item.InfoTip, query);
+                scores.Add(score);
+            }
+            return scores.Max();
         }
 
         public string GetTranslatedPluginTitle()

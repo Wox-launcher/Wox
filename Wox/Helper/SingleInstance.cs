@@ -1,14 +1,4 @@
-﻿//-----------------------------------------------------------------------
-// <copyright file="SingleInstance.cs" company="Microsoft">
-//     Copyright (c) Microsoft Corporation.  All rights reserved.
-// </copyright>
-// <summary>
-//     This class checks to make sure that only one instance of 
-//     this application is running at a time.
-// </summary>
-//-----------------------------------------------------------------------
-
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -19,11 +9,13 @@ using System.Runtime.Remoting.Channels;
 using System.Runtime.Remoting.Channels.Ipc;
 using System.Runtime.Serialization.Formatters;
 using System.Security;
+using System.Text;
 using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
 
-//http://blogs.microsoft.co.il/arik/2010/05/28/wpf-single-instance-application/
+// http://blogs.microsoft.co.il/arik/2010/05/28/wpf-single-instance-application/
+// modified to allow single instace restart
 namespace Wox.Helper 
 {
     internal enum WM
@@ -140,7 +132,7 @@ namespace Wox.Helper
         // This is the hard-coded message value used by WinForms for Shell_NotifyIcon.
         // It's relatively safe to reuse.
         TRAYMOUSEMESSAGE = 0x800, //WM_USER + 1024
-        APP = 0x8000,
+        APP = 0x8000
     }
 
     [SuppressUnmanagedCodeSecurity]
@@ -194,7 +186,7 @@ namespace Wox.Helper
 
     public interface ISingleInstanceApp 
     { 
-         bool OnActivate(IList<string> args); 
+         void OnActivate(IList<string> args); 
     } 
 
     /// <summary>
@@ -212,6 +204,8 @@ namespace Wox.Helper
                 where   TApplication: Application ,  ISingleInstanceApp 
                                     
     {
+        public const string Restart = "Restart";
+
         #region Private Fields
 
         /// <summary>
@@ -237,7 +231,7 @@ namespace Wox.Helper
         /// <summary>
         /// Application mutex.
         /// </summary>
-        private static Mutex singleInstanceMutex;
+        internal static Mutex singleInstanceMutex;
 
         /// <summary>
         /// IPC channel for communications.
@@ -273,6 +267,8 @@ namespace Wox.Helper
         public static bool InitializeAsFirstInstance( string uniqueName )
         {
             commandLineArgs = GetCommandLineArgs(uniqueName);
+            //remove execute path itself
+            commandLineArgs.RemoveAt(0);
 
             // Build unique application Id and the IPC channel name.
             string applicationIdentifier = uniqueName + Environment.UserName;
@@ -285,13 +281,21 @@ namespace Wox.Helper
             if (firstInstance)
             {
                 CreateRemoteService(channelName);
+                return true;
+            }
+            // Restart
+            else if (commandLineArgs.Count > 0 && commandLineArgs[0] == Restart)
+            {
+                SignalFirstInstance(channelName, commandLineArgs);
+                singleInstanceMutex.WaitOne(TimeSpan.FromSeconds(10));
+                CreateRemoteService(channelName);
+                return true;
             }
             else
             {
                 SignalFirstInstance(channelName, commandLineArgs);
+                return false;
             }
-
-            return firstInstance;
         }
 
         /// <summary>
@@ -299,11 +303,7 @@ namespace Wox.Helper
         /// </summary>
         public static void Cleanup()
         {
-            if (singleInstanceMutex != null)
-            {
-                singleInstanceMutex.Close();
-                singleInstanceMutex = null;
-            }
+            singleInstanceMutex?.ReleaseMutex();
 
             if (channel != null)
             {
@@ -343,7 +343,7 @@ namespace Wox.Helper
                 {
                     try
                     {
-                        using (TextReader reader = new StreamReader(cmdLinePath, System.Text.Encoding.Unicode))
+                        using (TextReader reader = new StreamReader(cmdLinePath, Encoding.Unicode))
                         {
                             args = NativeMethods.CommandLineToArgvW(reader.ReadToEnd());
                         }
@@ -442,8 +442,7 @@ namespace Wox.Helper
             {
                 return;
             }
-            //remove execute path itself
-            args.RemoveAt(0);
+
             ((TApplication)Application.Current).OnActivate(args);
         }
 
@@ -467,7 +466,7 @@ namespace Wox.Helper
                 {
                     // Do an asynchronous call to ActivateFirstInstance function
                     Application.Current.Dispatcher.BeginInvoke(
-                        DispatcherPriority.Normal, new DispatcherOperationCallback(SingleInstance<TApplication>.ActivateFirstInstanceCallback), args);
+                        DispatcherPriority.Normal, new DispatcherOperationCallback(ActivateFirstInstanceCallback), args);
                 }
             }
 

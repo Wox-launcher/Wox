@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.IO;
+using Microsoft.Win32;
 using Wox.Infrastructure.Logger;
 
 namespace Wox.Plugin.Program.ProgramSources
 {
     [Serializable]
-    [System.ComponentModel.Browsable(false)]
+    [Browsable(false)]
     public class AppPathsProgramSource : AbstractProgramSource
     {
         public AppPathsProgramSource()
@@ -28,7 +31,7 @@ namespace Wox.Plugin.Program.ProgramSources
 
         private void ReadAppPaths(string rootpath, List<Program> list)
         {
-            using (var root = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(rootpath))
+            using (var root = Registry.LocalMachine.OpenSubKey(rootpath))
             {
                 if (root == null) return;
                 foreach (var item in root.GetSubKeyNames())
@@ -38,7 +41,7 @@ namespace Wox.Plugin.Program.ProgramSources
                         using (var key = root.OpenSubKey(item))
                         {
                             string path = key.GetValue("") as string;
-                            if (path == null) continue;
+                            if (string.IsNullOrEmpty(path)) continue;
 
                             // fix path like this ""\"C:\\folder\\executable.exe\"""
                             const int begin = 0;
@@ -49,15 +52,16 @@ namespace Wox.Plugin.Program.ProgramSources
                                 path = path.Substring(begin + 1, path.Length - 2);
                             }
 
-                            if (!System.IO.File.Exists(path)) continue;
+                            if (!File.Exists(path)) continue;
                             var entry = CreateEntry(path);
-                            entry.ExecuteName = item;
+                            entry.ExecutableName = item;
+                            entry.Source = this;
                             list.Add(entry);
                         }
                     }
                     catch (Exception e)
                     {
-                        Log.Error(e.StackTrace);
+                        Log.Error(e);
                     }
                 }
             }

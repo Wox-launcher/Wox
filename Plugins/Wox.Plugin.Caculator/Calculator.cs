@@ -1,6 +1,5 @@
 ﻿using System.Collections.Generic;
-using System.IO;
-using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Windows;
 using YAMP;
@@ -18,7 +17,7 @@ namespace Wox.Plugin.Caculator
                         @"[ei]|[0-9]|[\+\-\*\/\^\., ""]|[\(\)\|\!\[\]]" +
                         @")+$", RegexOptions.Compiled);
         private static Regex regBrackets = new Regex(@"[\(\)\[\]]", RegexOptions.Compiled);
-        private static ParseContext yampContext = null;
+        private static ParseContext yampContext;
         private PluginInitContext context { get; set; }
 
         static Calculator()
@@ -39,19 +38,21 @@ namespace Wox.Plugin.Caculator
                 var result = yampContext.Run(query.Search);
                 if (result.Output != null && !string.IsNullOrEmpty(result.Result))
                 {
-                    return new List<Result>() { new Result() { 
+                    return new List<Result>
+                    { new Result
+                    { 
                         Title = result.Result, 
                         IcoPath = "Images/calculator.png", 
                         Score = 300,
                         SubTitle = "Copy this number to the clipboard", 
-                        Action = (c) =>
+                        Action = c =>
                         {
                             try
                             {
                                 Clipboard.SetText(result.Result);
                                 return true;
                             }
-                            catch (System.Runtime.InteropServices.ExternalException e)
+                            catch (ExternalException e)
                             {
                                 MessageBox.Show("Copy failed, please try later");
                                 return false;
@@ -88,11 +89,6 @@ namespace Wox.Plugin.Caculator
         public void Init(PluginInitContext context)
         {
             this.context = context;
-        }
-
-        public string GetLanguagesFolder()
-        {
-            return Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Languages");
         }
 
         public string GetTranslatedPluginTitle()
