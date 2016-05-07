@@ -49,9 +49,6 @@ namespace Wox
         {
             CheckUpdate();
 
-            ThemeManager.Instance.ChangeTheme(_settings.Theme);
-            InternationalizationManager.Instance.ChangeLanguage(_settings.Language);
-
             InitProgressbarAnimation();
             WindowIntelopHelper.DisableControlBox(this);
 
@@ -368,6 +365,11 @@ namespace Wox
         private void OnPreviewDragOver(object sender, DragEventArgs e)
         {
             e.Handled = true;
+        }
+
+        private void OnContextMenusForSettingsClick(object sender, RoutedEventArgs e)
+        {
+            App.API.OpenSettingDialog();
         }
     }
 }

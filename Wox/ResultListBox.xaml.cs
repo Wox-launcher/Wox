@@ -3,6 +3,7 @@ using System.Linq;
 using System.Runtime.Remoting.Contexts;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Wox.Plugin;
 using Wox.ViewModel;
 
@@ -13,7 +14,7 @@ namespace Wox
     {
         public void AddResults(List<Result> newRawResults)
         {
-            var vm = DataContext as ResultsViewModel;
+            var vm = (ResultsViewModel) DataContext;
             var newResults = newRawResults.Select(r => new ResultViewModel(r)).ToList();
             vm.Results.Update(newResults);
             vm.SelectedIndex = 0;
@@ -31,6 +32,11 @@ namespace Wox
             {
                 ScrollIntoView(e.AddedItems[0]);
             }
+        }
+
+        private void OnMouseEnter(object sender, MouseEventArgs e)
+        {
+            ((ListBoxItem) sender).IsSelected = true;
         }
     }
 }

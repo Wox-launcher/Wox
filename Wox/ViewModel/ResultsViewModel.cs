@@ -41,11 +41,12 @@ namespace Wox.ViewModel
             get { return _selectedIndex; }
             set
             {
-               _selectedIndex = value;
+                _selectedIndex = value;
                 OnPropertyChanged();
             }
         }
 
+        public ResultViewModel SelectedItem { get; set; }
         public Thickness Margin
         {
             get
@@ -82,12 +83,13 @@ namespace Wox.ViewModel
             var n = Results.Count;
             if (n > 0)
             {
-                i = (n + i)%n;
+                i = (n + i) % n;
                 return i;
             }
             else
             {
-                return 0;
+                // SelectedIndex returns -1 if selection is empty.
+                return -1;
             }
         }
 
@@ -95,13 +97,6 @@ namespace Wox.ViewModel
         #endregion
 
         #region Public Methods
-
-        public ResultViewModel this[int selectedIndex] => Results[selectedIndex];
-
-        public void SelectResult(int index)
-        {
-            SelectedIndex = index;
-        }
 
         public void SelectNextResult()
         {
@@ -193,6 +188,7 @@ namespace Wox.ViewModel
                 if (Results.Count > 0)
                 {
                     Margin = new Thickness { Top = 8 };
+                    SelectedIndex = 0;
                 }
                 else
                 {
@@ -269,6 +265,7 @@ namespace Wox.ViewModel
         }
 
 
+        public ResultViewModel this[int selectedIndex] => Results[selectedIndex];
     }
 
 }

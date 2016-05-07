@@ -51,6 +51,11 @@ namespace Wox
             Loaded += Setting_Loaded;
         }
 
+        private void ProxyToggled(object sender, RoutedEventArgs e)
+        {
+            _settings.ProxyEnabled = ToggleProxy.IsChecked ?? false;
+        }
+
         private void Setting_Loaded(object sender, RoutedEventArgs ev)
         {
             #region General
@@ -113,13 +118,13 @@ namespace Wox
             var maxResults = _settings.MaxResultsToShow;
             comboMaxResultsToShow.SelectedItem = maxResults == 0 ? 6 : maxResults;
 
+            PythonDirectory.Text = _settings.PluginSettings.PythonDirectory;
+
             #endregion
 
             #region Proxy
 
-            cbEnableProxy.Checked += (o, e) => EnableProxy();
-            cbEnableProxy.Unchecked += (o, e) => DisableProxy();
-            cbEnableProxy.IsChecked = _settings.ProxyEnabled;
+            ToggleProxy.IsChecked = _settings.ProxyEnabled;
             tbProxyServer.Text = _settings.ProxyServer;
             if (_settings.ProxyPort != 0)
             {
@@ -127,14 +132,6 @@ namespace Wox
             }
             tbProxyUserName.Text = _settings.ProxyUserName;
             tbProxyPassword.Password = _settings.ProxyPassword;
-            if (_settings.ProxyEnabled)
-            {
-                EnableProxy();
-            }
-            else
-            {
-                DisableProxy();
-            }
 
             #endregion
 
@@ -248,7 +245,10 @@ namespace Wox
 
         private void SelectPythonDirectoryOnClick(object sender, RoutedEventArgs e)
         {
-            var dlg = new FolderBrowserDialog {RootFolder = Environment.SpecialFolder.ProgramFiles};
+            var dlg = new FolderBrowserDialog
+            {
+                SelectedPath = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)
+            };
 
             var result = dlg.ShowDialog();
             if (result == System.Windows.Forms.DialogResult.OK)
@@ -721,7 +721,7 @@ namespace Wox
         #region Proxy
         private void btnSaveProxy_Click(object sender, RoutedEventArgs e)
         {
-            _settings.ProxyEnabled = cbEnableProxy.IsChecked ?? false;
+            _settings.ProxyEnabled = ToggleProxy.IsChecked ?? false;
 
             int port = 80;
             if (_settings.ProxyEnabled)
@@ -798,22 +798,6 @@ namespace Wox
             {
                 MessageBox.Show(InternationalizationManager.Instance.GetTranslation("proxyConnectFailed"));
             }
-        }
-
-        private void EnableProxy()
-        {
-            tbProxyPassword.IsEnabled = true;
-            tbProxyServer.IsEnabled = true;
-            tbProxyUserName.IsEnabled = true;
-            tbProxyPort.IsEnabled = true;
-        }
-
-        private void DisableProxy()
-        {
-            tbProxyPassword.IsEnabled = false;
-            tbProxyServer.IsEnabled = false;
-            tbProxyUserName.IsEnabled = false;
-            tbProxyPort.IsEnabled = false;
         }
 
         #endregion

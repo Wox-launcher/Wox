@@ -22,7 +22,6 @@ namespace Wox.ViewModel
     {
         #region Private Fields
 
-        private bool _isProgressBarTooltipVisible;
         private double _left;
         private double _top;
 
@@ -67,7 +66,9 @@ namespace Wox.ViewModel
             HttpProxy.Instance.Settings = _settings;
             UpdaterManager.Instance.Settings = _settings;
             InternationalizationManager.Instance.Settings = _settings;
+            InternationalizationManager.Instance.ChangeLanguage(_settings.Language);
             ThemeManager.Instance.Settings = _settings;
+            ThemeManager.Instance.ChangeTheme(_settings.Theme);
 
             _queryHistoryStorage = new JsonStrorage<QueryHistory>();
             _userSelectedRecordStorage = new JsonStrorage<UserSelectedRecord>();
@@ -167,30 +168,33 @@ namespace Wox.ViewModel
                 Process.Start("http://doc.getwox.com");
             });
 
-            OpenResultCommand = new RelayCommand(o =>
+            OpenResultCommand = new RelayCommand(index =>
             {
                 var results = ContextMenuVisibility.IsVisible() ? ContextMenu : Results;
 
-                if (o != null)
+                if (index != null)
                 {
-                    var index = int.Parse(o.ToString());
-                    results.SelectResult(index);
+                    results.SelectedIndex = int.Parse(index.ToString());
                 }
 
-                var result = results[results.SelectedIndex].RawResult;
-                bool hideWindow = result.Action(new ActionContext
+                var result = results.SelectedItem?.RawResult;
+                if (result != null) // SelectedItem returns null if selection is empty.
                 {
-                    SpecialKeyState = GlobalHotkey.Instance.CheckModifiers()
-                });
-                if (hideWindow)
-                {
-                    MainWindowVisibility = Visibility.Collapsed;
-                }
+                    bool hideWindow = result.Action(new ActionContext
+                    {
+                        SpecialKeyState = GlobalHotkey.Instance.CheckModifiers()
+                    });
 
-                if (!ContextMenuVisibility.IsVisible())
-                {
-                    _userSelectedRecord.Add(result);
-                    _queryHistory.Add(result.OriginQuery.RawQuery);
+                    if (hideWindow)
+                    {
+                        MainWindowVisibility = Visibility.Collapsed;
+                    }
+
+                    if (!ContextMenuVisibility.IsVisible())
+                    {
+                        _userSelectedRecord.Add(result);
+                        _queryHistory.Add(result.OriginQuery.RawQuery);
+                    }
                 }
             });
 
@@ -198,19 +202,23 @@ namespace Wox.ViewModel
             {
                 if (!ContextMenuVisibility.IsVisible())
                 {
-                    var result = Results[Results.SelectedIndex].RawResult;
-                    var id = result.PluginID;
+                    var result = Results.SelectedItem?.RawResult;
 
-                    var menus = PluginManager.GetContextMenusForPlugin(result);
-                    menus.Add(ContextMenuTopMost(result));
-                    menus.Add(ContextMenuPluginInfo(id));
-
-                    ContextMenu.Clear();
-                    Task.Run(() =>
+                    if (result != null) // SelectedItem returns null if selection is empty.
                     {
-                        ContextMenu.AddResults(menus, id);
-                    }, _updateToken);
-                    ContextMenuVisibility = Visibility.Visible;
+                        var id = result.PluginID;
+
+                        var menus = PluginManager.GetContextMenusForPlugin(result);
+                        menus.Add(ContextMenuTopMost(result));
+                        menus.Add(ContextMenuPluginInfo(id));
+
+                        ContextMenu.Clear();
+                        Task.Run(() =>
+                        {
+                            ContextMenu.AddResults(menus, id);
+                        }, _updateToken);
+                        ContextMenuVisibility = Visibility.Visible;
+                    }
                 }
                 else
                 {
