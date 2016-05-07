@@ -194,7 +194,6 @@ namespace Wox.ViewModel
                 {
                     Margin = new Thickness { Top = 0 };
                 }
-                SelectedIndex = 0;
             }
         }
 
