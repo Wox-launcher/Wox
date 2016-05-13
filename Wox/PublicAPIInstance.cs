@@ -147,6 +147,16 @@ namespace Wox
             });
         }
 
+        public void HideNotifyIcon()
+        {
+            MainVM.NotifyIconVisibility = Visibility.Hidden;
+        }
+
+        public void ShowNotifyIcon()
+        {
+            MainVM.NotifyIconVisibility = Visibility.Visible;
+        }
+
         #endregion
 
         #region Private Methods

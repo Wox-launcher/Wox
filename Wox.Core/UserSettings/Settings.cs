@@ -45,6 +45,7 @@ namespace Wox.Core.UserSettings
         public bool LeaveCmdOpen { get; set; }
         public bool HideWhenDeactive { get; set; }
         public bool RememberLastLaunchLocation { get; set; }
+        public bool HideNotifyIcon { get; set; }
         public bool IgnoreHotkeysOnFullscreen { get; set; }
 
         public string ProxyServer { get; set; }
