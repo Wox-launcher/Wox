@@ -101,5 +101,15 @@ namespace Wox.Plugin
         /// if you want to hook something like Ctrl+R, you should use this event
         /// </summary>
         event WoxGlobalKeyboardEventHandler GlobalKeyboardEvent;
+
+        /// <summary>
+        /// Hide tray icon
+        /// </summary>
+        void HideNotifyIcon();
+
+        /// <summary>
+        /// Show tray icon
+        /// </summary>
+        void ShowNotifyIcon();
     }
 }

@@ -105,6 +105,7 @@ namespace Wox
             cbHideWhenDeactive.IsChecked = _settings.HideWhenDeactive;
             cbDontPromptUpdateMsg.IsChecked = _settings.DontPromptUpdateMsg;
             cbRememberLastLocation.IsChecked = _settings.RememberLastLaunchLocation;
+            cbHideNotifyIcon.IsChecked = _settings.HideNotifyIcon;
             cbIgnoreHotkeysOnFullscreen.IsChecked = _settings.IgnoreHotkeysOnFullscreen;
 
             LoadLanguages();
@@ -211,6 +212,18 @@ namespace Wox
         {
             RemoveApplicationFromStartup();
             _settings.StartWoxOnSystemStartup = false;
+        }
+
+        private void CbHideNotifyIcon_OnChecked(object sender, RoutedEventArgs e)
+        {
+            App.API.HideNotifyIcon();
+            _settings.HideNotifyIcon = true;
+        }
+
+        private void CbHideNotifyIcon_OnUnchecked(object sender, RoutedEventArgs e)
+        {
+            App.API.ShowNotifyIcon();
+            _settings.HideNotifyIcon = false;
         }
 
         private void AddApplicationToStartup()

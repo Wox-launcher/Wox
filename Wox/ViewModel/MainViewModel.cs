@@ -31,6 +31,7 @@ namespace Wox.ViewModel
         private Visibility _progressBarVisibility;
         private Visibility _resultListBoxVisibility;
         private Visibility _mainWindowVisibility;
+        private Visibility _notifyIconVisibility;
 
         private bool _queryHasReturn;
         private Query _lastQuery;
@@ -376,6 +377,17 @@ namespace Wox.ViewModel
             }
         }
 
+        public Visibility NotifyIconVisibility
+        {
+            get { return _notifyIconVisibility; }
+            set
+            {
+                _notifyIconVisibility = value;
+                OnPropertyChanged();
+                NotifyIconVisibilityChanged?.Invoke(this, new EventArgs());
+            }
+        }
+
         public ICommand EscCommand { get; set; }
         public ICommand SelectNextItemCommand { get; set; }
         public ICommand SelectPrevItemCommand { get; set; }
@@ -706,6 +718,7 @@ namespace Wox.ViewModel
 
         public event EventHandler MainWindowVisibilityChanged;
         public event EventHandler CursorMovedToEnd;
+        public event EventHandler NotifyIconVisibilityChanged;
 
         public void OnCursorMovedToEnd()
         {

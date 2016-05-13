@@ -92,11 +92,15 @@ namespace Wox
                     _settings.WindowTop = Top;
                 }
             };
+            vm.NotifyIconVisibilityChanged += (o, e) =>
+            {
+                _notifyIcon.Visible = vm.NotifyIconVisibility.IsVisible();
+            };
         }
 
         private void InitializeNotifyIcon()
         {
-            _notifyIcon = new NotifyIcon { Text = Infrastructure.Wox.Name, Icon = Properties.Resources.app, Visible = true };
+            _notifyIcon = new NotifyIcon { Text = Infrastructure.Wox.Name, Icon = Properties.Resources.app, Visible = !_settings.HideNotifyIcon };
             _notifyIcon.Click += (o, e) => App.API.ShowApp();
             var open = new MenuItem(InternationalizationManager.Instance.GetTranslation("iconTrayOpen"));
             open.Click += (o, e) => App.API.ShowApp();
