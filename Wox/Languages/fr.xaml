@@ -18,6 +18,7 @@
     <system:String x:Key="woxsettings">Paramètres - Wox</system:String>
     <system:String x:Key="general">Général</system:String>
     <system:String x:Key="startWoxOnSystemStartup">Lancer Wox au démarrage du système</system:String>
+    <system:String x:Key="hideOnStartup">Hide Wox on startup</system:String>
     <system:String x:Key="hideWoxWhenLoseFocus">Cacher Wox lors de la perte de focus</system:String>
     <system:String x:Key="dontPromptUpdateMsg">Ne pas afficher le message de mise à jour pour les nouvelles versions</system:String>
     <system:String x:Key="rememberLastLocation">Se souvenir du dernier emplacement de la fenêtre</system:String>

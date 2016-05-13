@@ -53,6 +53,16 @@ namespace Wox
         {
             #region General
 
+            cbHideOnStartup.Checked += (o, e) =>
+            {
+                _settings.HideOnStartup = true;
+            };
+
+            cbHideOnStartup.Unchecked += (o, e) =>
+            {
+                _settings.HideOnStartup = false;
+            };
+
             cbHideWhenDeactive.Checked += (o, e) =>
             {
                 _settings.HideWhenDeactive = true;
@@ -102,6 +112,7 @@ namespace Wox
                 //MainWindow.pnlResult.lbResults.GetBindingExpression(MaxHeightProperty).UpdateTarget();
             };
 
+            cbHideOnStartup.IsChecked = _settings.HideOnStartup;
             cbHideWhenDeactive.IsChecked = _settings.HideWhenDeactive;
             cbDontPromptUpdateMsg.IsChecked = _settings.DontPromptUpdateMsg;
             cbRememberLastLocation.IsChecked = _settings.RememberLastLaunchLocation;
