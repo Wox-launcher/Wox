@@ -28,6 +28,7 @@ namespace Wox.Core.Plugin
             {
                 Method = "query",
                 Parameters = new object[] { query.Search },
+                Keyword = query.ActionKeyword,
                 HttpProxy = HttpProxy.Instance
             };
             //Add -B flag to tell python don't write .py[co] files. Because .pyc contains location infos which will prevent python portable

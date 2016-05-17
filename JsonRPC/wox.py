@@ -14,14 +14,15 @@ class Wox(object):
         self.proxy = rpc_request.get("proxy",{})
         request_method_name = rpc_request.get("method")
         request_parameters = rpc_request.get("parameters")
+        request_keyword = rpc_request.get("keyword")
         methods = inspect.getmembers(self, predicate=inspect.ismethod)
 
         request_method = dict(methods)[request_method_name]
-        results = request_method(*request_parameters)
+        results = request_method(*request_parameters, request_keyword)
         if request_method_name == "query":
             print(json.dumps({"result": results}))
 
-    def query(self,query):
+    def query(self,query,keyword):
         """
         sub class need to override this method
         """
