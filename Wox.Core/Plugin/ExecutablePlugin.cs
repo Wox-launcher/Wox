@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using Wox.Core.UserSettings;
 using Wox.Plugin;
+using Wox.Infrastructure.Logger;
 
 namespace Wox.Core.Plugin
 {
@@ -28,6 +29,7 @@ namespace Wox.Core.Plugin
             {
                 Method = "query",
                 Parameters = new object[] { query.Search },
+                Keyword = query.ActionKeyword,
                 HttpProxy = HttpProxy.Instance
             };
 

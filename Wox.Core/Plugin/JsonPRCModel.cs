@@ -51,6 +51,8 @@ namespace Wox.Core.Plugin
 
         public object[] Parameters { get; set; }
 
+        public string Keyword { get; set; }
+
         public override string ToString()
         {
             string rpc = string.Empty;
@@ -58,11 +60,11 @@ namespace Wox.Core.Plugin
             {
                 string parameters = Parameters.Aggregate("[", (current, o) => current + (GetParamterByType(o) + ","));
                 parameters = parameters.Substring(0, parameters.Length - 1) + "]";
-                rpc = string.Format(@"{{\""method\"":\""{0}\"",\""parameters\"":{1}", Method, parameters);
+                rpc = string.Format(@"{{\""method\"":\""{0}\"",\""parameters\"":{1}, \""keyword\"":\""{2}\""", Method, parameters, Keyword);
             }
             else
             {
-                rpc = string.Format(@"{{\""method\"":\""{0}\"",\""parameters\"":[]", Method);
+                rpc = string.Format(@"{{\""method\"":\""{0}\"",\""parameters\"":[], \""keyword\"":\""{1}\""", Method, Keyword);
             }
 
             return rpc;
