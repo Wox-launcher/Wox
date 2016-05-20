@@ -28,59 +28,86 @@ namespace Wox.Plugin.Express
 
         public List<Result> Query(Query query)
         {
-            if (context.CurrentPluginMetadata.ActionKeywords.Count > 0)
+            // 格式 key 快递 单号
+            string[] _info = query.RawQuery.Split(' ');
+
+            // 需要查询的信息
+            //string[] _info = _str.Split(' ');
+
+            List<Result> _list = new List<Result>();
+
+            // 判断快递名称
+            var _str = query.RawQuery.Substring(m_keyword.Length + 1);
+
+            // 格式匹配
+            if (_info.Length < 2)
             {
-                m_keyword = context.CurrentPluginMetadata.ActionKeywords[0];
+                _list.Add(new Result
+                {
+                    Title = __TIPS,
+                    SubTitle = "",
+                    IcoPath = "txt",
+                    Score = 20,
+                    Action = e =>
+                    {
+                        return false;
+                    }
+                });
+
+                return _list;
             }
-
-            if (query.RawQuery.StartsWith(m_keyword + " "))
+            else
             {
-                List<Result> _list = new List<Result>();
+                // 查询快递id
+                string _id = _info[1];
 
-                // 判断快递名称
-                var _str = query.RawQuery.Substring(m_keyword.Length + 1);
+                // 快递公司名
+                string _expressName = "未知快递";
 
-                // 需要查询的信息
-                string[] _info = _str.Split(' ');
+                bool _find = false;
 
-                if (_info.Length < 2 ||
-                    _info[1].Equals(""))
+                foreach (ExpressDataInfo _i in m_listInfo)
                 {
-                    _list.Add(new Result
+                    if (_id.Equals(_i.Key))
                     {
-                        Title = __TIPS,
-                        SubTitle = "",
-                        IcoPath = "txt",
-                        Score = 20,
-                        Action = e =>
-                        {
-                            return false;
-                        }
-                    });
+                        _id = _i.Key;
+                        _expressName = _i.Name;
 
-                    return _list;
-                }
-                else
-                {
-                    // 查询快递id
-                    string _id = _info[0];
+                        _find = true;
 
-                    // 快递公司名
-                    string _expressName = "未知快递";
-
-                    foreach (ExpressDataInfo i in m_listInfo)
-                    {
-                        if (_id.Equals(i.Key))
-                        {
-                            _id = i.Key;
-                            _expressName = i.Name;
-
-                            break;
-                        }
+                        break;
                     }
 
-                    // 单号
-                    string _order = _info[1];
+                    // 模糊查找
+                    if (_i.Key.Contains(_id) ||
+                        _i.Name.Contains(_id))
+                    {
+                        _list.Add(new Result
+                        {
+                            Title = "查询:" + _i.Key + "_" + _i.Name,
+                            SubTitle = "点击选取",
+                            IcoPath = "txt",
+                            Score = 20,
+                            Action = e =>
+                            {
+                                // 重新拼接字符串
+                                this.context.API.ChangeQuery(_info[0] + " " + _i.Key + " ");
+
+                                return false;
+                            }
+                        });
+                    }
+                }
+
+                // 根据中文找对应key
+                if (!_find)
+                {
+                    return _list;
+                }
+
+                if (_info.Length > 2)
+                {
+                    string _order = _info[2];
 
                     // 开始查询
                     if (_order.Length > 0)
@@ -93,18 +120,30 @@ namespace Wox.Plugin.Express
                             Score = 20,
                             Action = e =>
                             {
-                                _list.AddRange(QueryExpress(_id, _order, query));
+                                QueryExpress(_id, _order, query);
 
                                 return false;
                             }
                         });
                     }
-
-                    return _list;
                 }
-            }
+                else
+                {
+                    _list.Add(new Result
+                    {
+                        Title = @"输入需要查询的单号",
+                        SubTitle = "",
+                        IcoPath = "txt",
+                        Score = 20,
+                        Action = e =>
+                        {
+                            return false;
+                        }
+                    });
+                }
 
-            return new List<Result>();
+                return _list;
+            }
         }
 
         public void Init(PluginInitContext context)

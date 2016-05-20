@@ -1,728 +1,286 @@
 ﻿[
   {
-    "expresskey": "aae",
-    "expressname": "AAE快递",
-    "expresswebsite": "http:\/\/cn.aaeweb.com",
-    "expresstelephone": "400-610-0400"
-  },
-  {
-    "expresskey": "axd",
-    "expressname": "安信达快递",
-    "expresswebsite": "http:\/\/www.anxinda.com",
-    "expresstelephone": "021-54224681"
-  },
-  {
-    "expresskey": "aj",
-    "expressname": "安捷快递",
-    "expresswebsite": "http:\/\/www.anjelex.com\/index.asp",
-    "expresstelephone": "400-056-5656"
-  },
-  {
-    "expresskey": "xindan",
-    "expressname": "新蛋物流",
-    "expresswebsite": "http:\/\/www.ozzo.com.cn",
-    "expresstelephone": "400-820-4400"
-  },
-  {
-    "expresskey": "bfdf",
-    "expressname": "百福东方",
-    "expresswebsite": "http:\/\/www.ees.com.cn",
-    "expresstelephone": "010-57169000"
-  },
-  {
-    "expresskey": "bgpyghx",
-    "expressname": "包裹、平邮、挂号信",
-    "expresswebsite": "http:\/\/yjcx.chinapost.com.cn",
-    "expresstelephone": "11185"
-  },
-  {
-    "expresskey": "cxwl",
-    "expressname": "传喜物流",
-    "expresswebsite": "http:\/\/www.cxcod.com",
-    "expresstelephone": "400-777-5656"
-  },
-  {
-    "expresskey": "chengguang",
-    "expressname": "程光快递",
-    "expresswebsite": "http:\/\/www.flyway.co.nz",
-    "expresstelephone": "0064 9 948 2780"
-  },
-  {
-    "expresskey": "coe",
-    "expressname": "东方快递",
-    "expresswebsite": "http:\/\/www.coe.com.hk",
-    "expresstelephone": "0755-83575000"
-  },
-  {
-    "expresskey": "ctwl",
-    "expressname": "长通物流",
-    "expresswebsite": "http:\/\/www.hnct56.com",
-    "expresstelephone": "0731-6652 0111"
-  },
-  {
-    "expresskey": "cszx",
-    "expressname": "城市之星物流",
-    "expresswebsite": "http:\/\/www.socl.net",
-    "expresstelephone": "400-628-5168"
-  },
-  {
-    "expresskey": "cs",
-    "expressname": "城市100快递",
-    "expresswebsite": "http:\/\/www.bjcs100.com",
-    "expresstelephone": "010-52932760"
-  },
-  {
-    "expresskey": "chuanzhi",
-    "expressname": "传志快递",
-    "expresswebsite": "http:\/\/www.chuanzhi.cn",
-    "expresstelephone": "上海(021-56325555 56625555) 北京(010-67035843) 广州(020-86380996)"
-  },
-  {
-    "expresskey": "debang",
-    "expressname": "德邦物流",
-    "expresswebsite": "http:\/\/www.deppon.com",
-    "expresstelephone": "400-830-5555"
-  },
-  {
-    "expresskey": "dhl",
-    "expressname": "DHL快递",
-    "expresswebsite": "http:\/\/www.cn.dhl.com",
-    "expresstelephone": "800-810-8000"
-  },
-  {
-    "expresskey": "dpex",
-    "expressname": "DPEX快递",
-    "expresswebsite": "http:\/\/www.szdpex.com.cn",
-    "expresstelephone": "021-64659883"
-  },
-  {
-    "expresskey": "dsf",
-    "expressname": "递四方速递",
-    "expresswebsite": "http:\/\/www.4px.com",
-    "expresstelephone": "0755-33933895"
-  },
-  {
-    "expresskey": "dtwl",
-    "expressname": "大田物流",
-    "expresswebsite": "http:\/\/www.dtw.com.cn",
-    "expresstelephone": "010-59237777"
-  },
-  {
-    "expresskey": "dywl",
-    "expressname": "大洋物流",
-    "expresswebsite": "http:\/\/www.dayang365.cn",
-    "expresstelephone": "400-820-0088"
-  },
-  {
-    "expresskey": "ds",
-    "expressname": "D速快递",
-    "expresswebsite": "http:\/\/www.d-exp.cn",
-    "expresstelephone": "0531-88636363"
-  },
-  {
-    "expresskey": "ems",
-    "expressname": "EMS快递",
-    "expresswebsite": "http:\/\/www.ems.com.cn",
-    "expresstelephone": "11183"
-  },
-  {
-    "expresskey": "fedex",
-    "expressname": "FEDEX国际快递",
-    "expresswebsite": "http:\/\/fedex.com\/cn",
-    "expresstelephone": "400-886-1888"
-  },
-  {
-    "expresskey": "fedexcn",
-    "expressname": "FEDEX国内快递",
-    "expresswebsite": "http:\/\/cndxp.apac.fedex.com",
-    "expresstelephone": "400-886-1888"
-  },
-  {
-    "expresskey": "fkd",
-    "expressname": "飞康达快递",
-    "expresswebsite": "http:\/\/www.fkd.com.cn",
-    "expresstelephone": "010-84223376,010-84223378"
-  },
-  {
-    "expresskey": "fbwl",
-    "expressname": "飞邦物流",
-    "expresswebsite": "http:\/\/121.14.118.50:8050",
-    "expresstelephone": "0769-89066698"
-  },
-  {
-    "expresskey": "feibao",
-    "expressname": "飞豹快递",
-    "expresswebsite": "http:\/\/www.ztky.com\/feibao\/KJCX.aspx",
-    "expresstelephone": "400-000-5566"
-  },
-  {
-    "expresskey": "feihu",
-    "expressname": "飞狐快递",
-    "expresswebsite": "http:\/\/www.feihukuaidi.com",
-    "expresstelephone": "010-51389299"
-  },
-  {
-    "expresskey": "gsdwl",
-    "expressname": "共速达物流",
-    "expresswebsite": "http:\/\/www.gongsuda.com",
-    "expresstelephone": "400-111-0005"
-  },
-  {
-    "expresskey": "guotong",
-    "expressname": "国通快递",
-    "expresswebsite": "http:\/\/www.gto365.com",
-    "expresstelephone": "4006-773-777"
-  },
-  {
-    "expresskey": "gznd",
-    "expressname": "港中能达",
-    "expresswebsite": "http:\/\/www.nd56.com",
-    "expresstelephone": "400-620-1111"
-  },
-  {
-    "expresskey": "tdhy",
-    "expressname": "天地华宇",
-    "expresswebsite": "http:\/\/www.hoau.net",
-    "expresstelephone": "400-808-6666"
-  },
-  {
-    "expresskey": "huitong",
-    "expressname": "汇通快递",
-    "expresswebsite": "http:\/\/www.htky365.com",
-    "expresstelephone": "021-62963636"
-  },
-  {
-    "expresskey": "tiantian",
-    "expressname": "天天快递",
-    "expresswebsite": "http:\/\/www.ttkdex.com",
-    "expresstelephone": "400-820-8198"
-  },
-  {
-    "expresskey": "henglu",
-    "expressname": "恒路物流",
-    "expresswebsite": "http:\/\/www.e-henglu.com",
-    "expresstelephone": "400-182-6666"
-  },
-  {
-    "expresskey": "huiqiang",
-    "expressname": "汇强快递",
-    "expresswebsite": "http:\/\/www.hq-ex.com",
-    "expresstelephone": "400-000-0177"
-  },
-  {
-    "expresskey": "hxlwl",
-    "expressname": "华夏龙物流",
-    "expresswebsite": "http:\/\/www.chinadragon56.com",
-    "expresstelephone": "0755-61211999"
-  },
-  {
-    "expresskey": "hswl",
-    "expressname": "昊盛物流",
-    "expresswebsite": "http:\/\/www.hs-express.cn",
-    "expresstelephone": "400-186-5566"
-  },
-  {
-    "expresskey": "jldt",
-    "expressname": "嘉里大通物流",
-    "expresswebsite": "http:\/\/www.kerryeas.com",
-    "expresstelephone": "400-610-3188"
-  },
-  {
-    "expresskey": "jywl",
-    "expressname": "佳怡物流",
-    "expresswebsite": "http:\/\/www.jiayi56.com",
-    "expresstelephone": "400-660-5656"
-  },
-  {
-    "expresskey": "jiaji",
-    "expressname": "佳吉快运",
-    "expresswebsite": "http:\/\/www.jiaji.com",
-    "expresstelephone": "400-820-5566"
-  },
-  {
-    "expresskey": "jiayunmei",
-    "expressname": "加运美快递",
-    "expresswebsite": "http:\/\/www.tms56.com",
-    "expresstelephone": "0769-8551-5555"
-  },
-  {
-    "expresskey": "jingguang",
-    "expressname": "京广快递",
-    "expresswebsite": "http:\/\/www.kke.com.hk",
-    "expresstelephone": "0769-83660666-60"
-  },
-  {
-    "expresskey": "jinyue",
-    "expressname": "晋越快递",
-    "expresswebsite": "http:\/\/www.byondex.com",
-    "expresstelephone": "0769-85158039"
-  },
-  {
-    "expresskey": "kuaijie",
-    "expressname": "快捷快递",
-    "expresswebsite": "http:\/\/www.fastexpress.com.cn",
-    "expresstelephone": "400-830-4888"
-  },
-  {
-    "expresskey": "klwl",
-    "expressname": "康力物流",
-    "expresswebsite": "http:\/\/www.kangliex.com",
-    "expresstelephone": "400-156-5156"
-  },
-  {
-    "expresskey": "longbang",
-    "expressname": "龙邦快递",
-    "expresswebsite": "http:\/\/www.lbex.com.cn",
-    "expresstelephone": "021-39283333"
-  },
-  {
-    "expresskey": "lianhaotong",
-    "expressname": "联昊通快递",
-    "expresswebsite": "http:\/\/www.lhtex.com.cn",
-    "expresstelephone": "0769-88620000"
-  },
-  {
-    "expresskey": "lejiedi",
-    "expressname": "乐捷递快递",
-    "expresswebsite": "http:\/\/www.ljd360.com",
-    "expresstelephone": "400-618-1400"
-  },
-  {
-    "expresskey": "lijisong",
-    "expressname": "立即送",
-    "expresswebsite": "http:\/\/www.cdljs.com",
-    "expresstelephone": "400-028-5666"
-  },
-  {
-    "expresskey": "minbang",
-    "expressname": "民邦快递",
-    "expresswebsite": "http:\/\/www.ywfex.com",
-    "expresstelephone": "0769-81515303"
-  },
-  {
-    "expresskey": "minhang",
-    "expressname": "民航快递",
-    "expresswebsite": "http:\/\/www.cae.com.cn",
-    "expresstelephone": "400-817-4008"
-  },
-  {
-    "expresskey": "meiguo",
-    "expressname": "美国快递",
-    "expresswebsite": "http:\/\/www.us-ex.com",
-    "expresstelephone": "888-611-1888"
-  },
-  {
-    "expresskey": "ocs",
-    "expressname": "OCS快递",
-    "expresswebsite": "http:\/\/www.ocschina.com",
-    "expresstelephone": "400-118-8588"
-  },
-  {
-    "expresskey": "pinganda",
-    "expressname": "平安达快递",
-    "expresswebsite": "http:\/\/www.padtf.com",
-    "expresstelephone": "4006-230-009"
-  },
-  {
-    "expresskey": "quanfeng",
-    "expressname": "全峰快递",
-    "expresswebsite": "http:\/\/www.qfkd.com.cn",
-    "expresstelephone": "400-100-0001"
-  },
-  {
-    "expresskey": "quanyi",
-    "expressname": "全一快递",
-    "expresswebsite": "http:\/\/www.unitop-apex.com",
-    "expresstelephone": "400-663-1111"
-  },
-  {
-    "expresskey": "quanchen",
-    "expressname": "全晨快递",
-    "expresswebsite": "http:\/\/www.qckd.net",
-    "expresstelephone": "0769-82026703"
-  },
-  {
-    "expresskey": "quanritong",
-    "expressname": "全日通快递",
-    "expresswebsite": "http:\/\/www.at-express.com",
-    "expresstelephone": "020-86298999"
-  },
-  {
-    "expresskey": "rufengda",
-    "expressname": "如风达快递",
-    "expresswebsite": "http:\/\/www.rufengda.com",
-    "expresstelephone": "400-010-6660"
+    "expresskey": "yuantong",
+    "expressname": "圆通速递"
   },
   {
     "expresskey": "shentong",
-    "expressname": "申通快递",
-    "expresswebsite": "http:\/\/www.sto.cn",
-    "expresstelephone": "400-889-5543"
-  },
-  {
-    "expresskey": "shunfeng",
-    "expressname": "顺丰快递",
-    "expresswebsite": "http:\/\/www.sf-express.com",
-    "expresstelephone": "400-811-1111"
-  },
-  {
-    "expresskey": "suer",
-    "expressname": "速尔快递",
-    "expresswebsite": "http:\/\/www.sure56.com",
-    "expresstelephone": "400-882-2168"
-  },
-  {
-    "expresskey": "haihong",
-    "expressname": "山东海红快递",
-    "expresswebsite": "http:\/\/www.haihongwangsong.com",
-    "expresstelephone": "400-632-9988"
-  },
-  {
-    "expresskey": "santai",
-    "expressname": "三态速递",
-    "expresswebsite": "http:\/\/www.sfcservice.com",
-    "expresstelephone": "400-881-8106"
-  },
-  {
-    "expresskey": "shenghui",
-    "expressname": "盛辉物流",
-    "expresswebsite": "http:\/\/www.shenghui56.com",
-    "expresstelephone": "4008-222-222"
-  },
-  {
-    "expresskey": "shengfeng",
-    "expressname": "盛丰物流",
-    "expresswebsite": "http:\/\/www.sfwl.com.cn",
-    "expresstelephone": "0591-83621111"
-  },
-  {
-    "expresskey": "shengan",
-    "expressname": "圣安物流",
-    "expresswebsite": "http:\/\/www.sa56.net",
-    "expresstelephone": "4006-618-169"
-  },
-  {
-    "expresskey": "saiaodi",
-    "expressname": "赛澳递",
-    "expresswebsite": "http:\/\/www.51cod.com ",
-    "expresstelephone": "4000-345-888"
-  },
-  {
-    "expresskey": "tnt",
-    "expressname": "TNT快递",
-    "expresswebsite": "http:\/\/www.tnt.com.cn",
-    "expresstelephone": "800-820-9868"
-  },
-  {
-    "expresskey": "thtx",
-    "expressname": "通和天下物流",
-    "expresswebsite": "http:\/\/www.cod56.com",
-    "expresstelephone": "400-0056-516"
-  },
-  {
-    "expresskey": "tcwl",
-    "expressname": "通成物流",
-    "expresswebsite": "http:\/\/www.tc56.com",
-    "expresstelephone": "021-36161199-8021"
-  },
-  {
-    "expresskey": "ups",
-    "expressname": "UPS国际快递",
-    "expresswebsite": "http:\/\/www.ups.com\/cn",
-    "expresstelephone": "400-820-8388"
-  },
-  {
-    "expresskey": "yousu",
-    "expressname": "优速快递",
-    "expresswebsite": "http:\/\/www.uc56.com",
-    "expresstelephone": "400-1111-119"
-  },
-  {
-    "expresskey": "weibang",
-    "expressname": "伟邦快递",
-    "expresswebsite": "http:\/\/www.scsexpress.com\/?char_set=gb",
-    "expresstelephone": "021-64212098\/021-62629520"
-  },
-  {
-    "expresskey": "weitepai",
-    "expressname": "微特派快递",
-    "expresswebsite": "http:\/\/www.vtepai.com",
-    "expresstelephone": "400-606-0909"
-  },
-  {
-    "expresskey": "wxwl",
-    "expressname": "万象物流",
-    "expresswebsite": "http:\/\/www.ewinshine.com",
-    "expresstelephone": "400-820-8088"
-  },
-  {
-    "expresskey": "xfwl",
-    "expressname": "信丰物流",
-    "expresswebsite": "http:\/\/www.xf-express.com.cn",
-    "expresstelephone": "400-830-6333"
-  },
-  {
-    "expresskey": "xinbang",
-    "expressname": "新邦物流",
-    "expresswebsite": "http:\/\/www.xbwl.cn",
-    "expresstelephone": "4008-000-222"
-  },
-  {
-    "expresskey": "yuantong",
-    "expressname": "圆通快递",
-    "expresswebsite": "http:\/\/www.yto.net.cn",
-    "expresstelephone": "021-69777888\/999"
-  },
-  {
-    "expresskey": "yunda",
-    "expressname": "韵达快递",
-    "expresswebsite": "http:\/\/www.yundaex.com",
-    "expresstelephone": "400-821-6789"
-  },
-  {
-    "expresskey": "yibang",
-    "expressname": "一邦快递",
-    "expresswebsite": "http:\/\/www.ebon-express.com\/",
-    "expresstelephone": "4008-000-666"
-  },
-  {
-    "expresskey": "yuntong",
-    "expressname": "运通快递",
-    "expresswebsite": "http:\/\/www.ytkd168.com",
-    "expresstelephone": "0769-81156999"
-  },
-  {
-    "expresskey": "yzjc",
-    "expressname": "元智捷诚快递",
-    "expresswebsite": "http:\/\/www.yjkd.com",
-    "expresstelephone": "400-081-2345"
-  },
-  {
-    "expresskey": "yuanfeihang",
-    "expressname": "原飞航快递",
-    "expresswebsite": "http:\/\/www.yfhex.com",
-    "expresstelephone": "0755-29778899"
-  },
-  {
-    "expresskey": "yafeng",
-    "expressname": "亚风快递",
-    "expresswebsite": "http:\/\/www.broad-asia.net",
-    "expresstelephone": "400-628-0018"
-  },
-  {
-    "expresskey": "ycwl",
-    "expressname": "远成物流",
-    "expresswebsite": "http:\/\/www.ycgwl.com",
-    "expresstelephone": "400-820-1646"
-  },
-  {
-    "expresskey": "yuefeng",
-    "expressname": "越丰快递",
-    "expresswebsite": "http:\/\/www.yfexpress.com.hk",
-    "expresstelephone": "852-23909969"
+    "expressname": "申通快递"
   },
   {
     "expresskey": "zhongtong",
-    "expressname": "中通快递",
-    "expresswebsite": "http:\/\/www.zto.cn",
-    "expresstelephone": "021-39777777"
+    "expressname": "中通快递"
   },
   {
-    "expresskey": "zjs",
-    "expressname": "宅急送快递",
-    "expresswebsite": "http:\/\/www.zjs.com.cn",
-    "expresstelephone": "400-6789-000"
+    "expresskey": "yunda",
+    "expressname": "韵达快递"
   },
   {
-    "expresskey": "zhongtie",
-    "expressname": "中铁快运",
-    "expresswebsite": "http:\/\/www.ztky.com ",
-    "expresstelephone": "400-000-5566"
+    "expresskey": "shunfeng",
+    "expressname": "顺丰速运"
   },
   {
-    "expresskey": "zhongyou",
-    "expressname": "中邮物流",
-    "expresswebsite": "http:\/\/www.cnpl.com.cn",
-    "expresstelephone": "11183"
+    "expresskey": "zhaijisong",
+    "expressname": "宅急送"
   },
   {
-    "expresskey": "zmkm",
-    "expressname": "芝麻开门",
-    "expresswebsite": "http:\/\/www.zmkmex.com",
-    "expresstelephone": "4001-056-056,88056056"
+    "expresskey": "ems",
+    "expressname": "EMS"
   },
   {
-    "expresskey": "zzjh",
-    "expressname": "郑州建华快递",
-    "expresswebsite": "http:\/\/www.zzjhtd.com",
-    "expresstelephone": "0371-65995266"
+    "expresskey": "tiantian",
+    "expressname": "天天快递"
   },
   {
-    "expresskey": "ztwy",
-    "expressname": "中天万运快递",
-    "expresswebsite": "http:\/\/www.wanyun56.cn",
-    "expresstelephone": "0531-68850629"
+    "expresskey": "suer",
+    "expressname": "速尔快递"
   },
   {
-    "expresskey": "jingdong",
-    "expressname": "京东快递",
-    "expresswebsite": "http:\/\/jd-ex.com\/",
-    "expresstelephone": "400-603-3600"
+    "expresskey": "youshuwuliu",
+    "expressname": "优速物流"
   },
   {
-    "expresskey": "zengyi",
-    "expressname": "增益快递",
-    "expresswebsite": "http:\/\/www.zeny-express.com",
-    "expresstelephone": "4008-456-789"
+    "expresskey": "quanfengkuaidi",
+    "expressname": "全峰快递"
   },
   {
-    "expresskey": "chengji",
-    "expressname": "城际快递",
-    "expresswebsite": "http:\/\/chengji-express.com\/",
-    "expresstelephone": "4000-523-525"
+    "expresskey": "debangwuliu",
+    "expressname": "德邦"
   },
   {
-    "expresskey": "stwl",
-    "expressname": "速通物流",
-    "expresswebsite": "http:\/\/www.sut56.com\/",
-    "expresstelephone": "4006561185"
+    "expresskey": "aae",
+    "expressname": "AAE全球专递"
   },
   {
-    "expresskey": "guada",
-    "expressname": "冠达快递",
-    "expresswebsite": "http:\/\/www.gda-e.com.cn\/",
-    "expresstelephone": "400-990-0088"
+    "expresskey": "auspost",
+    "expressname": "澳大利亚邮政"
   },
   {
-    "expresskey": "huaqi",
-    "expressname": "华企快递",
-    "expresswebsite": "http:\/\/www.hqkd.cn\/",
-    "expresstelephone": "400-806-8111"
+    "expresskey": "aramex",
+    "expressname": "Aramex"
   },
   {
-    "expresskey": "anwl",
-    "expressname": "安能物流",
-    "expresswebsite": "http:\/\/www.ane56.com\/",
-    "expresstelephone": "40010-40088"
+    "expresskey": "huitongkuaidi",
+    "expressname": "百世汇通"
   },
   {
-    "expresskey": "bgn",
-    "expressname": "布谷鸟快递",
-    "expresswebsite": "http:\/\/www.cuckooexpress.com\/",
-    "expresstelephone": "400-100-0533"
+    "expresskey": "youzhengguonei",
+    "expressname": "包裹信件"
   },
   {
-    "expresskey": "newl",
-    "expressname": "尼尔物流",
-    "expresswebsite": "http:\/\/www.nell.cn\/",
-    "expresstelephone": "400-000-5611"
+    "expresskey": "bpost",
+    "expressname": "比利时邮政"
   },
   {
-    "expresskey": "fanyu",
-    "expressname": "凡宇快递",
-    "expresswebsite": "http:\/\/www.fanyu56.com.cn",
-    "expresstelephone": "400-658-0358"
+    "expresskey": "citylink",
+    "expressname": "City-Link"
   },
   {
-    "expresskey": "shiyun",
-    "expressname": "世运快递",
-    "expresswebsite": "http:\/\/www.sehoex.com\/",
-    "expresstelephone": "400-666-1111"
+    "expresskey": "coe",
+    "expressname": "COE"
   },
   {
-    "expresskey": "rrs",
-    "expressname": "日日顺物流",
-    "expresswebsite": "http:\/\/www.rrs.com\/",
-    "expresstelephone": "400-999-999"
+    "expresskey": "dhl",
+    "expressname": "DHL中国件"
   },
   {
-    "expresskey": "lanhu",
-    "expressname": "蓝狐快递",
-    "expresswebsite": "http:\/\/www.lanhukd.com\/",
-    "expresstelephone": "4000661646"
+    "expresskey": "dhlde",
+    "expressname": "DHL德国件"
   },
   {
-    "expresskey": "ddwl",
-    "expressname": "大达物流",
-    "expresswebsite": "http:\/\/www.idada56.com\/",
-    "expresstelephone": "400-098-5656"
+    "expresskey": "disifang",
+    "expressname": "递四方"
   },
   {
-    "expresskey": "yad",
-    "expressname": "源安达快递",
-    "expresswebsite": "http:\/\/www.yadex.com.cn\/",
-    "expresstelephone": "0769-85021875"
+    "expresskey": "emsguoji",
+    "expressname": "EMS国际件"
   },
   {
-    "expresskey": "yxwl",
-    "expressname": "宇鑫物流",
-    "expresswebsite": "http:\/\/www.yx56.cn",
-    "expresstelephone": "0371-66378798\/99"
+    "expresskey": "fedex",
+    "expressname": "FedEx国际件"
   },
   {
-    "expresskey": "krwl",
-    "expressname": "宽容物流",
-    "expresswebsite": "http:\/\/www.krwl-sh.com\/",
-    "expresstelephone": "400-820-2719"
+    "expresskey": "vancl",
+    "expressname": "凡客配送"
   },
   {
-    "expresskey": "feiyang",
-    "expressname": "飞洋快递",
-    "expresswebsite": "www.express.shipgce.com",
-    "expresstelephone": "1-877-387-9799 \/ 626-527-5800"
+    "expresskey": "fanyukuaidi",
+    "expressname": "凡宇快递"
   },
   {
-    "expresskey": "gdems",
-    "expressname": "广东ems快递",
-    "expresswebsite": "http:\/\/www.gdems.com\/",
-    "expresstelephone": "11183"
+    "expresskey": "fedexcn",
+    "expressname": "Fedex"
   },
   {
-    "expresskey": "wanbo",
-    "expressname": "万博快递",
-    "expresswebsite": "http:\/\/www.wanboex.cn",
-    "expresstelephone": "0311-83035553"
+    "expresskey": "fedexus",
+    "expressname": "FedEx美国件"
   },
   {
-    "expresskey": "meilong",
-    "expressname": "美龙快递",
-    "expresswebsite": "http:\/\/www.mjexp.com\/",
-    "expresstelephone": "323-208-9848"
+    "expresskey": "guotongkuaidi",
+    "expressname": "国通快递"
   },
   {
-    "expresskey": "guangtong",
-    "expressname": "广通速递",
-    "expresswebsite": "http:\/\/www.gtongsudi.com\/",
-    "expresstelephone": "400-080-6369"
+    "expresskey": "ganzhongnengda",
+    "expressname": "能达速递"
   },
   {
-    "expresskey": "fengda",
-    "expressname": "丰达快递",
-    "expresswebsite": "http:\/\/www.fd168.com.cn",
-    "expresstelephone": "400-113-6666"
+    "expresskey": "gongsuda",
+    "expressname": "共速达"
   },
   {
-    "expresskey": "xlyt",
-    "expressname": "祥龙运通",
-    "expresswebsite": "http:\/\/www.ldl.com.cn\/",
-    "expresstelephone": "4008-908-908"
+    "expresskey": "koreapost",
+    "expressname": "韩国邮政"
   },
   {
-    "expresskey": "gjbg",
-    "expressname": "国际包裹",
-    "expresswebsite": "http:\/\/intmail.183.com.cn\/",
-    "expresstelephone": "11183"
+    "expresskey": "huaqikuaiyun",
+    "expressname": "华企快运"
   },
   {
-    "expresskey": "yitongda",
-    "expressname": "易通达",
-    "expresswebsite": "http:\/\/www.etd365.com\/",
-    "expresstelephone": "0898-65339299"
+    "expresskey": "jiajiwuliu",
+    "expressname": "佳吉快运"
   },
   {
-    "expresskey": "gtsd",
-    "expressname": "高铁速递",
-    "expresswebsite": "http:\/\/www.hre-e.com\/",
-    "expresstelephone": "400-999-7777"
+    "expresskey": "jd",
+    "expressname": "京东快递"
+  },
+  {
+    "expresskey": "canpost",
+    "expressname": "加拿大邮政"
+  },
+  {
+    "expresskey": "jiayunmeiwuliu",
+    "expressname": "加运美"
+  },
+  {
+    "expresskey": "jialidatong",
+    "expressname": "嘉里大通"
+  },
+  {
+    "expresskey": "jinguangsudikuaijian",
+    "expressname": "京广速递"
+  },
+  {
+    "expresskey": "kuayue",
+    "expressname": "跨越速递"
+  },
+  {
+    "expresskey": "kuaijiesudi",
+    "expressname": "快捷速递"
+  },
+  {
+    "expresskey": "kuaiyouda",
+    "expressname": "四川快优达"
+  },
+  {
+    "expresskey": "minbangsudi",
+    "expressname": "民邦速递"
+  },
+  {
+    "expresskey": "minghangkuaidi",
+    "expressname": "民航快递"
+  },
+  {
+    "expresskey": "ocs",
+    "expressname": "OCS"
+  },
+  {
+    "expresskey": "ontrac",
+    "expressname": "OnTrac"
+  },
+  {
+    "expresskey": "quanritongkuaidi",
+    "expressname": "全日通"
+  },
+  {
+    "expresskey": "quanyikuaidi",
+    "expressname": "全一快递"
+  },
+  {
+    "expresskey": "quanchenkuaidi",
+    "expressname": "全晨快递"
+  },
+  {
+    "expresskey": "quanjitong",
+    "expressname": "全际通"
+  },
+  {
+    "expresskey": "japanposten",
+    "expressname": "日本邮政"
+  },
+  {
+    "expresskey": "rufengda",
+    "expressname": "如风达"
+  },
+  {
+    "expresskey": "swisspost",
+    "expressname": "瑞士邮政"
+  },
+  {
+    "expresskey": "shenganwuliu",
+    "expressname": "圣安物流"
+  },
+  {
+    "expresskey": "shengfengwuliu",
+    "expressname": "盛丰物流"
+  },
+  {
+    "expresskey": "shenghuiwuliu",
+    "expressname": "盛辉物流"
+  },
+  {
+    "expresskey": "tnt",
+    "expressname": "TNT"
+  },
+  {
+    "expresskey": "ups",
+    "expressname": "UPS"
+  },
+  {
+    "expresskey": "usps",
+    "expressname": "USPS"
+  },
+  {
+    "expresskey": "wanjiawuliu",
+    "expressname": "万家物流"
+  },
+  {
+    "expresskey": "wanxiangwuliu",
+    "expressname": "万象物流"
+  },
+  {
+    "expresskey": "hkpost",
+    "expressname": "香港邮政"
+  },
+  {
+    "expresskey": "xinbangwuliu",
+    "expressname": "新邦物流"
+  },
+  {
+    "expresskey": "xinfengwuliu",
+    "expressname": "信丰物流"
+  },
+  {
+    "expresskey": "youzhengguoji",
+    "expressname": "邮政国际包裹"
+  },
+  {
+    "expresskey": "yuanchengwuliu",
+    "expressname": "远成物流"
+  },
+  {
+    "expresskey": "ytkd",
+    "expressname": "运通中港快递"
+  },
+  {
+    "expresskey": "ztky",
+    "expressname": "中铁物流"
+  },
+  {
+    "expresskey": "zhongyouwuliu",
+    "expressname": "中邮物流"
+  },
+  {
+    "expresskey": "zengyisudi",
+    "expressname": "增益速递"
   }
 ]
