@@ -1,0 +1,286 @@
+﻿[
+  {
+    "expresskey": "yuantong",
+    "expressname": "圆通速递"
+  },
+  {
+    "expresskey": "shentong",
+    "expressname": "申通快递"
+  },
+  {
+    "expresskey": "zhongtong",
+    "expressname": "中通快递"
+  },
+  {
+    "expresskey": "yunda",
+    "expressname": "韵达快递"
+  },
+  {
+    "expresskey": "shunfeng",
+    "expressname": "顺丰速运"
+  },
+  {
+    "expresskey": "zhaijisong",
+    "expressname": "宅急送"
+  },
+  {
+    "expresskey": "ems",
+    "expressname": "EMS"
+  },
+  {
+    "expresskey": "tiantian",
+    "expressname": "天天快递"
+  },
+  {
+    "expresskey": "suer",
+    "expressname": "速尔快递"
+  },
+  {
+    "expresskey": "youshuwuliu",
+    "expressname": "优速物流"
+  },
+  {
+    "expresskey": "quanfengkuaidi",
+    "expressname": "全峰快递"
+  },
+  {
+    "expresskey": "debangwuliu",
+    "expressname": "德邦"
+  },
+  {
+    "expresskey": "aae",
+    "expressname": "AAE全球专递"
+  },
+  {
+    "expresskey": "auspost",
+    "expressname": "澳大利亚邮政"
+  },
+  {
+    "expresskey": "aramex",
+    "expressname": "Aramex"
+  },
+  {
+    "expresskey": "huitongkuaidi",
+    "expressname": "百世汇通"
+  },
+  {
+    "expresskey": "youzhengguonei",
+    "expressname": "包裹信件"
+  },
+  {
+    "expresskey": "bpost",
+    "expressname": "比利时邮政"
+  },
+  {
+    "expresskey": "citylink",
+    "expressname": "City-Link"
+  },
+  {
+    "expresskey": "coe",
+    "expressname": "COE"
+  },
+  {
+    "expresskey": "dhl",
+    "expressname": "DHL中国件"
+  },
+  {
+    "expresskey": "dhlde",
+    "expressname": "DHL德国件"
+  },
+  {
+    "expresskey": "disifang",
+    "expressname": "递四方"
+  },
+  {
+    "expresskey": "emsguoji",
+    "expressname": "EMS国际件"
+  },
+  {
+    "expresskey": "fedex",
+    "expressname": "FedEx国际件"
+  },
+  {
+    "expresskey": "vancl",
+    "expressname": "凡客配送"
+  },
+  {
+    "expresskey": "fanyukuaidi",
+    "expressname": "凡宇快递"
+  },
+  {
+    "expresskey": "fedexcn",
+    "expressname": "Fedex"
+  },
+  {
+    "expresskey": "fedexus",
+    "expressname": "FedEx美国件"
+  },
+  {
+    "expresskey": "guotongkuaidi",
+    "expressname": "国通快递"
+  },
+  {
+    "expresskey": "ganzhongnengda",
+    "expressname": "能达速递"
+  },
+  {
+    "expresskey": "gongsuda",
+    "expressname": "共速达"
+  },
+  {
+    "expresskey": "koreapost",
+    "expressname": "韩国邮政"
+  },
+  {
+    "expresskey": "huaqikuaiyun",
+    "expressname": "华企快运"
+  },
+  {
+    "expresskey": "jiajiwuliu",
+    "expressname": "佳吉快运"
+  },
+  {
+    "expresskey": "jd",
+    "expressname": "京东快递"
+  },
+  {
+    "expresskey": "canpost",
+    "expressname": "加拿大邮政"
+  },
+  {
+    "expresskey": "jiayunmeiwuliu",
+    "expressname": "加运美"
+  },
+  {
+    "expresskey": "jialidatong",
+    "expressname": "嘉里大通"
+  },
+  {
+    "expresskey": "jinguangsudikuaijian",
+    "expressname": "京广速递"
+  },
+  {
+    "expresskey": "kuayue",
+    "expressname": "跨越速递"
+  },
+  {
+    "expresskey": "kuaijiesudi",
+    "expressname": "快捷速递"
+  },
+  {
+    "expresskey": "kuaiyouda",
+    "expressname": "四川快优达"
+  },
+  {
+    "expresskey": "minbangsudi",
+    "expressname": "民邦速递"
+  },
+  {
+    "expresskey": "minghangkuaidi",
+    "expressname": "民航快递"
+  },
+  {
+    "expresskey": "ocs",
+    "expressname": "OCS"
+  },
+  {
+    "expresskey": "ontrac",
+    "expressname": "OnTrac"
+  },
+  {
+    "expresskey": "quanritongkuaidi",
+    "expressname": "全日通"
+  },
+  {
+    "expresskey": "quanyikuaidi",
+    "expressname": "全一快递"
+  },
+  {
+    "expresskey": "quanchenkuaidi",
+    "expressname": "全晨快递"
+  },
+  {
+    "expresskey": "quanjitong",
+    "expressname": "全际通"
+  },
+  {
+    "expresskey": "japanposten",
+    "expressname": "日本邮政"
+  },
+  {
+    "expresskey": "rufengda",
+    "expressname": "如风达"
+  },
+  {
+    "expresskey": "swisspost",
+    "expressname": "瑞士邮政"
+  },
+  {
+    "expresskey": "shenganwuliu",
+    "expressname": "圣安物流"
+  },
+  {
+    "expresskey": "shengfengwuliu",
+    "expressname": "盛丰物流"
+  },
+  {
+    "expresskey": "shenghuiwuliu",
+    "expressname": "盛辉物流"
+  },
+  {
+    "expresskey": "tnt",
+    "expressname": "TNT"
+  },
+  {
+    "expresskey": "ups",
+    "expressname": "UPS"
+  },
+  {
+    "expresskey": "usps",
+    "expressname": "USPS"
+  },
+  {
+    "expresskey": "wanjiawuliu",
+    "expressname": "万家物流"
+  },
+  {
+    "expresskey": "wanxiangwuliu",
+    "expressname": "万象物流"
+  },
+  {
+    "expresskey": "hkpost",
+    "expressname": "香港邮政"
+  },
+  {
+    "expresskey": "xinbangwuliu",
+    "expressname": "新邦物流"
+  },
+  {
+    "expresskey": "xinfengwuliu",
+    "expressname": "信丰物流"
+  },
+  {
+    "expresskey": "youzhengguoji",
+    "expressname": "邮政国际包裹"
+  },
+  {
+    "expresskey": "yuanchengwuliu",
+    "expressname": "远成物流"
+  },
+  {
+    "expresskey": "ytkd",
+    "expressname": "运通中港快递"
+  },
+  {
+    "expresskey": "ztky",
+    "expressname": "中铁物流"
+  },
+  {
+    "expresskey": "zhongyouwuliu",
+    "expressname": "中邮物流"
+  },
+  {
+    "expresskey": "zengyisudi",
+    "expressname": "增益速递"
+  }
+]

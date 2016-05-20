@@ -1,0 +1,12 @@
+{
+  "ID": "D2D2C23B084D422DB66FE0C79D6C2A9H",
+  "ActionKeyword": "kdcx",
+  "Name": "快递查询",
+  "Description": "快递查询",
+  "Author": "ZeaLotSean",
+  "Version": "1.0.0",
+  "Language": "csharp",
+  "Website": "http://www.getwox.com/plugin",
+  "ExecuteFileName": "Wox.Plugin.Express.dll",
+  "IcoPath": "Images\\calculator.png"
+}
