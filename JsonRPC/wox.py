@@ -21,7 +21,7 @@ class Wox(object):
         if request_method_name == "query":
             print(json.dumps({"result": results}))
 
-    def query(self,query):
+    def query(self,*query):
         """
         sub class need to override this method
         """
