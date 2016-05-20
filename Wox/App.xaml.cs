@@ -54,14 +54,26 @@ namespace Wox
                 PluginManager.InitializePlugins(API);
 
                 Current.MainWindow = window;
-                Current.MainWindow.Title = Infrastructure.Wox.Name;
+                Current.MainWindow.Title = Infrastructure.Constant.Wox;
 
                 RegisterExitEvents();
 
+                AutoStartup();
                 AutoUpdates();
 
                 window.Show();
             });
+        }
+
+        private void AutoStartup()
+        {
+            if (_settings.StartWoxOnSystemStartup)
+            {
+                if (!SettingWindow.StartupSet())
+                {
+                    SettingWindow.SetStartup();
+                }
+            }
         }
 
         private void AutoUpdates()

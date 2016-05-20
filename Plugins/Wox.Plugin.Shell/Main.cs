@@ -15,16 +15,17 @@ namespace Wox.Plugin.CMD
 {
     public class CMD : IPlugin, ISettingProvider, IPluginI18n, IContextMenu
     {
+        private const string Image = "Images/shell.png";
         private PluginInitContext context;
         private bool WinRStroked;
         private readonly KeyboardSimulator keyboardSimulator = new KeyboardSimulator(new InputSimulator());
 
-        private readonly CMDHistory _settings;
-        private readonly PluginJsonStorage<CMDHistory> _storage;
+        private readonly Settings _settings;
+        private readonly PluginJsonStorage<Settings> _storage;
 
         public CMD()
         {
-            _storage = new PluginJsonStorage<CMDHistory>();
+            _storage = new PluginJsonStorage<Settings>();
             _settings = _storage.Load();
         }
 
@@ -76,10 +77,10 @@ namespace Wox.Plugin.CMD
                         results.AddRange(autocomplete.ConvertAll(m => new Result
                         {
                             Title = m,
-                            IcoPath = "Images/cmd.png",
+                            IcoPath = Image,
                             Action = c =>
                             {
-                                ExecuteCMD(m);
+                                Execute(m);
                                 return true;
                             }
                         }));
@@ -109,10 +110,10 @@ namespace Wox.Plugin.CMD
                     {
                         Title = m.Key,
                         SubTitle = string.Format(context.API.GetTranslation("wox_plugin_cmd_cmd_has_been_executed_times"), m.Value),
-                        IcoPath = "Images/cmd.png",
+                        IcoPath = Image,
                         Action = c =>
                         {
-                            ExecuteCMD(m.Key);
+                            Execute(m.Key);
                             return true;
                         }
                     };
@@ -128,10 +129,10 @@ namespace Wox.Plugin.CMD
                 Title = cmd,
                 Score = 5000,
                 SubTitle = context.API.GetTranslation("wox_plugin_cmd_execute_through_shell"),
-                IcoPath = "Images/cmd.png",
+                IcoPath = Image,
                 Action = c =>
                 {
-                    ExecuteCMD(cmd);
+                    Execute(cmd);
                     return true;
                 }
             };
@@ -146,35 +147,120 @@ namespace Wox.Plugin.CMD
                 {
                     Title = m.Key,
                     SubTitle = string.Format(context.API.GetTranslation("wox_plugin_cmd_cmd_has_been_executed_times"), m.Value),
-                    IcoPath = "Images/cmd.png",
+                    IcoPath = Image,
                     Action = c =>
                     {
-                        ExecuteCMD(m.Key);
+                        Execute(m.Key);
                         return true;
                     }
                 }).Take(5);
             return history.ToList();
         }
 
-        private void ExecuteCMD(string cmd, bool runAsAdministrator = false)
+        private void Execute(string command, bool runAsAdministrator = false)
         {
-            var arguments = _settings.LeaveCmdOpen ? $"/k {cmd}" : $"/c {cmd} & pause";
-            var info = new ProcessStartInfo
+            command = command.Trim();
+            command = Environment.ExpandEnvironmentVariables(command);
+
+            ProcessStartInfo info;
+            if (_settings.Shell == Shell.CMD)
             {
-                UseShellExecute = true,
-                FileName = "cmd.exe",
-                WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                Arguments = arguments,
-                Verb = runAsAdministrator ? "runas" : ""
-            };
+                var arguments = _settings.LeaveShellOpen ? $"/k \"{command}\"" : $"/c \"{command}\" & pause";
+                info = new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = arguments,
+                };
+            }
+            else if (_settings.Shell == Shell.Powershell)
+            {
+                string arguments;
+                if (_settings.LeaveShellOpen)
+                {
+                    arguments = $"-NoExit \"{command}\"";
+                }
+                else
+                {
+                    arguments = $"\"{command} ; Read-Host -Prompt \\\"Press Enter to continue\\\"\"";
+                }
+                info = new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = arguments
+                };
+            }
+            else if (_settings.Shell == Shell.RunCommand)
+            {
+                var parts = command.Split(new[] {' '}, 2);
+                if (parts.Length == 2)
+                {
+                    var filename = parts[0];
+                    if (ExistInPath(filename))
+                    {
+                        var arguemtns = parts[1];
+                        info = new ProcessStartInfo
+                        {
+                            FileName = filename,
+                            Arguments = arguemtns
+                        };
+                    }
+                    else
+                    {
+                        info = new ProcessStartInfo(command);
+                    }
+                }
+                else
+                {
+                    info = new ProcessStartInfo(command);
+                }
+            }
+            else
+            {
+                return;
+            }
+
+
+            info.UseShellExecute = true;
+            info.WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            info.Verb = runAsAdministrator ? "runas" : "";
+
             try
             {
                 Process.Start(info);
-                _settings.AddCmdHistory(cmd);
+                _settings.AddCmdHistory(command);
             }
             catch (FileNotFoundException e)
             {
                 MessageBox.Show($"Command not found: {e.Message}");
+            }
+        }
+
+        private bool ExistInPath(string filename)
+        {
+            if (File.Exists(filename))
+            {
+                return true;
+            }
+            else
+            {
+                var values = Environment.GetEnvironmentVariable("PATH");
+                if (values != null)
+                {
+                    foreach (var path in values.Split(';'))
+                    {
+                        var path1 = Path.Combine(path, filename);
+                        var path2 = Path.Combine(path, filename + ".exe");
+                        if (File.Exists(path1) || File.Exists(path2))
+                        {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                else
+                {
+                    return false;
+                }
             }
         }
 
@@ -237,10 +323,10 @@ namespace Wox.Plugin.CMD
                             Action = c =>
                             {
                                 context.API.HideApp();
-                                ExecuteCMD(selectedResult.Title, true);
+                                Execute(selectedResult.Title, true);
                                 return true;
                             },
-                            IcoPath = "Images/cmd.png"
+                            IcoPath = Image
                         }
                      };
         }
