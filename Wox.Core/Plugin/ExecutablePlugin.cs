@@ -27,7 +27,7 @@ namespace Wox.Core.Plugin
             JsonRPCServerRequestModel request = new JsonRPCServerRequestModel
             {
                 Method = "query",
-                Parameters = new object[] { query.Search },
+                Parameters = new object[] { query.Search, query.ActionKeyword },
                 HttpProxy = HttpProxy.Instance
             };
 

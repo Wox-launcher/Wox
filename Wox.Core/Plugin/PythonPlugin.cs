@@ -27,7 +27,7 @@ namespace Wox.Core.Plugin
             JsonRPCServerRequestModel request = new JsonRPCServerRequestModel
             {
                 Method = "query",
-                Parameters = new object[] { query.Search },
+                Parameters = new object[] { query.Search, query.ActionKeyword },
                 HttpProxy = HttpProxy.Instance
             };
             //Add -B flag to tell python don't write .py[co] files. Because .pyc contains location infos which will prevent python portable
