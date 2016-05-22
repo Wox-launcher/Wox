@@ -338,5 +338,15 @@ namespace Wox
             Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri));
             e.Handled = true;
         }
+
+        private void OnClosed(object sender, EventArgs e)
+        {
+            _viewModel.Save();
+        }
+
+        private void OnCloseExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            Close();
+        }
     }
 }
