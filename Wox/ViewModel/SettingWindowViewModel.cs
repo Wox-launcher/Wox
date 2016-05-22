@@ -139,28 +139,22 @@ namespace Wox.ViewModel
         {
             get
             {
-
-                const string image = "app.png";
-                
                 List<Result> results = new List<Result>
                 {
                     new Result
                     {
                         Title = "WoX is a launcher for Windows that simply works.",
                         SubTitle = "You can call it Windows omni-eXecutor if you want a long name.",
-                        IcoPath = image,
                     },
                     new Result
                     {
                         Title = "Search for everything—applications, folders, files and more.",
                         SubTitle = "Use pinyin to search for programs. (yyy / wangyiyun → 网易云音乐)",
-                        IcoPath = image,
                     },
                     new Result
                     {
                         Title = "Keyword plugin search.",
                         SubTitle = "search google with g search_term.",
-                        IcoPath = image,
                     },
                     new Result
                     {
@@ -171,13 +165,11 @@ namespace Wox.ViewModel
                     {
                         Title = "Install plugins from: ",
                         SubTitle = Plugin,
-                        IcoPath = image,
                     },
                     new Result
                     {
                         Title = $"Open Source: {Infrastructure.Constant.Github}",
                         SubTitle = "Please star it!",
-                        IcoPath = image,
                     }
                 };
                 var vm = new ResultsViewModel(6);
