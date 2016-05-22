@@ -309,15 +309,6 @@ namespace Wox
 
         #endregion
 
-        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            // Hide window with ESC, but make sure it is not pressed as a hotkey
-            if (e.Key == Key.Escape && !HotkeyControl.IsFocused)
-            {
-                Close();
-            }
-        }
-
         private async void OnCheckUpdates(object sender, RoutedEventArgs e)
         {
             var version = await Updater.NewVersion();
