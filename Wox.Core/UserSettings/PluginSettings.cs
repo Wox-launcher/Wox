@@ -1,10 +1,12 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using PropertyChanged;
 using Wox.Core.Plugin;
 using Wox.Plugin;
 
 namespace Wox.Core.UserSettings
 {
+    [ImplementPropertyChanged]
     public class PluginsSettings
     {
         public string PythonDirectory { get; set; }
@@ -22,6 +24,7 @@ namespace Wox.Core.UserSettings
                         metadata.ActionKeywords = settings.ActionKeywords;
                         metadata.ActionKeyword = settings.ActionKeywords[0];
                     }
+                    metadata.Disabled = settings.Disabled;
                 }
                 else
                 {

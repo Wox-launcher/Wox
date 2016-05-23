@@ -1,16 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using System.Windows;
-using NHotkey;
-using NHotkey.Wpf;
 using Squirrel;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
-using Wox.Core.UserSettings;
 using Wox.Helper;
 using Wox.Infrastructure.Hotkey;
 using Wox.Plugin;
@@ -20,13 +16,13 @@ namespace Wox
 {
     public class PublicAPIInstance : IPublicAPI
     {
-        private readonly Settings _settings;
+        private readonly SettingWindowViewModel _settingsViewModel;
 
         #region Constructor
 
-        public PublicAPIInstance(Settings settings, MainViewModel mainVM)
+        public PublicAPIInstance(SettingWindowViewModel settingsViewModel, MainViewModel mainVM)
         {
-            _settings = settings;
+            _settingsViewModel = settingsViewModel;
             MainVM = mainVM;
             //_settings = settings;
             GlobalHotkey.Instance.hookedKeyboardCallback += KListener_hookedKeyboardCallback;
@@ -96,12 +92,11 @@ namespace Wox
             });
         }
 
-        public void OpenSettingDialog(string tabName = "general")
+        public void OpenSettingDialog()
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
-                SettingWindow sw = SingletonWindowOpener.Open<SettingWindow>(this, _settings);
-                sw.SwitchTo(tabName);
+                SettingWindow sw = SingletonWindowOpener.Open<SettingWindow>(this, _settingsViewModel);
             });
         }
 

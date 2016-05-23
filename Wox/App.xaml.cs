@@ -38,17 +38,17 @@ namespace Wox
 
         private void OnStartup(object sender, StartupEventArgs e)
         {
-            Stopwatch.Debug("Startup Time", () =>
+            Stopwatch.Normal("Startup Time", () =>
             {
                 RegisterDispatcherUnhandledException();
 
-                var storage = new JsonStrorage<Settings>();
-                _settings = storage.Load();
+                var settingVM = new SettingWindowViewModel();
+                _settings = settingVM.Settings;
 
                 PluginManager.LoadPlugins(_settings.PluginSettings);
-                var vm = new MainViewModel(_settings, storage);
-                var window = new MainWindow(_settings, vm);
-                API = new PublicAPIInstance(_settings, vm);
+                var mainVM = new MainViewModel(_settings);
+                var window = new MainWindow(_settings, mainVM);
+                API = new PublicAPIInstance(settingVM, mainVM);
                 PluginManager.InitializePlugins(API);
 
                 ImageLoader.PreloadImages();
