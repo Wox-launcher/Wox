@@ -34,7 +34,7 @@ namespace Wox.Core.UserSettings
         public string Hotkey { get; set; } = "Alt + Space";
         public List<CustomHotkey> CustomHotkeys { get; set; } = new List<CustomHotkey>
         {
-            new CustomHotkey { Hotkey = "Ctrl+R", Query = ">" }
+            new CustomHotkey { Hotkey = "WIN+R", Query = ">" }
         };
 
         public bool StartWoxOnSystemStartup { get; set; } = true;
