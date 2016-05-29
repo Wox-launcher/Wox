@@ -9,7 +9,6 @@ namespace Wox.Infrastructure.Hotkey
         private readonly IntPtr _hookID;
         private readonly Dictionary<HotkeyModel, Action> _hotkeys;
         private static GlobalHotkey _instance;
-        private Key _lastModifierKey = Key.None;
         private bool _modifierPressed = false;
 
         public bool Capturing { get; set; } = false;
@@ -88,18 +87,17 @@ namespace Wox.Infrastructure.Hotkey
                     }
                     else
                     {
-                        _lastModifierKey = info.vkCode;
                         return InterceptKeys.CallNextHookEx(_hookID, nCode, wParam, lParam);
                     }
                 }
-                else if (m == WindowsMessage.KEYUP || m == WindowsMessage.SYSKEYUP)
+                else if (m == WindowsMessage.KEYUP)
                 {
                     // if win+r is pressed, windows star menu will still popup
                     // so we need to discard keyup event
                     if (_modifierPressed)
                     {
                         _modifierPressed = false;
-                        if (info.vkCode == _lastModifierKey)
+                        if (info.vkCode == Key.LWIN || info.vkCode == Key.RWIN || info.vkCode == Key.WIN)
                         {
                             return intercepted;
                         }
@@ -108,7 +106,10 @@ namespace Wox.Infrastructure.Hotkey
                             return InterceptKeys.CallNextHookEx(_hookID, nCode, wParam, lParam);
                         }
                     }
-                    return InterceptKeys.CallNextHookEx(_hookID, nCode, wParam, lParam);
+                    else
+                    {
+                        return InterceptKeys.CallNextHookEx(_hookID, nCode, wParam, lParam);
+                    }
                 }
                 else
                 {
