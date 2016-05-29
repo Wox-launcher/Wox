@@ -45,7 +45,7 @@ namespace Wox
                 _settings = settingVM.Settings;
 
                 PluginManager.LoadPlugins(_settings.PluginSettings);
-                var mainVM = new MainViewModel(_settings);
+                var mainVM = new MainViewModel(settingVM);
                 var window = new MainWindow(_settings, mainVM);
                 API = new PublicAPIInstance(settingVM, mainVM);
                 PluginManager.InitializePlugins(API);

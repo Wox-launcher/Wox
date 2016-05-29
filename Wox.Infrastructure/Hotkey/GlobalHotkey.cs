@@ -1,107 +1,115 @@
 using System;
-using System.Runtime.CompilerServices;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using Wox.Plugin;
 
 namespace Wox.Infrastructure.Hotkey
 {
-    /// <summary>
-    /// Listens keyboard globally.
-    /// <remarks>Uses WH_KEYBOARD_LL.</remarks>
-    /// </summary>
-    public class GlobalHotkey : IDisposable
+    public class GlobalHotkey
     {
-        private static GlobalHotkey instance;
-        private InterceptKeys.LowLevelKeyboardProc hookedLowLevelKeyboardProc;
-        private IntPtr hookId = IntPtr.Zero;
-        public delegate bool KeyboardCallback(KeyEvent keyEvent, int vkCode, SpecialKeyState state);
-        public event KeyboardCallback hookedKeyboardCallback;
+        private readonly IntPtr _hookID;
+        private readonly Dictionary<HotkeyModel, Action> _hotkeys;
+        private static GlobalHotkey _instance;
+        private HotkeyModel _capturingHotkey;
 
-        //Modifier key constants
-        private const int VK_SHIFT = 0x10;
-        private const int VK_CONTROL = 0x11;
-        private const int VK_ALT = 0x12;
-        private const int VK_WIN = 91;
-
-        public static GlobalHotkey Instance
-        {
-            get
-            {
-                if (instance == null)
-                {
-                    instance = new GlobalHotkey();
-                }
-                return instance;
-            }
-        }
+        public bool Capturing { get; set; } = false;
+        public static GlobalHotkey Instance => _instance ?? (_instance = new GlobalHotkey());
 
         private GlobalHotkey()
         {
-            // We have to store the LowLevelKeyboardProc, so that it is not garbage collected runtime
-            hookedLowLevelKeyboardProc = LowLevelKeyboardProc;
-            // Set the hook
-            hookId = InterceptKeys.SetHook(hookedLowLevelKeyboardProc);
+            _hotkeys = new Dictionary<HotkeyModel, Action>();
+            _hookID = InterceptKeys.SetHook(LowLevelKeyboardProc);
         }
 
-        public SpecialKeyState CheckModifiers()
+        public void SetHotkey(HotkeyModel hotkey, Action action)
         {
-            SpecialKeyState state = new SpecialKeyState();
-            if ((InterceptKeys.GetKeyState(VK_SHIFT) & 0x8000) != 0)
+            if (!_hotkeys.ContainsKey(hotkey))
             {
-                //SHIFT is pressed
-                state.ShiftPressed = true;
+                _hotkeys[hotkey] = action;
             }
-            if ((InterceptKeys.GetKeyState(VK_CONTROL) & 0x8000) != 0)
+            else
             {
-                //CONTROL is pressed
-                state.CtrlPressed = true;
+                throw new ArgumentException("hotkey existed");
             }
-            if ((InterceptKeys.GetKeyState(VK_ALT) & 0x8000) != 0)
-            {
-                //ALT is pressed
-                state.AltPressed = true;
-            }
-            if ((InterceptKeys.GetKeyState(VK_WIN) & 0x8000) != 0)
-            {
-                //WIN is pressed
-                state.WinPressed = true;
-            }
-
-            return state;
         }
 
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        private IntPtr LowLevelKeyboardProc(int nCode, UIntPtr wParam, IntPtr lParam)
+        public void RemoveHotkey(HotkeyModel hotkey)
         {
-            bool continues = true;
-
-            if (nCode >= 0)
+            if (_hotkeys.ContainsKey(hotkey))
             {
-                if (wParam.ToUInt32() == (int)KeyEvent.WM_KEYDOWN ||
-                    wParam.ToUInt32() == (int)KeyEvent.WM_KEYUP ||
-                    wParam.ToUInt32() == (int)KeyEvent.WM_SYSKEYDOWN ||
-                    wParam.ToUInt32() == (int)KeyEvent.WM_SYSKEYUP)
+                _hotkeys.Remove(hotkey);
+            }
+        }
+
+        private IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam)
+        {
+            const int pressed = 0;  // HC_ACTION
+            if (nCode == pressed)
+            {
+                var m = (WindowsMessage)wParam.ToInt32();
+                if (m == WindowsMessage.KEYDOWN || m == WindowsMessage.SYSKEYDOWN)
                 {
-                    if (hookedKeyboardCallback != null)
-                        continues = hookedKeyboardCallback((KeyEvent)wParam.ToUInt32(), Marshal.ReadInt32(lParam), CheckModifiers());
+                    var info = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
+                    var pressedHotkey = new HotkeyModel(info.vkCode);
+                    if (pressedHotkey.Key != Key.None &&
+                        pressedHotkey.ModifierKeys.Length != 0)
+                    {
+                        if (!Capturing)
+                        {
+                            if (_hotkeys.ContainsKey(pressedHotkey))
+                            {
+                                var action = _hotkeys[pressedHotkey];
+                                action();
+                                var intercepted = (IntPtr)1;
+                                return intercepted;
+                            }
+                            else
+                            {
+                                return InterceptKeys.CallNextHookEx(_hookID, nCode, wParam, lParam);
+                            }
+                        }
+                        else if (HotkeyCaptured != null)
+                        {
+                            var args = new HotkeyCapturedEventArgs
+                            {
+                                Hotkey = pressedHotkey,
+                                Available = !_hotkeys.ContainsKey(pressedHotkey),
+                            };
+                            HotkeyCaptured.Invoke(this, args);
+                            var intercepted = (IntPtr)1;
+                            return intercepted;
+                        }
+                        else
+                        {
+                            return InterceptKeys.CallNextHookEx(_hookID, nCode, wParam, lParam);
+                        }
+                    }
+                    else
+                    {
+                        return InterceptKeys.CallNextHookEx(_hookID, nCode, wParam, lParam);
+                    }
+                }
+                else
+                {
+                    return InterceptKeys.CallNextHookEx(_hookID, nCode, wParam, lParam);
                 }
             }
-
-            if (continues)
+            else
             {
-                return InterceptKeys.CallNextHookEx(hookId, nCode, wParam, lParam);
+                return InterceptKeys.CallNextHookEx(_hookID, nCode, wParam, lParam);
             }
-            return (IntPtr)1;
+        }
+        public delegate void HotkeyCapturedEventHandler(object sender, HotkeyCapturedEventArgs e);
+        public event HotkeyCapturedEventHandler HotkeyCaptured;
+
+        public class HotkeyCapturedEventArgs : EventArgs
+        {
+            public HotkeyModel Hotkey { get; set; }
+            public bool Available { get; set; }
         }
 
         ~GlobalHotkey()
         {
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            InterceptKeys.UnhookWindowsHookEx(hookId);
+            InterceptKeys.UnhookWindowsHookEx(_hookID);
         }
     }
 }

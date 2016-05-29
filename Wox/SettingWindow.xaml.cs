@@ -9,8 +9,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Navigation;
 using Microsoft.Win32;
-using NHotkey;
-using NHotkey.Wpf;
 using Wox.Core;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
@@ -119,93 +117,17 @@ namespace Wox
 
         #region Hotkey
 
-        private void OnHotkeyControlLoaded(object sender, RoutedEventArgs e)
-        {
-            HotkeyControl.SetHotkey(_viewModel.Settings.Hotkey, false);
-        }
-
-        void OnHotkeyChanged(object sender, EventArgs e)
-        {
-            if (HotkeyControl.CurrentHotkeyAvailable)
-            {
-                SetHotkey(HotkeyControl.CurrentHotkey, (o, args) =>
-                {
-                    if (!Application.Current.MainWindow.IsVisible)
-                    {
-                        Application.Current.MainWindow.Visibility = Visibility.Visible;
-                    }
-                    else
-                    {
-                        Application.Current.MainWindow.Visibility = Visibility.Hidden;
-                    }
-                });
-                RemoveHotkey(_settings.Hotkey);
-                _settings.Hotkey = HotkeyControl.CurrentHotkey.ToString();
-            }
-        }
-
-        void SetHotkey(HotkeyModel hotkey, EventHandler<HotkeyEventArgs> action)
-        {
-            string hotkeyStr = hotkey.ToString();
-            try
-            {
-                HotkeyManager.Current.AddOrReplace(hotkeyStr, hotkey.CharKey, hotkey.ModifierKeys, action);
-            }
-            catch (Exception)
-            {
-                string errorMsg =
-                    string.Format(InternationalizationManager.Instance.GetTranslation("registerHotkeyFailed"), hotkeyStr);
-                MessageBox.Show(errorMsg);
-            }
-        }
-
-        void RemoveHotkey(string hotkeyStr)
-        {
-            if (!string.IsNullOrEmpty(hotkeyStr))
-            {
-                HotkeyManager.Current.Remove(hotkeyStr);
-            }
-        }
-
         private void OnDeleteCustomHotkeyClick(object sender, RoutedEventArgs e)
         {
-            var item = _viewModel.SelectedCustomPluginHotkey;
-            if (item == null)
+            if (_viewModel.CustomHotkeyViewModels.Count > 0 && _viewModel.SelectedCustomHotkey >= 0)
             {
-                MessageBox.Show(InternationalizationManager.Instance.GetTranslation("pleaseSelectAnItem"));
-                return;
-            }
-
-            string deleteWarning =
-                string.Format(InternationalizationManager.Instance.GetTranslation("deleteCustomHotkeyWarning"),
-                    item.Hotkey);
-            if (
-                MessageBox.Show(deleteWarning, InternationalizationManager.Instance.GetTranslation("delete"),
-                    MessageBoxButton.YesNo) == MessageBoxResult.Yes)
-            {
-                _settings.CustomPluginHotkeys.Remove(item);
-                RemoveHotkey(item.Hotkey);
-            }
-        }
-
-        private void OnnEditCustomHotkeyClick(object sender, RoutedEventArgs e)
-        {
-            var item = _viewModel.SelectedCustomPluginHotkey;
-            if (item != null)
-            {
-                CustomQueryHotkeySetting window = new CustomQueryHotkeySetting(this, _settings);
-                window.UpdateItem(item);
-                window.ShowDialog();
-            }
-            else
-            {
-                MessageBox.Show(InternationalizationManager.Instance.GetTranslation("pleaseSelectAnItem"));
+                _viewModel.CustomHotkeyViewModels.RemoveAt(_viewModel.SelectedCustomHotkey);
             }
         }
 
         private void OnAddCustomeHotkeyClick(object sender, RoutedEventArgs e)
         {
-            new CustomQueryHotkeySetting(this, _settings).ShowDialog();
+            _viewModel.CustomHotkeyViewModels.Add(new CustomHotkeyViewModel());
         }
 
         #endregion
@@ -339,5 +261,6 @@ namespace Wox
         {
             Close();
         }
+
     }
 }

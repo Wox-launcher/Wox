@@ -1,12 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
-using NHotkey;
-using NHotkey.Wpf;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
 using Wox.Core.UserSettings;
@@ -14,6 +13,7 @@ using Wox.Helper;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Hotkey;
 using Wox.Infrastructure.Image;
+using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
 using Wox.Plugin;
 using Wox.Storage;
@@ -35,32 +35,39 @@ namespace Wox.ViewModel
         private readonly JsonStrorage<QueryHistory> _queryHistoryStorage;
         private readonly JsonStrorage<UserSelectedRecord> _userSelectedRecordStorage;
         private readonly JsonStrorage<TopMostRecord> _topMostRecordStorage;
-        private readonly Settings _settings;
         private readonly QueryHistory _queryHistory;
         private readonly UserSelectedRecord _userSelectedRecord;
         private readonly TopMostRecord _topMostRecord;
+        private readonly Settings _settings;
+        private readonly SettingWindowViewModel _settingVM;
 
         private CancellationTokenSource _updateSource;
         private CancellationToken _updateToken;
         private bool _saved;
 
+        private readonly Internationalization _translater = InternationalizationManager.Instance;
+        private readonly GlobalHotkey _globalHotkey = GlobalHotkey.Instance;
+
         #endregion
 
         #region Constructor
 
-        public MainViewModel(Settings settings)
+        public MainViewModel(SettingWindowViewModel settings)
         {
             _saved = false;
             _queryTextBeforeLoadContextMenu = "";
             _queryText = "";
             _lastQuery = new Query();
 
-            _settings = settings;
+            _settingVM = settings;
+            _settings = _settingVM.Settings;
+
+            SetHotkeys();
 
             // happlebao todo temp fix for instance code logic
             HttpProxy.Instance.Settings = _settings;
-            InternationalizationManager.Instance.Settings = _settings;
-            InternationalizationManager.Instance.ChangeLanguage(_settings.Language);
+            _translater.Settings = _settings;
+            _translater.ChangeLanguage(_settings.Language);
             ThemeManager.Instance.Settings = _settings;
 
             _queryHistoryStorage = new JsonStrorage<QueryHistory>();
@@ -74,21 +81,18 @@ namespace Wox.ViewModel
             InitializeContextMenu();
             InitializeKeyCommands();
             RegisterResultsUpdatedEvent();
-
-            SetHotkey(_settings.Hotkey, OnHotkey);
-            SetCustomPluginHotkey();
         }
+
 
         private void RegisterResultsUpdatedEvent()
         {
             foreach (var pair in PluginManager.GetPluginsForInterface<IResultUpdated>())
             {
-                var plugin = (IResultUpdated) pair.Plugin;
+                var plugin = (IResultUpdated)pair.Plugin;
                 plugin.ResultsUpdated += (s, e) =>
                 {
                     Task.Run(() =>
                     {
-
                         PluginManager.UpdatePluginMetadata(e.Results, pair.Metadata, e.Query);
                         UpdateResultView(e.Results, pair.Metadata, e.Query);
                     }, _updateToken);
@@ -177,10 +181,7 @@ namespace Wox.ViewModel
                 var result = results.SelectedItem?.RawResult;
                 if (result != null) // SelectedItem returns null if selection is empty.
                 {
-                    bool hideWindow = result.Action != null && result.Action(new ActionContext
-                    {
-                        SpecialKeyState = GlobalHotkey.Instance.CheckModifiers()
-                    });
+                    bool hideWindow = result.Action != null && result.Action(new ActionContext());
 
                     if (hideWindow)
                     {
@@ -226,7 +227,7 @@ namespace Wox.ViewModel
         }
 
         private void InitializeResultListBox()
-        {   
+        {
             Results = new ResultsViewModel(_settings);
             ResultListBoxVisibility = Visibility.Collapsed;
         }
@@ -434,8 +435,8 @@ namespace Wox.ViewModel
                 QueryText = history.Query;
                 OnTextBoxSelected();
 
-                var executeQueryHistoryTitle = InternationalizationManager.Instance.GetTranslation("executeQuery");
-                var lastExecuteTime = InternationalizationManager.Instance.GetTranslation("lastExecuteTime");
+                var executeQueryHistoryTitle = _translater.GetTranslation("executeQuery");
+                var lastExecuteTime = _translater.GetTranslation("lastExecuteTime");
                 Results.RemoveResultsExcept(historyMetadata);
                 var result = new Result
                 {
@@ -461,13 +462,14 @@ namespace Wox.ViewModel
         private Result ContextMenuTopMost(Result result)
         {
             Result menu;
+
             if (_topMostRecord.IsTopMost(result))
             {
                 menu = new Result
                 {
-                    Title = InternationalizationManager.Instance.GetTranslation("cancelTopMostInThisQuery"),
+                    Title = _translater.GetTranslation("cancelTopMostInThisQuery"),
                     IcoPath = "Images\\down.png",
-                    PluginDirectory = Infrastructure.Constant.ProgramDirectory,
+                    PluginDirectory = Constant.ProgramDirectory,
                     Action = _ =>
                     {
                         _topMostRecord.Remove(result);
@@ -480,9 +482,9 @@ namespace Wox.ViewModel
             {
                 menu = new Result
                 {
-                    Title = InternationalizationManager.Instance.GetTranslation("setAsTopMostInThisQuery"),
+                    Title = _translater.GetTranslation("setAsTopMostInThisQuery"),
                     IcoPath = "Images\\up.png",
-                    PluginDirectory = Infrastructure.Constant.ProgramDirectory,
+                    PluginDirectory = Constant.ProgramDirectory,
                     Action = _ =>
                     {
                         _topMostRecord.AddOrUpdate(result);
@@ -497,7 +499,7 @@ namespace Wox.ViewModel
         private Result ContextMenuPluginInfo(string id)
         {
             var metadata = PluginManager.GetPluginForId(id).Metadata;
-            var translator = InternationalizationManager.Instance;
+            var translator = _translater;
 
             var author = translator.GetTranslation("author");
             var website = translator.GetTranslation("website");
@@ -521,69 +523,108 @@ namespace Wox.ViewModel
         #endregion
         #region Hotkey
 
-        internal void SetHotkey(string hotkeyStr, EventHandler<HotkeyEventArgs> action)
+        private void SetHotkeys()
         {
-            var hotkey = new HotkeyModel(hotkeyStr);
-            SetHotkey(hotkey, action);
+            SetWoxHotkey();
+            SetCustomHotkeys();
+            _settingVM.HotkeyViewModel.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(HotkeyViewModel.Hotkey))
+                {
+                    _globalHotkey.SetHotkey(_settingVM.HotkeyViewModel.Hotkey, OnWoxHotkey);
+                }
+            };
+
+            foreach (var vm in _settingVM.CustomHotkeyViewModels)
+            {
+                vm.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName == nameof(CustomHotkeyViewModel.CustomHotkey))
+                    {
+                        var k = vm.CustomHotkey;
+                        _globalHotkey.SetHotkey(k.Hotkey, () => { OnCustomHotkey(k); });
+                    }
+                };
+            }
+            _settingVM.CustomHotkeyViewModels.CollectionChanged += (_, ce) =>
+            {
+                if (ce.Action == NotifyCollectionChangedAction.Add)
+                {
+                    var vm = (CustomHotkeyViewModel)ce.NewItems[0];
+                    vm.PropertyChanged += (__, pe) =>
+                    {
+                        if (pe.PropertyName == nameof(CustomHotkeyViewModel.CustomHotkey))
+                        {
+                            var k = vm.CustomHotkey;
+                            _globalHotkey.SetHotkey(k.Hotkey, () => { OnCustomHotkey(k); });
+                        }
+                    };
+                }
+                else if (ce.Action == NotifyCollectionChangedAction.Remove)
+                {
+                    var vm = (CustomHotkeyViewModel)ce.OldItems[0];
+                    var k = vm.CustomHotkey;
+                    _globalHotkey.RemoveHotkey(k.Hotkey);
+                }
+            };
         }
 
-        public void SetHotkey(HotkeyModel hotkey, EventHandler<HotkeyEventArgs> action)
+        private void SetWoxHotkey()
         {
-            string hotkeyStr = hotkey.ToString();
             try
             {
-                HotkeyManager.Current.AddOrReplace(hotkeyStr, hotkey.CharKey, hotkey.ModifierKeys, action);
+                _globalHotkey.SetHotkey(_settingVM.HotkeyViewModel.Hotkey, OnWoxHotkey);
             }
-            catch (Exception)
+            catch (ArgumentException e)
             {
-                string errorMsg =
-                    string.Format(InternationalizationManager.Instance.GetTranslation("registerHotkeyFailed"), hotkeyStr);
-                MessageBox.Show(errorMsg);
-            }
-        }
-
-        public void RemoveHotkey(string hotkeyStr)
-        {
-            if (!string.IsNullOrEmpty(hotkeyStr))
-            {
-                HotkeyManager.Current.Remove(hotkeyStr);
+                Log.Exception(e);
+                var translation = _translater.GetTranslation("registerHotkeyFailed");
+                string error = string.Format(translation, _settings.Hotkey);
+                MessageBox.Show(error);
             }
         }
 
-        /// <summary>
-        /// Checks if Wox should ignore any hotkeys
-        /// </summary>
-        /// <returns></returns>
-        private bool ShouldIgnoreHotkeys()
+        private void OnWoxHotkey()
         {
-            //double if to omit calling win32 function
-            if (_settings.IgnoreHotkeysOnFullscreen)
-                if (WindowIntelopHelper.IsWindowFullscreen())
-                    return true;
-
-            return false;
+            if (!IgnoreHotkey())
+            {
+                QueryTextSelected = true;
+                ToggleWox();
+            }
         }
 
-        private void SetCustomPluginHotkey()
+        private void SetCustomHotkeys()
         {
-            if (_settings.CustomPluginHotkeys == null) return;
-            foreach (CustomPluginHotkey hotkey in _settings.CustomPluginHotkeys)
+            foreach (var c in _settingVM.CustomHotkeyViewModels)
             {
-                SetHotkey(hotkey.Hotkey, (s, e) =>
+                try
                 {
-                    if (ShouldIgnoreHotkeys()) return;
-                    QueryText = hotkey.ActionKeyword;
-                    MainWindowVisibility = Visibility.Visible;
-                });
+                    var k = c.CustomHotkey;
+                    _globalHotkey.SetHotkey(k.Hotkey, () => { OnCustomHotkey(k); });
+                }
+                catch (ArgumentException e)
+                {
+                    Log.Exception(e);
+                    var translation = _translater.GetTranslation("registerHotkeyFailed");
+                    string error = string.Format(translation, _settings.Hotkey);
+                    MessageBox.Show(error);
+                }
             }
         }
 
-        private void OnHotkey(object sender, HotkeyEventArgs e)
+        private void OnCustomHotkey(CustomHotkeyModel hotkey)
         {
-            if (ShouldIgnoreHotkeys()) return;
-            QueryTextSelected = true;
-            ToggleWox();
-            e.Handled = true;
+            if (!IgnoreHotkey())
+            {
+                QueryText = hotkey.Query + Plugin.Query.TermSeperater;
+                ToggleWox();
+            }
+        }
+
+        private bool IgnoreHotkey()
+        {
+            var ignore = _settings.IgnoreHotkeysOnFullscreen && WindowIntelopHelper.IsWindowFullscreen();
+            return ignore;
         }
 
         private void ToggleWox()
@@ -633,7 +674,7 @@ namespace Wox.ViewModel
                 }
                 else
                 {
-                    result.Score += _userSelectedRecord.GetSelectedCount(result)*5;
+                    result.Score += _userSelectedRecord.GetSelectedCount(result) * 5;
                 }
             }
 
@@ -650,4 +691,4 @@ namespace Wox.ViewModel
 
         #endregion
     }
-} 
+}

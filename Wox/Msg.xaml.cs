@@ -4,7 +4,6 @@ using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
-using System.Windows.Media.Imaging;
 using Wox.Helper;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Image;
@@ -38,7 +37,7 @@ namespace Wox
             Storyboard.SetTargetProperty(fadeOutAnimation, new PropertyPath(TopProperty));
             fadeOutStoryboard.Children.Add(fadeOutAnimation);
 
-            imgClose.Source = ImageLoader.Load(Path.Combine(Infrastructure.Constant.ProgramDirectory, "Images\\close.png"));
+            imgClose.Source = ImageLoader.Load(Path.Combine(Constant.ProgramDirectory, "Images\\close.png"));
             imgClose.MouseUp += imgClose_MouseUp;
         }
 
@@ -64,24 +63,15 @@ namespace Wox
             {
                 tbSubTitle.Visibility = Visibility.Collapsed;
             }
-            if (!File.Exists(iconPath))
-            {
-                imgIco.Source = ImageLoader.Load(Path.Combine(Infrastructure.Constant.ProgramDirectory, "Images\\app.png"));
-            }
-            else {
-                imgIco.Source = ImageLoader.Load(iconPath);
-            }
+            imgIco.Source = ImageLoader.Load(iconPath);
 
             Show();
 
-            Dispatcher.InvokeAsync(async () =>
-                                   {
-                                       if (!closing)
-                                       {
-                                           closing = true;
-                                           await Dispatcher.InvokeAsync(fadeOutStoryboard.Begin);
-                                       }
-                                   });
+            if (!closing)
+            {
+                closing = true;
+                fadeOutStoryboard.Begin();
+            }
         }
     }
 }
