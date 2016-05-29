@@ -9,7 +9,8 @@ namespace Wox.Infrastructure.Hotkey
         private readonly IntPtr _hookID;
         private readonly Dictionary<HotkeyModel, Action> _hotkeys;
         private static GlobalHotkey _instance;
-        private HotkeyModel _capturingHotkey;
+        private Key _lastModifierKey = Key.None;
+        private bool _modifierPressed = false;
 
         public bool Capturing { get; set; } = false;
         public static GlobalHotkey Instance => _instance ?? (_instance = new GlobalHotkey());
@@ -43,12 +44,14 @@ namespace Wox.Infrastructure.Hotkey
         private IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam)
         {
             const int pressed = 0;  // HC_ACTION
+            IntPtr intercepted = (IntPtr)1;
+            
             if (nCode == pressed)
             {
                 var m = (WindowsMessage)wParam.ToInt32();
+                var info = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
                 if (m == WindowsMessage.KEYDOWN || m == WindowsMessage.SYSKEYDOWN)
                 {
-                    var info = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
                     var pressedHotkey = new HotkeyModel(info.vkCode);
                     if (pressedHotkey.Key != Key.None &&
                         pressedHotkey.ModifierKeys.Length != 0)
@@ -57,9 +60,9 @@ namespace Wox.Infrastructure.Hotkey
                         {
                             if (_hotkeys.ContainsKey(pressedHotkey))
                             {
+                                _modifierPressed = true;
                                 var action = _hotkeys[pressedHotkey];
                                 action();
-                                var intercepted = (IntPtr)1;
                                 return intercepted;
                             }
                             else
@@ -69,13 +72,13 @@ namespace Wox.Infrastructure.Hotkey
                         }
                         else if (HotkeyCaptured != null)
                         {
+                            _modifierPressed = true;
                             var args = new HotkeyCapturedEventArgs
                             {
                                 Hotkey = pressedHotkey,
                                 Available = !_hotkeys.ContainsKey(pressedHotkey),
                             };
                             HotkeyCaptured.Invoke(this, args);
-                            var intercepted = (IntPtr)1;
                             return intercepted;
                         }
                         else
@@ -85,8 +88,27 @@ namespace Wox.Infrastructure.Hotkey
                     }
                     else
                     {
+                        _lastModifierKey = info.vkCode;
                         return InterceptKeys.CallNextHookEx(_hookID, nCode, wParam, lParam);
                     }
+                }
+                else if (m == WindowsMessage.KEYUP || m == WindowsMessage.SYSKEYUP)
+                {
+                    // if win+r is pressed, windows star menu will still popup
+                    // so we need to discard keyup event
+                    if (_modifierPressed)
+                    {
+                        _modifierPressed = false;
+                        if (info.vkCode == _lastModifierKey)
+                        {
+                            return intercepted;
+                        }
+                        else
+                        {
+                            return InterceptKeys.CallNextHookEx(_hookID, nCode, wParam, lParam);
+                        }
+                    }
+                    return InterceptKeys.CallNextHookEx(_hookID, nCode, wParam, lParam);
                 }
                 else
                 {
