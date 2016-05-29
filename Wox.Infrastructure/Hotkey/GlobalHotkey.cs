@@ -22,7 +22,7 @@ namespace Wox.Infrastructure.Hotkey
 
         public void SetHotkey(HotkeyModel hotkey, Action action)
         {
-            if (!_hotkeys.ContainsKey(hotkey))
+            if (!_hotkeys.ContainsKey(hotkey) && hotkey.Key != Key.None && hotkey.ModifierKeys.Length > 0)
             {
                 _hotkeys[hotkey] = action;
             }
