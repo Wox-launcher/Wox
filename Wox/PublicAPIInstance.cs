@@ -8,7 +8,6 @@ using Squirrel;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
 using Wox.Helper;
-using Wox.Infrastructure.Hotkey;
 using Wox.Plugin;
 using Wox.ViewModel;
 
@@ -25,7 +24,6 @@ namespace Wox
         {
             _settingsVM = settingsVM;
             _mainVM = mainVM;
-            GlobalHotkey.Instance.hookedKeyboardCallback += KListener_hookedKeyboardCallback;
             WebRequest.RegisterPrefix("data", new DataWebRequestFactory());
 
         }
@@ -77,7 +75,7 @@ namespace Wox
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
-                var m = new Msg { Owner = Application.Current.MainWindow };
+                var m = new Msg();
                 m.Show(title, subTitle, iconPath);
             });
         }
@@ -115,6 +113,7 @@ namespace Wox
             return PluginManager.AllPlugins.ToList();
         }
 
+        [Obsolete]
         public event WoxGlobalKeyboardEventHandler GlobalKeyboardEvent;
 
         [Obsolete("This will be removed in Wox 1.3")]
@@ -132,18 +131,6 @@ namespace Wox
             });
         }
 
-        #endregion
-
-        #region Private Methods
-
-        private bool KListener_hookedKeyboardCallback(KeyEvent keyevent, int vkcode, SpecialKeyState state)
-        {
-            if (GlobalKeyboardEvent != null)
-            {
-                return GlobalKeyboardEvent((int)keyevent, vkcode, state);
-            }
-            return true;
-        }
         #endregion
     }
 }

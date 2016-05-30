@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -11,6 +12,8 @@ using Wox.Core.Resource;
 using Wox.Core.UserSettings;
 using Wox.Helper;
 using Wox.Infrastructure;
+using Wox.Infrastructure.Hotkey;
+using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
 using Wox.Plugin;
 
@@ -19,11 +22,13 @@ namespace Wox.ViewModel
     public class SettingWindowViewModel : BaseModel
     {
         private readonly JsonStrorage<Settings> _storage;
+        public Settings Settings { get; set; }
 
         public SettingWindowViewModel()
         {
             _storage = new JsonStrorage<Settings>();
             Settings = _storage.Load();
+            InitializeHotkey();
             Settings.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(Settings.ActivateTimes))
@@ -33,11 +38,15 @@ namespace Wox.ViewModel
             };
         }
 
-        public Settings Settings { get; set; }
 
 
         public void Save()
         {
+            Settings.Hotkey = HotkeyViewModel.Hotkey.ToString();
+            Settings.CustomHotkeys = CustomHotkeyViewModels.Select
+            (
+                c => new CustomHotkey { Hotkey = c.CustomHotkey.Hotkey.ToString(), Query = c.CustomHotkey.Query }
+            ).ToList();
             _storage.Save();
         }
 
@@ -297,8 +306,31 @@ namespace Wox.ViewModel
 
         #region hotkey
 
-        public CustomPluginHotkey SelectedCustomPluginHotkey { get; set; }
+        public HotkeyViewModel HotkeyViewModel { get; set; } = new HotkeyViewModel();
 
+        public ObservableCollection<CustomHotkeyViewModel> CustomHotkeyViewModels { get; set; } = new ObservableCollection<CustomHotkeyViewModel>();
+        public int SelectedCustomHotkey { get; set; }
+
+
+        private void InitializeHotkey()
+        {
+            var hotkey = new HotkeyModel(Settings.Hotkey);
+            HotkeyViewModel = new HotkeyViewModel { Hotkey = hotkey };
+            foreach (var key in Settings.CustomHotkeys)
+            {
+                var m = new HotkeyModel(key.Hotkey);
+                var cvm = new CustomHotkeyViewModel
+                {
+                    HotkeyViewModel = {Hotkey = m},
+                    CustomHotkey =
+                    {
+                        Hotkey = m,
+                        Query = key.Query
+                    }
+                };
+                CustomHotkeyViewModels.Add(cvm);
+            }
+        }
         #endregion
 
         #region about

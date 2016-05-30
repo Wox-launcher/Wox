@@ -102,10 +102,8 @@ namespace Wox.Plugin
         /// <returns></returns>
         List<PluginPair> GetAllPlugins();
 
-        /// <summary>
-        /// Fired after global keyboard events
-        /// if you want to hook something like Ctrl+R, you should use this event
-        /// </summary>
+        [Obsolete]
         event WoxGlobalKeyboardEventHandler GlobalKeyboardEvent;
     }
+    public delegate bool WoxGlobalKeyboardEventHandler(int keyevent, int vkcode, SpecialKeyState state);
 }
