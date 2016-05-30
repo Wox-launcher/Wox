@@ -71,7 +71,7 @@ namespace Wox.Helper
 
             if (hWnd != null && !hWnd.Equals(IntPtr.Zero))
             {
-                //if current active window is desktop or shell
+                //if current active window is NOT desktop or shell
                 if (!(hWnd.Equals(HWND_DESKTOP) || hWnd.Equals(HWND_SHELL)))
                 {
                     StringBuilder sb = new StringBuilder(256);
@@ -98,7 +98,7 @@ namespace Wox.Helper
                     {
                         IntPtr hWndDesktop = FindWindowEx(hWnd, IntPtr.Zero, "SHELLDLL_DefView", null);
                         hWndDesktop = FindWindowEx(hWndDesktop, IntPtr.Zero, "SysListView32", "FolderView");
-                        if(hWndDesktop != null && !hWndDesktop.Equals(IntPtr.Zero))
+                        if (hWndDesktop != null && !hWndDesktop.Equals(IntPtr.Zero))
                         {
                             return false;
                         }
@@ -147,7 +147,7 @@ namespace Wox.Helper
                     matrix = src.CompositionTarget.TransformFromDevice;
                 }
             }
-            return new Point((int) (matrix.M11*unitX), (int) (matrix.M22*unitY));
+            return new Point((int)(matrix.M11 * unitX), (int)(matrix.M22 * unitY));
         }
 
 
