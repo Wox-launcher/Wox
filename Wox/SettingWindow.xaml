@@ -263,46 +263,38 @@
                 </Grid.RowDefinitions>
                 <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Height="24"
                             Margin="0,4,0,3">
-                    <TextBlock VerticalAlignment="Center" Margin="0 0 10 0" Text="{DynamicResource woxHotkey}" />
-                    <wox:HotkeyControl x:Name="HotkeyControl" HotkeyChanged="OnHotkeyChanged"
-                                       Loaded="OnHotkeyControlLoaded" />
+                    <TextBlock Margin="0 0 10 0" Text="{DynamicResource woxHotkey}" />
+                    <wox:HotkeyControl DataContext="{Binding HotkeyViewModel}"/>
                 </StackPanel>
-                <TextBlock VerticalAlignment="Center" Grid.Row="1" Margin="0,3,10,2"
+                <TextBlock Grid.Row="1" Margin="0,3,10,2"
                            Text="{DynamicResource customQueryHotkey}" />
-                <ListView ItemsSource="{Binding Settings.CustomPluginHotkeys}"
-                          SelectedItem="{Binding SelectedCustomPluginHotkey}"
-                          Margin="0 5 0 0" Grid.Row="2">
+                <ListView ItemsSource="{Binding CustomHotkeyViewModels}" SelectedIndex="{Binding SelectedCustomHotkey}" Grid.Row="2" Margin="10" >
                     <ListView.View>
                         <GridView>
-                            <GridViewColumn Header="{DynamicResource hotkey}" Width="180">
+                            <GridViewColumn Header="{DynamicResource hotkey}" Width="120">
                                 <GridViewColumn.CellTemplate>
-                                    <DataTemplate DataType="s:CustomPluginHotkey">
-                                        <TextBlock Text="{Binding Hotkey}" />
+                                    <DataTemplate DataType="vm:CustomHotkeyViewModel">
+                                        <wox:HotkeyControl DataContext="{Binding HotkeyViewModel}" />
                                     </DataTemplate>
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
-                            <GridViewColumn Header="{DynamicResource actionKeywords}" Width="500">
+                            <GridViewColumn Header="{DynamicResource actionKeywords}" Width="600">
                                 <GridViewColumn.CellTemplate>
-                                    <DataTemplate DataType="s:CustomPluginHotkey">
-                                        <TextBlock Text="{Binding ActionKeyword}" />
+                                    <DataTemplate DataType="vm:CustomHotkeyViewModel">
+                                        <TextBox Text="{Binding CustomHotkey.Query}" Width="580" />
                                     </DataTemplate>
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
                         </GridView>
                     </ListView.View>
                 </ListView>
-                <StackPanel Grid.Row="3" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                            Orientation="Horizontal" Height="40" Width="360">
-                    <Button Click="OnDeleteCustomHotkeyClick" Width="100"
-                            Margin="10" Content="{DynamicResource delete}" />
-                    <Button Click="OnnEditCustomHotkeyClick" Width="100" Margin="10"
-                            Content="{DynamicResource edit}" />
-                    <Button Click="OnAddCustomeHotkeyClick" Width="100" Margin="10"
-                            Content="{DynamicResource add}" />
+                <StackPanel Grid.Row="3" HorizontalAlignment="Right" VerticalAlignment="Bottom" Orientation="Horizontal" Margin="10,0" >
+                    <Button Click="OnDeleteCustomHotkeyClick" Content="-" Width="20" Height="20" Margin="0,0,5,0" />
+                    <Button Click="OnAddCustomeHotkeyClick" Content="+" Width="20" Height="20" Margin="5,0,0,0"/>
                 </StackPanel>
             </Grid>
         </TabItem>
-        <TabItem Header="{DynamicResource proxy}">
+        <TabItem Header="{DynamicResource proxy}" HorizontalAlignment="Right" Width="45">
             <StackPanel>
                 <CheckBox Margin="10" IsChecked="{Binding Settings.ProxyEnabled}">
                     <TextBlock Text="{DynamicResource enableProxy}" />

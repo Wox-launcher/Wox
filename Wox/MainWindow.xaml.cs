@@ -48,7 +48,6 @@ namespace Wox
 
         private void OnLoaded(object sender, RoutedEventArgs _)
         {
-            InitProgressbarAnimation();
             WindowIntelopHelper.DisableControlBox(this);
             ThemeManager.Instance.ChangeTheme(_settings.Theme);
             InitializeNotifyIcon();
@@ -168,31 +167,28 @@ namespace Wox
             QueryTextBox.CaretIndex = QueryTextBox.Text.Length;
         }
 
+        private bool _startup = true;
         private void OnMainWindowVisible(object sender, DependencyPropertyChangedEventArgs e)
         {
             var visible = (bool)e.NewValue;
             if (visible)
             {
-                SetWindowPosition();
-                _settings.ActivateTimes++;
+                if (!_startup)
+                {
+                    if (!_settings.RememberLastLaunchLocation)
+                    {
+                        Left = WindowLeft();
+                        Top = WindowTop();
+                    }
+                    Activate();
+                    _settings.ActivateTimes++;
+                }
+                else
+                {
+                    _startup = false;
+                }
             }
         }
-
-        private bool _startup = true;
-        private void SetWindowPosition()
-        {
-            if (!_settings.RememberLastLaunchLocation && !_startup)
-            {
-                Left = WindowLeft();
-                Top = WindowTop();
-            }
-            else
-            {
-                _startup = false;
-            }
-        }
-
-
 
         /// <summary>
         // used to set correct position on windows first startup
@@ -202,6 +198,7 @@ namespace Wox
         {
             Left = WindowLeft();
             Top = WindowTop();
+            InitProgressbarAnimation();
         }
 
         private double WindowLeft()

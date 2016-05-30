@@ -1,145 +1,144 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Windows.Input;
+using Wox.Plugin;
 
 namespace Wox.Infrastructure.Hotkey
 {
-    public class HotkeyModel
+    public class HotkeyModel : BaseModel
     {
-        public bool Alt { get; set; }
-        public bool Shift { get; set; }
-        public bool Win { get; set; }
-        public bool Ctrl { get; set; }
-        public Key CharKey { get; set; }
+        private const char Seperater = '+';
 
+        private static readonly Key[] Win = { Key.LWIN, Key.RWIN, Key.WIN };
+        private static readonly Key[] Alt = { Key.LALT, Key.RALT, Key.ALT };
+        private static readonly Key[] Ctrl = { Key.LCTRL, Key.RCTRL, Key.CTRL };
+        private static readonly Key[] Shift = { Key.LSHIFT, Key.RSHIFT, Key.SHIFT };
+        private static readonly Key[] AllModifierKeys = Win.Concat(Alt).Concat(Ctrl).Concat(Shift).ToArray();
 
-        Dictionary<Key, string> specialSymbolDictionary = new Dictionary<Key, string>
+        public Key Key { get; } = Key.None;
+        public Key[] ModifierKeys { get; } = new Key[0];
+
+        public HotkeyModel() { }
+
+        //todo use parse instead of constructor, so class can express empty
+        /// <exception cref="ArgumentException"></exception>
+        public HotkeyModel(string hotkey)
         {
-            {Key.Space, "Space"},
-            {Key.Oem3, "~"}
-        };
+            var keys = hotkey.Split(Seperater)
+                             .Select(k => k.Trim().ToUpper())
+                             .Select(k => (Key)Enum.Parse(typeof(Key), k))
+                             .ToArray();
 
-        public ModifierKeys ModifierKeys
-        {
-            get
+            ModifierKeys = keys.Where(k => AllModifierKeys.Contains(k)).ToArray();
+            ModifierKeys = LeftRightRemoved(ModifierKeys);
+
+            Key = keys.FirstOrDefault(k => !AllModifierKeys.Contains(k));
+            if (!ContainsNonModifyKey(Key))
             {
-                ModifierKeys modifierKeys = ModifierKeys.None;
-                if (Alt)
-                {
-                    modifierKeys = ModifierKeys.Alt;
-                }
-                if (Shift)
-                {
-                    modifierKeys = modifierKeys | ModifierKeys.Shift;
-                }
-                if (Win)
-                {
-                    modifierKeys = modifierKeys | ModifierKeys.Windows;
-                }
-                if (Ctrl)
-                {
-                    modifierKeys = modifierKeys | ModifierKeys.Control;
-                }
-                return modifierKeys;
+                Key = ModifierKeys.Last();
             }
         }
 
-        public HotkeyModel(string hotkeyString)
+        public HotkeyModel(Key pressedKey)
         {
-            Parse(hotkeyString);
+            if (!AllModifierKeys.Contains(pressedKey))
+            {
+                Key = pressedKey;
+                ModifierKeys = AllModifierKeys.Where(ModifierKeyPressed).ToArray();
+                ModifierKeys = LeftRightRemoved(ModifierKeys);
+            }
+            else
+            {
+                Key = Key.None;
+            }
         }
 
-        public HotkeyModel(bool alt, bool shift, bool win, bool ctrl, Key key)
+
+        private Key[] LeftRightRemoved(Key[] keys)
         {
-            Alt = alt;
-            Shift = shift;
-            Win = win;
-            Ctrl = ctrl;
-            CharKey = key;
+            var removed = new List<Key>();
+            if (keys.Any(Ctrl.Contains))
+            {
+                removed.Add(Key.CTRL);
+            }
+            if (keys.Any(Shift.Contains))
+            {
+                removed.Add(Key.SHIFT);
+            }
+            if (keys.Any(Win.Contains))
+            {
+                removed.Add(Key.WIN);
+            }
+            if (keys.Any(Alt.Contains))
+            {
+                removed.Add(Key.ALT);
+            }
+            return removed.ToArray();
         }
 
-        private void Parse(string hotkeyString)
+        private bool ModifierKeyPressed(Key key)
         {
-            if (string.IsNullOrEmpty(hotkeyString))
-            {
-                return;
-            }
-            List<string> keys = hotkeyString.Replace(" ", "").Split('+').ToList();
-            if (keys.Contains("Alt"))
-            {
-                Alt = true;
-                keys.Remove("Alt");
-            }
-            if (keys.Contains("Shift"))
-            {
-                Shift = true;
-                keys.Remove("Shift");
-            }
-            if (keys.Contains("Win"))
-            {
-                Win = true;
-                keys.Remove("Win");
-            }
-            if (keys.Contains("Ctrl"))
-            {
-                Ctrl = true;
-                keys.Remove("Ctrl");
-            }
-            if (keys.Count > 0)
-            {
-                string charKey = keys[0];
-                KeyValuePair<Key, string>? specialSymbolPair = specialSymbolDictionary.FirstOrDefault(pair => pair.Value == charKey);
-                if (specialSymbolPair.Value.Value != null)
-                {
-                    CharKey = specialSymbolPair.Value.Key;
-                }
-                else
-                {
-                    try
-                    {
-                        CharKey = (Key) Enum.Parse(typeof (Key), charKey);
-                    }
-                    catch (ArgumentException)
-                    {
+            const int keyPressed = 0x8000;
+            var pressed = Convert.ToBoolean(InterceptKeys.GetKeyState(key) & keyPressed);
+            return pressed;
+        }
 
-                    }
-                }
-            }
+        private bool ContainsNonModifyKey(Key key)
+        {
+            var contains = key != 0;
+            return contains;
         }
 
         public override string ToString()
         {
-            string text = string.Empty;
-            if (Ctrl)
+            var hotkey = string.Join(Seperater.ToString(), ModifierKeys);
+            if (hotkey.Length != 0 && Key != Key.None)
             {
-                text += "Ctrl + ";
+                hotkey += $"+{Key}";
             }
-            if (Alt)
+            else
             {
-                text += "Alt + ";
+                hotkey = Key.None.ToString();
             }
-            if (Shift)
-            {
-                text += "Shift + ";
-            }
-            if (Win)
-            {
-                text += "Win + ";
-            }
+            return hotkey;
+        }
 
-            if (CharKey != Key.None)
+        public override int GetHashCode()
+        {
+            var hashcode = Key.GetHashCode();
+            foreach (var key in ModifierKeys)
             {
-                text += specialSymbolDictionary.ContainsKey(CharKey)
-                    ? specialSymbolDictionary[CharKey]
-                    : CharKey.ToString();
+                hashcode = hashcode ^ key.GetHashCode();
             }
-            else if (!string.IsNullOrEmpty(text))
-            {
-                text = text.Remove(text.Length - 3);
-            }
+            return hashcode;
+        }
 
-            return text;
+        public override bool Equals(object obj)
+        {
+            var hotkey = obj as HotkeyModel;
+            if (hotkey != null)
+            {
+                if (Key.Equals(hotkey.Key) &&
+                    ModifierKeys.Length == hotkey.ModifierKeys.Length)
+                {
+                    for (var i = 0; i < ModifierKeys.Length; i++)
+                    {
+                        if (ModifierKeys[i] != hotkey.ModifierKeys[i])
+                        {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                return false;
+            }
         }
     }
 }

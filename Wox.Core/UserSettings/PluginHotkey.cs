@@ -2,9 +2,9 @@
 
 namespace Wox.Core.UserSettings
 {
-    public class CustomPluginHotkey : BaseModel
+    public class CustomHotkey : BaseModel
     {
         public string Hotkey { get; set; }
-        public string ActionKeyword { get; set; }
+        public string Query { get; set; }
     }
 }
