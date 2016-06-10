@@ -23,16 +23,34 @@ Features
 
 Installation
 ------------
+- Prerequisites:
+  - .net >= 4.5.2
+  - [everything](https://www.voidtools.com/): Download and install with the `.exe` installer (use x64 if your windows is x64)
+  - [python3](https://www.python.org/downloads/): Choose `Python 3.5.1` and download the `.exe` installer that suits your need.
 
-Download [`setup.exe`](https://github.com/Wox-launcher/Wox/releases/download/latest/Setup.exe) from [releases](https://github.com/Wox-launcher/Wox/releases).
+  
+Download the `.exe` file from [the latest release](https://github.com/Wox-launcher/Wox/releases/latest), for example, [`Wox-1.3.67.exe`](https://github.com/Wox-launcher/Wox/releases/download/v1.3.67/Wox-1.3.67.exe). And double click to install it.
+
 Just ignore Windows' complaints about security, we will sign the code in the future.
 
+
+
+
+
+**Notes**:
 Versions marked as **pre-release** are unstable pre-release versions.
 
-- Requirements:
-  - .net >= 4.5.2
-  - [everything](https://www.voidtools.com/): `.exe` installer + use x64 if your windows is x64
-  - [python3](https://www.python.org/downloads/): `.exe` installer
+If the `everything` search doesn't work, try this:
+
+After the installation is complete, make sure you've installed the [everything](https://www.voidtools.com/) program. Then right click the wox icon in the toolbar and choose `Settings`, and you can see the window as follows:
+
+![everything plugin](http://i.imgur.com/kc3UzSD.png?1)
+
+Click `Plugin -> Everythin -> Plugin Directory` to open the `EverythingSDK` folder. And copy the `Everything.dll` file from the `x86` or`x64` folder according to your system, and paste it to the folder you opened first. Then you have this:
+
+![everything sdk](http://i.imgur.com/5KzCJ5W.png)
+
+Now restart your wox and you should be able to search with `everything` search engine.
 
 Usage
 -----
