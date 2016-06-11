@@ -294,7 +294,7 @@
                 </StackPanel>
             </Grid>
         </TabItem>
-        <TabItem Header="{DynamicResource proxy}" HorizontalAlignment="Right" Width="45">
+        <TabItem Header="{DynamicResource proxy}">
             <StackPanel>
                 <CheckBox Margin="10" IsChecked="{Binding Settings.ProxyEnabled}">
                     <TextBlock Text="{DynamicResource enableProxy}" />
