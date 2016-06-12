@@ -24,15 +24,15 @@ Features
 Installation
 ------------
 
-Download [`setup.exe`](https://github.com/Wox-launcher/Wox/releases/download/latest/Setup.exe) from [releases](https://github.com/Wox-launcher/Wox/releases).
+Download [`Wox-xxx.exe`](https://github.com/Wox-launcher/Wox/releases/download/v1.3.67/Wox-1.3.67.exe) from [releases](https://github.com/Wox-launcher/Wox/releases).
 Just ignore Windows' complaints about security, we will sign the code in the future.
 
 Versions marked as **pre-release** are unstable pre-release versions.
 
 - Requirements:
   - .net >= 4.5.2
-  - [everything](https://www.voidtools.com/): `.exe` installer + use x64 if your windows is x64
-  - [python3](https://www.python.org/downloads/): `.exe` installer
+  - [everything](https://www.voidtools.com/): `.exe` installer + use x64 if your windows is x64 + everything service is running
+  - [python3](https://www.python.org/downloads/): `.exe` installer + add it to `%PATH%` or set it in WoX settings
 
 Usage
 -----
@@ -52,15 +52,6 @@ Contribution
 Documentation
 -------------
 
-Outdated doc: [WoX doc](http://doc.getwox.com).
-
-Just ask questions in [issues](https://github.com/Wox-launcher/Wox/issues) for now.
-
-TODO
-----
-
-- [x] unified directory `%APPDATA%` for all storage
-- [ ] bring unitest for wox back
-- [x] add autoupdate / installer
-- [x] disable plugin properly
+- Outdated doc: [WoX doc](http://doc.getwox.com).
+- Just ask questions in [issues](https://github.com/Wox-launcher/Wox/issues) for now.
 

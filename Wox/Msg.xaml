@@ -7,6 +7,7 @@
         ResizeMode="NoResize"
         WindowStyle="None"
         ShowInTaskbar="False"
+        ShowActivated ="False"
         Title="Msg" Height="60" Width="420">
     <Window.Triggers>
         <EventTrigger RoutedEvent="Window.Loaded">

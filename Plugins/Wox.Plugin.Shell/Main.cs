@@ -4,22 +4,16 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Windows;
-using WindowsInput;
-using Wox.Infrastructure.Hotkey;
+using System.Windows.Controls;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
-using Application = System.Windows.Application;
-using Control = System.Windows.Controls.Control;
-using Keys = System.Windows.Forms.Keys;
 
 namespace Wox.Plugin.CMD
 {
-    public class CMD : IPlugin, ISettingProvider, IPluginI18n, IContextMenu
+    public class CMD : IPlugin, ISettingProvider, IPluginI18n, IContextMenu, ISavable
     {
         private const string Image = "Images/shell.png";
-        private PluginInitContext context;
-        private bool WinRStroked;
-        private readonly KeyboardSimulator keyboardSimulator = new KeyboardSimulator(new InputSimulator());
+        private PluginInitContext _context;
 
         private readonly Settings _settings;
         private readonly PluginJsonStorage<Settings> _storage;
@@ -30,10 +24,11 @@ namespace Wox.Plugin.CMD
             _settings = _storage.Load();
         }
 
-        ~CMD()
+        public void Save()
         {
             _storage.Save();
         }
+
 
         public List<Result> Query(Query query)
         {
@@ -103,14 +98,14 @@ namespace Wox.Plugin.CMD
                 {
                     if (m.Key == cmd)
                     {
-                        result.SubTitle = string.Format(context.API.GetTranslation("wox_plugin_cmd_cmd_has_been_executed_times"), m.Value);
+                        result.SubTitle = string.Format(_context.API.GetTranslation("wox_plugin_cmd_cmd_has_been_executed_times"), m.Value);
                         return null;
                     }
 
                     var ret = new Result
                     {
                         Title = m.Key,
-                        SubTitle = string.Format(context.API.GetTranslation("wox_plugin_cmd_cmd_has_been_executed_times"), m.Value),
+                        SubTitle = string.Format(_context.API.GetTranslation("wox_plugin_cmd_cmd_has_been_executed_times"), m.Value),
                         IcoPath = Image,
                         Action = c =>
                         {
@@ -129,7 +124,7 @@ namespace Wox.Plugin.CMD
             {
                 Title = cmd,
                 Score = 5000,
-                SubTitle = context.API.GetTranslation("wox_plugin_cmd_execute_through_shell"),
+                SubTitle = _context.API.GetTranslation("wox_plugin_cmd_execute_through_shell"),
                 IcoPath = Image,
                 Action = c =>
                 {
@@ -147,7 +142,7 @@ namespace Wox.Plugin.CMD
                 .Select(m => new Result
                 {
                     Title = m.Key,
-                    SubTitle = string.Format(context.API.GetTranslation("wox_plugin_cmd_cmd_has_been_executed_times"), m.Value),
+                    SubTitle = string.Format(_context.API.GetTranslation("wox_plugin_cmd_cmd_has_been_executed_times"), m.Value),
                     IcoPath = Image,
                     Action = c =>
                     {
@@ -267,33 +262,7 @@ namespace Wox.Plugin.CMD
 
         public void Init(PluginInitContext context)
         {
-            this.context = context;
-            context.API.GlobalKeyboardEvent += API_GlobalKeyboardEvent;
-        }
-
-        bool API_GlobalKeyboardEvent(int keyevent, int vkcode, SpecialKeyState state)
-        {
-            if (_settings.ReplaceWinR)
-            {
-                if (keyevent == (int)KeyEvent.WM_KEYDOWN && vkcode == (int)Keys.R && state.WinPressed)
-                {
-                    WinRStroked = true;
-                    OnWinRPressed();
-                    return false;
-                }
-                if (keyevent == (int)KeyEvent.WM_KEYUP && WinRStroked && vkcode == (int)Keys.LWin)
-                {
-                    WinRStroked = false;
-                    return false;
-                }
-            }
-            return false;
-        }
-
-        private void OnWinRPressed()
-        {
-            context.API.ChangeQuery($"{context.CurrentPluginMetadata.ActionKeywords[0]}{Plugin.Query.TermSeperater}");
-            Application.Current.MainWindow.Visibility = Visibility.Visible;
+            this._context = context;
         }
 
         public Control CreateSettingPanel()
@@ -303,12 +272,12 @@ namespace Wox.Plugin.CMD
 
         public string GetTranslatedPluginTitle()
         {
-            return context.API.GetTranslation("wox_plugin_cmd_plugin_name");
+            return _context.API.GetTranslation("wox_plugin_cmd_plugin_name");
         }
 
         public string GetTranslatedPluginDescription()
         {
-            return context.API.GetTranslation("wox_plugin_cmd_plugin_description");
+            return _context.API.GetTranslation("wox_plugin_cmd_plugin_description");
         }
 
         public List<Result> LoadContextMenus(Result selectedResult)
@@ -317,7 +286,7 @@ namespace Wox.Plugin.CMD
             {
                         new Result
                         {
-                            Title = context.API.GetTranslation("wox_plugin_cmd_run_as_administrator"),
+                            Title = _context.API.GetTranslation("wox_plugin_cmd_run_as_administrator"),
                             Action = c =>
                             {
                                 Execute(selectedResult.Title, true);
