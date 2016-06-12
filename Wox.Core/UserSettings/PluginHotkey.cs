@@ -1,11 +1,10 @@
-﻿using System;
+﻿using Wox.Plugin;
 
 namespace Wox.Core.UserSettings
 {
-    [Serializable]
-    public class CustomPluginHotkey
+    public class CustomHotkey : BaseModel
     {
         public string Hotkey { get; set; }
-        public string ActionKeyword { get; set; }
+        public string Query { get; set; }
     }
 }

@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using Wox.Infrastructure.Logger;
 
 namespace Wox.Plugin.Program
@@ -10,7 +11,7 @@ namespace Wox.Plugin.Program
         private static bool isIndexing;
         private static List<string> watchedPath = new List<string>(); 
 
-        public static void AddWatch(string path, bool includingSubDirectory = true)
+        public static void AddWatch(string path, string[] programSuffixes, bool includingSubDirectory = true)
         {
             if (watchedPath.Contains(path)) return;
             if (!Directory.Exists(path))
@@ -20,7 +21,7 @@ namespace Wox.Plugin.Program
             }
 
             watchedPath.Add(path);
-            foreach (string fileType in ProgramStorage.Instance.ProgramSuffixes.Split(';'))
+            foreach (string fileType in programSuffixes)
             {
                 FileSystemWatcher watcher = new FileSystemWatcher
                 {
@@ -40,9 +41,9 @@ namespace Wox.Plugin.Program
         {
             if (!isIndexing)
             {
-                ThreadPool.QueueUserWorkItem(o =>
+                Task.Run(() =>
                 {
-                    Programs.IndexPrograms();
+                    Main.IndexPrograms();
                     isIndexing = false;
                 });
             }

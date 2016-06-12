@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Wox.Plugin
 {
@@ -13,13 +14,8 @@ namespace Wox.Plugin
         /// <param name="query"></param>
         /// <param name="plugin"></param>
         /// <param name="results"></param>
+        [Obsolete("This method will be removed in Wox 1.3")]
         void PushResults(Query query, PluginMetadata plugin, List<Result> results);
-
-        /// <summary>
-        /// Show context menu with giving results
-        /// </summary>
-        /// <param name="results"></param>
-        void ShowContextMenu(PluginMetadata plugin, List<Result> results);
 
         /// <summary>
         /// Change Wox query
@@ -35,11 +31,13 @@ namespace Wox.Plugin
         /// Just change the query text, this won't raise search
         /// </summary>
         /// <param name="query"></param>
+        [Obsolete]
         void ChangeQueryText(string query, bool selectAll = false);
 
         /// <summary>
         /// Close Wox
         /// </summary>
+        [Obsolete]
         void CloseApp();
 
         /// <summary>
@@ -50,11 +48,13 @@ namespace Wox.Plugin
         /// <summary>
         /// Hide Wox
         /// </summary>
+        [Obsolete]
         void HideApp();
 
         /// <summary>
         /// Show Wox
         /// </summary>
+        [Obsolete]
         void ShowApp();
 
         /// <summary>
@@ -68,16 +68,18 @@ namespace Wox.Plugin
         /// <summary>
         /// Open setting dialog
         /// </summary>
-        void OpenSettingDialog(string tabName = "general");
+        void OpenSettingDialog();
 
         /// <summary>
         /// Show loading animation
         /// </summary>
+        [Obsolete("automatically start")]
         void StartLoadingBar();
 
         /// <summary>
         /// Stop loading animation
         /// </summary>
+        [Obsolete("automatically stop")]
         void StopLoadingBar();
 
         /// <summary>
@@ -85,11 +87,6 @@ namespace Wox.Plugin
         /// </summary>
         /// <param name="path">Plugin path (ends with .wox)</param>
         void InstallPlugin(string path);
-
-        /// <summary>
-        /// Reload all plugins
-        /// </summary>
-        void ReloadPlugins();
 
         /// <summary>
         /// Get translation of current language
@@ -105,21 +102,8 @@ namespace Wox.Plugin
         /// <returns></returns>
         List<PluginPair> GetAllPlugins();
 
-        /// <summary>
-        /// Fired after Back key down in the Wox query box
-        /// </summary>
-        event WoxKeyDownEventHandler BackKeyDownEvent;
-
-        /// <summary>
-        /// Fired after global keyboard events
-        /// if you want to hook something like Ctrl+R, you should use this event
-        /// </summary>
+        [Obsolete]
         event WoxGlobalKeyboardEventHandler GlobalKeyboardEvent;
-
-        /// <summary>
-        /// Fired after drop to result item of current plugin 
-        /// </summary>
-        /// todo: ResultItem -> Result
-        event ResultItemDropEventHandler ResultItemDropEvent;
     }
+    public delegate bool WoxGlobalKeyboardEventHandler(int keyevent, int vkcode, SpecialKeyState state);
 }

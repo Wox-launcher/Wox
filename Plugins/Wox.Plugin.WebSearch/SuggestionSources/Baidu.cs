@@ -1,31 +1,53 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Wox.Infrastructure.Http;
+using Wox.Infrastructure.Logger;
 
 namespace Wox.Plugin.WebSearch.SuggestionSources
 {
-    public class Baidu : AbstractSuggestionSource
+    public class Baidu : SuggestionSource
     {
+        public override string Domain { get; set; } = "www.baidu.com";
+
         Regex reg = new Regex("window.baidu.sug\\((.*)\\)");
 
-        public override List<string> GetSuggestions(string query)
+        public override async Task<List<string>> GetSuggestions(string query)
         {
-            var result = HttpRequest.Get("http://suggestion.baidu.com/su?json=1&wd=" + Uri.EscapeUriString(query), Proxy, "GB2312");
+            string result;
+
+            try
+            {
+                const string api = "http://suggestion.baidu.com/su?json=1&wd=";
+                result = await Http.Get(api + Uri.EscapeUriString(query), Proxy, "GB2312");
+            }
+            catch (WebException e)
+            {
+                Log.Warn("Can't get suggestion from baidu");
+                Log.Exception(e);
+                return new List<string>(); ;
+            }
+
             if (string.IsNullOrEmpty(result)) return new List<string>();
 
             Match match = reg.Match(result);
             if (match.Success)
             {
-                JContainer json = null;
+                JContainer json;
                 try
                 {
                     json = JsonConvert.DeserializeObject(match.Groups[1].Value) as JContainer;
                 }
-                catch { }
+                catch (JsonSerializationException e)
+                {
+                    Log.Exception(e);
+                    return new List<string>();
+                }
 
                 if (json != null)
                 {

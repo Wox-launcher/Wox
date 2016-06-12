@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
-using Wox.Core.UserSettings;
 using Wox.Infrastructure.Exception;
 using Wox.Infrastructure.Logger;
 using Wox.Plugin;
@@ -12,6 +11,8 @@ namespace Wox.Core.Resource
 {
     public class Internationalization : Resource
     {
+        public UserSettings.Settings Settings { get; set; }
+
         public Internationalization()
         {
             DirectoryName = "Languages";
@@ -28,7 +29,7 @@ namespace Wox.Core.Resource
                 }
                 catch (Exception e)
                 {
-                    Log.Error(e);
+                    Log.Exception(e);
                 }
             }
         }
@@ -64,8 +65,7 @@ namespace Wox.Core.Resource
                 }
             }
 
-            UserSettingStorage.Instance.Language = language.LanguageCode;
-            UserSettingStorage.Instance.Save();
+            Settings.Language = language.LanguageCode;
             ResourceMerger.UpdateResource(this);
         }
 
@@ -117,7 +117,7 @@ namespace Wox.Core.Resource
             catch (Exception e)
             {
                 var woxPluginException = new WoxPluginException(pluginPair.Metadata.Name, "Update Plugin metadata translation failed:", e);
-                Log.Error(woxPluginException);
+                Log.Exception(woxPluginException);
             }
         }
 
@@ -137,7 +137,7 @@ namespace Wox.Core.Resource
         {
             if (!Directory.Exists(folder)) return string.Empty;
 
-            string path = Path.Combine(folder, UserSettingStorage.Instance.Language + ".xaml");
+            string path = Path.Combine(folder, Settings.Language + ".xaml");
             if (File.Exists(path))
             {
                 return path;

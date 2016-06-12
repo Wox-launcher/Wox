@@ -1,13 +1,13 @@
-﻿using Wox.Core.Plugin;
-using Wox.Core.Resource;
-using Wox.Infrastructure;
-using Wox.Infrastructure.Hotkey;
+﻿using System;
+using System.Windows.Media;
+using System.Windows;
+using Wox.Infrastructure.Image;
 using Wox.Plugin;
-using Wox.Storage;
+
 
 namespace Wox.ViewModel
 {
-    public class ResultViewModel : BaseViewModel
+    public class ResultViewModel : BaseModel
     {
         #region Private Fields
 
@@ -22,41 +22,6 @@ namespace Wox.ViewModel
             if (result != null)
             {
                 RawResult = result;
-
-                OpenResultListBoxItemCommand = new RelayCommand(_ =>
-                {
-
-                    bool hideWindow = result.Action(new ActionContext
-                    {
-                        SpecialKeyState = GlobalHotkey.Instance.CheckModifiers()
-                    });
-
-                    if (hideWindow)
-                    {
-                        App.API.HideApp();
-                        UserSelectedRecordStorage.Instance.Add(RawResult);
-                        QueryHistoryStorage.Instance.Add(RawResult.OriginQuery.RawQuery);
-                    }
-                });
-
-                OpenContextMenuItemCommand = new RelayCommand(_ =>
-                {
-
-                    var actions = PluginManager.GetContextMenusForPlugin(result);
-
-                    var pluginMetaData = PluginManager.GetPluginForId(result.PluginID).Metadata;
-                    actions.ForEach(o =>
-                    {
-                        o.PluginDirectory = pluginMetaData.PluginDirectory;
-                        o.PluginID = result.PluginID;
-                        o.OriginQuery = result.OriginQuery;
-                    });
-
-                    actions.Add(GetTopMostContextMenu(result));
-
-                    App.API.ShowContextMenu(pluginMetaData, actions);
-
-                });
             }
         }
 
@@ -69,64 +34,48 @@ namespace Wox.ViewModel
 
         public string SubTitle => RawResult.SubTitle;
 
-        public string FullIcoPath => RawResult.FullIcoPath;
+        public string PluginID => RawResult.PluginID;
 
-        public bool IsSelected
+        public ImageSource Image
         {
-            get { return _isSelected; }
-            set
+            get
             {
-                _isSelected = value;
-                OnPropertyChanged();
+                var image = ImageLoader.Load(RawResult.IcoPath);
+                return image;
             }
         }
 
-        public RelayCommand OpenResultListBoxItemCommand { get; set; }
+        public int Score
+        {
+            get { return RawResult.Score; }
+            set { RawResult.Score = value; }
+        }
 
-        public RelayCommand OpenContextMenuItemCommand { get; set; }
+        public Query OriginQuery
+        {
+            get { return RawResult.OriginQuery; }
+            set { RawResult.OriginQuery = value; }
+        }
+
+        public Func<ActionContext, bool> Action
+        {
+            get { return RawResult.Action; }
+            set { RawResult.Action = value; }
+        }
 
         #endregion
 
         #region Properties
 
-        public Result RawResult { get; }
+        internal Result RawResult { get; }
 
         #endregion
 
-        #region Private Methods
-
-        private Result GetTopMostContextMenu(Result result)
+        public void Update(ResultViewModel newResult)
         {
-            if (TopMostRecordStorage.Instance.IsTopMost(result))
-            {
-                return new Result(InternationalizationManager.Instance.GetTranslation("cancelTopMostInThisQuery"), "Images\\down.png")
-                {
-                    PluginDirectory = WoxDirectroy.Executable,
-                    Action = _ =>
-                    {
-                        TopMostRecordStorage.Instance.Remove(result);
-                        App.API.ShowMsg("Succeed");
-                        return false;
-                    }
-                };
-            }
-            else
-            {
-                return new Result(InternationalizationManager.Instance.GetTranslation("setAsTopMostInThisQuery"), "Images\\up.png")
-                {
-                    PluginDirectory = WoxDirectroy.Executable,
-                    Action = _ =>
-                    {
-                        TopMostRecordStorage.Instance.AddOrUpdate(result);
-                        App.API.ShowMsg("Succeed");
-                        return false;
-                    }
-                };
-            }
+            RawResult.Score = newResult.RawResult.Score;
+            RawResult.OriginQuery = newResult.RawResult.OriginQuery;
         }
-
-
-        #endregion
 
         public override bool Equals(object obj)
         {

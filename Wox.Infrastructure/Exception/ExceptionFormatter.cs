@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Xml;
@@ -14,6 +15,7 @@ namespace Wox.Infrastructure.Exception
             return CreateExceptionReport(exception);
         }
 
+        //todo log /display line by line 
         private static string CreateExceptionReport(System.Exception ex)
         {
             var sb = new StringBuilder();
@@ -62,7 +64,7 @@ namespace Wox.Infrastructure.Exception
             sb.Append("* Command Line: ");
             sb.AppendLine(Environment.CommandLine);
             sb.Append("* Timestamp: ");
-            sb.AppendLine(XmlConvert.ToString(DateTime.Now));
+            sb.AppendLine(DateTime.Now.ToString(CultureInfo.InvariantCulture));
             sb.Append("* IntPtr Length: ");
             sb.AppendLine(IntPtr.Size.ToString());
             sb.Append("* System Version: ");
@@ -84,7 +86,21 @@ namespace Wox.Infrastructure.Exception
                 sb.Append("* ");
                 sb.Append(ass.FullName);
                 sb.Append(" (");
-                sb.Append(string.IsNullOrEmpty(ass.Location) ? "not supported" : ass.Location);
+
+                if (ass.IsDynamic)
+                {
+                    sb.Append("dynamic assembly doesn't has location");
+                }
+                else if (string.IsNullOrEmpty(ass.Location))
+                {
+                    sb.Append("location is null or empty");
+                    
+                }
+                else
+                {
+                sb.Append(ass.Location);
+                    
+                }
                 sb.AppendLine(")");
             }
 

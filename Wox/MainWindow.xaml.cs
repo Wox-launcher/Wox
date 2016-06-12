@@ -1,20 +1,18 @@
 ﻿using System;
 using System.ComponentModel;
 using System.Windows;
-using System.Windows.Forms;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
+using System.Windows.Controls;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
-using Wox.Core.Updater;
 using Wox.Core.UserSettings;
 using Wox.Helper;
-using Wox.Infrastructure.Hotkey;
 using Wox.ViewModel;
-using DataFormats = System.Windows.DataFormats;
-using DragEventArgs = System.Windows.DragEventArgs;
-using KeyEventArgs = System.Windows.Input.KeyEventArgs;
-using MessageBox = System.Windows.MessageBox;
+using Screen = System.Windows.Forms.Screen;
+using ContextMenu = System.Windows.Forms.ContextMenu;
+using MenuItem = System.Windows.Forms.MenuItem;
+using NotifyIcon = System.Windows.Forms.NotifyIcon;
 
 namespace Wox
 {
@@ -24,9 +22,19 @@ namespace Wox
         #region Private Fields
 
         private readonly Storyboard _progressBarStoryboard = new Storyboard();
+        private Settings _settings;
+        private NotifyIcon _notifyIcon;
+        private MainViewModel _viewModel;
 
         #endregion
 
+        public MainWindow(Settings settings, MainViewModel mainVM)
+        {
+            InitializeComponent();
+            DataContext = mainVM;
+            _viewModel = mainVM;
+            _settings = settings;
+        }
         public MainWindow()
         {
             InitializeComponent();
@@ -34,95 +42,42 @@ namespace Wox
 
         private void OnClosing(object sender, CancelEventArgs e)
         {
-            UserSettingStorage.Instance.WindowLeft = Left;
-            UserSettingStorage.Instance.WindowTop = Top;
-            UserSettingStorage.Instance.Save();
-            e.Cancel = true;
+            _notifyIcon.Visible = false;
+            _viewModel.Save();
         }
 
         private void OnLoaded(object sender, RoutedEventArgs _)
         {
-            CheckUpdate();
-
-            ThemeManager.Theme.ChangeTheme(UserSettingStorage.Instance.Theme);
-            InternationalizationManager.Instance.ChangeLanguage(UserSettingStorage.Instance.Language);
-
-            InitProgressbarAnimation();
             WindowIntelopHelper.DisableControlBox(this);
-
-            var vm = (MainViewModel)DataContext;
-            vm.TextBoxSelected += (o, e) => QueryTextBox.SelectAll();
-            vm.CursorMovedToEnd += (o, e) =>
-            {
-                QueryTextBox.Focus();
-                QueryTextBox.CaretIndex = QueryTextBox.Text.Length;
-            };
-            vm.MainWindowVisibilityChanged += (o, e) =>
-            {
-                if (vm.MainWindowVisibility.IsVisible())
-                {
-                    Activate();
-                    QueryTextBox.Focus();
-                }
-            };
-
-            vm.Left = GetWindowsLeft();
-            vm.Top = GetWindowsTop();
-            vm.MainWindowVisibility = Visibility.Visible;
+            ThemeManager.Instance.ChangeTheme(_settings.Theme);
+            InitializeNotifyIcon();
         }
 
-        private double GetWindowsLeft()
+        private void InitializeNotifyIcon()
         {
-            if (UserSettingStorage.Instance.RememberLastLaunchLocation) return UserSettingStorage.Instance.WindowLeft;
-
-            var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
-            var dipPoint = WindowIntelopHelper.TransformPixelsToDIP(this, screen.WorkingArea.Width, 0);
-            UserSettingStorage.Instance.WindowLeft = (dipPoint.X - ActualWidth) / 2;
-            return UserSettingStorage.Instance.WindowLeft;
-        }
-
-        private double GetWindowsTop()
-        {
-            if (UserSettingStorage.Instance.RememberLastLaunchLocation) return UserSettingStorage.Instance.WindowTop;
-
-            var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
-            var dipPoint = WindowIntelopHelper.TransformPixelsToDIP(this, 0, screen.WorkingArea.Height);
-            UserSettingStorage.Instance.WindowTop = (dipPoint.Y - QueryTextBox.ActualHeight) / 4;
-            return UserSettingStorage.Instance.WindowTop;
-        }
-
-        private void CheckUpdate()
-        {
-            UpdaterManager.Instance.PrepareUpdateReady += OnPrepareUpdateReady;
-            UpdaterManager.Instance.UpdateError += OnUpdateError;
-            UpdaterManager.Instance.CheckUpdate();
-        }
-
-        void OnUpdateError(object sender, EventArgs e)
-        {
-            string updateError = InternationalizationManager.Instance.GetTranslation("update_wox_update_error");
-            MessageBox.Show(updateError);
-        }
-
-        private void OnPrepareUpdateReady(object sender, EventArgs e)
-        {
-            Dispatcher.Invoke(() =>
-            {
-                new WoxUpdate().ShowDialog();
-            });
+            _notifyIcon = new NotifyIcon { Text = Infrastructure.Constant.Wox, Icon = Properties.Resources.app, Visible = true };
+            _notifyIcon.Click += (o, e) => Visibility = Visibility.Visible;
+            var open = new MenuItem(InternationalizationManager.Instance.GetTranslation("iconTrayOpen"));
+            open.Click += (o, e) => Visibility = Visibility.Visible;
+            var setting = new MenuItem(InternationalizationManager.Instance.GetTranslation("iconTraySettings"));
+            setting.Click += (o, e) => App.API.OpenSettingDialog();
+            var exit = new MenuItem(InternationalizationManager.Instance.GetTranslation("iconTrayExit"));
+            exit.Click += (o, e) => Close();
+            MenuItem[] childen = { open, setting, exit };
+            _notifyIcon.ContextMenu = new ContextMenu(childen);
         }
 
         private void InitProgressbarAnimation()
         {
-            var da = new DoubleAnimation(progressBar.X2, ActualWidth + 100, new Duration(new TimeSpan(0, 0, 0, 0, 1600)));
-            var da1 = new DoubleAnimation(progressBar.X1, ActualWidth, new Duration(new TimeSpan(0, 0, 0, 0, 1600)));
+            var da = new DoubleAnimation(ProgressBar.X2, ActualWidth + 100, new Duration(new TimeSpan(0, 0, 0, 0, 1600)));
+            var da1 = new DoubleAnimation(ProgressBar.X1, ActualWidth, new Duration(new TimeSpan(0, 0, 0, 0, 1600)));
             Storyboard.SetTargetProperty(da, new PropertyPath("(Line.X2)"));
             Storyboard.SetTargetProperty(da1, new PropertyPath("(Line.X1)"));
             _progressBarStoryboard.Children.Add(da);
             _progressBarStoryboard.Children.Add(da1);
             _progressBarStoryboard.RepeatBehavior = RepeatBehavior.Forever;
-            progressBar.Visibility = Visibility.Hidden;
-            progressBar.BeginStoryboard(_progressBarStoryboard);
+            ProgressBar.BeginStoryboard(_progressBarStoryboard);
+            _viewModel.ProgressBarVisibility = Visibility.Hidden;
         }
 
         private void OnMouseDown(object sender, MouseButtonEventArgs e)
@@ -130,175 +85,28 @@ namespace Wox
             if (e.ChangedButton == MouseButton.Left) DragMove();
         }
 
-        private void OnDeactivated(object sender, EventArgs e)
+        private void OnPreviewMouseButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (UserSettingStorage.Instance.HideWhenDeactive)
+            if (sender != null && e.OriginalSource != null)
             {
-                App.API.HideApp();
+                var r = (ResultListBox)sender;
+                var d = (DependencyObject)e.OriginalSource;
+                var item = ItemsControl.ContainerFromElement(r, d) as ListBoxItem;
+                var result = (ResultViewModel)item?.DataContext;
+                if (result != null)
+                {
+                    if (e.ChangedButton == MouseButton.Left)
+                    {
+                        _viewModel.OpenResultCommand.Execute(null);
+                    }
+                    else if (e.ChangedButton == MouseButton.Right)
+                    {
+                        _viewModel.LoadContextMenuCommand.Execute(null);
+                    }
+                }
             }
         }
 
-        private void OnPreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            var vm = DataContext as MainViewModel;
-
-            if (null == vm) return;
-            //when alt is pressed, the real key should be e.SystemKey
-            var key = (e.Key == Key.System ? e.SystemKey : e.Key);
-            switch (key)
-            {
-                case Key.Escape:
-                    vm.EscCommand.Execute(null);
-                    e.Handled = true;
-                    break;
-
-                case Key.Tab:
-                    if (GlobalHotkey.Instance.CheckModifiers().ShiftPressed)
-                    {
-                        vm.SelectPrevItemCommand.Execute(null);
-                    }
-                    else
-                    {
-                        vm.SelectNextItemCommand.Execute(null);
-                    }
-                    e.Handled = true;
-                    break;
-
-                case Key.N:
-                case Key.J:
-                    if (GlobalHotkey.Instance.CheckModifiers().CtrlPressed)
-                    {
-                        vm.SelectNextItemCommand.Execute(null);
-                    }
-                    break;
-
-                case Key.P:
-                case Key.K:
-                    if (GlobalHotkey.Instance.CheckModifiers().CtrlPressed)
-                    {
-                        vm.SelectPrevItemCommand.Execute(null);
-                    }
-                    break;
-
-                case Key.O:
-                    if (GlobalHotkey.Instance.CheckModifiers().CtrlPressed)
-                    {
-                        vm.CtrlOCommand.Execute(null);
-                    }
-                    break;
-
-                case Key.Down:
-                    if (GlobalHotkey.Instance.CheckModifiers().CtrlPressed)
-                    {
-                        vm.DisplayNextQueryCommand.Execute(null);
-                    }
-                    else
-                    {
-                        vm.SelectNextItemCommand.Execute(null);
-                    }
-                    e.Handled = true;
-                    break;
-
-                case Key.Up:
-                    if (GlobalHotkey.Instance.CheckModifiers().CtrlPressed)
-                    {
-                        vm.DisplayPrevQueryCommand.Execute(null);
-                    }
-                    else
-                    {
-                        vm.SelectPrevItemCommand.Execute(null);
-                    }
-                    e.Handled = true;
-                    break;
-
-                case Key.D:
-                    if (GlobalHotkey.Instance.CheckModifiers().CtrlPressed)
-                    {
-                        vm.SelectNextPageCommand.Execute(null);
-                    }
-                    break;
-
-                case Key.PageDown:
-                    vm.SelectNextPageCommand.Execute(null);
-                    e.Handled = true;
-                    break;
-
-                case Key.U:
-                    if (GlobalHotkey.Instance.CheckModifiers().CtrlPressed)
-                    {
-                        vm.SelectPrevPageCommand.Execute(null);
-                    }
-                    break;
-
-                case Key.PageUp:
-                    vm.SelectPrevPageCommand.Execute(null);
-                    e.Handled = true;
-                    break;
-
-                case Key.Back:
-                    vm.BackCommand.Execute(e);
-                    break;
-
-                case Key.F1:
-                    vm.StartHelpCommand.Execute(null);
-                    break;
-
-                case Key.Enter:
-                    if (GlobalHotkey.Instance.CheckModifiers().ShiftPressed)
-                    {
-                        vm.ShiftEnterCommand.Execute(null);
-                    }
-                    else
-                    {
-                        vm.OpenResultCommand.Execute(null);
-                    }
-                    e.Handled = true;
-                    break;
-
-                case Key.D1:
-
-                    if (GlobalHotkey.Instance.CheckModifiers().AltPressed)
-                    {
-                        vm.OpenResultCommand.Execute(0);
-                    }
-                    break;
-
-                case Key.D2:
-                    if (GlobalHotkey.Instance.CheckModifiers().AltPressed)
-                    {
-                        vm.OpenResultCommand.Execute(1);
-                    }
-                    break;
-
-                case Key.D3:
-                    if (GlobalHotkey.Instance.CheckModifiers().AltPressed)
-                    {
-                        vm.OpenResultCommand.Execute(2);
-                    }
-                    break;
-
-                case Key.D4:
-                    if (GlobalHotkey.Instance.CheckModifiers().AltPressed)
-                    {
-                        vm.OpenResultCommand.Execute(3);
-                    }
-                    break;
-
-                case Key.D5:
-                    if (GlobalHotkey.Instance.CheckModifiers().AltPressed)
-                    {
-                        vm.OpenResultCommand.Execute(4);
-                    }
-                    break;
-                case Key.D6:
-                    if (GlobalHotkey.Instance.CheckModifiers().AltPressed)
-                    {
-                        vm.OpenResultCommand.Execute(5);
-                    }
-                    break;
-
-            }
-        }
 
         private void OnDrop(object sender, DragEventArgs e)
         {
@@ -322,5 +130,113 @@ namespace Wox
         {
             e.Handled = true;
         }
+
+        private void OnContextMenusForSettingsClick(object sender, RoutedEventArgs e)
+        {
+            App.API.OpenSettingDialog();
+        }
+
+
+        private void OnDeactivated(object sender, EventArgs e)
+        {
+            if (_settings.HideWhenDeactive)
+            {
+                Hide();
+            }
+        }
+
+        private void OnQueryVisible(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            var visible = (bool)e.NewValue;
+            if (visible)
+            {
+                // the Focusable and the IsVisible both needs to be true when set focus
+                // logical is set in xaml
+                QueryTextBox.Focus();
+
+                if (_viewModel.QueryTextSelected)
+                {
+                    QueryTextBox.SelectAll();
+                    _viewModel.QueryTextSelected = false;
+                }
+            }
+        }
+
+        private void OnQueryChanged(object sender, TextChangedEventArgs e)
+        {
+            QueryTextBox.CaretIndex = QueryTextBox.Text.Length;
+        }
+
+        private bool _startup = true;
+        private void OnMainWindowVisible(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            var visible = (bool)e.NewValue;
+            if (visible)
+            {
+                if (!_startup)
+                {
+                    if (!_settings.RememberLastLaunchLocation)
+                    {
+                        Left = WindowLeft();
+                        Top = WindowTop();
+                    }
+                    Activate();
+                    _settings.ActivateTimes++;
+                }
+                else
+                {
+                    _startup = false;
+                }
+            }
+        }
+
+        /// <summary>
+        // used to set correct position on windows first startup
+        // since the actual width and actual height will be avaiable after this event
+        /// </summary>
+        private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            Left = WindowLeft();
+            Top = WindowTop();
+            InitProgressbarAnimation();
+        }
+
+        private double WindowLeft()
+        {
+            var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
+            var dip1 = WindowIntelopHelper.TransformPixelsToDIP(this, screen.WorkingArea.X, 0);
+            var dip2 = WindowIntelopHelper.TransformPixelsToDIP(this, screen.WorkingArea.Width, 0);
+            var left = (dip2.X - ActualWidth) / 2 + dip1.X;
+            return left;
+        }
+
+        private double WindowTop()
+        {
+            var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
+            var dip1 = WindowIntelopHelper.TransformPixelsToDIP(this, 0, screen.WorkingArea.Y);
+            var dip2 = WindowIntelopHelper.TransformPixelsToDIP(this, 0, screen.WorkingArea.Height);
+            var top = (dip2.Y - QueryTextBox.ActualHeight) / 4 + dip1.Y;
+            return top;
+        }
+
+        /// <summary>
+        /// Register up and down key
+        /// todo: any way to put this in xaml ?
+        /// </summary>
+        private void OnKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Down)
+            {
+                _viewModel.SelectNextItemCommand.Execute(null);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Up)
+            {
+                _viewModel.SelectPrevItemCommand.Execute(null);
+                e.Handled = true;
+            }
+        }
+
+
     }
 }

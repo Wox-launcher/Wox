@@ -34,7 +34,7 @@ namespace Wox.Core.Plugin
                     return;
                 }
 
-                string pluginFolerPath = PluginManager.PluginDirectory;
+                string pluginFolerPath = Infrastructure.Constant.UserDirectory;
 
                 string newPluginName = plugin.Name
                     .Replace("/", "_")
@@ -80,7 +80,7 @@ namespace Wox.Core.Plugin
                     //current solution is to restart wox. Ugly.
                     //if (MainWindow.Initialized)
                     //{
-                    //    Plugins.Init();
+                    //    Plugins.Initialize();
                     //}
                     if (MessageBox.Show($"You have installed plugin {plugin.Name} successfully.{Environment.NewLine}" +
                                         " Restart Wox to take effect?",

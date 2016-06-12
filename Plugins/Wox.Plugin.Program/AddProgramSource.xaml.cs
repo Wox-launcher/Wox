@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.Collections.Generic;
+using System.Windows;
 using System.Windows.Forms;
 
 namespace Wox.Plugin.Program
@@ -9,18 +10,25 @@ namespace Wox.Plugin.Program
     public partial class AddProgramSource
     {
         private ProgramSource _editing;
+        private Settings _settings;
 
-        public AddProgramSource()
+        public AddProgramSource(Settings settings)
         {
             InitializeComponent();
+            _settings = settings;
+            Suffixes.Text = string.Join(";", settings.ProgramSuffixes);
+            Directory.Focus();
         }
 
-        public AddProgramSource(ProgramSource edit) : this()
+        public AddProgramSource(ProgramSource edit, Settings settings)
         {
             _editing = edit;
+            _settings = settings;
+
+            InitializeComponent();
             Directory.Text = _editing.Location;
             MaxDepth.Text = _editing.MaxDepth.ToString();
-            Suffixes.Text = _editing.Suffixes;
+            Suffixes.Text = string.Join(";", _editing.Suffixes);
         }
 
         private void BrowseButton_Click(object sender, RoutedEventArgs e)
@@ -43,23 +51,23 @@ namespace Wox.Plugin.Program
 
             if(_editing == null)
             {
-                ProgramStorage.Instance.ProgramSources.Add(new ProgramSource
+                var source = new ProgramSource
                 {
                     Location = Directory.Text,
                     MaxDepth = max,
-                    Suffixes = Suffixes.Text,
+                    Suffixes = Suffixes.Text.Split(ProgramSource.SuffixSeperator),
                     Type = "FileSystemProgramSource",
                     Enabled = true
-                });
+                };
+                _settings.ProgramSources.Add(source);
             }
             else
             {
                 _editing.Location = Directory.Text;
                 _editing.MaxDepth = max;
-                _editing.Suffixes = Suffixes.Text;
+                _editing.Suffixes = Suffixes.Text.Split(ProgramSource.SuffixSeperator);
             }
 
-            ProgramStorage.Instance.Save();
             DialogResult = true;
             Close();
         }

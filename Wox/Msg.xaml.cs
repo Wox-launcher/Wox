@@ -4,8 +4,9 @@ using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
-using System.Windows.Media.Imaging;
 using Wox.Helper;
+using Wox.Infrastructure;
+using Wox.Infrastructure.Image;
 
 namespace Wox
 {
@@ -28,7 +29,7 @@ namespace Wox
 
             // Create the fade out storyboard
             fadeOutStoryboard.Completed += fadeOutStoryboard_Completed;
-            DoubleAnimation fadeOutAnimation = new DoubleAnimation(dipWorkingArea.Y - Height, dipWorkingArea.Y, new Duration(TimeSpan.FromSeconds(0.3)))
+            DoubleAnimation fadeOutAnimation = new DoubleAnimation(dipWorkingArea.Y - Height, dipWorkingArea.Y, new Duration(TimeSpan.FromSeconds(1)))
             {
                 AccelerationRatio = 0.2
             };
@@ -36,9 +37,7 @@ namespace Wox
             Storyboard.SetTargetProperty(fadeOutAnimation, new PropertyPath(TopProperty));
             fadeOutStoryboard.Children.Add(fadeOutAnimation);
 
-
-            imgClose.Source = new BitmapImage(new Uri("Images\\close.pn", UriKind.Relative));
-            //imgClose.Source = new BitmapImage(new Uri(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(System.Windows.Forms.Application.ExecutablePath), "Images\\close.png")));
+            imgClose.Source = ImageLoader.Load(Path.Combine(Constant.ProgramDirectory, "Images\\close.png"));
             imgClose.MouseUp += imgClose_MouseUp;
         }
 
@@ -56,7 +55,7 @@ namespace Wox
             Close();
         }
 
-        public void Show(string title, string subTitle, string icopath)
+        public void Show(string title, string subTitle, string iconPath)
         {
             tbTitle.Text = title;
             tbSubTitle.Text = subTitle;
@@ -64,24 +63,15 @@ namespace Wox
             {
                 tbSubTitle.Visibility = Visibility.Collapsed;
             }
-            if (!File.Exists(icopath))
-            {
-                imgIco.Source = new BitmapImage(new Uri("Images\\app.png", UriKind.Relative));
-            }
-            else {
-                imgIco.Source = new BitmapImage(new Uri(icopath));
-            }
+            imgIco.Source = ImageLoader.Load(iconPath);
 
             Show();
 
-            Dispatcher.InvokeAsync(async () =>
-                                   {
-                                       if (!closing)
-                                       {
-                                           closing = true;
-                                           await Dispatcher.InvokeAsync(fadeOutStoryboard.Begin);
-                                       }
-                                   });
+            if (!closing)
+            {
+                closing = true;
+                fadeOutStoryboard.Begin();
+            }
         }
     }
 }

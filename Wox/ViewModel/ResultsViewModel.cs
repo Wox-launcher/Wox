@@ -1,82 +1,56 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Collections.Specialized;
-using System.ComponentModel;
 using System.Linq;
 using System.Windows;
+using System.Windows.Data;
 using Wox.Core.UserSettings;
 using Wox.Plugin;
-using Wox.Storage;
 
 namespace Wox.ViewModel
 {
-    public class ResultsViewModel : BaseViewModel
+    public class ResultsViewModel : BaseModel
     {
         #region Private Fields
 
-        private ResultViewModel _selectedResult;
-        public ResultCollection Results { get; } = new ResultCollection();
-        private Thickness _margin;
+        public ResultCollection Results { get; }
 
-        private readonly object _resultsUpdateLock = new object();
+        private readonly object _addResultsLock = new object();
+        private readonly object _collectionLock = new object();
+        private readonly Settings _settings;
+        private int MaxResults => _settings?.MaxResultsToShow ?? 6;
+
+        public ResultsViewModel()
+        {
+            Results = new ResultCollection();
+            BindingOperations.EnableCollectionSynchronization(Results, _collectionLock);
+        }
+        public ResultsViewModel(Settings settings) : this()
+        {
+            _settings = settings;
+            _settings.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(_settings.MaxResultsToShow))
+                {
+                    OnPropertyChanged(nameof(MaxHeight));
+                }
+            };
+        }
 
         #endregion
 
         #region ViewModel Properties
 
-        public int MaxHeight => UserSettingStorage.Instance.MaxResultsToShow * 50;
+        public int MaxHeight => MaxResults * 50;
 
-        public ResultViewModel SelectedResult
-        {
-            get
-            {
-                return _selectedResult;
-            }
-            set
-            {
-                if (value != null)
-                {
-                    if (_selectedResult != null)
-                    {
-                        _selectedResult.IsSelected = false;
-                    }
+        public int SelectedIndex { get; set; }
 
-                    _selectedResult = value;
-
-                    if (_selectedResult != null)
-                    {
-                        _selectedResult.IsSelected = true;
-                    }
-
-                }
-
-                OnPropertyChanged();
-
-            }
-        }
-
-        public Thickness Margin
-        {
-            get
-            {
-                return _margin;
-            }
-            set
-            {
-                _margin = value;
-                OnPropertyChanged();
-            }
-        }
+        public ResultViewModel SelectedItem { get; set; }
+        public Thickness Margin { get; set; }
 
         #endregion
 
         #region Private Methods
-
-        private bool IsTopMostResult(Result result)
-        {
-            return TopMostRecordStorage.Instance.IsTopMost(result);
-        }
 
         private int InsertIndexOf(int newScore, IList<ResultViewModel> list)
         {
@@ -92,72 +66,44 @@ namespace Wox.ViewModel
             return index;
         }
 
+        private int NewIndex(int i)
+        {
+            var n = Results.Count;
+            if (n > 0)
+            {
+                i = (n + i) % n;
+                return i;
+            }
+            else
+            {
+                // SelectedIndex returns -1 if selection is empty.
+                return -1;
+            }
+        }
+
+
         #endregion
 
         #region Public Methods
 
-        public void SelectResult(int index)
-        {
-            if (index <= Results.Count - 1)
-            {
-                SelectedResult = Results[index];
-            }
-        }
-
         public void SelectNextResult()
         {
-            if (SelectedResult != null)
-            {
-                var index = Results.IndexOf(SelectedResult);
-                if (index == Results.Count - 1)
-                {
-                    index = -1;
-                }
-                SelectedResult = Results.ElementAt(index + 1);
-            }
+            SelectedIndex = NewIndex(SelectedIndex + 1);
         }
 
         public void SelectPrevResult()
         {
-            if (SelectedResult != null)
-            {
-                var index = Results.IndexOf(SelectedResult);
-                if (index == 0)
-                {
-                    index = Results.Count;
-                }
-                SelectedResult = Results.ElementAt(index - 1);
-            }
+            SelectedIndex = NewIndex(SelectedIndex - 1);
         }
 
         public void SelectNextPage()
         {
-            var index = 0;
-            if (SelectedResult != null)
-            {
-                index = Results.IndexOf(SelectedResult);
-            }
-            index += 5;
-            if (index > Results.Count - 1)
-            {
-                index = Results.Count - 1;
-            }
-            SelectedResult = Results.ElementAt(index);
+            SelectedIndex = NewIndex(SelectedIndex + MaxResults);
         }
 
         public void SelectPrevPage()
         {
-            var index = 0;
-            if (SelectedResult != null)
-            {
-                index = Results.IndexOf(SelectedResult);
-            }
-            index -= 5;
-            if (index < 0)
-            {
-                index = 0;
-            }
-            SelectedResult = Results.ElementAt(index);
+            SelectedIndex = NewIndex(SelectedIndex - MaxResults);
         }
 
         public void Clear()
@@ -167,83 +113,81 @@ namespace Wox.ViewModel
 
         public void RemoveResultsExcept(PluginMetadata metadata)
         {
-            lock (_resultsUpdateLock)
-            {
-                Results.RemoveAll(r => r.RawResult.PluginID != metadata.ID);
-            }
+            Results.RemoveAll(r => r.RawResult.PluginID != metadata.ID);
         }
 
         public void RemoveResultsFor(PluginMetadata metadata)
         {
-            lock (_resultsUpdateLock)
-            {
-                Results.RemoveAll(r => r.RawResult.PluginID == metadata.ID);
-            }
+            Results.RemoveAll(r => r.PluginID == metadata.ID);
         }
 
+        /// <summary>
+        /// To avoid deadlock, this method should not called from main thread
+        /// </summary>
         public void AddResults(List<Result> newRawResults, string resultId)
         {
-            lock (_resultsUpdateLock)
+            lock (_addResultsLock)
             {
-                var newResults = new List<ResultViewModel>();
-                newRawResults.ForEach((re) => { newResults.Add(new ResultViewModel(re)); });
-                // todo use async to do new result calculation
-                var resultsCopy = Results.ToList();
-                var oldResults = resultsCopy.Where(r => r.RawResult.PluginID == resultId).ToList();
-                // intersection of A (old results) and B (new newResults)
-                var intersection = oldResults.Intersect(newResults).ToList();
-                // remove result of relative complement of B in A
-                foreach (var result in oldResults.Except(intersection))
-                {
-                    resultsCopy.Remove(result);
-                }
-
-                // update scores
-                foreach (var result in newResults)
-                {
-                    if (IsTopMostResult(result.RawResult))
-                    {
-                        result.RawResult.Score = int.MaxValue;
-                    }
-                }
-
-                // update index for result in intersection of A and B
-                foreach (var commonResult in intersection)
-                {
-                    int oldIndex = resultsCopy.IndexOf(commonResult);
-                    int oldScore = resultsCopy[oldIndex].RawResult.Score;
-                    int newScore = newResults[newResults.IndexOf(commonResult)].RawResult.Score;
-                    if (newScore != oldScore)
-                    {
-                        var oldResult = resultsCopy[oldIndex];
-                        oldResult.RawResult.Score = newScore;
-                        resultsCopy.RemoveAt(oldIndex);
-                        int newIndex = InsertIndexOf(newScore, resultsCopy);
-                        resultsCopy.Insert(newIndex, oldResult);
-
-                    }
-                }
-
-                // insert result in relative complement of A in B
-                foreach (var result in newResults.Except(intersection))
-                {
-                    int newIndex = InsertIndexOf(result.RawResult.Score, resultsCopy);
-                    resultsCopy.Insert(newIndex, result);
-                }
+                var newResults = NewResults(newRawResults, resultId);
 
                 // update UI in one run, so it can avoid UI flickering
-                Results.Update(resultsCopy);
+                Results.Update(newResults);
 
                 if (Results.Count > 0)
                 {
                     Margin = new Thickness { Top = 8 };
-                    SelectedResult = Results[0];
+                    SelectedIndex = 0;
                 }
                 else
                 {
                     Margin = new Thickness { Top = 0 };
                 }
             }
+        }
+
+        private List<ResultViewModel> NewResults(List<Result> newRawResults, string resultId)
+        {
+            var newResults = newRawResults.Select(r => new ResultViewModel(r)).ToList();
+            var results = Results.ToList();
+            var oldResults = results.Where(r => r.PluginID == resultId).ToList();
+
+            // intersection of A (old results) and B (new newResults)
+            var intersection = oldResults.Intersect(newResults).ToList();
+
+            // remove result of relative complement of B in A
+            foreach (var result in oldResults.Except(intersection))
+            {
+                results.Remove(result);
+            }
+
+            // update index for result in intersection of A and B
+            foreach (var commonResult in intersection)
+            {
+                int oldIndex = results.IndexOf(commonResult);
+                int oldScore = results[oldIndex].Score;
+                var newResult = newResults[newResults.IndexOf(commonResult)];
+                int newScore = newResult.Score;
+                if (newScore != oldScore)
+                {
+                    var oldResult = results[oldIndex];
+
+                    oldResult.Score = newScore;
+                    oldResult.OriginQuery = newResult.OriginQuery;
+
+                    results.RemoveAt(oldIndex);
+                    int newIndex = InsertIndexOf(newScore, results);
+                    results.Insert(newIndex, oldResult);
+                }
+            }
+
+            // insert result in relative complement of A in B
+            foreach (var result in newResults.Except(intersection))
+            {
+                int newIndex = InsertIndexOf(result.Score, results);
+                results.Insert(newIndex, result);
+            }
+
+            return results;
         }
 
 
@@ -256,21 +200,13 @@ namespace Wox.ViewModel
             {
                 CheckReentrancy();
 
-                List<ResultViewModel> itemsToRemove = Items.Where(x => predicate(x)).ToList();
-                if (itemsToRemove.Count > 0)
+                for (int i = Count - 1; i >= 0; i--)
                 {
-                    itemsToRemove.ForEach(item => { Items.Remove(item); });
-
-                    OnPropertyChanged(new PropertyChangedEventArgs("Count"));
-                    OnPropertyChanged(new PropertyChangedEventArgs("Item[]"));
-                    // fuck ms 
-                    // http://blogs.msdn.com/b/nathannesbit/archive/2009/04/20/addrange-and-observablecollection.aspx
-                    // http://geekswithblogs.net/NewThingsILearned/archive/2008/01/16/listcollectionviewcollectionview-doesnt-support-notifycollectionchanged-with-multiple-items.aspx
-                    // PS: don't use Reset for other data updates, it will cause UI flickering
-                    OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+                    if (predicate(this[i]))
+                    {
+                        RemoveAt(i);
+                    }
                 }
-
-
             }
 
             public void Update(List<ResultViewModel> newItems)
@@ -278,21 +214,23 @@ namespace Wox.ViewModel
                 int newCount = newItems.Count;
                 int oldCount = Items.Count;
                 int location = newCount > oldCount ? oldCount : newCount;
+
                 for (int i = 0; i < location; i++)
                 {
-                    ResultViewModel oldResult = Items[i];
+                    ResultViewModel oldResult = this[i];
                     ResultViewModel newResult = newItems[i];
                     if (!oldResult.Equals(newResult))
                     {
                         this[i] = newResult;
                     }
-                    else if (oldResult.RawResult.Score != newResult.RawResult.Score)
+                    else if (oldResult.Score != newResult.Score)
                     {
-                        this[i].RawResult.Score = newResult.RawResult.Score;
+                        this[i].Score = newResult.Score;
                     }
                 }
 
-                if (newCount > oldCount)
+
+                if (newCount >= oldCount)
                 {
                     for (int i = oldCount; i < newCount; i++)
                     {
@@ -301,16 +239,12 @@ namespace Wox.ViewModel
                 }
                 else
                 {
-                    int removeIndex = newCount;
-                    for (int i = newCount; i < oldCount; i++)
+                    for (int i = oldCount - 1; i >= newCount; i--)
                     {
-                        RemoveAt(removeIndex);
+                        RemoveAt(i);
                     }
                 }
-
             }
         }
-
     }
-
 }
