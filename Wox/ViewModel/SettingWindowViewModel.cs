@@ -103,16 +103,9 @@ namespace Wox.ViewModel
                     var multipleActionKeywordsProvider = settingProvider as IMultipleActionKeywords;
                     if (multipleActionKeywordsProvider != null)
                     {
-                        multipleActionKeywordsProvider.ActionKeywordsChanged += (o, e) =>
-                        {
-                            // update in-memory data
-                            PluginManager.UpdateActionKeywordForPlugin(SelectedPlugin.PluginPair, e.OldActionKeyword,
-                                e.NewActionKeyword);
-                            // update persistant data
-                            Settings.PluginSettings.UpdateActionKeyword(SelectedPlugin.Metadata);
-
-                            MessageBox.Show(_translater.GetTranslation("succeed"));
-                        };
+                        // prevent subscribing multiple times
+                        multipleActionKeywordsProvider.ActionKeywordsChanged -= ActionKeywordsChangedHandler;
+                        multipleActionKeywordsProvider.ActionKeywordsChanged += ActionKeywordsChangedHandler;
                     }
                     var control = settingProvider.CreateSettingPanel();
                     control.HorizontalAlignment = HorizontalAlignment.Stretch;
@@ -124,6 +117,17 @@ namespace Wox.ViewModel
                     return new Control();
                 }
             }
+        }
+
+        private void ActionKeywordsChangedHandler(object sender, ActionKeywordsChangedEventArgs e)
+        {
+            // update in-memory data
+            PluginManager.UpdateActionKeywordForPlugin(SelectedPlugin.PluginPair, e.OldActionKeyword,
+                e.NewActionKeyword);
+            // update persistent data
+            Settings.PluginSettings.UpdateActionKeyword(SelectedPlugin.Metadata);
+
+            MessageBox.Show(_translater.GetTranslation("succeed"));
         }
 
         #endregion
