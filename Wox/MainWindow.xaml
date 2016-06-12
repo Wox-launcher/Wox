@@ -58,6 +58,7 @@
                      PreviewDragOver="OnPreviewDragOver"
                      IsVisibleChanged="OnQueryVisible"
                      TextChanged="OnQueryChanged"
+                     TextOptions.TextFormattingMode="Display"
                      AllowDrop="True"
                      Focusable="True"
                      Visibility="Visible"
