@@ -42,9 +42,9 @@
                             </Grid.RowDefinitions>
                             <TextBlock Style="{DynamicResource ItemTitleStyle}" DockPanel.Dock="Left"
                                        VerticalAlignment="Center" ToolTip="{Binding Title}" x:Name="Title"
-                                       Text="{Binding Title}" />
+                                       Text="{Binding Title}" TextOptions.TextFormattingMode="Display" />
                             <TextBlock Style="{DynamicResource ItemSubTitleStyle}" ToolTip="{Binding SubTitle}"
-                                       Grid.Row="1" x:Name="SubTitle" Text="{Binding SubTitle}" />
+                                       Grid.Row="1" x:Name="SubTitle" Text="{Binding SubTitle}" TextOptions.TextFormattingMode="Display" />
                         </Grid>
                     </Grid>
                 </Button.Content>
