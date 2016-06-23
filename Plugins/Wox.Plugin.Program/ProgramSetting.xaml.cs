@@ -24,6 +24,7 @@ namespace Wox.Plugin.Program
         private void Setting_Loaded(object sender, RoutedEventArgs e)
         {
             programSourceView.ItemsSource = _settings.ProgramSources;
+            programIgnoreView.ItemsSource = _settings.IgnoredPatterns;
             StartMenuEnabled.IsChecked = _settings.EnableStartMenuSource;
             RegistryEnabled.IsChecked = _settings.EnableRegistrySource;
         }
@@ -142,6 +143,46 @@ namespace Wox.Plugin.Program
         {
             _settings.EnableRegistrySource = RegistryEnabled.IsChecked ?? false;
             ReIndexing();
+        }
+
+        private void btnDeleteIgnored_OnClick(object sender, RoutedEventArgs e)
+        {
+            string selectedIgnoredEntry = programIgnoreView.SelectedItem as string;
+            if (selectedIgnoredEntry != null)
+            {
+                string msg = string.Format(context.API.GetTranslation("wox_plugin_program_delete_program_source"), selectedIgnoredEntry);
+
+                if (MessageBox.Show(msg, string.Empty, MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+                {
+                    _settings.IgnoredPatterns.Remove(selectedIgnoredEntry);
+                    programIgnoreView.Items.Refresh();
+                }
+            }
+            else
+            {
+                string msg = context.API.GetTranslation("wox_plugin_program_pls_select_program_source");
+                MessageBox.Show(msg);
+            }
+        }
+
+        private void btnEditIgnored_OnClick(object sender, RoutedEventArgs e)
+        {
+            string selectedIgnoredEntry = programIgnoreView.SelectedItem as string;
+            if (selectedIgnoredEntry != null)
+            {
+                new AddIgnored(selectedIgnoredEntry, _settings).ShowDialog();
+                programIgnoreView.Items.Refresh();
+            }
+            else
+            {
+                string msg = context.API.GetTranslation("wox_plugin_program_pls_select_program_source");
+                MessageBox.Show(msg);
+            }
+        }
+        private void btnAddIgnored_OnClick(object sender, RoutedEventArgs e)
+        {
+            new AddIgnored(_settings).ShowDialog();
+            programIgnoreView.Items.Refresh();
         }
     }
 }

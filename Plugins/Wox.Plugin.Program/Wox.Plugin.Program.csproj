@@ -53,9 +53,15 @@
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
+    <Page Include="AddIgnored.xaml">
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="AddProgramSource.xaml" />
     <Compile Include="..\..\SolutionAssemblyInfo.cs">
       <Link>Properties\SolutionAssemblyInfo.cs</Link>
+    </Compile>
+    <Compile Include="AddIgnored.xaml.cs">
+      <DependentUpon>AddIgnored.xaml</DependentUpon>
     </Compile>
     <Compile Include="AddProgramSource.xaml.cs">
       <DependentUpon>AddProgramSource.xaml</DependentUpon>

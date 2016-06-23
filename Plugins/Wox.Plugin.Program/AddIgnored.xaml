@@ -1,0 +1,19 @@
+﻿<Window x:Class="Wox.Plugin.Program.AddIgnored"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+                Width="350"
+                Height="100"
+        WindowStartupLocation="CenterScreen"
+             d:DesignHeight="400" d:DesignWidth="300">
+    <StackPanel Orientation="Vertical">
+        <StackPanel Orientation="Horizontal">
+            <Label Content="{DynamicResource wox_plugin_program_directory}" Margin="10, 10, 0, 0"/>
+            <TextBox Name="Ignored" VerticalAlignment="Center" Width="140" Margin="10" />
+            <Button VerticalAlignment="Top" HorizontalAlignment="Right" Margin="10" Height="20" Width="70"  Click="ButtonAdd_OnClick"  Content="{DynamicResource wox_plugin_program_update}"   />
+        </StackPanel>
+      
+    </StackPanel>
+</Window>
