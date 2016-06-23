@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 using System.Windows.Controls;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
@@ -70,7 +71,6 @@ namespace Wox.Plugin.Program
         {
             Win32[] win32;
             UWP.Application[] uwps;
-
             lock (IndexLock)
             { // just take the reference inside the lock to eliminate query time issues.
                 win32 = _win32s;
@@ -85,8 +85,22 @@ namespace Wox.Plugin.Program
                 .Where(p => p.Enabled)
                 .Select(p => p.Result(query.Search, _context.API));
 
-            var result = results1.Concat(results2).Where(r => r != null && r.Score > 0).ToList();
-            return result;
+            var result = results1.Concat(results2)
+                .Where(r => r != null && r.Score > 0)
+                .Where(p => !_settings.IgnoredSequence.Any(entry =>
+            {
+                if (entry.IsRegex)
+                {
+                    return Regex.Match(p.Title, entry.EntryString).Success;
+                }
+                else
+                {
+                    return p.Title.ToLower().Contains(entry.EntryString);
+                }
+            }));
+
+
+            return result.ToList();
         }
 
         public void Init(PluginInitContext context)

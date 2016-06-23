@@ -9,6 +9,10 @@
     <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="50"/>
+            <RowDefinition Height="30"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="50"/>
+            <RowDefinition Height="30"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="50"/>
         </Grid.RowDefinitions>
@@ -23,7 +27,8 @@
                 <Button Height="30" HorizontalAlignment="Right" Margin="10" Width="100" x:Name="btnReindex" Click="btnReindex_Click" Content="{DynamicResource wox_plugin_program_reindex}" />
             </StackPanel>
         </StackPanel>
-        <ListView x:Name="programSourceView" Grid.Row="1" AllowDrop="True" SelectionMode="Extended" GridViewColumnHeader.Click="GridViewColumnHeaderClickedHandler"
+        <Label Grid.Row ="1" HorizontalAlignment="Center" Content="{DynamicResource wox_plugin_program_sources}"/>
+        <ListView x:Name="programSourceView" Grid.Row="2" AllowDrop="True" SelectionMode="Extended" GridViewColumnHeader.Click="GridViewColumnHeaderClickedHandler"
             PreviewMouseRightButtonUp="ProgramSourceView_PreviewMouseRightButtonUp"
             DragEnter="programSourceView_DragEnter"
             Drop="programSourceView_Drop" >
@@ -58,7 +63,7 @@
                 </GridView>
             </ListView.View>
         </ListView>
-        <DockPanel  Grid.Row="2">
+        <DockPanel  Grid.Row="3">
             <StackPanel x:Name="indexingPanel" Visibility="Hidden" HorizontalAlignment="Left" Orientation="Horizontal">
                 <ProgressBar x:Name="progressBarIndexing" Height="20" Width="80" Minimum="0" Maximum="100" IsIndeterminate="True" />
                 <TextBlock Margin="10 0 0 0" Height="20" HorizontalAlignment="Center" Text="{DynamicResource wox_plugin_program_indexing}" />
@@ -67,6 +72,29 @@
                 <Button x:Name="btnProgramSourceStatus" Click="btnProgramSourceStatus_OnClick" Width="100" Margin="10" Content="{DynamicResource wox_plugin_program_disable}" />
                 <Button x:Name="btnAddProgramSource" Click="btnAddProgramSource_OnClick" Width="100" Margin="10" Content="{DynamicResource wox_plugin_program_add}"/>
                 <Button x:Name="btnEditProgramSource" Click="btnEditProgramSource_OnClick" Width="100" Margin="10" Content="{DynamicResource wox_plugin_program_edit}"/>
+            </StackPanel>
+        </DockPanel>
+        <Label Grid.Row ="4" HorizontalAlignment="Center" Content="{DynamicResource wox_plugin_program_ignored_sequences}"/>
+        <ListView x:Name="programIgnoreView" Grid.Row="5" AllowDrop="True"
+            DragEnter="programSourceView_DragEnter"
+            Drop="programSourceView_Drop" >
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="{DynamicResource wox_plugin_program_location}"  Width="500">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                </GridView>
+            </ListView.View>
+        </ListView>
+        <DockPanel  Grid.Row="6">
+            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                <Button x:Name="btnDeleteIgnoredEntry" Click="btnDeleteIgnored_OnClick" Width="100" Margin="10" Content="{DynamicResource wox_plugin_program_delete}"/>
+                <Button x:Name="btnEditIgnoredEntry" Click="btnEditIgnored_OnClick" Width="100" Margin="10" Content="{DynamicResource wox_plugin_program_edit}"/>
+                <Button x:Name="btnAddIgnoredEntry" Click="btnAddIgnored_OnClick" Width="100" Margin="10" Content="{DynamicResource wox_plugin_program_add}"/>
             </StackPanel>
         </DockPanel>
     </Grid>
