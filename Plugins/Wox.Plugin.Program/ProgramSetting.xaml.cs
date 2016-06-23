@@ -24,7 +24,7 @@ namespace Wox.Plugin.Program
         private void Setting_Loaded(object sender, RoutedEventArgs e)
         {
             programSourceView.ItemsSource = _settings.ProgramSources;
-            programIgnoreView.ItemsSource = _settings.IgnoredPatterns;
+            programIgnoreView.ItemsSource = _settings.IgnoredSequence;
             StartMenuEnabled.IsChecked = _settings.EnableStartMenuSource;
             RegistryEnabled.IsChecked = _settings.EnableRegistrySource;
         }
@@ -154,7 +154,7 @@ namespace Wox.Plugin.Program
 
                 if (MessageBox.Show(msg, string.Empty, MessageBoxButton.YesNo) == MessageBoxResult.Yes)
                 {
-                    _settings.IgnoredPatterns.Remove(selectedIgnoredEntry);
+                    _settings.IgnoredSequence.Remove(selectedIgnoredEntry);
                     programIgnoreView.Items.Refresh();
                 }
             }

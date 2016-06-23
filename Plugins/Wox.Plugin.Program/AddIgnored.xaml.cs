@@ -29,12 +29,12 @@ namespace Wox.Plugin.Program
         {
             if(_editing == null)
             {
-                _settings.IgnoredPatterns.Add(Ignored.Text);
+                _settings.IgnoredSequence.Add(Ignored.Text);
             }
             else
             {
-                _settings.IgnoredPatterns.Remove(_editing);
-                _settings.IgnoredPatterns.Add(Ignored.Text);
+                _settings.IgnoredSequence.Remove(_editing);
+                _settings.IgnoredSequence.Add(Ignored.Text);
             }
             Close();
         }

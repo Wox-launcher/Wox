@@ -49,7 +49,7 @@ namespace Wox.Plugin.Program
         public List<Result> Query(Query query)
         {
             var results = _programs.AsParallel()
-                                   .Where(p => !_settings.IgnoredPatterns.Any(ignored => p.Path.ToLower().Contains(ignored)))
+                                   .Where(p => !_settings.IgnoredSequence.Any(ignored => p.Path.ToLower().Contains(ignored)))
                                    .Where(p => Score(p, query.Search) > 0)
                                    .Select(ScoreFilter)
                                    .OrderByDescending(p => p.Score)

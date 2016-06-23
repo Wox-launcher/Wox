@@ -7,7 +7,7 @@ namespace Wox.Plugin.Program
     public class Settings
     {
         public List<ProgramSource> ProgramSources { get; set; } = new List<ProgramSource>();
-        public List<string> IgnoredPatterns { get; set; } = new List<string>();
+        public List<string> IgnoredSequence { get; set; } = new List<string>();
         public string[] ProgramSuffixes { get; set; } = {"bat", "appref-ms", "exe", "lnk"};
 
         public bool EnableStartMenuSource { get; set; } = true;
