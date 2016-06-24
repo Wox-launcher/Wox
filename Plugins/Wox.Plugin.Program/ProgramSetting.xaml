@@ -24,7 +24,7 @@
             <Button Height="30" HorizontalAlignment="Right" x:Name="btnProgramSuffixes" Width="130" Click="BtnProgramSuffixes_OnClick" Content="{DynamicResource wox_plugin_program_suffixes}"></Button>
             <Button Height="30" HorizontalAlignment="Right" Margin="10 0 0 0" x:Name="btnReindex" Width="100" Click="btnReindex_Click" Content="{DynamicResource wox_plugin_program_reindex}"></Button>
         </StackPanel>
-        <Label Grid.Row ="1" HorizontalAlignment="Center" Content="Program Sources"/>
+        <Label Grid.Row ="1" HorizontalAlignment="Center" Content="{DynamicResource wox_plugin_program_sources}"/>
         <ListView x:Name="programSourceView" Grid.Row="2" AllowDrop="True"
             DragEnter="programSourceView_DragEnter"
             Drop="programSourceView_Drop" >
@@ -65,7 +65,7 @@
                 <Button x:Name="btnAddProgramSource" Click="btnAddProgramSource_OnClick" Width="100" Margin="10" Content="{DynamicResource wox_plugin_program_add}"/>
             </StackPanel>
         </DockPanel>
-        <Label Grid.Row ="4" HorizontalAlignment="Center" Content="Ignored entries"/>
+        <Label Grid.Row ="4" HorizontalAlignment="Center" Content="{DynamicResource wox_plugin_program_ignored_sequences}"/>
         <ListView x:Name="programIgnoreView" Grid.Row="5" AllowDrop="True"
             DragEnter="programSourceView_DragEnter"
             Drop="programSourceView_Drop" >

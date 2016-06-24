@@ -10,7 +10,7 @@
              d:DesignHeight="400" d:DesignWidth="300">
     <StackPanel Orientation="Vertical">
         <StackPanel Orientation="Horizontal">
-            <Label Content="{DynamicResource wox_plugin_program_directory}" Margin="10, 10, 0, 0"/>
+            <Label Content="{DynamicResource wox_plugin_program_sequence}" Margin="10, 10, 0, 0"/>
             <TextBox Name="Ignored" VerticalAlignment="Center" Width="140" Margin="10" />
             <Button VerticalAlignment="Top" HorizontalAlignment="Right" Margin="10" Height="20" Width="70"  Click="ButtonAdd_OnClick"  Content="{DynamicResource wox_plugin_program_update}"   />
         </StackPanel>

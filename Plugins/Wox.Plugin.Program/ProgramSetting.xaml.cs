@@ -150,7 +150,7 @@ namespace Wox.Plugin.Program
             string selectedIgnoredEntry = programIgnoreView.SelectedItem as string;
             if (selectedIgnoredEntry != null)
             {
-                string msg = string.Format(context.API.GetTranslation("wox_plugin_program_delete_program_source"), selectedIgnoredEntry);
+                string msg = string.Format(context.API.GetTranslation("wox_plugin_program_delete_ignored"), selectedIgnoredEntry);
 
                 if (MessageBox.Show(msg, string.Empty, MessageBoxButton.YesNo) == MessageBoxResult.Yes)
                 {
@@ -160,7 +160,7 @@ namespace Wox.Plugin.Program
             }
             else
             {
-                string msg = context.API.GetTranslation("wox_plugin_program_pls_select_program_source");
+                string msg = context.API.GetTranslation("wox_plugin_program_pls_select_ignored");
                 MessageBox.Show(msg);
             }
         }
@@ -175,7 +175,7 @@ namespace Wox.Plugin.Program
             }
             else
             {
-                string msg = context.API.GetTranslation("wox_plugin_program_pls_select_program_source");
+                string msg = context.API.GetTranslation("wox_plugin_program_pls_select_ignored");
                 MessageBox.Show(msg);
             }
         }
