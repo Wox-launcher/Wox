@@ -1,10 +1,9 @@
 ﻿using System;
-using System.Diagnostics;
 using System.IO;
+using System.Windows;
 using ICSharpCode.SharpZipLib.Zip;
 using Newtonsoft.Json;
 using Wox.Plugin;
-using System.Windows;
 
 namespace Wox.Core.Plugin
 {
@@ -35,7 +34,7 @@ namespace Wox.Core.Plugin
                     return;
                 }
 
-                string pluginFolerPath = PluginManager.PluginDirectory;
+                string pluginFolerPath = Infrastructure.Constant.PluginsDirectory;
 
                 string newPluginName = plugin.Name
                     .Replace("/", "_")
@@ -81,7 +80,7 @@ namespace Wox.Core.Plugin
                     //current solution is to restart wox. Ugly.
                     //if (MainWindow.Initialized)
                     //{
-                    //    Plugins.Init();
+                    //    Plugins.Initialize();
                     //}
                     if (MessageBox.Show($"You have installed plugin {plugin.Name} successfully.{Environment.NewLine}" +
                                         " Restart Wox to take effect?",
@@ -108,12 +107,12 @@ namespace Wox.Core.Plugin
                 metadata = JsonConvert.DeserializeObject<PluginMetadata>(File.ReadAllText(configPath));
                 metadata.PluginDirectory = pluginDirectory;
             }
-            catch (System.Exception)
+            catch (Exception)
             {
                 string error = $"Parse plugin config {configPath} failed: json format is not valid";
 #if (DEBUG)
                 {
-                    throw new System.Exception(error);
+                    throw new Exception(error);
                 }
 #endif
                 return null;
@@ -125,7 +124,7 @@ namespace Wox.Core.Plugin
                 string error = $"Parse plugin config {configPath} failed: invalid language {metadata.Language}";
 #if (DEBUG)
                 {
-                    throw new System.Exception(error);
+                    throw new Exception(error);
                 }
 #endif
                 return null;
@@ -135,7 +134,7 @@ namespace Wox.Core.Plugin
                 string error = $"Parse plugin config {configPath} failed: ExecuteFile {metadata.ExecuteFilePath} didn't exist";
 #if (DEBUG)
                 {
-                    throw new System.Exception(error);
+                    throw new Exception(error);
                 }
 #endif
                 return null;

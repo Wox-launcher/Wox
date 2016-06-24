@@ -1,10 +1,11 @@
 ﻿using System;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using NHotkey.Wpf;
-using Wox.Core.i18n;
+using Wox.Core.Resource;
 using Wox.Infrastructure.Hotkey;
 using Wox.Plugin;
 
@@ -39,10 +40,10 @@ namespace Wox
             SpecialKeyState specialKeyState = GlobalHotkey.Instance.CheckModifiers();
 
             var hotkeyModel = new HotkeyModel(
-                specialKeyState.AltPressed, 
-                specialKeyState.ShiftPressed, 
-                specialKeyState.WinPressed, 
-                specialKeyState.CtrlPressed, 
+                specialKeyState.AltPressed,
+                specialKeyState.ShiftPressed,
+                specialKeyState.WinPressed,
+                specialKeyState.CtrlPressed,
                 key);
 
             var hotkeyString = hotkeyModel.ToString();
@@ -52,12 +53,11 @@ namespace Wox
                 return;
             }
 
-            Dispatcher.DelayInvoke("HotkeyAvailabilityTest", 
-                () =>
-                {
-                    SetHotkey(hotkeyModel);
-                },
-                TimeSpan.FromMilliseconds(500));
+            Dispatcher.InvokeAsync(async () =>
+            {
+                await Task.Delay(500);
+                SetHotkey(hotkeyModel);
+            });
         }
 
         public void SetHotkey(HotkeyModel keyModel, bool triggerValidate = true)
@@ -94,7 +94,7 @@ namespace Wox
         {
             try
             {
-                HotkeyManager.Current.AddOrReplace("HotkeyAvailabilityTest", CurrentHotkey.CharKey, CurrentHotkey.ModifierKeys, (sender, e) => {});
+                HotkeyManager.Current.AddOrReplace("HotkeyAvailabilityTest", CurrentHotkey.CharKey, CurrentHotkey.ModifierKeys, (sender, e) => { });
 
                 return true;
             }

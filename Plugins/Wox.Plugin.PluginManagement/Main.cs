@@ -1,20 +1,21 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Reflection;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using Newtonsoft.Json;
+using Wox.Infrastructure.Http;
+using Wox.Infrastructure.Logger;
 
 namespace Wox.Plugin.PluginManagement
 {
     public class Main : IPlugin, IPluginI18n
     {
-        private static string APIBASE = "https://api.getwox.com";
+        private static string APIBASE = "http://api.getwox.com";
         private static string PluginConfigName = "plugin.json";
         private static string pluginSearchUrl = APIBASE + "/plugin/search/";
         private const string ListCommand = "list";
@@ -109,69 +110,67 @@ namespace Wox.Plugin.PluginManagement
             List<Result> results = new List<Result>();
             string pluginName = query.SecondSearch;
             if (string.IsNullOrEmpty(pluginName)) return results;
-            HttpWebResponse response = HttpRequest.CreateGetHttpResponse(pluginSearchUrl + pluginName, context.Proxy);
-            Stream s = response.GetResponseStream();
-            if (s != null)
+            string json;
+            try
             {
-                StreamReader reader = new StreamReader(s, Encoding.UTF8);
-                string json = reader.ReadToEnd();
-                List<WoxPluginResult> searchedPlugins = null;
-                try
-                {
-                    searchedPlugins = JsonConvert.DeserializeObject<List<WoxPluginResult>>(json);
-                }
-                catch
-                {
-                    context.API.ShowMsg("Coundn't parse api search results", "Please update your Wox!", string.Empty);
-                    return results;
-                }
+                json = Http.Get(pluginSearchUrl + pluginName).Result;
+            }
+            catch (WebException e)
+            {
+                Log.Warn("Can't connect to Wox plugin website, check your conenction");
+                Log.Exception(e);
+                return new List<Result>();
+            }
+            List<WoxPluginResult> searchedPlugins;
+            try
+            {
+                searchedPlugins = JsonConvert.DeserializeObject<List<WoxPluginResult>>(json);
+            }
+            catch(JsonSerializationException e)
+            {
+                context.API.ShowMsg("Coundn't parse api search results", "Please update your Wox!", string.Empty);
+                Log.Exception(e);
+                return results;
+            }
 
-                foreach (WoxPluginResult r in searchedPlugins)
+            foreach (WoxPluginResult r in searchedPlugins)
+            {
+                WoxPluginResult r1 = r;
+                results.Add(new Result
                 {
-                    WoxPluginResult r1 = r;
-                    results.Add(new Result
+                    Title = r.name,
+                    SubTitle = r.description,
+                    IcoPath = "Images\\plugin.png",
+                    Action = c =>
                     {
-                        Title = r.name,
-                        SubTitle = r.description,
-                        IcoPath = "Images\\plugin.png",
-                        Action = e =>
+                        MessageBoxResult result = MessageBox.Show("Are your sure to install " + r.name + " plugin",
+                            "Install plugin", MessageBoxButton.YesNo);
+
+                        if (result == MessageBoxResult.Yes)
                         {
-                            MessageBoxResult result = MessageBox.Show("Are your sure to install " + r.name + " plugin",
-                                "Install plugin", MessageBoxButton.YesNo);
+                            string folder = Path.Combine(Path.GetTempPath(), "WoxPluginDownload");
+                            if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
+                            string filePath = Path.Combine(folder, Guid.NewGuid().ToString() + ".wox");
 
-                            if (result == MessageBoxResult.Yes)
+                            string pluginUrl = APIBASE + "/media/" + r1.plugin_file;
+
+                            try
                             {
-                                string folder = Path.Combine(Path.GetTempPath(), "WoxPluginDownload");
-                                if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
-                                string filePath = Path.Combine(folder, Guid.NewGuid().ToString() + ".wox");
-
-                                context.API.StartLoadingBar();
-                                ThreadPool.QueueUserWorkItem(delegate
-                                {
-                                    using (WebClient Client = new WebClient())
-                                    {
-                                        try
-                                        {
-                                            string pluginUrl = APIBASE + "/media/" + r1.plugin_file;
-                                            Client.DownloadFile(pluginUrl, filePath);
-                                            context.API.InstallPlugin(filePath);
-                                            context.API.ReloadPlugins();
-                                        }
-                                        catch (Exception exception)
-                                        {
-                                            MessageBox.Show("download plugin " + r.name + "failed. " + exception.Message);
-                                        }
-                                        finally
-                                        {
-                                            context.API.StopLoadingBar();
-                                        }
-                                    }
-                                });
+                                Http.Download(pluginUrl, filePath);
                             }
-                            return false;
+                            catch (WebException e)
+                            {
+                                var info = "download plugin " + r.name + "failed.";
+                                MessageBox.Show(info);
+                                Log.Warn(info);
+                                Log.Exception(e);
+                                return false;
+                            }
+                            context.API.InstallPlugin(filePath);
                         }
-                    });
-                }
+                        return false;
+                    }
+                });
             }
             return results;
         }
@@ -192,7 +191,7 @@ namespace Wox.Plugin.PluginManagement
                 {
                     Title = plugin.Name,
                     SubTitle = plugin.Description,
-                    IcoPath = plugin.FullIcoPath,
+                    IcoPath = plugin.IcoPath,
                     Action = e =>
                     {
                         UnInstallPlugin(plugin);
@@ -232,7 +231,7 @@ namespace Wox.Plugin.PluginManagement
                 {
                     Title = $"{plugin.Name} - Action Keywords: {actionKeywordString}",
                     SubTitle = plugin.Description,
-                    IcoPath = plugin.FullIcoPath
+                    IcoPath = plugin.IcoPath
                 });
             }
             return results;
@@ -241,11 +240,6 @@ namespace Wox.Plugin.PluginManagement
         public void Init(PluginInitContext context)
         {
             this.context = context;
-        }
-
-        public string GetLanguagesFolder()
-        {
-            return Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Languages");
         }
 
         public string GetTranslatedPluginTitle()

@@ -10,13 +10,15 @@ namespace Wox.Plugin.Program
         public string Type { get; set; }
         public int BonusPoints { get; set; }
         public bool Enabled { get; set; }
-        public string Suffixes { get; set; }
+        // happlebao todo: temp hack for program suffixes
+        public string[] Suffixes { get; set; } = {"bat", "appref-ms", "exe", "lnk"};
+        public const char SuffixSeperator = ';';
         public int MaxDepth { get; set; }
         public Dictionary<string, string> Meta { get; set; }
 
         public override string ToString()
         {
-            return (this.Type ?? "") + ":" + this.Location ?? "";
+            return (Type ?? "") + ":" + Location ?? "";
         }
     }
 }

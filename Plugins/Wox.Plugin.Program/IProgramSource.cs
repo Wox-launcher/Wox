@@ -16,24 +16,22 @@ namespace Wox.Plugin.Program
     {
         public abstract List<Program> LoadPrograms();
 
-        public int BonusPoints
-        {
-            get; set;
-        }
+        public int BonusPoints { get; set; }
 
         protected Program CreateEntry(string file)
         {
-            var p = new Program()
+            var p = new Program
             {
                 Title = Path.GetFileNameWithoutExtension(file),
                 IcoPath = file,
-                ExecutePath = file
+                Path = file,
+                Directory = Directory.GetParent(file).FullName
             };
 
             switch (Path.GetExtension(file).ToLower())
             {
                 case ".exe":
-                    p.ExecuteName = Path.GetFileName(file);
+                    p.ExecutableName = Path.GetFileName(file);
                     try
                     {
                         FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(file);

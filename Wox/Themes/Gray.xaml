@@ -7,7 +7,6 @@
         <Setter Property="Background" Value="#EDEDED" />
         <Setter Property="Foreground" Value="#222222" />
         <Setter Property="FontSize" Value="38" />
-        <Setter Property="FontFamily" Value="Calibri" />
     </Style>
     <Style x:Key="WindowBorderStyle" BasedOn="{StaticResource BaseWindowBorderStyle}" TargetType="{x:Type Border}">
         <Setter Property="BorderBrush" Value="#B0B0B0" />
@@ -33,7 +32,7 @@
     <Style x:Key="ItemSubTitleSelectedStyle" BasedOn="{StaticResource BaseItemSubTitleSelectedStyle}" TargetType="{x:Type TextBlock}">
         <Setter Property="Foreground" Value="#ffffff" />
     </Style>
-    <Color x:Key="ItemSelectedBackgroundColor">#00AAF6</Color>
+    <SolidColorBrush x:Key="ItemSelectedBackgroundColor">#00AAF6</SolidColorBrush>
     <Style x:Key="ThumbStyle" BasedOn="{StaticResource BaseThumbStyle}" TargetType="{x:Type Thumb}">
         <Setter Property="Template">
             <Setter.Value>

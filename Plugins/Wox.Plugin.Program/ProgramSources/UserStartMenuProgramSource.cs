@@ -1,20 +1,21 @@
 ﻿using System;
+using System.ComponentModel;
 
 namespace Wox.Plugin.Program.ProgramSources
 {
     [Serializable]
-    [global::System.ComponentModel.Browsable(false)]
+    [Browsable(false)]
     public class UserStartMenuProgramSource : FileSystemProgramSource
     {
-        public UserStartMenuProgramSource()
-            : base(Environment.GetFolderPath(Environment.SpecialFolder.Programs))
+        public UserStartMenuProgramSource(string[] suffixes)
+            : base(Environment.GetFolderPath(Environment.SpecialFolder.Programs), suffixes)
         {
         }
 
         public UserStartMenuProgramSource(ProgramSource source)
-            : this()
+            : this(source.Suffixes)
         {
-            this.BonusPoints = source.BonusPoints;
+            BonusPoints = source.BonusPoints;
         }
 
         public override string ToString()

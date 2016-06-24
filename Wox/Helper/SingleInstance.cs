@@ -9,6 +9,7 @@ using System.Runtime.Remoting.Channels;
 using System.Runtime.Remoting.Channels.Ipc;
 using System.Runtime.Serialization.Formatters;
 using System.Security;
+using System.Text;
 using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
@@ -131,7 +132,7 @@ namespace Wox.Helper
         // This is the hard-coded message value used by WinForms for Shell_NotifyIcon.
         // It's relatively safe to reuse.
         TRAYMOUSEMESSAGE = 0x800, //WM_USER + 1024
-        APP = 0x8000,
+        APP = 0x8000
     }
 
     [SuppressUnmanagedCodeSecurity]
@@ -185,7 +186,7 @@ namespace Wox.Helper
 
     public interface ISingleInstanceApp 
     { 
-         void OnActivate(IList<string> args); 
+         void OnSecondAppStarted(); 
     } 
 
     /// <summary>
@@ -203,8 +204,6 @@ namespace Wox.Helper
                 where   TApplication: Application ,  ISingleInstanceApp 
                                     
     {
-        public const string Restart = "Restart";
-
         #region Private Fields
 
         /// <summary>
@@ -237,22 +236,9 @@ namespace Wox.Helper
         /// </summary>
         private static IpcServerChannel channel;
 
-        /// <summary>
-        /// List of command line arguments for the application.
-        /// </summary>
-        private static IList<string> commandLineArgs;
-
         #endregion
 
         #region Public Properties
-
-        /// <summary>
-        /// Gets list of command line arguments for the application.
-        /// </summary>
-        public static IList<string> CommandLineArgs
-        {
-            get { return commandLineArgs; }
-        }
 
         #endregion
 
@@ -265,10 +251,6 @@ namespace Wox.Helper
         /// <returns>True if this is the first instance of the application.</returns>
         public static bool InitializeAsFirstInstance( string uniqueName )
         {
-            commandLineArgs = GetCommandLineArgs(uniqueName);
-            //remove execute path itself
-            commandLineArgs.RemoveAt(0);
-
             // Build unique application Id and the IPC channel name.
             string applicationIdentifier = uniqueName + Environment.UserName;
 
@@ -282,17 +264,9 @@ namespace Wox.Helper
                 CreateRemoteService(channelName);
                 return true;
             }
-            // Restart
-            else if (commandLineArgs.Count > 0 && commandLineArgs[0] == Restart)
-            {
-                SignalFirstInstance(channelName, commandLineArgs);
-                singleInstanceMutex.WaitOne(TimeSpan.FromSeconds(10));
-                CreateRemoteService(channelName);
-                return true;
-            }
             else
             {
-                SignalFirstInstance(channelName, commandLineArgs);
+                SignalFirstInstance(channelName);
                 return false;
             }
         }
@@ -342,7 +316,7 @@ namespace Wox.Helper
                 {
                     try
                     {
-                        using (TextReader reader = new StreamReader(cmdLinePath, System.Text.Encoding.Unicode))
+                        using (TextReader reader = new StreamReader(cmdLinePath, Encoding.Unicode))
                         {
                             args = NativeMethods.CommandLineToArgvW(reader.ReadToEnd());
                         }
@@ -397,7 +371,7 @@ namespace Wox.Helper
         /// <param name="args">
         /// Command line arguments for the second instance, passed to the first instance to take appropriate action.
         /// </param>
-        private static void SignalFirstInstance(string channelName, IList<string> args)
+        private static void SignalFirstInstance(string channelName)
         {
             IpcClientChannel secondInstanceChannel = new IpcClientChannel();
             ChannelServices.RegisterChannel(secondInstanceChannel, true);
@@ -413,7 +387,7 @@ namespace Wox.Helper
             {
                 // Invoke a method of the remote service exposed by the first instance passing on the command line
                 // arguments and causing the first instance to activate itself
-                firstInstanceRemoteServiceReference.InvokeFirstInstance(args);
+                firstInstanceRemoteServiceReference.InvokeFirstInstance();
             }
         }
 
@@ -422,11 +396,9 @@ namespace Wox.Helper
         /// </summary>
         /// <param name="arg">Callback argument.</param>
         /// <returns>Always null.</returns>
-        private static object ActivateFirstInstanceCallback(object arg)
+        private static object ActivateFirstInstanceCallback(object o)
         {
-            // Get command line args to be passed to first instance
-            IList<string> args = arg as IList<string>;
-            ActivateFirstInstance(args);
+            ActivateFirstInstance();
             return null;
         }
 
@@ -434,7 +406,7 @@ namespace Wox.Helper
         /// Activates the first instance of the application with arguments from a second instance.
         /// </summary>
         /// <param name="args">List of arguments to supply the first instance of the application.</param>
-        private static void ActivateFirstInstance(IList<string> args)
+        private static void ActivateFirstInstance()
         {
             // Set main window state and process command line args
             if (Application.Current == null)
@@ -442,7 +414,7 @@ namespace Wox.Helper
                 return;
             }
 
-            ((TApplication)Application.Current).OnActivate(args);
+            ((TApplication)Application.Current).OnSecondAppStarted();
         }
 
         #endregion
@@ -458,14 +430,12 @@ namespace Wox.Helper
             /// <summary>
             /// Activates the first instance of the application.
             /// </summary>
-            /// <param name="args">List of arguments to pass to the first instance.</param>
-            public void InvokeFirstInstance(IList<string> args)
+            public void InvokeFirstInstance()
             {
                 if (Application.Current != null)
                 {
                     // Do an asynchronous call to ActivateFirstInstance function
-                    Application.Current.Dispatcher.BeginInvoke(
-                        DispatcherPriority.Normal, new DispatcherOperationCallback(SingleInstance<TApplication>.ActivateFirstInstanceCallback), args);
+                    Application.Current.Dispatcher.Invoke(ActivateFirstInstance);
                 }
             }
 

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Windows;
 using System.Windows.Threading;
 using Wox.Infrastructure.Exception;
 using Wox.Infrastructure.Logger;
@@ -10,20 +11,20 @@ namespace Wox.Helper
         public static void Report(Exception e)
         {
             Log.Fatal(e);
-            new CrashReporter.CrashReporter(e).Show();
+            new CrashReporter(e).Show();
         }
 
         public static void UnhandledExceptionHandle(object sender, UnhandledExceptionEventArgs e)
         {
             //handle non-ui thread exceptions
-            App.Window.Dispatcher.Invoke(new Action(() =>
+            Application.Current.MainWindow.Dispatcher.Invoke(() =>
             {
                 Report((Exception)e.ExceptionObject);
                 if (!(e.ExceptionObject is WoxException))
                 {
                     Environment.Exit(0);
                 }
-            }));
+            });
         }
 
         public static void DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
