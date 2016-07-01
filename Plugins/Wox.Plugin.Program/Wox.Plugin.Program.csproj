@@ -67,6 +67,7 @@
       <DependentUpon>AddProgramSource.xaml</DependentUpon>
     </Compile>
     <Compile Include="FileChangeWatcher.cs" />
+    <Compile Include="IgnoredEntry.cs" />
     <Compile Include="IProgramSource.cs" />
     <Compile Include="SuffixesConverter.cs" />
     <Compile Include="Program.cs" />

@@ -147,7 +147,7 @@ namespace Wox.Plugin.Program
 
         private void btnDeleteIgnored_OnClick(object sender, RoutedEventArgs e)
         {
-            string selectedIgnoredEntry = programIgnoreView.SelectedItem as string;
+            IgnoredEntry selectedIgnoredEntry = programIgnoreView.SelectedItem as IgnoredEntry;
             if (selectedIgnoredEntry != null)
             {
                 string msg = string.Format(context.API.GetTranslation("wox_plugin_program_delete_ignored"), selectedIgnoredEntry);
@@ -167,7 +167,7 @@ namespace Wox.Plugin.Program
 
         private void btnEditIgnored_OnClick(object sender, RoutedEventArgs e)
         {
-            string selectedIgnoredEntry = programIgnoreView.SelectedItem as string;
+            IgnoredEntry selectedIgnoredEntry = programIgnoreView.SelectedItem as IgnoredEntry;
             if (selectedIgnoredEntry != null)
             {
                 new AddIgnored(selectedIgnoredEntry, _settings).ShowDialog();

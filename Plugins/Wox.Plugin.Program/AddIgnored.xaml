@@ -9,11 +9,13 @@
         WindowStartupLocation="CenterScreen"
              d:DesignHeight="400" d:DesignWidth="300">
     <StackPanel Orientation="Vertical">
-        <StackPanel Orientation="Horizontal">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Stretch">
             <Label Content="{DynamicResource wox_plugin_program_sequence}" Margin="10, 10, 0, 0"/>
-            <TextBox Name="Ignored" VerticalAlignment="Center" Width="140" Margin="10" />
+            <TextBox Name="IgnoredStringTextbox" VerticalAlignment="Center" HorizontalAlignment="Stretch" Margin="10" />
+        </StackPanel> 
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <CheckBox Name="RegexCheckbox" Content="Use Regex?" Margin="10,10, 0" />
             <Button VerticalAlignment="Top" HorizontalAlignment="Right" Margin="10" Height="20" Width="70"  Click="ButtonAdd_OnClick"  Content="{DynamicResource wox_plugin_program_update}"   />
         </StackPanel>
-      
     </StackPanel>
 </Window>

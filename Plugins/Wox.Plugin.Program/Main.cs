@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows.Controls;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
@@ -49,7 +50,17 @@ namespace Wox.Plugin.Program
         public List<Result> Query(Query query)
         {
             var results = _programs.AsParallel()
-                                   .Where(p => !_settings.IgnoredSequence.Any(ignored => p.Path.ToLower().Contains(ignored)))
+                                   .Where(p => !_settings.IgnoredSequence.Any(delegate(IgnoredEntry entry)
+                                   {
+                                       if (entry.IsRegex)
+                                       {
+                                           return Regex.Match(p.Path, entry.EntryString).Success;
+                                       }
+                                       else
+                                       {
+                                           return p.Path.ToLower().Contains(entry.EntryString);
+                                       }
+                                   }))
                                    .Where(p => Score(p, query.Search) > 0)
                                    .Select(ScoreFilter)
                                    .OrderByDescending(p => p.Score)
