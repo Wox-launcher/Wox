@@ -12,7 +12,6 @@ namespace Wox.Core.Resource
         public static Language Japanese = new Language("ja", "日本語");
         public static Language Dutch = new Language("nl", "Dutch");
         public static Language Polish = new Language("pl", "Polski");
-        public static Language German = new Language("de", "Deutsch");
 
         public static List<Language> GetAvailableLanguages()
         {
@@ -25,8 +24,8 @@ namespace Wox.Core.Resource
                 French,
                 Japanese,
                 Dutch,
-                Polish,
-                German
+                Polish
+
             };
             return languages;
         }
