@@ -57,7 +57,6 @@
     <system:String x:Key="add">新增</system:String>
     <system:String x:Key="pleaseSelectAnItem">請選擇一項</system:String>
     <system:String x:Key="deleteCustomHotkeyWarning">確定要刪除外掛 {0} 的熱鍵嗎？</system:String>
-    <<<<<<< 01e7d84845ebfda42cedeb8226e053863b868931
 
     <!--設置，代理-->
     <system:String x:Key="proxy">HTTP 代理</system:String>
@@ -89,7 +88,6 @@
     <system:String x:Key="newActionKeywords">新觸發關鍵字</system:String>
     <system:String x:Key="cancel">取消</system:String>
     <system:String x:Key="done">確定</system:String>
-<<<<<<< 01e7d84845ebfda42cedeb8226e053863b868931
     <system:String x:Key="cannotFindSpecifiedPlugin">找不到指定的外掛</system:String>
     <system:String x:Key="newActionKeywordsCannotBeEmpty">新觸發關鍵字不能為空白</system:String>
     <system:String x:Key="newActionKeywordsHasBeenAssigned">新觸發關鍵字已經被指派給另一外掛，請設定其他關鍵字。</system:String>
