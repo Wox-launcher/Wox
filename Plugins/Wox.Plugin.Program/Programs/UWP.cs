@@ -157,12 +157,24 @@ namespace Wox.Plugin.Program.Programs
                 var userSecurityId = user.Value;
                 var packageManager = new PackageManager();
                 var packages = packageManager.FindPackagesForUser(userSecurityId);
-                packages = packages.Where(p => !p.IsFramework && !string.IsNullOrEmpty(p.InstalledLocation.Path));
+                packages = packages.Where(IsValidPackage);
                 return packages;
             }
             else
             {
                 return new Package[] { };
+            }
+        }
+
+        private static bool IsValidPackage(Package package)
+        {
+            try
+            {
+                return !package.IsFramework && !string.IsNullOrEmpty(package.InstalledLocation.Path);
+            }
+            catch (FileNotFoundException)
+            {
+                return false;
             }
         }
 
