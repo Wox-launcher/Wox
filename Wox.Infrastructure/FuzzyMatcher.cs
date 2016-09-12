@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Collections.Generic;
+using System.Text;
 
 namespace Wox.Infrastructure
 {
@@ -39,6 +40,10 @@ namespace Wox.Infrastructure
             var firstMatchIndex = -1;
             var lastMatchIndex = 0;
             char ch;
+
+            // list of matched indices
+            var indexList = new List<int>();
+
             for (var idx = 0; idx < len; idx++)
             {
                 ch = str[idx];
@@ -48,6 +53,7 @@ namespace Wox.Infrastructure
                         firstMatchIndex = idx;
                     lastMatchIndex = idx + 1;
 
+                    indexList.Add(idx);
                     sb.Append(opt.Prefix + ch + opt.Suffix);
                     patternIdx += 1;
                 }
@@ -70,8 +76,8 @@ namespace Wox.Infrastructure
                 return new MatchResult
                 {
                     Success = true,
-                    Value = sb.ToString(),
-                    Score = CalScore(str, firstMatchIndex, lastMatchIndex - firstMatchIndex)
+                    Score = CalScore(str, firstMatchIndex, lastMatchIndex - firstMatchIndex),
+                    MatchData = indexList
                 };
             }
 
@@ -98,9 +104,9 @@ namespace Wox.Infrastructure
         public bool Success { get; set; }
         public int Score { get; set; }
         /// <summary>
-        /// hightlight string
+        /// highlight data
         /// </summary>
-        public string Value { get; set; }
+        public List<int> MatchData { get; set; }
     }
 
     public class MatchOption
