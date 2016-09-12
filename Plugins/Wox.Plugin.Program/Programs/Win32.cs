@@ -29,12 +29,10 @@ namespace Wox.Plugin.Program.Programs
 
         private int Score(string query)
         {
-            var score1 = StringMatcher.Score(Name, query);
-            var score2 = StringMatcher.ScoreForPinyin(Name, query);
-            var score3 = StringMatcher.Score(Description, query);
-            var score4 = StringMatcher.ScoreForPinyin(Description, query);
-            var score5 = StringMatcher.Score(ExecutableName, query);
-            var score = new[] { score1, score2, score3, score4, score5 }.Max();
+            var score1 = StringMatcher.Score(Name, query, true);
+            var score2 = StringMatcher.Score(Description, query, true);
+            var score3 = StringMatcher.Score(ExecutableName, query);
+            var score = new[] { score1, score2, score3 }.Max();
             return score;
         }
 

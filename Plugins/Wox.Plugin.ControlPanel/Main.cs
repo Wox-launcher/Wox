@@ -42,7 +42,12 @@ namespace Wox.Plugin.ControlPanel
 
             foreach (var item in controlPanelItems)
             {
-                item.Score = Score(item, query.Search);
+                var titleMatch = StringMatcher.Match(item.LocalizedString, query.Search, pinyin: true);
+                // todo should we add pinyin score for infotip also?
+                var subtitleMatch = StringMatcher.Match(item.InfoTip, query.Search);
+                // what was the best match?
+                item.Score = Math.Max(titleMatch.Score, subtitleMatch.Score);
+
                 if (item.Score > 0)
                 {
                     var result = new Result
@@ -71,24 +76,6 @@ namespace Wox.Plugin.ControlPanel
 
             List<Result> panelItems = results.OrderByDescending(o => o.Score).Take(5).ToList();
             return panelItems;
-        }
-
-        private int Score(ControlPanelItem item, string query)
-        {
-            var scores = new List<int>();
-            if (item.LocalizedString != null)
-            {
-                var score1 = StringMatcher.Score(item.LocalizedString, query);
-                var socre2 = StringMatcher.ScoreForPinyin(item.LocalizedString, query);
-                scores.Add(Math.Max(score1, socre2));
-            }
-            if (item.InfoTip != null)
-            {
-                // todo should we add pinyin score for infotip also?
-                var score = StringMatcher.Score(item.InfoTip, query);
-                scores.Add(score);
-            }
-            return scores.Max();
         }
 
         public string GetTranslatedPluginTitle()

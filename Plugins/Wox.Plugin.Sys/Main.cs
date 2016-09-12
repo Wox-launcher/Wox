@@ -55,9 +55,10 @@ namespace Wox.Plugin.Sys
             List<Result> results = new List<Result>();
             foreach (Result availableResult in availableResults)
             {
-                var titleScore = StringMatcher.Score(availableResult.Title, query.Search);
-                var subTitleScore = StringMatcher.Score(availableResult.SubTitle, query.Search);
-                var score = Math.Max(titleScore, subTitleScore);
+                var titleMatch = StringMatcher.Match(availableResult.Title, query.Search);
+                var subTitleMatch = StringMatcher.Match(availableResult.SubTitle, query.Search);
+                var score = Math.Max(titleMatch.Score, subTitleMatch.Score);
+
                 if (score > 0)
                 {
                     availableResult.Score = score;
