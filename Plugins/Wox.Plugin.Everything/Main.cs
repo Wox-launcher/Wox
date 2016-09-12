@@ -78,6 +78,7 @@ namespace Wox.Plugin.Everything
                             return hide;
                         };
                         r.ContextData = s;
+                        r.SubTitleHighlightData = FuzzyMatcher.Create(keyword).Evaluate(path).MatchData;
                         results.Add(r);
                     }
                 }
