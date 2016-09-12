@@ -70,6 +70,16 @@ namespace Wox.Plugin.ControlPanel
                                 return true;
                             }
                     };
+                    
+                    if (item.Score == titleMatch.Score)
+                    {
+                        result.TitleHighlightData = titleMatch.MatchData;
+                    }
+                    else
+                    {
+                        result.SubTitleHighlightData = subtitleMatch.MatchData;
+                    }
+
                     results.Add(result);
                 }
             }
