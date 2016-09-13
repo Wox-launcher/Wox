@@ -142,7 +142,7 @@ namespace Wox.Plugin.PluginManagement
                     Title = r.name,
                     SubTitle = r.description,
                     IcoPath = "Images\\plugin.png",
-                    TitleHighlightData = StringMatcher.Match(r.name, query.SecondSearch).MatchData,
+                    TitleHighlightData = StringMatcher.Match(r.name, query.SecondToEndSearch).MatchData,
                     Action = c =>
                     {
                         MessageBoxResult result = MessageBox.Show("Are your sure to install " + r.name + " plugin",
@@ -194,7 +194,7 @@ namespace Wox.Plugin.PluginManagement
                     Title = plugin.Name,
                     SubTitle = plugin.Description,
                     IcoPath = plugin.IcoPath,
-                    TitleHighlightData = StringMatcher.Match(plugin.Name, query.SecondSearch).MatchData,
+                    TitleHighlightData = StringMatcher.Match(plugin.Name, query.SecondToEndSearch).MatchData,
                     Action = e =>
                     {
                         UnInstallPlugin(plugin);
