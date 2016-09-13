@@ -262,14 +262,17 @@ namespace Wox.Plugin.Program.Programs
                     Description.Substring(0, DisplayName.Length) == DisplayName)
                 {
                     result.Title = Description;
+                    result.TitleHighlightData = StringMatcher.Match(Description, query).MatchData;
                 }
                 else if (!string.IsNullOrEmpty(Description))
                 {
                     result.Title = $"{DisplayName}: {Description}";
+                    result.TitleHighlightData = StringMatcher.Match(DisplayName, query).MatchData;
                 }
                 else
                 {
                     result.Title = DisplayName;
+                    result.TitleHighlightData = StringMatcher.Match(DisplayName, query).MatchData;
                 }
                 return result;
             }

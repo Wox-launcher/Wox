@@ -61,14 +61,17 @@ namespace Wox.Plugin.Program.Programs
                 Description.Substring(0, Name.Length) == Name)
             {
                 result.Title = Description;
+                result.TitleHighlightData = StringMatcher.Match(Description, query).MatchData;
             }
             else if (!string.IsNullOrEmpty(Description))
             {
                 result.Title = $"{Name}: {Description}";
+                result.TitleHighlightData = StringMatcher.Match(Name, query).MatchData;
             }
             else
             {
                 result.Title = Name;
+                result.TitleHighlightData = StringMatcher.Match(Name, query).MatchData;
             }
 
             return result;
