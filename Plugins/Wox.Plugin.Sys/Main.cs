@@ -62,6 +62,16 @@ namespace Wox.Plugin.Sys
                 if (score > 0)
                 {
                     availableResult.Score = score;
+
+                    if (score == titleMatch.Score)
+                    {
+                        availableResult.TitleHighlightData = titleMatch.MatchData;
+                    }
+                    else
+                    {
+                        availableResult.SubTitleHighlightData = subTitleMatch.MatchData;
+                    }
+
                     results.Add(availableResult);
                 }
             }
