@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using Wox.Infrastructure;
 using Wox.Infrastructure.Storage;
 
 namespace Wox.Plugin.Folder
@@ -53,6 +54,7 @@ namespace Wox.Plugin.Folder
                         Title = item.Nickname,
                         IcoPath = item.Path,
                         SubTitle = "Ctrl + Enter to open the directory",
+                        TitleHighlightData = StringMatcher.Match(item.Nickname, search).MatchData,
                         Action = c =>
                         {
                             if (c.SpecialKeyState.CtrlPressed)
@@ -148,6 +150,9 @@ namespace Wox.Plugin.Folder
                 }
             });
 
+            // the string that matches the result's title
+            string searchNickname = new FolderLink { Path = query.Search }.Nickname;
+
             //Add children directories
             DirectoryInfo[] dirs = new DirectoryInfo(search).GetDirectories();
             foreach (DirectoryInfo dir in dirs)
@@ -162,6 +167,7 @@ namespace Wox.Plugin.Folder
                     Title = dir.Name,
                     IcoPath = dir.FullName,
                     SubTitle = "Ctrl + Enter to open the directory",
+                    TitleHighlightData = StringMatcher.Match(dir.Name, searchNickname).MatchData,
                     Action = c =>
                     {
                         if (c.SpecialKeyState.CtrlPressed)
@@ -197,6 +203,7 @@ namespace Wox.Plugin.Folder
                 {
                     Title = Path.GetFileName(filePath),
                     IcoPath = filePath,
+                    TitleHighlightData = StringMatcher.Match(file.Name, searchNickname).MatchData,
                     Action = c =>
                     {
                         try
