@@ -37,6 +37,7 @@
         <KeyBinding Key="K" Modifiers="Ctrl" Command="{Binding SelectPrevItemCommand}"></KeyBinding>
         <KeyBinding Key="U" Modifiers="Ctrl" Command="{Binding SelectPrevPageCommand}"></KeyBinding>
         <KeyBinding Key="O" Modifiers="Ctrl" Command="{Binding LoadContextMenuCommand}"></KeyBinding>
+        <KeyBinding Key="L" Modifiers="Ctrl" Command="{Binding UnselectTextCommand}"></KeyBinding>
         <KeyBinding Key="H" Modifiers="Ctrl" Command="{Binding LoadHistoryCommand}"></KeyBinding>
         <KeyBinding Key="Enter" Modifiers="Shift" Command="{Binding LoadContextMenuCommand}"></KeyBinding>
         <KeyBinding Key="Enter" Command="{Binding OpenResultCommand}"></KeyBinding>
