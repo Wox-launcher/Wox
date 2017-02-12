@@ -595,6 +595,7 @@ namespace Wox.ViewModel
                 _historyItemsStorage.Save();
                 _userSelectedRecordStorage.Save();
                 _topMostRecordStorage.Save();
+                _settings.Save();
 
                 _saved = true;
             }

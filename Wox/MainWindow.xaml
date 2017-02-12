@@ -23,6 +23,7 @@
         SizeChanged="OnSizeChanged"
         Deactivated="OnDeactivated"
         PreviewKeyDown="OnKeyDown"
+        LocationChanged="OnLocationChanged"
         Visibility="{Binding MainWindowVisibility, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
         d:DataContext="{d:DesignInstance vm:MainViewModel}">
     <Window.InputBindings>
@@ -70,7 +71,7 @@
                 </TextBox.ContextMenu>
             </TextBox>
             <Line x:Name="ProgressBar" HorizontalAlignment="Right"
-                  Style="{DynamicResource PendingLineStyle}" Visibility="{Binding ProgressBarVisibility, Mode=TwoWay}" 
+                  Style="{DynamicResource PendingLineStyle}" Visibility="{Binding ProgressBarVisibility, Mode=TwoWay}"
                   Y1="0" Y2="0" X2="100" Height="2" Width="752" StrokeThickness="1">
             </Line>
             <ContentControl>

@@ -34,6 +34,7 @@ namespace Wox
             DataContext = mainVM;
             _viewModel = mainVM;
             _settings = settings;
+            SetWindowPosition();
         }
         public MainWindow()
         {
@@ -64,15 +65,19 @@ namespace Wox
                 {
                     if (Visibility == Visibility.Visible)
                     {
+                        SetWindowPosition();
                         Activate();
                         QueryTextBox.Focus();
-                        SetWindowPosition();
                         _settings.ActivateTimes++;
                         if (_viewModel.QueryTextSelected)
                         {
                             QueryTextBox.SelectAll();
                             _viewModel.QueryTextSelected = false;
                         }
+                    }
+                    else if (Visibility == Visibility.Hidden)
+                    {
+                        this._settings.Save();
                     }
                 }
             };
@@ -176,14 +181,16 @@ namespace Wox
         private bool _startup = true;
         private void SetWindowPosition()
         {
-            if (!_settings.RememberLastLaunchLocation && !_startup)
+            if( _settings.RememberLastLaunchLocation || _startup )
             {
-                Left = WindowLeft();
-                Top = WindowTop();
+                this._startup = false;
+                this.Top = this._settings.WindowTop;
+                this.Left = this._settings.WindowLeft;
             }
             else
             {
-                _startup = false;
+                this.Left = this.WindowLeft();
+                this.Top = this.WindowTop();
             }
         }
 
@@ -193,8 +200,19 @@ namespace Wox
         /// </summary>
         private void OnSizeChanged(object sender, SizeChangedEventArgs e)
         {
-            Left = WindowLeft();
-            Top = WindowTop();
+            if( _settings.RememberLastLaunchLocation )
+                return;
+            this.Left = this.WindowLeft();
+            this.Top = this.WindowTop();
+        }
+
+        private void OnLocationChanged( object sender, EventArgs e )
+        {
+            if (this._settings.RememberLastLaunchLocation)
+            {
+                this._settings.WindowTop = this.Top;
+                this._settings.WindowLeft = this.Left;
+            }
         }
 
         private double WindowLeft()

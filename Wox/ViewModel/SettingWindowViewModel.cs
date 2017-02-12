@@ -25,6 +25,7 @@ namespace Wox.ViewModel
         {
             _storage = new WoxJsonStorage<Settings>();
             Settings = _storage.Load();
+            Settings.Save = this.Save;
             Settings.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(Settings.ActivateTimes))
