@@ -1,6 +1,6 @@
-﻿using System.Collections.Generic;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Forms;
+using Wox.Plugin.Program.Programs;
 
 namespace Wox.Plugin.Program
 {
@@ -9,26 +9,23 @@ namespace Wox.Plugin.Program
     /// </summary>
     public partial class AddProgramSource
     {
-        private ProgramSource _editing;
+        private Settings.ProgramSource _editing;
         private Settings _settings;
 
         public AddProgramSource(Settings settings)
         {
             InitializeComponent();
             _settings = settings;
-            Suffixes.Text = string.Join(";", settings.ProgramSuffixes);
             Directory.Focus();
         }
 
-        public AddProgramSource(ProgramSource edit, Settings settings)
+        public AddProgramSource(Settings.ProgramSource edit, Settings settings)
         {
             _editing = edit;
             _settings = settings;
 
             InitializeComponent();
             Directory.Text = _editing.Location;
-            MaxDepth.Text = _editing.MaxDepth.ToString();
-            Suffixes.Text = string.Join(";", _editing.Suffixes);
         }
 
         private void BrowseButton_Click(object sender, RoutedEventArgs e)
@@ -43,29 +40,17 @@ namespace Wox.Plugin.Program
 
         private void ButtonAdd_OnClick(object sender, RoutedEventArgs e)
         {
-            int max;
-            if(!int.TryParse(MaxDepth.Text, out max))
-            {
-                max = -1;
-            }
-
             if(_editing == null)
             {
-                var source = new ProgramSource
+                var source = new Settings.ProgramSource
                 {
                     Location = Directory.Text,
-                    MaxDepth = max,
-                    Suffixes = Suffixes.Text.Split(ProgramSource.SuffixSeperator),
-                    Type = "FileSystemProgramSource",
-                    Enabled = true
                 };
                 _settings.ProgramSources.Add(source);
             }
             else
             {
                 _editing.Location = Directory.Text;
-                _editing.MaxDepth = max;
-                _editing.Suffixes = Suffixes.Text.Split(ProgramSource.SuffixSeperator);
             }
 
             DialogResult = true;

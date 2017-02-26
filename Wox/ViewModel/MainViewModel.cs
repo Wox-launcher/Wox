@@ -29,9 +29,9 @@ namespace Wox.ViewModel
         private Query _lastQuery;
         private string _queryTextBeforeLeaveResults;
 
-        private readonly JsonStrorage<History> _historyItemsStorage;
-        private readonly JsonStrorage<UserSelectedRecord> _userSelectedRecordStorage;
-        private readonly JsonStrorage<TopMostRecord> _topMostRecordStorage;
+        private readonly WoxJsonStorage<History> _historyItemsStorage;
+        private readonly WoxJsonStorage<UserSelectedRecord> _userSelectedRecordStorage;
+        private readonly WoxJsonStorage<TopMostRecord> _topMostRecordStorage;
         private readonly Settings _settings;
         private readonly History _history;
         private readonly UserSelectedRecord _userSelectedRecord;
@@ -56,9 +56,9 @@ namespace Wox.ViewModel
 
             _settings = settings;
 
-            _historyItemsStorage = new JsonStrorage<History>();
-            _userSelectedRecordStorage = new JsonStrorage<UserSelectedRecord>();
-            _topMostRecordStorage = new JsonStrorage<TopMostRecord>();
+            _historyItemsStorage = new WoxJsonStorage<History>();
+            _userSelectedRecordStorage = new WoxJsonStorage<UserSelectedRecord>();
+            _topMostRecordStorage = new WoxJsonStorage<TopMostRecord>();
             _history = _historyItemsStorage.Load();
             _userSelectedRecord = _userSelectedRecordStorage.Load();
             _topMostRecord = _topMostRecordStorage.Load();
@@ -205,7 +205,19 @@ namespace Wox.ViewModel
                 Query();
             }
         }
-        public bool QueryTextSelected { get; set; }
+
+        /// <summary>
+        /// we need move cursor to end when we manually changed query
+        /// but we don't want to move cursor to end when query is updated from TextBox
+        /// </summary>
+        /// <param name="queryText"></param>
+        public void ChangeQueryText(string queryText)
+        {
+            QueryTextCursorMovedToEnd = true;
+            QueryText = queryText;
+        }
+        public bool LastQuerySelected { get; set; }
+        public bool QueryTextCursorMovedToEnd { get; set; }
 
         private ResultsViewModel _selectedResults;
         private ResultsViewModel SelectedResults
@@ -218,7 +230,7 @@ namespace Wox.ViewModel
                 {
                     ContextMenu.Visbility = Visibility.Collapsed;
                     History.Visbility = Visibility.Collapsed;
-                    QueryText = _queryTextBeforeLeaveResults;
+                    ChangeQueryText(_queryTextBeforeLeaveResults);
                 }
                 else
                 {
@@ -325,7 +337,7 @@ namespace Wox.ViewModel
                     Action = _ =>
                     {
                         SelectedResults = Results;
-                        QueryText = h.Query;
+                        ChangeQueryText(h.Query);
                         return false;
                     }
                 };
@@ -532,7 +544,7 @@ namespace Wox.ViewModel
         {
             //double if to omit calling win32 function
             if (_settings.IgnoreHotkeysOnFullscreen)
-                if (WindowIntelopHelper.IsWindowFullscreen())
+                if (WindowsInteropHelper.IsWindowFullscreen())
                     return true;
 
             return false;
@@ -547,17 +559,36 @@ namespace Wox.ViewModel
                 {
                     if (ShouldIgnoreHotkeys()) return;
                     MainWindowVisibility = Visibility.Visible;
-                    QueryText = hotkey.ActionKeyword;
+                    ChangeQueryText(hotkey.ActionKeyword);
                 });
             }
         }
 
         private void OnHotkey(object sender, HotkeyEventArgs e)
         {
-            if (ShouldIgnoreHotkeys()) return;
-            QueryTextSelected = true;
-            ToggleWox();
-            e.Handled = true;
+            if (!ShouldIgnoreHotkeys())
+            {
+
+                if (_settings.LastQueryMode == LastQueryMode.Empty)
+                {
+                    ChangeQueryText(string.Empty);
+                }
+                else if (_settings.LastQueryMode == LastQueryMode.Preserved)
+                {
+                    LastQuerySelected = true;
+                }
+                else if (_settings.LastQueryMode == LastQueryMode.Selected)
+                {
+                    LastQuerySelected = false;
+                }
+                else
+                {
+                    throw new ArgumentException($"wrong LastQueryMode: <{_settings.LastQueryMode}>");
+                }
+
+                ToggleWox();
+                e.Handled = true;
+            }
         }
 
         private void ToggleWox()
@@ -583,9 +614,6 @@ namespace Wox.ViewModel
                 _historyItemsStorage.Save();
                 _userSelectedRecordStorage.Save();
                 _topMostRecordStorage.Save();
-
-                PluginManager.Save();
-                ImageLoader.Save();
 
                 _saved = true;
             }

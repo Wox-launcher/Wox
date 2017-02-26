@@ -1,6 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
+﻿using System.Collections.Generic;
+using Wox.Plugin.Program.Programs;
 
 namespace Wox.Plugin.Program
 {
@@ -12,5 +11,12 @@ namespace Wox.Plugin.Program
         public bool EnableStartMenuSource { get; set; } = true;
 
         public bool EnableRegistrySource { get; set; } = true;
+
+        internal const char SuffixSeperator = ';';
+
+        public class ProgramSource
+        {
+            public string Location { get; set; }
+        }
     }
 }

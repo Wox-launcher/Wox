@@ -19,11 +19,11 @@ namespace Wox.ViewModel
 {
     public class SettingWindowViewModel : BaseModel
     {
-        private readonly JsonStrorage<Settings> _storage;
+        private readonly WoxJsonStorage<Settings> _storage;
 
         public SettingWindowViewModel()
         {
-            _storage = new JsonStrorage<Settings>();
+            _storage = new WoxJsonStorage<Settings>();
             Settings = _storage.Load();
             Settings.PropertyChanged += (s, e) =>
             {
@@ -33,11 +33,7 @@ namespace Wox.ViewModel
                 }
             };
 
-            // happlebao todo temp fix for instance code logic
-            InternationalizationManager.Instance.Settings = Settings;
-            InternationalizationManager.Instance.ChangeLanguage(Settings.Language);
-            ThemeManager.Instance.Settings = Settings;
-            Http.Proxy = Settings.Proxy;
+
         }
 
         public Settings Settings { get; set; }
@@ -50,8 +46,31 @@ namespace Wox.ViewModel
 
         #region general
 
-        public List<Language> Languages => _translater.LoadAvailableLanguages();
+        // todo a better name?
+        public class LastQueryMode
+        {
+            public string Display { get; set; }
+            public Infrastructure.UserSettings.LastQueryMode Value { get; set; }
+        }
+        public List<LastQueryMode> LastQueryModes
+        {
+            get
+            {
+                List<LastQueryMode> modes = new List<LastQueryMode>();
+                var enums = (Infrastructure.UserSettings.LastQueryMode[])Enum.GetValues(typeof(Infrastructure.UserSettings.LastQueryMode));
+                foreach (var e in enums)
+                {
+                    var key = $"LastQuery{e}";
+                    var display = _translater.GetTranslation(key);
+                    var m = new LastQueryMode { Display = display, Value = e, };
+                    modes.Add(m);
+                }
+                return modes;
+            }
+        }
+
         private Internationalization _translater => InternationalizationManager.Instance;
+        public List<Language> Languages => _translater.LoadAvailableLanguages();
         public IEnumerable<int> MaxResultsRange => Enumerable.Range(2, 16);
 
         #endregion
@@ -114,7 +133,7 @@ namespace Wox.ViewModel
 
         #region theme
 
-        public static string Theme => @"http://www.getwox.com/theme";
+        public static string Theme => @"http://www.getwox.com/theme/builder";
 
         public string SelectedTheme
         {

@@ -96,11 +96,10 @@ namespace Wox.Plugin.WebSearch
 
         private void EditSearchSource()
         {
-            var keyword = _searchSource.ActionKeyword;
-            if (!PluginManager.ActionKeywordRegistered(keyword))
+            var newKeyword = _searchSource.ActionKeyword;
+            var oldKeyword = _oldSearchSource.ActionKeyword;
+            if (!PluginManager.ActionKeywordRegistered(newKeyword) || oldKeyword == newKeyword)
             {
-                var newKeyword = keyword;
-                var oldKeyword = _oldSearchSource.ActionKeyword;
                 var id = _context.CurrentPluginMetadata.ID;
                 PluginManager.ReplaceActionKeyword(id, oldKeyword, newKeyword);
 
@@ -120,7 +119,7 @@ namespace Wox.Plugin.WebSearch
 
         private void OnSelectIconClick(object sender, RoutedEventArgs e)
         {
-            var directory = Path.Combine(Main.ImagesDirectory, Main.Images);
+            var directory = Main.ImagesDirectory;
             const string filter = "Image files (*.jpg, *.jpeg, *.gif, *.png, *.bmp) |*.jpg; *.jpeg; *.gif; *.png; *.bmp";
             var dialog = new OpenFileDialog {InitialDirectory = directory, Filter = filter};
 

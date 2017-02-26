@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Wox.Infrastructure;
 
 namespace Wox.Plugin.ControlPanel
@@ -51,19 +52,19 @@ namespace Wox.Plugin.ControlPanel
                         SubTitle = item.InfoTip,
                         Score = item.Score,
                         IcoPath = Path.Combine(context.CurrentPluginMetadata.PluginDirectory,
-                        @"Images\\ControlPanelIcons\\" + item.GUID + fileType),
+                            @"Images\\ControlPanelIcons\\" + item.GUID + fileType),
                         Action = e =>
+                        {
+                            try
                             {
-                                try
-                                {
-                                    Process.Start(item.ExecutablePath);
-                                }
-                                catch (Exception)
-                                {
-                                    //Silently Fail for now.. todo
-                                }
-                                return true;
+                                Process.Start(item.ExecutablePath);
                             }
+                            catch (Exception)
+                            {
+                                //Silently Fail for now.. todo
+                            }
+                            return true;
+                        }
                     };
                     results.Add(result);
                 }
@@ -75,18 +76,20 @@ namespace Wox.Plugin.ControlPanel
 
         private int Score(ControlPanelItem item, string query)
         {
-            var scores = new List<int>();
-            if (item.LocalizedString != null)
+            var scores = new List<int> {0};
+            if (string.IsNullOrEmpty(item.LocalizedString))
             {
                 var score1 = StringMatcher.Score(item.LocalizedString, query);
-                var socre2 = StringMatcher.ScoreForPinyin(item.LocalizedString, query);
-                scores.Add(Math.Max(score1, socre2));
+                var score2 = StringMatcher.ScoreForPinyin(item.LocalizedString, query);
+                scores.Add(score1);
+                scores.Add(score2);
             }
-            if (item.InfoTip != null)
+            if (!string.IsNullOrEmpty(item.InfoTip))
             {
-                // todo should we add pinyin score for infotip also?
-                var score = StringMatcher.Score(item.InfoTip, query);
-                scores.Add(score);
+                var score1 = StringMatcher.Score(item.InfoTip, query);
+                var score2 = StringMatcher.ScoreForPinyin(item.InfoTip, query);
+                scores.Add(score1);
+                scores.Add(score2);
             }
             return scores.Max();
         }

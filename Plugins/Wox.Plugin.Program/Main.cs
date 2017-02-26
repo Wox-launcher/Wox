@@ -3,32 +3,26 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Controls;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
-using Wox.Plugin.Program.ProgramSources;
+using Wox.Plugin.Program.Programs;
 using Stopwatch = Wox.Infrastructure.Stopwatch;
 
 namespace Wox.Plugin.Program
 {
     public class Main : ISettingProvider, IPlugin, IPluginI18n, IContextMenu, ISavable
     {
-        private static object lockObject = new object();
-        private static List<Program> _programs = new List<Program>();
-        private static List<IProgramSource> _sources = new List<IProgramSource>();
-        private static readonly Dictionary<string, Type> SourceTypes = new Dictionary<string, Type>
-        {
-            {"FileSystemProgramSource", typeof(FileSystemProgramSource)},
-            {"CommonStartMenuProgramSource", typeof(CommonStartMenuProgramSource)},
-            {"UserStartMenuProgramSource", typeof(UserStartMenuProgramSource)},
-            {"AppPathsProgramSource", typeof(AppPathsProgramSource)}
-        };
+        private static readonly object IndexLock = new object();
+        private static Win32[] _win32s;
+        private static UWP.Application[] _uwps;
 
-        private PluginInitContext _context;
+        private static PluginInitContext _context;
 
-        private static ProgramIndexCache _cache;
-        private static BinaryStorage<ProgramIndexCache> _cacheStorage;
+        private static BinaryStorage<Win32[]> _win32Storage;
+        private static BinaryStorage<UWP.Application[]> _uwpStorage;
         private static Settings _settings;
         private readonly PluginJsonStorage<Settings> _settingsStorage;
 
@@ -36,150 +30,79 @@ namespace Wox.Plugin.Program
         {
             _settingsStorage = new PluginJsonStorage<Settings>();
             _settings = _settingsStorage.Load();
-            _cacheStorage = new BinaryStorage<ProgramIndexCache>();
-            _cache = _cacheStorage.Load();
+
+            Stopwatch.Normal("|Wox.Plugin.Program.Main|Preload programs cost", () =>
+            {
+                _win32Storage = new BinaryStorage<Win32[]>("Win32");
+                _win32s = _win32Storage.TryLoad(new Win32[] { });
+                _uwpStorage = new BinaryStorage<UWP.Application[]>("UWP");
+                _uwps = _uwpStorage.TryLoad(new UWP.Application[] { });
+            });
+            Log.Info($"|Wox.Plugin.Program.Main|Number of preload win32 programs <{_win32s.Length}>");
+            Log.Info($"|Wox.Plugin.Program.Main|Number of preload uwps <{_uwps.Length}>");
+            Task.Run(() =>
+            {
+                Stopwatch.Normal("|Wox.Plugin.Program.Main|Program index cost", IndexPrograms);
+            });
         }
 
         public void Save()
         {
             _settingsStorage.Save();
-            _cacheStorage.Save();
+            _win32Storage.Save(_win32s);
+            _uwpStorage.Save(_uwps);
         }
 
         public List<Result> Query(Query query)
         {
-            var results = _programs.AsParallel()
-                                   .Where(p => Score(p, query.Search) > 0)
-                                   .Select(ScoreFilter)
-                                   .OrderByDescending(p => p.Score)
-                                   .Select(p => new Result
-                                   {
-                                       Title = p.Title,
-                                       SubTitle = p.Path,
-                                       IcoPath = p.IcoPath,
-                                       Score = p.Score,
-                                       ContextData = p,
-                                       Action = e =>
-                                       {
-                                           var info = new ProcessStartInfo
-                                           {
-                                               FileName = p.Path,
-                                               WorkingDirectory = p.Directory
-                                           };
-                                           var hide = StartProcess(info);
-                                           return hide;
-                                       }
-                                   }).ToList();
-            return results;
-        }
-
-        private int Score(Program program, string query)
-        {
-            var score1 = StringMatcher.Score(program.Title, query);
-            var score2 = StringMatcher.ScoreForPinyin(program.Title, query);
-            var score3 = StringMatcher.Score(program.ExecutableName, query);
-            var score = new[] { score1, score2, score3 }.Max();
-            program.Score = score;
-            return score;
+            lock (IndexLock)
+            {
+                var results1 = _win32s.AsParallel().Select(p => p.Result(query.Search, _context.API));
+                var results2 = _uwps.AsParallel().Select(p => p.Result(query.Search, _context.API));
+                var result = results1.Concat(results2).Where(r => r.Score > 0).ToList();
+                return result;
+            }
         }
 
         public void Init(PluginInitContext context)
         {
             _context = context;
-            Stopwatch.Debug("Preload programs", () =>
-            {
-                _programs = _cache.Programs;
-            });
-            Log.Info($"Preload {_programs.Count} programs from cache");
-            Stopwatch.Debug("Program Index", IndexPrograms);
         }
 
         public static void IndexPrograms()
         {
-            // todo why there is a lock??
-            lock (lockObject)
+            Win32[] w = { };
+            UWP.Application[] u = { };
+            var t1 = Task.Run(() =>
             {
-                var sources = DefaultProgramSources();
-                if (_settings.ProgramSources != null &&
-                    _settings.ProgramSources.Count(o => o.Enabled) > 0)
+                w = Win32.All(_settings);
+            });
+            var t2 = Task.Run(() =>
+            {
+                var windows10 = new Version(10, 0);
+                var support = Environment.OSVersion.Version.Major >= windows10.Major;
+                if (support)
                 {
-                    sources.AddRange(_settings.ProgramSources);
+                    u = UWP.All();
                 }
+                else
+                {
+                    u = new UWP.Application[] { };
+                }
+            });
+            Task.WaitAll(t1, t2);
 
-                _sources = sources.AsParallel()
-                                  .Where(s => s.Enabled && SourceTypes.ContainsKey(s.Type))
-                                  .Select(s =>
-                                  {
-                                      var sourceClass = SourceTypes[s.Type];
-                                      var constructorInfo = sourceClass.GetConstructor(new[] { typeof(ProgramSource) });
-                                      var programSource = constructorInfo?.Invoke(new object[] { s }) as IProgramSource;
-                                      return programSource;
-                                  })
-                                  .Where(s => s != null).ToList();
-
-                _programs = _sources.AsParallel()
-                                    .SelectMany(s => s.LoadPrograms())
-                                    // filter duplicate program
-                                    .GroupBy(x => new { ExecutePath = x.Path, ExecuteName = x.ExecutableName })
-                                    .Select(g => g.First())
-                                    .ToList();
-
-                _cache.Programs = _programs;
+            lock (IndexLock)
+            {
+                _win32s = w;
+                _uwps = u;
             }
         }
-
-        /// <summary>
-        /// Load program sources that wox always provide
-        /// </summary>
-        private static List<ProgramSource> DefaultProgramSources()
-        {
-            var list = new List<ProgramSource>
-            {
-                new ProgramSource
-                {
-                    BonusPoints = 0,
-                    Enabled = _settings.EnableStartMenuSource,
-                    Type = "CommonStartMenuProgramSource"
-                },
-                new ProgramSource
-                {
-                    BonusPoints = 0,
-                    Enabled = _settings.EnableStartMenuSource,
-                    Type = "UserStartMenuProgramSource"
-                },
-                new ProgramSource
-                {
-                    BonusPoints = -10,
-                    Enabled = _settings.EnableRegistrySource,
-                    Type = "AppPathsProgramSource"
-                }
-            };
-            return list;
-        }
-
-        private Program ScoreFilter(Program p)
-        {
-            p.Score += p.Source.BonusPoints;
-
-            if (p.Title.Contains("启动") || p.Title.ToLower().Contains("start"))
-                p.Score += 10;
-
-            if (p.Title.Contains("帮助") || p.Title.ToLower().Contains("help") || p.Title.Contains("文档") || p.Title.ToLower().Contains("documentation"))
-                p.Score -= 10;
-
-            if (p.Title.Contains("卸载") || p.Title.ToLower().Contains("uninstall"))
-                p.Score -= 20;
-            return p;
-        }
-
-        #region ISettingProvider Members
 
         public Control CreateSettingPanel()
         {
             return new ProgramSetting(_context, _settings);
         }
-
-        #endregion
 
         public string GetTranslatedPluginTitle()
         {
@@ -193,40 +116,19 @@ namespace Wox.Plugin.Program
 
         public List<Result> LoadContextMenus(Result selectedResult)
         {
-            Program p = selectedResult.ContextData as Program;
-            List<Result> contextMenus = new List<Result>
+            var program = selectedResult.ContextData as IProgram;
+            if (program != null)
             {
-                new Result
-                {
-                    Title = _context.API.GetTranslation("wox_plugin_program_run_as_administrator"),
-                    Action = _ =>
-                    {
-                        var info = new ProcessStartInfo
-                        {
-                            FileName = p.Path,
-                            WorkingDirectory = p.Directory,
-                            Verb = "runas"
-                        };
-                        var hide = StartProcess(info);
-                        return hide;
-                    },
-                    IcoPath = "Images/cmd.png"
-                },
-                new Result
-                {
-                    Title = _context.API.GetTranslation("wox_plugin_program_open_containing_folder"),
-                    Action = _ =>
-                    {
-                        var hide = StartProcess(new ProcessStartInfo(p.Directory));
-                        return hide;
-                    },
-                    IcoPath = "Images/folder.png"
-                }
-            };
-            return contextMenus;
+                var menus = program.ContextMenus(_context.API);
+                return menus;
+            }
+            else
+            {
+                return new List<Result>();
+            }
         }
 
-        private bool StartProcess(ProcessStartInfo info)
+        public static bool StartProcess(ProcessStartInfo info)
         {
             bool hide;
             try
@@ -234,10 +136,10 @@ namespace Wox.Plugin.Program
                 Process.Start(info);
                 hide = true;
             }
-            catch (Win32Exception)
+            catch (Exception)
             {
-                var name = $"Plugin: {_context.CurrentPluginMetadata.Name}";
-                var message = "Can't open this file";
+                var name = "Plugin: Program";
+                var message = $"Can't start: {info.FileName}";
                 _context.API.ShowMsg(name, message, string.Empty);
                 hide = false;
             }

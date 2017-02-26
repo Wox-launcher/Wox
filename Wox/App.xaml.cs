@@ -4,7 +4,10 @@ using System.Timers;
 using System.Windows;
 using Wox.Core;
 using Wox.Core.Plugin;
+using Wox.Core.Resource;
 using Wox.Helper;
+using Wox.Infrastructure;
+using Wox.Infrastructure.Http;
 using Wox.Infrastructure.Image;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.UserSettings;
@@ -37,9 +40,13 @@ namespace Wox
 
         private void OnStartup(object sender, StartupEventArgs e)
         {
-            Stopwatch.Normal("Startup Time", () =>
+            Stopwatch.Normal("|App.OnStartup|Startup cost", () =>
             {
+                Log.Info("|App.OnStartup|Begin Wox startup ----------------------------------------------------");
                 RegisterDispatcherUnhandledException();
+
+                ImageLoader.Initialize();
+                Alphabet.Initialize();
 
                 var settingVM = new SettingWindowViewModel();
                 _settings = settingVM.Settings;
@@ -50,22 +57,31 @@ namespace Wox
                 API = new PublicAPIInstance(settingVM, mainVM);
                 PluginManager.InitializePlugins(API);
 
-                ImageLoader.PreloadImages();
-
                 Current.MainWindow = window;
-                Current.MainWindow.Title = Infrastructure.Constant.Wox;
+                Current.MainWindow.Title = Constant.Wox;
+
+                // happlebao todo temp fix for instance code logic
+                // remove all dictionaries defined in xaml e.g.g App.xaml
+                Current.Resources.MergedDictionaries.Clear();
+                // load plugin before change language, because plugin language also needs be changed
+                InternationalizationManager.Instance.Settings = _settings;
+                InternationalizationManager.Instance.ChangeLanguage(_settings.Language);
+                // main windows needs initialized before theme change because of blur settigns
+                ThemeManager.Instance.Settings = _settings;
+                ThemeManager.Instance.ChangeTheme(_settings.Theme);
+
+                Http.Proxy = _settings.Proxy;
 
                 RegisterExitEvents();
 
                 AutoStartup();
                 AutoUpdates();
 
-                if (!_settings.HideOnStartup)
-                {
-                    mainVM.MainWindowVisibility = Visibility.Visible;
-                }
+                mainVM.MainWindowVisibility = _settings.HideOnStartup ? Visibility.Hidden : Visibility.Visible;
+                Log.Info("|App.OnStartup|End Wox startup ----------------------------------------------------  ");
             });
         }
+
 
         private void AutoStartup()
         {
@@ -102,7 +118,7 @@ namespace Wox
         }
 
         /// <summary>
-        /// let exception throw as normal is better for Debug 
+        /// let exception throw as normal is better for Debug
         /// </summary>
         [Conditional("RELEASE")]
         private void RegisterDispatcherUnhandledException()
@@ -113,7 +129,7 @@ namespace Wox
 
 
         /// <summary>
-        /// let exception throw as normal is better for Debug 
+        /// let exception throw as normal is better for Debug
         /// </summary>
         [Conditional("RELEASE")]
         private static void RegisterAppDomainExceptions()
@@ -122,8 +138,7 @@ namespace Wox
             AppDomain.CurrentDomain.UnhandledException += ErrorReporting.UnhandledExceptionHandle;
             AppDomain.CurrentDomain.FirstChanceException += (s, e) =>
             {
-                Log.Error("First Chance Exception:");
-                Log.Exception(e.Exception);
+                Log.Exception("|App.RegisterAppDomainExceptions|First Chance Exception:", e.Exception);
             };
         }
 
@@ -134,6 +149,11 @@ namespace Wox
             if (!_disposed)
             {
                 Current.Dispatcher.Invoke(() => ((MainViewModel)Current.MainWindow?.DataContext)?.Save());
+
+                PluginManager.Save();
+                ImageLoader.Save();
+                Alphabet.Save();
+
                 _disposed = true;
             }
         }

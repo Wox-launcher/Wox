@@ -7,24 +7,30 @@ namespace Wox.Core.Resource
         public static Language English = new Language("en", "English");
         public static Language Chinese = new Language("zh-cn", "中文");
         public static Language Chinese_TW = new Language("zh-tw", "中文（繁体）");
+        public static Language Ukrainian = new Language("uk-UA", "Українська");
         public static Language Russian = new Language("ru", "Русский");
         public static Language French = new Language("fr", "Français");
         public static Language Japanese = new Language("ja", "日本語");
         public static Language Dutch = new Language("nl", "Dutch");
         public static Language Polish = new Language("pl", "Polski");
+        public static Language Danish = new Language("da", "Dansk");
+        public static Language German = new Language("de", "Deutsch");
 
         public static List<Language> GetAvailableLanguages()
         {
             List<Language> languages = new List<Language>
             {
-                English, 
-                Chinese, 
+                English,
+                Chinese,
                 Chinese_TW,
+                Ukrainian,
                 Russian,
                 French,
                 Japanese,
                 Dutch,
-                Polish
+                Polish,
+                Danish,
+                German
 
             };
             return languages;

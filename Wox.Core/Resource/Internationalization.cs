@@ -2,7 +2,11 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Windows;
+using JetBrains.Annotations;
+using Wox.Core.Plugin;
+using Wox.Infrastructure;
 using Wox.Infrastructure.Exception;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.UserSettings;
@@ -10,76 +14,88 @@ using Wox.Plugin;
 
 namespace Wox.Core.Resource
 {
-    public class Internationalization : Resource
+    public class Internationalization
     {
         public Settings Settings { get; set; }
+        private const string DirectoryName = "Languages";
+        private readonly List<string> _languageDirectories = new List<string>();
+        private readonly List<ResourceDictionary> _oldResources = new List<ResourceDictionary>();
 
         public Internationalization()
         {
-            DirectoryName = "Languages";
-            MakesureDirectoriesExist();
-        }
+            var woxThemeDirectory = Path.Combine(Constant.ProgramDirectory, DirectoryName);
+            _languageDirectories.Add(woxThemeDirectory);
 
-        private void MakesureDirectoriesExist()
-        {
-            if (!Directory.Exists(DirectoryPath))
+            foreach (var plugin in PluginManager.GetPluginsForInterface<IPluginI18n>())
             {
-                try
+                var location = Assembly.GetAssembly(plugin.Plugin.GetType()).Location;
+                var dir = Path.GetDirectoryName(location);
+                if (dir != null)
                 {
-                    Directory.CreateDirectory(DirectoryPath);
+                    var pluginThemeDirectory = Path.Combine(dir, DirectoryName);
+                    _languageDirectories.Add(pluginThemeDirectory);
                 }
-                catch (Exception e)
+                else
                 {
-                    Log.Exception(e);
+                    Log.Error($"|ResourceMerger.UpdatePluginLanguages|Can't find plugin path <{location}> for <{plugin.Metadata.Name}>");
                 }
             }
         }
 
         public void ChangeLanguage(string languageCode)
         {
+            languageCode = languageCode.NonNull();
             Language language = GetLanguageByLanguageCode(languageCode);
             ChangeLanguage(language);
         }
 
         private Language GetLanguageByLanguageCode(string languageCode)
         {
-            Language language = AvailableLanguages.GetAvailableLanguages().FirstOrDefault(o => o.LanguageCode.ToLower() == languageCode.ToLower());
+            var lowercase = languageCode.ToLower();
+            var language = AvailableLanguages.GetAvailableLanguages().FirstOrDefault(o => o.LanguageCode.ToLower() == lowercase);
             if (language == null)
             {
-                throw new WoxI18nException("Invalid language code:" + languageCode);
+                Log.Error($"|Internationalization.GetLanguageByLanguageCode|Language code can't be found <{languageCode}>");
+                return AvailableLanguages.English;
             }
-
-            return language;
+            else
+            {
+                return language;
+            }
         }
 
         public void ChangeLanguage(Language language)
         {
-            if (language == null) throw new WoxI18nException("language can't be null");
+            language = language.NonNull();
 
-            string path = GetLanguagePath(language);
-            if (string.IsNullOrEmpty(path))
+            var files = _languageDirectories.Select(LanguageFile).Where(f => !string.IsNullOrEmpty(f)).ToArray();
+
+            if (files.Length > 0)
             {
-                path = GetLanguagePath(AvailableLanguages.English);
-                if (string.IsNullOrEmpty(path))
+                Settings.Language = language.LanguageCode;
+
+                var dicts = Application.Current.Resources.MergedDictionaries;
+                foreach (var r in _oldResources)
                 {
-                    throw new Exception("Change Language failed");
+                    dicts.Remove(r);
+                }
+                foreach (var f in files)
+                {
+                    var r = new ResourceDictionary
+                    {
+                        Source = new Uri(f, UriKind.Absolute)
+                    };
+                    dicts.Add(r);
+                    _oldResources.Add(r);
                 }
             }
 
-            Settings.Language = language.LanguageCode;
-            ResourceMerger.UpdateResource(this);
-        }
-
-
-
-        public override ResourceDictionary GetResourceDictionary()
-        {
-            var dictionary = new ResourceDictionary
+            foreach (var plugin in PluginManager.GetPluginsForInterface<IPluginI18n>())
             {
-                Source = new Uri(GetLanguageFile(DirectoryPath), UriKind.Absolute)
-            };
-            return dictionary;
+                UpdatePluginMetadataTranslations(plugin);
+            }
         }
+
 
         public List<Language> LoadAvailableLanguages()
         {
@@ -99,14 +115,7 @@ namespace Wox.Core.Resource
             }
         }
 
-        private string GetLanguagePath(string languageCode)
-        {
-            Language language = GetLanguageByLanguageCode(languageCode);
-            return GetLanguagePath(language);
-        }
-
-
-        internal void UpdatePluginMetadataTranslations(PluginPair pluginPair)
+        private void UpdatePluginMetadataTranslations(PluginPair pluginPair)
         {
             var pluginI18n = pluginPair.Plugin as IPluginI18n;
             if (pluginI18n == null) return;
@@ -117,43 +126,38 @@ namespace Wox.Core.Resource
             }
             catch (Exception e)
             {
-                var woxPluginException = new WoxPluginException(pluginPair.Metadata.Name, "Update Plugin metadata translation failed:", e);
-                Log.Exception(woxPluginException);
+                Log.Exception($"|Internationalization.UpdatePluginMetadataTranslations|Update Plugin metadata translation failed for <{pluginPair.Metadata.Name}>", e);
             }
         }
 
-        private string GetLanguagePath(Language language)
+        public string LanguageFile(string folder)
         {
-            string path = Path.Combine(DirectoryPath, language.LanguageCode + ".xaml");
-            if (File.Exists(path))
+            if (Directory.Exists(folder))
             {
-                return path;
-            }
-
-            return string.Empty;
-        }
-
-
-        public string GetLanguageFile(string folder)
-        {
-            if (!Directory.Exists(folder)) return string.Empty;
-
-            string path = Path.Combine(folder, Settings.Language + ".xaml");
-            if (File.Exists(path))
-            {
-                return path;
+                string path = Path.Combine(folder, Settings.Language + ".xaml");
+                if (File.Exists(path))
+                {
+                    return path;
+                }
+                else
+                {
+                    Log.Error($"|Internationalization.LanguageFile|Language path can't be found <{path}>");
+                    string english = Path.Combine(folder, "en.xaml");
+                    if (File.Exists(english))
+                    {
+                        return english;
+                    }
+                    else
+                    {
+                        Log.Error($"|Internationalization.LanguageFile|Default English Language path can't be found <{path}>");
+                        return string.Empty;
+                    }
+                }
             }
             else
             {
-                string english = Path.Combine(folder, "en.xaml");
-                if (File.Exists(english))
-                {
-                    return english;
-                }
-
                 return string.Empty;
             }
-
         }
     }
 

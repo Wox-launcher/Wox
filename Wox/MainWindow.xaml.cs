@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
 using System.Windows.Controls;
+using System.Windows.Forms;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
 using Wox.Helper;
@@ -11,7 +12,12 @@ using Wox.Infrastructure.UserSettings;
 using Wox.ViewModel;
 using Screen = System.Windows.Forms.Screen;
 using ContextMenu = System.Windows.Forms.ContextMenu;
+using ContextMenuStrip = System.Windows.Forms.ContextMenuStrip;
+using DataFormats = System.Windows.DataFormats;
+using DragEventArgs = System.Windows.DragEventArgs;
+using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using MenuItem = System.Windows.Forms.MenuItem;
+using MessageBox = System.Windows.MessageBox;
 using NotifyIcon = System.Windows.Forms.NotifyIcon;
 
 namespace Wox
@@ -30,10 +36,10 @@ namespace Wox
 
         public MainWindow(Settings settings, MainViewModel mainVM)
         {
-            InitializeComponent();
             DataContext = mainVM;
             _viewModel = mainVM;
             _settings = settings;
+            InitializeComponent();
         }
         public MainWindow()
         {
@@ -46,12 +52,22 @@ namespace Wox
             _viewModel.Save();
         }
 
+        private void OnInitialized(object sender, EventArgs e)
+        {
+            // show notify icon when wox is hided
+            InitializeNotifyIcon();
+        }
+
         private void OnLoaded(object sender, RoutedEventArgs _)
         {
-            WindowIntelopHelper.DisableControlBox(this);
-            ThemeManager.Instance.ChangeTheme(_settings.Theme);
-            InitializeNotifyIcon();
+            // todo is there a way to set blur only once?
+            ThemeManager.Instance.SetBlurForWindow();
+            WindowsInteropHelper.DisableControlBox(this);
             InitProgressbarAnimation();
+            InitializePosition();
+            // since the default main window visibility is visible
+            // so we need set focus during startup
+            QueryTextBox.Focus();
 
             _viewModel.PropertyChanged += (o, e) =>
             {
@@ -61,33 +77,61 @@ namespace Wox
                     {
                         Activate();
                         QueryTextBox.Focus();
-                        SetWindowPosition();
+                        UpdatePosition();
                         _settings.ActivateTimes++;
-                        if (_viewModel.QueryTextSelected)
+                        if (!_viewModel.LastQuerySelected)
                         {
                             QueryTextBox.SelectAll();
-                            _viewModel.QueryTextSelected = false;
+                            _viewModel.LastQuerySelected = true;
                         }
                     }
                 }
             };
-            // since the default main window visibility is visible
-            // so we need set focus during startup
-            QueryTextBox.Focus();
+            InitializePosition();
+        }
+
+        private void InitializePosition()
+        {
+            Top = WindowTop();
+            Left = WindowLeft();
+            _settings.WindowTop = Top;
+            _settings.WindowLeft = Left;
         }
 
         private void InitializeNotifyIcon()
         {
-            _notifyIcon = new NotifyIcon { Text = Infrastructure.Constant.Wox, Icon = Properties.Resources.app, Visible = true };
-            _notifyIcon.Click += (o, e) => Visibility = Visibility.Visible;
-            var open = new MenuItem(InternationalizationManager.Instance.GetTranslation("iconTrayOpen"));
+            _notifyIcon = new NotifyIcon
+            {
+                Text = Infrastructure.Constant.Wox,
+                Icon = Properties.Resources.app,
+                Visible = true
+            };
+            var menu = new ContextMenuStrip();
+            var items = menu.Items;
+
+            var open = items.Add(InternationalizationManager.Instance.GetTranslation("iconTrayOpen"));
             open.Click += (o, e) => Visibility = Visibility.Visible;
-            var setting = new MenuItem(InternationalizationManager.Instance.GetTranslation("iconTraySettings"));
+            var setting = items.Add(InternationalizationManager.Instance.GetTranslation("iconTraySettings"));
             setting.Click += (o, e) => App.API.OpenSettingDialog();
-            var exit = new MenuItem(InternationalizationManager.Instance.GetTranslation("iconTrayExit"));
+            var exit = items.Add(InternationalizationManager.Instance.GetTranslation("iconTrayExit"));
             exit.Click += (o, e) => Close();
-            MenuItem[] childen = { open, setting, exit };
-            _notifyIcon.ContextMenu = new ContextMenu(childen);
+
+            _notifyIcon.ContextMenuStrip = menu;
+            _notifyIcon.MouseClick += (o, e) =>
+            {
+                if (e.Button == MouseButtons.Left)
+                {
+                    if (menu.Visible)
+                    {
+                        menu.Close();
+                    }
+                    else
+                    {
+                        var p = System.Windows.Forms.Cursor.Position;
+                        menu.Show(p);
+                    }
+                }
+            };
         }
 
         private void InitProgressbarAnimation()
@@ -168,35 +212,34 @@ namespace Wox
             }
         }
 
-        private bool _startup = true;
-        private void SetWindowPosition()
+        private void UpdatePosition()
         {
-            if (!_settings.RememberLastLaunchLocation && !_startup)
+            if (_settings.RememberLastLaunchLocation)
+            {
+                Left = _settings.WindowLeft;
+                Top = _settings.WindowTop;
+            }
+            else
             {
                 Left = WindowLeft();
                 Top = WindowTop();
             }
-            else
-            {
-                _startup = false;
-            }
         }
 
-        /// <summary>
-        // used to set correct position on windows first startup
-        // since the actual width and actual height will be avaiable after this event
-        /// </summary>
-        private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+        private void OnLocationChanged(object sender, EventArgs e)
         {
-            Left = WindowLeft();
-            Top = WindowTop();
+            if (_settings.RememberLastLaunchLocation)
+            {
+                _settings.WindowLeft = Left;
+                _settings.WindowTop = Top;
+            }
         }
 
         private double WindowLeft()
         {
             var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
-            var dip1 = WindowIntelopHelper.TransformPixelsToDIP(this, screen.WorkingArea.X, 0);
-            var dip2 = WindowIntelopHelper.TransformPixelsToDIP(this, screen.WorkingArea.Width, 0);
+            var dip1 = WindowsInteropHelper.TransformPixelsToDIP(this, screen.WorkingArea.X, 0);
+            var dip2 = WindowsInteropHelper.TransformPixelsToDIP(this, screen.WorkingArea.Width, 0);
             var left = (dip2.X - ActualWidth) / 2 + dip1.X;
             return left;
         }
@@ -204,8 +247,8 @@ namespace Wox
         private double WindowTop()
         {
             var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
-            var dip1 = WindowIntelopHelper.TransformPixelsToDIP(this, 0, screen.WorkingArea.Y);
-            var dip2 = WindowIntelopHelper.TransformPixelsToDIP(this, 0, screen.WorkingArea.Height);
+            var dip1 = WindowsInteropHelper.TransformPixelsToDIP(this, 0, screen.WorkingArea.Y);
+            var dip2 = WindowsInteropHelper.TransformPixelsToDIP(this, 0, screen.WorkingArea.Height);
             var top = (dip2.Y - QueryTextBox.ActualHeight) / 4 + dip1.Y;
             return top;
         }
@@ -226,11 +269,27 @@ namespace Wox
                 _viewModel.SelectPrevItemCommand.Execute(null);
                 e.Handled = true;
             }
+            else if (e.Key == Key.PageDown)
+            {
+                _viewModel.SelectNextPageCommand.Execute(null);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.PageUp)
+            {
+                _viewModel.SelectPrevPageCommand.Execute(null);
+                e.Handled = true;
+            }
         }
 
         private void OnTextChanged(object sender, TextChangedEventArgs e)
         {
-            QueryTextBox.CaretIndex = QueryTextBox.Text.Length;
+            if (_viewModel.QueryTextCursorMovedToEnd)
+            {
+                QueryTextBox.CaretIndex = QueryTextBox.Text.Length;
+                _viewModel.QueryTextCursorMovedToEnd = false;
+            }
         }
+
+
     }
 }

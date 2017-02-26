@@ -1,9 +1,9 @@
 ﻿using System.Diagnostics;
 using System.IO;
+using System.Runtime.CompilerServices;
 using NLog;
 using NLog.Config;
 using NLog.Targets;
-using Wox.Infrastructure.Exception;
 
 namespace Wox.Infrastructure.Logger
 {
@@ -22,79 +22,141 @@ namespace Wox.Infrastructure.Logger
             var configuration = new LoggingConfiguration();
             var target = new FileTarget();
             configuration.AddTarget("file", target);
-            target.FileName = "${specialfolder:folder=ApplicationData}/" + Constant.Wox + "/" + DirectoryName + "/" + Constant.Version + "/${shortdate}.txt";
+            target.FileName = "${specialfolder:folder=ApplicationData}/" + Constant.Wox + "/" + DirectoryName + "/" +
+                              Constant.Version + "/${shortdate}.txt";
+#if DEBUG
+            var rule = new LoggingRule("*", LogLevel.Debug, target);
+#else
             var rule = new LoggingRule("*", LogLevel.Info, target);
+#endif
             configuration.LoggingRules.Add(rule);
             LogManager.Configuration = configuration;
         }
-        private static string CallerType()
+
+        private static void LogFaultyFormat(string message)
         {
-            var stackTrace = new StackTrace();
-            var stackFrames = stackTrace.GetFrames().NonNull();
-            var callingFrame = stackFrames[2];
-            var method = callingFrame.GetMethod();
-            var type = $"{method.DeclaringType.NonNull().FullName}.{method.Name}";
-            return type;
+            var logger = LogManager.GetLogger("FaultyLogger");
+            message = $"Wrong logger message format <{message}>";
+            System.Diagnostics.Debug.WriteLine($"FATAL|{message}");
+            logger.Fatal(message);
         }
 
-        public static void Error(string msg)
+        private static bool FormatValid(string message)
         {
-            var type = CallerType();
-            var logger = LogManager.GetLogger(type);
-            System.Diagnostics.Debug.WriteLine($"ERROR: {msg}");
-            logger.Error(msg);
+            var parts = message.Split('|');
+            var valid = parts.Length == 3 && !string.IsNullOrWhiteSpace(parts[1]) && !string.IsNullOrWhiteSpace(parts[2]);
+            return valid;
         }
 
-        public static void Exception(System.Exception e)
+        /// <param name="message">example: "|prefix|unprefixed" </param>
+        public static void Error(string message)
         {
-#if DEBUG
-            throw e;
-#else
-            var type = CallerType();
-            var logger = LogManager.GetLogger(type);
-
-            do
+            if (FormatValid(message))
             {
-                logger.Error(e.Message);
-                logger.Error($"\n{e.StackTrace}");
-                e = e.InnerException;
-            } while (e != null);
-#endif
+                var parts = message.Split('|');
+                var prefix = parts[1];
+                var unprefixed = parts[2];
+                var logger = LogManager.GetLogger(prefix);
+
+                System.Diagnostics.Debug.WriteLine($"ERROR|{message}");
+                logger.Error(unprefixed);
+            }
+            else
+            {
+                LogFaultyFormat(message);
+            }
         }
 
-        public static void Debug(string msg)
-        {
-            var type = CallerType();
-            var logger = LogManager.GetLogger(type);
-            System.Diagnostics.Debug.WriteLine($"DEBUG: {msg}");
-            logger.Debug(msg);
-        }
-
-        public static void Info(string msg)
-        {
-            var type = CallerType();
-            var logger = LogManager.GetLogger(type);
-            System.Diagnostics.Debug.WriteLine($"INFO: {msg}");
-            logger.Info(msg);
-        }
-
-        public static void Warn(string msg)
-        {
-            var type = CallerType();
-            var logger = LogManager.GetLogger(type);
-            System.Diagnostics.Debug.WriteLine($"WARN: {msg}");
-            logger.Warn(msg);
-        }
-
-        public static void Fatal(System.Exception e)
+        /// <param name="message">example: "|prefix|unprefixed" </param>
+        [MethodImpl(MethodImplOptions.Synchronized)]
+        public static void Exception(string message, System.Exception e)
         {
 #if DEBUG
             throw e;
 #else
-            var type = CallerType();
-            var logger = LogManager.GetLogger(type);
-            logger.Fatal(ExceptionFormatter.FormatExcpetion(e));
+            if (FormatValid(message))
+            {
+                var parts = message.Split('|');
+                var prefix = parts[1];
+                var unprefixed = parts[2];
+                var logger = LogManager.GetLogger(prefix);
+
+                System.Diagnostics.Debug.WriteLine($"ERROR|{message}");
+
+                logger.Error("-------------------------- Begin exception --------------------------");
+                logger.Error(unprefixed);
+
+                do
+                {
+                    logger.Error($"Exception message:\n <{e.Message}>");
+                    logger.Error($"Exception stack trace:\n <{e.StackTrace}>");
+                    e = e.InnerException;
+                } while (e != null);
+
+                logger.Error("-------------------------- End exception --------------------------");
+            }
+            else
+            {
+                LogFaultyFormat(message);
+            }
 #endif
+        }
+        
+        /// <param name="message">example: "|prefix|unprefixed" </param>
+        public static void Debug(string message)
+        {
+            if (FormatValid(message))
+            {
+                var parts = message.Split('|');
+                var prefix = parts[1];
+                var unprefixed = parts[2];
+                var logger = LogManager.GetLogger(prefix);
+
+                System.Diagnostics.Debug.WriteLine($"DEBUG|{message}");
+                logger.Debug(unprefixed);
+            }
+            else
+            {
+                LogFaultyFormat(message);
+            }
+        }
+
+        /// <param name="message">example: "|prefix|unprefixed" </param>
+        public static void Info(string message)
+        {
+            if (FormatValid(message))
+            {
+                var parts = message.Split('|');
+                var prefix = parts[1];
+                var unprefixed = parts[2];
+                var logger = LogManager.GetLogger(prefix);
+
+                System.Diagnostics.Debug.WriteLine($"INFO|{message}");
+                logger.Info(unprefixed);
+            }
+            else
+            {
+                LogFaultyFormat(message);
+            }
+        }
+
+        /// <param name="message">example: "|prefix|unprefixed" </param>
+        public static void Warn(string message)
+        {
+            if (FormatValid(message))
+            {
+                var parts = message.Split('|');
+                var prefix = parts[1];
+                var unprefixed = parts[2];
+                var logger = LogManager.GetLogger(prefix);
+
+                System.Diagnostics.Debug.WriteLine($"WARN|{message}");
+                logger.Warn(unprefixed);
+            }
+            else
+            {
+                LogFaultyFormat(message);
+            }
         }
     }
 }

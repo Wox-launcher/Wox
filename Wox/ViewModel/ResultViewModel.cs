@@ -1,5 +1,8 @@
-﻿using System.Windows.Media;
+﻿using System;
+using System.Windows.Media;
+using System.Windows.Threading;
 using Wox.Infrastructure.Image;
+using Wox.Infrastructure.Logger;
 using Wox.Plugin;
 
 
@@ -15,7 +18,28 @@ namespace Wox.ViewModel
             }
         }
 
-        public ImageSource Image => ImageLoader.Load(Result.IcoPath);
+        public ImageSource Image
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(Result.IcoPath))
+                {
+                    try
+                    {
+                        return Result.Icon();
+                    }
+                    catch (Exception e)
+                    {
+                        Log.Exception($"|ResultViewModel.Image|IcoPath is empty and exception when calling Icon() for result <{Result.Title}> of plugin <{Result.PluginDirectory}>", e);
+                        return ImageLoader.Load(Result.IcoPath);
+                    }
+                }
+                else
+                {
+                    return ImageLoader.Load(Result.IcoPath);
+                }
+            }
+        }
 
         public Result Result { get; }
 

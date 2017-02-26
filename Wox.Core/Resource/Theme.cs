@@ -7,69 +7,89 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
+using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Core.Resource
 {
-    public class Theme : Resource
+    public class Theme
     {
-        private static List<string> themeDirectories = new List<string>();
+        private readonly List<string> _themeDirectories = new List<string>();
         public Settings Settings { get; set; }
+        private string DirectoryPath => Path.Combine(Constant.ProgramDirectory, DirectoryName);
+        private const string DirectoryName = "Themes";
 
         public Theme()
         {
-            DirectoryName = "Themes";
-            themeDirectories.Add(DirectoryPath);
+            _themeDirectories.Add(DirectoryPath);
             MakesureThemeDirectoriesExist();
         }
 
-        private static void MakesureThemeDirectoriesExist()
+        private void MakesureThemeDirectoriesExist()
         {
-            foreach (string pluginDirectory in themeDirectories)
+            foreach (string dir in _themeDirectories)
             {
-                if (!Directory.Exists(pluginDirectory))
+                if (!Directory.Exists(dir))
                 {
                     try
                     {
-                        Directory.CreateDirectory(pluginDirectory);
+                        Directory.CreateDirectory(dir);
                     }
                     catch (Exception e)
                     {
-                        Log.Exception(e);
+                        Log.Exception($"|Theme.MakesureThemeDirectoriesExist|Exception when create directory <{dir}>", e);
                     }
                 }
             }
         }
 
-        public void ChangeTheme(string themeName)
+        public void ChangeTheme(string theme)
         {
-            string themePath = GetThemePath(themeName);
-            if (string.IsNullOrEmpty(themePath))
+            const string dark = "Dark";
+            bool valid;
+
+            string path = GetThemePath(theme);
+            if (string.IsNullOrEmpty(path))
             {
-                themePath = GetThemePath("Dark");
-                if (string.IsNullOrEmpty(themePath))
+                Log.Error($"|Theme.ChangeTheme|Theme path can't be found <{path}>, use default dark theme");
+                path = GetThemePath(dark);
+                if (string.IsNullOrEmpty(path))
                 {
-                    throw new Exception("Change theme failed");
+                    valid = false;
+                    Log.Error($"|Theme.ChangeTheme|Default theme path can't be found <{path}>");
+                }
+                else
+                {
+                    valid = true;
+                    theme = dark;
                 }
             }
-
-            Settings.Theme = themeName;
-            ResourceMerger.UpdateResource(this);
-
-            // Exception of FindResource can't be cathed if global exception handle is set
-            var isBlur = Application.Current.TryFindResource("ThemeBlurEnabled");
-            if (isBlur is bool)
+            else
             {
-                SetBlurForWindow(Application.Current.MainWindow, (bool)isBlur);
+                valid = true;
+            }
+
+            if (valid)
+            {
+                Settings.Theme = theme;
+
+                var dicts = Application.Current.Resources.MergedDictionaries;
+                // OnStartup, there is nothing to remove
+                var oldResource = dicts.FirstOrDefault(d => d.Source.AbsolutePath == path) ?? new ResourceDictionary();
+                dicts.Remove(oldResource);
+                var newResource = GetResourceDictionary();
+                dicts.Add(newResource);
+
             }
         }
 
-        public override ResourceDictionary GetResourceDictionary()
+        public ResourceDictionary GetResourceDictionary()
         {
+            var uri = GetThemePath(Settings.Theme);
             var dict = new ResourceDictionary
             {
-                Source = new Uri(GetThemePath(Settings.Theme), UriKind.Absolute)
+                Source = new Uri(uri, UriKind.Absolute)
             };
 
             Style queryBoxStyle = dict["QueryBoxStyle"] as Style;
@@ -101,7 +121,7 @@ namespace Wox.Core.Resource
         public List<string> LoadAvailableThemes()
         {
             List<string> themes = new List<string>();
-            foreach (var themeDirectory in themeDirectories)
+            foreach (var themeDirectory in _themeDirectories)
             {
                 themes.AddRange(
                     Directory.GetFiles(themeDirectory)
@@ -113,7 +133,7 @@ namespace Wox.Core.Resource
 
         private string GetThemePath(string themeName)
         {
-            foreach (string themeDirectory in themeDirectories)
+            foreach (string themeDirectory in _themeDirectories)
             {
                 string path = Path.Combine(themeDirectory, themeName + ".xaml");
                 if (File.Exists(path))
@@ -165,20 +185,38 @@ namespace Wox.Core.Resource
         /// <summary>
         /// Sets the blur for a window via SetWindowCompositionAttribute
         /// </summary>
-        /// <param name="wind">window to blur</param>
-        /// <param name="isBlur">true/false - on or off correspondingly</param>
-        private void SetBlurForWindow(Window wind, bool isBlur)
+        public void SetBlurForWindow()
         {
-            if (isBlur)
+
+            // Exception of FindResource can't be cathed if global exception handle is set
+            if (Environment.OSVersion.Version >= new Version(6, 2))
             {
-                SetWindowAccent(wind, AccentState.ACCENT_ENABLE_BLURBEHIND);
+                var resource = Application.Current.TryFindResource("ThemeBlurEnabled");
+                bool blur;
+                if (resource is bool)
+                {
+                    blur = (bool)resource;
+                }
+                else
+                {
+                    blur = false;
+                }
+
+                if (blur)
+                {
+                    SetWindowAccent(Application.Current.MainWindow, AccentState.ACCENT_ENABLE_BLURBEHIND);
+                }
+                else
+                {
+                    SetWindowAccent(Application.Current.MainWindow, AccentState.ACCENT_DISABLED);
+                }
             }
         }
 
-        private void SetWindowAccent(Window wind, AccentState themeAccentMode)
+        private void SetWindowAccent(Window w, AccentState state)
         {
-            var windowHelper = new WindowInteropHelper(wind);
-            var accent = new AccentPolicy { AccentState = themeAccentMode };
+            var windowHelper = new WindowInteropHelper(w);
+            var accent = new AccentPolicy { AccentState = state };
             var accentStructSize = Marshal.SizeOf(accent);
 
             var accentPtr = Marshal.AllocHGlobal(accentStructSize);

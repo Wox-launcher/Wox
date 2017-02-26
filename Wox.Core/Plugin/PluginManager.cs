@@ -87,13 +87,10 @@ namespace Wox.Core.Plugin
         }
         public static void InitializePlugins(IPublicAPI api)
         {
-            //load plugin i18n languages
-            ResourceMerger.UpdatePluginLanguages();
-
             API = api;
             Parallel.ForEach(AllPlugins, pair =>
             {
-                var milliseconds = Stopwatch.Normal($"Plugin init: {pair.Metadata.Name}", () =>
+                var milliseconds = Stopwatch.Debug($"|PluginManager.InitializePlugins|Init method time cost for <{pair.Metadata.Name}>", () =>
                 {
                     pair.Plugin.Init(new PluginInitContext
                     {
@@ -101,8 +98,8 @@ namespace Wox.Core.Plugin
                         API = API
                     });
                 });
-                pair.Metadata.InitTime = milliseconds;
-                InternationalizationManager.Instance.UpdatePluginMetadataTranslations(pair);
+                pair.Metadata.InitTime += milliseconds;
+                Log.Info($"|PluginManager.InitializePlugins|Total init cost for <{pair.Metadata.Name}> is <{pair.Metadata.InitTime}ms>");
             });
 
             _contextMenuPlugins = GetPluginsForInterface<IContextMenu>();
@@ -176,19 +173,20 @@ namespace Wox.Core.Plugin
             try
             {
                 var metadata = pair.Metadata;
-                var milliseconds = Stopwatch.Normal($"Plugin.Query cost for {metadata.Name}", () =>
+                var milliseconds = Stopwatch.Debug($"|PluginManager.QueryForPlugin|Cost for {metadata.Name}", () =>
                 {
                     results = pair.Plugin.Query(query) ?? results;
                     UpdatePluginMetadata(results, metadata, query);
                 });
                 metadata.QueryCount += 1;
                 metadata.AvgQueryTime = metadata.QueryCount == 1 ? milliseconds : (metadata.AvgQueryTime + milliseconds) / 2;
+                return results;
             }
             catch (Exception e)
             {
-                throw new WoxPluginException(pair.Metadata.Name, "QueryForPlugin failed", e);
+                Log.Exception($"|PluginManager.QueryForPlugin|Exception for plugin <{pair.Metadata.Name}> when query <{query}>", e);
+                return new List<Result>();
             }
-            return results;
         }
 
         public static void UpdatePluginMetadata(List<Result> results, PluginMetadata metadata, Query query)
@@ -242,7 +240,7 @@ namespace Wox.Core.Plugin
                 }
                 catch (Exception e)
                 {
-                    Log.Exception(new WoxPluginException(metadata.Name, "Couldn't load plugin context menus", e));
+                    Log.Exception($"|PluginManager.GetContextMenusForPlugin|Can't load context menus for plugin <{metadata.Name}>", e);
                     return new List<Result>();
                 }
             }
