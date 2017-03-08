@@ -221,8 +221,6 @@ namespace Wox.Plugin.Program.Programs
             {
                 try
                 {
-                    if (dir.StartsWith(@"D:\System Volume Information") || dir.StartsWith(@"D:\$RECYCLE.BIN"))
-                        continue;
                     var tempFiles = Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).Where(
                         f => suffixes.Contains(Extension(f)));
                     files.AddRange(tempFiles);
