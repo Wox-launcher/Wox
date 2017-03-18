@@ -212,6 +212,24 @@ namespace Wox.Plugin.Shell
                     info = ShellCommand.SetProcessStartInfo(command, verb: runAsAdministratorArg);
                 }
             }
+            else if (_settings.Shell == Shell.Bash && _settings.SupportWSL)
+            {
+                string arguments;
+                if (_settings.LeaveShellOpen)
+                {
+                    // FIXME: How to deal with commands containing single quote?
+                    arguments = $"-c \'{command} ; $SHELL\'";
+                }
+                else
+                {
+                    arguments = $"-c \'{command} ; echo -n Press any key to exit... ; read -n1\'";
+                }
+                info = new ProcessStartInfo
+                {
+                    FileName = "bash.exe",
+                    Arguments = arguments
+                };
+            }
             else
             {
                 throw new NotImplementedException();
