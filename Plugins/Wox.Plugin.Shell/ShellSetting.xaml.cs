@@ -50,6 +50,10 @@ namespace Wox.Plugin.Shell
             };
 
             ShellComboBox.SelectedIndex = (int) _settings.Shell;
+            if (_settings.SupportWSL)
+            {
+                ShellComboBox.Items.Add("Bash");
+            }
             ShellComboBox.SelectionChanged += (o, e) =>
             {
                 _settings.Shell = (Shell) ShellComboBox.SelectedIndex;
