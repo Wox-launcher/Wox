@@ -204,25 +204,34 @@ namespace Wox.Plugin.Program.Programs
 
         private static IEnumerable<string> ProgramPaths(string directory, string[] suffixes)
         {
-            if (Directory.Exists(directory))
+            if (!Directory.Exists(directory))
+                return new string[] {};
+            var files = new List<string>();
+            //try
+            //{
+            //    files = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories);
+            //}
+            //catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
+            //{
+            //    Log.Exception($"|Program.Win32.ProgramPaths|Can't parse directory <{directory}>", e);
+            //    return new string[] { };
+            //}
+            //files = files.Where(f => suffixes.Contains(Extension(f)));
+            foreach (var dir in Directory.GetDirectories(directory))
             {
-                IEnumerable<string> files;
                 try
                 {
-                    files = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories);
+                    var tempFiles = Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).Where(
+                        f => suffixes.Contains(Extension(f)));
+                    files.AddRange(tempFiles);
                 }
-                catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
+                catch (Exception e)
                 {
                     Log.Exception($"|Program.Win32.ProgramPaths|Can't parse directory <{directory}>", e);
-                    return new string[] { };
                 }
-                files = files.Where(f => suffixes.Contains(Extension(f)));
-                return files;
+
             }
-            else
-            {
-                return new string[] { };
-            }
+            return files;
         }
 
         private static string Extension(string path)
