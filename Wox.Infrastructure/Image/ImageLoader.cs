@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
+using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Infrastructure.Image
 {
@@ -17,8 +18,7 @@ namespace Wox.Infrastructure.Image
     {
         private static readonly ImageCache ImageCache = new ImageCache();
         private static BinaryStorage<ConcurrentDictionary<string, int>> _storage;
-
-        public static bool UseWindowsThumbnailCache = true;
+        
         private static int ThumbnailCacheSize = 2 * 32; // for high resolution display, use double size
 
         private static readonly string[] ImageExtions =
@@ -32,9 +32,12 @@ namespace Wox.Infrastructure.Image
             ".ico"
         };
 
+        private static Settings _settings;
 
-        public static void Initialize()
+        public static void Initialize(Settings settings)
         {
+            _settings = settings;
+
             _storage = new BinaryStorage<ConcurrentDictionary<string, int>> ("Image");
             ImageCache.Usage = _storage.TryLoad(new ConcurrentDictionary<string, int>());
 
@@ -126,7 +129,7 @@ namespace Wox.Infrastructure.Image
                 {
                     if (Directory.Exists(path))
                     {
-                        if (UseWindowsThumbnailCache) 
+                        if (_settings.UseWindowThumbnailCache) 
                         {
                             image = GetBitmapFromPath(path);
                         } 
@@ -137,7 +140,7 @@ namespace Wox.Infrastructure.Image
                     }
                     else if (File.Exists(path))
                     {
-                        if (UseWindowsThumbnailCache) 
+                        if (_settings.UseWindowThumbnailCache) 
                         {
                             image = GetBitmapFromPath(path);
                         }
@@ -182,7 +185,7 @@ namespace Wox.Infrastructure.Image
         private static ImageSource GetBitmapFromPath(string path) 
         {
             
-            if (UseWindowsThumbnailCache)
+            if (_settings.UseWindowThumbnailCache)
             {
                 string ext = Path.GetExtension(path);
                 if (!WindowsThumbnailCacheAPI.NotCachableExtensions.Contains(ext)) { // check if extension is cachable

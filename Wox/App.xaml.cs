@@ -48,11 +48,11 @@ namespace Wox
                 RegisterAppDomainExceptions();
                 RegisterDispatcherUnhandledException();
 
-                ImageLoader.Initialize();
-                Alphabet.Initialize();
-
                 _settingsVM = new SettingWindowViewModel();
                 _settings = _settingsVM.Settings;
+
+                ImageLoader.Initialize(_settings);
+                Alphabet.Initialize();
 
                 PluginManager.LoadPlugins(_settings.PluginSettings);
                 _mainVM = new MainViewModel(_settings);
