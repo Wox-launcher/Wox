@@ -18,7 +18,7 @@ namespace Wox.Infrastructure.Image
         private static readonly ImageCache ImageCache = new ImageCache();
         private static BinaryStorage<ConcurrentDictionary<string, int>> _storage;
 
-        private static bool UseWindowsThumbnailCache = true;
+        public static bool UseWindowsThumbnailCache = true;
         private static int ThumbnailCacheSize = 2 * 32; // for high resolution display, use double size
 
         private static readonly string[] ImageExtions =

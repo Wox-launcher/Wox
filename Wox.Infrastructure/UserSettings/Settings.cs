@@ -49,6 +49,11 @@ namespace Wox.Infrastructure.UserSettings
         public bool RememberLastLaunchLocation { get; set; }
         public bool IgnoreHotkeysOnFullscreen { get; set; }
 
+        public bool UseWindowThumbnailCache {
+            get { return Image.ImageLoader.UseWindowsThumbnailCache; }
+            set { Image.ImageLoader.UseWindowsThumbnailCache = value; }
+        }
+
         public HttpProxy Proxy { get; set; } = new HttpProxy();
 
         [JsonConverter(typeof(StringEnumConverter))]
