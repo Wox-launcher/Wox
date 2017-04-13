@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -21,7 +22,7 @@ namespace Wox.Infrastructure.Image
         
         private static int ThumbnailCacheSize = 2 * 32; // for high resolution display, use double size
 
-        private static readonly string[] ImageExtions =
+        private static readonly HashSet<string> ImageExtions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             ".png",
             ".jpg",
@@ -146,7 +147,7 @@ namespace Wox.Infrastructure.Image
                         }
                         else 
                         {
-                            var externsion = Path.GetExtension(path).ToLower();
+                            var externsion = Path.GetExtension(path);
                             if (ImageExtions.Contains(externsion))
                             {
                                 image = new BitmapImage(new Uri(path));
@@ -196,7 +197,7 @@ namespace Wox.Infrastructure.Image
                     }
                 }
 
-                if (ImageExtions.Contains(ext.ToLower())) {
+                if (ImageExtions.Contains(ext)) {
                     // fallback for images (eg. ico files)
                     var img = new BitmapImage();
                     img.BeginInit();
