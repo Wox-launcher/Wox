@@ -14,6 +14,8 @@
     <system:String x:Key="wox_plugin_sys_setting">Dostosuj ustawienia</system:String>
     <system:String x:Key="wox_plugin_sys_sleep">Przełącz komputer w tryb uśpienia</system:String>
     <system:String x:Key="wox_plugin_sys_emptyrecyclebin">Opróżnij kosz</system:String>
+    <system:String x:Key="wox_plugin_sys_openrecyclebin">Missing translation for: Open recycle bin</system:String>
+
 
     <system:String x:Key="wox_plugin_sys_plugin_name">Komendy systemowe</system:String>
     <system:String x:Key="wox_plugin_sys_plugin_description">Wykonywanie komend systemowych, np. wyłącz, zablokuj komputer, otwórz ustawienia itp.</system:String>

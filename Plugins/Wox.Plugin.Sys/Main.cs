@@ -137,6 +137,17 @@ namespace Wox.Plugin.Sys
                 },
                 new Result
                 {
+                    Title = "Open Recycle Bin",
+                    SubTitle = context.API.GetTranslation("wox_plugin_sys_openrecyclebin"),
+                    IcoPath = "Images\\recyclebin.png",
+                    Action = c =>
+                    {
+                        Process.Start("explorer.exe", "shell:RecycleBinFolder");
+                        return true;
+                    }
+                },
+                new Result
+                {
                     Title = "Empty Recycle Bin",
                     SubTitle = context.API.GetTranslation("wox_plugin_sys_emptyrecyclebin"),
                     IcoPath = "Images\\recyclebin.png",

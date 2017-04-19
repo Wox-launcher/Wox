@@ -14,6 +14,8 @@
     <system:String x:Key="wox_plugin_sys_setting">設定</system:String>
     <system:String x:Key="wox_plugin_sys_sleep">睡眠</system:String>
     <system:String x:Key="wox_plugin_sys_emptyrecyclebin">清空資源回收桶</system:String>
+    <system:String x:Key="wox_plugin_sys_openrecyclebin">Missing translation for: Open recycle bin</system:String>
+
 
     <system:String x:Key="wox_plugin_sys_plugin_name">系統命令</system:String>
     <system:String x:Key="wox_plugin_sys_plugin_description">系統相關的命令。例如，關機，鎖定，設定等</system:String>
