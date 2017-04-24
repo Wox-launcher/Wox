@@ -137,6 +137,17 @@ namespace Wox.Plugin.Sys
                 },
                 new Result
                 {
+                    Title = "Open Recycle Bin",
+                    SubTitle = context.API.GetTranslation("wox_plugin_sys_openrecyclebin"),
+                    IcoPath = "Images\\recyclebin.png",
+                    Action = c =>
+                    {
+                        Process.Start("explorer.exe", "shell:RecycleBinFolder");
+                        return true;
+                    }
+                },
+                new Result
+                {
                     Title = "Empty Recycle Bin",
                     SubTitle = context.API.GetTranslation("wox_plugin_sys_emptyrecyclebin"),
                     IcoPath = "Images\\recyclebin.png",
@@ -147,10 +158,9 @@ namespace Wox.Plugin.Sys
                         var result = SHEmptyRecycleBin(new WindowInteropHelper(Application.Current.MainWindow).Handle, 0);
                         if (result != (uint) HRESULT.S_OK)
                         {
-                            MessageBox.Show($"Error emptying recycle bin, error code: {result}\n" +
-                                            "please refer to https://msdn.microsoft.com/en-us/library/windows/desktop/aa378137",
-                                            "Error",
-                                            MessageBoxButton.OK, MessageBoxImage.Error);
+                            MessageBox.Show($"Recycle bin already empty",
+                                            "Recycle bin",
+                                            MessageBoxButton.OK, MessageBoxImage.Information);
                         }
                         return true;
                     }

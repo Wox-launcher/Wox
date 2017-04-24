@@ -14,6 +14,7 @@
     <system:String x:Key="wox_plugin_sys_setting">Anwendung beschleunigen</system:String>
     <system:String x:Key="wox_plugin_sys_sleep">Computer in Schlafmodus versetzen</system:String>
     <system:String x:Key="wox_plugin_sys_emptyrecyclebin">Papierkorb leeren</system:String>
+    <system:String x:Key="wox_plugin_sys_openrecyclebin">Missing translation for: Open recycle bin</system:String>
 
     <system:String x:Key="wox_plugin_sys_plugin_name">Systembefehle</system:String>
     <system:String x:Key="wox_plugin_sys_plugin_description">Stellt Systemrelevante Befehle bereit. z.B. herunterfahren, sperren, Einstellungen, usw.</system:String>
