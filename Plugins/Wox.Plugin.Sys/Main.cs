@@ -147,10 +147,9 @@ namespace Wox.Plugin.Sys
                         var result = SHEmptyRecycleBin(new WindowInteropHelper(Application.Current.MainWindow).Handle, 0);
                         if (result != (uint) HRESULT.S_OK)
                         {
-                            MessageBox.Show($"Error emptying recycle bin, error code: {result}\n" +
-                                            "please refer to https://msdn.microsoft.com/en-us/library/windows/desktop/aa378137",
-                                            "Error",
-                                            MessageBoxButton.OK, MessageBoxImage.Error);
+                            MessageBox.Show($"Recycle bin already empty",
+                                            "Recycle bin",
+                                            MessageBoxButton.OK, MessageBoxImage.Information);
                         }
                         return true;
                     }
