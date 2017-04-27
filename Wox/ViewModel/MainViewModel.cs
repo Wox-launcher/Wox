@@ -185,6 +185,13 @@ namespace Wox.ViewModel
                     SelectedResults = Results;
                 }
             });
+
+            UnselectTextCommand = new RelayCommand(_ =>
+            {
+                var q = QueryText;
+                ChangeQueryText(q + " ");
+                ChangeQueryText(q);
+            });
         }
 
         #endregion
@@ -268,6 +275,7 @@ namespace Wox.ViewModel
         public ICommand LoadContextMenuCommand { get; set; }
         public ICommand LoadHistoryCommand { get; set; }
         public ICommand OpenResultCommand { get; set; }
+        public ICommand UnselectTextCommand { get; set; }
 
         #endregion
 
