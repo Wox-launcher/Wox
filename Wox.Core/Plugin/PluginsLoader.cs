@@ -94,8 +94,9 @@ namespace Wox.Core.Plugin
 
             if (string.IsNullOrEmpty(pythonDirecotry))
             {
-                var paths = Environment.GetEnvironmentVariable(PATH);
-                if (paths != null)
+                var paths = Environment.GetEnvironmentVariable(PATH, EnvironmentVariableTarget.Machine);
+                paths += Environment.GetEnvironmentVariable(PATH, EnvironmentVariableTarget.User);
+                if (!string.IsNullOrEmpty(paths))
                 {
                     var pythonPaths = paths.Split(';').Where(p => p.ToLower().Contains(Python));
                     if (pythonPaths.Any())
