@@ -100,7 +100,7 @@ namespace Wox
         {
             _notifyIcon = new NotifyIcon
             {
-                Text = Infrastructure.Constant.Wox,
+                Text = Infrastructure.Constant.Saber,
                 Icon = Properties.Resources.app,
                 Visible = true
             };

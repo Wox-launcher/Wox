@@ -10,8 +10,8 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyDescription("Release build, https://github.com/Wox-launcher/Wox")]
 #endif
 
-[assembly: AssemblyCompany("Wox")]
-[assembly: AssemblyProduct("Wox")]
+[assembly: AssemblyCompany("Saber")]
+[assembly: AssemblyProduct("Saber")]
 [assembly: AssemblyCopyright("The MIT License (MIT)")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

@@ -11,14 +11,14 @@ assembly_info:
 before_build:
 - ps: nuget restore
 build:
-  project: Wox.sln
+  project: Saber.sln
 after_test:
 artifacts:
-- path: 'Output\Packages\Wox-*.zip'
+- path: 'Output\Packages\Saber-*.zip'
   name: zipped_binary
 - path: 'Output\Packages\Wox.Plugin.*.nupkg'
   name: nuget_package
-- path: 'Output\Packages\Wox-*.*'
+- path: 'Output\Packages\Saber-*.*'
   name: installer
 - path: 'Output\Packages\RELEASES'
   name: installer

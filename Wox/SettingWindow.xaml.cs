@@ -60,7 +60,7 @@ namespace Wox
         {
             using (var key = Registry.CurrentUser.OpenSubKey(StartupPath, true))
             {
-                key?.SetValue(Infrastructure.Constant.Wox, Infrastructure.Constant.ExecutablePath);
+                key?.SetValue(Infrastructure.Constant.Saber, Infrastructure.Constant.ExecutablePath);
             }
         }
 
@@ -68,7 +68,7 @@ namespace Wox
         {
             using (var key = Registry.CurrentUser.OpenSubKey(StartupPath, true))
             {
-                key?.DeleteValue(Infrastructure.Constant.Wox, false);
+                key?.DeleteValue(Infrastructure.Constant.Saber, false);
             }
         }
 
@@ -76,7 +76,7 @@ namespace Wox
         {
             using (var key = Registry.CurrentUser.OpenSubKey(StartupPath, true))
             {
-                var path = key?.GetValue(Infrastructure.Constant.Wox) as string;
+                var path = key?.GetValue(Infrastructure.Constant.Saber) as string;
                 if (path != null)
                 {
                     return path == Infrastructure.Constant.ExecutablePath;

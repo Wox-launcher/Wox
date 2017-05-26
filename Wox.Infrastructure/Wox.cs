@@ -7,13 +7,13 @@ namespace Wox.Infrastructure
 {
     public static class Constant
     {
-        public const string Wox = "Wox";
+        public const string Saber = "Saber";
         public const string Plugins = "Plugins";
 
         private static readonly Assembly Assembly = Assembly.GetExecutingAssembly();
         public static readonly string ProgramDirectory = Directory.GetParent(Assembly.Location.NonNull()).ToString();
-        public static readonly string ExecutablePath = Path.Combine(ProgramDirectory, Wox + ".exe");
-        public static readonly string DataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Wox);
+        public static readonly string ExecutablePath = Path.Combine(ProgramDirectory, Saber + ".exe");
+        public static readonly string DataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Saber);
         public static readonly string PluginsDirectory = Path.Combine(DataDirectory, Plugins);
         public static readonly string PreinstalledDirectory = Path.Combine(ProgramDirectory, Plugins);
         public const string Repository = "https://github.com/Wox-launcher/Wox";
