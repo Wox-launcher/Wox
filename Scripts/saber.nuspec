@@ -1,14 +1,14 @@
 <?xml version="1.0"?>
 <package>
   <metadata>
-    <id>Wox</id>
-    <title>Wox</title>
+    <id>Saber</id>
+    <title>Saber</title>
     <version>$version$</version>
-    <authors>happlebao</authors>
+    <authors>yozora</authors>
     <projectUrl>https://github.com/Wox-launcher/Wox</projectUrl>
     <iconUrl>https://raw.githubusercontent.com/Wox-launcher/Wox/master/Wox/Images/app.png</iconUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <description>Wox - a launcher for windows</description>
+    <description>Saber - a launcher for windows</description>
   </metadata>
   <files>
     <file src="**\*.*" target="lib\net45\" exclude="Wox.vshost.exe;Wox.vshost.exe.config;Wox.vshost.exe.manifest;*.nupkg;Setup.exe;RELEASES"/>

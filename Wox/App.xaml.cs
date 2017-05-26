@@ -62,7 +62,7 @@ namespace Wox
                 Log.Info($"|App.OnStartup|Dependencies Info:{ErrorReporting.DependenciesInfo()}");
 
                 Current.MainWindow = window;
-                Current.MainWindow.Title = Constant.Wox;
+                Current.MainWindow.Title = Constant.Saber;
 
                 // happlebao todo temp fix for instance code logic
                 // load plugin before change language, because plugin language also needs be changed

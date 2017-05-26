@@ -1,7 +1,7 @@
 ﻿using System.Reflection;
 using System.Windows;
 
-[assembly: AssemblyTitle("Wox")]
+[assembly: AssemblyTitle("Saber")]
 [assembly: ThemeInfo(
     ResourceDictionaryLocation.None, 
     ResourceDictionaryLocation.SourceAssembly
