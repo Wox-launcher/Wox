@@ -436,11 +436,14 @@ namespace Wox.Plugin.Program.Programs
                     var prefix = path.Substring(0, end);
                     var paths = new List<string> { path };
 
-                    // todo hidpi icon
                     if (Package.Version == PackageVersion.Windows10)
                     {
+                        // https://docs.microsoft.com/en-us/windows/uwp/controls-and-patterns/tiles-and-notifications-app-assets#asset-size-tables,
                         paths.Add($"{prefix}.scale-100{extension}");
+                        paths.Add($"{prefix}.scale-125{extension}");
+                        paths.Add($"{prefix}.scale-150{extension}");
                         paths.Add($"{prefix}.scale-200{extension}");
+                        paths.Add($"{prefix}.scale-400{extension}");
                     }
                     else if (Package.Version == PackageVersion.Windows81)
                     {
