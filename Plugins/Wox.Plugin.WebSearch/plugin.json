@@ -20,7 +20,8 @@
         "youtube",
         "bing",
         "yahoo",
-        "bd"
+        "bd",
+        "q"
     ],
     "Name": "Web Searches",
     "Description": "Provide the web search ability",
