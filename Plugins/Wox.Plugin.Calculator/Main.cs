@@ -2,7 +2,8 @@
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Windows;
-using YAMP;
+using Mages;
+using Mages.Core;
 
 namespace Wox.Plugin.Caculator
 {
@@ -18,14 +19,12 @@ namespace Wox.Plugin.Caculator
                         @"[ei]|[0-9]|[\+\-\*\/\^\., ""]|[\(\)\|\!\[\]]" +
                         @")+$", RegexOptions.Compiled);
         private static Regex regBrackets = new Regex(@"[\(\)\[\]]", RegexOptions.Compiled);
-        private static ParseContext yampContext;
+        private static Mages.Core.Engine magesEngine;
         private PluginInitContext context { get; set; }
 
         static Main()
         {
-            yampContext = Parser.PrimaryContext;
-            Parser.InteractiveMode = false;
-            Parser.UseScripting = false;
+            magesEngine = new Engine();
         }
 
         public List<Result> Query(Query query)
@@ -36,21 +35,29 @@ namespace Wox.Plugin.Caculator
 
             try
             {
-                var result = yampContext.Run(query.Search);
-                if (result.Output != null && !string.IsNullOrEmpty(result.Result))
+                var result = magesEngine.Interpret(query.Search);
+
+                if (result.ToString() == "NaN")
+                    result = context.API.GetTranslation("wox_plugin_calculator_not_a_number");
+
+                if (result is Function)
+                    result = context.API.GetTranslation("wox_plugin_calculator_expression_not_complete");
+
+
+                if (result != null && !string.IsNullOrEmpty(result.ToString()))
                 {
                     return new List<Result>
                     { new Result
-                    { 
-                        Title = result.Result, 
-                        IcoPath = "Images/calculator.png", 
+                    {
+                        Title = result.ToString(),
+                        IcoPath = "Images/calculator.png",
                         Score = 300,
-                        SubTitle = "Copy this number to the clipboard", 
+                        SubTitle = context.API.GetTranslation("wox_plugin_calculator_copy_number_to_clipboard"),
                         Action = c =>
                         {
                             try
                             {
-                                Clipboard.SetText(result.Result);
+                                Clipboard.SetText(result.ToString());
                                 return true;
                             }
                             catch (ExternalException e)
@@ -63,7 +70,7 @@ namespace Wox.Plugin.Caculator
                 }
             }
             catch
-            {}
+            { }
 
             return new List<Result>();
         }
