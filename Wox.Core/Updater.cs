@@ -35,14 +35,10 @@ namespace Wox.Core
 
             try
             {
-                updateManager = await GitHubUpdateManager(GitHubRepository);
-            }
-            catch (Exception e) when (e is HttpRequestException || e is WebException || e is SocketException)
-            {
-                Log.Exception($"|Updater.UpdateApp|Please check your connection and proxy settings to api.github.com.", e);
-                return;
-            }
+                using (updateManager = await GitHubUpdateManager(GitHubRepository))
+                {
 
+                
             try
             {
                 // UpdateApp CheckForUpdate will return value only if the app is squirrel installed
@@ -99,8 +95,15 @@ namespace Wox.Core
             MessageBox.Show(newVersionTips);
             Log.Info($"|Updater.UpdateApp|Update success:{newVersionTips}");
 
-            // always dispose UpdateManager
-            updateManager.Dispose();
+
+                }
+            }
+            catch (Exception e) when (e is HttpRequestException || e is WebException || e is SocketException)
+            {
+                Log.Exception($"|Updater.UpdateApp|Please check your connection and proxy settings to api.github.com.", e);
+                return;
+            }
+
         }
 
         [UsedImplicitly]
