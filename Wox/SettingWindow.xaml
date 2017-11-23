@@ -171,7 +171,9 @@
                                     </CheckBox>
                                     <TextBlock Text="{DynamicResource actionKeywords}"
                                                Visibility="{Binding ActionKeywordsVisibility}"
-                                               Margin="20 0 0 0" />
+                                               Cursor="Hand" Foreground="Blue"
+                                               Margin="20 0 0 0"
+                                               MouseUp="OnPluginActionKeywordsClick" />
                                     <TextBlock Text="{Binding ActionKeywordsText}"
                                                Visibility="{Binding ActionKeywordsVisibility}"
                                                ToolTip="Change Action Keywords"
