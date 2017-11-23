@@ -156,7 +156,7 @@ namespace Wox.Core.Plugin
 
         public static List<PluginPair> ValidPluginsForQuery(Query query)
         {
-            if (NonGlobalPlugins.ContainsKey(query.ActionKeyword))
+            if (NonGlobalPlugins.ContainsKey(query.ActionKeyword) && !string.IsNullOrEmpty(query.ActionKeyword))
             {
                 var plugin = NonGlobalPlugins[query.ActionKeyword];
                 return new List<PluginPair> { plugin };
