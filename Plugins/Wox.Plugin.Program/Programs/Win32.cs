@@ -211,22 +211,22 @@ namespace Wox.Plugin.Program.Programs
 
             var paths = ds.SelectMany(d =>
             {
-                try
-                {
-                    var paths_for_suffixes = suffixes.SelectMany(s =>
-                    {
-                        var pattern = $"*.{s}";
-                        var ps = Directory.EnumerateFiles(d, pattern, SearchOption.AllDirectories);
-                        return ps;
-                    });
-                    return paths_for_suffixes;
-                }
-                catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
-                {
-                    Log.Exception($"|Program.Win32.ProgramPaths|Don't have permission on <{directory}>", e);
-                    return new List<string>();
-                }
-            });
+				var paths_for_suffixes = suffixes.SelectMany(s =>
+				{
+					try
+					{
+						var pattern = $"*.{s}";
+						var ps = Directory.EnumerateFiles(d, pattern, SearchOption.AllDirectories);
+						return ps;
+					}
+					catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
+					{
+						Log.Exception($"|Program.Win32.ProgramPaths|Don't have permission on <{directory}>", e);
+						return new List<string>();
+					}
+				});
+				return paths_for_suffixes;
+			});
             return paths;
         }
 
