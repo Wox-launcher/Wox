@@ -236,7 +236,6 @@ namespace Wox.Plugin.Program.Programs
                     Log.Exception($"|Program.Win32.ProgramPaths|Don't have permission on <{currentDirectory}>", e);
                 }
             } while (folderQueue.Any());
-            Log.Debug(string.Join("\n", files));
             return files;
         }
 
