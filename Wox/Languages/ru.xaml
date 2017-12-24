@@ -5,8 +5,8 @@
     <system:String x:Key="registerHotkeyFailed">Регистрация хоткея {0} не удалась</system:String>
     <system:String x:Key="couldnotStartCmd">Не удалось запустить {0}</system:String>
     <system:String x:Key="invalidWoxPluginFileFormat">Неверный формат файла wox плагина</system:String>
-    <system:String x:Key="setAsTopMostInThisQuery">Отображать это окно выше всех при этом запросе</system:String>
-    <system:String x:Key="cancelTopMostInThisQuery">Не отображать это окно выше всех при этом запросе</system:String>
+    <system:String x:Key="setAsTopMostInThisQuery">Отображать этот результат выше всех при этом запросе</system:String>
+    <system:String x:Key="cancelTopMostInThisQuery">Не отображать этот результат выше всех при этом запросе</system:String>
     <system:String x:Key="executeQuery">Выполнить запрос:{0}</system:String>
     <system:String x:Key="lastExecuteTime">Последний раз выполнен в:{0}</system:String>
     <system:String x:Key="iconTrayOpen">Открыть</system:String>
@@ -20,14 +20,14 @@
     <system:String x:Key="startWoxOnSystemStartup">Запускать Wox при запуске системы</system:String>
     <system:String x:Key="hideWoxWhenLoseFocus">Скрывать Wox если потерян фокус</system:String>
     <system:String x:Key="dontPromptUpdateMsg">Не отображать сообщение об обновлении когда доступна новая версия</system:String>
-    <system:String x:Key="rememberLastLocation">Запомнить последнее место запуска</system:String>
+    <system:String x:Key="rememberLastLocation">Запоминать последнее положение</system:String>
     <system:String x:Key="language">Язык</system:String>
     <system:String x:Key="maxShowResults">Максимальное количество результатов</system:String>
     <system:String x:Key="ignoreHotkeysOnFullscreen">Игнорировать горячие клавиши, если окно в полноэкранном режиме</system:String>
-    <system:String x:Key="pythonDirectory">Python Directory</system:String>
-    <system:String x:Key="autoUpdates">Auto Update</system:String>
-    <system:String x:Key="selectPythonDirectory">Select</system:String>
-    <system:String x:Key="hideOnStartup">Hide Wox on startup</system:String>
+    <system:String x:Key="pythonDirectory">Директория Python</system:String>
+    <system:String x:Key="autoUpdates">Автоматическое обновление</system:String>
+    <system:String x:Key="selectPythonDirectory">Выбрать</system:String>
+    <system:String x:Key="hideOnStartup">Спрятать Wox при запуске</system:String>
     
     <!--Setting Plugin-->
     <system:String x:Key="plugin">Плагины</system:String>
