@@ -79,9 +79,9 @@
     <system:String x:Key="website">Сайт</system:String>
     <system:String x:Key="version">Версия</system:String>
     <system:String x:Key="about_activate_times">Вы воспользовались Wox уже {0} раз</system:String>
-    <system:String x:Key="checkUpdates">Check for Updates</system:String>
-    <system:String x:Key="newVersionTips">New version {0} avaiable, please restart wox</system:String>
-    <system:String x:Key="releaseNotes">Release Notes:</system:String>
+    <system:String x:Key="checkUpdates">Проверить доступность обновлений</system:String>
+    <system:String x:Key="newVersionTips">Доступна новая версия - {0}, перезапустите Wox для обновления</system:String>
+    <system:String x:Key="releaseNotes">Список изменений:</system:String>
 
     <!--Action Keyword Setting Dialog-->
     <system:String x:Key="oldActionKeywords">Текущая горячая клавиша</system:String>
