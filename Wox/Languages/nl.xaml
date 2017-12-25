@@ -13,6 +13,10 @@
     <system:String x:Key="iconTraySettings">Instellingen</system:String>
     <system:String x:Key="iconTrayAbout">About</system:String>
     <system:String x:Key="iconTrayExit">Afsluiten</system:String>
+    <!-- REQUIRES TRANSLATION. REMOVE COMMENT WHEN TRANSLATED -->
+    <system:String x:Key="pluginInitErrorsTitle">Plugin initialization errors</system:String>
+    <!-- REQUIRES TRANSLATION. REMOVE COMMENT WHEN TRANSLATED -->
+    <system:String x:Key="pluginInitErrorsBody">The following plugins failed to initialize and will be disabled:</system:String>
 
     <!--Setting General-->
     <system:String x:Key="wox_settings">Wox Instellingen</system:String>

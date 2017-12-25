@@ -13,6 +13,10 @@
     <system:String x:Key="iconTraySettings">設定</system:String>
     <system:String x:Key="iconTrayAbout">關於</system:String>
     <system:String x:Key="iconTrayExit">結束</system:String>
+    <!-- REQUIRES TRANSLATION. REMOVE COMMENT WHEN TRANSLATED -->
+    <system:String x:Key="pluginInitErrorsTitle">Plugin initialization errors</system:String>
+    <!-- REQUIRES TRANSLATION. REMOVE COMMENT WHEN TRANSLATED -->
+    <system:String x:Key="pluginInitErrorsBody">The following plugins failed to initialize and will be disabled:</system:String>
 
     <!--設定，一般-->
     <system:String x:Key="wox_settings">Wox 設定</system:String>
