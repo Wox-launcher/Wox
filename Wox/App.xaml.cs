@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Timers;
 using System.Windows;
@@ -17,11 +18,6 @@ using Stopwatch = Wox.Infrastructure.Stopwatch;
 
 namespace Wox
 {
-    using System.Linq;
-    using System.Text;
-
-    using Wox.Plugin;
-
     public partial class App : IDisposable, ISingleInstanceApp
     {
         public static PublicAPIInstance API { get; private set; }
@@ -69,7 +65,6 @@ namespace Wox
                 }
                 catch (AggregateException exception)
                 {
-                    
                     var pluginsList = string.Join("\n", exception.InnerExceptions.Select(innerException => innerException.Data["PluginName"]));
                     new Msg().Show(
                         (string)FindResource("pluginInitErrorsTitle"), 
