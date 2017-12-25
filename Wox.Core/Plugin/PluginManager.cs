@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Collections.Concurrent;
 using Wox.Core.Resource;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Exception;
@@ -87,16 +88,24 @@ namespace Wox.Core.Plugin
         }
         public static void InitializePlugins(IPublicAPI api)
         {
+            var exceptionTuples = new ConcurrentQueue<Exception>();
+
             API = api;
             Parallel.ForEach(AllPlugins, pair =>
             {
                 var milliseconds = Stopwatch.Debug($"|PluginManager.InitializePlugins|Init method time cost for <{pair.Metadata.Name}>", () =>
                 {
-                    pair.Plugin.Init(new PluginInitContext
+                    try
                     {
-                        CurrentPluginMetadata = pair.Metadata,
-                        API = API
-                    });
+                        pair.Plugin.Init(new PluginInitContext { CurrentPluginMetadata = pair.Metadata, API = API });
+                    }
+                    catch (Exception e)
+                    {
+                        // PluginMetadata is not serializable. We are storing only the name and ID
+                        e.Data["PluginName"] = pair.Metadata.Name;
+                        e.Data["PluginID"] = pair.Metadata.ID;
+                        exceptionTuples.Enqueue(e);
+                    }
                 });
                 pair.Metadata.InitTime += milliseconds;
                 Log.Info($"|PluginManager.InitializePlugins|Total init cost for <{pair.Metadata.Name}> is <{pair.Metadata.InitTime}ms>");
@@ -105,6 +114,12 @@ namespace Wox.Core.Plugin
             _contextMenuPlugins = GetPluginsForInterface<IContextMenu>();
             foreach (var plugin in AllPlugins)
             {
+                // disable and skip plugin if it errored during initialization
+                if (exceptionTuples.Any(t => (string)t.Data["PluginID"] == plugin.Metadata.ID))
+                {
+                    plugin.Metadata.Disabled = true;
+                    continue;
+                }
                 if (IsGlobalPlugin(plugin.Metadata))
                 {
                     GlobalPlugins.Add(plugin);
@@ -117,6 +132,10 @@ namespace Wox.Core.Plugin
                     }
                 }
             }
+
+            if (exceptionTuples.Count > 0)
+                throw new AggregateException(exceptionTuples);
+
 
         }
 

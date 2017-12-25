@@ -17,6 +17,11 @@ using Stopwatch = Wox.Infrastructure.Stopwatch;
 
 namespace Wox
 {
+    using System.Linq;
+    using System.Text;
+
+    using Wox.Plugin;
+
     public partial class App : IDisposable, ISingleInstanceApp
     {
         public static PublicAPIInstance API { get; private set; }
@@ -58,7 +63,20 @@ namespace Wox
                 _mainVM = new MainViewModel(_settings);
                 var window = new MainWindow(_settings, _mainVM);
                 API = new PublicAPIInstance(_settingsVM, _mainVM);
-                PluginManager.InitializePlugins(API);
+                try
+                {
+                    PluginManager.InitializePlugins(API);
+                }
+                catch (AggregateException exception)
+                {
+                    
+                    var pluginsList = string.Join("\n", exception.InnerExceptions.Select(innerException => innerException.Data["PluginName"]));
+                    new Msg().Show(
+                        (string)FindResource("pluginInitErrorsTitle"), 
+                        $"{FindResource("pluginInitErrorsBody")}\n{pluginsList}", 
+                        Constant.ErrorIcon);
+                }
+                
                 Log.Info($"|App.OnStartup|Dependencies Info:{ErrorReporting.DependenciesInfo()}");
 
                 Current.MainWindow = window;
