@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Input;
@@ -19,6 +20,13 @@ namespace Wox
         public Msg()
         {
             InitializeComponent();
+          
+            imgClose.Source = ImageLoader.Load(Path.Combine(Infrastructure.Constant.ProgramDirectory, "Images\\close.png"));
+            imgClose.MouseUp += imgClose_MouseUp;
+        }
+
+        private void Msg_OnLoaded(object sender, RoutedEventArgs e)
+        {
             var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
             var dipWorkingArea = WindowsInteropHelper.TransformPixelsToDIP(this,
                 screen.WorkingArea.Width,
@@ -26,20 +34,17 @@ namespace Wox
             Left = dipWorkingArea.X - Width;
             Top = dipWorkingArea.Y;
             showAnimation.From = dipWorkingArea.Y;
-            showAnimation.To = dipWorkingArea.Y - Height;
+            showAnimation.To = dipWorkingArea.Y - ActualHeight;
 
             // Create the fade out storyboard
             fadeOutStoryboard.Completed += fadeOutStoryboard_Completed;
-            DoubleAnimation fadeOutAnimation = new DoubleAnimation(dipWorkingArea.Y - Height, dipWorkingArea.Y, new Duration(TimeSpan.FromSeconds(1)))
+            DoubleAnimation fadeOutAnimation = new DoubleAnimation(dipWorkingArea.Y - ActualHeight, dipWorkingArea.Y, new Duration(TimeSpan.FromSeconds(1)))
             {
                 AccelerationRatio = 0.2
             };
             Storyboard.SetTarget(fadeOutAnimation, this);
             Storyboard.SetTargetProperty(fadeOutAnimation, new PropertyPath(TopProperty));
             fadeOutStoryboard.Children.Add(fadeOutAnimation);
-
-            imgClose.Source = ImageLoader.Load(Path.Combine(Infrastructure.Constant.ProgramDirectory, "Images\\close.png"));
-            imgClose.MouseUp += imgClose_MouseUp;
         }
 
         void imgClose_MouseUp(object sender, MouseButtonEventArgs e)
@@ -56,7 +61,7 @@ namespace Wox
             Close();
         }
 
-        public void Show(string title, string subTitle, string iconPath)
+        public void Show(string title, string subTitle, string iconPath, int durationMillis = 0)
         {
             tbTitle.Text = title;
             tbSubTitle.Text = subTitle;
@@ -71,17 +76,22 @@ namespace Wox
             else {
                 imgIco.Source = ImageLoader.Load(iconPath);
             }
-
+          
             Show();
 
-            Dispatcher.InvokeAsync(async () =>
-                                   {
-                                       if (!closing)
-                                       {
-                                           closing = true;
-                                           await Dispatcher.InvokeAsync(fadeOutStoryboard.Begin);
-                                       }
-                                   });
+            if (durationMillis != 0)
+            {
+                Dispatcher.InvokeAsync(async () =>
+                {
+                    await Task.Delay(durationMillis);
+                    if (!closing)
+                    {
+                        closing = true;
+                        await Dispatcher.InvokeAsync(fadeOutStoryboard.Begin);
+                    }
+                });
+            }
         }
+      
     }
 }

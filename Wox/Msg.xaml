@@ -7,7 +7,10 @@
         ResizeMode="NoResize"
         WindowStyle="None"
         ShowInTaskbar="False"
-        Title="Msg" Height="60" Width="420">
+        Title="Msg" Height="60" Width="420"
+        ShowActivated="False"
+        Loaded="Msg_OnLoaded"
+        >
     <Window.Triggers>
         <EventTrigger RoutedEvent="Window.Loaded">
             <BeginStoryboard>
@@ -29,11 +32,11 @@
         <Image x:Name="imgIco" Width="32" Height="32" HorizontalAlignment="Left" Margin="0,9" />
         <Grid HorizontalAlignment="Stretch" Margin="5 0 0 0" Grid.Column="1" VerticalAlignment="Stretch">
             <Grid.RowDefinitions>
-                <RowDefinition />
-                <RowDefinition />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <TextBlock x:Name="tbTitle" FontSize="16" Foreground="#37392c" FontWeight="Medium">Title</TextBlock>
-            <TextBlock Grid.Row="1" Foreground="#8e94a4" x:Name="tbSubTitle">sdfdsf</TextBlock>
+            <TextBlock x:Name="tbTitle" FontSize="16" Foreground="#37392c" FontWeight="Medium" TextWrapping="Wrap">Title</TextBlock>
+            <TextBlock Grid.Row="1" Foreground="#8e94a4" x:Name="tbSubTitle" TextWrapping="Wrap">Subtitle</TextBlock>
         </Grid>
         <Image x:Name="imgClose" Grid.Column="2" Cursor="Hand" Width="16" VerticalAlignment="Top"
                HorizontalAlignment="Right" Grid.ColumnSpan="2" />
