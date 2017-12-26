@@ -13,10 +13,8 @@
     <system:String x:Key="iconTraySettings">设置</system:String>
     <system:String x:Key="iconTrayAbout">关于</system:String>
     <system:String x:Key="iconTrayExit">退出</system:String>
-    <!-- REQUIRES TRANSLATION. REMOVE COMMENT WHEN TRANSLATED -->
-    <system:String x:Key="pluginInitErrorsTitle">Plugin initialization errors</system:String>
-    <!-- REQUIRES TRANSLATION. REMOVE COMMENT WHEN TRANSLATED -->
-    <system:String x:Key="pluginInitErrorsBody">The following plugins failed to initialize and will be disabled:</system:String>
+    <system:String x:Key="pluginInitErrorsTitle">插件初始化错误</system:String>
+    <system:String x:Key="pluginInitErrorsBody">以下插件初始化失败，并且将被禁用：</system:String>
 
     <!--设置，通用-->
     <system:String x:Key="wox_settings">Wox设置</system:String>
