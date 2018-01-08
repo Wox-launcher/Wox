@@ -7,6 +7,7 @@ namespace Wox.Plugin.Shell
         public Shell Shell { get; set; } = Shell.Cmd;
         public bool ReplaceWinR { get; set; } = true;
         public bool LeaveShellOpen { get; set; }
+        public bool LeaveShellPause { get; set; }
         public Dictionary<string, int> Count = new Dictionary<string, int>();
 
         public void AddCmdHistory(string cmdName)

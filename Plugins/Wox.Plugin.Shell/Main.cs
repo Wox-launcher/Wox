@@ -168,7 +168,8 @@ namespace Wox.Plugin.Shell
             ProcessStartInfo info;
             if (_settings.Shell == Shell.Cmd)
             {
-                var arguments = _settings.LeaveShellOpen ? $"/k \"{command}\"" : $"/c \"{command}\" & pause";
+                var arguments = _settings.LeaveShellOpen ? $"/k \"{command}\"" :
+                    _settings.LeaveShellPause ? $"/c \"{command}\" & pause" : $"/c \"{command}\"";
                 info = new ProcessStartInfo
                 {
                     FileName = "cmd.exe",
@@ -182,9 +183,13 @@ namespace Wox.Plugin.Shell
                 {
                     arguments = $"-NoExit \"{command}\"";
                 }
-                else
+                else if(_settings.LeaveShellPause)
                 {
                     arguments = $"\"{command} ; Read-Host -Prompt \\\"Press Enter to continue\\\"\"";
+                }
+                else
+                {
+                    arguments = $"\"{command}\"";
                 }
                 info = new ProcessStartInfo
                 {
