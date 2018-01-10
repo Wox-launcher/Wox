@@ -48,12 +48,12 @@ namespace Wox.Infrastructure.UserSettings
         public bool HideWhenDeactive { get; set; }
         public bool RememberLastLaunchLocation { get; set; }
         public bool IgnoreHotkeysOnFullscreen { get; set; }
+        public bool ShowAppDescription { get; set; }
 
         public HttpProxy Proxy { get; set; } = new HttpProxy();
 
         [JsonConverter(typeof(StringEnumConverter))]
         public LastQueryMode LastQueryMode { get; set; } = LastQueryMode.Selected;
-
     }
 
     public enum LastQueryMode
