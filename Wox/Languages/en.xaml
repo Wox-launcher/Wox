@@ -30,6 +30,7 @@
     <system:String x:Key="LastQueryEmpty">Empty last Query</system:String>
     <system:String x:Key="maxShowResults">Maximum results shown</system:String>
     <system:String x:Key="ignoreHotkeysOnFullscreen">Ignore hotkeys in fullscreen mode</system:String>
+    <system:String x:Key="showAppDescription">Show App description</system:String>
     <system:String x:Key="pythonDirectory">Python Directory</system:String>
     <system:String x:Key="autoUpdates">Auto Update</system:String>
     <system:String x:Key="selectPythonDirectory">Select</system:String>

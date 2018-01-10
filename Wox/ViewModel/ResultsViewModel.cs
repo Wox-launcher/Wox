@@ -186,6 +186,11 @@ namespace Wox.ViewModel
             {
                 int newIndex = InsertIndexOf(result.Result.Score, results);
                 results.Insert(newIndex, result);
+
+                if (!_settings.ShowAppDescription)
+                {
+                    result.Result.SubTitle = "";
+                }
             }
 
             return results;
