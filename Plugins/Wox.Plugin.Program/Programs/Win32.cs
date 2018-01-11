@@ -28,6 +28,7 @@ namespace Wox.Plugin.Program.Programs
         private const string ShortcutExtension = "lnk";
         private const string ApplicationReferenceExtension = "appref-ms";
         private const string ExeExtension = "exe";
+        private static bool ShowDescription = true;
 
         private int Score(string query)
         {
@@ -66,7 +67,7 @@ namespace Wox.Plugin.Program.Programs
             {
                 result.Title = Description;
             }
-            else if (!string.IsNullOrEmpty(Description))
+            else if (!string.IsNullOrEmpty(Description) && ShowDescription)
             {
                 result.Title = $"{Name}: {Description}";
             }
@@ -389,6 +390,9 @@ namespace Wox.Plugin.Program.Programs
             var unregistered = UnregisteredPrograms(settings.ProgramSources, settings.ProgramSuffixes);
             programs = programs.Concat(unregistered);
             //.Select(ScoreFilter);
+
+            ShowDescription = settings.EnableShowDescription;
+
             return programs.ToArray();
         }
     }

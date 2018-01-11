@@ -13,9 +13,12 @@
             <RowDefinition Height="50"/>
         </Grid.RowDefinitions>
         <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Stretch">
-            <StackPanel Orientation="Vertical" Width="310">
+            <StackPanel Orientation="Vertical" Width="150">
                 <CheckBox Name="StartMenuEnabled" Click="StartMenuEnabled_Click" Margin="5" Content="{DynamicResource wox_plugin_program_index_start}" />
                 <CheckBox Name="RegistryEnabled" Click="RegistryEnabled_Click"  Margin="5" Content="{DynamicResource wox_plugin_program_index_registry}" />
+            </StackPanel>
+            <StackPanel Orientation="Vertical" Width="165">
+                <CheckBox Name="ShowDescription" Click="ShowDescription_Click" Margin="5" Content="{DynamicResource wox_plugin_program_show_description}" />
             </StackPanel>
             <Button Height="30" HorizontalAlignment="Right" x:Name="btnProgramSuffixes" Width="130" Click="BtnProgramSuffixes_OnClick" Content="{DynamicResource wox_plugin_program_suffixes}" />
             <Button Height="30" HorizontalAlignment="Right" Margin="10 0 0 0" x:Name="btnReindex" Width="100" Click="btnReindex_Click" Content="{DynamicResource wox_plugin_program_reindex}" />

@@ -26,6 +26,7 @@ namespace Wox.Plugin.Program
         {
             programSourceView.ItemsSource = _settings.ProgramSources;
             StartMenuEnabled.IsChecked = _settings.EnableStartMenuSource;
+            ShowDescription.IsChecked = _settings.EnableShowDescription;
             RegistryEnabled.IsChecked = _settings.EnableRegistrySource;
         }
 
@@ -140,6 +141,12 @@ namespace Wox.Plugin.Program
         private void RegistryEnabled_Click(object sender, RoutedEventArgs e)
         {
             _settings.EnableRegistrySource = RegistryEnabled.IsChecked ?? false;
+            ReIndexing();
+        }
+        
+        private void ShowDescription_Click(object sender, RoutedEventArgs e)
+        {
+            _settings.EnableShowDescription = ShowDescription.IsChecked ?? false;
             ReIndexing();
         }
     }
