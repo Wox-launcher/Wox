@@ -4,7 +4,6 @@
 
     <system:String x:Key="wox_plugin_cmd_relace_winr">Ersetzt Win+R</system:String>
     <system:String x:Key="wox_plugin_cmd_leave_cmd_open">Schließe die Kommandozeilte nicht nachdem der Befehl ausgeführt wurde</system:String>
-    <system:String x:Key="wox_plugin_cmd_leave_cmd_pause">Pause die Kommandozeilte nachdem der Befehl ausgeführt wurde</system:String>
     <system:String x:Key="wox_plugin_cmd_plugin_name">Kommandozeile</system:String>
     <system:String x:Key="wox_plugin_cmd_plugin_description">Bereitstellung der Kommandozeile in Wox. Befehle müssem mit > starten</system:String>
     <system:String x:Key="wox_plugin_cmd_cmd_has_been_executed_times">Dieser Befehl wurde {0} mal ausgeführt</system:String>
