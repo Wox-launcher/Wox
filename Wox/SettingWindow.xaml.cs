@@ -60,7 +60,7 @@ namespace Wox
         {
             using (var key = Registry.CurrentUser.OpenSubKey(StartupPath, true))
             {
-                key?.SetValue(Infrastructure.Constant.Wox, Infrastructure.Constant.ExecutablePath);
+                key?.SetValue(Infrastructure.Constant.Wox, $"\"{Infrastructure.Constant.ExecutablePath}\"");
             }
         }
 
