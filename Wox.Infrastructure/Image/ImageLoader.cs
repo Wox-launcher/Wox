@@ -97,33 +97,8 @@ namespace Wox.Infrastructure.Image
                 else if (File.Exists(path))
                 {
                     var externsion = Path.GetExtension(path).ToLower();
-                    if (ImageExtions.Contains(externsion))
-                    {
-                        try
-                        {
-                            image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
-                                Constant.ThumbnailSize, ThumbnailOptions.ThumbnailOnly);
-                        }
-                        catch (COMException e)
-                        {
-                            // check if we failed while loading image thumbnail. If we did, its likely because 
-                            // the file was not an image or just corrupted. Force load shell icon. 
-                            if (e.InnerException?.HResult == (int) WindowsThumbnailProvider.HResult.TypeElementNotFound)
-                            {
-                                image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
-                                    Constant.ThumbnailSize, ThumbnailOptions.IconOnly);
-                            } 
-                            else
-                            {
-                                throw; // otherwise its something unrelated and should be throwed up
-                            }
-                        }
-                    }
-                    else
-                    {
-                        image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
-                            Constant.ThumbnailSize, ThumbnailOptions.None);
-                    }
+                    image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize, Constant.ThumbnailSize, 
+                        ImageExtions.Contains(externsion) ? ThumbnailOptions.ThumbnailOnly : ThumbnailOptions.None);
                 }
                 else
                 {
