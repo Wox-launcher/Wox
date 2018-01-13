@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.IO;
 using System.Windows.Interop;
@@ -22,12 +20,13 @@ namespace Wox.Infrastructure.Image
 
     public class WindowsThumbnailProvider
     {
+        // Based on https://stackoverflow.com/questions/21751747/extract-thumbnail-for-any-file-in-windows
+
         private const string IShellItem2Guid = "7E9FB0D3-919F-4307-AB2E-9B1860310C93";
 
         [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         internal static extern int SHCreateItemFromParsingName(
             [MarshalAs(UnmanagedType.LPWStr)] string path,
-            // The following parameter is not used - binding context.
             IntPtr pbc,
             ref Guid riid,
             [MarshalAs(UnmanagedType.Interface)] out IShellItem shellItem);
@@ -99,8 +98,8 @@ namespace Wox.Infrastructure.Image
             private int width;
             private int height;
 
-            public int Width { set { width = value; } }
-            public int Height { set { height = value; } }
+            public int Width { set => width = value; }
+            public int Height { set => height = value; }
         };
 
 
@@ -110,7 +109,7 @@ namespace Wox.Infrastructure.Image
 
             try
             {
-                // return a System.Drawing.Bitmap from the hBitmap
+
                 return Imaging.CreateBitmapSourceFromHBitmap(hBitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
             }
             finally
@@ -129,9 +128,11 @@ namespace Wox.Infrastructure.Image
             if (retCode != 0)
                 throw Marshal.GetExceptionForHR(retCode);
 
-            NativeSize nativeSize = new NativeSize();
-            nativeSize.Width = width;
-            nativeSize.Height = height;
+            NativeSize nativeSize = new NativeSize
+            {
+                Width = width,
+                Height = height
+            };
 
             IntPtr hBitmap;
             HResult hr = ((IShellItemImageFactory)nativeShellItem).GetImage(nativeSize, options, out hBitmap);
