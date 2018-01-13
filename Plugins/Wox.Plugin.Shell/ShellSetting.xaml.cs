@@ -29,6 +29,19 @@ namespace Wox.Plugin.Shell
                 _settings.LeaveShellOpen = false;
             };
 
+            LeaveShellPause.IsChecked = _settings.LeaveShellPause;
+            LeaveShellPause.IsEnabled = LeaveShellOpen.IsEnabled && !(LeaveShellOpen.IsChecked ?? false);
+
+            LeaveShellPause.Checked += (o, e) =>
+            {
+                _settings.LeaveShellPause = true;
+            };
+
+            LeaveShellPause.Unchecked += (o, e) =>
+            {
+                _settings.LeaveShellPause = false;
+            };
+
             ReplaceWinR.Checked += (o, e) =>
             {
                 _settings.ReplaceWinR = true;
@@ -43,6 +56,7 @@ namespace Wox.Plugin.Shell
             {
                 _settings.Shell = (Shell) ShellComboBox.SelectedIndex;
                 LeaveShellOpen.IsEnabled = _settings.Shell != Shell.RunCommand;
+                LeaveShellPause.IsEnabled = LeaveShellOpen.IsEnabled && !(LeaveShellOpen.IsChecked ?? false);
             };
         }
     }
