@@ -324,5 +324,10 @@ namespace Wox
         {
             Close();
         }
+
+        private void OnFocusLost(object sender, RoutedEventArgs e)
+        {
+            _viewModel.Save();
+        }
     }
 }

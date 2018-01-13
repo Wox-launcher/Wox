@@ -15,6 +15,7 @@
         WindowStartupLocation="CenterScreen"
         Height="600" Width="800" 
         Closed="OnClosed"
+        LostFocus="OnFocusLost"
         d:DataContext="{d:DesignInstance vm:SettingWindowViewModel}">
     <Window.InputBindings>
         <KeyBinding Key="Escape" Command="Close"/>
