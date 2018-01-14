@@ -2,10 +2,7 @@
 using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Wox.Infrastructure.Logger;
@@ -65,7 +62,7 @@ namespace Wox.Infrastructure.Image
             _storage.Save(ImageCache.Usage);
         }
         
-        public static ImageSource Load(string path)
+        public static ImageSource Load(string path, bool loadFullImage = false)
         {
             ImageSource image;
             try
@@ -97,28 +94,50 @@ namespace Wox.Infrastructure.Image
                 else if (File.Exists(path))
                 {
                     var extension = Path.GetExtension(path).ToLower();
-                    image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize, Constant.ThumbnailSize, 
-                        ImageExtensions.Contains(extension) ? ThumbnailOptions.ThumbnailOnly : ThumbnailOptions.None);
+                    if (ImageExtensions.Contains(extension))
+                    {
+                        if (loadFullImage)
+                        {
+                            image = LoadFullImage(path);
+                        }
+                        else
+                        {
+                            image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
+                                Constant.ThumbnailSize, ThumbnailOptions.ThumbnailOnly);
+                        }
+                    }
+                    else
+                    {
+                        image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
+                            Constant.ThumbnailSize, ThumbnailOptions.None);
+                    }
                 }
                 else
                 {
                     image = ImageCache[Constant.ErrorIcon];
                     path = Constant.ErrorIcon;
                 }
-                
                 ImageCache[path] = image;
                 image.Freeze();
-                
             }
             catch (System.Exception e)
             {
-                Log.Exception($"Failed to get thumbnail for {path}", e);
+                Log.Exception($"|ImageLoader.Load|Failed to get thumbnail for {path}", e);
 
                 image = ImageCache[Constant.ErrorIcon];
                 ImageCache[path] = image;
             }
             return image;
         }
-        
+
+        private static BitmapImage LoadFullImage(string path)
+        {
+            BitmapImage image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.UriSource = new Uri(path);
+            image.EndInit();
+            return image;
+        }
     }
 }
