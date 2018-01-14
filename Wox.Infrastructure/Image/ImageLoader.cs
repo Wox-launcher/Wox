@@ -92,7 +92,7 @@ namespace Wox.Infrastructure.Image
                 if (Directory.Exists(path))
                 {
                     image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
-                        Constant.ThumbnailSize, ThumbnailOptions.None);
+                        Constant.ThumbnailSize, ThumbnailOptions.IconOnly);
                 }
                 else if (File.Exists(path))
                 {
