@@ -19,7 +19,7 @@ namespace Wox.Infrastructure.Image
         private static BinaryStorage<ConcurrentDictionary<string, int>> _storage;
 
 
-        private static readonly string[] ImageExtions =
+        private static readonly string[] ImageExtensions =
         {
             ".png",
             ".jpg",
@@ -96,9 +96,9 @@ namespace Wox.Infrastructure.Image
                 }
                 else if (File.Exists(path))
                 {
-                    var externsion = Path.GetExtension(path).ToLower();
+                    var extension = Path.GetExtension(path).ToLower();
                     image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize, Constant.ThumbnailSize, 
-                        ImageExtions.Contains(externsion) ? ThumbnailOptions.ThumbnailOnly : ThumbnailOptions.None);
+                        ImageExtensions.Contains(extension) ? ThumbnailOptions.ThumbnailOnly : ThumbnailOptions.None);
                 }
                 else
                 {
@@ -115,6 +115,7 @@ namespace Wox.Infrastructure.Image
                 Log.Exception($"Failed to get thumbnail for {path}", e);
 
                 image = ImageCache[Constant.ErrorIcon];
+                ImageCache[path] = image;
             }
             return image;
         }
