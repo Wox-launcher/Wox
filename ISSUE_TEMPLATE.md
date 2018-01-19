@@ -1,13 +1,7 @@
-<!--
-## Known problems for 1.3.183:
-We are aware of the following issues and the following workarounds exist:
-1. `System.NullReferenceException`: https://github.com/Wox-launcher/Wox/releases/tag/v1.3.475
-2. `System.UriFormatException`: delete your old theme file
-3. `System.Threading.Tasks.TaskCanceledException`: https://github.com/Wox-launcher/Wox/releases/tag/v1.3.475
-4. `System.AggregateException`: see https://github.com/Wox-launcher/Wox/issues/1777
--->
 <!-- 
+     ===================================================
      DO NOT DELETE UNTIL YOU HAVE READ THE FIRST SECTION
+     ===================================================
 
      To be able to help you we need enough information to find
      what is causing your issue. Please follow the instructions 
@@ -25,6 +19,19 @@ We are aware of the following issues and the following workarounds exist:
     to write your concern. 
 -->
 
+<!--
+     Some problems are known of and there are 
+     already workarounds or existing issues.    
+
+     Known problems for 1.3.183:
+     We are aware of the following issues and the following workarounds exist:
+     1. `System.NullReferenceException`: https://github.com/Wox-launcher/Wox/releases/tag/v1.3.475
+     2. `System.UriFormatException`: delete your old theme file
+     3. `System.Threading.Tasks.TaskCanceledException`: https://github.com/Wox-launcher/Wox/releases/tag/v1.3.475
+     4. `System.AggregateException`: see https://github.com/Wox-launcher/Wox/issues/1777
+     
+     If none of them match your case, please continue. 
+-->
 
 ### Steps to reproduce
 
