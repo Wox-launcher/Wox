@@ -7,6 +7,7 @@
         xmlns:scm="clr-namespace:System.ComponentModel;assembly=WindowsBase"
         xmlns:userSettings="clr-namespace:Wox.Infrastructure.UserSettings;assembly=Wox.Infrastructure"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
+        xmlns:dp="clr-namespace:Wox.DP"
         x:Class="Wox.SettingWindow"
         mc:Ignorable="d"
         Icon="Images\app.png"
@@ -28,10 +29,33 @@
                 <scm:SortDescription PropertyName="Source"/>
             </CollectionViewSource.SortDescriptions>
         </CollectionViewSource>
+        <Style x:Key="TabItemStyle" TargetType="{x:Type TabItem}">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TabItem}">
+                        <Grid MinWidth="64"
+                              MinHeight="64">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="48"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Border BorderBrush="#CCCCCC"
+                                    Grid.Row="1">
+                                <ContentPresenter Content="{TemplateBinding Header}"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <TabControl Height="auto" SelectedIndex="0">
-        <TabItem Header="{DynamicResource general}">
+        <TabItem Header="{DynamicResource general}" 
+                 Style="{StaticResource TabItemStyle}">
             <StackPanel Orientation="Vertical">
                 <CheckBox IsChecked="{Binding Settings.StartWoxOnSystemStartup}" Margin="10">
                     <TextBlock Text="{DynamicResource startWoxOnSystemStartup}" />
@@ -77,7 +101,7 @@
                 </StackPanel>
             </StackPanel>
         </TabItem>
-        <TabItem Header="{DynamicResource plugin}">
+        <TabItem Header="{DynamicResource plugin}" Style="{StaticResource TabItemStyle}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="200" />
@@ -85,7 +109,7 @@
                 </Grid.ColumnDefinitions>
                 <DockPanel Grid.Column="0">
                     <TextBlock DockPanel.Dock="Top" Margin="10">
-                        <Hyperlink NavigateUri="{Binding Plugin, Mode=OneWay}" RequestNavigate="OnRequestNavigate">
+                        <Hyperlink NavigateUri="{Binding (vm:SettingWindowViewModel.Plugin), Mode=OneWay}" RequestNavigate="OnRequestNavigate">
                             <Run Text="{DynamicResource browserMorePlugins}" />
                         </Hyperlink>
                     </TextBlock>
@@ -178,7 +202,7 @@
                 </Grid>
             </Grid>
         </TabItem>
-        <TabItem Header="{DynamicResource theme}">
+        <TabItem Header="{DynamicResource theme}" Style="{StaticResource TabItemStyle}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="200" />
@@ -186,7 +210,7 @@
                 </Grid.ColumnDefinitions>
                 <DockPanel Grid.Column="0">
                     <TextBlock DockPanel.Dock="Top" Margin="10" HorizontalAlignment="Left">
-                        <Hyperlink NavigateUri="{Binding Theme, Mode=OneWay}" RequestNavigate="OnRequestNavigate">
+                        <Hyperlink NavigateUri="{Binding (vm:SettingWindowViewModel.Theme), Mode=OneWay}" RequestNavigate="OnRequestNavigate">
                             <Run Text="{DynamicResource browserMoreThemes}" />
                         </Hyperlink>
                     </TextBlock>
@@ -269,7 +293,7 @@
                 </Grid>
             </Grid>
         </TabItem>
-        <TabItem Header="{DynamicResource hotkey}">
+        <TabItem Header="{DynamicResource hotkey}" Style="{StaticResource TabItemStyle}">
             <Grid Margin="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="35" />
@@ -318,7 +342,7 @@
                 </StackPanel>
             </Grid>
         </TabItem>
-        <TabItem Header="{DynamicResource proxy}">
+        <TabItem Header="{DynamicResource proxy}" Style="{StaticResource TabItemStyle}">
             <StackPanel>
                 <CheckBox Margin="10" IsChecked="{Binding Settings.Proxy.Enabled}">
                     <TextBlock Text="{DynamicResource enableProxy}" />
@@ -347,7 +371,7 @@
                         Width="80" HorizontalAlignment="Left" Margin="10" Click="OnTestProxyClick" />
             </StackPanel>
         </TabItem>
-        <TabItem Header="{DynamicResource about}">
+        <TabItem Header="{DynamicResource about}" Style="{StaticResource TabItemStyle}">
             <Grid>
                 <Grid.Resources>
                     <Style TargetType="{x:Type TextBlock}">
@@ -368,17 +392,17 @@
                 <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="{Binding ActivatedTimes, Mode=OneWay}" />
                 <TextBlock Grid.Row="1" Grid.Column="0" Text="{DynamicResource website}" />
                 <TextBlock Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left">
-                    <Hyperlink NavigateUri="{Binding Github, Mode=OneWay}" RequestNavigate="OnRequestNavigate">
-                        <Run Text="{Binding Github, Mode=OneWay}" />
+                    <Hyperlink NavigateUri="{Binding (vm:SettingWindowViewModel.Github), Mode=OneWay}" RequestNavigate="OnRequestNavigate">
+                        <Run Text="{Binding (vm:SettingWindowViewModel.Github), Mode=OneWay}" />
                     </Hyperlink>
                 </TextBlock>
                 <TextBlock Grid.Row="2" Grid.Column="0" Text="{DynamicResource version}" />
-                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Version}" />
+                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding (vm:SettingWindowViewModel.Version)}" />
                 <TextBlock Grid.Row="3" Grid.Column="0" Text="{DynamicResource releaseNotes}" />
                 <TextBlock Grid.Row="3" Grid.Column="1">
-                    <Hyperlink NavigateUri="{Binding ReleaseNotes, Mode=OneWay}"
+                    <Hyperlink NavigateUri="{Binding (vm:SettingWindowViewModel.ReleaseNotes), Mode=OneWay}"
                                RequestNavigate="OnRequestNavigate">
-                        <Run Text="{Binding ReleaseNotes, Mode=OneWay}" />
+                        <Run Text="{Binding (vm:SettingWindowViewModel.ReleaseNotes), Mode=OneWay}" />
                     </Hyperlink>
                 </TextBlock>
                 <Button Grid.Row="4" Grid.Column="0"
