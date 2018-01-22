@@ -35,7 +35,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type TabItem}">
                         <Border BorderBrush="#CCCCCC"
-                                Margin="0,0,0,2"
+                                Margin="2"
                                 x:Name="TabItemBorder">
                             <Grid MinWidth="64"
                                   MinHeight="64">
@@ -46,10 +46,11 @@
                                 <Image Width="48"
                                        Height="48"
                                        Grid.Row="0"
-                                       Source="{Binding TabItemIcon,RelativeSource={RelativeSource TemplatedParent}}"></Image>
+                                       Source="{Binding TabItemIcon,RelativeSource={RelativeSource TemplatedParent}}"/>
                                 <ContentPresenter Content="{TemplateBinding Header}"
                                                   Grid.Row="1"
                                                   HorizontalAlignment="Center"
+                                                  Margin="3"
                                                   VerticalAlignment="Center">
                                 </ContentPresenter>
                             </Grid>
