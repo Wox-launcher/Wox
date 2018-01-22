@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Windows;
+using System.Windows.Controls;
 
 namespace Wox.DP
 {
     public class TabItemDependencyProperty
     {
-        public static DependencyProperty TabItemIconProperty = DependencyProperty.RegisterAttached("Icon", typeof(Uri),
-            typeof(TabItemDependencyProperty));
+        public static DependencyProperty TabItemIconProperty = DependencyProperty.RegisterAttached("TabItemIcon", typeof(Uri),
+            typeof(TabItem));
 
         public static Uri GetTabItemIcon(DependencyObject obj)
         {

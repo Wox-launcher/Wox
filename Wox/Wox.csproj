@@ -216,6 +216,11 @@
     <None Include="App.config" />
     <None Include="app.manifest" />
     <Resource Include="Images\settings.png" />
+    <Resource Include="Images\theme.png" />
+    <Resource Include="Images\about.png" />
+    <Resource Include="Images\plugin.png" />
+    <Resource Include="Images\hotkey.png" />
+    <Resource Include="Images\proxy.png" />
     <Content Include="Languages\zh-cn.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -224,12 +229,12 @@
     <Resource Include="Images\update.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Resource>
-    <None Include="Images\up.png">
+    <Resource Include="Images\up.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="Images\down.png">
+    </Resource>
+    <Resource Include="Images\down.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    </Resource>
     <Resource Include="Images\history.png" />
     <Resource Include="Images\app_error.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
