@@ -8,6 +8,7 @@
         xmlns:userSettings="clr-namespace:Wox.Infrastructure.UserSettings;assembly=Wox.Infrastructure"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         xmlns:dp="clr-namespace:Wox.DP"
+        xmlns:controls="clr-namespace:Wox.Controls"
         x:Class="Wox.SettingWindow"
         mc:Ignorable="d"
         Icon="Images\app.png"
@@ -87,6 +88,9 @@
                 <CheckBox IsChecked="{Binding Settings.StartWoxOnSystemStartup}" Margin="10">
                     <TextBlock Text="{DynamicResource startWoxOnSystemStartup}" />
                 </CheckBox>
+                <controls:Switch Width="50"
+                                 Height="25"
+                                 Checked="{Binding Settings.StartWoxOnSystemStartup}"/>
                 <CheckBox Margin="10" IsChecked="{Binding Settings.HideOnStartup}">
                     <TextBlock Text="{DynamicResource hideOnStartup}" />
                 </CheckBox>

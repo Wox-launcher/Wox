@@ -81,6 +81,7 @@
       <HintPath>..\packages\squirrel.windows.1.4.0\lib\Net45\ICSharpCode.SharpZipLib.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="Microsoft.CSharp" />
     <Reference Include="Mono.Cecil, Version=0.9.6.0, Culture=neutral, PublicKeyToken=0738eb9f132ed756, processorArchitecture=MSIL">
       <HintPath>..\packages\Mono.Cecil.0.9.6.1\lib\net45\Mono.Cecil.dll</HintPath>
       <Private>True</Private>
@@ -158,8 +159,13 @@
     <Compile Include="..\SolutionAssemblyInfo.cs">
       <Link>Properties\SolutionAssemblyInfo.cs</Link>
     </Compile>
+    <Compile Include="Controls\Switch.xaml.cs">
+      <DependentUpon>Switch.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Converters\DivideConverter.cs" />
     <Compile Include="DP\TabItemDependencyProperty.cs" />
     <Compile Include="Helper\SingletonWindowOpener.cs" />
+    <Compile Include="Properties\Annotations.cs" />
     <Compile Include="PublicAPIInstance.cs" />
     <Compile Include="ReportWindow.xaml.cs" />
     <Compile Include="ResultListBox.xaml.cs">
@@ -202,6 +208,10 @@
       <DependentUpon>SettingWindow.xaml</DependentUpon>
     </Compile>
     <Page Include="ActionKeywords.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Controls\Switch.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
