@@ -5,7 +5,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using Wox.Annotations;
 
 namespace Wox.Controls
@@ -15,62 +14,54 @@ namespace Wox.Controls
     /// </summary>
     public partial class Switch : UserControl, INotifyPropertyChanged
     {
-        private DoubleAnimation SwitchOnAnimation { get; }
-        private DoubleAnimation SwitchOffAnimation { get; }
-
         public Switch()
         {
-            DataContext = this;
-
-            //SwitchOnAnimation = new DoubleAnimation(
-            //    (ActualWidth - BorderThickness.Left - BorderThickness.Right) / 2,
-            //    new Duration(TimeSpan.FromMilliseconds(200)));
-            //SwitchOffAnimation = new DoubleAnimation(
-            //    -(ActualWidth - BorderThickness.Left - BorderThickness.Right) / 2,
-            //    new Duration(TimeSpan.FromMilliseconds(200)));
-
-            //var switchOn = new Storyboard();
-            //switchOn.Children.Add(SwitchOnAnimation);
-            //Resources.Add("SwitchOn", switchOn);
-
-            //var switchOff = new Storyboard();
-            //switchOff.Children.Add(SwitchOffAnimation);
-            //Resources.Add("SwitchOff", switchOff);
             InitializeComponent();
+            if (Content is FrameworkElement first)
+                first.DataContext = this;
         }
 
-        public Brush BubbleBorderBrush
+        public Brush BubbleBackground
         {
-            get { return (Brush)GetValue(BubbleBorderBrushProperty); }
-            set { SetValue(BubbleBorderBrushProperty, value); }
+            get { return (Brush)GetValue(BubbleBackgroundProperty); }
+            set { SetValue(BubbleBackgroundProperty, value); }
         }
 
-        public Brush BubbleFillBrush
+        public bool IsChecked
         {
-            get { return (Brush)GetValue(BubbleFillBrushProperty); }
-            set { SetValue(BubbleFillBrushProperty, value); }
-        }
-
-        public bool Checked
-        {
-            get { return (bool)GetValue(CheckedProperty); }
-            set { SetValue(CheckedProperty, value); }
+            get { return (bool)GetValue(IsCheckedProperty); }
+            set
+            {
+                SetValue(IsCheckedProperty, value);
+                OnPropertyChanged(nameof(IsChecked));
+                if (value)
+                    Checked?.Invoke(this, EventArgs.Empty);
+                else
+                    Unchecked?.Invoke(this, EventArgs.Empty);
+            }
         }
 
         public double BorderRadius => ActualHeight / 2;
 
         public double BubbleDiameter => ActualHeight - BorderThickness.Top - BorderThickness.Bottom;
 
-        public static DependencyProperty BubbleBorderBrushProperty =
-            DependencyProperty.Register(nameof(BubbleBorderBrush),
-                typeof(Brush), typeof(Switch), new PropertyMetadata(new SolidColorBrush(Color.FromRgb(255, 255, 255))));
+        public double BubbleLeft => ActualWidth / 2 - BubbleDiameter / 2;
 
-        public static DependencyProperty BubbleFillBrushProperty = DependencyProperty.Register(nameof(BubbleFillBrush),
-            typeof(Brush),
-            typeof(Switch), new PropertyMetadata(new SolidColorBrush(Color.FromRgb(100, 100, 100))));
+        public double BubbleTop => ActualHeight / 2 - BubbleDiameter / 2;
 
-        public static DependencyProperty CheckedProperty = DependencyProperty.Register(nameof(Checked), typeof(bool),
-            typeof(Switch), new PropertyMetadata(false));
+        public double TranslateX => (ActualWidth - BubbleDiameter - BorderThickness.Left - BorderThickness.Right) / 2;
+
+        public static readonly DependencyProperty BubbleBackgroundProperty =
+            DependencyProperty.Register(nameof(BubbleBackground), typeof(Brush), typeof(Switch),
+                new PropertyMetadata(new SolidColorBrush(Color.FromRgb(255, 255, 255))));
+
+        public static readonly DependencyProperty IsCheckedProperty =
+            DependencyProperty.Register(nameof(IsChecked), typeof(bool), typeof(Switch),
+                new PropertyMetadata(false));
+
+        public event EventHandler Checked;
+
+        public event EventHandler Unchecked;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -82,28 +73,16 @@ namespace Wox.Controls
 
         private void Switch_OnMouseUp(object sender, MouseButtonEventArgs e)
         {
-            Checked = !Checked;
-        }
-
-        private void Switch_OnLoaded(object sender, RoutedEventArgs e)
-        {
-            //var switchOn = new Storyboard();
-            //switchOn.Children.Add(new DoubleAnimation(
-            //    (ActualWidth - BorderThickness.Left - BorderThickness.Right) / 2,
-            //    new Duration(TimeSpan.FromMilliseconds(200))));
-            //Resources.Add("SwitchOn", switchOn);
-
-            //var switchOff = new Storyboard();
-            //switchOff.Children.Add(new DoubleAnimation(
-            //    -(ActualWidth - BorderThickness.Left - BorderThickness.Right) / 2,
-            //    new Duration(TimeSpan.FromMilliseconds(200))));
-            //Resources.Add("SwitchOff", switchOff);
+            IsChecked = !IsChecked;
         }
 
         private void Switch_OnSizeChanged(object sender, SizeChangedEventArgs e)
         {
             OnPropertyChanged(nameof(BubbleDiameter));
             OnPropertyChanged(nameof(BorderRadius));
+            OnPropertyChanged(nameof(TranslateX));
+            OnPropertyChanged(nameof(BubbleTop));
+            OnPropertyChanged(nameof(BubbleLeft));
         }
     }
 }

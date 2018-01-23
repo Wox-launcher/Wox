@@ -8,78 +8,106 @@
              xmlns:system="clr-namespace:System;assembly=mscorlib"
              mc:Ignorable="d"
              Name="Current"
-             Background="Gray"
+             Background="LightGray"
              Foreground="LimeGreen"
              BorderBrush="DarkGray"
-             d:DataContext="{d:DesignInstance local:Switch}"
+             BorderThickness="2"
+             Height="25"
+             Width="50"
              d:DesignHeight="25"
              MouseUp="Switch_OnMouseUp"
-             Loaded="Switch_OnLoaded"
              SizeChanged="Switch_OnSizeChanged"
              d:DesignWidth="50">
     <UserControl.Resources>
-        <Storyboard TargetName="BubblePosition" TargetProperty="X" x:Key="SwitchOn">
-            <DoubleAnimation To="12"
-                             Duration="0:0:0.2" />
+        <converters:SwitchPositionConverter x:Key="SwitchPositionConverter"/>
+        <Duration x:Key="AnimationDuration">0:0:0.15</Duration>
+        <Storyboard TargetName="Bubble"
+                    TargetProperty="Tag"
+                    x:Key="SwitchOn">
+            <DoubleAnimation To="1"
+                             Duration="{StaticResource AnimationDuration}" />
         </Storyboard>
-        <Storyboard TargetName="BubblePosition" TargetProperty="X" x:Key="SwitchOff">
-            <DoubleAnimation To="-12"
-                             Duration="0:0:0.2" />
+        <Storyboard TargetName="Bubble"
+                    TargetProperty="Tag"
+                    x:Key="SwitchOff">
+            <DoubleAnimation To="-1"
+                             Duration="{StaticResource AnimationDuration}" />
         </Storyboard>
+        <ControlTemplate TargetType="{x:Type UserControl}" 
+                         x:Key="SwitchTemplate">
+            <Canvas>
+                <Rectangle Canvas.Left="0"
+                           Canvas.Top="0"
+                           Width="{TemplateBinding Width}"
+                           Height="{TemplateBinding Height}"
+                           RadiusX="{Binding BorderRadius,Mode=OneWay,RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           RadiusY="{Binding BorderRadius,Mode=OneWay,RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           Stroke="{TemplateBinding BorderBrush}"
+                           StrokeThickness="{TemplateBinding BorderThickness}"
+                           Fill="{TemplateBinding Background}"
+                           x:Name="SwitchBorder"></Rectangle>
+                <Ellipse Height="{Binding BubbleDiameter,Mode=OneWay,RelativeSource={RelativeSource AncestorType=UserControl}}"
+                         Width="{Binding BubbleDiameter,Mode=OneWay,RelativeSource={RelativeSource AncestorType=UserControl}}"
+                         Fill="{Binding BubbleBackground,Mode=OneWay,RelativeSource={RelativeSource AncestorType=UserControl}}"
+                         Canvas.Left="{Binding BubbleLeft,Mode=OneWay,RelativeSource={RelativeSource AncestorType=UserControl}}"
+                         Canvas.Top="{Binding BubbleTop,Mode=OneWay,RelativeSource={RelativeSource AncestorType=UserControl}}"
+                         x:Name="Bubble">
+                    <Ellipse.Tag>
+                        <system:Double>-1.0</system:Double>
+                    </Ellipse.Tag>
+                    <Ellipse.RenderTransform>
+                        <TranslateTransform x:Name="BubblePosition">
+                            <TranslateTransform.X>
+                                <MultiBinding Converter="{StaticResource SwitchPositionConverter}">
+                                    <Binding Path="TranslateX" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                    <Binding Path="Tag" ElementName="Bubble"/>
+                                </MultiBinding>
+                            </TranslateTransform.X>
+                        </TranslateTransform>
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+            </Canvas>
+            <ControlTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsChecked,Mode=OneWay,ElementName=Current}" 
+                             Value="True">
+                    <DataTrigger.Setters>
+                        <Setter TargetName="SwitchBorder" 
+                                Property="Fill"
+                                Value="{Binding Foreground,RelativeSource={RelativeSource TemplatedParent}}" />
+                        <Setter TargetName="SwitchBorder" 
+                                Property="Stroke"
+                                Value="{Binding Foreground,RelativeSource={RelativeSource TemplatedParent}}" />
+                    </DataTrigger.Setters>
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard Storyboard="{StaticResource SwitchOn}" 
+                                         x:Name="SwitchOnAnimation" />
+                    </DataTrigger.EnterActions>
+                    <DataTrigger.ExitActions>
+                        <RemoveStoryboard BeginStoryboardName="SwitchOnAnimation" />
+                    </DataTrigger.ExitActions>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsChecked,Mode=OneWay,ElementName=Current}" 
+                             Value="False">
+                    <DataTrigger.Setters>
+                        <Setter TargetName="SwitchBorder" 
+                                Property="Fill"
+                                Value="{Binding Background,RelativeSource={RelativeSource TemplatedParent}}" />
+                    </DataTrigger.Setters>
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard Storyboard="{StaticResource SwitchOff}"
+                                         x:Name="SwitchOffAnimation" />
+                    </DataTrigger.EnterActions>
+                    <DataTrigger.ExitActions>
+                        <RemoveStoryboard BeginStoryboardName="SwitchOffAnimation" />
+                    </DataTrigger.ExitActions>
+                </DataTrigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
     </UserControl.Resources>
     <UserControl.Style>
         <Style TargetType="{x:Type UserControl}">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type UserControl}">
-                        <Border CornerRadius="{Binding BorderRadius,Mode=OneWay}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                x:Name="SwitchBorder"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                Background="{TemplateBinding Background}">
-                            <Ellipse Height="{Binding BubbleDiameter,Mode=OneWay}"
-                                     Width="{Binding BubbleDiameter,Mode=OneWay}"
-                                     Stroke="{Binding BubbleBorderBrush,Mode=OneWay}"
-                                     StrokeThickness="0"
-                                     Fill="{Binding BubbleFillBrush,Mode=OneWay}"
-                                     x:Name="Bubble">
-                                <Ellipse.RenderTransform>
-                                    <TranslateTransform x:Name="BubblePosition" X="0" />
-                                </Ellipse.RenderTransform>
-                            </Ellipse>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <DataTrigger Binding="{Binding Checked,Mode=OneWay}" Value="True">
-                                <DataTrigger.Setters>
-                                    <Setter TargetName="SwitchBorder" Property="Background"
-                                            Value="{Binding Foreground,RelativeSource={RelativeSource TemplatedParent}}" />
-                                    <Setter TargetName="SwitchBorder" Property="BorderBrush"
-                                            Value="{Binding Foreground,RelativeSource={RelativeSource TemplatedParent}}" />
-                                </DataTrigger.Setters>
-                                <DataTrigger.EnterActions>
-                                    <BeginStoryboard Storyboard="{StaticResource SwitchOn}" x:Name="SwitchOnAnimation" />
-                                </DataTrigger.EnterActions>
-                                <DataTrigger.ExitActions>
-                                    <RemoveStoryboard BeginStoryboardName="SwitchOnAnimation" />
-                                </DataTrigger.ExitActions>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding Checked,Mode=OneWay}" Value="False">
-                                <DataTrigger.Setters>
-                                    <Setter TargetName="SwitchBorder" Property="Background"
-                                            Value="{Binding Background,RelativeSource={RelativeSource TemplatedParent}}" />
-                                </DataTrigger.Setters>
-                                <DataTrigger.EnterActions>
-                                    <BeginStoryboard Storyboard="{StaticResource SwitchOff}"
-                                                     x:Name="SwitchOffAnimation" />
-                                </DataTrigger.EnterActions>
-                                <DataTrigger.ExitActions>
-                                    <RemoveStoryboard BeginStoryboardName="SwitchOffAnimation" />
-                                </DataTrigger.ExitActions>
-                            </DataTrigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="Template" 
+                    Value="{StaticResource SwitchTemplate}" />
         </Style>
     </UserControl.Style>
 </UserControl>

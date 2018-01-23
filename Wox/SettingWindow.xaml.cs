@@ -1,16 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using Microsoft.Win32;
+using NHotkey;
+using NHotkey.Wpf;
+using System;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Navigation;
-using Microsoft.Win32;
-using NHotkey;
-using NHotkey.Wpf;
 using Wox.Core;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
@@ -46,12 +44,12 @@ namespace Wox
             InternationalizationManager.Instance.ChangeLanguage(language);
         }
 
-        private void OnAutoStartupChecked(object sender, RoutedEventArgs e)
+        private void OnAutoStartupChecked(object sender, EventArgs e)
         {
             SetStartup();
         }
 
-        private void OnAutoStartupUncheck(object sender, RoutedEventArgs e)
+        private void OnAutoStartupUncheck(object sender, EventArgs e)
         {
             RemoveStartup();
         }

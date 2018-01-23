@@ -1,8 +1,8 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using System;
 using System.Collections.ObjectModel;
 using System.Drawing;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
 using Wox.Plugin;
 
 namespace Wox.Infrastructure.UserSettings
@@ -42,7 +42,18 @@ namespace Wox.Infrastructure.UserSettings
         public bool DontPromptUpdateMsg { get; set; }
         public bool EnableUpdateLog { get; set; }
 
-        public bool StartWoxOnSystemStartup { get; set; } = true;
+        private bool _startWoxOnSystemStartup = true;
+
+        public bool StartWoxOnSystemStartup
+        {
+            get { return _startWoxOnSystemStartup; }
+            set
+            {
+                _startWoxOnSystemStartup = value;
+                OnPropertyChanged(nameof(StartWoxOnSystemStartup));
+            }
+        }
+
         public bool HideOnStartup { get; set; }
         public bool LeaveCmdOpen { get; set; }
         public bool HideWhenDeactive { get; set; }
