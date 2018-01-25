@@ -42,18 +42,7 @@ namespace Wox.Infrastructure.UserSettings
         public bool DontPromptUpdateMsg { get; set; }
         public bool EnableUpdateLog { get; set; }
 
-        private bool _startWoxOnSystemStartup = true;
-
-        public bool StartWoxOnSystemStartup
-        {
-            get { return _startWoxOnSystemStartup; }
-            set
-            {
-                _startWoxOnSystemStartup = value;
-                OnPropertyChanged(nameof(StartWoxOnSystemStartup));
-            }
-        }
-
+        public bool StartWoxOnSystemStartup { get; set; } = true;
         public bool HideOnStartup { get; set; }
         public bool LeaveCmdOpen { get; set; }
         public bool HideWhenDeactive { get; set; }

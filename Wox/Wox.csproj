@@ -171,8 +171,6 @@
     <Compile Include="Controls\Switch.xaml.cs">
       <DependentUpon>Switch.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Converters\DivideConverter.cs" />
-    <Compile Include="Converters\LanguageImageConverter.cs" />
     <Compile Include="Converters\SwitchPositionConverter.cs" />
     <Compile Include="DP\TabItemDependencyProperty.cs" />
     <Compile Include="Helper\SingletonWindowOpener.cs" />
