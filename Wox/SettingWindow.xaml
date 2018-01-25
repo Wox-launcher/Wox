@@ -9,14 +9,16 @@
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         xmlns:dp="clr-namespace:Wox.DP"
         xmlns:controls="clr-namespace:Wox.Controls"
+        xmlns:resource="clr-namespace:Wox.Core.Resource;assembly=Wox.Core"
         x:Class="Wox.SettingWindow"
         mc:Ignorable="d"
         Icon="Images\app.png"
         Title="{DynamicResource wox_settings}"
-        ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
-        Height="600" Width="616" 
+        ResizeMode="NoResize"
+        Height="600" Width="800" 
         Closed="OnClosed"
+        ContentRendered="SettingWindow_OnContentRendered"
         d:DataContext="{d:DesignInstance vm:SettingWindowViewModel}">
     <Window.InputBindings>
         <KeyBinding Key="Escape" Command="Close"/>
@@ -30,53 +32,52 @@
                 <scm:SortDescription PropertyName="Source"/>
             </CollectionViewSource.SortDescriptions>
         </CollectionViewSource>
-        <Style x:Key="TabItemStyle" TargetType="{x:Type TabItem}">
-            <Setter Property="HorizontalAlignment" Value="Left" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type TabItem}">
-                        <Border BorderBrush="White"
+        <ControlTemplate x:Key="TabItemControlTemplate" TargetType="{x:Type TabItem}">
+            <Border BorderBrush="White"
                                 BorderThickness="1"
                                 Margin="2"
                                 x:Name="TabItemBorder">
-                            <Grid MinWidth="64"
+                <Grid MinWidth="64"
                                   MinHeight="64">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="48"/>
-                                    <RowDefinition Height="*"/>
-                                </Grid.RowDefinitions>
-                                <Image Width="48"
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="48"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Image Width="48"
                                        Height="48"
                                        Grid.Row="0"
                                        Source="{Binding TabItemIcon,RelativeSource={RelativeSource TemplatedParent}}"/>
-                                <ContentPresenter Content="{TemplateBinding Header}"
+                    <ContentPresenter Content="{TemplateBinding Header}"
                                                   Grid.Row="1"
                                                   HorizontalAlignment="Center"
                                                   Margin="3"
                                                   VerticalAlignment="Center">
-                                </ContentPresenter>
-                            </Grid>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="TabItemBorder"
+                    </ContentPresenter>
+                </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter TargetName="TabItemBorder"
                                     Property="BorderBrush"
                                     Value="#CCCCCC" />
-                            </Trigger>
-                            <MultiTrigger>
-                                <MultiTrigger.Conditions>
-                                    <Condition Property="IsSelected" Value="False" />
-                                    <Condition Property="IsMouseOver" Value="True" />
-                                    <Condition Property="HasHeader" Value="True" />
-                                    <Condition Property="IsEnabled" Value="True" />
-                                </MultiTrigger.Conditions>
-                                <MultiTrigger.Setters>
-                                    <Setter Property="Background" Value="#EEEEEE" TargetName="TabItemBorder" />
-                                </MultiTrigger.Setters>
-                            </MultiTrigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
+                </Trigger>
+                <MultiTrigger>
+                    <MultiTrigger.Conditions>
+                        <Condition Property="IsSelected" Value="False" />
+                        <Condition Property="IsMouseOver" Value="True" />
+                        <Condition Property="HasHeader" Value="True" />
+                        <Condition Property="IsEnabled" Value="True" />
+                    </MultiTrigger.Conditions>
+                    <MultiTrigger.Setters>
+                        <Setter Property="Background" Value="#EEEEEE" TargetName="TabItemBorder" />
+                    </MultiTrigger.Setters>
+                </MultiTrigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <Style x:Key="TabItemStyle" TargetType="{x:Type TabItem}">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="Template" Value="{StaticResource TabItemControlTemplate}">
             </Setter>
         </Style>
         
@@ -87,6 +88,41 @@
             <Setter Property="Margin" Value="10,0"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
+        
+        <Style TargetType="{x:Type controls:Switch}">
+            <Setter Property="Width" Value="50"/>
+            <Setter Property="Height" Value="25"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="LightGray"/>
+            <Setter Property="Foreground" Value="LimeGreen"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="BorderBrush" Value="DarkGray"/>
+            <Setter Property="BubbleBackground" Value="White"/>
+        </Style>
+        
+        <Style TargetType="{x:Type ComboBox}">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Margin" Value="10 0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        
+        <Style TargetType="{x:Type TextBox}">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Margin" Value="10 0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <DataTemplate x:Key="LanguageItemTemplate" DataType="{x:Type resource:Language}">
+            <Border BorderThickness="1"
+                    BorderBrush="LightGray"
+                    VerticalAlignment="Center">
+                <TextBlock Text="{Binding Display}" 
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"
+                           FontSize="11"
+                           TextWrapping="Wrap"></TextBlock>
+            </Border>
+        </DataTemplate>
     </Window.Resources>
 
     <TabControl Height="auto" SelectedIndex="0">
@@ -95,14 +131,16 @@
                  dp:TabItemDependencyProperty.TabItemIcon="Images/settings.png">
             <Grid>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="80"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="60"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="80"/>
+                    <ColumnDefinition Width="80"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="80"/>
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="*"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="*"/>
@@ -114,79 +152,94 @@
                 </Grid.RowDefinitions>
                 <TextBlock Grid.Row="0"
                            Grid.Column="0"
+                           Grid.ColumnSpan="3"
                            Text="{DynamicResource startWoxOnSystemStartup}"/>
                 <controls:Switch Grid.Row="0"
-                                 Grid.Column="1"
-                                 Width="50"
-                                 Height="25"
-                                 IsChecked="{Binding Settings.StartWoxOnSystemStartup}"/>
-                <TextBlock Grid.Row="0"
-                           Grid.Column="2"
-                           Text="{DynamicResource hideOnStartup}"/>
-                <controls:Switch Grid.Row="0"
                                  Grid.Column="3"
-                                 Width="50"
-                                 Height="25"
-                                 IsChecked="{Binding Settings.HideOnStartup}"/>
-                <TextBlock Grid.Row="1"
-                           Grid.Column="0"
-                           Text="{DynamicResource hideWoxWhenLoseFocus}"/>
-                <controls:Switch Grid.Row="1"
-                                 Grid.Column="1"
-                                 Width="50"
-                                 Height="25"
-                                 IsChecked="{Binding Settings.HideWhenDeactive}"/>
-                <TextBlock Grid.Row="1"
-                           Grid.Column="2"
-                           Text="{DynamicResource rememberLastLocation}"/>
-                <controls:Switch Grid.Row="1"
-                                 Grid.Column="3"
-                                 Width="50"
-                                 Height="25"
-                                 IsChecked="{Binding Settings.RememberLastLaunchLocation}"/>
-                <TextBlock Grid.Row="2"
-                           Grid.Column="0"
-                           Text="{DynamicResource ignoreHotkeysOnFullscreen}"/>
-                <controls:Switch Grid.Row="2"
-                                 Grid.Column="1"
-                                 Width="50"
-                                 Height="25"
-                                 IsChecked="{Binding Settings.IgnoreHotkeysOnFullscreen}"/>
-                <TextBlock Grid.Row="2"
-                           Grid.Column="2"
-                           Text="{DynamicResource autoUpdates}"/>
-                <controls:Switch Grid.Row="2"
-                                 Grid.Column="3"
-                                 Width="50"
-                                 Height="25"
-                                 IsChecked="{Binding Settings.AutoUpdates}"
                                  Checked="OnAutoStartupChecked" 
-                                 Unchecked="OnAutoStartupUncheck"/>
-                <!--<StackPanel Orientation="Vertical" Grid.RowSpan="10" Grid.ColumnSpan="4">
-                    <StackPanel Margin="10" Orientation="Horizontal">
-                        <TextBlock Text="{DynamicResource lastQueryMode}" />
-                        <ComboBox Margin="10 0 0 0" Width="120"
-                              ItemsSource="{Binding LastQueryModes}" SelectedValue="{Binding Settings.LastQueryMode}"
-                              DisplayMemberPath="Display" SelectedValuePath="Value" />
-                    </StackPanel>
-                    <StackPanel Margin="10" Orientation="Horizontal">
-                        <TextBlock Text="{DynamicResource language}" />
-                        <ComboBox Margin="10 0 0 0" Width="120" SelectionChanged="OnLanguageChanged"
-                              ItemsSource="{Binding Languages}" SelectedValue="{Binding Settings.Language}"
-                              DisplayMemberPath="Display" SelectedValuePath="LanguageCode" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="10">
-                        <TextBlock Text="{DynamicResource maxShowResults}" />
-                        <ComboBox Margin="10 0 0 0" Width="45" ItemsSource="{Binding MaxResultsRange}"
-                              SelectedItem="{Binding Settings.MaxResultsToShow}" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Margin="10" Text="{DynamicResource pythonDirectory}" />
-                        <TextBox Width="300" Margin="10" Text="{Binding Settings.PluginSettings.PythonDirectory}" />
-                        <Button Margin="10" Click="OnSelectPythonDirectoryClick"
-                            Content="{DynamicResource selectPythonDirectory}" />
-                    </StackPanel>
-                </StackPanel>-->
+                                 Unchecked="OnAutoStartupUncheck"
+                                 IsChecked="{Binding Settings.StartWoxOnSystemStartup}"/>
+                <TextBlock Grid.Row="1"
+                           Grid.Column="0"
+                           Grid.ColumnSpan="3"
+                           Text="{DynamicResource hideOnStartup}"/>
+                <controls:Switch Grid.Row="1"
+                                 Grid.Column="3"
+                                 IsChecked="{Binding Settings.HideOnStartup}"/>
+                <TextBlock Grid.Row="2"
+                           Grid.Column="0"
+                           Grid.ColumnSpan="3"
+                           Text="{DynamicResource hideWoxWhenLoseFocus}"/>
+                <controls:Switch Grid.Row="2"
+                                 Grid.Column="3"
+                                 IsChecked="{Binding Settings.HideWhenDeactive}"/>
+                <TextBlock Grid.Row="3"
+                           Grid.Column="0"
+                           Grid.ColumnSpan="3"
+                           Text="{DynamicResource rememberLastLocation}"/>
+                <controls:Switch Grid.Row="3"
+                                 Grid.Column="3"
+                                 IsChecked="{Binding Settings.RememberLastLaunchLocation}"/>
+                <TextBlock Grid.Row="4"
+                           Grid.Column="0"
+                           Grid.ColumnSpan="3"
+                           Text="{DynamicResource ignoreHotkeysOnFullscreen}"/>
+                <controls:Switch Grid.Row="4"
+                                 Grid.Column="3"
+                                 IsChecked="{Binding Settings.IgnoreHotkeysOnFullscreen}"/>
+                <TextBlock Grid.Row="5"
+                           Grid.Column="0"
+                           Grid.ColumnSpan="3"
+                           Text="{DynamicResource autoUpdates}"/>
+                <controls:Switch Grid.Row="5"
+                                 Grid.Column="3"
+                                 IsChecked="{Binding Settings.AutoUpdates}"/>
+                <TextBlock Grid.Row="0"
+                           Grid.Column="4"
+                           Grid.ColumnSpan="2"
+                           Text="{DynamicResource language}"/>
+                <ComboBox Grid.Row="0"
+                          Grid.Column="6"
+                          Grid.ColumnSpan="2"
+                          SelectionChanged="OnLanguageChanged"
+                          ItemsSource="{Binding Languages}" 
+                          SelectedValue="{Binding Settings.Language}"
+                          DisplayMemberPath="Display"
+                          SelectedValuePath="LanguageCode" />
+                <TextBlock Grid.Row="1"
+                           Grid.Column="4"
+                           Grid.ColumnSpan="2"
+                           Text="{DynamicResource lastQueryMode}"/>
+                <ComboBox Grid.Row="1"
+                          Grid.Column="6"
+                          Grid.ColumnSpan="2"
+                          ItemsSource="{Binding LastQueryModes}"
+                          SelectedValue="{Binding Settings.LastQueryMode}"
+                          DisplayMemberPath="Display"
+                          SelectedValuePath="Value" />
+                <TextBlock Grid.Row="2"
+                           Grid.Column="4"
+                           Grid.ColumnSpan="2"
+                           Text="{DynamicResource maxShowResults}"/>
+                <ComboBox Grid.Row="2"
+                          Grid.Column="6"
+                          Grid.ColumnSpan="2"
+                          ItemsSource="{Binding MaxResultsRange}" 
+                          SelectedValue="{Binding Settings.MaxResultsToShow}" />
+                <TextBlock Grid.Row="6"
+                           Grid.Column="0"
+                           Grid.ColumnSpan="2"
+                           Text="{DynamicResource pythonDirectory}"/>
+                <TextBox Grid.Row="6"
+                         Grid.Column="2"
+                         Grid.ColumnSpan="5"
+                         Text="{Binding Settings.PluginSettings.PythonDirectory}"/>
+                <Button Margin="10"
+                        Grid.Row="6"
+                        Grid.Column="7"
+                        Height="30"
+                        Click="OnSelectPythonDirectoryClick"
+                        Content="{DynamicResource selectPythonDirectory}" />
             </Grid>
         </TabItem>
         <TabItem Header="{DynamicResource plugin}" 
@@ -203,9 +256,11 @@
                             <Run Text="{DynamicResource browserMorePlugins}" />
                         </Hyperlink>
                     </TextBlock>
-                    <ListBox SelectedIndex="0" SelectedItem="{Binding SelectedPlugin}"
+                    <ListBox SelectedIndex="0" 
+                             SelectedItem="{Binding SelectedPlugin}"
                              ItemsSource="{Binding PluginViewModels}"
-                             Margin="10, 0, 10, 10" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                             Margin="10, 0, 10, 10" 
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" Margin="3">
@@ -274,7 +329,9 @@
                                     <TextBlock Text="{Binding ActionKeywordsText}"
                                                Visibility="{Binding ActionKeywordsVisibility}"
                                                ToolTip="Change Action Keywords"
-                                               Margin="5 0 0 0" Cursor="Hand" Foreground="Blue"
+                                               Margin="5 0 0 0" 
+                                               Cursor="Hand" 
+                                               Foreground="Blue"
                                                MouseUp="OnPluginActionKeywordsClick" />
                                     <TextBlock Text="{Binding InitilizaTime}" Margin="10 0 0 0" />
                                     <TextBlock Text="{Binding QueryTime}" Margin="10 0 0 0" />

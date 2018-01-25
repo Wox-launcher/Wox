@@ -46,7 +46,8 @@ namespace Wox
 
         private void OnAutoStartupChecked(object sender, EventArgs e)
         {
-            SetStartup();
+            if (!SetStartup())
+                _settings.AutoUpdates = false;
         }
 
         private void OnAutoStartupUncheck(object sender, EventArgs e)
@@ -54,11 +55,21 @@ namespace Wox
             RemoveStartup();
         }
 
-        public static void SetStartup()
+        public static bool SetStartup()
         {
             using (var key = Registry.CurrentUser.OpenSubKey(StartupPath, true))
             {
-                key?.SetValue(Infrastructure.Constant.Wox, Infrastructure.Constant.ExecutablePath);
+                try
+                {
+                    //A big chance to be blocked by antivirus system(e.g 360Safe), causing Wox not to respond. Need to be fixed
+                    key?.SetValue(Infrastructure.Constant.Wox, Infrastructure.Constant.ExecutablePath);
+                    return true;
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                    return false;
+                }
             }
         }
 
@@ -66,7 +77,15 @@ namespace Wox
         {
             using (var key = Registry.CurrentUser.OpenSubKey(StartupPath, true))
             {
-                key?.DeleteValue(Infrastructure.Constant.Wox, false);
+                try
+                {
+                    key?.DeleteValue(Infrastructure.Constant.Wox, false);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                    _settings.AutoUpdates = true;
+                }
             }
         }
 
@@ -321,6 +340,11 @@ namespace Wox
         private void OnCloseExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             Close();
+        }
+
+        private void SettingWindow_OnContentRendered(object sender, EventArgs e)
+        {
+
         }
     }
 }

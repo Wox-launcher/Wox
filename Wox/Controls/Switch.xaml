@@ -33,7 +33,7 @@
             <DoubleAnimation To="-1"
                              Duration="{StaticResource AnimationDuration}" />
         </Storyboard>
-        <ControlTemplate TargetType="{x:Type UserControl}" 
+        <ControlTemplate TargetType="{x:Type Control}" 
                          x:Key="SwitchTemplate">
             <Canvas>
                 <Rectangle Canvas.Left="0"
@@ -110,4 +110,13 @@
                     Value="{StaticResource SwitchTemplate}" />
         </Style>
     </UserControl.Style>
+    <Control Template="{StaticResource SwitchTemplate}"
+             DataContext="{Binding ElementName=Current}"
+             Width="{Binding Width}"
+             Height="{Binding Height}"
+             Cursor="{Binding Cursor}"
+             Background="{Binding Background}"
+             BorderThickness="{Binding BorderThickness}"
+             BorderBrush="{Binding BorderBrush}"
+             Foreground="{Binding Foreground}"></Control>
 </UserControl>
