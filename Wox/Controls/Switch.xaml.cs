@@ -17,8 +17,6 @@ namespace Wox.Controls
         public Switch()
         {
             InitializeComponent();
-            if (Content is FrameworkElement first)
-                first.DataContext = this;
         }
 
         public Brush BubbleBackground
