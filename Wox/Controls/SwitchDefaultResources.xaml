@@ -1,0 +1,27 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:Wox.Controls"
+                    xmlns:converters="clr-namespace:Wox.Converters">
+    <converters:SwitchPositionConverter x:Key="SwitchPositionConverter"/>
+    <Duration x:Key="AnimationDuration">0:0:0.15</Duration>
+    <Storyboard TargetName="Bubble"
+                TargetProperty="Tag"
+                x:Key="SwitchOn">
+        <DoubleAnimation To="1"
+                         Duration="{StaticResource AnimationDuration}" />
+    </Storyboard>
+    <Storyboard TargetName="Bubble"
+                TargetProperty="Tag"
+                x:Key="SwitchOff">
+        <DoubleAnimation To="-1"
+                         Duration="{StaticResource AnimationDuration}" />
+    </Storyboard>
+    <Style TargetType="{x:Type local:Switch}">
+        <Setter Property="Width" Value="50"/>
+        <Setter Property="Height" Value="25"/>
+        <Setter Property="Background" Value="LightGray"/>
+        <Setter Property="Foreground" Value="LimeGreen"/>
+        <Setter Property="BorderBrush" Value="DarkGray"/>
+        <Setter Property="BorderThickness" Value="2"/>
+    </Style>
+</ResourceDictionary>

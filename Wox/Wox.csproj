@@ -171,6 +171,7 @@
     <Compile Include="Controls\Switch.xaml.cs">
       <DependentUpon>Switch.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Converters\BooleanInvertConverter.cs" />
     <Compile Include="Converters\SwitchPositionConverter.cs" />
     <Compile Include="DP\TabItemDependencyProperty.cs" />
     <Compile Include="Helper\SingletonWindowOpener.cs" />
@@ -221,6 +222,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Controls\Switch.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Controls\SwitchDefaultResources.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

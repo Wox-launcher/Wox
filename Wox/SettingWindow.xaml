@@ -10,6 +10,7 @@
         xmlns:dp="clr-namespace:Wox.DP"
         xmlns:controls="clr-namespace:Wox.Controls"
         xmlns:resource="clr-namespace:Wox.Core.Resource;assembly=Wox.Core"
+        xmlns:converters="clr-namespace:Wox.Converters"
         x:Class="Wox.SettingWindow"
         mc:Ignorable="d"
         Icon="Images\app.png"
@@ -32,6 +33,7 @@
                 <scm:SortDescription PropertyName="Source"/>
             </CollectionViewSource.SortDescriptions>
         </CollectionViewSource>
+        <converters:BooleanInvertConverter x:Key="BooleanInvertConverter"/>
         <ControlTemplate x:Key="TabItemControlTemplate" TargetType="{x:Type TabItem}">
             <Border BorderBrush="White"
                                 BorderThickness="1"
@@ -80,7 +82,7 @@
             <Setter Property="Template" Value="{StaticResource TabItemControlTemplate}">
             </Setter>
         </Style>
-        
+
         <Style TargetType="{x:Type TextBlock}">
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
@@ -88,18 +90,7 @@
             <Setter Property="Margin" Value="10,0"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
-        
-        <Style TargetType="{x:Type controls:Switch}">
-            <Setter Property="Width" Value="50"/>
-            <Setter Property="Height" Value="25"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Background" Value="LightGray"/>
-            <Setter Property="Foreground" Value="LimeGreen"/>
-            <Setter Property="BorderThickness" Value="2"/>
-            <Setter Property="BorderBrush" Value="DarkGray"/>
-            <Setter Property="BubbleBackground" Value="White"/>
-        </Style>
-        
+
         <Style TargetType="{x:Type ComboBox}">
             <Setter Property="Height" Value="30"/>
             <Setter Property="Margin" Value="10 0"/>
@@ -111,18 +102,6 @@
             <Setter Property="Margin" Value="10 0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
-
-        <DataTemplate x:Key="LanguageItemTemplate" DataType="{x:Type resource:Language}">
-            <Border BorderThickness="1"
-                    BorderBrush="LightGray"
-                    VerticalAlignment="Center">
-                <TextBlock Text="{Binding Display}" 
-                           VerticalAlignment="Center"
-                           HorizontalAlignment="Center"
-                           FontSize="11"
-                           TextWrapping="Wrap"></TextBlock>
-            </Border>
-        </DataTemplate>
     </Window.Resources>
 
     <TabControl Height="auto" SelectedIndex="0">
@@ -261,19 +240,37 @@
                              ItemsSource="{Binding PluginViewModels}"
                              Margin="10, 0, 10, 10" 
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal" Margin="3">
+                            <DataTemplate DataType="{x:Type vm:PluginViewModel}">
+                                <Grid Height="50" ToolTip="{Binding PluginPair.Metadata.Description}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="40"/>
+                                        <ColumnDefinition/>
+                                        <ColumnDefinition Width="40"/>
+                                    </Grid.ColumnDefinitions>
                                     <Image Source="{Binding Image, IsAsync=True}"
-                                           Width="32" Height="32" />
-                                    <StackPanel Margin="3 0 3 0">
-                                        <TextBlock Text="{Binding PluginPair.Metadata.Name}"
-                                                   ToolTip="{Binding PluginPair.Metadata.Name}" />
-                                        <TextBlock Text="{Binding PluginPair.Metadata.Description}"
-                                                   ToolTip="{Binding PluginPair.Metadata.Description}"
-                                                   Opacity="0.5" />
-                                    </StackPanel>
-                                </StackPanel>
+                                           Grid.Column="0"
+                                           Grid.Row="0"
+                                           Width="32" 
+                                           Height="32" />
+                                    <TextBlock Text="{Binding PluginPair.Metadata.Name}"
+                                               Grid.Row="0"
+                                               Grid.Column="1"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center"/>
+                                    <controls:Switch Grid.Column="2"
+                                                     Grid.Row="0"
+                                                     Checked="OnPluginToggled"
+                                                     Unchecked="OnPluginToggled"
+                                                     Width="30"
+                                                     Height="15"
+                                                     IsChecked="{Binding PluginPair.Metadata.Disabled,Converter={StaticResource BooleanInvertConverter}}"/>
+                                </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
@@ -284,7 +281,9 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <ContentControl DataContext="{Binding Path=SelectedPlugin}"
-                                    Grid.ColumnSpan="1" Grid.Row="0" Margin="10 10 10 0">
+                                    Grid.ColumnSpan="1"
+                                    Grid.Row="0" 
+                                    Margin="10 10 10 0">
                         <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="48" />
@@ -319,10 +318,6 @@
                                            ToolTip="{Binding PluginPair.Metadata.Description}"
                                            Grid.Row="1" Opacity="0.5" />
                                 <DockPanel Grid.Row="2" Margin="0 10 0 8">
-                                    <CheckBox IsChecked="{Binding PluginPair.Metadata.Disabled}" Checked="OnPluginToggled"
-                                              Unchecked="OnPluginToggled">
-                                        <TextBlock Text="{DynamicResource disable}" />
-                                    </CheckBox>
                                     <TextBlock Text="{DynamicResource actionKeywords}"
                                                Visibility="{Binding ActionKeywordsVisibility}"
                                                Margin="20 0 0 0" />

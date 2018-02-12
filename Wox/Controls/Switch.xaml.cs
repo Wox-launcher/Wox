@@ -51,11 +51,12 @@ namespace Wox.Controls
 
         public static readonly DependencyProperty BubbleBackgroundProperty =
             DependencyProperty.Register(nameof(BubbleBackground), typeof(Brush), typeof(Switch),
-                new PropertyMetadata(new SolidColorBrush(Color.FromRgb(255, 255, 255))));
+                new FrameworkPropertyMetadata(new SolidColorBrush(Color.FromRgb(255, 255, 255)),
+                    FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
 
         public static readonly DependencyProperty IsCheckedProperty =
             DependencyProperty.Register(nameof(IsChecked), typeof(bool), typeof(Switch),
-                new PropertyMetadata(false));
+                new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
 
         public event EventHandler Checked;
 

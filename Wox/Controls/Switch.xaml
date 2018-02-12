@@ -3,54 +3,36 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:local="clr-namespace:Wox.Controls"
-             xmlns:converters="clr-namespace:Wox.Converters"
              xmlns:system="clr-namespace:System;assembly=mscorlib"
+             xmlns:controls="clr-namespace:Wox.Controls"
              mc:Ignorable="d"
              Name="Current"
-             Background="LightGray"
-             Foreground="LimeGreen"
-             BorderBrush="DarkGray"
-             BorderThickness="2"
-             Height="25"
-             Width="50"
-             d:DesignHeight="25"
-             MouseUp="Switch_OnMouseUp"
              SizeChanged="Switch_OnSizeChanged"
+             MouseUp="Switch_OnMouseUp"
+             d:DataContext="{d:DesignInstance controls:Switch}"
+             d:DesignHeight="25"
              d:DesignWidth="50">
     <UserControl.Resources>
-        <converters:SwitchPositionConverter x:Key="SwitchPositionConverter"/>
-        <Duration x:Key="AnimationDuration">0:0:0.15</Duration>
-        <Storyboard TargetName="Bubble"
-                    TargetProperty="Tag"
-                    x:Key="SwitchOn">
-            <DoubleAnimation To="1"
-                             Duration="{StaticResource AnimationDuration}" />
-        </Storyboard>
-        <Storyboard TargetName="Bubble"
-                    TargetProperty="Tag"
-                    x:Key="SwitchOff">
-            <DoubleAnimation To="-1"
-                             Duration="{StaticResource AnimationDuration}" />
-        </Storyboard>
-        <ControlTemplate TargetType="{x:Type Control}" 
-                         x:Key="SwitchTemplate">
-            <Canvas>
+        <ResourceDictionary Source="SwitchDefaultResources.xaml"/>
+    </UserControl.Resources>
+    <UserControl.Template>
+        <ControlTemplate TargetType="{x:Type UserControl}">
+            <Canvas DataContext="{Binding ElementName=Current}">
                 <Rectangle Canvas.Left="0"
                            Canvas.Top="0"
                            Width="{TemplateBinding Width}"
                            Height="{TemplateBinding Height}"
-                           RadiusX="{Binding BorderRadius,Mode=OneWay,RelativeSource={RelativeSource AncestorType=UserControl}}"
-                           RadiusY="{Binding BorderRadius,Mode=OneWay,RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           RadiusX="{Binding BorderRadius,Mode=OneWay}"
+                           RadiusY="{Binding BorderRadius,Mode=OneWay}"
                            Stroke="{TemplateBinding BorderBrush}"
                            StrokeThickness="{TemplateBinding BorderThickness}"
                            Fill="{TemplateBinding Background}"
                            x:Name="SwitchBorder"></Rectangle>
-                <Ellipse Height="{Binding BubbleDiameter,Mode=OneWay,RelativeSource={RelativeSource AncestorType=UserControl}}"
-                         Width="{Binding BubbleDiameter,Mode=OneWay,RelativeSource={RelativeSource AncestorType=UserControl}}"
-                         Fill="{Binding BubbleBackground,Mode=OneWay,RelativeSource={RelativeSource AncestorType=UserControl}}"
-                         Canvas.Left="{Binding BubbleLeft,Mode=OneWay,RelativeSource={RelativeSource AncestorType=UserControl}}"
-                         Canvas.Top="{Binding BubbleTop,Mode=OneWay,RelativeSource={RelativeSource AncestorType=UserControl}}"
+                <Ellipse Height="{Binding BubbleDiameter,Mode=OneWay}"
+                         Width="{Binding BubbleDiameter,Mode=OneWay}"
+                         Fill="{Binding BubbleBackground,Mode=OneWay}"
+                         Canvas.Left="{Binding BubbleLeft,Mode=OneWay}"
+                         Canvas.Top="{Binding BubbleTop,Mode=OneWay}"
                          x:Name="Bubble">
                     <Ellipse.Tag>
                         <system:Double>-1.0</system:Double>
@@ -59,7 +41,7 @@
                         <TranslateTransform x:Name="BubblePosition">
                             <TranslateTransform.X>
                                 <MultiBinding Converter="{StaticResource SwitchPositionConverter}">
-                                    <Binding Path="TranslateX" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                    <Binding Path="TranslateX"/>
                                     <Binding Path="Tag" ElementName="Bubble"/>
                                 </MultiBinding>
                             </TranslateTransform.X>
@@ -103,20 +85,5 @@
                 </DataTrigger>
             </ControlTemplate.Triggers>
         </ControlTemplate>
-    </UserControl.Resources>
-    <UserControl.Style>
-        <Style TargetType="{x:Type UserControl}">
-            <Setter Property="Template" 
-                    Value="{StaticResource SwitchTemplate}" />
-        </Style>
-    </UserControl.Style>
-    <Control Template="{StaticResource SwitchTemplate}"
-             DataContext="{Binding ElementName=Current}"
-             Width="{Binding Width}"
-             Height="{Binding Height}"
-             Cursor="{Binding Cursor}"
-             Background="{Binding Background}"
-             BorderThickness="{Binding BorderThickness}"
-             BorderBrush="{Binding BorderBrush}"
-             Foreground="{Binding Foreground}"></Control>
+    </UserControl.Template>
 </UserControl>

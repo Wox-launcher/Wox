@@ -229,7 +229,7 @@ namespace Wox
 
         #region Plugin
 
-        private void OnPluginToggled(object sender, RoutedEventArgs e)
+        private void OnPluginToggled(object sender, EventArgs e)
         {
             var id = _viewModel.SelectedPlugin.PluginPair.Metadata.ID;
             _settings.PluginSettings.Plugins[id].Disabled = _viewModel.SelectedPlugin.PluginPair.Metadata.Disabled;
