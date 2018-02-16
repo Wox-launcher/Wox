@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -10,6 +11,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
+using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Infrastructure.Image
 {
@@ -17,9 +19,10 @@ namespace Wox.Infrastructure.Image
     {
         private static readonly ImageCache ImageCache = new ImageCache();
         private static BinaryStorage<ConcurrentDictionary<string, int>> _storage;
+        
+        private static int ThumbnailCacheSize = 2 * 32; // for high resolution display, use double size
 
-
-        private static readonly string[] ImageExtions =
+        private static readonly HashSet<string> ImageExtions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             ".png",
             ".jpg",
@@ -30,9 +33,12 @@ namespace Wox.Infrastructure.Image
             ".ico"
         };
 
+        private static Settings _settings;
 
-        public static void Initialize()
+        public static void Initialize(Settings settings)
         {
+            _settings = settings;
+
             _storage = new BinaryStorage<ConcurrentDictionary<string, int>> ("Image");
             ImageCache.Usage = _storage.TryLoad(new ConcurrentDictionary<string, int>());
 
@@ -124,19 +130,33 @@ namespace Wox.Infrastructure.Image
                 {
                     if (Directory.Exists(path))
                     {
-                        image = ShellIcon(path);
-                    }
-                    else if (File.Exists(path))
-                    {
-                        var externsion = Path.GetExtension(path).ToLower();
-                        if (ImageExtions.Contains(externsion))
+                        if (_settings.UseWindowThumbnailCache) 
                         {
-                            image = new BitmapImage(new Uri(path));
-                        }
-                        else
+                            image = GetBitmapFromPath(path);
+                        } 
+                        else 
                         {
                             image = ShellIcon(path);
                         }
+                    }
+                    else if (File.Exists(path))
+                    {
+                        if (_settings.UseWindowThumbnailCache) 
+                        {
+                            image = GetBitmapFromPath(path);
+                        }
+                        else 
+                        {
+                            var externsion = Path.GetExtension(path);
+                            if (ImageExtions.Contains(externsion))
+                            {
+                                image = new BitmapImage(new Uri(path));
+                            }
+                            else
+                            {
+                                image = ShellIcon(path);
+                            }
+                        }                        
                     }
                     else
                     {
@@ -149,7 +169,7 @@ namespace Wox.Infrastructure.Image
                     var defaultDirectoryPath = Path.Combine(Constant.ProgramDirectory, "Images", Path.GetFileName(path));
                     if (File.Exists(defaultDirectoryPath))
                     {
-                        image = new BitmapImage(new Uri(defaultDirectoryPath));
+                        image = GetBitmapFromPath(defaultDirectoryPath);
                     }
                     else
                     {
@@ -161,6 +181,40 @@ namespace Wox.Infrastructure.Image
                 image.Freeze();
             }
             return image;
+        }
+
+        private static ImageSource GetBitmapFromPath(string path) 
+        {
+            
+            if (_settings.UseWindowThumbnailCache)
+            {
+                string ext = Path.GetExtension(path);
+                if (!WindowsThumbnailCacheAPI.NotCachableExtensions.Contains(ext)) { // check if extension is cachable
+                    try {
+                        return WindowsThumbnailCacheAPI.GetThumbnail(path, ThumbnailCacheSize);
+                    }
+                    catch (COMException) {
+                    }
+                }
+
+                if (ImageExtions.Contains(ext)) {
+                    // fallback for images (eg. ico files)
+                    var img = new BitmapImage();
+                    img.BeginInit();
+                    img.DecodePixelWidth = ThumbnailCacheSize;
+                    img.UriSource = new Uri(path);
+                    img.EndInit();
+                    return img;
+                } else {
+                    // fallback. use shell icon
+                    return ShellIcon(path);
+                }
+
+            }
+            else 
+            {
+                return new BitmapImage(new Uri(path));
+            }
         }
 
         private const int NAMESIZE = 80;
