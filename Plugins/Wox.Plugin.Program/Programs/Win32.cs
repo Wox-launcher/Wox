@@ -216,7 +216,14 @@ namespace Wox.Plugin.Program.Programs
                 {
                     foreach (var suffix in suffixes)
                     {
-                        files.AddRange(Directory.EnumerateFiles(currentDirectory, $"*.{suffix}", SearchOption.TopDirectoryOnly));
+                        try
+                        {
+                            files.AddRange(Directory.EnumerateFiles(currentDirectory, $"*.{suffix}", SearchOption.TopDirectoryOnly));
+                        }
+                        catch (Exception e) when (e is DirectoryNotFoundException)
+                        {
+                            continue;
+                        }
                     }
                 }
                 catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
