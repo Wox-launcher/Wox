@@ -10,7 +10,13 @@ class Wox(object):
     """
 
     def __init__(self):
-        rpc_request = json.loads(sys.argv[1])
+        if sys.stdin.isatty():
+            return self.run(sys.argv[1])
+        for request in sys.stdin:
+            self.run(request)
+
+    def run(self, request):
+        rpc_request = json.loads(request)
         # proxy is not working now
         self.proxy = rpc_request.get("proxy",{})
         request_method_name = rpc_request.get("method")
@@ -21,7 +27,9 @@ class Wox(object):
         results = request_method(*request_parameters)
 
         if request_method_name == "query" or request_method_name == "context_menu":
-            print(json.dumps({"result": results}))
+            print(json.dumps({"result": results}), end="")
+        print("")
+        sys.stdout.flush()
 
     def query(self,query):
         """
