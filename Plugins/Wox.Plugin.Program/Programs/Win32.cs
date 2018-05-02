@@ -222,6 +222,7 @@ namespace Wox.Plugin.Program.Programs
                         }
                         catch (DirectoryNotFoundException e)
                         {
+                            Log.Exception($"|Program.Win32.ProgramPaths|skip directory(<{currentDirectory}>)", e);
                             continue;
                         }
                     }
