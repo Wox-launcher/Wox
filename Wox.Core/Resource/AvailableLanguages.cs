@@ -16,7 +16,7 @@ namespace Wox.Core.Resource
         public static Language Danish = new Language("da", "Dansk");
         public static Language German = new Language("de", "Deutsch");
         public static Language Korean = new Language("ko", "한국어");
-		public static Language Portuguese_BR = new Language("pt-br", "Português (Brasil)");
+        public static Language Portuguese_BR = new Language("pt-br", "Português (Brasil)");
 
         public static List<Language> GetAvailableLanguages()
         {
