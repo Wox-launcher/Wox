@@ -38,7 +38,7 @@ namespace Wox.Core.Resource
                 Korean,
                 Serbian,
                 Portuguese_BR,
-				Italiano
+				Italian
             };
             return languages;
         }
