@@ -198,6 +198,43 @@ namespace Wox.Plugin.Everything
                 }
             }
 
+            var icoPath = (record.Type == ResultType.File) ? "Images\\file.png" : "Images\\folder.png";
+            contextMenus.Add(new Result
+            {
+                Title = "Copy as path",
+                Action = (context) =>
+                {
+                    Clipboard.SetText(record.FullPath);
+                    return true;
+                },
+                IcoPath = icoPath
+            });
+            contextMenus.Add(new Result
+            {
+                Title = "Copy",
+                Action = (context) =>
+                {
+                    Clipboard.SetFileDropList(new System.Collections.Specialized.StringCollection{record.FullPath});
+                    return true;
+                },
+                IcoPath = icoPath
+            });
+
+            if (record.Type == ResultType.File || record.Type == ResultType.Folder)
+                contextMenus.Add(new Result
+                {
+                    Title = "Delete",
+                    Action = (context) =>
+                    {
+                        if (record.Type == ResultType.File)
+                            System.IO.File.Delete(record.FullPath);
+                        else
+                            System.IO.Directory.Delete(record.FullPath);
+
+                        return true;
+                    },
+                    IcoPath = icoPath
+                });
             return contextMenus;
         }
 
