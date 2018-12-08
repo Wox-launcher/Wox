@@ -43,14 +43,25 @@ namespace Wox.Plugin.Folder
         public List<Result> Query(Query query)
         {
             string search = query.Search.ToLower();
+            bool datedFolder = false;
+            if (!string.IsNullOrEmpty(search))
+            {
+                var strs = search.Split('|');
+                if (strs.Length == 2 && strs[1] == "d")
+                {
+                    search = strs[0];
+                    datedFolder = true;
+                }
+            }
 
+            var today = DateTime.Today;
             List<FolderLink> userFolderLinks = _settings.FolderLinks.Where(
                 x => x.Nickname.StartsWith(search, StringComparison.OrdinalIgnoreCase)).ToList();
             List<Result> results =
                 userFolderLinks.Select(
                     item => new Result()
                     {
-                        Title = item.Nickname,
+                        Title = datedFolder ? $"{item.Nickname}\\{today:yyyy-MM-dd}" : item.Nickname,
                         IcoPath = item.Path,
                         SubTitle = "Ctrl + Enter to open the directory",
                         Action = c =>
@@ -59,7 +70,19 @@ namespace Wox.Plugin.Folder
                             {
                                 try
                                 {
-                                    Process.Start(item.Path);
+                                    if (datedFolder)
+                                    {
+                                        if (Directory.Exists(item.Path))
+                                        {
+                                            var datedFolderPath = Path.Combine(item.Path, today.ToString("yyyy-MM-dd"));
+                                            Directory.CreateDirectory(datedFolderPath);
+                                            Process.Start(datedFolderPath);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        Process.Start(item.Path);
+                                    }
                                     return true;
                                 }
                                 catch (Exception ex)
