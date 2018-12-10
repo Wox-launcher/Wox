@@ -91,7 +91,7 @@ namespace Wox.Plugin.Folder
                                     return false;
                                 }
                             }
-                            _context.API.ChangeQuery($"{query.ActionKeyword} {item.Path}{(item.Path.EndsWith("\\") ? "" : "\\")}");
+                            _context.API.ChangeQuery($"{query.ActionKeyword} {item.Path}{(item.Path.EndsWith("\\") ? "" : "\\")}{(datedFolder ? $"{today:yyyy-MM-dd}" : null)}");
                             return false;
                         },
                         ContextData = item,
