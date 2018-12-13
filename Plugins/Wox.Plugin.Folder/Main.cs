@@ -42,62 +42,15 @@ namespace Wox.Plugin.Folder
 
         public List<Result> Query(Query query)
         {
-            string search = query.Search.ToLower();
-            bool datedFolder = false;
-            if (!string.IsNullOrEmpty(search))
-            {
-                var strs = search.Split('|');
-                if (strs.Length == 2 && strs[1] == "d")
-                {
-                    search = strs[0];
-                    datedFolder = true;
-                }
-            }
+            var op = Operators.OperatorFactory.GetOperator(_context, query);
 
             var today = DateTime.Today;
             List<FolderLink> userFolderLinks = _settings.FolderLinks.Where(
-                x => x.Nickname.StartsWith(search, StringComparison.OrdinalIgnoreCase)).ToList();
+                x => x.Nickname.StartsWith(op.ActualSearch, StringComparison.OrdinalIgnoreCase)).ToList();
             List<Result> results =
-                userFolderLinks.Select(
-                    item => new Result()
-                    {
-                        Title = datedFolder ? $"{item.Nickname}\\{today:yyyy-MM-dd}" : item.Nickname,
-                        IcoPath = item.Path,
-                        SubTitle = "Ctrl + Enter to open the directory",
-                        Action = c =>
-                        {
-                            if (c.SpecialKeyState.CtrlPressed)
-                            {
-                                try
-                                {
-                                    if (datedFolder)
-                                    {
-                                        if (Directory.Exists(item.Path))
-                                        {
-                                            var datedFolderPath = Path.Combine(item.Path, today.ToString("yyyy-MM-dd"));
-                                            Directory.CreateDirectory(datedFolderPath);
-                                            Process.Start(datedFolderPath);
-                                        }
-                                    }
-                                    else
-                                    {
-                                        Process.Start(item.Path);
-                                    }
-                                    return true;
-                                }
-                                catch (Exception ex)
-                                {
-                                    MessageBox.Show(ex.Message, "Could not start " + item.Path);
-                                    return false;
-                                }
-                            }
-                            _context.API.ChangeQuery($"{query.ActionKeyword} {item.Path}{(item.Path.EndsWith("\\") ? "" : "\\")}{(datedFolder ? $"{today:yyyy-MM-dd}" : null)}");
-                            return false;
-                        },
-                        ContextData = item,
-                    }).ToList();
+                userFolderLinks.Select(op.GetResult).ToList();
 
-            if (_driverNames != null && !_driverNames.Any(search.StartsWith))
+            if (_driverNames != null && !_driverNames.Any(op.ActualSearch.StartsWith))
                 return results;
 
             //if (!input.EndsWith("\\"))

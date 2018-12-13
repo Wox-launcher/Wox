@@ -63,6 +63,11 @@
     <Compile Include="FolderPluginSettings.xaml.cs">
       <DependentUpon>FolderPluginSettings.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Operators\DatedOperator.cs" />
+    <Compile Include="Operators\DefaultOperator.cs" />
+    <Compile Include="Operators\IOperator.cs" />
+    <Compile Include="Operators\OperatorFactory.cs" />
+    <Compile Include="Operators\PSOperator.cs" />
     <Compile Include="Settings.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
