@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -49,6 +50,36 @@ namespace Wox.Plugin.Folder.Operators
                     return false;
                 },
                 ContextData = item,
+            };
+        }
+
+        public Result GetResult(DirectoryInfo dir)
+        {
+            return new Result
+            {
+                Title = dir.Name,
+                IcoPath = dir.FullName,
+                SubTitle = "Ctrl + Enter to open the directory",
+                Action = c =>
+                {
+                    if (c.SpecialKeyState.CtrlPressed)
+                    {
+                        try
+                        {
+                            var arg = $"-NoExit -Command \"Set-Location '{dir.FullName.Replace("\\", "\\\\")}'\"";
+                            Process.Start("powershell.exe", arg);
+                            return true;
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show(ex.Message, "Could not start " + dir.FullName);
+                            return false;
+                        }
+                    }
+
+                    _context.API.ChangeQuery($"{_query.ActionKeyword} {dir.FullName}\\");
+                    return false;
+                }
             };
         }
     }

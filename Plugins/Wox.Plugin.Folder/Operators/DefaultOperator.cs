@@ -51,5 +51,34 @@ namespace Wox.Plugin.Folder.Operators
                 ContextData = item,
             };
         }
+
+        public Result GetResult(DirectoryInfo dir)
+        {
+            return new Result
+            {
+                Title = dir.Name,
+                IcoPath = dir.FullName,
+                SubTitle = "Ctrl + Enter to open the directory",
+                Action = c =>
+                {
+                    if (c.SpecialKeyState.CtrlPressed)
+                    {
+                        try
+                        {
+                            Process.Start(dir.FullName);
+                            return true;
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show(ex.Message, "Could not start " + dir.FullName);
+                            return false;
+                        }
+                    }
+
+                    _context.API.ChangeQuery($"{_query.ActionKeyword} {dir.FullName}\\");
+                    return false;
+                }
+            };
+        }
     }
 }

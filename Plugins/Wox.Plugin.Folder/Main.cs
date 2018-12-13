@@ -44,7 +44,6 @@ namespace Wox.Plugin.Folder
         {
             var op = Operators.OperatorFactory.GetOperator(_context, query);
 
-            var today = DateTime.Today;
             List<FolderLink> userFolderLinks = _settings.FolderLinks.Where(
                 x => x.Nickname.StartsWith(op.ActualSearch, StringComparison.OrdinalIgnoreCase)).ToList();
             List<Result> results =
@@ -83,11 +82,13 @@ namespace Wox.Plugin.Folder
 
         private List<Result> QueryInternal_Directory_Exists(Query query)
         {
-            var search = query.Search.ToLower();
+            var op = Operators.OperatorFactory.GetOperator(_context, query);
+            var search = op.ActualSearch;
+
             var results = new List<Result>();
 
             string incompleteName = "";
-            if (!Directory.Exists(search + "\\"))
+            if (!Directory.Exists(op.ActualSearch + "\\"))
             {
                 //if the last component of the path is incomplete,
                 //then make auto complete for it.
@@ -111,18 +112,29 @@ namespace Wox.Plugin.Folder
 
             string firstResult = "Open current directory";
             if (incompleteName.Length > 0)
-                firstResult = "Open " + search;
-            results.Add(new Result
             {
-                Title = firstResult,
-                IcoPath = search,
-                Score = 10000,
-                Action = c =>
+                firstResult = "Open " + search;
+
+                results.Add(new Result
                 {
-                    Process.Start(search);
-                    return true;
-                }
-            });
+                    Title = firstResult,
+                    IcoPath = search,
+                    Score = 10000,
+                    Action = c =>
+                    {
+                        Process.Start(search);
+                        return true;
+                    }
+                });
+            }
+            else
+            {
+                var result = op.GetResult(new DirectoryInfo(search));
+                result.Score = 10000;
+                results.Add(result);
+
+            }
+            
 
             //Add children directories
             DirectoryInfo[] dirs = new DirectoryInfo(search).GetDirectories();
@@ -133,32 +145,7 @@ namespace Wox.Plugin.Folder
                 if (incompleteName.Length != 0 && !dir.Name.ToLower().StartsWith(incompleteName))
                     continue;
                 DirectoryInfo dirCopy = dir;
-                var result = new Result
-                {
-                    Title = dir.Name,
-                    IcoPath = dir.FullName,
-                    SubTitle = "Ctrl + Enter to open the directory",
-                    Action = c =>
-                    {
-                        if (c.SpecialKeyState.CtrlPressed)
-                        {
-                            try
-                            {
-                                Process.Start(dirCopy.FullName);
-                                return true;
-                            }
-                            catch (Exception ex)
-                            {
-                                MessageBox.Show(ex.Message, "Could not start " + dirCopy.FullName);
-                                return false;
-                            }
-                        }
-                        _context.API.ChangeQuery($"{query.ActionKeyword} {dirCopy.FullName}\\");
-                        return false;
-                    }
-                };
-
-                results.Add(result);
+                results.Add(op.GetResult(dirCopy));
             }
 
             //Add children files
