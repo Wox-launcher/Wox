@@ -128,7 +128,7 @@ namespace Wox.Plugin.Folder
             }
             else
             {
-                var result = op.GetResult(new DirectoryInfo(search));
+                var result = op.GetResult(new DirectoryInfo(search), true);
                 result.Score = 10000;
                 results.Add(result);
 
@@ -144,7 +144,7 @@ namespace Wox.Plugin.Folder
                 if (incompleteName.Length != 0 && !dir.Name.ToLower().StartsWith(incompleteName))
                     continue;
                 DirectoryInfo dirCopy = dir;
-                results.Add(op.GetResult(dirCopy));
+                results.Add(op.GetResult(dirCopy, false));
             }
 
             //Add children files

@@ -11,6 +11,6 @@ namespace Wox.Plugin.Folder.Operators
     {
         string ActualSearch { get; }
         Result GetResult(FolderLink item);
-        Result GetResult(DirectoryInfo dir);
+        Result GetResult(DirectoryInfo dir, bool openByEnter);
     }
 }

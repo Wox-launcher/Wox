@@ -53,7 +53,7 @@ namespace Wox.Plugin.Folder.Operators
             };
         }
 
-        public Result GetResult(DirectoryInfo dir)
+        public Result GetResult(DirectoryInfo dir, bool openByEnter)
         {
             return new Result
             {
@@ -62,7 +62,7 @@ namespace Wox.Plugin.Folder.Operators
                 SubTitle = "Ctrl + Enter to open the directory",
                 Action = c =>
                 {
-                    if (c.SpecialKeyState.CtrlPressed)
+                    if (c.SpecialKeyState.CtrlPressed || openByEnter)
                     {
                         try
                         {
@@ -77,7 +77,7 @@ namespace Wox.Plugin.Folder.Operators
                         }
                     }
 
-                    _context.API.ChangeQuery($"{_query.ActionKeyword} {dir.FullName}\\");
+                    _context.API.ChangeQuery($"{_query.ActionKeyword} {dir.FullName}");
                     return false;
                 }
             };
