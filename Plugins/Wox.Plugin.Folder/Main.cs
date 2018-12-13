@@ -110,10 +110,9 @@ namespace Wox.Plugin.Folder
                     search += "\\";
             }
 
-            string firstResult = "Open current directory";
             if (incompleteName.Length > 0)
             {
-                firstResult = "Open " + search;
+                var firstResult = "Open " + search;
 
                 results.Add(new Result
                 {

@@ -28,14 +28,14 @@ namespace Wox.Plugin.Folder.Operators
             {
                 Title = item.Nickname,
                 IcoPath = item.Path,
-                SubTitle = "Ctrl + Enter to open the directory in Power Shell",
+                SubTitle = "Ctrl + Enter to open the directory in console",
                 Action = c =>
                 {
                     if (c.SpecialKeyState.CtrlPressed)
                     {
                         try
                         {
-                            var arg = $"\"{item.Path}\"";
+                            var arg = $"/k \"cd /d {item.Path}\"";
                             Process.Start("cmd.exe", arg);
                             return true;
                         }
@@ -66,7 +66,7 @@ namespace Wox.Plugin.Folder.Operators
                     {
                         try
                         {
-                            var arg = $"\"{dir.FullName}\"";
+                            var arg = $"/k \"cd /d {dir.FullName}\"";
                             Process.Start("cmd.exe", arg);
                             return true;
                         }
