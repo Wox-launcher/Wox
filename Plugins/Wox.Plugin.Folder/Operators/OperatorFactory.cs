@@ -22,6 +22,8 @@ namespace Wox.Plugin.Folder.Operators
                         return new DatedOperator(context, query, actualSearch);
                     case "ps":
                         return new PSOperator(context, query, actualSearch);
+                    case "cmd":
+                        return new CMDOperator(context, query, actualSearch);
                 }
             }
 
