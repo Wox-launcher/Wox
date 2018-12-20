@@ -105,7 +105,7 @@ namespace Wox.Plugin.Url
 
         public Control CreateSettingPanel()
         {
-            return new SettingsControl(_settings);
+            return new SettingsControl(context.API,_settings);
         }
 
         public bool IsURL(string raw)

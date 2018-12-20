@@ -23,10 +23,13 @@ namespace Wox.Plugin.Url
     public partial class SettingsControl : UserControl
     {
         private Settings _settings;
-        public SettingsControl(Settings settings)
+        private IPublicAPI _woxAPI;
+
+        public SettingsControl(IPublicAPI woxAPI,Settings settings)
         {
             InitializeComponent();
             _settings = settings;
+            _woxAPI = woxAPI;
             browserPathBox.Text = _settings.BrowserPath;
         }
 
@@ -38,7 +41,7 @@ namespace Wox.Plugin.Url
         private void OnChooseClick(object sender, RoutedEventArgs e)
         {
             var fileBrowserDialog = new OpenFileDialog();
-            fileBrowserDialog.Filter = "程序文件(*.exe)|*.exe|所有文件|*.*";
+            fileBrowserDialog.Filter = _woxAPI.GetTranslation("wox_plugin_url_plugin_filter"); ;
             fileBrowserDialog.CheckFileExists = true;
             fileBrowserDialog.CheckPathExists = true;
             if (fileBrowserDialog.ShowDialog() == true)
