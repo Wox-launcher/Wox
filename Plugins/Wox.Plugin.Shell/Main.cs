@@ -239,7 +239,7 @@ namespace Wox.Plugin.Shell
                 _settings.AddCmdHistory(command);
             }
             catch (Exception e) when (e is FileNotFoundException
-                                      // Can't fine file specified, can't find file specified. As per https://msdn.microsoft.com/en-us/library/cc231199.aspx
+                                      // Can't find file specified, can't find file specified. As per https://msdn.microsoft.com/en-us/library/cc231199.aspx
                                       || e is Win32Exception w32e && (w32e.NativeErrorCode == 0x00000002 || w32e.NativeErrorCode == 0x00000003))
             {
                 MessageBox.Show($"Command not found: {e.Message}");
