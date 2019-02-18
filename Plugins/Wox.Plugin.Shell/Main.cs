@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -237,7 +238,9 @@ namespace Wox.Plugin.Shell
                 Process.Start(info);
                 _settings.AddCmdHistory(command);
             }
-            catch (FileNotFoundException e)
+            catch (Exception e) when (e is FileNotFoundException
+                                      // Can't fine file specified, can't find file specified. As per https://msdn.microsoft.com/en-us/library/cc231199.aspx
+                                      || e is Win32Exception w32e && (w32e.NativeErrorCode == 0x00000002 || w32e.NativeErrorCode == 0x00000003))
             {
                 MessageBox.Show($"Command not found: {e.Message}");
             }
