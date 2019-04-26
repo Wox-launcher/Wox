@@ -7,13 +7,29 @@ namespace Wox.Infrastructure
 {
     public static class Constant
     {
+
+        public static string DetermineDataDirectory()
+        {
+            // use the method of VSCode to enable portable mode
+            // https://code.visualstudio.com/docs/editor/portable
+            string portableDataPath = Path.Combine(ProgramDirectory, "data");
+            if (Directory.Exists(portableDataPath))
+            {
+                return portableDataPath;
+            }
+            else
+            {
+                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Wox);
+            }
+        }
+
         public const string Wox = "Wox";
         public const string Plugins = "Plugins";
 
         private static readonly Assembly Assembly = Assembly.GetExecutingAssembly();
         public static readonly string ProgramDirectory = Directory.GetParent(Assembly.Location.NonNull()).ToString();
         public static readonly string ExecutablePath = Path.Combine(ProgramDirectory, Wox + ".exe");
-        public static readonly string DataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Wox);
+        public static readonly string DataDirectory = DetermineDataDirectory();
         public static readonly string PluginsDirectory = Path.Combine(DataDirectory, Plugins);
         public static readonly string PreinstalledDirectory = Path.Combine(ProgramDirectory, Plugins);
         public const string Repository = "https://github.com/Wox-launcher/Wox";

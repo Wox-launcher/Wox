@@ -22,8 +22,7 @@ namespace Wox.Infrastructure.Logger
             var configuration = new LoggingConfiguration();
             var target = new FileTarget();
             configuration.AddTarget("file", target);
-            target.FileName = "${specialfolder:folder=ApplicationData}/" + Constant.Wox + "/" + DirectoryName + "/" +
-                              Constant.Version + "/${shortdate}.txt";
+            target.FileName = path.Replace(@"\", "/") + "/${shortdate}.txt";
 #if DEBUG
             var rule = new LoggingRule("*", LogLevel.Debug, target);
 #else
@@ -105,7 +104,7 @@ namespace Wox.Infrastructure.Logger
             }
 #endif
         }
-        
+
         /// <param name="message">example: "|prefix|unprefixed" </param>
         public static void Debug(string message)
         {
