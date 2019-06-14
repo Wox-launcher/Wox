@@ -7,7 +7,7 @@
   <system:String x:Key="cancelTopMostInThisQuery">Cancelar más arriba en esta consulta</system:String>
   <system:String x:Key="executeQuery">Consulta de ejecución: {0}</system:String>
   <system:String x:Key="lastExecuteTime">Último tiempo de ejecución: {0}</system:String>
-  <system:String x:Key="iconTrayOpen">Abierto</system:String>
+  <system:String x:Key="iconTrayOpen">Abrir</system:String>
   <system:String x:Key="iconTraySettings">Ajustes</system:String>
   <system:String x:Key="iconTrayAbout">Acerca de</system:String>
   <system:String x:Key="iconTrayExit">Salida</system:String>
