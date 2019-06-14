@@ -31,7 +31,7 @@
   <system:String x:Key="hideOnStartup">Ocultar Wox en el inicio</system:String>
   <system:String x:Key="hideNotifyIcon">Ocultar icono de bandeja</system:String>
   <!--Setting Plugin-->
-  <system:String x:Key="plugin">Enchufar</system:String>
+  <system:String x:Key="plugin">Plugins</system:String>
   <system:String x:Key="browserMorePlugins">Encuentra más complementos</system:String>
   <system:String x:Key="disable">Inhabilitar</system:String>
   <system:String x:Key="actionKeywords">Palabras clave de acción</system:String>
@@ -93,7 +93,7 @@ Error al descargar las actualizaciones, verifique su conexión y la configuraci�
   <system:String x:Key="cannotFindSpecifiedPlugin">No puedo encontrar el plugin especificado</system:String>
   <system:String x:Key="newActionKeywordsCannotBeEmpty">La nueva palabra clave de acción no puede estar vacía</system:String>
   <system:String x:Key="newActionKeywordsHasBeenAssigned">Se han asignado nuevas palabras clave de acción a otro complemento, asigne otra palabra clave de acción nueva</system:String>
-  <system:String x:Key="succeed">Tener éxito</system:String>
+  <system:String x:Key="succeed">Listo!</system:String>
   <system:String x:Key="actionkeyword_tips">Utilice * si no desea especificar una palabra clave de acción</system:String>
   <!--Custom Query Hotkey Dialog-->
   <system:String x:Key="preview">Avance</system:String>
@@ -112,7 +112,7 @@ Error al descargar las actualizaciones, verifique su conexión y la configuraci�
   <system:String x:Key="reportWindow_exceptions">Excepciones</system:String>
   <system:String x:Key="reportWindow_exception_type">Tipo de excepción</system:String>
   <system:String x:Key="reportWindow_source">Fuente</system:String>
-  <system:String x:Key="reportWindow_stack_trace">Traza de pila</system:String>
+  <system:String x:Key="reportWindow_stack_trace">Stack trace</system:String>
   <system:String x:Key="reportWindow_sending">Enviando</system:String>
   <system:String x:Key="reportWindow_report_succeed">Informe enviado correctamente</system:String>
   <system:String x:Key="reportWindow_report_failed">Error al enviar el informe</system:String>
