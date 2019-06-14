@@ -10,7 +10,7 @@
   <system:String x:Key="iconTrayOpen">Abrir</system:String>
   <system:String x:Key="iconTraySettings">Ajustes</system:String>
   <system:String x:Key="iconTrayAbout">Acerca de</system:String>
-  <system:String x:Key="iconTrayExit">Salida</system:String>
+  <system:String x:Key="iconTrayExit">Salir</system:String>
   <!--Setting General-->
   <system:String x:Key="wox_settings">Configuraciones Wox</system:String>
   <system:String x:Key="general">General</system:String>
