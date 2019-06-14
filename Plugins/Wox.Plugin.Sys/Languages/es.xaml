@@ -1,0 +1,33 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">
+    <system:String x:Key="wox_plugin_sys_command">Comando</system:String>
+    <system:String x:Key="wox_plugin_sys_desc">Descripción</system:String>
+
+    <system:String x:Key="wox_plugin_sys_shutdown_computer_command">Apagar</system:String>
+    <system:String x:Key="wox_plugin_sys_restart_computer_command">Reiniciar</system:String>
+    <system:String x:Key="wox_plugin_sys_log_off_command">Desconectarse</system:String>
+    <system:String x:Key="wox_plugin_sys_lock_command">Bloquear</system:String>
+    <system:String x:Key="wox_plugin_sys_exit_command">Salida</system:String>
+    <system:String x:Key="wox_plugin_sys_restart_command">Reiniciar Wox</system:String>
+    <system:String x:Key="wox_plugin_sys_setting_command">Ajustes</system:String>
+    <system:String x:Key="wox_plugin_sys_sleep_command">Suspender</system:String>
+    <system:String x:Key="wox_plugin_sys_hibernate_command">Hibernar</system:String>
+    <system:String x:Key="wox_plugin_sys_emptyrecyclebin_command">Vaciar papelera de reciclaje</system:String>
+
+    <system:String x:Key="wox_plugin_sys_shutdown_computer">Apagar la computadora</system:String>
+    <system:String x:Key="wox_plugin_sys_restart_computer">Reiniciar la computadora</system:String>
+    <system:String x:Key="wox_plugin_sys_log_off">Cerrar sesión</system:String>
+    <system:String x:Key="wox_plugin_sys_lock">Bloquea ésta computadora</system:String>
+    <system:String x:Key="wox_plugin_sys_exit">Cerrar wox</system:String>
+    <system:String x:Key="wox_plugin_sys_restart">Reiniciar wox</system:String>
+    <system:String x:Key="wox_plugin_sys_setting">Configurar esta aplicación</system:String>
+    <system:String x:Key="wox_plugin_sys_sleep">Suspende el ordenador</system:String>
+    <system:String x:Key="wox_plugin_sys_hibernate">Hibernar ordenador</system:String>
+    <system:String x:Key="wox_plugin_sys_emptyrecyclebin">Vaciar papelera de reciclaje</system:String>
+
+    <system:String x:Key="wox_plugin_sys_confirm_shutdown">¿Estás seguro de que quieres apagar el ordenador?</system:String>
+    <system:String x:Key="wox_plugin_sys_confirm_restart">¿Estás seguro de que deseas reiniciar el ordenador?</system:String>
+
+    <system:String x:Key="wox_plugin_sys_plugin_name">Comandos del sistema</system:String>
+    <system:String x:Key="wox_plugin_sys_plugin_description">Proporciona comandos relacionados con el sistema.  p.ej.  apagado, bloqueo, ajustes etc.</system:String>
+
+</ResourceDictionary>
