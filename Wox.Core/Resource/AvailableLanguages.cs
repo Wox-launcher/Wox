@@ -21,6 +21,7 @@ namespace Wox.Core.Resource
 	public static Language Italian = new Language("it", "Italiano");
         public static Language Norwegian_Bokmal = new Language("nb-NO", "Norsk Bokmål");
         public static Language Slovak = new Language("sk", "Slovenský");
+        public static Language Espanol = new Language("es", "Español");
 
         public static List<Language> GetAvailableLanguages()
         {
@@ -43,6 +44,7 @@ namespace Wox.Core.Resource
 		Italian,
                 Norwegian_Bokmal,
 		Slovak
+		        Espanol
             };
             return languages;
         }
