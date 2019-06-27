@@ -80,14 +80,14 @@ namespace Wox.Plugin.Sys
             {
                 new Result
                 {
-                    Title = "Shutdown",
+                    Title = context.API.GetTranslation("wox_plugin_sys_shutdown_computer_command"),
                     SubTitle = context.API.GetTranslation("wox_plugin_sys_shutdown_computer"),
                     IcoPath = "Images\\shutdown.png",
                     Action = c =>
                     {
-                        var reuslt = MessageBox.Show("Are you sure you want to shut the computer down?",
+                        var result = MessageBox.Show(context.API.GetTranslation("wox_plugin_sys_confirm_shutdown"),
                                                      "Shutdown Computer?", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                        if (reuslt == MessageBoxResult.Yes)
+                        if (result == MessageBoxResult.Yes)
                         {
                             Process.Start("shutdown", "/s /t 0");
                         }
@@ -96,12 +96,12 @@ namespace Wox.Plugin.Sys
                 },
                 new Result
                 {
-                    Title = "Restart",
+                    Title = context.API.GetTranslation("wox_plugin_sys_restart_computer_command"),
                     SubTitle = context.API.GetTranslation("wox_plugin_sys_restart_computer"),
                     IcoPath = "Images\\restart.png",
                     Action = c =>
                     {
-                        var result = MessageBox.Show("Are you sure you want to restart the computer?",
+                        var result = MessageBox.Show(context.API.GetTranslation("wox_plugin_sys_confirm_restart"),
                                                      "Restart Computer?", MessageBoxButton.YesNo, MessageBoxImage.Warning);
                         if (result == MessageBoxResult.Yes)
                         {
@@ -112,14 +112,14 @@ namespace Wox.Plugin.Sys
                 },
                 new Result
                 {
-                    Title = "Log off",
+                    Title = context.API.GetTranslation("wox_plugin_sys_log_off_command"),
                     SubTitle = context.API.GetTranslation("wox_plugin_sys_log_off"),
                     IcoPath = "Images\\logoff.png",
                     Action = c => ExitWindowsEx(EWX_LOGOFF, 0)
                 },
                 new Result
                 {
-                    Title = "Lock",
+                    Title = context.API.GetTranslation("wox_plugin_sys_lock_command"),
                     SubTitle = context.API.GetTranslation("wox_plugin_sys_lock"),
                     IcoPath = "Images\\lock.png",
                     Action = c =>
@@ -130,14 +130,21 @@ namespace Wox.Plugin.Sys
                 },
                 new Result
                 {
-                    Title = "Sleep",
+                    Title = context.API.GetTranslation("wox_plugin_sys_sleep_command"),
                     SubTitle = context.API.GetTranslation("wox_plugin_sys_sleep"),
                     IcoPath = "Images\\sleep.png",
                     Action = c => FormsApplication.SetSuspendState(PowerState.Suspend, false, false)
                 },
                 new Result
                 {
-                    Title = "Empty Recycle Bin",
+                    Title = context.API.GetTranslation("wox_plugin_sys_hibernate_command"),
+                    SubTitle = context.API.GetTranslation("wox_plugin_sys_hibernate"),
+                    IcoPath = "Images\\sleep.png", // Icon change needed
+                    Action = c => FormsApplication.SetSuspendState(PowerState.Hibernate, false, false)
+                },
+                new Result
+                {
+                    Title = context.API.GetTranslation("wox_plugin_sys_emptyrecyclebin_command"),
                     SubTitle = context.API.GetTranslation("wox_plugin_sys_emptyrecyclebin"),
                     IcoPath = "Images\\recyclebin.png",
                     Action = c =>
@@ -158,7 +165,7 @@ namespace Wox.Plugin.Sys
                 },
                 new Result
                 {
-                    Title = "Exit",
+                    Title = context.API.GetTranslation("wox_plugin_sys_exit_command"),
                     SubTitle = context.API.GetTranslation("wox_plugin_sys_exit"),
                     IcoPath = "Images\\app.png",
                     Action = c =>
@@ -169,7 +176,7 @@ namespace Wox.Plugin.Sys
                 },
                 new Result
                 {
-                    Title = "Restart Wox",
+                    Title = context.API.GetTranslation("wox_plugin_sys_restart_command"),
                     SubTitle = context.API.GetTranslation("wox_plugin_sys_restart"),
                     IcoPath = "Images\\app.png",
                     Action = c =>
@@ -180,7 +187,7 @@ namespace Wox.Plugin.Sys
                 },
                 new Result
                 {
-                    Title = "Settings",
+                    Title = context.API.GetTranslation("wox_plugin_sys_setting_command"),
                     SubTitle = context.API.GetTranslation("wox_plugin_sys_setting"),
                     IcoPath = "Images\\app.png",
                     Action = c =>
