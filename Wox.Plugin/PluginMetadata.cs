@@ -38,6 +38,8 @@ namespace Wox.Plugin
 
         public string IcoPath { get; set;}
 
+        public bool KeepResultOrder { get; set; }
+
         public override string ToString()
         {
             return Name;

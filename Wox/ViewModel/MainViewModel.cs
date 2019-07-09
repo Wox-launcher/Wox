@@ -667,7 +667,7 @@ namespace Wox.ViewModel
 
             if (originQuery.RawQuery == _lastQuery.RawQuery)
             {
-                Results.AddResults(list, metadata.ID);
+                Results.AddResults(list, metadata.ID, metadata.KeepResultOrder);
             }
 
             if (Results.Visbility != Visibility.Visible && list.Count > 0)
