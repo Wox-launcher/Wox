@@ -41,9 +41,9 @@ namespace Wox.Core.Resource
                 Korean,
                 Serbian,
                 Portuguese_BR,
-		Italian,
+		        Italian,
                 Norwegian_Bokmal,
-		Slovak
+		        Slovak,
 		        Espanol
             };
             return languages;
