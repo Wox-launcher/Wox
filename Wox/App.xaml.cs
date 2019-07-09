@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Timers;
 using System.Windows;
+using System.Collections.Generic;
 using Wox.Core;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
@@ -14,6 +15,7 @@ using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.UserSettings;
 using Wox.ViewModel;
 using Stopwatch = Wox.Infrastructure.Stopwatch;
+using CommandLine;
 
 namespace Wox
 {
@@ -25,6 +27,25 @@ namespace Wox
         private Settings _settings;
         private MainViewModel _mainVM;
         private SettingWindowViewModel _settingsVM;
+
+        private class Options
+        {
+            [Option('q', "query", Required = false, HelpText = "Specify text to query on startup.")]
+            public string QueryText { get; set; }
+        }
+
+        private void ParseCommandLineArgs(IList<string> args)
+        {
+            if (args == null)
+                return;
+
+            Parser.Default.ParseArguments<Options>(args)
+                .WithParsed(o =>
+                {
+                    if (o.QueryText != null && _mainVM != null)
+                        _mainVM.ChangeQueryText(o.QueryText);
+                });
+        }
 
         [STAThread]
         public static void Main()
@@ -79,6 +100,7 @@ namespace Wox
                 AutoStartup();
                 AutoUpdates();
 
+                ParseCommandLineArgs(SingleInstance<App>.CommandLineArgs);
                 _mainVM.MainWindowVisibility = _settings.HideOnStartup ? Visibility.Hidden : Visibility.Visible;
                 Log.Info("|App.OnStartup|End Wox startup ----------------------------------------------------  ");
             });
@@ -164,8 +186,9 @@ namespace Wox
             }
         }
 
-        public void OnSecondAppStarted()
+        public void OnSecondAppStarted(IList<string> args)
         {
+            ParseCommandLineArgs(args);
             Current.MainWindow.Visibility = Visibility.Visible;
         }
     }
