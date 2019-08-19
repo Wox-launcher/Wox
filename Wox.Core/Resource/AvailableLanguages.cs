@@ -43,7 +43,7 @@ namespace Wox.Core.Resource
                 Portuguese_BR,
 		Italian,
                 Norwegian_Bokmal,
-		Slovak
+		Slovak,
 		        Espanol
             };
             return languages;
