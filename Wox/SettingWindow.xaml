@@ -144,7 +144,7 @@
                                         <ColumnDefinition />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="{Binding PluginPair.Metadata.Name}"
-                                               ToolTip="{Binding PluginPair.Metadata.Name}"
+                                               ToolTip="{Binding PluginPair.Metadata.Version}"
                                                Grid.Column="0"
                                                Cursor="Hand" MouseUp="OnPluginNameClick" FontSize="24"
                                                HorizontalAlignment="Left" />
