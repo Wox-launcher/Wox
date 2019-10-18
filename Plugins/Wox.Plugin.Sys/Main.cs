@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -56,8 +56,8 @@ namespace Wox.Plugin.Sys
             var results = new List<Result>();
             foreach (var c in commands)
             {
-                var titleScore = StringMatcher.Score(c.Title, query.Search);
-                var subTitleScore = StringMatcher.Score(c.SubTitle, query.Search);
+                var titleScore = StringMatcher.FuzzySearch(query.Search, c.Title).ScoreAfterSearchPrecisionFilter();
+                var subTitleScore = StringMatcher.FuzzySearch(query.Search, c.SubTitle).ScoreAfterSearchPrecisionFilter();
                 var score = Math.Max(titleScore, subTitleScore);
                 if (score > 0)
                 {
