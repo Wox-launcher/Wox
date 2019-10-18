@@ -22,7 +22,18 @@ namespace Wox.Infrastructure.UserSettings
         public string ResultFontStretch { get; set; }
 
         public bool AutoUpdates { get; set; } = true;
-
+		
+		private string _querySearchPrecision { get; set; } = StringMatcher.SearchPrecisionScore.Regular.ToString();
+        public string QuerySearchPrecision
+        {
+            get { return _querySearchPrecision; }
+            set
+            {
+                _querySearchPrecision = value;
+                StringMatcher.UserSettingSearchPrecision = value;
+            }
+        }
+		
         public double WindowLeft { get; set; }
         public double WindowTop { get; set; }
         public int MaxResultsToShow { get; set; } = 6;
