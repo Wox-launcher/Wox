@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -28,7 +28,8 @@ namespace Wox.Plugin.Caculator
 
         public List<Result> Query(Query query)
         {
-            if (query.Search.Length <= 2          // don't affect when user only input "e" or "i" keyword
+            // Don't affect when user only input "e" or "i" keyword
+            if (query.Search.Length <= 2          
                 || !RegValidExpressChar.IsMatch(query.Search)
                 || !IsBracketComplete(query.Search)) return new List<Result>();
 
@@ -42,7 +43,6 @@ namespace Wox.Plugin.Caculator
 
                 if (result is Function)
                     result = Context.API.GetTranslation("wox_plugin_calculator_expression_not_complete");
-
 
                 if (!string.IsNullOrEmpty(result?.ToString()))
                 {
