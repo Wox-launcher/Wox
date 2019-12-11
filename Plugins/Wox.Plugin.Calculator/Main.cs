@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -34,7 +34,8 @@ namespace Wox.Plugin.Caculator
 
             try
             {
-                var result = MagesEngine.Interpret(query.Search);
+                var expression = query.Search.Replace(",", ".");
+                var result = MagesEngine.Interpret(expression);
 
                 if (result.ToString() == "NaN")
                     result = Context.API.GetTranslation("wox_plugin_calculator_not_a_number");
