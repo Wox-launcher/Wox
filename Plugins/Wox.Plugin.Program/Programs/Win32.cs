@@ -265,7 +265,7 @@ namespace Wox.Plugin.Program.Programs
             var paths = sources.Where(s => Directory.Exists(s.Location))
                                .SelectMany(s => ProgramPaths(s.Location, suffixes))
                                .ToArray();
-            var programs1 = paths.AsParallel().Where(p => Extension(p) == ExeExtension).Select(ExeProgram);
+            var programs1 = paths.AsParallel().Where(p => Extension(p) == ExeExtension).Select(LnkProgram);
             var programs2 = paths.AsParallel().Where(p => Extension(p) == ShortcutExtension).Select(ExeProgram);
             var programs3 = from p in paths.AsParallel()
                             let e = Extension(p)
