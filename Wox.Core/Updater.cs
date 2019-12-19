@@ -94,7 +94,7 @@ namespace Wox.Core
         {
             var uri = new Uri(repository);
             var api = $"https://api.github.com/repos{uri.AbsolutePath}/releases";
-
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
             var json = await Http.Get(api);
 
             var releases = JsonConvert.DeserializeObject<List<GithubRelease>>(json);
