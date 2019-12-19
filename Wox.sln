@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 14
-VisualStudioVersion = 14.0.25420.1
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.168
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Wox.Test", "Wox.Test\Wox.Test.csproj", "{FF742965-9A80-41A5-B042-D6C7D3A21708}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -316,5 +316,8 @@ Global
 		{03FFA443-5F50-48D5-8869-F3DF316803AA} = {3A73F5A7-0335-40D8-BF7C-F20BE5D0BA87}
 		{C21BFF9C-2C99-4B5F-B7C9-A5E6DDDB37B0} = {3A73F5A7-0335-40D8-BF7C-F20BE5D0BA87}
 		{59BD9891-3837-438A-958D-ADC7F91F6F7E} = {3A73F5A7-0335-40D8-BF7C-F20BE5D0BA87}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {EC37581C-280A-4D31-B60F-C6B95EB031B9}
 	EndGlobalSection
 EndGlobal
