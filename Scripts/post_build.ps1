@@ -6,7 +6,7 @@ Write-Host "Config: $config"
 
 function Build-Version {
     if ([string]::IsNullOrEmpty($env:APPVEYOR_BUILD_VERSION)) {
-        $v = "1.2.0"
+        $v = "1.4.0"
     } else {
         $v = $env:APPVEYOR_BUILD_VERSION
     }
