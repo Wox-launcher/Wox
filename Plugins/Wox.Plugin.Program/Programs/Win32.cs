@@ -343,7 +343,7 @@ namespace Wox.Plugin.Program.Programs
             var paths = listToAdd.Distinct().ToArray();
 
             var programs1 = paths.AsParallel().Where(p => Extension(p) == ExeExtension).Select(ExeProgram);
-            var programs2 = paths.AsParallel().Where(p => Extension(p) == ShortcutExtension).Select(ExeProgram);
+            var programs2 = paths.AsParallel().Where(p => Extension(p) == ShortcutExtension).Select(LnkProgram);
             var programs3 = from p in paths.AsParallel()
                             let e = Extension(p)
                             where e != ShortcutExtension && e != ExeExtension
