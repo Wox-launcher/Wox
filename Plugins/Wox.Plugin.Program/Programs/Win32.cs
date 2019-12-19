@@ -145,26 +145,35 @@ namespace Wox.Plugin.Program.Programs
                 var hwnd = new _RemotableHandle();
                 link.Resolve(ref hwnd, 0);
 
-                const int MAX_PATH = 260;
-                StringBuilder buffer = new StringBuilder(MAX_PATH);
-
-                var data = new _WIN32_FIND_DATAW();
-                const uint SLGP_SHORTPATH = 1;
-                link.GetPath(buffer, buffer.Capacity, ref data, SLGP_SHORTPATH);
-                var target = buffer.ToString();
-                if (!string.IsNullOrEmpty(target))
+                const int MAX_DESCRIPTION = 150;
+                StringBuilder bufferDescription = new StringBuilder(MAX_DESCRIPTION);
+                String description = String.Empty;
+                try
                 {
-                    var extension = Extension(target);
-                    if (extension == ExeExtension && File.Exists(target))
+                    link.GetDescription(bufferDescription, MAX_DESCRIPTION);
+                }
+                catch (COMException e)
+                {
+                    Log.Error($"|Win32.LnkProgram|cannot get description <{path}>. HResult: <{e.HResult}>. Exception: <{e}>.");
+                    bufferDescription.Clear();
+                }
+                description = bufferDescription.ToString();
+                if (!string.IsNullOrEmpty(description))
+                {
+                    program.Description = description;
+                }
+                else
+                {
+                    const int MAX_PATH = 260;
+                    StringBuilder bufferPath = new StringBuilder(MAX_PATH);
+                    var data = new _WIN32_FIND_DATAW();
+                    const uint SLGP_SHORTPATH = 1;
+                    link.GetPath(bufferPath, bufferPath.Capacity, ref data, SLGP_SHORTPATH);
+                    var target = bufferPath.ToString();
+                    if (!string.IsNullOrEmpty(target))
                     {
-                        buffer = new StringBuilder(MAX_PATH);
-                        link.GetDescription(buffer, MAX_PATH);
-                        var description = buffer.ToString();
-                        if (!string.IsNullOrEmpty(description))
-                        {
-                            program.Description = description;
-                        }
-                        else
+                        var extension = Extension(target);
+                        if (extension == ExeExtension && File.Exists(target))
                         {
                             var info = FileVersionInfo.GetVersionInfo(target);
                             if (!string.IsNullOrEmpty(info.FileDescription))
@@ -176,13 +185,7 @@ namespace Wox.Plugin.Program.Programs
                 }
                 return program;
             }
-            catch (COMException e)
-            {
-                // C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\MiracastView.lnk always cause exception
-                Log.Exception($"|Win32.LnkProgram|COMException when parsing shortcut <{path}> with HResult <{e.HResult}>", e);
-                program.Valid = false;
-                return program;
-            }
+
             catch (Exception e)
             {
                 Log.Exception($"|Win32.LnkProgram|Exception when parsing shortcut <{path}>", e);
