@@ -59,9 +59,57 @@
     <Compile Include="UrlPluginTest.cs" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Plugins\HelloWorldCSharp\HelloWorldCSharp.csproj">
+      <Project>{03ffa443-5f50-48d5-8869-f3df316803aa}</Project>
+      <Name>HelloWorldCSharp</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Plugins\Wox.Plugin.Calculator\Wox.Plugin.Calculator.csproj">
+      <Project>{59bd9891-3837-438a-958d-adc7f91f6f7e}</Project>
+      <Name>Wox.Plugin.Calculator</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Plugins\Wox.Plugin.Color\Wox.Plugin.Color.csproj">
+      <Project>{f35190aa-4758-4d9e-a193-e3bdf6ad3567}</Project>
+      <Name>Wox.Plugin.Color</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Plugins\Wox.Plugin.ControlPanel\Wox.Plugin.ControlPanel.csproj">
+      <Project>{1ee20b48-82fb-48a2-8086-675d6ddab4f0}</Project>
+      <Name>Wox.Plugin.ControlPanel</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Plugins\Wox.Plugin.Everything\Wox.Plugin.Everything.csproj">
+      <Project>{230ae83f-e92e-4e69-8355-426b305da9c0}</Project>
+      <Name>Wox.Plugin.Everything</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Plugins\Wox.Plugin.Folder\Wox.Plugin.Folder.csproj">
+      <Project>{787b8aa6-ca93-4c84-96fe-df31110ad1c4}</Project>
+      <Name>Wox.Plugin.Folder</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Plugins\Wox.Plugin.PluginIndicator\Wox.Plugin.PluginIndicator.csproj">
+      <Project>{fded22c8-b637-42e8-824a-63b5b6e05a3a}</Project>
+      <Name>Wox.Plugin.PluginIndicator</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Plugins\Wox.Plugin.PluginManagement\Wox.Plugin.PluginManagement.csproj">
+      <Project>{049490f0-ecd2-4148-9b39-2135ec346ebe}</Project>
+      <Name>Wox.Plugin.PluginManagement</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Plugins\Wox.Plugin.Program\Wox.Plugin.Program.csproj">
+      <Project>{fdb3555b-58ef-4ae6-b5f1-904719637ab4}</Project>
+      <Name>Wox.Plugin.Program</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Plugins\Wox.Plugin.Shell\Wox.Plugin.Shell.csproj">
+      <Project>{c21bff9c-2c99-4b5f-b7c9-a5e6dddb37b0}</Project>
+      <Name>Wox.Plugin.Shell</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Plugins\Wox.Plugin.Sys\Wox.Plugin.Sys.csproj">
+      <Project>{0b9de348-9361-4940-adb6-f5953bffccec}</Project>
+      <Name>Wox.Plugin.Sys</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Plugins\Wox.Plugin.Url\Wox.Plugin.Url.csproj">
       <Project>{A3DCCBCA-ACC1-421D-B16E-210896234C26}</Project>
       <Name>Wox.Plugin.Url</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Plugins\Wox.Plugin.WebSearch\Wox.Plugin.WebSearch.csproj">
+      <Project>{403b57f2-1856-4fc7-8a24-36ab346b763e}</Project>
+      <Name>Wox.Plugin.WebSearch</Name>
     </ProjectReference>
     <ProjectReference Include="..\Wox.Core\Wox.Core.csproj">
       <Project>{B749F0DB-8E75-47DB-9E5E-265D16D0C0D2}</Project>
@@ -74,6 +122,10 @@
     <ProjectReference Include="..\Wox.Plugin\Wox.Plugin.csproj">
       <Project>{8451ECDD-2EA4-4966-BB0A-7BBC40138E80}</Project>
       <Name>Wox.Plugin</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Wox\Wox.csproj">
+      <Project>{db90f671-d861-46bb-93a3-f1304f5ba1c5}</Project>
+      <Name>Wox</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
