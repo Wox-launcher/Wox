@@ -362,16 +362,15 @@ namespace Wox.Plugin.Program.Programs
                 Description = manifestApp.GetStringValue("Description");
                 BackgroundColor = manifestApp.GetStringValue("BackgroundColor");
                 Package = package;
-
-                DisplayName = ResourceFromPri(package.FullName, DisplayName);
-                Description = ResourceFromPri(package.FullName, Description);
+                DisplayName = ResourceFromPri(package.FullName, package.Name, DisplayName);
+                Description = ResourceFromPri(package.FullName, package.Name, Description);
                 LogoUri = LogoUriFromManifest(manifestApp);
                 LogoPath = LogoPathFromUri(LogoUri);
 
                 Enabled = true;
             }
 
-            internal string ResourceFromPri(string packageFullName, string resourceReference)
+            internal string ResourceFromPri(string packageFullName, String name, string resourceReference)
             {
                 const string prefix = "ms-resource:";
                 if (!string.IsNullOrWhiteSpace(resourceReference) && resourceReference.StartsWith(prefix))
@@ -379,18 +378,24 @@ namespace Wox.Plugin.Program.Programs
                     // magic comes from @talynone
                     // https://github.com/talynone/Wox.Plugin.WindowsUniversalAppLauncher/blob/master/StoreAppLauncher/Helpers/NativeApiHelper.cs#L139-L153
                     string key = resourceReference.Substring(prefix.Length);
+                    Log.Info($"|ResourceFromPri| {prefix}, {key}, ");
                     string parsed;
                     if (key.StartsWith("//"))
                     {
-                        parsed = prefix + key;
-                    }
-                    else if (key.StartsWith("/"))
-                    {
-                        parsed = prefix + "//" + key;
+                        parsed = $"{prefix}{key}";
                     }
                     else
                     {
-                        parsed = prefix + "///resources/" + key;
+                        if (!key.StartsWith("/"))
+                        {
+                            key = $"/{key}";
+                        }
+
+                        if (!key.ToLower().Contains("resources"))
+                        {
+                            key = $"/Resources{key}";
+                        }
+                        parsed = $"{prefix}//{name}{key}";
                     }
 
                     var outBuffer = new StringBuilder(128);
