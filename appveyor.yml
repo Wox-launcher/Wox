@@ -1,4 +1,7 @@
 version: 1.3.{build}
+branches:
+  only:
+  - master
 image: Visual Studio 2019
 configuration: Release
 platform: Any CPU
