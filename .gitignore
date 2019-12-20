@@ -302,3 +302,4 @@ migrateToAutomaticPackageRestore.ps1
 Output-Performance.txt
 *.diff
 MigrationBackup
+FodyWeavers.xsd

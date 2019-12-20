@@ -55,7 +55,7 @@ Contribution
 Build
 -----
 
-1. Install Visual Studio 2015 and tick all Windows 10 sdk options
+1. Install Visual Studio 2019, choose .net development and tick all Windows 10 sdk options
 2. Open powershell with admin permission and `Set-ExecutionPolicy Unrestricted -Scope CurrentUser`
 
 Documentation
