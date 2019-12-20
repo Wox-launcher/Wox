@@ -63,3 +63,5 @@
 #*.RTF   diff=astextplain
 
 PythonHome/* linguist-vendored
+
+text eol=crlf
