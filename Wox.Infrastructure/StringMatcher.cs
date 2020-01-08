@@ -95,11 +95,25 @@ namespace Wox.Infrastructure
                 var result = new MatchResult
                 {
                     Success = true,
-                    MatchData = indexList,
-                    RawScore = Math.Max(score, pinyinScore)
+                    MatchData = indexList, // TODO: pinyin is taking the wrong match data
+                    RawScore = Math.Max(score, pinyinScore) 
                 };
 
                 return result;
+            }
+            else
+            { // pinyin can only work if you don't find the result you want (I think :\ but not sure hence I keep the code above as well)
+                var pinyinScore = ScoreForPinyin(stringToCompare, query);
+                if (pinyinScore > 0)
+                {
+                    var result = new MatchResult
+                    {
+                        Success = true,
+                        RawScore = pinyinScore
+                    };
+
+                    return result;
+                }
             }
 
             return new MatchResult { Success = false };
