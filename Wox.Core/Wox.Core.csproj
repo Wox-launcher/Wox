@@ -51,6 +51,8 @@
     <Compile Include="..\SolutionAssemblyInfo.cs">
       <Link>Properties\SolutionAssemblyInfo.cs</Link>
     </Compile>
+    <Compile Include="Configuration\IPortable.cs" />
+    <Compile Include="Configuration\Portable.cs" />
     <Compile Include="Plugin\ExecutablePlugin.cs" />
     <Compile Include="Plugin\PluginsLoader.cs" />
     <Compile Include="Updater.cs" />

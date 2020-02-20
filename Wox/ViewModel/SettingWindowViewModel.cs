@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Wox.Core;
+using Wox.Core.Configuration;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
 using Wox.Helper;
@@ -22,11 +23,13 @@ namespace Wox.ViewModel
     public class SettingWindowViewModel : BaseModel
     {
         private readonly Updater _updater;
+        private readonly IPortable _portable;
         private readonly WoxJsonStorage<Settings> _storage;
 
-        public SettingWindowViewModel(Updater updater)
+        public SettingWindowViewModel(Updater updater, IPortable portable)
         {
             _updater = updater;
+            _portable = portable;
             _storage = new WoxJsonStorage<Settings>();
             Settings = _storage.Load();
             Settings.PropertyChanged += (s, e) =>
@@ -45,6 +48,11 @@ namespace Wox.ViewModel
         public async void UpdateApp()
         {
             await _updater.UpdateApp();
+        }
+
+        public void EnablePortableMode()
+        {
+            _portable.EnablePortableMode();
         }
 
         public void Save()

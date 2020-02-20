@@ -25,6 +25,8 @@ namespace Wox.Infrastructure
 
         private static readonly Assembly Assembly = Assembly.GetExecutingAssembly();
         public static readonly string ProgramDirectory = Directory.GetParent(Assembly.Location.NonNull()).ToString();
+        private static readonly string ApplicationDirectory = Directory.GetParent(ProgramDirectory).ToString();
+        public static readonly string RootDirectory = Directory.GetParent(ApplicationDirectory).ToString();
         public static readonly string ExecutablePath = Path.Combine(ProgramDirectory, Wox + ".exe");
         public static readonly string DataDirectory = DetermineDataDirectory();
         public static readonly string PluginsDirectory = Path.Combine(DataDirectory, Plugins);
