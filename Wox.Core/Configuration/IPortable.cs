@@ -9,5 +9,6 @@ namespace Wox.Core.Configuration
         void RemoveUninstallerEntry();
         bool IsPortableModeEnabled();
         void MoveUserDataFolder(string fromLocation, string toLocation);
+        void VerifyUserDataAfterMove(string fromLocation, string toLocation);
     }
 }

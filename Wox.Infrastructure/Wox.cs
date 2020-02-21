@@ -7,27 +7,30 @@ namespace Wox.Infrastructure
 {
     public static class Constant
     {
-        public static string DetermineDataDirectory()
-        {
-            string portableDataPath = Path.Combine(ProgramDirectory, "UserData");
-            if (Directory.Exists(portableDataPath))
-            {
-                return portableDataPath;
-            }
-            else
-            {
-                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Wox);
-            }
-        }
-
         public const string Wox = "Wox";
         public const string Plugins = "Plugins";
 
         private static readonly Assembly Assembly = Assembly.GetExecutingAssembly();
         public static readonly string ProgramDirectory = Directory.GetParent(Assembly.Location.NonNull()).ToString();
+        public static readonly string ExecutablePath = Path.Combine(ProgramDirectory, Wox + ".exe");
         private static readonly string ApplicationDirectory = Directory.GetParent(ProgramDirectory).ToString();
         public static readonly string RootDirectory = Directory.GetParent(ApplicationDirectory).ToString();
-        public static readonly string ExecutablePath = Path.Combine(ProgramDirectory, Wox + ".exe");
+
+        public const string PortableFolderName = "UserData";
+        public static string PortableDataPath = Path.Combine(ProgramDirectory, PortableFolderName);
+        public static string RoamingDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Wox);
+        public static string DetermineDataDirectory()
+        {
+            if (Directory.Exists(PortableDataPath))
+            {
+                return PortableDataPath;
+            }
+            else
+            {
+                return RoamingDataPath;
+            }
+        }
+
         public static readonly string DataDirectory = DetermineDataDirectory();
         public static readonly string PluginsDirectory = Path.Combine(DataDirectory, Plugins);
         public static readonly string PreinstalledDirectory = Path.Combine(ProgramDirectory, Plugins);

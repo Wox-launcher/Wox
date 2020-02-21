@@ -1,6 +1,7 @@
 using Squirrel;
 using System;
 using Wox.Infrastructure;
+using Wox.Plugin.SharedCommands;
 
 namespace Wox.Core.Configuration
 {
@@ -10,6 +11,8 @@ namespace Wox.Core.Configuration
         private string exeName;
         private string rootAppDirectory;
         private UpdateManager portabilityUpdater;
+        private string roamingDataPath;
+        private string portableDataPath;
 
         public Portable()
         {
@@ -17,6 +20,9 @@ namespace Wox.Core.Configuration
             exeName = applicationName + ".exe";
             rootAppDirectory = Constant.RootDirectory;
             portabilityUpdater = new UpdateManager(string.Empty, applicationName, rootAppDirectory);
+
+            roamingDataPath = Constant.RoamingDataPath;
+            portableDataPath = Constant.PortableDataPath;
         }
 
         public void DisablePortableMode()
@@ -28,6 +34,7 @@ namespace Wox.Core.Configuration
         {
             try
             {
+                MoveUserDataFolder(roamingDataPath, portableDataPath);
                 RemoveShortcuts();
                 RemoveUninstallerEntry();
             }
@@ -62,7 +69,14 @@ namespace Wox.Core.Configuration
 
         public void MoveUserDataFolder(string fromLocation, string toLocation)
         {
-            throw new NotImplementedException();
+            FilesFolders.Copy(fromLocation, toLocation);
+            VerifyUserDataAfterMove(fromLocation, toLocation);
+            FilesFolders.RemoveFolder(fromLocation);
+        }
+
+        public void VerifyUserDataAfterMove(string fromLocation, string toLocation)
+        {
+            FilesFolders.VerifyBothFolderFilesEqual(fromLocation, toLocation);
         }
     }
 }
