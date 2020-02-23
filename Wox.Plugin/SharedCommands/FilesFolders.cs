@@ -42,16 +42,30 @@ namespace Wox.Plugin.SharedCommands
 
         public static bool VerifyBothFolderFilesEqual(this string fromPath, string toPath)
         {
-            var fromDir = new DirectoryInfo(fromPath);
-            var toDir = new DirectoryInfo(toPath);
+            try
+            {
+                var fromDir = new DirectoryInfo(fromPath);
+                var toDir = new DirectoryInfo(toPath);
 
-            if (fromDir.GetFiles().Length != toDir.GetFiles().Length)
-                return false;
+                if (fromDir.GetFiles("*", SearchOption.AllDirectories).Length != toDir.GetFiles("*", SearchOption.AllDirectories).Length)
+                    return false;
 
-            if (Directory.GetDirectories(fromPath).Length != Directory.GetDirectories(toPath).Length)
-                return false;
+                if (fromDir.GetDirectories("*", SearchOption.AllDirectories).Length != toDir.GetDirectories("*", SearchOption.AllDirectories).Length)
+                    return false;
 
-            return true;
+                return true;
+            }
+            catch(PathTooLongException e)
+            {
+                //log and update error message to output
+#if DEBUG
+                throw;
+#else
+                throw;// PRODUCTION LOGGING AND CONTINUE
+
+#endif
+            }
+
         }
 
         public static void RemoveFolder(this string path)
