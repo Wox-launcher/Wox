@@ -57,12 +57,10 @@ namespace Wox.Plugin.SharedCommands
             }
             catch(PathTooLongException e)
             {
-                //log and update error message to output
 #if DEBUG
                 throw;
 #else
-                throw;// PRODUCTION LOGGING AND CONTINUE
-
+                return false;
 #endif
             }
 
