@@ -1,4 +1,6 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
+using System.Windows;
 
 namespace Wox.Plugin.SharedCommands
 {
@@ -16,26 +18,38 @@ namespace Wox.Plugin.SharedCommands
                     + sourcePath);
             }
 
-            DirectoryInfo[] dirs = dir.GetDirectories();
-            // If the destination directory doesn't exist, create it.
-            if (!Directory.Exists(targetPath))
+            try
             {
-                Directory.CreateDirectory(targetPath);
-            }
+                DirectoryInfo[] dirs = dir.GetDirectories();
+                // If the destination directory doesn't exist, create it.
+                if (!Directory.Exists(targetPath))
+                {
+                    Directory.CreateDirectory(targetPath);
+                }
 
-            // Get the files in the directory and copy them to the new location.
-            FileInfo[] files = dir.GetFiles();
-            foreach (FileInfo file in files)
-            {
-                string temppath = Path.Combine(targetPath, file.Name);
-                file.CopyTo(temppath, false);
-            }
+                // Get the files in the directory and copy them to the new location.
+                FileInfo[] files = dir.GetFiles();
+                foreach (FileInfo file in files)
+                {
+                    string temppath = Path.Combine(targetPath, file.Name);
+                    file.CopyTo(temppath, false);
+                }
 
-            // Recursively copy subdirectories by calling itself on each subdirectory until there are no more to copy
-            foreach (DirectoryInfo subdir in dirs)
+                // Recursively copy subdirectories by calling itself on each subdirectory until there are no more to copy
+                foreach (DirectoryInfo subdir in dirs)
+                {
+                    string temppath = Path.Combine(targetPath, subdir.Name);
+                    Copy(subdir.FullName, temppath);
+                }
+            }
+            catch(Exception e)
             {
-                string temppath = Path.Combine(targetPath, subdir.Name);
-                Copy(subdir.FullName, temppath);
+#if DEBUG
+                throw e;
+#else
+                MessageBox.Show(string.Format("Copying path {0} has failed, it will now be deleted for consistency", targetPath));
+                RemoveFolder(targetPath);
+#endif
             }
 
         }
@@ -55,11 +69,12 @@ namespace Wox.Plugin.SharedCommands
 
                 return true;
             }
-            catch(PathTooLongException e)
+            catch(Exception e)
             {
 #if DEBUG
-                throw;
+                throw e;
 #else
+                MessageBox.Show(string.Format("Unable to verify folders and files between {0} and {1}", fromPath, toPath));
                 return false;
 #endif
             }
@@ -73,14 +88,12 @@ namespace Wox.Plugin.SharedCommands
                 if (Directory.Exists(path))
                     Directory.Delete(path, true);
             }
-            catch(PathTooLongException e)
+            catch(Exception e)
             {
-                //log and update error message to output
 #if DEBUG
-                throw;
+                throw e;
 #else
-                throw;// PRODUCTION LOGGING AND CONTINUE
-
+                MessageBox.Show(string.Format("Not able to delete folder {0}, please go to the location and manually delete it", path));
 #endif
             }
         }
