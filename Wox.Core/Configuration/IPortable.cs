@@ -7,6 +7,8 @@ namespace Wox.Core.Configuration
         void DisablePortableMode();
         void RemoveShortcuts();
         void RemoveUninstallerEntry();
+        void CreateShortcuts();
+        void CreateUninstallerEntry();
         bool IsPortableModeEnabled();
         void MoveUserDataFolder(string fromLocation, string toLocation);
         void VerifyUserDataAfterMove(string fromLocation, string toLocation);

@@ -27,7 +27,25 @@ namespace Wox.Core.Configuration
 
         public void DisablePortableMode()
         {
-            throw new NotImplementedException();
+            try
+            {
+                MoveUserDataFolder(portableDataPath, roamingDataPath);
+                CreateShortcuts();
+                CreateUninstallerEntry();
+
+                // always dispose UpdateManager???????????
+                // CHANGE TO PRIVATE/INTERNAL METHODS
+            }
+            catch (Exception e)
+            {
+                //log and update error message to output above locations where shortcuts may not have been removed
+#if DEBUG
+                throw;
+#else
+                throw;// PRODUCTION LOGGING AND CONTINUE
+                
+#endif
+            }
         }
 
         public void EnablePortableMode()
@@ -37,6 +55,8 @@ namespace Wox.Core.Configuration
                 MoveUserDataFolder(roamingDataPath, portableDataPath);
                 RemoveShortcuts();
                 RemoveUninstallerEntry();
+
+                // always dispose UpdateManager???????????
             }
             catch (Exception e)
             {
@@ -77,6 +97,18 @@ namespace Wox.Core.Configuration
         public void VerifyUserDataAfterMove(string fromLocation, string toLocation)
         {
             FilesFolders.VerifyBothFolderFilesEqual(fromLocation, toLocation);
+        }
+
+        public void CreateShortcuts()
+        {
+            portabilityUpdater.CreateShortcutsForExecutable(exeName, ShortcutLocation.StartMenu, false);
+            portabilityUpdater.CreateShortcutsForExecutable(exeName, ShortcutLocation.Desktop, false);
+            portabilityUpdater.CreateShortcutsForExecutable(exeName, ShortcutLocation.Startup, false);
+        }
+
+        public void CreateUninstallerEntry()
+        {
+            portabilityUpdater.CreateUninstallerRegistryEntry();
         }
     }
 }
