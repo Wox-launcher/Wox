@@ -1,4 +1,6 @@
+﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -30,9 +32,9 @@ namespace Wox.Plugin.Caculator
 
         static Main()
         {
-            MagesEngine = new Engine();
+            MagesEngine = new Engine();            
         }
-
+        
         public void Init(PluginInitContext context)
         {
             Context = context;
@@ -147,7 +149,7 @@ namespace Wox.Plugin.Caculator
 
             return leftBracketCount == 0;
         }
-
+        
         public string GetTranslatedPluginTitle()
         {
             return Context.API.GetTranslation("wox_plugin_caculator_plugin_name");
