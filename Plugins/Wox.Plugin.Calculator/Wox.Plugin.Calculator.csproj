@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -57,6 +57,11 @@
     <Compile Include="NumberTranslator.cs" />
     <Compile Include="Main.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Settings.cs" />
+    <Compile Include="ViewModels\SettingsViewModel.cs" />
+    <Compile Include="Views\CalculatorSettings.xaml.cs">
+      <DependentUpon>CalculatorSettings.xaml</DependentUpon>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -65,6 +70,10 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Wox.Core\Wox.Core.csproj">
+      <Project>{B749F0DB-8E75-47DB-9E5E-265D16D0C0D2}</Project>
+      <Name>Wox.Core</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\Wox.Infrastructure\Wox.Infrastructure.csproj">
       <Project>{4FD29318-A8AB-4D8F-AA47-60BC241B8DA3}</Project>
       <Name>Wox.Infrastructure</Name>
@@ -120,6 +129,12 @@
       <SubType>Designer</SubType>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Include="Views\CalculatorSettings.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
