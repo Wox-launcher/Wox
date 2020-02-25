@@ -64,11 +64,12 @@ namespace Wox.Plugin.Caculator
 
                 if (!string.IsNullOrEmpty(result?.ToString()))
                 {
+                    string newResult = ChangeDecimalSeparator(result, GetDecimalSeparator());
                     return new List<Result>
                     {
                         new Result
                         {
-                            Title = result.ToString(),
+                            Title = newResult,
                             IcoPath = "Images/calculator.png",
                             Score = 300,
                             SubTitle = Context.API.GetTranslation("wox_plugin_calculator_copy_number_to_clipboard"),
@@ -76,7 +77,7 @@ namespace Wox.Plugin.Caculator
                             {
                                 try
                                 {
-                                    Clipboard.SetText(result.ToString());
+                                    Clipboard.SetText(newResult);
                                     return true;
                                 }
                                 catch (ExternalException)
@@ -97,6 +98,37 @@ namespace Wox.Plugin.Caculator
             return new List<Result>();
         }
 
+        private string ChangeDecimalSeparator(object value, string newDecimalSeparator)
+        {
+            if (value == null || String.IsNullOrEmpty(value.ToString()))
+            {
+                return string.Empty;
+            }
+
+            if (String.IsNullOrEmpty(newDecimalSeparator))
+            {
+                return value.ToString();
+            }
+
+            var numberFormatInfo = new NumberFormatInfo
+            {
+                NumberDecimalSeparator = newDecimalSeparator
+            };
+            return Convert.ToDecimal(value).ToString(numberFormatInfo);
+        }
+
+        private string GetDecimalSeparator()
+        {
+            string systemDecimalSeperator = CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator;
+            switch (_settings.DecimalSeparator)
+            {
+                case DecimalSeparator.UseSystemLocale: return systemDecimalSeperator;
+                case DecimalSeparator.Dot: return ".";
+                case DecimalSeparator.Comma: return ",";
+                default: return systemDecimalSeperator;
+            }
+        }
+
         private bool IsBracketComplete(string query)
         {
             var matchs = RegBrackets.Matches(query);
@@ -114,11 +146,6 @@ namespace Wox.Plugin.Caculator
             }
 
             return leftBracketCount == 0;
-        }
-
-        public void Init(PluginInitContext context)
-        {
-            Context = context;
         }
 
         public string GetTranslatedPluginTitle()
