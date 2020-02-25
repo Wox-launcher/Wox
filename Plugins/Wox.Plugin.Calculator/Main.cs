@@ -2,11 +2,15 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Controls;
 using Mages.Core;
+using Wox.Infrastructure.Storage;
+using Wox.Plugin.Caculator.ViewModels;
+using Wox.Plugin.Caculator.Views;
 
 namespace Wox.Plugin.Caculator
 {
-    public class Main : IPlugin, IPluginI18n
+    public class Main : IPlugin, IPluginI18n, ISavable, ISettingProvider
     {
         private static readonly Regex RegValidExpressChar = new Regex(
                         @"^(" +
@@ -21,9 +25,20 @@ namespace Wox.Plugin.Caculator
         private static readonly Engine MagesEngine;
         private PluginInitContext Context { get; set; }
 
+        private static Settings _settings;
+        private static SettingsViewModel _viewModel;
+
         static Main()
         {
             MagesEngine = new Engine();
+        }
+
+        public void Init(PluginInitContext context)
+        {
+            Context = context;
+
+            _viewModel = new SettingsViewModel();
+            _settings = _viewModel.Settings;
         }
 
         public List<Result> Query(Query query)
@@ -114,6 +129,16 @@ namespace Wox.Plugin.Caculator
         public string GetTranslatedPluginDescription()
         {
             return Context.API.GetTranslation("wox_plugin_caculator_plugin_description");
+        }
+
+        public Control CreateSettingPanel()
+        {
+            return new CalculatorSettings(_viewModel);
+        }
+
+        public void Save()
+        {
+            _viewModel.Save();
         }
     }
 }
