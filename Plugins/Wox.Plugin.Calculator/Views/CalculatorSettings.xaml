@@ -26,13 +26,14 @@
                 <ColumnDefinition Width="3*"/>
             </Grid.ColumnDefinitions>
 
-            <TextBlock Grid.Column="0" Text ="Decimal separator" VerticalAlignment="Center" /> <!-- Text="{DynamicResource wox_plugin_calculator_output_decimal_seperator}" />-->
+            <TextBlock Grid.Column="0" Grid.Row="0" Text="{DynamicResource wox_plugin_calculator_output_decimal_seperator}" VerticalAlignment="Center" />
             <ComboBox Grid.Column="1"
-                x:Name="DecimalSeparatorComboBox" 
-                Width="200"
-                HorizontalAlignment="Left"
-                SelectedItem="{Binding Settings.DecimalSeparator}"
-                ItemsSource="{Binding Source={ui:EnumBindingSource {x:Type calculator:DecimalSeparator}}}">
+                      Grid.Row="0"
+                      x:Name="DecimalSeparatorComboBox" 
+                      Width="200"
+                      HorizontalAlignment="Left"
+                      SelectedItem="{Binding Settings.DecimalSeparator}"
+                      ItemsSource="{Binding Source={ui:EnumBindingSource {x:Type calculator:DecimalSeparator}}}">
                 <ComboBox.ItemTemplate>
                     <DataTemplate>
                         <TextBlock Text="{Binding Converter={StaticResource LocalizationConverter}}" />
