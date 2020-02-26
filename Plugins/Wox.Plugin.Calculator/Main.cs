@@ -45,10 +45,7 @@ namespace Wox.Plugin.Caculator
 
         public List<Result> Query(Query query)
         {
-            // Don't affect when user only input "e" or "i" keyword
-            if (query.Search.Length < 2
-                || !RegValidExpressChar.IsMatch(query.Search)
-                || !IsBracketComplete(query.Search))
+            if (!CanCalculate(query))
             {
                 return new List<Result>();
             }
@@ -98,6 +95,27 @@ namespace Wox.Plugin.Caculator
             }
 
             return new List<Result>();
+        }
+
+        private bool CanCalculate(Query query)
+        {
+            // Don't execute when user only input "e" or "i" keyword
+            if (query.Search.Length < 2)
+            {
+                return false;
+            }
+
+            if (!RegValidExpressChar.IsMatch(query.Search))
+            {
+                return false;
+            }
+                
+            if (!IsBracketComplete(query.Search))
+            {
+                return false;
+            }
+
+            return true;
         }
 
         private string ChangeDecimalSeparator(object value, string newDecimalSeparator)
