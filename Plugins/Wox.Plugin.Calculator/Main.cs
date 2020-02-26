@@ -63,7 +63,9 @@ namespace Wox.Plugin.Caculator
 
                 if (!string.IsNullOrEmpty(result?.ToString()))
                 {
-                    string newResult = ChangeDecimalSeparator(result, GetDecimalSeparator());
+                    decimal roundedResult = Math.Round(Convert.ToDecimal(result), _settings.MaxDecimalPlaces, MidpointRounding.AwayFromZero);
+                    string newResult = ChangeDecimalSeparator(roundedResult, GetDecimalSeparator());
+
                     return new List<Result>
                     {
                         new Result
@@ -118,13 +120,8 @@ namespace Wox.Plugin.Caculator
             return true;
         }
 
-        private string ChangeDecimalSeparator(object value, string newDecimalSeparator)
+        private string ChangeDecimalSeparator(decimal value, string newDecimalSeparator)
         {
-            if (value == null || String.IsNullOrEmpty(value.ToString()))
-            {
-                return string.Empty;
-            }
-
             if (String.IsNullOrEmpty(newDecimalSeparator))
             {
                 return value.ToString();
@@ -134,7 +131,7 @@ namespace Wox.Plugin.Caculator
             {
                 NumberDecimalSeparator = newDecimalSeparator
             };
-            return Convert.ToDecimal(value).ToString(numberFormatInfo);
+            return value.ToString(numberFormatInfo);
         }
 
         private string GetDecimalSeparator()
