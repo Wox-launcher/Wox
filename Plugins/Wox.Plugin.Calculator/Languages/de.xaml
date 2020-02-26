@@ -12,4 +12,5 @@
     <system:String x:Key="wox_plugin_calculator_decimal_seperator_use_system_locale">Systemeinstellung nutzen</system:String>
     <system:String x:Key="wox_plugin_calculator_decimal_seperator_comma">Komma (,)</system:String>
     <system:String x:Key="wox_plugin_calculator_decimal_seperator_dot">Punkt (.)</system:String>
+    <system:String x:Key="wox_plugin_calculator_max_decimal_places">Max. Nachkommastellen</system:String>
 </ResourceDictionary>

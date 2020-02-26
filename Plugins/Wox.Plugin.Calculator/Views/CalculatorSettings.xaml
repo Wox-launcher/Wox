@@ -41,7 +41,7 @@
                 </ComboBox.ItemTemplate>
             </ComboBox>
 
-            <TextBlock Grid.Column="0" Grid.Row="1" Text="Decimal places" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="0" Grid.Row="1" Text="{DynamicResource wox_plugin_calculator_max_decimal_places}" VerticalAlignment="Center" />
             <ComboBox x:Name="MaxDecimalPlaces"
                       Grid.Column="1"
                       Grid.Row="1"
