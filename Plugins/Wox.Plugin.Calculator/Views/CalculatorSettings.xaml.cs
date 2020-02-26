@@ -21,8 +21,8 @@ namespace Wox.Plugin.Caculator.Views
     /// </summary>
     public partial class CalculatorSettings : UserControl
     {
-        private SettingsViewModel _viewModel;
-        private Settings _settings;
+        private readonly SettingsViewModel _viewModel;
+        private readonly Settings _settings;
 
         public CalculatorSettings(SettingsViewModel viewModel)
         {
@@ -35,6 +35,7 @@ namespace Wox.Plugin.Caculator.Views
         private void CalculatorSettings_Loaded(object sender, RoutedEventArgs e)
         {
             DecimalSeparatorComboBox.SelectedItem = _settings.DecimalSeparator;
+            MaxDecimalPlaces.SelectedItem = _settings.MaxDecimalPlaces;
         }
     }
 

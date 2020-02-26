@@ -20,6 +20,8 @@ namespace Wox.Plugin.Caculator.ViewModels
 
         public Settings Settings { get; set; }
 
+        public IEnumerable<int> MaxDecimalPlacesRange => Enumerable.Range(1, 20);
+
         public void Save()
         {
             _storage.Save();
