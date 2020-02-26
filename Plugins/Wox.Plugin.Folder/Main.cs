@@ -5,17 +5,26 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using Wox.Infrastructure;
 using Wox.Infrastructure.Storage;
 
 namespace Wox.Plugin.Folder
 {
-    public class Main : IPlugin, ISettingProvider, IPluginI18n, ISavable
+    public class Main : IPlugin, ISettingProvider, IPluginI18n, ISavable, IContextMenu
     {
+        public const string FolderImagePath = "Images\\folder.png";
+        public const string FileImagePath = "Images\\file.png";
+        public const string DeleteFileFolderImagePath = "Images\\deletefilefolder.png";
+        public const string CopyImagePath = "Images\\copy.png";
+
+        private string DefaultFolderSubtitleString = "Ctrl + Enter to open the directory";
+
         private static List<string> _driverNames;
         private PluginInitContext _context;
 
         private readonly Settings _settings;
         private readonly PluginJsonStorage<Settings> _storage;
+        private IContextMenu _contextMenuLoader;
 
         public Main()
         {
@@ -36,6 +45,7 @@ namespace Wox.Plugin.Folder
         public void Init(PluginInitContext context)
         {
             _context = context;
+            _contextMenuLoader = new ContextMenuLoader(context);
             InitialDriverList();
         }
 
@@ -44,7 +54,7 @@ namespace Wox.Plugin.Folder
             var results = GetUserFolderResults(query);
 
             string search = query.Search.ToLower();
-            if (_driverNames != null && !_driverNames.Any(search.StartsWith))
+            if (!IsDriveOrSharedFolder(search))
                 return results;
 
             results.AddRange(QueryInternal_Directory_Exists(query));
@@ -58,13 +68,34 @@ namespace Wox.Plugin.Folder
             return results;
         }
 
-        private Result CreateFolderResult(string title, string path, string queryActionKeyword)
+        private static bool IsDriveOrSharedFolder(string search)
+        {
+            if (search.StartsWith(@"\\"))
+            { // share folder
+                return true;
+            }
+
+            if (_driverNames != null && _driverNames.Any(search.StartsWith))
+            { // normal drive letter
+                return true;
+            }
+
+            if (_driverNames == null && search.Length > 2 && char.IsLetter(search[0]) && search[1] == ':')
+            { // when we don't have the drive letters we can try...
+                return true; // we don't know so let's give it the possibility
+            }
+
+            return false;
+        }
+
+        private Result CreateFolderResult(string title, string subtitle, string path, Query query)
         {
             return new Result
             {
                 Title = title,
                 IcoPath = path,
-                SubTitle = "Ctrl + Enter to open the directory",
+                SubTitle = subtitle,
+                TitleHighlightData = StringMatcher.FuzzySearch(query.Search, title).MatchData,
                 Action = c =>
                 {
                     if (c.SpecialKeyState.CtrlPressed)
@@ -82,9 +113,12 @@ namespace Wox.Plugin.Folder
                     }
 
                     string changeTo = path.EndsWith("\\") ? path : path + "\\";
-                    _context.API.ChangeQuery(string.IsNullOrEmpty(queryActionKeyword)? changeTo : queryActionKeyword + " " + changeTo);
+                    _context.API.ChangeQuery(string.IsNullOrEmpty(query.ActionKeyword) ?
+                        changeTo :
+                        query.ActionKeyword + " " + changeTo);
                     return false;
-                }
+                },
+                ContextData = new SearchResult { Type = ResultType.Folder, FullPath = path }
             };
         }
 
@@ -93,8 +127,8 @@ namespace Wox.Plugin.Folder
             string search = query.Search.ToLower();
             var userFolderLinks = _settings.FolderLinks.Where(
                 x => x.Nickname.StartsWith(search, StringComparison.OrdinalIgnoreCase));
-            var results = userFolderLinks.Select(item => CreateFolderResult(item.Nickname, item.Path, query.ActionKeyword))
-                    .ToList();
+            var results = userFolderLinks.Select(item =>
+                CreateFolderResult(item.Nickname, DefaultFolderSubtitleString, item.Path, query)).ToList();
             return results;
         }
 
@@ -132,48 +166,67 @@ namespace Wox.Plugin.Folder
                     incompleteName = search.Substring(index + 1).ToLower();
                     search = search.Substring(0, index + 1);
                     if (!Directory.Exists(search))
+                    {
                         return results;
+                    }
                 }
                 else
+                {
                     return results;
+                }
             }
             else
-            { // folder exist, add \ at the end of doesn't exist
+            {
+                // folder exist, add \ at the end of doesn't exist
                 if (!search.EndsWith("\\"))
+                {
                     search += "\\";
+                }
             }
 
             results.Add(CreateOpenCurrentFolderResult(incompleteName, search));
 
-            
-            var directoryInfo = new DirectoryInfo(search);
-
-            var searchOption= SearchOption.TopDirectoryOnly;
+            var searchOption = SearchOption.TopDirectoryOnly;
             incompleteName += "*";
 
-            if (incompleteName.StartsWith(">")) // give the ability to search all folder when starting with >
+            // give the ability to search all folder when starting with >
+            if (incompleteName.StartsWith(">"))
             {
                 searchOption = SearchOption.AllDirectories;
-                incompleteName = incompleteName.Substring(1);
+
+                // match everything before and after search term using supported wildcard '*', ie. *searchterm*
+                incompleteName = "*" + incompleteName.Substring(1);
             }
+
+            var folderList = new List<Result>();
+            var fileList = new List<Result>();
+
+            var folderSubtitleString = DefaultFolderSubtitleString;
 
             try
             {
                 // search folder and add results
+                var directoryInfo = new DirectoryInfo(search);
                 var fileSystemInfos = directoryInfo.GetFileSystemInfos(incompleteName, searchOption);
 
                 foreach (var fileSystemInfo in fileSystemInfos)
                 {
                     if ((fileSystemInfo.Attributes & FileAttributes.Hidden) == FileAttributes.Hidden) continue;
 
-                    var result =
-                        fileSystemInfo is DirectoryInfo
-                            ? CreateFolderResult(fileSystemInfo.Name, fileSystemInfo.FullName, query.ActionKeyword)
-                            : CreateFileResult(fileSystemInfo.FullName);
-                    results.Add(result);
+                    if(fileSystemInfo is DirectoryInfo)
+                    {
+                        if (searchOption == SearchOption.AllDirectories)
+                            folderSubtitleString = fileSystemInfo.FullName;
+
+                        folderList.Add(CreateFolderResult(fileSystemInfo.Name, folderSubtitleString, fileSystemInfo.FullName, query));
+                    }
+                    else
+                    {
+                        fileList.Add(CreateFileResult(fileSystemInfo.FullName, query));
+                    }
                 }
             }
-            catch(Exception e)
+            catch (Exception e)
             {
                 if (e is UnauthorizedAccessException || e is ArgumentException)
                 {
@@ -185,15 +238,18 @@ namespace Wox.Plugin.Folder
                 throw;
             }
 
-            return results;
+            // Intial ordering, this order can be updated later by UpdateResultView.MainViewModel based on history of user selection.
+            return results.Concat(folderList.OrderBy(x => x.Title)).Concat(fileList.OrderBy(x => x.Title)).ToList();
         }
 
-        private static Result CreateFileResult(string filePath)
+        private static Result CreateFileResult(string filePath, Query query)
         {
             var result = new Result
             {
                 Title = Path.GetFileName(filePath),
+                SubTitle = filePath,
                 IcoPath = filePath,
+                TitleHighlightData = StringMatcher.FuzzySearch(query.Search, Path.GetFileName(filePath)).MatchData,
                 Action = c =>
                 {
                     try
@@ -206,7 +262,8 @@ namespace Wox.Plugin.Folder
                     }
 
                     return true;
-                }
+                },
+                ContextData = new SearchResult { Type = ResultType.File, FullPath = filePath}
             };
             return result;
         }
@@ -242,6 +299,11 @@ namespace Wox.Plugin.Folder
         public string GetTranslatedPluginDescription()
         {
             return _context.API.GetTranslation("wox_plugin_folder_plugin_description");
+        }
+
+        public List<Result> LoadContextMenus(Result selectedResult)
+        {
+            return _contextMenuLoader.LoadContextMenus(selectedResult);
         }
     }
 }

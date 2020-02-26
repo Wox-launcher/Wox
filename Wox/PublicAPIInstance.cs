@@ -20,16 +20,17 @@ namespace Wox
     {
         private readonly SettingWindowViewModel _settingsVM;
         private readonly MainViewModel _mainVM;
+        private readonly Alphabet _alphabet;
 
         #region Constructor
 
-        public PublicAPIInstance(SettingWindowViewModel settingsVM, MainViewModel mainVM)
+        public PublicAPIInstance(SettingWindowViewModel settingsVM, MainViewModel mainVM, Alphabet alphabet)
         {
             _settingsVM = settingsVM;
             _mainVM = mainVM;
+            _alphabet = alphabet;
             GlobalHotkey.Instance.hookedKeyboardCallback += KListener_hookedKeyboardCallback;
             WebRequest.RegisterPrefix("data", new DataWebRequestFactory());
-
         }
 
         #endregion
@@ -70,7 +71,7 @@ namespace Wox
             _settingsVM.Save();
             PluginManager.Save();
             ImageLoader.Save();
-            Alphabet.Save();
+            _alphabet.Save();
         }
 
         public void ReloadAllPluginData()
@@ -90,12 +91,12 @@ namespace Wox
             _mainVM.MainWindowVisibility = Visibility.Visible;
         }
 
-        public void ShowMsg(string title, string subTitle = "", string iconPath = "")
+        public void ShowMsg(string title, string subTitle = "", string iconPath = "", bool useMainWindowAsOwner = true)
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
-                var m = new Msg { Owner = Application.Current.MainWindow };
-                m.Show(title, subTitle, iconPath);
+                var msg = useMainWindowAsOwner ? new Msg {Owner = Application.Current.MainWindow} : new Msg();
+                msg.Show(title, subTitle, iconPath);
             });
         }
 

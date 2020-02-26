@@ -2,49 +2,95 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using hyjiacan.util.p4n;
 using hyjiacan.util.p4n.format;
+using JetBrains.Annotations;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
 using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Infrastructure
 {
-    public static class Alphabet
+    public interface IAlphabet
     {
-        private static readonly HanyuPinyinOutputFormat Format = new HanyuPinyinOutputFormat();
-        private static ConcurrentDictionary<string, string[][]> PinyinCache;
-        private static BinaryStorage<ConcurrentDictionary<string, string[][]>> _pinyinStorage;
-        private static Settings _settings;
+        string Translate(string stringToTranslate);
+    }
 
-        public static void Initialize(Settings settings)
+    public class Alphabet : IAlphabet
+    {
+        private readonly HanyuPinyinOutputFormat Format = new HanyuPinyinOutputFormat();
+        private ConcurrentDictionary<string, string[][]> PinyinCache;
+        private BinaryStorage<ConcurrentDictionary<string, string[][]>> _pinyinStorage;
+        private Settings _settings;
+         
+        public void Initialize([NotNull] Settings settings)
         {
-            _settings = settings;
+            _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            InitializePinyinHelpers();
+        }
+
+        private void InitializePinyinHelpers()
+        {
             Format.setToneType(HanyuPinyinToneType.WITHOUT_TONE);
 
             Stopwatch.Normal("|Wox.Infrastructure.Alphabet.Initialize|Preload pinyin cache", () =>
             {
                 _pinyinStorage = new BinaryStorage<ConcurrentDictionary<string, string[][]>>("Pinyin");
                 PinyinCache = _pinyinStorage.TryLoad(new ConcurrentDictionary<string, string[][]>());
+
                 // force pinyin library static constructor initialize
                 PinyinHelper.toHanyuPinyinStringArray('T', Format);
             });
             Log.Info($"|Wox.Infrastructure.Alphabet.Initialize|Number of preload pinyin combination<{PinyinCache.Count}>");
         }
 
-        public static void Save()
+        public string Translate(string str)
         {
+            return ConvertChineseCharactersToPinyin(str);
+        }
+
+        public string ConvertChineseCharactersToPinyin(string source)
+        {
+            if (!_settings.ShouldUsePinyin)
+                return source;
+
+            if (string.IsNullOrEmpty(source))
+                return source;
+
+            if (!ContainsChinese(source))
+                return source;
+                
+            var combination = PinyinCombination(source);
+            
+            var pinyinArray=combination.Select(x => string.Join("", x));
+            var acronymArray = combination.Select(Acronym).Distinct();
+
+            var joinedSingleStringCombination = new StringBuilder();
+            var all = acronymArray.Concat(pinyinArray);
+            all.ToList().ForEach(x => joinedSingleStringCombination.Append(x));
+
+            return joinedSingleStringCombination.ToString();
+        }
+
+        public void Save()
+        {
+            if (!_settings.ShouldUsePinyin)
+            {
+                return; 
+            }
             _pinyinStorage.Save(PinyinCache);
         }
 
         private static string[] EmptyStringArray = new string[0];
         private static string[][] Empty2DStringArray = new string[0][];
 
+        [Obsolete("Not accurate, eg 音乐 will not return yinyue but returns yinle ")]
         /// <summary>
         /// replace chinese character with pinyin, non chinese character won't be modified
         /// <param name="word"> should be word or sentence, instead of single character. e.g. 微软 </param>
         /// </summary>
-        public static string[] Pinyin(string word)
+        public string[] Pinyin(string word)
         {
             if (!_settings.ShouldUsePinyin)
             {
@@ -66,51 +112,48 @@ namespace Wox.Infrastructure
         /// e.g. 音乐 will return yinyue and yinle
         /// <param name="characters"> should be word or sentence, instead of single character. e.g. 微软 </param>
         /// </summmary>
-        public static string[][] PinyinComination(string characters)
+        public string[][] PinyinCombination(string characters)
         {
-            if (_settings.ShouldUsePinyin && !string.IsNullOrEmpty(characters))
-            {
-                if (!PinyinCache.ContainsKey(characters))
-                {
-
-                    var allPinyins = new List<string[]>();
-                    foreach (var c in characters)
-                    {
-                        var pinyins = PinyinHelper.toHanyuPinyinStringArray(c, Format);
-                        if (pinyins != null)
-                        {
-                            var r = pinyins.Distinct().ToArray();
-                            allPinyins.Add(r);
-                        }
-                        else
-                        {
-                            var r = new[] { c.ToString() };
-                            allPinyins.Add(r);
-                        }
-                    }
-
-                    var combination = allPinyins.Aggregate(Combination).Select(c => c.Split(';')).ToArray();
-                    PinyinCache[characters] = combination;
-                    return combination;
-                }
-                else
-                {
-                    return PinyinCache[characters];
-                }
-            }
-            else
+            if (!_settings.ShouldUsePinyin || string.IsNullOrEmpty(characters))
             {
                 return Empty2DStringArray;
             }
+
+            if (!PinyinCache.ContainsKey(characters))
+            {
+                var allPinyins = new List<string[]>();
+                foreach (var c in characters)
+                {
+                    var pinyins = PinyinHelper.toHanyuPinyinStringArray(c, Format);
+                    if (pinyins != null)
+                    {
+                        var r = pinyins.Distinct().ToArray();
+                        allPinyins.Add(r);
+                    }
+                    else
+                    {
+                        var r = new[] { c.ToString() };
+                        allPinyins.Add(r);
+                    }
+                }
+
+                var combination = allPinyins.Aggregate(Combination).Select(c => c.Split(';')).ToArray();
+                PinyinCache[characters] = combination;
+                return combination;
+            }
+            else
+            {
+                return PinyinCache[characters];
+            }
         }
 
-        public static string Acronym(string[] pinyin)
+        public string Acronym(string[] pinyin)
         {
             var acronym = string.Join("", pinyin.Select(p => p[0]));
             return acronym;
         }
 
-        public static bool ContainsChinese(string word)
+        public bool ContainsChinese(string word)
         {
             if (!_settings.ShouldUsePinyin)
             {
@@ -128,7 +171,7 @@ namespace Wox.Infrastructure
             return chinese;
         }
 
-        private static string[] Combination(string[] array1, string[] array2)
+        private string[] Combination(string[] array1, string[] array2)
         {
             if (!_settings.ShouldUsePinyin)
             {
@@ -142,7 +185,5 @@ namespace Wox.Infrastructure
             ).ToArray();
             return combination;
         }
-
-
     }
 }

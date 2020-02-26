@@ -21,19 +21,38 @@ namespace Wox.Infrastructure.UserSettings
         public string ResultFontWeight { get; set; }
         public string ResultFontStretch { get; set; }
 
+
         /// <summary>
         /// when false Alphabet static service will always return empty results
         /// </summary>
         public bool ShouldUsePinyin { get; set; } = true;
 
-        private string _querySearchPrecision { get; set; } = StringMatcher.SearchPrecisionScore.Regular.ToString();
-        public string QuerySearchPrecision
+
+        internal StringMatcher.SearchPrecisionScore QuerySearchPrecision { get; private set; } = StringMatcher.SearchPrecisionScore.Regular;
+
+        [JsonIgnore]
+        public string QuerySearchPrecisionString
         {
-            get { return _querySearchPrecision; }
+            get { return QuerySearchPrecision.ToString(); }
             set
             {
-                _querySearchPrecision = value;
-                StringMatcher.UserSettingSearchPrecision = value;
+                try
+                {
+                    var precisionScore = (StringMatcher.SearchPrecisionScore)Enum
+                                            .Parse(typeof(StringMatcher.SearchPrecisionScore), value);
+
+                    QuerySearchPrecision = precisionScore;
+                    StringMatcher.Instance.UserSettingSearchPrecision = precisionScore;
+                }
+                catch (ArgumentException e)
+                {
+                    Logger.Log.Exception(nameof(Settings), "Failed to load QuerySearchPrecisionString value from Settings file", e);
+
+                    QuerySearchPrecision = StringMatcher.SearchPrecisionScore.Regular;
+                    StringMatcher.Instance.UserSettingSearchPrecision = StringMatcher.SearchPrecisionScore.Regular;
+
+                    throw;
+                }
             }
         }
 
