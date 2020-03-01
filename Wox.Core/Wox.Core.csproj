@@ -53,6 +53,8 @@
     </Compile>
     <Compile Include="Plugin\ExecutablePlugin.cs" />
     <Compile Include="Plugin\PluginsLoader.cs" />
+    <Compile Include="Resource\LocalizationConverter.cs" />
+    <Compile Include="Resource\LocalizedDescriptionAttribute.cs" />
     <Compile Include="Plugin\QueryBuilder.cs" />
     <Compile Include="Updater.cs" />
     <Compile Include="Resource\AvailableLanguages.cs" />
