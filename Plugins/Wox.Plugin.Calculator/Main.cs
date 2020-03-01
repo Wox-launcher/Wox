@@ -28,7 +28,7 @@ namespace Wox.Plugin.Caculator
 
         public List<Result> Query(Query query)
         {
-            if (query.Search.Length <= 2          // don't affect when user only input "e" or "i" keyword
+            if (query.Search.Length <= 1          // don't affect when user only input "e" or "i" keyword
                 || !RegValidExpressChar.IsMatch(query.Search)
                 || !IsBracketComplete(query.Search)) return new List<Result>();
 
