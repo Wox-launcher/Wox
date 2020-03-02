@@ -1,3 +1,4 @@
+using Microsoft.Win32;
 using Squirrel;
 using System;
 using Wox.Infrastructure;
@@ -16,12 +17,13 @@ namespace Wox.Core.Configuration
 
         public Portable()
         {
+            //NEED TO DYNAMICALLY GET WOX'S LOCATION OTHERWISE SHORTCUTS WONT WORK
             applicationName = Constant.Wox;
             exeName = applicationName + ".exe";
             rootAppDirectory = Constant.RootDirectory;
-            portabilityUpdater = new UpdateManager(string.Empty, applicationName, rootAppDirectory);
+            portabilityUpdater = new UpdateManager(string.Empty, applicationName, rootAppDirectory); 
 
-            roamingDataPath = Constant.RoamingDataPath;
+             roamingDataPath = Constant.RoamingDataPath;
             portableDataPath = Constant.PortableDataPath;
         }
 
@@ -31,7 +33,7 @@ namespace Wox.Core.Configuration
             {
                 MoveUserDataFolder(portableDataPath, roamingDataPath);
                 CreateShortcuts();
-                CreateUninstallerEntry();
+                CreateUninstallerEntry(); //DOES NOT CREATE THE UNINSTALLER ICON!!!!!!
 
                 // always dispose UpdateManager???????????
                 // CHANGE TO PRIVATE/INTERNAL METHODS
@@ -108,7 +110,17 @@ namespace Wox.Core.Configuration
 
         public void CreateUninstallerEntry()
         {
-            portabilityUpdater.CreateUninstallerRegistryEntry();
+            var uninstallRegSubKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall";
+            // NB: Sometimes the Uninstall key doesn't exist
+            using (var parentKey =
+                RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default)
+                    .CreateSubKey("Uninstall", RegistryKeyPermissionCheck.ReadWriteSubTree)) {; }
+
+            var key = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default)
+                .CreateSubKey(uninstallRegSubKey + "\\" + applicationName, RegistryKeyPermissionCheck.ReadWriteSubTree);
+            key.SetValue("DisplayIcon", Constant.ApplicationDirectory + "\\app.ico", RegistryValueKind.String);
+
+            portabilityUpdater.CreateUninstallerRegistryEntry().Wait();
         }
     }
 }

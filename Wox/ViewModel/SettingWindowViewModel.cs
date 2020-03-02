@@ -55,6 +55,11 @@ namespace Wox.ViewModel
             _portable.EnablePortableMode();
         }
 
+        public void DisablePortableMode()
+        {
+            _portable.DisablePortableMode();
+        }
+
         public void Save()
         {
             _storage.Save();
