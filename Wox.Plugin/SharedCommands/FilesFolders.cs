@@ -42,7 +42,7 @@ namespace Wox.Plugin.SharedCommands
                     Copy(subdir.FullName, temppath);
                 }
             }
-            catch(Exception e)
+            catch (Exception e)
             {
 #if DEBUG
                 throw e;
@@ -69,7 +69,7 @@ namespace Wox.Plugin.SharedCommands
 
                 return true;
             }
-            catch(Exception e)
+            catch (Exception e)
             {
 #if DEBUG
                 throw e;
@@ -88,7 +88,7 @@ namespace Wox.Plugin.SharedCommands
                 if (Directory.Exists(path))
                     Directory.Delete(path, true);
             }
-            catch(Exception e)
+            catch (Exception e)
             {
 #if DEBUG
                 throw e;

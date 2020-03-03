@@ -16,6 +16,7 @@ namespace Wox.Infrastructure
         public static readonly string ApplicationDirectory = Directory.GetParent(ProgramDirectory).ToString();
         public static readonly string RootDirectory = Directory.GetParent(ApplicationDirectory).ToString();
 
+        public static bool IsPortableMode;
         public const string PortableFolderName = "UserData";
         public static string PortableDataPath = Path.Combine(ProgramDirectory, PortableFolderName);
         public static string RoamingDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Wox);
@@ -23,6 +24,7 @@ namespace Wox.Infrastructure
         {
             if (Directory.Exists(PortableDataPath))
             {
+                IsPortableMode = true;
                 return PortableDataPath;
             }
             else

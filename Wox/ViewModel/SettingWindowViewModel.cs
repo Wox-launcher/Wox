@@ -47,7 +47,7 @@ namespace Wox.ViewModel
 
         public async void UpdateApp()
         {
-            await _updater.UpdateApp();
+            await _updater.UpdateApp(false);
         }
 
         public void EnablePortableMode()
@@ -163,26 +163,11 @@ namespace Wox.ViewModel
         {
             get
             {
-                var plugins = PluginManager.AllPlugins;
-                var settings = Settings.PluginSettings.Plugins;
-                plugins.Sort((a, b) =>
-                {
-                    var d1 = settings[a.Metadata.ID].Disabled;
-                    var d2 = settings[b.Metadata.ID].Disabled;
-                    if (d1 == d2)
-                    {
-                        return string.Compare(a.Metadata.Name, b.Metadata.Name, StringComparison.CurrentCulture);
-                    }
-                    else
-                    {
-                        return d1.CompareTo(d2);
-                    }
-                });
-
-                var metadatas = plugins.Select(p => new PluginViewModel
-                {
-                    PluginPair = p,
-                }).ToList();
+                var metadatas = PluginManager.AllPlugins
+                    .OrderBy(x => x.Metadata.Disabled)
+                    .ThenBy(y => y.Metadata.Name)
+                    .Select(p => new PluginViewModel { PluginPair = p})
+                    .ToList();
                 return metadatas;
             }
         }
