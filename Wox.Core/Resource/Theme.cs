@@ -23,7 +23,7 @@ namespace Wox.Core.Resource
         private const string Folder = "Themes";
         private const string Extension = ".xaml";
         private string DirectoryPath => Path.Combine(Constant.ProgramDirectory, Folder);
-        private string UserDirectoryPath => Path.Combine(Constant.DataDirectory, Folder);
+        private string UserDirectoryPath => Path.Combine(DataLocation.DataDirectory(), Folder);
 
         public Theme()
         {

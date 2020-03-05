@@ -125,7 +125,7 @@ namespace Wox.Core.Configuration
                     .CreateSubKey("Uninstall", RegistryKeyPermissionCheck.ReadWriteSubTree)) {; }
 
             var key = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default)
-                .CreateSubKey(uninstallRegSubKey + "\\" + applicationName, RegistryKeyPermissionCheck.ReadWriteSubTree);
+                .CreateSubKey(uninstallRegSubKey + "\\" + Constant.Wox, RegistryKeyPermissionCheck.ReadWriteSubTree);
             key.SetValue("DisplayIcon", Constant.ApplicationDirectory + "\\app.ico", RegistryValueKind.String);
 
             portabilityUpdater.CreateUninstallerRegistryEntry();

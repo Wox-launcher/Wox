@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using NLog;
 using NLog.Config;
 using NLog.Targets;
+using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Infrastructure.Logger
 {
@@ -15,7 +16,7 @@ namespace Wox.Infrastructure.Logger
 
         static Log()
         {
-            CurrentLogDirectory = Path.Combine(Constant.DataDirectory, DirectoryName, Constant.Version);
+            CurrentLogDirectory = Path.Combine(DataLocation.DataDirectory(), DirectoryName, Constant.Version);
             if (!Directory.Exists(CurrentLogDirectory))
             {
                 Directory.CreateDirectory(CurrentLogDirectory);
