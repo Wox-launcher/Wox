@@ -1,49 +1,46 @@
 using Microsoft.Win32;
 using Squirrel;
 using System;
+using System.IO;
+using System.Reflection;
+using System.Windows;
 using Wox.Infrastructure;
+using Wox.Infrastructure.UserSettings;
 using Wox.Plugin.SharedCommands;
 
 namespace Wox.Core.Configuration
 {
     public class Portable : IPortable
     {
-        private string applicationName;
-        private string exeName;
-        private string rootAppDirectory;
         private UpdateManager portabilityUpdater;
-        private string roamingDataPath;
-        private string portableDataPath;
-
-        public Portable()
-        {
-            //NEED TO DYNAMICALLY GET WOX'S LOCATION OTHERWISE SHORTCUTS WONT WORK
-            applicationName = Constant.Wox;
-            exeName = applicationName + ".exe";
-            rootAppDirectory = Constant.RootDirectory;
-            portabilityUpdater = new UpdateManager(string.Empty, applicationName, rootAppDirectory); 
-
-             roamingDataPath = Constant.RoamingDataPath;
-            portableDataPath = Constant.PortableDataPath;
-        }
 
         public void DisablePortableMode()
         {
+            portabilityUpdater = new UpdateManager(string.Empty, Constant.Wox, Constant.RootDirectory);
+
             try
             {
-                MoveUserDataFolder(portableDataPath, roamingDataPath);
+                MoveUserDataFolder(DataLocation.PortableDataPath, DataLocation.RoamingDataPath);
                 CreateShortcuts();
-                CreateUninstallerEntry(); //DOES NOT CREATE THE UNINSTALLER ICON!!!!!!
+                CreateUninstallerEntry();
+                IndicateDeletion(DataLocation.PortableDataPath);
 
-                // always dispose UpdateManager???????????
+                MessageBox.Show("Wox needs to restart to finish disabling portable mode, " +
+                    "after the restart your portable data profile will be deleted and roaming data profile kept");
+
+                portabilityUpdater.Dispose();
                 // CHANGE TO PRIVATE/INTERNAL METHODS
+
+                UpdateManager.RestartApp();
             }
             catch (Exception e)
             {
                 //log and update error message to output above locations where shortcuts may not have been removed
 #if DEBUG
+                portabilityUpdater.Dispose();
                 throw;
 #else
+                portabilityUpdater.Dispose();
                 throw;// PRODUCTION LOGGING AND CONTINUE
                 
 #endif
@@ -113,6 +110,7 @@ namespace Wox.Core.Configuration
 
         public void CreateShortcuts()
         {
+            var exeName = Constant.Wox + ".exe";
             portabilityUpdater.CreateShortcutsForExecutable(exeName, ShortcutLocation.StartMenu, false);
             portabilityUpdater.CreateShortcutsForExecutable(exeName, ShortcutLocation.Desktop, false);
             portabilityUpdater.CreateShortcutsForExecutable(exeName, ShortcutLocation.Startup, false);
