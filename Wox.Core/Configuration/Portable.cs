@@ -128,7 +128,8 @@ namespace Wox.Core.Configuration
                 .CreateSubKey(uninstallRegSubKey + "\\" + applicationName, RegistryKeyPermissionCheck.ReadWriteSubTree);
             key.SetValue("DisplayIcon", Constant.ApplicationDirectory + "\\app.ico", RegistryValueKind.String);
 
-            portabilityUpdater.CreateUninstallerRegistryEntry().Wait();
+            portabilityUpdater.CreateUninstallerRegistryEntry();
+        }
 
         public void IndicateDeletion(string filePathTodelete)
         {
