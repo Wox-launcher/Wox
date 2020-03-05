@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -13,7 +13,6 @@ using Wox.Core.Plugin;
 using Wox.Core.Resource;
 using Wox.Helper;
 using Wox.Infrastructure;
-using Wox.Infrastructure.Http;
 using Wox.Infrastructure.Storage;
 using Wox.Infrastructure.UserSettings;
 using Wox.Plugin;
@@ -39,8 +38,7 @@ namespace Wox.ViewModel
                     OnPropertyChanged(nameof(ActivatedTimes));
                 }
             };
-
-
+            _portableMode = Settings.PortableMode;
         }
 
         public Settings Settings { get; set; }
@@ -50,14 +48,30 @@ namespace Wox.ViewModel
             await _updater.UpdateApp(false);
         }
 
-        public void EnablePortableMode()
+        private bool _portableMode;
+        public bool PortableMode
         {
-            _portable.EnablePortableMode();
+            get { return _portableMode; }
+            set
+            {
+                _portableMode = value;
+
+                Settings.PortableMode = value;
+                Save();
+                PortabilityUpdate(value);
+            }
         }
 
-        public void DisablePortableMode()
+        private void PortabilityUpdate(bool enabled)
         {
-            _portable.DisablePortableMode();
+            if (enabled)
+            {
+                _portable.EnablePortableMode();
+            }
+            else
+            {
+                _portable.DisablePortableMode();
+            }
         }
 
         public void Save()
