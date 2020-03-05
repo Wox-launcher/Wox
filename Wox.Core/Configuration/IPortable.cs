@@ -12,5 +12,6 @@ namespace Wox.Core.Configuration
         bool IsPortableModeEnabled();
         void MoveUserDataFolder(string fromLocation, string toLocation);
         void VerifyUserDataAfterMove(string fromLocation, string toLocation);
+        void CleanUpFolderAfterPortabilityUpdate();
     }
 }

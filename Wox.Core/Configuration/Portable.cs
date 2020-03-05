@@ -52,20 +52,30 @@ namespace Wox.Core.Configuration
 
         public void EnablePortableMode()
         {
+            portabilityUpdater = new UpdateManager(string.Empty, Constant.Wox, Constant.RootDirectory);
+
             try
             {
-                MoveUserDataFolder(roamingDataPath, portableDataPath);
+                MoveUserDataFolder(DataLocation.RoamingDataPath, DataLocation.PortableDataPath);
                 RemoveShortcuts();
                 RemoveUninstallerEntry();
+                IndicateDeletion(DataLocation.RoamingDataPath);
 
-                // always dispose UpdateManager???????????
+                MessageBox.Show("Wox needs to restart to finish enabling portable mode, " +
+                    "after the restart your roaming data profile will be deleted and portable data profile kept");
+
+                portabilityUpdater.Dispose();
+
+                UpdateManager.RestartApp();
             }
             catch (Exception e)
             {
                 //log and update error message to output above locations where shortcuts may not have been removed
 #if DEBUG
+                portabilityUpdater.Dispose();
                 throw;
 #else
+                portabilityUpdater.Dispose();
                 throw;// PRODUCTION LOGGING AND CONTINUE
                 
 #endif
@@ -79,6 +89,7 @@ namespace Wox.Core.Configuration
 
         public void RemoveShortcuts()
         {
+            var exeName = Constant.Wox + ".exe";
             portabilityUpdater.RemoveShortcutsForExecutable(exeName, ShortcutLocation.StartMenu);
             portabilityUpdater.RemoveShortcutsForExecutable(exeName, ShortcutLocation.Desktop);
             portabilityUpdater.RemoveShortcutsForExecutable(exeName, ShortcutLocation.Startup);
@@ -93,7 +104,6 @@ namespace Wox.Core.Configuration
         {
             FilesFolders.Copy(fromLocation, toLocation);
             VerifyUserDataAfterMove(fromLocation, toLocation);
-            FilesFolders.RemoveFolder(fromLocation);
         }
 
         public void VerifyUserDataAfterMove(string fromLocation, string toLocation)
