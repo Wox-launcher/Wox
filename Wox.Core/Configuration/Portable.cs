@@ -129,6 +129,40 @@ namespace Wox.Core.Configuration
             key.SetValue("DisplayIcon", Constant.ApplicationDirectory + "\\app.ico", RegistryValueKind.String);
 
             portabilityUpdater.CreateUninstallerRegistryEntry().Wait();
+        public void CleanUpFolderAfterPortabilityUpdate()
+        {
+            var portableDataPath = Path.Combine(Directory.GetParent(Assembly.GetExecutingAssembly().Location.NonNull()).ToString(), "UserData");
+            var roamingDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Wox");
+
+            bool DataLocationPortableDeleteRequired = false;
+            bool DataLocationRoamingDeleteRequired = false;
+
+            if ((roamingDataPath + "\\.dead").FileExits())
+                DataLocationRoamingDeleteRequired = true;
+
+            if ((portableDataPath + "\\.dead").FileExits())
+                DataLocationPortableDeleteRequired = true;
+
+            if (DataLocationRoamingDeleteRequired)
+            {
+                if(roamingDataPath.LocationExists())
+                    MessageBox.Show("Wox detected you restarted after enabling portable mode, " +
+                                    "your roaming data profile will now be deleted");
+
+                FilesFolders.RemoveFolderIfExists(roamingDataPath);
+
+                return;
+            }
+
+            if(DataLocationPortableDeleteRequired)
+            {
+                MessageBox.Show("Wox detected you restarted after disabling portable mode, " +
+                                    "your portable data profile will now be deleted");
+
+                FilesFolders.RemoveFolderIfExists(portableDataPath);
+
+                return;
+            }
         }
     }
 }

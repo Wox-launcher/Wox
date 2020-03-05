@@ -48,6 +48,8 @@ namespace Wox
         {
             Stopwatch.Normal("|App.OnStartup|Startup cost", () =>
             {
+                _portable.CleanUpFolderAfterPortabilityUpdate();
+
                 Log.Info("|App.OnStartup|Begin Wox startup ----------------------------------------------------");
                 Log.Info($"|App.OnStartup|Runtime info:{ErrorReporting.RuntimeInfo()}");
                 RegisterAppDomainExceptions();
