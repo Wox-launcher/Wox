@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
@@ -15,26 +14,7 @@ namespace Wox.Infrastructure
         public static readonly string ExecutablePath = Path.Combine(ProgramDirectory, Wox + ".exe");
         public static readonly string ApplicationDirectory = Directory.GetParent(ProgramDirectory).ToString();
         public static readonly string RootDirectory = Directory.GetParent(ApplicationDirectory).ToString();
-
-        public static bool IsPortableMode;
-        public const string PortableFolderName = "UserData";
-        public static string PortableDataPath = Path.Combine(ProgramDirectory, PortableFolderName);
-        public static string RoamingDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Wox);
-        public static string DetermineDataDirectory()
-        {
-            if (Directory.Exists(PortableDataPath))
-            {
-                IsPortableMode = true;
-                return PortableDataPath;
-            }
-            else
-            {
-                return RoamingDataPath;
-            }
-        }
-
-        public static readonly string DataDirectory = DetermineDataDirectory();
-        public static readonly string PluginsDirectory = Path.Combine(DataDirectory, Plugins);
+        
         public static readonly string PreinstalledDirectory = Path.Combine(ProgramDirectory, Plugins);
         public const string Issue = "https://github.com/Wox-launcher/Wox/issues/new";
         public static readonly string Version = FileVersionInfo.GetVersionInfo(Assembly.Location.NonNull()).ProductVersion;
