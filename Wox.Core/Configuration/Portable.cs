@@ -129,6 +129,12 @@ namespace Wox.Core.Configuration
             key.SetValue("DisplayIcon", Constant.ApplicationDirectory + "\\app.ico", RegistryValueKind.String);
 
             portabilityUpdater.CreateUninstallerRegistryEntry().Wait();
+
+        public void IndicateDeletion(string filePathTodelete)
+        {
+            using (StreamWriter sw = File.CreateText(filePathTodelete + "\\.dead")){}
+        }
+
         public void CleanUpFolderAfterPortabilityUpdate()
         {
             var portableDataPath = Path.Combine(Directory.GetParent(Assembly.GetExecutingAssembly().Location.NonNull()).ToString(), "UserData");
