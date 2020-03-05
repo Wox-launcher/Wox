@@ -48,7 +48,7 @@ namespace Wox.Plugin.SharedCommands
                 throw e;
 #else
                 MessageBox.Show(string.Format("Copying path {0} has failed, it will now be deleted for consistency", targetPath));
-                RemoveFolder(targetPath);
+                RemoveFolderIfExists(targetPath);
 #endif
             }
 
@@ -81,7 +81,7 @@ namespace Wox.Plugin.SharedCommands
 
         }
 
-        public static void RemoveFolder(this string path)
+        public static void RemoveFolderIfExists(this string path)
         {
             try
             {
@@ -96,6 +96,16 @@ namespace Wox.Plugin.SharedCommands
                 MessageBox.Show(string.Format("Not able to delete folder {0}, please go to the location and manually delete it", path));
 #endif
             }
+        }
+
+        public static bool LocationExists(this string path)
+        {
+            return Directory.Exists(path);
+        }
+
+        public static bool FileExits(this string filePath)
+        {
+            return File.Exists(filePath);
         }
     }
 }
