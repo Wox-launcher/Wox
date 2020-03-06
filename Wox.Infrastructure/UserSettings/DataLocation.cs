@@ -9,21 +9,24 @@ namespace Wox.Infrastructure.UserSettings
 {
     public static class DataLocation
     {
-        public static bool PortableDataLocationInUse;
         public const string PortableFolderName = "UserData";
+        public const string DeletionIndicatorFile = ".dead";
         public static string PortableDataPath = Path.Combine(Constant.ProgramDirectory, PortableFolderName);
         public static string RoamingDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Constant.Wox);
         public static string DataDirectory()
         {
-            if (Directory.Exists(PortableDataPath))
-            {
-                PortableDataLocationInUse = true;
+            if (PortableDataLocationInUse())
                 return PortableDataPath;
-            }
-            else
-            {
-                return RoamingDataPath;
-            }
+
+            return RoamingDataPath;
+        }
+
+        public static bool PortableDataLocationInUse()
+        {
+            if (Directory.Exists(PortableDataPath) && !File.Exists(DeletionIndicatorFile))
+                return true;
+
+            return false;
         }
 
         public static readonly string PluginsDirectory = Path.Combine(DataDirectory(), Constant.Plugins);

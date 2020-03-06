@@ -81,7 +81,7 @@ namespace Wox.Core
             
             await updateManager.ApplyReleases(newUpdateInfo);
 
-            if (DataLocation.PortableDataLocationInUse)
+            if (DataLocation.PortableDataLocationInUse())
             {
                 var targetDestination = updateManager.RootAppDirectory + $"\\app-{newReleaseVersion.ToString()}\\{DataLocation.PortableFolderName}";
                 FilesFolders.Copy(DataLocation.PortableDataPath, targetDestination);

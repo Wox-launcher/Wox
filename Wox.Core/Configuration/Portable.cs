@@ -133,7 +133,7 @@ namespace Wox.Core.Configuration
 
         public void IndicateDeletion(string filePathTodelete)
         {
-            using (StreamWriter sw = File.CreateText(filePathTodelete + "\\.dead")){}
+            using (StreamWriter sw = File.CreateText(filePathTodelete + "\\" + DataLocation.DeletionIndicatorFile)){}
         }
 
         public void CleanUpFolderAfterPortabilityUpdate()
@@ -144,10 +144,10 @@ namespace Wox.Core.Configuration
             bool DataLocationPortableDeleteRequired = false;
             bool DataLocationRoamingDeleteRequired = false;
 
-            if ((roamingDataPath + "\\.dead").FileExits())
+            if ((roamingDataPath + "\\" + DataLocation.DeletionIndicatorFile).FileExits())
                 DataLocationRoamingDeleteRequired = true;
 
-            if ((portableDataPath + "\\.dead").FileExits())
+            if ((portableDataPath + "\\" + DataLocation.DeletionIndicatorFile).FileExits())
                 DataLocationPortableDeleteRequired = true;
 
             if (DataLocationRoamingDeleteRequired)
