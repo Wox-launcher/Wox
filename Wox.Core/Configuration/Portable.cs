@@ -171,5 +171,22 @@ namespace Wox.Core.Configuration
                 return;
             }
         }
+
+        public bool CanUpdatePortability()
+        {
+            var roamingLocationExists = DataLocation.RoamingDataPath.LocationExists();
+            var portableLocationExists = DataLocation.PortableDataPath.LocationExists();
+
+            if(roamingLocationExists && portableLocationExists)
+            {
+                MessageBox.Show(string.Format("Wox detected your user data exists both in {0} and " +
+                                    "{1}. {2}{2}Please delete {1} in order to proceed. No changes have occured.", 
+                                    DataLocation.PortableDataPath, DataLocation.RoamingDataPath, Environment.NewLine));
+
+                return false;
+            }
+
+            return true;
+        }
     }
 }

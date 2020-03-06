@@ -54,6 +54,9 @@ namespace Wox.ViewModel
             get { return _portableMode; }
             set
             {
+                if (!_portable.CanUpdatePortability())
+                    return;
+                
                 _portableMode = value;
 
                 Settings.PortableMode = value;
