@@ -136,7 +136,7 @@ namespace Wox.Core.Configuration
             using (StreamWriter sw = File.CreateText(filePathTodelete + "\\" + DataLocation.DeletionIndicatorFile)){}
         }
 
-        public void CleanUpFolderAfterPortabilityUpdate()
+        public void PreStartCleanUpAfterPortabilityUpdate()
         {
             var portableDataPath = Path.Combine(Directory.GetParent(Assembly.GetExecutingAssembly().Location.NonNull()).ToString(), "UserData");
             var roamingDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Wox");

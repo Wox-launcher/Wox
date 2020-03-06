@@ -48,7 +48,7 @@ namespace Wox
         {
             Stopwatch.Normal("|App.OnStartup|Startup cost", () =>
             {
-                _portable.CleanUpFolderAfterPortabilityUpdate();
+                _portable.PreStartCleanUpAfterPortabilityUpdate();
 
                 Log.Info("|App.OnStartup|Begin Wox startup ----------------------------------------------------");
                 Log.Info($"|App.OnStartup|Runtime info:{ErrorReporting.RuntimeInfo()}");
