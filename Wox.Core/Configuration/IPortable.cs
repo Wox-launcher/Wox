@@ -1,4 +1,4 @@
-
+﻿
 namespace Wox.Core.Configuration
 {
     public interface IPortable
@@ -9,7 +9,6 @@ namespace Wox.Core.Configuration
         void RemoveUninstallerEntry();
         void CreateShortcuts();
         void CreateUninstallerEntry();
-        bool IsPortableModeEnabled();
         void MoveUserDataFolder(string fromLocation, string toLocation);
         void VerifyUserDataAfterMove(string fromLocation, string toLocation);
         bool CanUpdatePortability();

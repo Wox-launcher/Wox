@@ -79,11 +79,6 @@ namespace Wox.Core.Configuration
             }
         }
 
-        public bool IsPortableModeEnabled()
-        {
-            throw new NotImplementedException();
-        }
-
         public void RemoveShortcuts()
         {
             var exeName = Constant.Wox + ".exe";
