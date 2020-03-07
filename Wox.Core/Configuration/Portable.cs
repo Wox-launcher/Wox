@@ -29,7 +29,6 @@ namespace Wox.Core.Configuration
                     "after the restart your portable data profile will be deleted and roaming data profile kept");
 
                 portabilityUpdater.Dispose();
-                // CHANGE TO PRIVATE/INTERNAL METHODS
 
                 UpdateManager.RestartApp();
             }
@@ -126,13 +125,18 @@ namespace Wox.Core.Configuration
             portabilityUpdater.CreateUninstallerRegistryEntry();
         }
 
-        public void IndicateDeletion(string filePathTodelete)
+        internal void IndicateDeletion(string filePathTodelete)
         {
             using (StreamWriter sw = File.CreateText(filePathTodelete + "\\" + DataLocation.DeletionIndicatorFile)){}
         }
 
+        ///<summary>
+        ///This method should be run at first before all methods during start up and should be run before determining which data location
+        ///will be used for Wox.
+        ///</summary>
         public void PreStartCleanUpAfterPortabilityUpdate()
         {
+            // Specify here so this method does not rely on other environment variables to initialise
             var portableDataPath = Path.Combine(Directory.GetParent(Assembly.GetExecutingAssembly().Location.NonNull()).ToString(), "UserData");
             var roamingDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Wox");
 
