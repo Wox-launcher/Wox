@@ -34,14 +34,13 @@ namespace Wox.Core.Configuration
             }
             catch (Exception e)
             {
-                //log and update error message to output above locations where shortcuts may not have been removed
 #if DEBUG
                 portabilityUpdater.Dispose();
                 throw;
 #else
                 portabilityUpdater.Dispose();
-                throw;// PRODUCTION LOGGING AND CONTINUE
-                
+                Log.Exception("Portable", "Error occured while disabling portable mode", e);
+                throw;
 #endif
             }
         }
@@ -66,14 +65,13 @@ namespace Wox.Core.Configuration
             }
             catch (Exception e)
             {
-                //log and update error message to output above locations where shortcuts may not have been removed
 #if DEBUG
                 portabilityUpdater.Dispose();
                 throw;
 #else
                 portabilityUpdater.Dispose();
-                throw;// PRODUCTION LOGGING AND CONTINUE
-                
+                Log.Exception("Portable", "Error occured while enabling portable mode", e);
+                throw;
 #endif
             }
         }
