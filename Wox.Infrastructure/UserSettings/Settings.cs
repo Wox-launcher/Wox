@@ -77,8 +77,6 @@ namespace Wox.Infrastructure.UserSettings
         public bool DontPromptUpdateMsg { get; set; }
         public bool EnableUpdateLog { get; set; }
 
-        public bool PortableMode { get; set; } = DataLocation.PortableDataLocationInUse();
-
         public bool StartWoxOnSystemStartup { get; set; } = true;
         public bool HideOnStartup { get; set; }
         bool _hideNotifyIcon { get; set; }

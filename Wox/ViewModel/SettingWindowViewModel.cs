@@ -38,7 +38,6 @@ namespace Wox.ViewModel
                     OnPropertyChanged(nameof(ActivatedTimes));
                 }
             };
-            _portableMode = Settings.PortableMode;
         }
 
         public Settings Settings { get; set; }
@@ -48,7 +47,8 @@ namespace Wox.ViewModel
             await _updater.UpdateApp(false);
         }
 
-        private bool _portableMode;
+        // This is only required to set at startup. When portable mode enabled/disabled a restart is always required
+        private bool _portableMode = DataLocation.PortableDataLocationInUse();
         public bool PortableMode
         {
             get { return _portableMode; }
@@ -56,18 +56,24 @@ namespace Wox.ViewModel
             {
                 if (!_portable.CanUpdatePortability())
                     return;
-                
-                _portableMode = value;
 
-                Settings.PortableMode = value;
-                Save();
-                PortabilityUpdate(value);
+                bool switchToPortable;
+                if(DataLocation.PortableDataLocationInUse())
+                {
+                    switchToPortable = false;
+                }
+                else
+                {
+                    switchToPortable = true;
+                }
+                
+                PortabilityUpdate(switchToPortable);
             }
         }
 
-        private void PortabilityUpdate(bool enabled)
+        private void PortabilityUpdate(bool enablePortableMode)
         {
-            if (enabled)
+            if (enablePortableMode)
             {
                 _portable.EnablePortableMode();
             }
