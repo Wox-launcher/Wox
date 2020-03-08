@@ -22,8 +22,13 @@ namespace Wox.Core.Configuration
             try
             {
                 MoveUserDataFolder(DataLocation.PortableDataPath, DataLocation.RoamingDataPath);
+#if DEBUG
+                // Create shortcuts and uninstaller are not required in debug mode, 
+                // otherwise will repoint the path of the actual installed production version to the debug version
+#else
                 CreateShortcuts();
                 CreateUninstallerEntry();
+#endif
                 IndicateDeletion(DataLocation.PortableDataPath);
 
                 MessageBox.Show("Wox needs to restart to finish disabling portable mode, " +
@@ -53,8 +58,13 @@ namespace Wox.Core.Configuration
             try
             {
                 MoveUserDataFolder(DataLocation.RoamingDataPath, DataLocation.PortableDataPath);
+#if DEBUG
+                // Remove shortcuts and uninstaller are not required in debug mode, 
+                // otherwise will delete the actual installed production version
+#else
                 RemoveShortcuts();
                 RemoveUninstallerEntry();
+#endif
                 IndicateDeletion(DataLocation.RoamingDataPath);
 
                 MessageBox.Show("Wox needs to restart to finish enabling portable mode, " +
