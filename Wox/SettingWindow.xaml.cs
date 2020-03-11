@@ -40,12 +40,6 @@ namespace Wox
 
         #region General
 
-        void OnLanguageChanged(object sender, SelectionChangedEventArgs e)
-        {
-            var language = (Language)e.AddedItems[0];
-            InternationalizationManager.Instance.ChangeLanguage(language);
-        }
-
         private void OnAutoStartupChecked(object sender, RoutedEventArgs e)
         {
             SetStartup();
