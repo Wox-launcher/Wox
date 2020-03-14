@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Wox.Infrastructure</RootNamespace>
     <AssemblyName>Wox.Infrastructure</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
     <TargetFrameworkProfile />
@@ -72,6 +72,7 @@
     <Compile Include="Hotkey\HotkeyModel.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Alphabet.cs" />
+    <Compile Include="UI\EnumBindingSource.cs" />
     <Compile Include="UserSettings\HttpProxy.cs" />
     <Compile Include="UserSettings\PluginHotkey.cs" />
     <Compile Include="UserSettings\PluginSettings.cs" />

@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Wox.Plugin.Caculator</RootNamespace>
     <AssemblyName>Wox.Plugin.Caculator</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
     <TargetFrameworkProfile />
@@ -46,14 +46,22 @@
     <Reference Include="PresentationFramework" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Xaml" />
+    <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\..\SolutionAssemblyInfo.cs">
       <Link>Properties\SolutionAssemblyInfo.cs</Link>
     </Compile>
+    <Compile Include="DecimalSeparator.cs" />
     <Compile Include="NumberTranslator.cs" />
     <Compile Include="Main.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Settings.cs" />
+    <Compile Include="ViewModels\SettingsViewModel.cs" />
+    <Compile Include="Views\CalculatorSettings.xaml.cs">
+      <DependentUpon>CalculatorSettings.xaml</DependentUpon>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <None Include="plugin.json">
@@ -61,6 +69,10 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Wox.Core\Wox.Core.csproj">
+      <Project>{B749F0DB-8E75-47DB-9E5E-265D16D0C0D2}</Project>
+      <Name>Wox.Core</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\Wox.Infrastructure\Wox.Infrastructure.csproj">
       <Project>{4FD29318-A8AB-4D8F-AA47-60BC241B8DA3}</Project>
       <Name>Wox.Infrastructure</Name>
@@ -122,11 +134,17 @@
       <Version>10.3.0</Version>
     </PackageReference>
     <PackageReference Include="Mages">
-      <Version>1.5.0</Version>
+      <Version>1.6.0</Version>
     </PackageReference>
     <PackageReference Include="System.Runtime">
       <Version>4.0.0</Version>
     </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Include="Views\CalculatorSettings.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

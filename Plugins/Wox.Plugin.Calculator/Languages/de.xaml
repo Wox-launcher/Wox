@@ -7,4 +7,10 @@
     <system:String x:Key="wox_plugin_calculator_not_a_number">Keine Zahl (NaN)</system:String>
     <system:String x:Key="wox_plugin_calculator_expression_not_complete">Ausdruck falsch oder nicht vollständig (Klammern vergessen?)</system:String>
     <system:String x:Key="wox_plugin_calculator_copy_number_to_clipboard">Diese Zahl in die Zwischenablage kopieren</system:String>
+    <system:String x:Key="wox_plugin_calculator_output_decimal_seperator">Dezimaltrennzeichen</system:String>
+    <system:String x:Key="wox_plugin_calculator_output_decimal_seperator_help">Das Dezimaltrennzeichen, welches bei der Ausgabe verwendet werden soll.</system:String>
+    <system:String x:Key="wox_plugin_calculator_decimal_seperator_use_system_locale">Systemeinstellung nutzen</system:String>
+    <system:String x:Key="wox_plugin_calculator_decimal_seperator_comma">Komma (,)</system:String>
+    <system:String x:Key="wox_plugin_calculator_decimal_seperator_dot">Punkt (.)</system:String>
+    <system:String x:Key="wox_plugin_calculator_max_decimal_places">Max. Nachkommastellen</system:String>
 </ResourceDictionary>

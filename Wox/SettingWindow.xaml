@@ -55,7 +55,7 @@
                 <CheckBox Margin="10" IsChecked="{Binding Settings.AutoUpdates}">
                     <TextBlock Text="{DynamicResource autoUpdates}" />
                 </CheckBox>
-                <CheckBox Margin="10" IsChecked="{Binding Settings.ShouldUsePinyin}">
+                <CheckBox Margin="10" IsChecked="{Binding ShouldUsePinyin}">
                     <TextBlock Text="{DynamicResource ShouldUsePinyin}" />
                 </CheckBox>
                 <StackPanel Margin="10" Orientation="Horizontal">
@@ -72,8 +72,8 @@
                 </StackPanel>
                 <StackPanel Margin="10" Orientation="Horizontal">
                     <TextBlock Text="{DynamicResource language}" />
-                    <ComboBox Margin="10 0 0 0" Width="120" SelectionChanged="OnLanguageChanged"
-                              ItemsSource="{Binding Languages}" SelectedValue="{Binding Settings.Language}"
+                    <ComboBox Margin="10 0 0 0" Width="120"
+                              ItemsSource="{Binding Languages}" SelectedValue="{Binding Language}"
                               DisplayMemberPath="Display" SelectedValuePath="LanguageCode" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="10">
