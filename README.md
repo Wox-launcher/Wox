@@ -27,6 +27,7 @@ Features
 **New from this fork:**
 - Portable mode
 - Drastically improved search experience
+- Auto-complete text suggestion
 - Search all subfolders and files
 - Option to always run CMD or Powershell as administrator
 - Run CMD, Powershell and programs as a different user

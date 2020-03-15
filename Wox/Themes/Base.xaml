@@ -8,6 +8,7 @@
         <Setter Property="Height" Value="46" />
         <Setter Property="Background" Value="#616161" />
         <Setter Property="Foreground" Value="#E3E0E3" />
+        <Setter Property="CaretBrush" Value="#E3E0E3" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Stylus.IsFlicksEnabled" Value="False" />
     </Style>
