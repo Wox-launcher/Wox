@@ -191,6 +191,11 @@ namespace Wox.Core.Plugin
                 r.PluginDirectory = metadata.PluginDirectory;
                 r.PluginID = metadata.ID;
                 r.OriginQuery = query;
+
+                // ActionKeywordAssigned is used for constructing MainViewModel's query text auto-complete suggestions 
+                // Plugins may have multi-actionkeywords eg. WebSearches. In this scenario it needs to be overriden on the plugin level 
+                if (metadata.ActionKeywords.Count == 1)
+                    r.ActionKeywordAssigned = query.ActionKeyword;
             }
         }
 

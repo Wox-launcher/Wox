@@ -14,6 +14,12 @@ namespace Wox.Plugin
         public string Title { get; set; }
         public string SubTitle { get; set; }
 
+        /// <summary>
+        /// This holds the action keyword that triggered the result. 
+        /// If result is triggered by global keyword: *, this should be empty.
+        /// </summary>
+        public string ActionKeywordAssigned { get; set; }
+
         public string IcoPath
         {
             get { return _icoPath; }
@@ -53,7 +59,7 @@ namespace Wox.Plugin
         public IList<int> SubTitleHighlightData { get; set; }
 
         /// <summary>
-        /// Only resulsts that originQuery match with curren query will be displayed in the panel
+        /// Only results that originQuery match with current query will be displayed in the panel
         /// </summary>
         internal Query OriginQuery { get; set; }
 
@@ -98,13 +104,14 @@ namespace Wox.Plugin
             return Title + SubTitle;
         }
 
-        [Obsolete("Use IContextMenu instead")]
+
         /// <summary>
         /// Context menus associate with this result
         /// </summary>
+        [Obsolete("Use IContextMenu instead")]
         public List<Result> ContextMenu { get; set; }
 
-        [Obsolete("Use Object initializers instead")]
+        [Obsolete("Use Object initializer instead")]
         public Result(string Title, string IcoPath, string SubTitle = null)
         {
             this.Title = Title;
