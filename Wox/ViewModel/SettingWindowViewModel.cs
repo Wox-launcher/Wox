@@ -113,6 +113,33 @@ namespace Wox.ViewModel
             }
         }
 
+        public string Language
+        {
+            get
+            {
+                return Settings.Language;
+            }
+            set
+            {
+                InternationalizationManager.Instance.ChangeLanguage(value);
+
+                if (InternationalizationManager.Instance.PromptShouldUsePinyin(value))
+                    ShouldUsePinyin = true;
+            }
+        }
+
+        public bool ShouldUsePinyin
+        {
+            get 
+            {
+                return Settings.ShouldUsePinyin;            
+            }
+            set 
+            {
+                Settings.ShouldUsePinyin = value;
+            }
+        }
+
         public List<string> QuerySearchPrecisionStrings
         {
             get

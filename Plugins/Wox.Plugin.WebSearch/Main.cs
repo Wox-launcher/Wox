@@ -72,6 +72,7 @@ namespace Wox.Plugin.WebSearch
                             SubTitle = subtitle,
                             Score = 6,
                             IcoPath = searchSource.IconPath,
+                            ActionKeywordAssigned = searchSource.ActionKeyword == SearchSourceGlobalPluginWildCardSign ? string.Empty : searchSource.ActionKeyword,
                             Action = c =>
                             {
                                 if (_settings.OpenInNewBrowser)
@@ -137,6 +138,7 @@ namespace Wox.Plugin.WebSearch
                     SubTitle = subtitle,
                     Score = 5,
                     IcoPath = searchSource.IconPath,
+                    ActionKeywordAssigned = searchSource.ActionKeyword == SearchSourceGlobalPluginWildCardSign ? string.Empty : searchSource.ActionKeyword,
                     Action = c =>
                     {
                         if (_settings.OpenInNewBrowser)

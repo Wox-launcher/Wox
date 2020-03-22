@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
@@ -210,7 +211,7 @@ namespace Wox.ViewModel
                 Query();
             }
         }
-
+        
         /// <summary>
         /// we need move cursor to end when we manually changed query
         /// but we don't want to move cursor to end when query is updated from TextBox
@@ -454,7 +455,6 @@ namespace Wox.ViewModel
                 }
             }
         }
-
 
         private Result ContextMenuTopMost(Result result)
         {
