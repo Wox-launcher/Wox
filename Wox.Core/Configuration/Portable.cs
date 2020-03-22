@@ -40,14 +40,11 @@ namespace Wox.Core.Configuration
             }
             catch (Exception e)
             {
-#if DEBUG
                 portabilityUpdater.Dispose();
-                throw;
-#else
-                portabilityUpdater.Dispose();
+#if !DEBUG
                 Log.Exception("Portable", "Error occured while disabling portable mode", e);
-                throw;
 #endif
+                throw;
             }
         }
 
@@ -76,14 +73,11 @@ namespace Wox.Core.Configuration
             }
             catch (Exception e)
             {
-#if DEBUG
                 portabilityUpdater.Dispose();
-                throw;
-#else
-                portabilityUpdater.Dispose();
+#if !DEBUG
                 Log.Exception("Portable", "Error occured while enabling portable mode", e);
-                throw;
 #endif
+                throw;
             }
         }
 
