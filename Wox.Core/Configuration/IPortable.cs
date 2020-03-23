@@ -3,6 +3,8 @@ namespace Wox.Core.Configuration
 {
     public interface IPortable
     {
+        void EnablePortableMode();
+        void DisablePortableMode();
         void RemoveShortcuts();
         void RemoveUninstallerEntry();
         void CreateShortcuts();
