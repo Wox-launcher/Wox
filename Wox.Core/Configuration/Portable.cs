@@ -13,12 +13,17 @@ namespace Wox.Core.Configuration
 {
     public class Portable : IPortable
     {
-        private UpdateManager portabilityUpdater;
+        /// <summary>
+        /// As at Squirrel.Windows version 1.5.2, UpdateManager needs to be disposed after finish
+        /// </summary>
+        /// <returns></returns>
+        private UpdateManager NewUpdateManager()
+        {
+            return new UpdateManager(string.Empty, Constant.Wox, Constant.RootDirectory);
+        }
 
         public void DisablePortableMode()
         {
-            portabilityUpdater = new UpdateManager(string.Empty, Constant.Wox, Constant.RootDirectory);
-
             try
             {
                 MoveUserDataFolder(DataLocation.PortableDataPath, DataLocation.RoamingDataPath);
@@ -34,13 +39,10 @@ namespace Wox.Core.Configuration
                 MessageBox.Show("Wox needs to restart to finish disabling portable mode, " +
                     "after the restart your portable data profile will be deleted and roaming data profile kept");
 
-                portabilityUpdater.Dispose();
-
                 UpdateManager.RestartApp();
             }
             catch (Exception e)
             {
-                portabilityUpdater.Dispose();
 #if !DEBUG
                 Log.Exception("Portable", "Error occured while disabling portable mode", e);
 #endif
@@ -50,8 +52,6 @@ namespace Wox.Core.Configuration
 
         public void EnablePortableMode()
         {
-            portabilityUpdater = new UpdateManager(string.Empty, Constant.Wox, Constant.RootDirectory);
-
             try
             {
                 MoveUserDataFolder(DataLocation.RoamingDataPath, DataLocation.PortableDataPath);
@@ -67,13 +67,10 @@ namespace Wox.Core.Configuration
                 MessageBox.Show("Wox needs to restart to finish enabling portable mode, " +
                     "after the restart your roaming data profile will be deleted and portable data profile kept");
 
-                portabilityUpdater.Dispose();
-
                 UpdateManager.RestartApp();
             }
             catch (Exception e)
             {
-                portabilityUpdater.Dispose();
 #if !DEBUG
                 Log.Exception("Portable", "Error occured while enabling portable mode", e);
 #endif
@@ -83,15 +80,21 @@ namespace Wox.Core.Configuration
 
         public void RemoveShortcuts()
         {
-            var exeName = Constant.Wox + ".exe";
-            portabilityUpdater.RemoveShortcutsForExecutable(exeName, ShortcutLocation.StartMenu);
-            portabilityUpdater.RemoveShortcutsForExecutable(exeName, ShortcutLocation.Desktop);
-            portabilityUpdater.RemoveShortcutsForExecutable(exeName, ShortcutLocation.Startup);
+            using (var portabilityUpdater = NewUpdateManager())
+            {
+                var exeName = Constant.Wox + ".exe";
+                portabilityUpdater.RemoveShortcutsForExecutable(exeName, ShortcutLocation.StartMenu);
+                portabilityUpdater.RemoveShortcutsForExecutable(exeName, ShortcutLocation.Desktop);
+                portabilityUpdater.RemoveShortcutsForExecutable(exeName, ShortcutLocation.Startup);
+            }
         }
 
         public void RemoveUninstallerEntry()
         {
-            portabilityUpdater.RemoveUninstallerRegistryEntry();
+            using (var portabilityUpdater = NewUpdateManager())
+            {
+                portabilityUpdater.RemoveUninstallerRegistryEntry();
+            }
         }
 
         public void MoveUserDataFolder(string fromLocation, string toLocation)
@@ -107,10 +110,13 @@ namespace Wox.Core.Configuration
 
         public void CreateShortcuts()
         {
-            var exeName = Constant.Wox + ".exe";
-            portabilityUpdater.CreateShortcutsForExecutable(exeName, ShortcutLocation.StartMenu, false);
-            portabilityUpdater.CreateShortcutsForExecutable(exeName, ShortcutLocation.Desktop, false);
-            portabilityUpdater.CreateShortcutsForExecutable(exeName, ShortcutLocation.Startup, false);
+            using (var portabilityUpdater = NewUpdateManager())
+            {
+                var exeName = Constant.Wox + ".exe";
+                portabilityUpdater.CreateShortcutsForExecutable(exeName, ShortcutLocation.StartMenu, false);
+                portabilityUpdater.CreateShortcutsForExecutable(exeName, ShortcutLocation.Desktop, false);
+                portabilityUpdater.CreateShortcutsForExecutable(exeName, ShortcutLocation.Startup, false);
+            }
         }
 
         public void CreateUninstallerEntry()
@@ -125,7 +131,10 @@ namespace Wox.Core.Configuration
                 .CreateSubKey(uninstallRegSubKey + "\\" + Constant.Wox, RegistryKeyPermissionCheck.ReadWriteSubTree);
             key.SetValue("DisplayIcon", Constant.ApplicationDirectory + "\\app.ico", RegistryValueKind.String);
 
-            portabilityUpdater.CreateUninstallerRegistryEntry();
+            using (var portabilityUpdater = NewUpdateManager())
+            {
+                portabilityUpdater.CreateUninstallerRegistryEntry();
+            }
         }
 
         internal void IndicateDeletion(string filePathTodelete)
