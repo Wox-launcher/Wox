@@ -57,29 +57,14 @@ namespace Wox.ViewModel
                 if (!_portable.CanUpdatePortability())
                     return;
 
-                bool switchToPortable;
-                if(DataLocation.PortableDataLocationInUse())
+                if (DataLocation.PortableDataLocationInUse())
                 {
-                    switchToPortable = false;
+                    _portable.DisablePortableMode();
                 }
                 else
                 {
-                    switchToPortable = true;
+                    _portable.EnablePortableMode();
                 }
-                
-                PortabilityUpdate(switchToPortable);
-            }
-        }
-
-        private void PortabilityUpdate(bool enablePortableMode)
-        {
-            if (enablePortableMode)
-            {
-                _portable.EnablePortableMode();
-            }
-            else
-            {
-                _portable.DisablePortableMode();
             }
         }
 
