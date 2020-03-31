@@ -88,7 +88,7 @@
     <system:String x:Key="checkUpdatesFailed">Oppdateringssjekk feilet, vennligst sjekk tilkoblingen og proxy-innstillene for api.github.com.</system:String>
     <system:String x:Key="downloadUpdatesFailed">
         Nedlastning av oppdateringer feilet, vennligst sjekk tilkoblingen og proxy-innstillene for github-cloud.s3.amazonaws.com, 
-        eller gå til https://github.com/Wox-launcher/Wox/releases for å laste ned oppdateringer manuelt.
+        eller gå til https://github.com/jjw24/Wox/releases for å laste ned oppdateringer manuelt.
     </system:String>
     <system:String x:Key="releaseNotes">Versjonsmerknader:</system:String>
 

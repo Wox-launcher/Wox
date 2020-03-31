@@ -86,7 +86,7 @@
     <system:String x:Key="checkUpdates">Vérifier les mises à jour</system:String>
     <system:String x:Key="newVersionTips">Nouvelle version {0} disponible, veuillez redémarrer Wox</system:String>
     <system:String x:Key="checkUpdatesFailed">Échec de la vérification de la mise à jour, vérifiez votre connexion et vos paramètres de configuration proxy pour pouvoir acceder à api.github.com.</system:String>
-    <system:String x:Key="downloadUpdatesFailed">Échec du téléchargement de la mise à jour, vérifiez votre connexion et vos paramètres de configuration proxy pour pouvoir acceder à github-cloud.s3.amazonaws.com, ou téléchargez manuelement la mise à jour sur https://github.com/Wox-launcher/Wox/releases.</system:String>
+    <system:String x:Key="downloadUpdatesFailed">Échec du téléchargement de la mise à jour, vérifiez votre connexion et vos paramètres de configuration proxy pour pouvoir acceder à github-cloud.s3.amazonaws.com, ou téléchargez manuelement la mise à jour sur https://github.com/jjw24/Wox/releases.</system:String>
     <system:String x:Key="releaseNotes">Notes de changement :</system:String>
 
     <!--Action Keyword Setting Dialog-->
