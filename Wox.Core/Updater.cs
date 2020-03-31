@@ -15,6 +15,7 @@ using Wox.Infrastructure;
 using Wox.Infrastructure.Http;
 using Wox.Infrastructure.Logger;
 using System.IO;
+using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Core
 {
@@ -80,13 +81,13 @@ namespace Wox.Core
             
             await updateManager.ApplyReleases(newUpdateInfo);
 
-            if (Constant.IsPortableMode)
+            if (DataLocation.PortableDataLocationInUse())
             {
-                var targetDestination = updateManager.RootAppDirectory + $"\\app-{newReleaseVersion.ToString()}\\{Constant.PortableFolderName}";
-                FilesFolders.Copy(Constant.PortableDataPath, targetDestination);
-                if (!FilesFolders.VerifyBothFolderFilesEqual(Constant.PortableDataPath, targetDestination))
+                var targetDestination = updateManager.RootAppDirectory + $"\\app-{newReleaseVersion.ToString()}\\{DataLocation.PortableFolderName}";
+                FilesFolders.Copy(DataLocation.PortableDataPath, targetDestination);
+                if (!FilesFolders.VerifyBothFolderFilesEqual(DataLocation.PortableDataPath, targetDestination))
                     MessageBox.Show(string.Format("Wox was not able to move your user profile data to the new update version. Please manually" +
-                        "move your profile data folder from {0} to {1}", Constant.PortableDataPath, targetDestination));
+                        "move your profile data folder from {0} to {1}", DataLocation.PortableDataPath, targetDestination));
             }
             else
             {

@@ -1,4 +1,4 @@
-﻿using NLog;
+using NLog;
 using NLog.Config;
 using NLog.Targets;
 using System;
@@ -7,6 +7,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Security;
 using Wox.Infrastructure;
+using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Plugin.Program.Logger
 {
@@ -21,7 +22,7 @@ namespace Wox.Plugin.Program.Logger
 
         static ProgramLogger()
         {
-            var path = Path.Combine(Constant.DataDirectory, DirectoryName, Constant.Version);
+            var path = Path.Combine(DataLocation.DataDirectory(), DirectoryName, Constant.Version);
             if (!Directory.Exists(path))
             {
                 Directory.CreateDirectory(path);

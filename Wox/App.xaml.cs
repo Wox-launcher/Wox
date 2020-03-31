@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Timers;
 using System.Windows;
 using Wox.Core;
+using Wox.Core.Configuration;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
 using Wox.Helper;
@@ -26,6 +27,7 @@ namespace Wox
         private MainViewModel _mainVM;
         private SettingWindowViewModel _settingsVM;
         private readonly Updater _updater = new Updater(Wox.Properties.Settings.Default.GithubRepo);
+        private readonly Portable _portable = new Portable();
         private readonly Alphabet _alphabet = new Alphabet();
         private StringMatcher _stringMatcher;
 
@@ -46,6 +48,8 @@ namespace Wox
         {
             Stopwatch.Normal("|App.OnStartup|Startup cost", () =>
             {
+                _portable.PreStartCleanUpAfterPortabilityUpdate();
+
                 Log.Info("|App.OnStartup|Begin Wox startup ----------------------------------------------------");
                 Log.Info($"|App.OnStartup|Runtime info:{ErrorReporting.RuntimeInfo()}");
                 RegisterAppDomainExceptions();
@@ -53,7 +57,7 @@ namespace Wox
 
                 ImageLoader.Initialize();
 
-                _settingsVM = new SettingWindowViewModel(_updater);
+                _settingsVM = new SettingWindowViewModel(_updater, _portable);
                 _settings = _settingsVM.Settings;
 
                 _alphabet.Initialize(_settings);

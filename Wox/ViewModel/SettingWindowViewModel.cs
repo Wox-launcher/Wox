@@ -8,11 +8,11 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Wox.Core;
+using Wox.Core.Configuration;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
 using Wox.Helper;
 using Wox.Infrastructure;
-using Wox.Infrastructure.Http;
 using Wox.Infrastructure.Storage;
 using Wox.Infrastructure.UserSettings;
 using Wox.Plugin;
@@ -22,11 +22,13 @@ namespace Wox.ViewModel
     public class SettingWindowViewModel : BaseModel
     {
         private readonly Updater _updater;
+        private readonly IPortable _portable;
         private readonly WoxJsonStorage<Settings> _storage;
 
-        public SettingWindowViewModel(Updater updater)
+        public SettingWindowViewModel(Updater updater, IPortable portable)
         {
             _updater = updater;
+            _portable = portable;
             _storage = new WoxJsonStorage<Settings>();
             Settings = _storage.Load();
             Settings.PropertyChanged += (s, e) =>
@@ -36,8 +38,6 @@ namespace Wox.ViewModel
                     OnPropertyChanged(nameof(ActivatedTimes));
                 }
             };
-
-
         }
 
         public Settings Settings { get; set; }
@@ -45,6 +45,27 @@ namespace Wox.ViewModel
         public async void UpdateApp()
         {
             await _updater.UpdateApp(false);
+        }
+
+        // This is only required to set at startup. When portable mode enabled/disabled a restart is always required
+        private bool _portableMode = DataLocation.PortableDataLocationInUse();
+        public bool PortableMode
+        {
+            get { return _portableMode; }
+            set
+            {
+                if (!_portable.CanUpdatePortability())
+                    return;
+
+                if (DataLocation.PortableDataLocationInUse())
+                {
+                    _portable.DisablePortableMode();
+                }
+                else
+                {
+                    _portable.EnablePortableMode();
+                }
+            }
         }
 
         public void Save()
