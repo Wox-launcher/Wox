@@ -32,20 +32,20 @@ namespace Wox.Core.Plugin
         // todo happlebao, this should not be public, the indicator function should be embeded 
         public static PluginsSettings Settings;
         private static List<PluginMetadata> _metadatas;
-        private static readonly string[] Directories = { Constant.PreinstalledDirectory, Constant.PluginsDirectory };
+        private static readonly string[] Directories = { Constant.PreinstalledDirectory, DataLocation.PluginsDirectory };
 
         private static void ValidateUserDirectory()
         {
-            if (!Directory.Exists(Constant.PluginsDirectory))
+            if (!Directory.Exists(DataLocation.PluginsDirectory))
             {
-                Directory.CreateDirectory(Constant.PluginsDirectory);
+                Directory.CreateDirectory(DataLocation.PluginsDirectory);
             }
         }
 
         private static void DeletePythonBinding()
         {
             const string binding = "wox.py";
-            var directory = Constant.PluginsDirectory;
+            var directory = DataLocation.PluginsDirectory;
             foreach (var subDirectory in Directory.GetDirectories(directory))
             {
                 var path = Path.Combine(subDirectory, binding);

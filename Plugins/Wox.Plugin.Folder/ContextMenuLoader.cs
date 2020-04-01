@@ -194,6 +194,7 @@ namespace Wox.Plugin.Folder
             {
                 case ".exe":
                 case ".bat":
+                case ".msi":
                     return true;
 
                 default:

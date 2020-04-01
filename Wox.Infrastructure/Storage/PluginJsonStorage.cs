@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Infrastructure.Storage
 {
@@ -9,7 +10,7 @@ namespace Wox.Infrastructure.Storage
             // C# releated, add python releated below
             var dataType = typeof(T);
             var assemblyName = typeof(T).Assembly.GetName().Name;
-            DirectoryPath = Path.Combine(Constant.DataDirectory, DirectoryName, Constant.Plugins, assemblyName);
+            DirectoryPath = Path.Combine(DataLocation.DataDirectory(), DirectoryName, Constant.Plugins, assemblyName);
             Helper.ValidateDirectory(DirectoryPath);
 
             FilePath = Path.Combine(DirectoryPath, $"{dataType.Name}{FileSuffix}");

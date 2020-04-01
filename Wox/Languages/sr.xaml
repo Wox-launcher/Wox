@@ -88,7 +88,7 @@
     <system:String x:Key="checkUpdatesFailed">Neuspešna provera ažuriranja, molim Vas proverite vašu vezu i podešavanja za proksi prema api.github.com.</system:String>
     <system:String x:Key="downloadUpdatesFailed">
         Neuspešno preuzimanje ažuriranja, molim Vas proverite vašu vezu i podešavanja za proksi prema github-cloud.s3.amazonaws.com, 
-        ili posetite https://github.com/Wox-launcher/Wox/releases da preuzmete ažuriranja ručno.
+        ili posetite https://github.com/jjw24/Wox/releases da preuzmete ažuriranja ručno.
     </system:String>
     <system:String x:Key="releaseNotes">U novoj verziji:</system:String>
 

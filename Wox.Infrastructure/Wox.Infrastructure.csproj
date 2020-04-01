@@ -77,7 +77,8 @@
     <Compile Include="UserSettings\PluginHotkey.cs" />
     <Compile Include="UserSettings\PluginSettings.cs" />
     <Compile Include="UserSettings\Settings.cs" />
-    <Compile Include="Wox.cs" />
+    <Compile Include="UserSettings\DataLocation.cs" />
+    <Compile Include="Constant.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Wox.Plugin\Wox.Plugin.csproj">

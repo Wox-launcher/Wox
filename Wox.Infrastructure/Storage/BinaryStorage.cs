@@ -5,6 +5,7 @@ using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters;
 using System.Runtime.Serialization.Formatters.Binary;
 using Wox.Infrastructure.Logger;
+using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Infrastructure.Storage
 {
@@ -17,7 +18,7 @@ namespace Wox.Infrastructure.Storage
         public BinaryStorage(string filename)
         {
             const string directoryName = "Cache";
-            var directoryPath = Path.Combine(Constant.DataDirectory, directoryName);
+            var directoryPath = Path.Combine(DataLocation.DataDirectory(), directoryName);
             Helper.ValidateDirectory(directoryPath);
 
             const string fileSuffix = ".cache";
