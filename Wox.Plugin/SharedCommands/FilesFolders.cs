@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 
@@ -106,6 +107,23 @@ namespace Wox.Plugin.SharedCommands
         public static bool FileExits(this string filePath)
         {
             return File.Exists(filePath);
+        }
+
+        public static void OpenLocationInExporer(string location)
+        {
+            try
+            {
+                if (LocationExists(location))
+                    Process.Start(location);
+            }
+            catch (Exception e)
+            {
+#if DEBUG
+                throw e;
+#else
+                MessageBox.Show(string.Format("Unable to open location {0}, please check if it exists", location));
+#endif
+            }
         }
     }
 }

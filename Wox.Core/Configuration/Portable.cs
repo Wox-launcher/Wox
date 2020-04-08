@@ -163,21 +163,26 @@ namespace Wox.Core.Configuration
 
             if (DataLocationRoamingDeleteRequired)
             {
-                if(roamingDataPath.LocationExists())
-                    MessageBox.Show("Wox detected you restarted after enabling portable mode, " +
-                                    "your roaming data profile will now be deleted");
-
                 FilesFolders.RemoveFolderIfExists(roamingDataPath);
+
+                if (MessageBox.Show("Wox has detected you enabled portable mode, " +
+                                    "would you like to move it to a different location?", string.Empty,
+                                    MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+                {
+                    FilesFolders.OpenLocationInExporer(Constant.RootDirectory);
+
+                    Environment.Exit(0);
+                }
 
                 return;
             }
 
             if(DataLocationPortableDeleteRequired)
             {
-                MessageBox.Show("Wox detected you restarted after disabling portable mode, " +
-                                    "your portable data profile will now be deleted");
-
                 FilesFolders.RemoveFolderIfExists(portableDataPath);
+
+                MessageBox.Show("Wox has detected you disabled portable mode, " +
+                                    "the relevant shortcuts and uninstaller entry have been created");
 
                 return;
             }
