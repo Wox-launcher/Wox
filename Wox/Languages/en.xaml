@@ -93,7 +93,7 @@
     <system:String x:Key="checkUpdatesFailed">Check updates failed, please check your connection and proxy settings to api.github.com.</system:String>
     <system:String x:Key="downloadUpdatesFailed">
         Download updates failed, please check your connection and proxy settings to github-cloud.s3.amazonaws.com, 
-        or go to https://github.com/jjw24/Wox/releases to download updates manually.
+        or go to https://github.com/Wox-launcher/Wox/releases to download updates manually.
     </system:String>
     <system:String x:Key="releaseNotes">Release Notes:</system:String>
 

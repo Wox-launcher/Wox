@@ -3,7 +3,7 @@
     "ActionKeyword":"*",
     "Name":"Colors",
     "Description":"Provide hex color preview.(Try #000 in Wox)",
-    "Author":"qianlifeng",
+    "Author":"Wox",
     "Version":"1.0.0",
     "Language":"csharp",
     "Website":"http://www.wox.one/plugin",

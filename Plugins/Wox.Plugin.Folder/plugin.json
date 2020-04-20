@@ -3,7 +3,7 @@
     "ActionKeyword":"*",
     "Name":"Folder",
     "Description":"Open favorite folder from wox directorily",
-    "Author":"qianlifeng",
+    "Author":"Wox",
     "Version":"1.0.0",
     "Language":"csharp",
     "Website":"http://www.wox.one/plugin",

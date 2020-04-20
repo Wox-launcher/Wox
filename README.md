@@ -2,11 +2,11 @@ WoX
 ===
 
 ![Maintenance](https://img.shields.io/maintenance/yes/2020)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/jjw24/wox)](https://github.com/jjw24/Wox/releases/latest)
-![GitHub Release Date](https://img.shields.io/github/release-date/jjw24/wox)
-![GitHub commits since latest release](https://img.shields.io/github/commits-since/jjw24/wox/v1.3.524)
-[![Build Status](https://dev.azure.com/Wox-Launcher/Wox/_apis/build/status/jjw24.Wox?branchName=master)](https://dev.azure.com/Wox-Launcher/Wox/_build/latest?definitionId=1&branchName=master)
-[![Github All Releases](https://img.shields.io/github/downloads/jjw24/Wox/total.svg)](https://github.com/jjw24/Wox/releases)
+[![Build status](https://ci.appveyor.com/api/projects/status/bfktntbivg32e103?svg=true)](https://ci.appveyor.com/project/bao-qian/wox)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/Wox-launcher/wox)](https://github.com/Wox-launcher/Wox/releases/latest)
+![GitHub Release Date](https://img.shields.io/github/release-date/Wox-launcher/wox)
+![GitHub commits since latest release](https://img.shields.io/github/commits-since/Wox-launcher/Wox/v1.3.524)
+[![Github All Releases](https://img.shields.io/github/downloads/Wox-launcher/Wox/total.svg)](https://github.com/Wox-launcher/Wox/releases)
 [![RamenBless](https://cdn.rawgit.com/LunaGao/BlessYourCodeTag/master/tags/ramen.svg)](https://github.com/LunaGao/BlessYourCodeTag)
 
 **WoX** is a launcher for Windows that simply works. It's an alternative to [Alfred](https://www.alfredapp.com/) and [Launchy](http://www.launchy.net/). You can call it Windows omni-eXecutor if you want a long name.
@@ -40,9 +40,9 @@ Features
 Installation
 ------------
 
-View new features released from this fork since Wox v1.3.524: [new releases](https://github.com/jjw24/Wox/releases)
+View new features released from this fork since Wox v1.3.524: [new releases](https://github.com/Wox-launcher/Wox/releases)
 
-To install this fork's version of Wox, you can **download** it [here](https://github.com/jjw24/Wox/releases/latest).
+To install this fork's version of Wox, you can **download** it [here](https://github.com/Wox-launcher/Wox/releases/latest).
 
 To install the upstream version:
 
@@ -83,6 +83,6 @@ Install Visual Studio 2017/2019
 
 Documentation
 -------------
-- [Wiki](https://github.com/jjw24/Wox/wiki)
+- [Wiki](https://github.com/Wox-launcher/Wox/wiki)
 - Outdated doc: [WoX doc](http://doc.wox.one).
-- Just ask questions in [issues](https://github.com/jjw24/Wox/issues) for now.
+- Just ask questions in [issues](https://github.com/Wox-launcher/Wox/issues) for now.

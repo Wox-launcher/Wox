@@ -92,7 +92,7 @@
     <system:String x:Key="checkUpdatesFailed">Güncelleme kontrolü başarısız oldu. Lütfen bağlantınız ve vekil sunucu ayarlarınızın api.github.com adresine ulaşabilir olduğunu kontrol edin.</system:String>
     <system:String x:Key="downloadUpdatesFailed">
         Güncellemenin yüklenmesi başarısız oldu. Lütfen bağlantınız ve vekil sunucu ayarlarınızın github-cloud.s3.amazonaws.com
-        adresine ulaşabilir olduğunu kontrol edin ya da https://github.com/jjw24/Wox/releases adresinden güncellemeyi elle indirin.
+        adresine ulaşabilir olduğunu kontrol edin ya da https://github.com/Wox-launcher/Wox/releases adresinden güncellemeyi elle indirin.
     </system:String>
     <system:String x:Key="releaseNotes">Sürüm Notları:</system:String>
 

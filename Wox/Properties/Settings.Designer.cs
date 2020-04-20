@@ -25,7 +25,7 @@ namespace Wox.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("https://github.com/jjw24/Wox")]
+        [global::System.Configuration.DefaultSettingValueAttribute("https://github.com/Wox-launcher/Wox")]
         public string GithubRepo {
             get {
                 return ((string)(this["GithubRepo"]));

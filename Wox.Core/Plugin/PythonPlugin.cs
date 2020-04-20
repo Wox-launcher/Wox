@@ -37,7 +37,7 @@ namespace Wox.Core.Plugin
             };
             //Add -B flag to tell python don't write .py[co] files. Because .pyc contains location infos which will prevent python portable
             _startInfo.Arguments = $"-B \"{context.CurrentPluginMetadata.ExecuteFilePath}\" \"{request}\"";
-            // todo happlebao why context can't be used in constructor
+            // todo why context can't be used in constructor
             _startInfo.WorkingDirectory = context.CurrentPluginMetadata.PluginDirectory;
 
             return Execute(_startInfo);

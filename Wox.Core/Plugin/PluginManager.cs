@@ -29,7 +29,7 @@ namespace Wox.Core.Plugin
 
         public static IPublicAPI API { private set; get; }
 
-        // todo happlebao, this should not be public, the indicator function should be embeded 
+        // todo this should not be public, the indicator function should be embeded 
         public static PluginsSettings Settings;
         private static List<PluginMetadata> _metadatas;
         private static readonly string[] Directories = { Constant.PreinstalledDirectory, DataLocation.PluginsDirectory };
@@ -83,7 +83,7 @@ namespace Wox.Core.Plugin
 
         /// <summary>
         /// because InitializePlugins needs API, so LoadPlugins needs to be called first
-        /// todo happlebao The API should be removed
+        /// todo The API should be removed
         /// </summary>
         /// <param name="settings"></param>
         public static void LoadPlugins(PluginsSettings settings)

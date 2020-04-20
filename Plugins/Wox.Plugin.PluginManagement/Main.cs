@@ -118,7 +118,7 @@ namespace Wox.Plugin.PluginManagement
             }
             catch (WebException e)
             {
-                //todo happlebao add option in log to decide give user prompt or not
+                //todo add option in log to decide give user prompt or not
                 context.API.ShowMsg("PluginManagement.ResultForInstallPlugin: Can't connect to Wox plugin website, check your conenction");
                 Log.Exception("|PluginManagement.ResultForInstallPlugin|Can't connect to Wox plugin website, check your conenction", e);
                 return new List<Result>();
