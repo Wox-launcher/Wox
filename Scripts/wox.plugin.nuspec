@@ -3,7 +3,7 @@
   <metadata>
     <id>Wox.Plugin</id>
     <version>$version$</version>
-    <authors>qianlifeng</authors>
+    <authors>Wox</authors>
     <licenseUrl>https://github.com/Wox-launcher/Wox/blob/master/LICENSE</licenseUrl>
     <projectUrl>https://github.com/Wox-launcher/Wox</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
@@ -11,6 +11,6 @@
     <tags>wox</tags>
   </metadata>
   <files>
-      <file src="..\Output\Release\Wox.Plugin.dll" target="lib\net452" />
+      <file src="..\Output\Release\Wox.Plugin.dll" target="lib\net462" />
   </files>
 </package>

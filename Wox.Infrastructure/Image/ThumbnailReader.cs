@@ -99,8 +99,8 @@ namespace Wox.Infrastructure.Image
             private int width;
             private int height;
 
-            public int Width { set => width = value; }
-            public int Height { set => height = value; }
+            public int Width { set { width = value; } }
+            public int Height { set { height = value; } }
         };
 
 
@@ -110,7 +110,6 @@ namespace Wox.Infrastructure.Image
 
             try
             {
-
                 return Imaging.CreateBitmapSourceFromHBitmap(hBitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
             }
             finally

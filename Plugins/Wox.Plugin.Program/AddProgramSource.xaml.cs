@@ -1,6 +1,8 @@
 ﻿using System.Windows;
 using System.Windows.Forms;
-using Wox.Plugin.Program.Programs;
+using Wox.Plugin.Program.Views.Models;
+using Wox.Plugin.Program.Views;
+using System.Linq;
 
 namespace Wox.Plugin.Program
 {
@@ -9,12 +11,14 @@ namespace Wox.Plugin.Program
     /// </summary>
     public partial class AddProgramSource
     {
+        private PluginInitContext _context;
         private Settings.ProgramSource _editing;
         private Settings _settings;
 
-        public AddProgramSource(Settings settings)
+        public AddProgramSource(PluginInitContext context, Settings settings)
         {
             InitializeComponent();
+            _context = context;
             _settings = settings;
             Directory.Focus();
         }
@@ -40,13 +44,25 @@ namespace Wox.Plugin.Program
 
         private void ButtonAdd_OnClick(object sender, RoutedEventArgs e)
         {
-            if(_editing == null)
+            string s = Directory.Text;
+            if (!System.IO.Directory.Exists(s))
             {
-                var source = new Settings.ProgramSource
+                System.Windows.MessageBox.Show(_context.API.GetTranslation("wox_plugin_program_invalid_path"));
+                return;
+            }
+            if (_editing == null)
+            {
+                if (!ProgramSetting.ProgramSettingDisplayList.Any(x => x.UniqueIdentifier == Directory.Text))
                 {
-                    Location = Directory.Text,
-                };
-                _settings.ProgramSources.Add(source);
+                    var source = new ProgramSource
+                    {
+                        Location = Directory.Text,
+                        UniqueIdentifier = Directory.Text
+                    };
+
+                    _settings.ProgramSources.Insert(0, source);
+                    ProgramSetting.ProgramSettingDisplayList.Add(source);
+                }
             }
             else
             {

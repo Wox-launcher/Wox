@@ -1,5 +1,5 @@
 version: 1.3.{build}
-image: Visual Studio 2017
+image: Visual Studio 2019
 configuration: Release
 platform: Any CPU
 assembly_info:
@@ -18,6 +18,8 @@ artifacts:
   name: zipped_binary
 - path: 'Output\Packages\Wox.Plugin.*.nupkg'
   name: nuget_package
+- path: 'Output\Packages\Wox.*.*'
+  name: installer
 - path: 'Output\Packages\Wox-*.*'
   name: installer
 - path: 'Output\Packages\RELEASES'

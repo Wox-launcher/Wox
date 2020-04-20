@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
@@ -10,24 +10,32 @@ using JetBrains.Annotations;
 using Squirrel;
 using Newtonsoft.Json;
 using Wox.Core.Resource;
+using Wox.Plugin.SharedCommands;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Http;
 using Wox.Infrastructure.Logger;
+using System.IO;
+using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Core
 {
-    public static class Updater
+    public class Updater
     {
-        private static readonly Internationalization Translater = InternationalizationManager.Instance;
+        public string GitHubRepository { get; }
 
-        public static async Task UpdateApp()
+        public Updater(string gitHubRepository)
         {
-            UpdateManager m;
-            UpdateInfo u;
+            GitHubRepository = gitHubRepository;
+        }
+
+        public async Task UpdateApp(bool silentIfLatestVersion = true)
+        {
+            UpdateManager updateManager;
+            UpdateInfo newUpdateInfo;
 
             try
             {
-                m = await GitHubUpdateManager(Constant.Repository);
+                updateManager = await GitHubUpdateManager(GitHubRepository);
             }
             catch (Exception e) when (e is HttpRequestException || e is WebException || e is SocketException)
             {
@@ -38,42 +46,61 @@ namespace Wox.Core
             try
             {
                 // UpdateApp CheckForUpdate will return value only if the app is squirrel installed
-                u = await m.CheckForUpdate().NonNull();
+                newUpdateInfo = await updateManager.CheckForUpdate().NonNull();
             }
             catch (Exception e) when (e is HttpRequestException || e is WebException || e is SocketException)
             {
                 Log.Exception($"|Updater.UpdateApp|Check your connection and proxy settings to api.github.com.", e);
-                m.Dispose();
+                updateManager.Dispose();
                 return;
             }
 
-            var fr = u.FutureReleaseEntry;
-            var cr = u.CurrentlyInstalledVersion;
-            Log.Info($"|Updater.UpdateApp|Future Release <{fr.Formatted()}>");
-            if (fr.Version > cr.Version)
+            var newReleaseVersion = Version.Parse(newUpdateInfo.FutureReleaseEntry.Version.ToString());
+            var currentVersion = Version.Parse(Constant.Version);
+
+            Log.Info($"|Updater.UpdateApp|Future Release <{newUpdateInfo.FutureReleaseEntry.Formatted()}>");
+
+            if (newReleaseVersion <= currentVersion)
             {
-                try
-                {
-                    await m.DownloadReleases(u.ReleasesToApply);
-                }
-                catch (Exception e) when (e is HttpRequestException || e is WebException || e is SocketException)
-                {
-                    Log.Exception($"|Updater.UpdateApp|Check your connection and proxy settings to github-cloud.s3.amazonaws.com.", e);
-                    m.Dispose();
-                    return;
-                }
-
-                await m.ApplyReleases(u);
-                await m.CreateUninstallerRegistryEntry();
-
-                var newVersionTips = Translater.GetTranslation("newVersionTips");
-                newVersionTips = string.Format(newVersionTips, fr.Version);
-                MessageBox.Show(newVersionTips);
-                Log.Info($"|Updater.UpdateApp|Update succeed:{newVersionTips}");
+                if (!silentIfLatestVersion)
+                    MessageBox.Show("You already have the latest Wox version");
+                updateManager.Dispose();
+                return;
             }
             
+            try
+            {
+                await updateManager.DownloadReleases(newUpdateInfo.ReleasesToApply);
+            }
+            catch (Exception e) when (e is HttpRequestException || e is WebException || e is SocketException)
+            {
+                Log.Exception($"|Updater.UpdateApp|Check your connection and proxy settings to github-cloud.s3.amazonaws.com.", e);
+                updateManager.Dispose();
+                return;
+            }
+            
+            await updateManager.ApplyReleases(newUpdateInfo);
+
+            if (DataLocation.PortableDataLocationInUse())
+            {
+                var targetDestination = updateManager.RootAppDirectory + $"\\app-{newReleaseVersion.ToString()}\\{DataLocation.PortableFolderName}";
+                FilesFolders.Copy(DataLocation.PortableDataPath, targetDestination);
+                if (!FilesFolders.VerifyBothFolderFilesEqual(DataLocation.PortableDataPath, targetDestination))
+                    MessageBox.Show(string.Format("Wox was not able to move your user profile data to the new update version. Please manually" +
+                        "move your profile data folder from {0} to {1}", DataLocation.PortableDataPath, targetDestination));
+            }
+            else
+            {
+                await updateManager.CreateUninstallerRegistryEntry();
+            }
+
+            var newVersionTips = NewVersinoTips(newReleaseVersion.ToString());
+            
+            MessageBox.Show(newVersionTips);
+            Log.Info($"|Updater.UpdateApp|Update success:{newVersionTips}");
+
             // always dispose UpdateManager
-            m.Dispose();
+            updateManager.Dispose();
         }
 
         [UsedImplicitly]
@@ -90,7 +117,7 @@ namespace Wox.Core
         }
 
         /// https://github.com/Squirrel/Squirrel.Windows/blob/master/src/Squirrel/UpdateManager.Factory.cs
-        private static async Task<UpdateManager> GitHubUpdateManager(string repository)
+        private async Task<UpdateManager> GitHubUpdateManager(string repository)
         {
             var uri = new Uri(repository);
             var api = $"https://api.github.com/repos{uri.AbsolutePath}/releases";
@@ -109,7 +136,7 @@ namespace Wox.Core
             return manager;
         }
 
-        public static string NewVersinoTips(string version)
+        public string NewVersinoTips(string version)
         {
             var translater = InternationalizationManager.Instance;
             var tips = string.Format(translater.GetTranslation("newVersionTips"), version);

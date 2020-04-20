@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using Newtonsoft.Json;
+using Wox.Infrastructure;
 using Wox.Infrastructure.Http;
 using Wox.Infrastructure.Logger;
 
@@ -117,7 +118,7 @@ namespace Wox.Plugin.PluginManagement
             }
             catch (WebException e)
             {
-                //todo happlebao add option in log to decide give user prompt or not
+                //todo add option in log to decide give user prompt or not
                 context.API.ShowMsg("PluginManagement.ResultForInstallPlugin: Can't connect to Wox plugin website, check your conenction");
                 Log.Exception("|PluginManagement.ResultForInstallPlugin|Can't connect to Wox plugin website, check your conenction", e);
                 return new List<Result>();
@@ -142,6 +143,8 @@ namespace Wox.Plugin.PluginManagement
                     Title = r.name,
                     SubTitle = r.description,
                     IcoPath = "Images\\plugin.png",
+                    TitleHighlightData = StringMatcher.FuzzySearch(query.SecondSearch, r.name).MatchData,
+                    SubTitleHighlightData = StringMatcher.FuzzySearch(query.SecondSearch, r.description).MatchData,
                     Action = c =>
                     {
                         MessageBoxResult result = MessageBox.Show("Are you sure you wish to install the \'" + r.name + "\' plugin",
@@ -191,6 +194,8 @@ namespace Wox.Plugin.PluginManagement
                     Title = plugin.Name,
                     SubTitle = plugin.Description,
                     IcoPath = plugin.IcoPath,
+                    TitleHighlightData = StringMatcher.FuzzySearch(query.SecondSearch, plugin.Name).MatchData,
+                    SubTitleHighlightData = StringMatcher.FuzzySearch(query.SecondSearch, plugin.Description).MatchData,
                     Action = e =>
                     {
                         UnInstallPlugin(plugin);

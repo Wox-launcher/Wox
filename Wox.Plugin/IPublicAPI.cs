@@ -58,12 +58,39 @@ namespace Wox.Plugin
         void ShowApp();
 
         /// <summary>
+        /// Save all Wox settings
+        /// </summary>
+        void SaveAppAllSettings();
+
+        /// <summary>
+        /// Reloads any Plugins that have the 
+        /// IReloadable implemented. It refeshes
+        /// Plugin's in memory data with new content
+        /// added by user.
+        /// </summary>
+        void ReloadAllPluginData();
+
+        /// <summary>
+        /// Check for new Wox update
+        /// </summary>
+        void CheckForNewUpdate();
+
+        /// <summary>
         /// Show message box
         /// </summary>
         /// <param name="title">Message title</param>
         /// <param name="subTitle">Message subtitle</param>
         /// <param name="iconPath">Message icon path (relative path to your plugin folder)</param>
         void ShowMsg(string title, string subTitle = "", string iconPath = "");
+
+        /// <summary>
+        /// Show message box
+        /// </summary>
+        /// <param name="title">Message title</param>
+        /// <param name="subTitle">Message subtitle</param>
+        /// <param name="iconPath">Message icon path (relative path to your plugin folder)</param>
+        /// <param name="useMainWindowAsOwner">when true will use main windows as the owner</param>
+        void ShowMsg(string title, string subTitle, string iconPath, bool useMainWindowAsOwner = true);
 
         /// <summary>
         /// Open setting dialog

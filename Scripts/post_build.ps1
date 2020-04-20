@@ -1,13 +1,14 @@
 param(
     [string]$config = "Release", 
-    [string]$solution
+    [string]$solution,
+	[string]$targetpath
 )
 Write-Host "Config: $config"
 
 function Build-Version {
-    if ([string]::IsNullOrEmpty($env:APPVEYOR_BUILD_VERSION)) {
-        $v = "1.2.0"
-    } else {
+	if ([string]::IsNullOrEmpty($env:APPVEYOR_BUILD_VERSION)) {
+		$v = (Get-Command ${TargetPath}).FileVersionInfo.FileVersion
+	} else {
         $v = $env:APPVEYOR_BUILD_VERSION
     }
 
@@ -38,7 +39,8 @@ function Copy-Resources ($path, $config) {
     Copy-Item -Recurse -Force $project\Images\* $target\Images\
     Copy-Item -Recurse -Force $path\Plugins\HelloWorldPython $target\Plugins\HelloWorldPython
     Copy-Item -Recurse -Force $path\JsonRPC $target\JsonRPC
-    Copy-Item -Force $path\packages\squirrel*\tools\Squirrel.exe $output\Update.exe
+    # making version static as multiple versions can exist in the nuget folder and in the case a breaking change is introduced.
+    Copy-Item -Force $env:USERPROFILE\.nuget\packages\squirrel.windows\1.5.2\tools\Squirrel.exe $output\Update.exe
 }
 
 function Delete-Unused ($path, $config) {
@@ -96,9 +98,9 @@ function Pack-Squirrel-Installer ($path, $version, $output) {
     $icon = "$path\Wox\Resources\app.ico"
     Write-Host "icon: $icon"
     # Squirrel.com: https://github.com/Squirrel/Squirrel.Windows/issues/369
-    New-Alias Squirrel $path\packages\squirrel*\tools\Squirrel.exe -Force
+    New-Alias Squirrel $env:USERPROFILE\.nuget\packages\squirrel.windows\1.5.2\tools\Squirrel.exe -Force
     # why we need Write-Output: https://github.com/Squirrel/Squirrel.Windows/issues/489#issuecomment-156039327
-    # directory of releaseDir in fucking squirrel can't be same as directory ($nupkg) in releasify
+    # directory of releaseDir in squirrel can't be same as directory ($nupkg) in releasify
     $temp = "$output\Temp"
 
     Squirrel --releasify $nupkg --releaseDir $temp --setupIcon $icon --no-msi | Write-Output
@@ -123,7 +125,8 @@ function Main {
         Delete-Unused $p $config
         $o = "$p\Output\Packages"
         Validate-Directory $o
-        New-Alias Nuget $p\packages\NuGet.CommandLine.*\tools\NuGet.exe -Force
+        # making version static as multiple versions can exist in the nuget folder and in the case a breaking change is introduced.
+        New-Alias Nuget $env:USERPROFILE\.nuget\packages\NuGet.CommandLine\5.5.1\tools\NuGet.exe -Force
         Pack-Squirrel-Installer $p $v $o
     
         $isInCI = $env:APPVEYOR

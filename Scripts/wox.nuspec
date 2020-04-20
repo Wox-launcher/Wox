@@ -4,7 +4,7 @@
     <id>Wox</id>
     <title>Wox</title>
     <version>$version$</version>
-    <authors>happlebao</authors>
+    <authors>Wox</authors>
     <projectUrl>https://github.com/Wox-launcher/Wox</projectUrl>
     <iconUrl>https://raw.githubusercontent.com/Wox-launcher/Wox/master/Wox/Images/app.png</iconUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>

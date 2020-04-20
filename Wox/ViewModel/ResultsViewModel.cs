@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Documents;
 using Wox.Infrastructure.UserSettings;
 using Wox.Plugin;
 
@@ -107,6 +109,11 @@ namespace Wox.ViewModel
             SelectedIndex = NewIndex(SelectedIndex - MaxResults);
         }
 
+        public void SelectFirstResult()
+        {
+            SelectedIndex = NewIndex(0);
+        }
+
         public void Clear()
         {
             Results.Clear();
@@ -148,25 +155,27 @@ namespace Wox.ViewModel
 
         private List<ResultViewModel> NewResults(List<Result> newRawResults, string resultId)
         {
-            var newResults = newRawResults.Select(r => new ResultViewModel(r)).ToList();
             var results = Results.ToList();
+            var newResults = newRawResults.Select(r => new ResultViewModel(r)).ToList();
             var oldResults = results.Where(r => r.Result.PluginID == resultId).ToList();
 
-            // intersection of A (old results) and B (new newResults)
-            var intersection = oldResults.Intersect(newResults).ToList();
+            // Find the same results in A (old results) and B (new newResults)          
+            var sameResults = oldResults
+                                .Where(t1 => newResults.Any(x => x.Result.Equals(t1.Result)))
+                                .ToList();
 
             // remove result of relative complement of B in A
-            foreach (var result in oldResults.Except(intersection))
+            foreach (var result in oldResults.Except(sameResults))
             {
                 results.Remove(result);
             }
 
-            // update index for result in intersection of A and B
-            foreach (var commonResult in intersection)
+            // update result with B's score and index position
+            foreach (var sameResult in sameResults)
             {
-                int oldIndex = results.IndexOf(commonResult);
+                int oldIndex = results.IndexOf(sameResult);
                 int oldScore = results[oldIndex].Result.Score;
-                var newResult = newResults[newResults.IndexOf(commonResult)];
+                var newResult = newResults[newResults.IndexOf(sameResult)];
                 int newScore = newResult.Result.Score;
                 if (newScore != oldScore)
                 {
@@ -182,7 +191,7 @@ namespace Wox.ViewModel
             }
 
             // insert result in relative complement of A in B
-            foreach (var result in newResults.Except(intersection))
+            foreach (var result in newResults.Except(sameResults))
             {
                 int newIndex = InsertIndexOf(result.Result.Score, results);
                 results.Insert(newIndex, result);
@@ -190,8 +199,37 @@ namespace Wox.ViewModel
 
             return results;
         }
+        #endregion
 
+        #region FormattedText Dependency Property
+        public static readonly DependencyProperty FormattedTextProperty = DependencyProperty.RegisterAttached(
+            "FormattedText",
+            typeof(Inline),
+            typeof(ResultsViewModel),
+            new PropertyMetadata(null, FormattedTextPropertyChanged));
 
+        public static void SetFormattedText(DependencyObject textBlock, IList<int> value)
+        {
+            textBlock.SetValue(FormattedTextProperty, value);
+        }
+
+        public static Inline GetFormattedText(DependencyObject textBlock)
+        {
+            return (Inline)textBlock.GetValue(FormattedTextProperty);
+        }
+
+        private static void FormattedTextPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var textBlock = d as TextBlock;
+            if (textBlock == null) return;
+
+            var inline = (Inline)e.NewValue;
+
+            textBlock.Inlines.Clear();
+            if (inline == null) return;
+
+            textBlock.Inlines.Add(inline);
+        }
         #endregion
 
         public class ResultCollection : ObservableCollection<ResultViewModel>
@@ -210,6 +248,10 @@ namespace Wox.ViewModel
                 }
             }
 
+            /// <summary>
+            /// Update the results collection with new results, try to keep identical results
+            /// </summary>
+            /// <param name="newItems"></param>
             public void Update(List<ResultViewModel> newItems)
             {
                 int newCount = newItems.Count;
@@ -221,7 +263,7 @@ namespace Wox.ViewModel
                     ResultViewModel oldResult = this[i];
                     ResultViewModel newResult = newItems[i];
                     if (!oldResult.Equals(newResult))
-                    {
+                    { // result is not the same update it in the current index
                         this[i] = newResult;
                     }
                     else if (oldResult.Result.Score != newResult.Result.Score)

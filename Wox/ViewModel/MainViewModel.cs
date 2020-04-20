@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
@@ -13,7 +14,6 @@ using Wox.Core.Resource;
 using Wox.Helper;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Hotkey;
-using Wox.Infrastructure.Image;
 using Wox.Infrastructure.Storage;
 using Wox.Infrastructure.UserSettings;
 using Wox.Plugin;
@@ -25,7 +25,7 @@ namespace Wox.ViewModel
     {
         #region Private Fields
 
-        private bool _queryHasReturn;
+        private bool _isQueryRunning;
         private Query _lastQuery;
         private string _queryTextBeforeLeaveResults;
 
@@ -41,7 +41,7 @@ namespace Wox.ViewModel
         private CancellationToken _updateToken;
         private bool _saved;
 
-        private Internationalization _translator = InternationalizationManager.Instance;
+        private readonly Internationalization _translator = InternationalizationManager.Instance;
 
         #endregion
 
@@ -96,7 +96,7 @@ namespace Wox.ViewModel
         {
             EscCommand = new RelayCommand(_ =>
             {
-                if (!ResultsSelected())
+                if (!SelectedIsFromQueryResults())
                 {
                     SelectedResults = Results;
                 }
@@ -126,9 +126,11 @@ namespace Wox.ViewModel
                 SelectedResults.SelectPrevPage();
             });
 
+            SelectFirstResultCommand = new RelayCommand(_ => SelectedResults.SelectFirstResult());
+
             StartHelpCommand = new RelayCommand(_ =>
             {
-                Process.Start("http://doc.getwox.com");
+                Process.Start("http://doc.wox.one/");
             });
 
             OpenResultCommand = new RelayCommand(index =>
@@ -153,17 +155,21 @@ namespace Wox.ViewModel
                         MainWindowVisibility = Visibility.Collapsed;
                     }
 
-                    if (ResultsSelected())
+                    if (SelectedIsFromQueryResults())
                     {
                         _userSelectedRecord.Add(result);
                         _history.Add(result.OriginQuery.RawQuery);
+                    }
+                    else
+                    {
+                        SelectedResults = Results;
                     }
                 }
             });
 
             LoadContextMenuCommand = new RelayCommand(_ =>
             {
-                if (ResultsSelected())
+                if (SelectedIsFromQueryResults())
                 {
                     SelectedResults = ContextMenu;
                 }
@@ -175,7 +181,7 @@ namespace Wox.ViewModel
 
             LoadHistoryCommand = new RelayCommand(_ =>
             {
-                if (ResultsSelected())
+                if (SelectedIsFromQueryResults())
                 {
                     SelectedResults = History;
                     History.SelectedIndex = _history.Items.Count - 1;
@@ -205,7 +211,7 @@ namespace Wox.ViewModel
                 Query();
             }
         }
-
+        
         /// <summary>
         /// we need move cursor to end when we manually changed query
         /// but we don't want to move cursor to end when query is updated from TextBox
@@ -226,7 +232,7 @@ namespace Wox.ViewModel
             set
             {
                 _selectedResults = value;
-                if (ResultsSelected())
+                if (SelectedIsFromQueryResults())
                 {
                     ContextMenu.Visbility = Visibility.Collapsed;
                     History.Visbility = Visibility.Collapsed;
@@ -264,6 +270,7 @@ namespace Wox.ViewModel
         public ICommand SelectPrevItemCommand { get; set; }
         public ICommand SelectNextPageCommand { get; set; }
         public ICommand SelectPrevPageCommand { get; set; }
+        public ICommand SelectFirstResultCommand { get; set; }
         public ICommand StartHelpCommand { get; set; }
         public ICommand LoadContextMenuCommand { get; set; }
         public ICommand LoadHistoryCommand { get; set; }
@@ -273,7 +280,7 @@ namespace Wox.ViewModel
 
         public void Query()
         {
-            if (ResultsSelected())
+            if (SelectedIsFromQueryResults())
             {
                 QueryResults();
             }
@@ -305,8 +312,8 @@ namespace Wox.ViewModel
                 {
                     var filtered = results.Where
                     (
-                        r => StringMatcher.IsMatch(r.Title, query) ||
-                             StringMatcher.IsMatch(r.SubTitle, query)
+                        r => StringMatcher.FuzzySearch(query, r.Title).IsSearchPrecisionScoreMet()
+                            || StringMatcher.FuzzySearch(query, r.SubTitle).IsSearchPrecisionScoreMet()
                     ).ToList();
                     ContextMenu.AddResults(filtered, id);
                 }
@@ -348,8 +355,8 @@ namespace Wox.ViewModel
             {
                 var filtered = results.Where
                 (
-                    r => StringMatcher.IsMatch(r.Title, query) ||
-                         StringMatcher.IsMatch(r.SubTitle, query)
+                    r => StringMatcher.FuzzySearch(query, r.Title).IsSearchPrecisionScoreMet() ||
+                         StringMatcher.FuzzySearch(query, r.SubTitle).IsSearchPrecisionScoreMet()
                 ).ToList();
                 History.AddResults(filtered, id);
             }
@@ -364,59 +371,58 @@ namespace Wox.ViewModel
             if (!string.IsNullOrEmpty(QueryText))
             {
                 _updateSource?.Cancel();
-                _updateSource = new CancellationTokenSource();
-                _updateToken = _updateSource.Token;
+                var currentUpdateSource = new CancellationTokenSource();
+                _updateSource = currentUpdateSource;
+                var currentCancellationToken = _updateSource.Token;
+                _updateToken = currentCancellationToken;
 
                 ProgressBarVisibility = Visibility.Hidden;
-                _queryHasReturn = false;
-                var query = PluginManager.QueryInit(QueryText.Trim());
+                _isQueryRunning = true;
+                var query = QueryBuilder.Build(QueryText.Trim(), PluginManager.NonGlobalPlugins);
                 if (query != null)
                 {
                     // handle the exclusiveness of plugin using action keyword
-                    string lastKeyword = _lastQuery.ActionKeyword;
-                    string keyword = query.ActionKeyword;
-                    if (string.IsNullOrEmpty(lastKeyword))
-                    {
-                        if (!string.IsNullOrEmpty(keyword))
-                        {
-                            Results.RemoveResultsExcept(PluginManager.NonGlobalPlugins[keyword].Metadata);
-                        }
-                    }
-                    else
-                    {
-                        if (string.IsNullOrEmpty(keyword))
-                        {
-                            Results.RemoveResultsFor(PluginManager.NonGlobalPlugins[lastKeyword].Metadata);
-                        }
-                        else if (lastKeyword != keyword)
-                        {
-                            Results.RemoveResultsExcept(PluginManager.NonGlobalPlugins[keyword].Metadata);
-                        }
-                    }
+                    RemoveOldQueryResults(query);
 
                     _lastQuery = query;
-                    Task.Delay(200, _updateToken).ContinueWith(_ =>
-                    {
-                        if (query.RawQuery == _lastQuery.RawQuery && !_queryHasReturn)
+                    Task.Delay(200, currentCancellationToken).ContinueWith(_ =>
+                    { // start the progress bar if query takes more than 200 ms and this is the current running query and it didn't finish yet
+                        if (currentUpdateSource == _updateSource && _isQueryRunning)
                         {
                             ProgressBarVisibility = Visibility.Visible;
                         }
-                    }, _updateToken);
+                    }, currentCancellationToken);
 
                     var plugins = PluginManager.ValidPluginsForQuery(query);
                     Task.Run(() =>
                     {
-                        Parallel.ForEach(plugins, plugin =>
+                        // so looping will stop once it was cancelled
+                        var parallelOptions = new ParallelOptions { CancellationToken = currentCancellationToken };
+                        try
                         {
-                            var config = _settings.PluginSettings.Plugins[plugin.Metadata.ID];
-                            if (!config.Disabled)
+                            Parallel.ForEach(plugins, parallelOptions, plugin =>
                             {
+                                if (!plugin.Metadata.Disabled)
+                                {
+                                    var results = PluginManager.QueryForPlugin(plugin, query);
+                                    UpdateResultView(results, plugin.Metadata, query);
+                                }
+                            });
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // nothing to do here
+                        }
+                        
 
-                                var results = PluginManager.QueryForPlugin(plugin, query);
-                                UpdateResultView(results, plugin.Metadata, query);
-                            }
-                        });
-                    }, _updateToken);
+                        // this should happen once after all queries are done so progress bar should continue
+                        // until the end of all querying
+                        _isQueryRunning = false;
+                        if (currentUpdateSource == _updateSource)
+                        { // update to hidden if this is still the current query
+                            ProgressBarVisibility = Visibility.Hidden;
+                        }
+                    }, currentCancellationToken);
                 }
             }
             else
@@ -426,6 +432,29 @@ namespace Wox.ViewModel
             }
         }
 
+        private void RemoveOldQueryResults(Query query)
+        {
+            string lastKeyword = _lastQuery.ActionKeyword;
+            string keyword = query.ActionKeyword;
+            if (string.IsNullOrEmpty(lastKeyword))
+            {
+                if (!string.IsNullOrEmpty(keyword))
+                {
+                    Results.RemoveResultsExcept(PluginManager.NonGlobalPlugins[keyword].Metadata);
+                }
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(keyword))
+                {
+                    Results.RemoveResultsFor(PluginManager.NonGlobalPlugins[lastKeyword].Metadata);
+                }
+                else if (lastKeyword != keyword)
+                {
+                    Results.RemoveResultsExcept(PluginManager.NonGlobalPlugins[keyword].Metadata);
+                }
+            }
+        }
 
         private Result ContextMenuTopMost(Result result)
         {
@@ -440,7 +469,7 @@ namespace Wox.ViewModel
                     Action = _ =>
                     {
                         _topMostRecord.Remove(result);
-                        App.API.ShowMsg("Succeed");
+                        App.API.ShowMsg("Success");
                         return false;
                     }
                 };
@@ -455,7 +484,7 @@ namespace Wox.ViewModel
                     Action = _ =>
                     {
                         _topMostRecord.AddOrUpdate(result);
-                        App.API.ShowMsg("Succeed");
+                        App.API.ShowMsg("Success");
                         return false;
                     }
                 };
@@ -487,7 +516,7 @@ namespace Wox.ViewModel
             return menu;
         }
 
-        private bool ResultsSelected()
+        private bool SelectedIsFromQueryResults()
         {
             var selected = SelectedResults == Results;
             return selected;
@@ -624,9 +653,6 @@ namespace Wox.ViewModel
         /// </summary>
         public void UpdateResultView(List<Result> list, PluginMetadata metadata, Query originQuery)
         {
-            _queryHasReturn = true;
-            ProgressBarVisibility = Visibility.Hidden;
-
             foreach (var result in list)
             {
                 if (_topMostRecord.IsTopMost(result))

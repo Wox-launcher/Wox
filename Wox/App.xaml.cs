@@ -1,9 +1,10 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Timers;
 using System.Windows;
 using Wox.Core;
+using Wox.Core.Configuration;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
 using Wox.Helper;
@@ -25,6 +26,10 @@ namespace Wox
         private Settings _settings;
         private MainViewModel _mainVM;
         private SettingWindowViewModel _settingsVM;
+        private readonly Updater _updater = new Updater(Wox.Properties.Settings.Default.GithubRepo);
+        private readonly Portable _portable = new Portable();
+        private readonly Alphabet _alphabet = new Alphabet();
+        private StringMatcher _stringMatcher;
 
         [STAThread]
         public static void Main()
@@ -43,28 +48,34 @@ namespace Wox
         {
             Stopwatch.Normal("|App.OnStartup|Startup cost", () =>
             {
+                _portable.PreStartCleanUpAfterPortabilityUpdate();
+
                 Log.Info("|App.OnStartup|Begin Wox startup ----------------------------------------------------");
                 Log.Info($"|App.OnStartup|Runtime info:{ErrorReporting.RuntimeInfo()}");
                 RegisterAppDomainExceptions();
                 RegisterDispatcherUnhandledException();
 
                 ImageLoader.Initialize();
-                Alphabet.Initialize();
 
-                _settingsVM = new SettingWindowViewModel();
+                _settingsVM = new SettingWindowViewModel(_updater, _portable);
                 _settings = _settingsVM.Settings;
+
+                _alphabet.Initialize(_settings);
+                _stringMatcher = new StringMatcher(_alphabet);
+                StringMatcher.Instance = _stringMatcher;
+                _stringMatcher.UserSettingSearchPrecision = _settings.QuerySearchPrecision;
 
                 PluginManager.LoadPlugins(_settings.PluginSettings);
                 _mainVM = new MainViewModel(_settings);
                 var window = new MainWindow(_settings, _mainVM);
-                API = new PublicAPIInstance(_settingsVM, _mainVM);
+                API = new PublicAPIInstance(_settingsVM, _mainVM, _alphabet);
                 PluginManager.InitializePlugins(API);
                 Log.Info($"|App.OnStartup|Dependencies Info:{ErrorReporting.DependenciesInfo()}");
 
                 Current.MainWindow = window;
                 Current.MainWindow.Title = Constant.Wox;
 
-                // happlebao todo temp fix for instance code logic
+                // todo temp fix for instance code logic
                 // load plugin before change language, because plugin language also needs be changed
                 InternationalizationManager.Instance.Settings = _settings;
                 InternationalizationManager.Instance.ChangeLanguage(_settings.Language);
@@ -107,14 +118,14 @@ namespace Wox
                     var timer = new Timer(1000 * 60 * 60 * 5);
                     timer.Elapsed += async (s, e) =>
                     {
-                        await Updater.UpdateApp();
+                        await _updater.UpdateApp();
                     };
                     timer.Start();
 
                     // check updates on startup
-                    await Updater.UpdateApp();
+                    await _updater.UpdateApp();
                 }
-            });
+            }).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
         }
 
         private void RegisterExitEvents()
@@ -140,11 +151,7 @@ namespace Wox
         [Conditional("RELEASE")]
         private static void RegisterAppDomainExceptions()
         {
-            AppDomain.CurrentDomain.UnhandledException += ErrorReporting.UnhandledExceptionHandle;
-            AppDomain.CurrentDomain.FirstChanceException += (_, e) =>
-            {
-                Log.Exception("|App.RegisterAppDomainExceptions|First Chance Exception:", e.Exception);
-            };
+            AppDomain.CurrentDomain.UnhandledException += ErrorReporting.UnhandledExceptionHandleMain;
         }
 
         public void Dispose()
@@ -153,13 +160,7 @@ namespace Wox
             // but if sessionending is not called, exit won't be called when log off / shutdown
             if (!_disposed)
             {
-                _mainVM.Save();
-                _settingsVM.Save();
-
-                PluginManager.Save();
-                ImageLoader.Save();
-                Alphabet.Save();
-
+                API.SaveAppAllSettings();
                 _disposed = true;
             }
         }
