@@ -155,14 +155,22 @@ namespace Wox.Infrastructure.Exception
                 {
                     int releaseKey = (int)ndpKey.GetValue("Release");
                     {
-                        if (releaseKey == 378389)
-                            result.Add("v4.5");
+                        if (releaseKey == 394806 || releaseKey == 394806) {
+                            result.Add("v4.6.2");
+                        }
+                        if (releaseKey == 460798 || releaseKey == 460805) {
+                            result.Add("v4.7");
+                        }
+                        if (releaseKey == 461308 || releaseKey == 461310) {
+                            result.Add("v4.7.1");
+                        }
+                        if (releaseKey == 461808 || releaseKey == 461814) {
+                            result.Add("v4.7.2");
+                        }
+                        if (releaseKey == 528040 || releaseKey == 528209 || releaseKey == 528049) {
+                            result.Add("v4.8");
+                        }
 
-                        if (releaseKey == 378675)
-                            result.Add("v4.5.1 installed with Windows 8.1");
-
-                        if (releaseKey == 378758)
-                            result.Add("4.5.1 installed on Windows 8, Windows 7 SP1, or Windows Vista SP2");
                     }
                 }
                 return result;

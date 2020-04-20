@@ -53,7 +53,7 @@ Windows may complain about security due to code not being signed. This will be f
 Versions marked as **pre-release** are unstable pre-release versions.
 
 - Requirements:
-  - .net >= 4.5.2
+  - .net >= 4.6.2
   - If you want to integrate with [everything](https://www.voidtools.com/): `.exe` installer + use x64 if your windows is x64 + everything service is running. Supported version is 1.3.4.686
   - If you use python plugins, install [python3](https://www.python.org/downloads/): `.exe` installer + add it to `%PATH%` or set it in WoX settings
 
