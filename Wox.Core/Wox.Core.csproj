@@ -93,7 +93,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Fody">
-      <Version>1.29.2</Version>
+      <Version>6.1.1</Version>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -104,7 +104,7 @@
       <Version>9.0.1</Version>
     </PackageReference>
     <PackageReference Include="PropertyChanged.Fody">
-      <Version>1.51.0</Version>
+      <Version>3.2.8</Version>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
