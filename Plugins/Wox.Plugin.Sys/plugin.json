@@ -3,7 +3,7 @@
     "ActionKeyword":"*",
     "Name":"System Commands",
     "Description":"Provide System related commands. e.g. shutdown,lock,setting etc.",
-    "Author":"qianlifeng",
+    "Author":"Wox",
     "Version":"1.0.0",
     "Language":"csharp",
     "Website":"http://www.wox.one/plugin",

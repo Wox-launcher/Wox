@@ -1,12 +1,12 @@
 <?xml version="1.0"?>
 <package>
   <metadata>
-    <id>Wox-JJW24</id>
+    <id>Wox</id>
     <title>Wox</title>
     <version>$version$</version>
-    <authors>happlebao, Jeremy Wu</authors>
-    <projectUrl>https://github.com/jjw24/Wox</projectUrl>
-    <iconUrl>https://raw.githubusercontent.com/jjw24/Wox/master/Wox/Images/app.png</iconUrl>
+    <authors>Wox</authors>
+    <projectUrl>https://github.com/Wox-launcher/Wox</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/Wox-launcher/Wox/master/Wox/Images/app.png</iconUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Wox - a launcher for windows</description>
   </metadata>

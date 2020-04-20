@@ -3,7 +3,7 @@
     "ActionKeyword":"*",
     "Name":"URL",
     "Description":"Open the typed URL from Wox",
-    "Author":"qianlifeng",
+    "Author":"Wox",
     "Version":"1.0.0",
     "Language":"csharp",
     "Website":"http://www.wox.one/plugin",

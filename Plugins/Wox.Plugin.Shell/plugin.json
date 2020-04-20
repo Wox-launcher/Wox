@@ -3,7 +3,7 @@
     "ActionKeyword":">",
     "Name":"Shell",
     "Description":"Provide executing commands from Wox. Commands should start with >",
-    "Author":"qianlifeng",
+    "Author":"Wox",
     "Version":"1.0.0",
     "Language":"csharp",
     "Website":"http://www.wox.one/plugin",

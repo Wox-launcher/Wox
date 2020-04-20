@@ -89,7 +89,7 @@
     <system:String x:Key="checkUpdatesFailed">Kontrola aktualizácií zlyhala, prosím, skontrolujte pripojenie na internet a nastavenie proxy k api.github.com.</system:String>
     <system:String x:Key="downloadUpdatesFailed">
         Sťahovanie aktualizácií zlyhalo, skontrolujte pripojenie na internet a nastavenie proxy k github-cloud.s3.amazonaws.com, 
-        alebo prejdite na https://github.com/jjw24/Wox/releases pre manuálne stiahnutie aktualizácií.
+        alebo prejdite na https://github.com/Wox-launcher/Wox/releases pre manuálne stiahnutie aktualizácií.
     </system:String>
     <system:String x:Key="releaseNotes">Poznámky k vydaniu:</system:String>
 

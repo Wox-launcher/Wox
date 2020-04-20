@@ -74,7 +74,7 @@ function Zip-Release ($path, $version, $output) {
 
     $input = "$path\Output\Release"
     Write-Host "Input path:  $input"
-    $file = "$output\Wox-JJW24-$version.zip"
+    $file = "$output\Wox-$version.zip"
     Write-Host "Filename: $file"
 
     [Reflection.Assembly]::LoadWithPartialName("System.IO.Compression.FileSystem")
@@ -93,7 +93,7 @@ function Pack-Squirrel-Installer ($path, $version, $output) {
     Write-Host "Input path:  $input"
     Nuget pack $spec -Version $version -Properties Configuration=Release -BasePath $input -OutputDirectory  $output
 
-    $nupkg = "$output\Wox-JJW24.$version.nupkg"
+    $nupkg = "$output\Wox.$version.nupkg"
     Write-Host "nupkg path: $nupkg"
     $icon = "$path\Wox\Resources\app.ico"
     Write-Host "icon: $icon"
@@ -107,7 +107,7 @@ function Pack-Squirrel-Installer ($path, $version, $output) {
     Move-Item $temp\* $output -Force
     Remove-Item $temp
     
-    $file = "$output\Wox-JJW24-$version.exe"
+    $file = "$output\Wox-$version.exe"
     Write-Host "Filename: $file"
 
     Move-Item "$output\Setup.exe" $file -Force

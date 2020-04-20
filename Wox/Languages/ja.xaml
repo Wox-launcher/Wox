@@ -91,7 +91,7 @@
     <system:String x:Key="checkUpdatesFailed">アップデートの確認に失敗しました、api.github.com への接続とプロキシ設定を確認してください。</system:String>
     <system:String x:Key="downloadUpdatesFailed">
         更新のダウンロードに失敗しました、github-cloud.s3.amazonaws.com への接続とプロキシ設定を確認するか、
-        https://github.com/jjw24/Wox/releases から手動でアップデートをダウンロードしてください。
+        https://github.com/Wox-launcher/Wox/releases から手動でアップデートをダウンロードしてください。
     </system:String>
     <system:String x:Key="releaseNotes">リリースノート:</system:String>
 
