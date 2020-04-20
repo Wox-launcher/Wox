@@ -375,10 +375,10 @@ namespace Wox.Plugin.Program.Programs
                 const string prefix = "ms-resource:";
                 if (!string.IsNullOrWhiteSpace(resourceReference) && resourceReference.StartsWith(prefix))
                 {
-                    // magic comes from @talynone
-                    // https://github.com/talynone/Wox.Plugin.WindowsUniversalAppLauncher/blob/master/StoreAppLauncher/Helpers/NativeApiHelper.cs#L139-L153
+
+                    // use makepri to check whether the resource can be get, the error message is usually useless
+                    //makepri.exe"  dump /if "a\resources.pri" /of b.xml 
                     string key = resourceReference.Substring(prefix.Length);
-                    Log.Info($"|ResourceFromPri| {prefix}, {key}, ");
                     string parsed;
                     if (key.StartsWith("//"))
                     {
