@@ -2,6 +2,7 @@ WoX
 ===
 
 ![Maintenance](https://img.shields.io/maintenance/yes/2020)
+[![Build status](https://ci.appveyor.com/api/projects/status/bfktntbivg32e103?svg=true)](https://ci.appveyor.com/project/bao-qian/wox)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Wox-launcher/wox)](https://github.com/Wox-launcher/Wox/releases/latest)
 ![GitHub Release Date](https://img.shields.io/github/release-date/Wox-launcher/wox)
 ![GitHub commits since latest release](https://img.shields.io/github/commits-since/Wox-launcher/Wox/v1.3.524)
