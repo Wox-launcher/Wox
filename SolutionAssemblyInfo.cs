@@ -4,10 +4,10 @@ using System.Runtime.InteropServices;
 #if DEBUG
 
 [assembly: AssemblyConfiguration("Debug")]
-[assembly: AssemblyDescription("Debug build, https://github.com/Wox-launcher/Wox")]
+[assembly: AssemblyDescription("Debug build, https://github.com/jjw24/Wox")]
 #else
 [assembly: AssemblyConfiguration("Release")]
-[assembly: AssemblyDescription("Release build, https://github.com/Wox-launcher/Wox")]
+[assembly: AssemblyDescription("Release build, https://github.com/jjw24/Wox")]
 #endif
 
 [assembly: AssemblyCompany("Wox")]
@@ -17,5 +17,5 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: AssemblyVersion("1.2.0")]
-[assembly: AssemblyFileVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0")]
 [assembly: AssemblyInformationalVersion("1.2.0")]

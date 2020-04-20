@@ -32,6 +32,7 @@
     <system:String x:Key="autoUpdates">自动更新</system:String>
     <system:String x:Key="selectPythonDirectory">Select</system:String>
     <system:String x:Key="hideOnStartup">启动时不显示主窗口</system:String>
+    <system:String x:Key="hideNotifyIcon">隐藏任务栏图标</system:String>
 
     <!--设置，插件-->
     <system:String x:Key="plugin">插件</system:String>
@@ -51,6 +52,8 @@
     <system:String x:Key="resultItemFont">结果项字体</system:String>
     <system:String x:Key="windowMode">窗口模式</system:String>
     <system:String x:Key="opacity">透明度</system:String>
+    <system:String x:Key="theme_load_failure_path_not_exists">无法找到主题 {0} ，切换为默认主题</system:String>
+    <system:String x:Key="theme_load_failure_parse_error">无法加载主题 {0} ，切换为默认主题</system:String>
     
     <!--设置，热键-->
     <system:String x:Key="hotkey">热键</system:String>
@@ -95,7 +98,7 @@
     <system:String x:Key="cannotFindSpecifiedPlugin">找不到指定的插件</system:String>
     <system:String x:Key="newActionKeywordsCannotBeEmpty">新触发关键字不能为空</system:String>
     <system:String x:Key="newActionKeywordsHasBeenAssigned">新触发关键字已经被指派给其他插件了，请重新选择一个关键字</system:String>
-    <system:String x:Key="succeed">成功</system:String>
+    <system:String x:Key="success">成功</system:String>
     <system:String x:Key="actionkeyword_tips">如果你不想设置触发关键字，可以使用*代替</system:String>
     
     <!--Custom Query Hotkey 对话框-->

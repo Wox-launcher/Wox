@@ -4,14 +4,15 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Infrastructure.Storage
 {
-    class WoxJsonStorage<T> : JsonStrorage<T> where T : new()
+    public class WoxJsonStorage<T> : JsonStrorage<T> where T : new()
     {
         public WoxJsonStorage()
         {
-            var directoryPath = Path.Combine(Constant.DataDirectory, DirectoryName);
+            var directoryPath = Path.Combine(DataLocation.DataDirectory(), DirectoryName);
             Helper.ValidateDirectory(directoryPath);
 
             var filename = typeof(T).Name;

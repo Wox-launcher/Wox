@@ -40,11 +40,12 @@ namespace Wox
         {
             var oldActionKeyword = _plugin.Metadata.ActionKeywords[0];
             var newActionKeyword = tbAction.Text.Trim();
+            newActionKeyword = newActionKeyword.Length > 0 ? newActionKeyword : "*";
             if (!PluginManager.ActionKeywordRegistered(newActionKeyword))
             {
                 var id = _plugin.Metadata.ID;
                 PluginManager.ReplaceActionKeyword(id, oldActionKeyword, newActionKeyword);
-                MessageBox.Show(_translater.GetTranslation("succeed"));
+                MessageBox.Show(_translater.GetTranslation("success"));
                 Close();
             }
             else

@@ -40,12 +40,6 @@ namespace Wox
 
         #region General
 
-        void OnLanguageChanged(object sender, SelectionChangedEventArgs e)
-        {
-            var language = (Language)e.AddedItems[0];
-            InternationalizationManager.Instance.ChangeLanguage(language);
-        }
-
         private void OnAutoStartupChecked(object sender, RoutedEventArgs e)
         {
             SetStartup();
@@ -215,7 +209,8 @@ namespace Wox
         private void OnPluginToggled(object sender, RoutedEventArgs e)
         {
             var id = _viewModel.SelectedPlugin.PluginPair.Metadata.ID;
-            _settings.PluginSettings.Plugins[id].Disabled = _viewModel.SelectedPlugin.PluginPair.Metadata.Disabled;
+            // used to sync the current status from the plugin manager into the setting to keep consistency after save
+            _settings.PluginSettings.Plugins[id].Disabled = _viewModel.SelectedPlugin.PluginPair.Metadata.Disabled; 
         }
 
         private void OnPluginActionKeywordsClick(object sender, MouseButtonEventArgs e)
@@ -260,53 +255,16 @@ namespace Wox
         #region Proxy
 
         private void OnTestProxyClick(object sender, RoutedEventArgs e)
-        {
-            if (string.IsNullOrEmpty(_settings.Proxy.Server))
-            {
-                MessageBox.Show(InternationalizationManager.Instance.GetTranslation("serverCantBeEmpty"));
-                return;
-            }
-            if (_settings.Proxy.Port <= 0)
-            {
-                MessageBox.Show(InternationalizationManager.Instance.GetTranslation("portCantBeEmpty"));
-                return;
-            }
-
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(Infrastructure.Constant.Repository);
-            if (string.IsNullOrEmpty(_settings.Proxy.UserName) || string.IsNullOrEmpty(_settings.Proxy.Password))
-            {
-                request.Proxy = new WebProxy(_settings.Proxy.Server, _settings.Proxy.Port);
-            }
-            else
-            {
-                request.Proxy = new WebProxy(_settings.Proxy.Server, _settings.Proxy.Port)
-                {
-                    Credentials = new NetworkCredential(_settings.Proxy.UserName, _settings.Proxy.Password)
-                };
-            }
-            try
-            {
-                var response = (HttpWebResponse)request.GetResponse();
-                if (response.StatusCode == HttpStatusCode.OK)
-                {
-                    MessageBox.Show(InternationalizationManager.Instance.GetTranslation("proxyIsCorrect"));
-                }
-                else
-                {
-                    MessageBox.Show(InternationalizationManager.Instance.GetTranslation("proxyConnectFailed"));
-                }
-            }
-            catch
-            {
-                MessageBox.Show(InternationalizationManager.Instance.GetTranslation("proxyConnectFailed"));
-            }
+        { // TODO: change to command
+            var msg = _viewModel.TestProxy();
+            MessageBox.Show(msg); // TODO: add message box service
         }
 
         #endregion
 
         private async void OnCheckUpdates(object sender, RoutedEventArgs e)
         {
-            await Updater.UpdateApp();
+            _viewModel.UpdateApp(); // TODO: change to command
         }
 
         private void OnRequestNavigate(object sender, RequestNavigateEventArgs e)
@@ -318,6 +276,7 @@ namespace Wox
         private void OnClosed(object sender, EventArgs e)
         {
             _viewModel.Save();
+            PluginManager.Save();
         }
 
         private void OnCloseExecuted(object sender, ExecutedRoutedEventArgs e)

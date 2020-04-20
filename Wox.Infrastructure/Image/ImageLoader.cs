@@ -2,10 +2,7 @@
 using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Wox.Infrastructure.Logger;
@@ -17,9 +14,11 @@ namespace Wox.Infrastructure.Image
     {
         private static readonly ImageCache ImageCache = new ImageCache();
         private static BinaryStorage<ConcurrentDictionary<string, int>> _storage;
+        private static readonly ConcurrentDictionary<string, string> GuidToKey = new ConcurrentDictionary<string, string>();
+        private static IImageHashGenerator _hashGenerator;
 
 
-        private static readonly string[] ImageExtions =
+        private static readonly string[] ImageExtensions =
         {
             ".png",
             ".jpg",
@@ -33,7 +32,8 @@ namespace Wox.Infrastructure.Image
 
         public static void Initialize()
         {
-            _storage = new BinaryStorage<ConcurrentDictionary<string, int>> ("Image");
+            _storage = new BinaryStorage<ConcurrentDictionary<string, int>>("Image");
+            _hashGenerator = new ImageHashGenerator();
             ImageCache.Usage = _storage.TryLoad(new ConcurrentDictionary<string, int>());
 
             foreach (var icon in new[] { Constant.DefaultIcon, Constant.ErrorIcon })
@@ -46,16 +46,12 @@ namespace Wox.Infrastructure.Image
             {
                 Stopwatch.Normal("|ImageLoader.Initialize|Preload images cost", () =>
                 {
-                    ImageCache.Usage.AsParallel().Where(i => !ImageCache.ContainsKey(i.Key)).ForAll(i =>
+                    ImageCache.Usage.AsParallel().ForAll(x =>
                     {
-                        var img = Load(i.Key);
-                        if (img != null)
-                        {
-                            ImageCache[i.Key] = img;
-                        }
+                        Load(x.Key);
                     });
                 });
-                Log.Info($"|ImageLoader.Initialize|Number of preload images is <{ImageCache.Usage.Count}>");
+                Log.Info($"|ImageLoader.Initialize|Number of preload images is <{ImageCache.Usage.Count}>, Images Number: {ImageCache.CacheSize()}, Unique Items {ImageCache.UniqueImagesInCache()}");
             });
         }
 
@@ -65,127 +61,155 @@ namespace Wox.Infrastructure.Image
             _storage.Save(ImageCache.Usage);
         }
 
-        private static ImageSource ShellIcon(string fileName)
+        private class ImageResult
         {
+            public ImageResult(ImageSource imageSource, ImageType imageType)
+            {
+                ImageSource = imageSource;
+                ImageType = imageType;
+            }
+
+            public ImageType ImageType { get; }
+            public ImageSource ImageSource { get; }
+        }
+
+        private enum ImageType
+        {
+            File,
+            Folder,
+            Data,
+            ImageFile,
+            Error,
+            Cache
+        }
+
+        private static ImageResult LoadInternal(string path, bool loadFullImage = false)
+        {
+            ImageSource image;
+            ImageType type = ImageType.Error;
             try
             {
-                // http://blogs.msdn.com/b/oldnewthing/archive/2011/01/27/10120844.aspx
-                var shfi = new SHFILEINFO();
-                var himl = SHGetFileInfo(
-                    fileName,
-                    FILE_ATTRIBUTE_NORMAL,
-                    ref shfi,
-                    (uint)Marshal.SizeOf(shfi),
-                    SHGFI_SYSICONINDEX
-                );
-
-                if (himl != IntPtr.Zero)
+                if (string.IsNullOrEmpty(path))
                 {
-                    var hIcon = ImageList_GetIcon(himl, shfi.iIcon, ILD_NORMAL);
-                    // http://stackoverflow.com/questions/1325625/how-do-i-display-a-windows-file-icon-in-wpf
-                    var img = Imaging.CreateBitmapSourceFromHIcon(
-                        hIcon,
-                        Int32Rect.Empty,
-                        BitmapSizeOptions.FromEmptyOptions()
-                    );
-                    DestroyIcon(hIcon);
-                    return img;
+                    return new ImageResult(ImageCache[Constant.ErrorIcon], ImageType.Error);
+                }
+                if (ImageCache.ContainsKey(path))
+                {
+                    return new ImageResult(ImageCache[path], ImageType.Cache);
+                }
+
+                if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var imageSource = new BitmapImage(new Uri(path));
+                    imageSource.Freeze();
+                    return new ImageResult(imageSource, ImageType.Data);
+                }
+
+                if (!Path.IsPathRooted(path))
+                {
+                    path = Path.Combine(Constant.ProgramDirectory, "Images", Path.GetFileName(path));
+                }
+
+                if (Directory.Exists(path))
+                {
+                    /* Directories can also have thumbnails instead of shell icons.
+                     * Generating thumbnails for a bunch of folders while scrolling through
+                     * results from Everything makes a big impact on performance and 
+                     * Wox responsibility. 
+                     * - Solution: just load the icon
+                     */
+                    type = ImageType.Folder;
+                    image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
+                        Constant.ThumbnailSize, ThumbnailOptions.IconOnly);
+
+                }
+                else if (File.Exists(path))
+                {
+                    var extension = Path.GetExtension(path).ToLower();
+                    if (ImageExtensions.Contains(extension))
+                    {
+                        type = ImageType.ImageFile;
+                        if (loadFullImage)
+                        {
+                            image = LoadFullImage(path);
+                        }
+                        else
+                        {
+                            /* Although the documentation for GetImage on MSDN indicates that 
+                             * if a thumbnail is available it will return one, this has proved to not
+                             * be the case in many situations while testing. 
+                             * - Solution: explicitly pass the ThumbnailOnly flag
+                             */
+                            image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
+                                Constant.ThumbnailSize, ThumbnailOptions.ThumbnailOnly);
+                        }
+                    }
+                    else
+                    {
+                        type = ImageType.File;
+                        image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
+                            Constant.ThumbnailSize, ThumbnailOptions.None);
+                    }
                 }
                 else
                 {
-                    return new BitmapImage(new Uri(Constant.ErrorIcon));
+                    image = ImageCache[Constant.ErrorIcon];
+                    path = Constant.ErrorIcon;
+                }
+
+                if (type != ImageType.Error)
+                {
+                    image.Freeze();
                 }
             }
             catch (System.Exception e)
             {
-                Log.Exception($"|ImageLoader.ShellIcon|can't get shell icon for <{fileName}>", e);
-                return ImageCache[Constant.ErrorIcon];
+                Log.Exception($"|ImageLoader.Load|Failed to get thumbnail for {path}", e);
+                type = ImageType.Error;
+                image = ImageCache[Constant.ErrorIcon];
+                ImageCache[path] = image;
             }
+            return new ImageResult(image, type);
         }
 
-        public static ImageSource Load(string path)
+        private static bool EnableImageHash = true;
+
+        public static ImageSource Load(string path, bool loadFullImage = false)
         {
-            ImageSource image;
-            if (string.IsNullOrEmpty(path))
-            {
-                image = ImageCache[Constant.ErrorIcon];
-            }
-            else if (ImageCache.ContainsKey(path))
-            {
-                image = ImageCache[path];
-            }
-            else
-            {
-                if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            var imageResult = LoadInternal(path, loadFullImage);
+
+            var img = imageResult.ImageSource;
+            if (imageResult.ImageType != ImageType.Error && imageResult.ImageType != ImageType.Cache)
+            { // we need to get image hash
+                string hash = EnableImageHash ? _hashGenerator.GetHashFromImage(img) : null;
+                if (hash != null)
                 {
-                    image = new BitmapImage(new Uri(path));
-                }
-                else if (Path.IsPathRooted(path))
-                {
-                    if (Directory.Exists(path))
-                    {
-                        image = ShellIcon(path);
-                    }
-                    else if (File.Exists(path))
-                    {
-                        var externsion = Path.GetExtension(path).ToLower();
-                        if (ImageExtions.Contains(externsion))
-                        {
-                            image = new BitmapImage(new Uri(path));
-                        }
-                        else
-                        {
-                            image = ShellIcon(path);
-                        }
+                    if (GuidToKey.TryGetValue(hash, out string key))
+                    { // image already exists
+                        img = ImageCache[key];
                     }
                     else
-                    {
-                        image = ImageCache[Constant.ErrorIcon];
-                        path = Constant.ErrorIcon;
+                    { // new guid
+                        GuidToKey[hash] = path;
                     }
                 }
-                else
-                {
-                    var defaultDirectoryPath = Path.Combine(Constant.ProgramDirectory, "Images", Path.GetFileName(path));
-                    if (File.Exists(defaultDirectoryPath))
-                    {
-                        image = new BitmapImage(new Uri(defaultDirectoryPath));
-                    }
-                    else
-                    {
-                        image = ImageCache[Constant.ErrorIcon];
-                        path = Constant.ErrorIcon;
-                    }
-                }
-                ImageCache[path] = image;
-                image.Freeze();
+
+                // update cache
+                ImageCache[path] = img;
             }
+
+
+            return img;
+        }
+
+        private static BitmapImage LoadFullImage(string path)
+        {
+            BitmapImage image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.UriSource = new Uri(path);
+            image.EndInit();
             return image;
         }
-
-        private const int NAMESIZE = 80;
-        private const int MAX_PATH = 256;
-        private const uint SHGFI_SYSICONINDEX = 0x000004000; // get system icon index
-        private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
-        private const uint ILD_NORMAL = 0x00000000;
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        private struct SHFILEINFO
-        {
-            readonly IntPtr hIcon;
-            internal readonly int iIcon;
-            readonly uint dwAttributes;
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = MAX_PATH)] readonly string szDisplayName;
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = NAMESIZE)] readonly string szTypeName;
-        }
-        
-        [DllImport("Shell32.dll", CharSet = CharSet.Unicode)]
-        private static extern IntPtr SHGetFileInfo(string pszPath, uint dwFileAttributes, ref SHFILEINFO psfi, uint cbFileInfo, uint uFlags);
-
-        [DllImport("User32.dll")]
-        private static extern int DestroyIcon(IntPtr hIcon);
-
-        [DllImport("comctl32.dll")]
-        private static extern IntPtr ImageList_GetIcon(IntPtr himl, int i, uint flags);
     }
 }

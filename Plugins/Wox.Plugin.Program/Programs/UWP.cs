@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -15,7 +15,7 @@ using Windows.Management.Deployment;
 using AppxPackaing;
 using Shell;
 using Wox.Infrastructure;
-using Wox.Infrastructure.Logger;
+using Wox.Plugin.Program.Logger;
 using IStream = AppxPackaing.IStream;
 using Rect = System.Windows.Rect;
 
@@ -35,7 +35,6 @@ namespace Wox.Plugin.Program.Programs
 
         public UWP(Package package)
         {
-
             Location = package.InstalledLocation.Path;
             Name = package.Id.Name;
             FullName = package.Id.FullName;
@@ -84,7 +83,10 @@ namespace Wox.Plugin.Program.Programs
             else
             {
                 var e = Marshal.GetExceptionForHR((int)hResult);
-                Log.Exception($"|UWP.InitializeAppInfo|SHCreateStreamOnFileEx on path <{path}> failed with HResult <{hResult}> and location <{Location}>.", e);
+                ProgramLogger.LogException($"|UWP|InitializeAppInfo|{path}" +
+                                                "|Error caused while trying to get the details of the UWP program", e);
+
+                Apps = new List<Application>().ToArray();
             }
         }
 
@@ -108,7 +110,9 @@ namespace Wox.Plugin.Program.Programs
             }
             else
             {
-                Log.Error($"|UWP.XmlNamespaces|can't find namespaces for <{path}>");
+                ProgramLogger.LogException($"|UWP|XmlNamespaces|{path}" +
+                                                $"|Error occured while trying to get the XML from {path}", new ArgumentNullException());
+
                 return new string[] { };
             }
         }
@@ -131,14 +135,12 @@ namespace Wox.Plugin.Program.Programs
                 }
             }
 
-            Log.Error($"|UWP.InitPackageVersion| Unknown Appmanifest version UWP <{FullName}> with location <{Location}>.");
+            ProgramLogger.LogException($"|UWP|XmlNamespaces|{Location}" +
+                                                "|Trying to get the package version of the UWP program, but a unknown UWP appmanifest version  "
+                                                + $"{FullName} from location {Location} is returned.", new FormatException());
+
             Version = PackageVersion.Unknown;
         }
-
-
-
-
-
 
         public static Application[] All()
         {
@@ -153,14 +155,29 @@ namespace Wox.Plugin.Program.Programs
                     {
                         u = new UWP(p);
                     }
+#if !DEBUG
                     catch (Exception e)
                     {
-                        Log.Exception($"|UWP.All|Can't convert Package to UWP for <{p.Id.FullName}>:", e);
+                        ProgramLogger.LogException($"|UWP|All|{p.InstalledLocation}|An unexpected error occured and "
+                                                        + $"unable to convert Package to UWP for {p.Id.FullName}", e);
                         return new Application[] { };
                     }
+#endif
+#if DEBUG //make developer aware and implement handling
+                    catch
+                    {
+                        throw;
+                    }
+#endif
                     return u.Apps;
                 }).ToArray();
-                return applications;
+
+                var updatedListWithoutDisabledApps = applications
+                                                        .Where(t1 => !Main._settings.DisabledProgramSources
+                                                                        .Any(x => x.UniqueIdentifier == t1.UniqueIdentifier))
+                                                        .Select(x => x);
+
+                return updatedListWithoutDisabledApps.ToArray();
             }
             else
             {
@@ -189,9 +206,12 @@ namespace Wox.Plugin.Program.Programs
                     }
                     catch (Exception e)
                     {
-                        Log.Exception($"|UWP.CurrentUserPackages|Can't get package info for <{p.Id.FullName}>", e);
-                        valid = false;
+                        ProgramLogger.LogException("UWP" ,"CurrentUserPackages", $"id","An unexpected error occured and "
+                                                   + $"unable to verify if package is valid", e);
+                        return false;
                     }
+                    
+                    
                     return valid;
                 });
                 return ps;
@@ -209,8 +229,7 @@ namespace Wox.Plugin.Program.Programs
 
         public override bool Equals(object obj)
         {
-            var uwp = obj as UWP;
-            if (uwp != null)
+            if (obj is UWP uwp)
             {
                 return FamilyName.Equals(uwp.FamilyName);
             }
@@ -229,10 +248,16 @@ namespace Wox.Plugin.Program.Programs
         public class Application : IProgram
         {
             public string AppListEntry { get; set; }
+            public string UniqueIdentifier { get; set; }
             public string DisplayName { get; set; }
             public string Description { get; set; }
             public string UserModelId { get; set; }
             public string BackgroundColor { get; set; }
+
+            public string Name => DisplayName;
+            public string Location => Package.Location;
+
+            public bool Enabled { get; set; }
 
             public string LogoUri { get; set; }
             public string LogoPath { get; set; }
@@ -240,21 +265,25 @@ namespace Wox.Plugin.Program.Programs
 
             private int Score(string query)
             {
-                var score1 = StringMatcher.Score(DisplayName, query);
-                var score2 = StringMatcher.ScoreForPinyin(DisplayName, query);
-                var score3 = StringMatcher.Score(Description, query);
-                var score4 = StringMatcher.ScoreForPinyin(Description, query);
-                var score = new[] { score1, score2, score3, score4 }.Max();
+                var displayNameMatch = StringMatcher.FuzzySearch(query, DisplayName);
+                var descriptionMatch = StringMatcher.FuzzySearch(query, Description);
+                var score = new[] { displayNameMatch.Score, descriptionMatch.Score }.Max();
                 return score;
             }
 
             public Result Result(string query, IPublicAPI api)
             {
+                var score = Score(query);
+                if (score <= 0)
+                { // no need to create result if score is 0
+                    return null;
+                }
+
                 var result = new Result
                 {
                     SubTitle = Package.Location,
                     Icon = Logo,
-                    Score = Score(query),
+                    Score = score,
                     ContextData = this,
                     Action = e =>
                     {
@@ -267,14 +296,18 @@ namespace Wox.Plugin.Program.Programs
                     Description.Substring(0, DisplayName.Length) == DisplayName)
                 {
                     result.Title = Description;
+                    result.TitleHighlightData = StringMatcher.FuzzySearch(query, Description).MatchData;
                 }
                 else if (!string.IsNullOrEmpty(Description))
                 {
-                    result.Title = $"{DisplayName}: {Description}";
+                    var title = $"{DisplayName}: {Description}";
+                    result.Title = title;
+                    result.TitleHighlightData = StringMatcher.FuzzySearch(query, title).MatchData;
                 }
                 else
                 {
                     result.Title = DisplayName;
+                    result.TitleHighlightData = StringMatcher.FuzzySearch(query, DisplayName).MatchData;
                 }
                 return result;
             }
@@ -286,11 +319,14 @@ namespace Wox.Plugin.Program.Programs
                     new Result
                     {
                         Title = api.GetTranslation("wox_plugin_program_open_containing_folder"),
+
                         Action = _ =>
                         {
-                            var hide = Main.StartProcess(new ProcessStartInfo(Package.Location));
-                            return hide;
+                            Main.StartProcess(Process.Start, new ProcessStartInfo(Package.Location));
+
+                            return true;
                         },
+
                         IcoPath = "Images/folder.png"
                     }
                 };
@@ -321,6 +357,7 @@ namespace Wox.Plugin.Program.Programs
             public Application(IAppxManifestApplication manifestApp, UWP package)
             {
                 UserModelId = manifestApp.GetAppUserModelId();
+                UniqueIdentifier = manifestApp.GetAppUserModelId();
                 DisplayName = manifestApp.GetStringValue("DisplayName");
                 Description = manifestApp.GetStringValue("Description");
                 BackgroundColor = manifestApp.GetStringValue("BackgroundColor");
@@ -330,6 +367,8 @@ namespace Wox.Plugin.Program.Programs
                 Description = ResourceFromPri(package.FullName, Description);
                 LogoUri = LogoUriFromManifest(manifestApp);
                 LogoPath = LogoPathFromUri(LogoUri);
+
+                Enabled = true;
             }
 
             internal string ResourceFromPri(string packageFullName, string resourceReference)
@@ -367,7 +406,8 @@ namespace Wox.Plugin.Program.Programs
                         }
                         else
                         {
-                            Log.Error($"|UWP.ResourceFromPri|Can't load null or empty result pri <{source}> with uwp location <{Package.Location}>.");
+                            ProgramLogger.LogException($"|UWP|ResourceFromPri|{Package.Location}|Can't load null or empty result "
+                                                        + $"pri {source} in uwp location {Package.Location}", new NullReferenceException());
                             return string.Empty;
                         }
                     }
@@ -380,7 +420,7 @@ namespace Wox.Plugin.Program.Programs
                         // Microsoft.MicrosoftOfficeHub_17.7608.23501.0_x64__8wekyb3d8bbwe: ms-resource://Microsoft.MicrosoftOfficeHub/officehubintl/AppManifest_GetOffice_Description
                         // Microsoft.BingFoodAndDrink_3.0.4.336_x64__8wekyb3d8bbwe: ms-resource:AppDescription
                         var e = Marshal.GetExceptionForHR((int)hResult);
-                        Log.Exception($"|UWP.ResourceFromPri|Load pri failed <{source}> with HResult <{hResult}> and location <{Package.Location}>.", e);
+                        ProgramLogger.LogException($"|UWP|ResourceFromPri|{Package.Location}|Load pri failed {source} with HResult {hResult} and location {Package.Location}", e);
                         return string.Empty;
                     }
                 }
@@ -394,11 +434,11 @@ namespace Wox.Plugin.Program.Programs
             internal string LogoUriFromManifest(IAppxManifestApplication app)
             {
                 var logoKeyFromVersion = new Dictionary<PackageVersion, string>
-            {
-                {PackageVersion.Windows10, "Square44x44Logo"},
-                {PackageVersion.Windows81, "Square30x30Logo"},
-                {PackageVersion.Windows8, "SmallLogo"},
-            };
+                {
+                    { PackageVersion.Windows10, "Square44x44Logo" },
+                    { PackageVersion.Windows81, "Square30x30Logo" },
+                    { PackageVersion.Windows8, "SmallLogo" },
+                };
                 if (logoKeyFromVersion.ContainsKey(Package.Version))
                 {
                     var key = logoKeyFromVersion[Package.Version];
@@ -436,23 +476,20 @@ namespace Wox.Plugin.Program.Programs
                     var prefix = path.Substring(0, end);
                     var paths = new List<string> { path };
 
-                    // todo hidpi icon
-                    if (Package.Version == PackageVersion.Windows10)
+                    var scaleFactors = new Dictionary<PackageVersion, List<int>>
                     {
-                        paths.Add($"{prefix}.scale-100{extension}");
-                        paths.Add($"{prefix}.scale-200{extension}");
-                    }
-                    else if (Package.Version == PackageVersion.Windows81)
+                        // scale factors on win10: https://docs.microsoft.com/en-us/windows/uwp/controls-and-patterns/tiles-and-notifications-app-assets#asset-size-tables,
+                        { PackageVersion.Windows10, new List<int> { 100, 125, 150, 200, 400 } },
+                        { PackageVersion.Windows81, new List<int> { 100, 120, 140, 160, 180 } },
+                        { PackageVersion.Windows8, new List<int> { 100 } }
+                    };
+
+                    if (scaleFactors.ContainsKey(Package.Version))
                     {
-                        paths.Add($"{prefix}.scale-100{extension}");
-                        paths.Add($"{prefix}.scale-120{extension}");
-                        paths.Add($"{prefix}.scale-140{extension}");
-                        paths.Add($"{prefix}.scale-160{extension}");
-                        paths.Add($"{prefix}.scale-180{extension}");
-                    }
-                    else if (Package.Version == PackageVersion.Windows8)
-                    {
-                        paths.Add($"{prefix}.scale-100{extension}");
+                        foreach (var factor in scaleFactors[Package.Version])
+                        {
+                            paths.Add($"{prefix}.scale-{factor}{extension}");
+                        }
                     }
 
                     var selected = paths.FirstOrDefault(File.Exists);
@@ -462,13 +499,16 @@ namespace Wox.Plugin.Program.Programs
                     }
                     else
                     {
-                        Log.Error($"|UWP.LogoPathFromUri| <{UserModelId}> can't find logo uri for <{uri}>, Package location <{Package.Location}>.");
+                        ProgramLogger.LogException($"|UWP|LogoPathFromUri|{Package.Location}" +
+                                                    $"|{UserModelId} can't find logo uri for {uri} in package location: {Package.Location}", new FileNotFoundException());
                         return string.Empty;
                     }
                 }
                 else
                 {
-                    Log.Error($"|UWP.LogoPathFromUri| <{UserModelId}> cantains can't find extension for <{uri}> Package location <{Package.Location}>.");
+                    ProgramLogger.LogException($"|UWP|LogoPathFromUri|{Package.Location}" +
+                                                    $"|Unable to find extension from {uri} for {UserModelId} " +
+                                                    $"in package location {Package.Location}", new FileNotFoundException());
                     return string.Empty;
                 }
             }
@@ -494,7 +534,9 @@ namespace Wox.Plugin.Program.Programs
                 }
                 else
                 {
-                    Log.Error($"|UWP.ImageFromPath|Can't get logo for <{UserModelId}> with path <{path}> and location <{Package.Location}>");
+                    ProgramLogger.LogException($"|UWP|ImageFromPath|{path}" +
+                                                    $"|Unable to get logo for {UserModelId} from {path} and" +
+                                                    $" located in {Package.Location}", new FileNotFoundException());
                     return new BitmapImage(new Uri(Constant.ErrorIcon));
                 }
             }
@@ -541,7 +583,10 @@ namespace Wox.Plugin.Program.Programs
                     }
                     else
                     {
-                        Log.Error($"|UWP.PlatedImage| Can't convert background string <{BackgroundColor}> to color for <{Package.Location}>.");
+                        ProgramLogger.LogException($"|UWP|PlatedImage|{Package.Location}" +
+                                                    $"|Unable to convert background string {BackgroundColor} " +
+                                                    $"to color for {Package.Location}", new InvalidOperationException());
+
                         return new BitmapImage(new Uri(Constant.ErrorIcon));
                     }
                 }

@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using Newtonsoft.Json;
+using Wox.Infrastructure;
 using Wox.Infrastructure.Http;
 using Wox.Infrastructure.Logger;
 
@@ -15,7 +16,7 @@ namespace Wox.Plugin.PluginManagement
 {
     public class Main : IPlugin, IPluginI18n
     {
-        private static string APIBASE = "http://api.getwox.com";
+        private static string APIBASE = "http://api.wox.one";
         private static string PluginConfigName = "plugin.json";
         private static string pluginSearchUrl = APIBASE + "/plugin/search/";
         private const string ListCommand = "list";
@@ -142,9 +143,11 @@ namespace Wox.Plugin.PluginManagement
                     Title = r.name,
                     SubTitle = r.description,
                     IcoPath = "Images\\plugin.png",
+                    TitleHighlightData = StringMatcher.FuzzySearch(query.SecondSearch, r.name).MatchData,
+                    SubTitleHighlightData = StringMatcher.FuzzySearch(query.SecondSearch, r.description).MatchData,
                     Action = c =>
                     {
-                        MessageBoxResult result = MessageBox.Show("Are your sure to install " + r.name + " plugin",
+                        MessageBoxResult result = MessageBox.Show("Are you sure you wish to install the \'" + r.name + "\' plugin",
                             "Install plugin", MessageBoxButton.YesNo);
 
                         if (result == MessageBoxResult.Yes)
@@ -191,6 +194,8 @@ namespace Wox.Plugin.PluginManagement
                     Title = plugin.Name,
                     SubTitle = plugin.Description,
                     IcoPath = plugin.IcoPath,
+                    TitleHighlightData = StringMatcher.FuzzySearch(query.SecondSearch, plugin.Name).MatchData,
+                    SubTitleHighlightData = StringMatcher.FuzzySearch(query.SecondSearch, plugin.Description).MatchData,
                     Action = e =>
                     {
                         UnInstallPlugin(plugin);

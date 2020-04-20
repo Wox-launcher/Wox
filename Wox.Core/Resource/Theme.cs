@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Markup;
 using System.Windows.Media;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
@@ -22,10 +23,12 @@ namespace Wox.Core.Resource
         private const string Folder = "Themes";
         private const string Extension = ".xaml";
         private string DirectoryPath => Path.Combine(Constant.ProgramDirectory, Folder);
+        private string UserDirectoryPath => Path.Combine(DataLocation.DataDirectory(), Folder);
 
         public Theme()
         {
             _themeDirectories.Add(DirectoryPath);
+            _themeDirectories.Add(UserDirectoryPath);
             MakesureThemeDirectoriesExist();
 
             var dicts = Application.Current.Resources.MergedDictionaries;
@@ -60,38 +63,21 @@ namespace Wox.Core.Resource
             }
         }
 
-        public void ChangeTheme(string theme)
+        public bool ChangeTheme(string theme)
         {
-            const string dark = "Dark";
-            bool valid;
+            const string defaultTheme = "Dark";
 
             string path = GetThemePath(theme);
-            if (string.IsNullOrEmpty(path))
+            try
             {
-                Log.Error($"|Theme.ChangeTheme|Theme path can't be found <{path}>, use default dark theme");
-                path = GetThemePath(dark);
                 if (string.IsNullOrEmpty(path))
-                {
-                    valid = false;
-                    Log.Error($"|Theme.ChangeTheme|Default theme path can't be found <{path}>");
-                }
-                else
-                {
-                    valid = true;
-                    theme = dark;
-                }
-            }
-            else
-            {
-                valid = true;
-            }
+                    throw new DirectoryNotFoundException("Theme path can't be found <{path}>");
 
-            if (valid)
-            {
                 Settings.Theme = theme;
 
                 var dicts = Application.Current.Resources.MergedDictionaries;
-                if (_oldTheme != theme)
+                //always allow re-loading default theme, in case of failure of switching to a new theme from default theme
+                if (_oldTheme != theme || theme == defaultTheme)
                 {
                     dicts.Remove(_oldResource);
                     var newResource = GetResourceDictionary();
@@ -100,6 +86,27 @@ namespace Wox.Core.Resource
                     _oldTheme = Path.GetFileNameWithoutExtension(_oldResource.Source.AbsolutePath);
                 }
             }
+            catch (DirectoryNotFoundException e)
+            {
+                Log.Error($"|Theme.ChangeTheme|Theme <{theme}> path can't be found");
+                if (theme != defaultTheme)
+                {
+                    MessageBox.Show(string.Format(InternationalizationManager.Instance.GetTranslation("theme_load_failure_path_not_exists"), theme));
+                    ChangeTheme(defaultTheme);
+                }
+                return false;
+            }
+            catch (XamlParseException e)
+            {
+                Log.Error($"|Theme.ChangeTheme|Theme <{theme}> fail to parse");
+                if (theme != defaultTheme)
+                {
+                    MessageBox.Show(string.Format(InternationalizationManager.Instance.GetTranslation("theme_load_failure_parse_error"), theme));
+                    ChangeTheme(defaultTheme);
+                }
+                return false;
+            }
+            return true;
         }
 
         public ResourceDictionary GetResourceDictionary()
@@ -117,6 +124,12 @@ namespace Wox.Core.Resource
                 queryBoxStyle.Setters.Add(new Setter(TextBox.FontStyleProperty, FontHelper.GetFontStyleFromInvariantStringOrNormal(Settings.QueryBoxFontStyle)));
                 queryBoxStyle.Setters.Add(new Setter(TextBox.FontWeightProperty, FontHelper.GetFontWeightFromInvariantStringOrNormal(Settings.QueryBoxFontWeight)));
                 queryBoxStyle.Setters.Add(new Setter(TextBox.FontStretchProperty, FontHelper.GetFontStretchFromInvariantStringOrNormal(Settings.QueryBoxFontStretch)));
+
+                var caretBrushPropertyValue = queryBoxStyle.Setters.OfType<Setter>().Any(x => x.Property.Name == "CaretBrush");
+                var foregroundPropertyValue = queryBoxStyle.Setters.OfType<Setter>().Where(x => x.Property.Name == "Foreground")
+                    .Select(x => x.Value).FirstOrDefault();
+                if (!caretBrushPropertyValue && foregroundPropertyValue != null) //otherwise BaseQueryBoxStyle will handle styling
+                    queryBoxStyle.Setters.Add(new Setter(TextBox.CaretBrushProperty, foregroundPropertyValue));
             }
 
             Style resultItemStyle = dict["ItemTitleStyle"] as Style;

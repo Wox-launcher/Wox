@@ -34,7 +34,7 @@ namespace Wox.Core.Plugin
                     return;
                 }
 
-                string pluginFolerPath = Infrastructure.Constant.PluginsDirectory;
+                string pluginFolerPath = Infrastructure.UserSettings.DataLocation.PluginsDirectory;
 
                 string newPluginName = plugin.Name
                     .Replace("/", "_")
@@ -83,7 +83,7 @@ namespace Wox.Core.Plugin
                     //    Plugins.Initialize();
                     //}
                     if (MessageBox.Show($"You have installed plugin {plugin.Name} successfully.{Environment.NewLine}" +
-                                        " Restart Wox to take effect?",
+                                        "Restart Wox to take effect?",
                                         "Install plugin", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
                     {
                         PluginManager.API.RestarApp();

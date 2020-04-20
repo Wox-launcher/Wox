@@ -5,6 +5,7 @@ using System.Net;
 using System.Threading.Tasks;
 using System.Windows;
 using Squirrel;
+using Wox.Core;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
 using Wox.Helper;
@@ -20,16 +21,17 @@ namespace Wox
     {
         private readonly SettingWindowViewModel _settingsVM;
         private readonly MainViewModel _mainVM;
+        private readonly Alphabet _alphabet;
 
         #region Constructor
 
-        public PublicAPIInstance(SettingWindowViewModel settingsVM, MainViewModel mainVM)
+        public PublicAPIInstance(SettingWindowViewModel settingsVM, MainViewModel mainVM, Alphabet alphabet)
         {
             _settingsVM = settingsVM;
             _mainVM = mainVM;
+            _alphabet = alphabet;
             GlobalHotkey.Instance.hookedKeyboardCallback += KListener_hookedKeyboardCallback;
             WebRequest.RegisterPrefix("data", new DataWebRequestFactory());
-
         }
 
         #endregion
@@ -59,13 +61,28 @@ namespace Wox
             // we must manually save
             // UpdateManager.RestartApp() will call Environment.Exit(0)
             // which will cause ungraceful exit
+            SaveAppAllSettings();
+
+            UpdateManager.RestartApp();
+        }
+
+        public void CheckForNewUpdate()
+        {
+            _settingsVM.UpdateApp();
+        }
+
+        public void SaveAppAllSettings()
+        {
             _mainVM.Save();
             _settingsVM.Save();
             PluginManager.Save();
             ImageLoader.Save();
-            Alphabet.Save();
+            _alphabet.Save();
+        }
 
-            UpdateManager.RestartApp();
+        public void ReloadAllPluginData()
+        {
+            PluginManager.ReloadData();
         }
 
         [Obsolete]
@@ -82,10 +99,15 @@ namespace Wox
 
         public void ShowMsg(string title, string subTitle = "", string iconPath = "")
         {
+            ShowMsg(title, subTitle, iconPath, true);
+        }
+
+        public void ShowMsg(string title, string subTitle, string iconPath, bool useMainWindowAsOwner = true)
+        {
             Application.Current.Dispatcher.Invoke(() =>
             {
-                var m = new Msg { Owner = Application.Current.MainWindow };
-                m.Show(title, subTitle, iconPath);
+                var msg = useMainWindowAsOwner ? new Msg {Owner = Application.Current.MainWindow} : new Msg();
+                msg.Show(title, subTitle, iconPath);
             });
         }
 
