@@ -116,7 +116,7 @@ namespace Wox
                     // check updates on startup
                     await Updater.UpdateApp();
                 }
-            });
+            }).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
         }
 
         private void RegisterExitEvents()
@@ -142,7 +142,7 @@ namespace Wox
         [Conditional("RELEASE")]
         private static void RegisterAppDomainExceptions()
         {
-            AppDomain.CurrentDomain.UnhandledException += ErrorReporting.UnhandledExceptionHandle;
+            AppDomain.CurrentDomain.UnhandledException += ErrorReporting.UnhandledExceptionHandleMain;
         }
 
         public void Dispose()
