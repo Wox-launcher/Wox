@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 using NLog;
 using Wox.Infrastructure;
@@ -16,9 +17,15 @@ namespace Wox.Helper
             reportWindow.Show();
         }
 
-        public static void UnhandledExceptionHandle(object sender, UnhandledExceptionEventArgs e)
+        public static void UnhandledExceptionHandleTask(Task t)
         {
-            //handle non-ui thread exceptions
+            //handle non-ui sub task exceptions
+            Report(t.Exception);
+        }
+
+        public static void UnhandledExceptionHandleMain(object sender, UnhandledExceptionEventArgs e)
+        {
+            //handle non-ui main thread exceptions
             Report((Exception)e.ExceptionObject);
         }
 
