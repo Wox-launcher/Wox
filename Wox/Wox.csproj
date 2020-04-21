@@ -402,6 +402,9 @@
     </Resource>
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="CommandLineParser">
+      <Version>2.7.82</Version>
+    </PackageReference>
     <PackageReference Include="Fody">
       <Version>6.1.1</Version>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
