@@ -1,8 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using Ookii.Dialogs.Wpf; // may be removed later https://github.com/dotnet/wpf/issues/438
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
-using System.Windows.Forms;
 using DataFormats = System.Windows.DataFormats;
 using DragDropEffects = System.Windows.DragDropEffects;
 using DragEventArgs = System.Windows.DragEventArgs;
@@ -49,9 +49,9 @@ namespace Wox.Plugin.Folder
             var selectedFolder = lbxFolders.SelectedItem as FolderLink;
             if (selectedFolder != null)
             {
-                var folderBrowserDialog = new FolderBrowserDialog();
+                var folderBrowserDialog = new VistaFolderBrowserDialog();
                 folderBrowserDialog.SelectedPath = selectedFolder.Path;
-                if (folderBrowserDialog.ShowDialog() == DialogResult.OK)
+                if (folderBrowserDialog.ShowDialog() == true)
                 {
                     var link = _settings.FolderLinks.First(x => x.Path == selectedFolder.Path);
                     link.Path = folderBrowserDialog.SelectedPath;
@@ -68,8 +68,8 @@ namespace Wox.Plugin.Folder
 
         private void btnAdd_Click(object sender, RoutedEventArgs e)
         {
-            var folderBrowserDialog = new FolderBrowserDialog();
-            if (folderBrowserDialog.ShowDialog() == DialogResult.OK)
+            var folderBrowserDialog = new VistaFolderBrowserDialog();
+            if (folderBrowserDialog.ShowDialog() == true)
             {
                 var newFolder = new FolderLink
                 {
