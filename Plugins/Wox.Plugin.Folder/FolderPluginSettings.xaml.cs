@@ -1,9 +1,8 @@
-﻿using Ookii.Dialogs.Wpf;
+﻿using Ookii.Dialogs.Wpf; // may be removed later https://github.com/dotnet/wpf/issues/438
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
-using System.Windows.Forms;
 using DataFormats = System.Windows.DataFormats;
 using DragDropEffects = System.Windows.DragDropEffects;
 using DragEventArgs = System.Windows.DragEventArgs;
