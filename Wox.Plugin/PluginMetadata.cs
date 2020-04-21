@@ -38,6 +38,9 @@ namespace Wox.Plugin
 
         public string IcoPath { get; set;}
 
+        // keep plugin raw score by not multiply selected counts
+        public bool KeepResultRawScore { get; set; }
+
         public override string ToString()
         {
             return Name;

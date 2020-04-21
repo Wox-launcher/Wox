@@ -659,7 +659,7 @@ namespace Wox.ViewModel
                 {
                     result.Score = int.MaxValue;
                 }
-                else
+                else if (!metadata.KeepResultRawScore)
                 {
                     result.Score += _userSelectedRecord.GetSelectedCount(result) * 5;
                 }
