@@ -30,15 +30,11 @@ namespace Wox.Core
 
         public async Task UpdateApp(bool silentIfLatestVersion = true)
         {
-            UpdateManager updateManager;
-            UpdateInfo newUpdateInfo;
-
             try
             {
-                using (updateManager = await GitHubUpdateManager(GitHubRepository))
+                using (UpdateManager updateManager = await GitHubUpdateManager(GitHubRepository))
                 {
-
-
+                    UpdateInfo newUpdateInfo;
                     try
                     {
                         // UpdateApp CheckForUpdate will return value only if the app is squirrel installed
@@ -101,7 +97,6 @@ namespace Wox.Core
             catch (Exception e) when (e is HttpRequestException || e is WebException || e is SocketException)
             {
                 Log.Exception($"|Updater.UpdateApp|Please check your connection and proxy settings to api.github.com.", e);
-                return;
             }
 
         }
