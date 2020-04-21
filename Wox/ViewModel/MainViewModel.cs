@@ -659,7 +659,7 @@ namespace Wox.ViewModel
                 {
                     result.Score = int.MaxValue;
                 }
-                else
+                else if (!metadata.KeepResultRawScore)
                 {
                     result.Score += _userSelectedRecord.GetSelectedCount(result) * 5;
                 }
@@ -667,7 +667,7 @@ namespace Wox.ViewModel
 
             if (originQuery.RawQuery == _lastQuery.RawQuery)
             {
-                Results.AddResults(list, metadata.ID, metadata.KeepResultOrder);
+                Results.AddResults(list, metadata.ID);
             }
 
             if (Results.Visbility != Visibility.Visible && list.Count > 0)

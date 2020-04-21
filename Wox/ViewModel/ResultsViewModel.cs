@@ -132,11 +132,11 @@ namespace Wox.ViewModel
         /// <summary>
         /// To avoid deadlock, this method should not called from main thread
         /// </summary>
-        public void AddResults(List<Result> newRawResults, string resultId, bool keepOrder = false)
+        public void AddResults(List<Result> newRawResults, string resultId)
         {
             lock (_addResultsLock)
             {
-                var newResults = NewResults(newRawResults, resultId, keepOrder);
+                var newResults = NewResults(newRawResults, resultId);
 
                 // update UI in one run, so it can avoid UI flickering
                 Results.Update(newResults);
@@ -153,12 +153,9 @@ namespace Wox.ViewModel
             }
         }
 
-        private List<ResultViewModel> NewResults(List<Result> newRawResults, string resultId, bool keepOrder)
+        private List<ResultViewModel> NewResults(List<Result> newRawResults, string resultId)
         {
             var newResults = newRawResults.Select(r => new ResultViewModel(r)).ToList();
-            if (keepOrder)
-                return newResults;
-
             var results = Results.ToList();
             var oldResults = results.Where(r => r.Result.PluginID == resultId).ToList();
 
