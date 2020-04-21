@@ -13,7 +13,7 @@
     "ActionKeyword":"h",
     "Name":"Hello World Python",
     "Description":"Hello World",
-    "Author":"happlebao",
+    "Author":"Wox",
     "Version":"1.0",
     "Language":"python",
     "Website":"https://github.com/Wox-launche/Wox",
