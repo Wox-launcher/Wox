@@ -132,6 +132,13 @@
       "IconPath": "Images\\yahoo.png",
       "URL": "http://www.search.yahoo.com/search?p={q}",
       "Enabled": true
+    },
+    {
+      "Title": "Qwant",
+      "ActionKeyword": "q",
+      "IconPath": "Images\\qwant.png",
+      "URL": "https://www.qwant.com/?q={q}",
+      "Enabled": true
     }
   ],
   "EnableWebSearchSuggestion": false,
