@@ -11,6 +11,24 @@
         <Setter Property="CaretBrush" Value="#E3E0E3" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Stylus.IsFlicksEnabled" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type TextBox}">
+                    <Border x:Name="border" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                        <ScrollViewer x:Name="PART_ContentHost" Focusable="false" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"
+                                      Background="{TemplateBinding Background}">
+                            <ScrollViewer.ContentTemplate>
+                                <DataTemplate>
+                                    <Grid Background="{Binding Background, ElementName=PART_ContentHost}" RenderOptions.ClearTypeHint="Enabled">
+                                        <ContentPresenter Content="{Binding Path=Content, ElementName=PART_ContentHost}"></ContentPresenter>
+                                    </Grid>
+                                </DataTemplate>
+                            </ScrollViewer.ContentTemplate>
+                        </ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
     <Style x:Key="BaseWindowBorderStyle" TargetType="{x:Type Border}">
         <Setter Property="BorderThickness" Value="0" />
