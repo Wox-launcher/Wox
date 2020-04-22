@@ -35,7 +35,8 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style x:Key="BaseQueryTextSuggestionBoxStyle" BasedOn="{StaticResource BaseQueryBoxStyle}" TargetType="{x:Type TextBox}">
+    <Style x:Key="BaseQueryTextSuggestionBoxStyle" BasedOn="{StaticResource BaseQueryBoxStyle}"
+           TargetType="{x:Type TextBox}">
         <Setter Property="Foreground" Value="LightGray" />
         <Setter Property="Background" Value="#616161" />
     </Style>
@@ -160,6 +161,5 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
-
     </Style>
 </ResourceDictionary>
