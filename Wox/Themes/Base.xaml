@@ -6,8 +6,8 @@
         <Setter Property="FontSize" Value="28" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Height" Value="46" />
-        <Setter Property="Background" Value="#616161" />
         <Setter Property="Foreground" Value="#E3E0E3" />
+        <Setter Property="Background" Value="Transparent" />
         <Setter Property="CaretBrush" Value="#E3E0E3" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Stylus.IsFlicksEnabled" Value="False" />
@@ -34,6 +34,10 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+    <Style x:Key="BaseQueryTextSuggestionBoxStyle" BasedOn="{StaticResource BaseQueryBoxStyle}" TargetType="{x:Type TextBox}">
+        <Setter Property="Foreground" Value="LightGray" />
+        <Setter Property="Background" Value="#616161" />
     </Style>
     <Style x:Key="BaseWindowBorderStyle" TargetType="{x:Type Border}">
         <Setter Property="BorderThickness" Value="0" />

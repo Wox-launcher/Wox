@@ -62,8 +62,7 @@
         <StackPanel Orientation="Vertical">
             <Grid>
                 <TextBox x:Name="QueryTextSuggestionBox"
-                         Style="{DynamicResource QueryBoxStyle}"
-                         Foreground="LightGray"
+                         Style="{DynamicResource QueryTextSuggestionBoxStyle}"
                          IsEnabled="False">
                     <TextBox.Text>
                         <MultiBinding Converter="{StaticResource QuerySuggestionBoxConverter}">
@@ -78,8 +77,7 @@
                      PreviewDragOver="OnPreviewDragOver"
                      TextChanged="OnTextChanged"
                      AllowDrop="True"
-                     Visibility="Visible"
-                    Background="Transparent">
+                     Visibility="Visible">
                     <TextBox.ContextMenu>
                         <ContextMenu>
                             <MenuItem Command="ApplicationCommands.Cut"/>
