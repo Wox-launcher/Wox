@@ -32,7 +32,13 @@ namespace Wox.Plugin.Program
         {
             _settingsStorage = new PluginJsonStorage<Settings>();
             _settings = _settingsStorage.Load();
+            
+            preloadPrograms();
+            IndexPrograms();
+        }
 
+        private static void preloadPrograms()
+        {
             Stopwatch.Normal("|Wox.Plugin.Program.Main|Preload programs cost", () =>
             {
                 _win32Storage = new BinaryStorage<Win32[]>("Win32");
@@ -42,8 +48,6 @@ namespace Wox.Plugin.Program
             });
             Log.Info($"|Wox.Plugin.Program.Main|Number of preload win32 programs <{_win32s.Length}>");
             Log.Info($"|Wox.Plugin.Program.Main|Number of preload uwps <{_uwps.Length}>");
-
-            IndexPrograms();
         }
 
         public void Save()
