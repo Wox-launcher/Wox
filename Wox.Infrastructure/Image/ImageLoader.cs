@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -90,6 +91,7 @@ namespace Wox.Infrastructure.Image
 
         private static ImageResult LoadInternal(string path, bool loadFullImage = false)
         {
+            Log.Debug(nameof(ImageLoader), $"image {path} {loadFullImage}");
             ImageSource image;
             ImageType type = ImageType.Error;
             try
