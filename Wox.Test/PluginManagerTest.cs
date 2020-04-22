@@ -16,14 +16,11 @@ namespace Wox.Test
     [TestFixture]
     class PluginManagerTest
     {
-        [Test]
-        public void ProgramPluginTest()
+        [OneTimeSetUp]
+        public void setUp()
         {
-            String QueryText = "PowerShell";
-            String ResultTitle = "PowerShell";
-
             // todo remove i18n from application / ui, so it can be tested in a modular way
-            var application = new App();
+            new App();
 
             Constant.Initialize();
             ImageLoader.Initialize();
@@ -44,14 +41,26 @@ namespace Wox.Test
             PublicAPIInstance api = new PublicAPIInstance(settingsVm, mainVm, alphabet);
             PluginManager.InitializePlugins(api);
 
+        }
+
+        [TestCase("powershell", "PowerShell")]
+        [TestCase("note", "Notepad")]
+        [TestCase("setting", "Settings")]
+        [TestCase("compu", "computer")]
+        [TestCase("netwo", "Network and Sharing Center")]
+        public void ProgramPluginTest(string QueryText, string ResultTitle)
+        {
+            
             Query query = QueryBuilder.Build(QueryText.Trim(), PluginManager.NonGlobalPlugins);
             List<PluginPair> plugins = PluginManager.ValidPluginsForQuery(query);
-            var results = plugins.SelectMany(
+            Result result = plugins.SelectMany(
                     p => PluginManager.QueryForPlugin(p, query)
                 )
                 .OrderByDescending(r => r.Score)
-                .Take(settings.MaxResultsToShow) // check title within the first page
-                .Any(r => r.Title == ResultTitle);
+                .First();
+
+            // we won't compre all content, since content description may too long to write testcase
+            Assert.IsTrue(result.Title.StartsWith(ResultTitle));
         }
     }
 }
