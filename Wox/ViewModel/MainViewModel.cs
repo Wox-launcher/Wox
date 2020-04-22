@@ -47,7 +47,7 @@ namespace Wox.ViewModel
 
         #region Constructor
 
-        public MainViewModel(Settings settings, bool useApp = true)
+        public MainViewModel(Settings settings, bool useUI = true)
         {
             _saved = false;
             _queryTextBeforeLeaveResults = "";
@@ -67,16 +67,15 @@ namespace Wox.ViewModel
             Results = new ResultsViewModel(_settings);
             History = new ResultsViewModel(_settings);
             _selectedResults = Results;
-            
-            if (useApp)
+
+            _translator = InternationalizationManager.Instance;
+            if (useUI)
             {
                 InitializeKeyCommands();
                 RegisterResultsUpdatedEvent();
 
                 SetHotkey(_settings.Hotkey, OnHotkey);
                 SetCustomPluginHotkey();
-
-                _translator = InternationalizationManager.Instance;
             }
         }
 

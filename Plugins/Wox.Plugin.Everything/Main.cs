@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
@@ -16,10 +17,11 @@ namespace Wox.Plugin.Everything
 {
     public class Main : IPlugin, ISettingProvider, IPluginI18n, IContextMenu, ISavable
     {
+
         public const string DLL = "Everything.dll";
         private readonly IEverythingApi _api = new EverythingApi();
 
-        
+
 
         private PluginInitContext _context;
 
@@ -40,7 +42,7 @@ namespace Wox.Plugin.Everything
             if (!string.IsNullOrEmpty(query.Search))
             {
                 var keyword = query.Search;
-                
+
                 try
                 {
                     var searchList = _api.Search(keyword, cts.Token, maxCount: _settings.MaxSearchCount);
@@ -105,7 +107,9 @@ namespace Wox.Plugin.Everything
                     {
                         Process.Start(new ProcessStartInfo
                         {
-                            FileName = path, UseShellExecute = true, WorkingDirectory = workingDir
+                            FileName = path,
+                            UseShellExecute = true,
+                            WorkingDirectory = workingDir
                         });
                         hide = true;
                     }
@@ -125,7 +129,7 @@ namespace Wox.Plugin.Everything
             return r;
         }
 
-        
+
 
         private List<ContextMenu> GetDefaultContextMenu()
         {
@@ -176,7 +180,22 @@ namespace Wox.Plugin.Everything
 
         private static string CpuType()
         {
-            return Environment.Is64BitOperatingSystem ? "x64" : "x86";
+            // for unknown reason, run with nunit we need use x86 version
+            // or "Microsoft C++ exception: EEException at memory location xxxx" will occur
+            // ref http://javcod1111.blogspot.com/2015/03/c-how-to-pass-hwnd-with-invokehelper.html
+            bool IsRunningFromNUnit = AppDomain.CurrentDomain.GetAssemblies().Any(
+                a => a.FullName.ToLowerInvariant().StartsWith("nunit.framework")
+            );
+
+            if (IsRunningFromNUnit || (!Environment.Is64BitOperatingSystem))
+            {
+                return "x86";
+            }
+            else
+            {
+                return "x64";
+            }
+            
         }
 
         public string GetTranslatedPluginTitle()
