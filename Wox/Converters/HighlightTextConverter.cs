@@ -30,7 +30,10 @@ namespace Wox.Converters
                 var currentCharacter = text.Substring(i, 1);
                 if (this.ShouldHighlight(highlightData, i))
                 {
-                    textBlock.Inlines.Add(new Bold(new Run(currentCharacter)));
+                    textBlock.Inlines.Add((new Run(currentCharacter)
+                    {
+                        FontWeight = FontWeights.Bold
+                    }));
                 }
                 else
                 {

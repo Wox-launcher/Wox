@@ -18,7 +18,7 @@
     <Style x:Key="PendingLineStyle" BasedOn="{StaticResource BasePendingLineStyle}" TargetType="{x:Type Line}" />
     <Style x:Key="ItemTitleStyle" BasedOn="{StaticResource BaseItemTitleStyle}" TargetType="{x:Type TextBlock}">
         <Setter Property="Foreground" Value="#333333" />
-        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontWeight" Value="Medium" />
     </Style>
 
     <Style x:Key="ItemSubTitleStyle" BasedOn="{StaticResource BaseItemSubTitleStyle}" TargetType="{x:Type TextBlock}">
