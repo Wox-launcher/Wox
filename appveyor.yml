@@ -12,7 +12,8 @@ before_build:
 - ps: nuget restore
 build:
   project: Wox.sln
-after_test:
+before_test:
+- ps: New-Item -ItemType Directory -Force -Path Output\Release\UserData
 artifacts:
 - path: 'Output\Packages\Wox-*.zip'
   name: zipped_binary
@@ -24,6 +25,8 @@ artifacts:
   name: installer
 - path: 'Output\Packages\RELEASES'
   name: installer
+- path: 'Output\Release\UserData\Logs\*\*.txt'
+  name: information
 deploy:
   provider: NuGet
   api_key:
