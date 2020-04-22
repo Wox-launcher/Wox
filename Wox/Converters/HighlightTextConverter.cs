@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Documents;
+using System.Windows.Media;
 
 namespace Wox.Converters
 {
@@ -37,7 +38,10 @@ namespace Wox.Converters
                 }
                 else
                 {
-                    textBlock.Inlines.Add(new Run(currentCharacter));
+                    textBlock.Inlines.Add(new Run(currentCharacter)
+                    {
+                        Foreground = Brushes.LightGray
+                    });
                 }
             }
             return textBlock;
