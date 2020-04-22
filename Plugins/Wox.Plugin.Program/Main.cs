@@ -43,21 +43,7 @@ namespace Wox.Plugin.Program
             Log.Info($"|Wox.Plugin.Program.Main|Number of preload win32 programs <{_win32s.Length}>");
             Log.Info($"|Wox.Plugin.Program.Main|Number of preload uwps <{_uwps.Length}>");
 
-            var a = Task.Run(() =>
-            {
-                if (IsStartupIndexProgramsRequired || !_win32s.Any())
-                    Stopwatch.Normal("|Wox.Plugin.Program.Main|Win32Program index cost", IndexWin32Programs);
-            });
-
-            var b = Task.Run(() =>
-            {
-                if (IsStartupIndexProgramsRequired || !_uwps.Any())
-                    Stopwatch.Normal("|Wox.Plugin.Program.Main|Win32Program index cost", IndexUWPPrograms);
-            });
-
-            Task.WaitAll(a, b);
-
-            _settings.LastIndexTime = DateTime.Today;
+            IndexPrograms();
         }
 
         public void Save()
@@ -131,11 +117,20 @@ namespace Wox.Plugin.Program
 
         public static void IndexPrograms()
         {
-            var t1 = Task.Run(() => IndexWin32Programs());
+            var a = Task.Run(() =>
+            {
+                if (IsStartupIndexProgramsRequired || !_win32s.Any())
+                    Stopwatch.Normal("|Wox.Plugin.Program.Main|Win32Program index cost", IndexWin32Programs);
+            });
 
-            var t2 = Task.Run(() => IndexUWPPrograms());
+            var b = Task.Run(() =>
+            {
+                if (IsStartupIndexProgramsRequired || !_uwps.Any())
+                    Stopwatch.Normal("|Wox.Plugin.Program.Main|Win32Program index cost", IndexUWPPrograms);
+            });
 
-            Task.WaitAll(t1, t2);
+            Task.WaitAll(a, b);
+
             Log.Info($"|Wox.Plugin.Program.Main|Number of indexed win32 programs <{_win32s.Length}>");
             Log.Info($"|Wox.Plugin.Program.Main|Number of indexed uwps <{_uwps.Length}>");
             foreach (var uwp in _uwps)
