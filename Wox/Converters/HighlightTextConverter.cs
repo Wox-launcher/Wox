@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Documents;
+using System.Windows.Media;
 
 namespace Wox.Converters
 {
@@ -30,11 +31,17 @@ namespace Wox.Converters
                 var currentCharacter = text.Substring(i, 1);
                 if (this.ShouldHighlight(highlightData, i))
                 {
-                    textBlock.Inlines.Add(new Bold(new Run(currentCharacter)));
+                    textBlock.Inlines.Add((new Run(currentCharacter)
+                    {
+                        FontWeight = FontWeights.Bold
+                    }));
                 }
                 else
                 {
-                    textBlock.Inlines.Add(new Run(currentCharacter));
+                    textBlock.Inlines.Add(new Run(currentCharacter)
+                    {
+                        Foreground = Brushes.LightGray
+                    });
                 }
             }
             return textBlock;
