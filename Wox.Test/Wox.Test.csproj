@@ -50,7 +50,6 @@
     </Compile>
     <Compile Include="FuzzyMatcherTest.cs" />
     <Compile Include="PluginManagerTest.cs" />
-    <Compile Include="PluginInitTest.cs" />
     <Compile Include="QueryBuilderTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="UrlPluginTest.cs" />
