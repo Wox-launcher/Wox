@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
@@ -16,10 +17,11 @@ namespace Wox.Plugin.Everything
 {
     public class Main : IPlugin, ISettingProvider, IPluginI18n, IContextMenu, ISavable
     {
+
         public const string DLL = "Everything.dll";
         private readonly IEverythingApi _api = new EverythingApi();
 
-        
+
 
         private PluginInitContext _context;
 
@@ -40,7 +42,7 @@ namespace Wox.Plugin.Everything
             if (!string.IsNullOrEmpty(query.Search))
             {
                 var keyword = query.Search;
-                
+
                 try
                 {
                     var searchList = _api.Search(keyword, cts.Token, maxCount: _settings.MaxSearchCount);
@@ -105,7 +107,9 @@ namespace Wox.Plugin.Everything
                     {
                         Process.Start(new ProcessStartInfo
                         {
-                            FileName = path, UseShellExecute = true, WorkingDirectory = workingDir
+                            FileName = path,
+                            UseShellExecute = true,
+                            WorkingDirectory = workingDir
                         });
                         hide = true;
                     }
@@ -125,7 +129,7 @@ namespace Wox.Plugin.Everything
             return r;
         }
 
-        
+
 
         private List<ContextMenu> GetDefaultContextMenu()
         {
@@ -167,18 +171,24 @@ namespace Wox.Plugin.Everything
 
             var pluginDirectory = context.CurrentPluginMetadata.PluginDirectory;
             const string sdk = "EverythingSDK";
-            var bundledSDKDirectory = Path.Combine(pluginDirectory, sdk, CpuType());
-            var sdkDirectory = Path.Combine(_storage.DirectoryPath, sdk, CpuType());
-            Helper.ValidateDataDirectory(bundledSDKDirectory, sdkDirectory);
-
+            var sdkDirectory = Path.Combine(pluginDirectory, sdk, CpuType());
             var sdkPath = Path.Combine(sdkDirectory, DLL);
+            Log.Info("Everything", $"sdk path {sdkPath}");
             Constant.EverythingSDKPath = sdkPath;
             _api.Load(sdkPath);
         }
 
         private static string CpuType()
         {
-            return Environment.Is64BitOperatingSystem ? "x64" : "x86";
+            if (!Environment.Is64BitProcess)
+            {
+                return "x86";
+            }
+            else
+            {
+                return "x64";
+            }
+            
         }
 
         public string GetTranslatedPluginTitle()

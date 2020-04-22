@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -42,16 +43,21 @@ namespace Wox.Infrastructure.Image
                 img.Freeze();
                 ImageCache[icon] = img;
             }
+
             Task.Run(() =>
             {
                 Stopwatch.Normal("|ImageLoader.Initialize|Preload images cost", () =>
                 {
-                    ImageCache.Usage.AsParallel().ForAll(x =>
+                    foreach (string key in ImageCache.Usage.Keys)
                     {
-                        Load(x.Key);
-                    });
+                        Load(key);
+                    }
                 });
-                Log.Info($"|ImageLoader.Initialize|Number of preload images is <{ImageCache.Usage.Count}>, Images Number: {ImageCache.CacheSize()}, Unique Items {ImageCache.UniqueImagesInCache()}");
+                string info = "|ImageLoader.Initialize|" +
+                              $"Number of preload images is <{ImageCache.Usage.Count}>, " +
+                              $"Images Number: {ImageCache.CacheSize()}, " +
+                              $"Unique Items {ImageCache.UniqueImagesInCache()}";
+                Log.Info(info);
             });
         }
 
@@ -85,6 +91,7 @@ namespace Wox.Infrastructure.Image
 
         private static ImageResult LoadInternal(string path, bool loadFullImage = false)
         {
+            Log.Debug(nameof(ImageLoader), $"image {path} {loadFullImage}");
             ImageSource image;
             ImageType type = ImageType.Error;
             try

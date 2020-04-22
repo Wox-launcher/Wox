@@ -176,7 +176,7 @@ namespace Wox.Plugin.Program.Programs
                 return new Win32() { Valid = false, Enabled = false };
             }
         }
-
+        // todo lnk.resolve has been removed, need test to get description and image for lnk only instead of target
         private static Win32 LnkProgram(string path)
         {
             var program = Win32Program(path);
@@ -185,9 +185,6 @@ namespace Wox.Plugin.Program.Programs
                 var link = new ShellLink();
                 const uint STGM_READ = 0;
                 ((IPersistFile)link).Load(path, STGM_READ);
-                var hwnd = new _RemotableHandle();
-                link.Resolve(ref hwnd, 0);
-
                 const int MAX_DESCRIPTION = 150;
                 StringBuilder bufferDescription = new StringBuilder(MAX_DESCRIPTION);
                 String description = String.Empty;
