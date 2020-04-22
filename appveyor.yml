@@ -16,7 +16,7 @@ after_test:
 - ps: Copy-Item %APPDATA%\Wox\Logs\*\*.txt .
 artifacts:
 - path: 'Output\Packages\Wox-*.zip'
-  name: zipped_binary
+  name: installer
 - path: 'Output\Packages\Wox.Plugin.*.nupkg'
   name: nuget_package
 - path: 'Output\Packages\Wox.*.*'
