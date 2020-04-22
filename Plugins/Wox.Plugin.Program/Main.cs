@@ -42,6 +42,10 @@ namespace Wox.Plugin.Program
             });
             Log.Info($"|Wox.Plugin.Program.Main|Number of preload win32 programs <{_win32s.Length}>");
             Log.Info($"|Wox.Plugin.Program.Main|Number of preload uwps <{_uwps.Length}>");
+            foreach (var uwp in _uwps)
+            {
+                Log.Info($"|Wox.Plugin.Program.Main| uwp: {uwp.DisplayName}>");
+            }
 
             var a = Task.Run(() =>
             {
