@@ -41,13 +41,13 @@ namespace Wox.ViewModel
         private CancellationToken _updateToken;
         private bool _saved;
 
-        private readonly Internationalization _translator = InternationalizationManager.Instance;
+        private readonly Internationalization _translator;
 
         #endregion
 
         #region Constructor
 
-        public MainViewModel(Settings settings)
+        public MainViewModel(Settings settings, bool useApp = true)
         {
             _saved = false;
             _queryTextBeforeLeaveResults = "";
@@ -67,13 +67,20 @@ namespace Wox.ViewModel
             Results = new ResultsViewModel(_settings);
             History = new ResultsViewModel(_settings);
             _selectedResults = Results;
+            
+            if (useApp)
+            {
+                InitializeKeyCommands();
+                RegisterResultsUpdatedEvent();
 
-            InitializeKeyCommands();
-            RegisterResultsUpdatedEvent();
+                SetHotkey(_settings.Hotkey, OnHotkey);
+                SetCustomPluginHotkey();
 
-            SetHotkey(_settings.Hotkey, OnHotkey);
-            SetCustomPluginHotkey();
+                _translator = InternationalizationManager.Instance;
+            }
         }
+
+
 
         private void RegisterResultsUpdatedEvent()
         {
