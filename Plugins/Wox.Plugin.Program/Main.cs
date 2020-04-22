@@ -140,6 +140,8 @@ namespace Wox.Plugin.Program
             var t2 = Task.Run(() => IndexUWPPrograms());
 
             Task.WaitAll(t1, t2);
+            Log.Info($"|Wox.Plugin.Program.Main|Number of indexed win32 programs <{_win32s.Length}>");
+            Log.Info($"|Wox.Plugin.Program.Main|Number of indexed uwps <{_uwps.Length}>");
 
             _settings.LastIndexTime = DateTime.Today;
         }
