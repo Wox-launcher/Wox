@@ -12,11 +12,11 @@ before_build:
 - ps: nuget restore
 build:
   project: Wox.sln
-before_test:
-- ps: New-Item -ItemType Directory -Force -Path Output\Release\UserData
+after_test:
+- ps: Copy-Item $env:APPDATA\Wox\Logs\*\*.txt .
 artifacts:
 - path: 'Output\Packages\Wox-*.zip'
-  name: zipped_binary
+  name: installer
 - path: 'Output\Packages\Wox.Plugin.*.nupkg'
   name: nuget_package
 - path: 'Output\Packages\Wox.*.*'
@@ -25,7 +25,7 @@ artifacts:
   name: installer
 - path: 'Output\Packages\RELEASES'
   name: installer
-- path: 'Output\Release\UserData\Logs\*\*.txt'
+- path: '*-*-*.txt'
   name: information
 deploy:
   provider: NuGet
