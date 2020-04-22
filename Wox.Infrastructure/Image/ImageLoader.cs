@@ -42,16 +42,21 @@ namespace Wox.Infrastructure.Image
                 img.Freeze();
                 ImageCache[icon] = img;
             }
+
             Task.Run(() =>
             {
                 Stopwatch.Normal("|ImageLoader.Initialize|Preload images cost", () =>
                 {
-                    ImageCache.Usage.AsParallel().ForAll(x =>
+                    foreach (string key in ImageCache.Usage.Keys)
                     {
-                        Load(x.Key);
-                    });
+                        Load(key);
+                    }
                 });
-                Log.Info($"|ImageLoader.Initialize|Number of preload images is <{ImageCache.Usage.Count}>, Images Number: {ImageCache.CacheSize()}, Unique Items {ImageCache.UniqueImagesInCache()}");
+                string info = "|ImageLoader.Initialize|" +
+                              $"Number of preload images is <{ImageCache.Usage.Count}>, " +
+                              $"Images Number: {ImageCache.CacheSize()}, " +
+                              $"Unique Items {ImageCache.UniqueImagesInCache()}";
+                Log.Info(info);
             });
         }
 
