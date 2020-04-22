@@ -29,19 +29,11 @@ namespace Wox.Infrastructure
         public static string PythonPath;
         public static string EverythingSDKPath;
 
-        public static void Initialize(string workingDirectory = "")
+        public static void Initialize()
         {
             Assembly = Assembly.GetExecutingAssembly();
             Version = FileVersionInfo.GetVersionInfo(Assembly.Location.NonNull()).ProductVersion;
-            
-            if (String.IsNullOrEmpty(workingDirectory))
-            {
-                ProgramDirectory = Directory.GetParent(Assembly.Location.NonNull()).ToString();
-            }
-            else
-            {
-                ProgramDirectory = workingDirectory;
-            }
+            ProgramDirectory = Directory.GetParent(Assembly.Location.NonNull()).ToString();
 
             ApplicationDirectory = Directory.GetParent(ProgramDirectory).ToString();
             RootDirectory = Directory.GetParent(ApplicationDirectory).ToString();
