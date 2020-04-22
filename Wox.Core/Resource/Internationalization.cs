@@ -43,6 +43,7 @@ namespace Wox.Core.Resource
             foreach (var plugin in PluginManager.GetPluginsForInterface<IPluginI18n>())
             {
                 var location = Assembly.GetAssembly(plugin.Plugin.GetType()).Location;
+                Log.Debug(nameof(Internationalization), $"Plugin language location {plugin.Plugin}: {location}");
                 var dir = Path.GetDirectoryName(location);
                 if (dir != null)
                 {
