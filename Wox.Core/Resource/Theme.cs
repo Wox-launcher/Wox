@@ -8,11 +8,9 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Media;
-using NuGet;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.UserSettings;
-using Settings = Wox.Infrastructure.UserSettings.Settings;
 
 namespace Wox.Core.Resource
 {
