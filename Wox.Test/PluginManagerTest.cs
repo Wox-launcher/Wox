@@ -43,12 +43,9 @@ namespace Wox.Test
 
         }
 
-        [TestCase("powershell", "PowerShell")]
-        [TestCase("note", "Notepad")]
         [TestCase("setting", "Settings")]
-        [TestCase("compu", "computer")]
         [TestCase("netwo", "Network and Sharing Center")]
-        public void ProgramPluginTest(string QueryText, string ResultTitle)
+        public void BuiltinQueryTest(string QueryText, string ResultTitle)
         {
             
             Query query = QueryBuilder.Build(QueryText.Trim(), PluginManager.NonGlobalPlugins);
@@ -59,7 +56,6 @@ namespace Wox.Test
                 .OrderByDescending(r => r.Score)
                 .First();
 
-            // we won't compre all content, since content description may too long to write testcase
             Assert.IsTrue(result.Title.StartsWith(ResultTitle));
         }
     }

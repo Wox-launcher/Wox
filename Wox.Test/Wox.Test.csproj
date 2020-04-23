@@ -48,6 +48,7 @@
     <Compile Include="..\SolutionAssemblyInfo.cs">
       <Link>Properties\SolutionAssemblyInfo.cs</Link>
     </Compile>
+    <Compile Include="PluginProgramTest.cs" />
     <Compile Include="FuzzyMatcherTest.cs" />
     <Compile Include="PluginManagerTest.cs" />
     <Compile Include="QueryBuilderTest.cs" />
@@ -55,6 +56,10 @@
     <Compile Include="UrlPluginTest.cs" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Plugins\Wox.Plugin.Program\Wox.Plugin.Program.csproj">
+      <Project>{fdb3555b-58ef-4ae6-b5f1-904719637ab4}</Project>
+      <Name>Wox.Plugin.Program</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Plugins\Wox.Plugin.Url\Wox.Plugin.Url.csproj">
       <Project>{A3DCCBCA-ACC1-421D-B16E-210896234C26}</Project>
       <Name>Wox.Plugin.Url</Name>

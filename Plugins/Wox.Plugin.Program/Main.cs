@@ -24,20 +24,8 @@ namespace Wox.Plugin.Program
 
         private static BinaryStorage<Win32[]> _win32Storage;
         private static BinaryStorage<UWP.Application[]> _uwpStorage;
-        private readonly PluginJsonStorage<Settings> _settingsStorage;
+        private PluginJsonStorage<Settings> _settingsStorage;
 
-        public Main()
-        {
-            _settingsStorage = new PluginJsonStorage<Settings>();
-            _settings = _settingsStorage.Load();
-
-            preloadPrograms();
-
-            Task.Delay(2000).ContinueWith(_ =>
-            {
-                IndexPrograms();
-            });
-        }
 
         private static void preloadPrograms()
         {
@@ -98,6 +86,20 @@ namespace Wox.Plugin.Program
         public void Init(PluginInitContext context)
         {
             _context = context;
+            loadSettings();
+
+            preloadPrograms();
+
+            Task.Delay(2000).ContinueWith(_ =>
+            {
+                IndexPrograms();
+            });
+        }
+
+        public void loadSettings()
+        {
+            _settingsStorage = new PluginJsonStorage<Settings>();
+            _settings = _settingsStorage.Load();
         }
 
         public static void IndexWin32Programs()
