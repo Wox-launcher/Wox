@@ -1,8 +1,11 @@
-﻿using System.Windows;
-using System.Windows.Forms;
+﻿using System.Linq;
+using System.Windows;
+
+using Ookii.Dialogs.Wpf; // may be removed later https://github.com/dotnet/wpf/issues/438
+
 using Wox.Plugin.Program.Views.Models;
 using Wox.Plugin.Program.Views;
-using System.Linq;
+
 
 namespace Wox.Plugin.Program
 {
@@ -34,9 +37,9 @@ namespace Wox.Plugin.Program
 
         private void BrowseButton_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new FolderBrowserDialog();
-            DialogResult result = dialog.ShowDialog();
-            if (result == System.Windows.Forms.DialogResult.OK)
+            var dialog = new VistaFolderBrowserDialog();
+            var result = dialog.ShowDialog();
+            if (result == true)
             {
                 Directory.Text = dialog.SelectedPath;
             }

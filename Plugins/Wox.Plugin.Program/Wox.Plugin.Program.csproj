@@ -174,6 +174,9 @@
     <PackageReference Include="NLog">
       <Version>4.2.0</Version>
     </PackageReference>
+    <PackageReference Include="Ookii.Dialogs.Wpf">
+      <Version>1.1.0</Version>
+    </PackageReference>
     <PackageReference Include="System.Runtime">
       <Version>4.0.0</Version>
     </PackageReference>

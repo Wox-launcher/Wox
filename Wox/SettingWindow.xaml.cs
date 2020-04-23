@@ -11,6 +11,8 @@ using System.Windows.Navigation;
 using Microsoft.Win32;
 using NHotkey;
 using NHotkey.Wpf;
+using Ookii.Dialogs.Wpf; // may be removed later https://github.com/dotnet/wpf/issues/438
+
 using Wox.Core;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
@@ -84,13 +86,13 @@ namespace Wox
 
         private void OnSelectPythonDirectoryClick(object sender, RoutedEventArgs e)
         {
-            var dlg = new System.Windows.Forms.FolderBrowserDialog
+            var dlg = new VistaFolderBrowserDialog()
             {
                 SelectedPath = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)
             };
 
             var result = dlg.ShowDialog();
-            if (result == System.Windows.Forms.DialogResult.OK)
+            if (result == true)
             {
                 string pythonDirectory = dlg.SelectedPath;
                 if (!string.IsNullOrEmpty(pythonDirectory))
