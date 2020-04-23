@@ -17,6 +17,8 @@ using Wox.Infrastructure.UserSettings;
 using Wox.ViewModel;
 using Stopwatch = Wox.Infrastructure.Stopwatch;
 using CommandLine;
+using System.Threading;
+using System.Globalization;
 
 namespace Wox
 {
@@ -55,6 +57,8 @@ namespace Wox
         [STAThread]
         public static void Main()
         {
+            // force english exception message for better github issue
+            Thread.CurrentThread.CurrentUICulture = new CultureInfo("en-US");
             if (SingleInstance<App>.InitializeAsFirstInstance(Unique))
             {
                 using (var application = new App())
