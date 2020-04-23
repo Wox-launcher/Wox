@@ -329,15 +329,10 @@ namespace Wox.Plugin.Program.Programs
 
         private static ParallelQuery<Win32> UnregisteredPrograms(List<Settings.ProgramSource> sources, string[] suffixes)
         {
-            var listToAdd = new List<string>();
-            sources.Where(s => Directory.Exists(s.Location) && s.Enabled)
+            var paths = sources.Where(s => Directory.Exists(s.Location) && s.Enabled)
                 .SelectMany(s => ProgramPaths(s.Location, suffixes))
-                .ToList()
                 .Where(t1 => !Main._settings.DisabledProgramSources.Any(x => t1 == x.UniqueIdentifier))
-                .ToList()
-                .ForEach(x => listToAdd.Add(x));
-
-            var paths = listToAdd.Distinct().ToArray();
+                .Distinct();
 
             var programs1 = paths.AsParallel().Where(p => Extension(p) == ExeExtension).Select(ExeProgram);
             var programs2 = paths.AsParallel().Where(p => Extension(p) == ShortcutExtension).Select(LnkProgram);
