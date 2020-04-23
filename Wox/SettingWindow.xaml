@@ -97,7 +97,7 @@
                 </StackPanel>
             </StackPanel>
         </TabItem>
-        <TabItem Header="{DynamicResource plugin}">
+        <TabItem Header="{DynamicResource plugin}" Height="22" VerticalAlignment="Top">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="200" />
@@ -200,7 +200,7 @@
                 </Grid>
             </Grid>
         </TabItem>
-        <TabItem Header="{DynamicResource theme}">
+        <TabItem Header="{DynamicResource theme}" Height="24" VerticalAlignment="Bottom">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="200" />
@@ -246,16 +246,17 @@
                             <Style TargetType="ComboBox">
                                 <Setter Property="VerticalAlignment" Value="Center"/>
                                 <Setter Property="HorizontalAlignment" Value="Center"/>
-                                <Setter Property="MinWidth" Value="150"/>
+                                <Setter Property="Height" Value="25" />
+                                <Setter Property="MinWidth" Value="170"/>
                             </Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Margin" Value="5"/>
-                                <Setter Property="TextAlignment" Value="Center"/>
-                                <Setter Property="VerticalAlignment" Value="Center"></Setter>
+                                <Setter Property="TextAlignment" Value="Left"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
                             </Style>
                         </Grid.Resources>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition/>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition/>
                             <ColumnDefinition/>
                         </Grid.ColumnDefinitions>
