@@ -29,50 +29,24 @@ namespace Wox.Infrastructure.Image
         {
         }
 
-        private class ImageResult
-        {
-            public ImageResult(ImageSource imageSource, ImageType imageType)
-            {
-                ImageSource = imageSource;
-                ImageType = imageType;
-            }
 
-            public ImageType ImageType { get; }
-            public ImageSource ImageSource { get; }
-        }
-
-        private enum ImageType
-        {
-            File,
-            Folder,
-            Data,
-            ImageFile,
-            Error,
-            Cache
-        }
-
-        
-
-        private static ImageResult LoadInternal(string path)
+        private static ImageSource LoadInternal(string path)
         {
             Log.Debug(nameof(ImageLoader), $"image {path}");
             ImageSource image;
-            ImageType type;
             try
             {
                 if (string.IsNullOrEmpty(path))
                 {
                     image = GetErrorImage();
-                    type = ImageType.Error;
-                    return new ImageResult(image, type);
+                    return image;
                 }
 
                 if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
                 {
                     image = new BitmapImage(new Uri(path));
                     image.Freeze();
-                    type = ImageType.Data;
-                    return new ImageResult(image, type);
+                    return image;
                 }
 
                 if (!Path.IsPathRooted(path))
@@ -82,11 +56,10 @@ namespace Wox.Infrastructure.Image
 
                 if (Directory.Exists(path))
                 {
-                    type = ImageType.Folder;
                     image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
                         Constant.ThumbnailSize, ThumbnailOptions.None);
                     image.Freeze();
-                    return new ImageResult(image, type);
+                    return image;
 
                 }
                 else if (File.Exists(path))
@@ -94,35 +67,31 @@ namespace Wox.Infrastructure.Image
                     var extension = Path.GetExtension(path).ToLower();
                     if (ImageExtensions.Contains(extension))
                     {
-                        type = ImageType.ImageFile;
                         image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
                             Constant.ThumbnailSize, ThumbnailOptions.None);
                         image.Freeze();
-                        return new ImageResult(image, type);
+                        return image;
                     }
                     else
                     {
-                        type = ImageType.File;
                         image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
                             Constant.ThumbnailSize, ThumbnailOptions.None);
                         image.Freeze();
-                        return new ImageResult(image, type);
+                        return image;
                     }
                 }
                 else
                 {
                     image = GetErrorImage();
-                    type = ImageType.Error;
-                    return new ImageResult(image, type);
+                    return image;
                 }
 
             }
             catch (System.Exception e)
             {
                 Log.Exception($"|ImageLoader.Load|Failed to get thumbnail for {path}", e);
-                type = ImageType.Error;
                 image = GetErrorImage();
-                return new ImageResult(image, type);
+                return image;
             }
         }
 
@@ -136,8 +105,7 @@ namespace Wox.Infrastructure.Image
 
         public static ImageSource Load(string path)
         {
-            var imageResult = LoadInternal(path);
-            var img = imageResult.ImageSource;
+            var img = LoadInternal(path);
             return img;
         }
     }
