@@ -47,8 +47,7 @@
                                 <RowDefinition Height="Auto" x:Name="SubTitleRowDefinition" />
                             </Grid.RowDefinitions>
                             <TextBlock Style="{DynamicResource ItemTitleStyle}" DockPanel.Dock="Left"
-                                       VerticalAlignment="Center" ToolTip="{Binding Result.Title}" x:Name="Title"
-                                       RenderOptions.ClearTypeHint="Enabled" >
+                                       VerticalAlignment="Center" ToolTip="{Binding Result.Title}" x:Name="Title">
                                 <vm:ResultsViewModel.FormattedText>
                                     <MultiBinding Converter="{StaticResource HighlightTextConverter}">
                                         <Binding Path="Result.Title" />
@@ -57,8 +56,7 @@
                                 </vm:ResultsViewModel.FormattedText>
                             </TextBlock>
                             <TextBlock Style="{DynamicResource ItemSubTitleStyle}" ToolTip="{Binding Result.SubTitle}"
-                                       Grid.Row="1" x:Name="SubTitle" 
-                                       RenderOptions.ClearTypeHint="Enabled" >
+                                       Grid.Row="1" x:Name="SubTitle" >
                                 <vm:ResultsViewModel.FormattedText>
                                     <MultiBinding Converter="{StaticResource HighlightTextConverter}">
                                         <Binding Path="Result.SubTitle" />
