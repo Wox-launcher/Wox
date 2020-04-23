@@ -76,15 +76,13 @@ namespace Wox.Core.Resource
                 Settings.Theme = theme;
 
                 var dicts = Application.Current.Resources.MergedDictionaries;
-                //always allow re-loading default theme, in case of failure of switching to a new theme from default theme
-                if (_oldTheme != theme || theme == defaultTheme)
-                {
-                    dicts.Remove(_oldResource);
-                    var newResource = GetResourceDictionary();
-                    dicts.Add(newResource);
-                    _oldResource = newResource;
-                    _oldTheme = Path.GetFileNameWithoutExtension(_oldResource.Source.AbsolutePath);
-                }
+                
+                dicts.Remove(_oldResource);
+                var newResource = GetResourceDictionary();
+                dicts.Add(newResource);
+                _oldResource = newResource;
+                _oldTheme = Path.GetFileNameWithoutExtension(_oldResource.Source.AbsolutePath);
+                
                 SetBlurForWindow();
             }
             catch (DirectoryNotFoundException e)

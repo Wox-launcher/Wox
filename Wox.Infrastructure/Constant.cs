@@ -1,6 +1,8 @@
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using JetBrains.Annotations;
 
 namespace Wox.Infrastructure
 {
@@ -9,21 +11,38 @@ namespace Wox.Infrastructure
         public const string Wox = "Wox";
         public const string Plugins = "Plugins";
 
-        private static readonly Assembly Assembly = Assembly.GetExecutingAssembly();
-        public static readonly string ProgramDirectory = Directory.GetParent(Assembly.Location.NonNull()).ToString();
-        public static readonly string ExecutablePath = Path.Combine(ProgramDirectory, Wox + ".exe");
-        public static readonly string ApplicationDirectory = Directory.GetParent(ProgramDirectory).ToString();
-        public static readonly string RootDirectory = Directory.GetParent(ApplicationDirectory).ToString();
-        
-        public static readonly string PreinstalledDirectory = Path.Combine(ProgramDirectory, Plugins);
+        private static Assembly Assembly;
+        public static string ProgramDirectory;
+        public static string ExecutablePath;
+        public static string ApplicationDirectory;
+        public static string RootDirectory;
+
+        public static string PreinstalledDirectory;
         public const string Issue = "https://github.com/Wox-launcher/Wox/issues/new";
-        public static readonly string Version = FileVersionInfo.GetVersionInfo(Assembly.Location.NonNull()).ProductVersion;
+        public static string Version;
 
         public static readonly int ThumbnailSize = 64;
-        public static readonly string DefaultIcon = Path.Combine(ProgramDirectory, "Images", "app.png");
-        public static readonly string ErrorIcon = Path.Combine(ProgramDirectory, "Images", "app_error.png");
+        public static string ImagesDirectory;
+        public static string DefaultIcon;
+        public static string ErrorIcon;
 
         public static string PythonPath;
         public static string EverythingSDKPath;
+
+        public static void Initialize()
+        {
+            Assembly = Assembly.GetExecutingAssembly();
+            Version = FileVersionInfo.GetVersionInfo(Assembly.Location.NonNull()).ProductVersion;
+            ProgramDirectory = Directory.GetParent(Assembly.Location.NonNull()).ToString();
+
+            ApplicationDirectory = Directory.GetParent(ProgramDirectory).ToString();
+            RootDirectory = Directory.GetParent(ApplicationDirectory).ToString();
+            ExecutablePath = Path.Combine(ProgramDirectory, Wox + ".exe");
+            ImagesDirectory = Path.Combine(ProgramDirectory, "Images");
+            PreinstalledDirectory = Path.Combine(ProgramDirectory, Plugins);
+            DefaultIcon = Path.Combine(ImagesDirectory, "app.png");
+            ErrorIcon = Path.Combine(ImagesDirectory, "app_error.png");
+
+        }
     }
 }

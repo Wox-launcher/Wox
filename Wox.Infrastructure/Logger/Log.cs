@@ -55,9 +55,13 @@ namespace Wox.Infrastructure.Logger
         [MethodImpl(MethodImplOptions.Synchronized)]
         public static void Exception(string className, string message, System.Exception exception, [CallerMemberName] string methodName = "")
         {
+#if DEBUG
+            throw exception;
+#else
             var classNameWithMethod = CheckClassAndMessageAndReturnFullClassWithMethod(className, message, methodName);
 
             ExceptionInternal(classNameWithMethod, message, exception);
+#endif
         }
 
         private static string CheckClassAndMessageAndReturnFullClassWithMethod(string className, string message,
@@ -86,7 +90,7 @@ namespace Wox.Infrastructure.Logger
         {
             var logger = LogManager.GetLogger(classAndMethod);
 
-            System.Diagnostics.Debug.WriteLine($"ERROR|{message}");
+            System.Diagnostics.Debug.WriteLine($"ERROR|{classAndMethod}|{message}");
 
             logger.Error("-------------------------- Begin exception --------------------------");
             logger.Error(message);
@@ -161,7 +165,7 @@ namespace Wox.Infrastructure.Logger
 
             var logger = LogManager.GetLogger(classNameWithMethod);
 
-            System.Diagnostics.Debug.WriteLine($"{level.Name}|{message}");
+            System.Diagnostics.Debug.WriteLine($"{level.Name}|{classNameWithMethod}|{message}");
             logger.Log(level, message);
         }
 

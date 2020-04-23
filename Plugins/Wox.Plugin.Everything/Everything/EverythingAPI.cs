@@ -18,7 +18,7 @@ namespace Wox.Plugin.Everything.Everything
         /// <param name="offset">The offset.</param>
         /// <param name="maxCount">The max count.</param>
         /// <returns></returns>
-        List<SearchResult> Search(string keyWord, CancellationToken token, int offset = 0, int maxCount = 100);
+        List<SearchResult> Search(string keyWord, CancellationToken token, int maxCount, int offset = 0);
 
         void Load(string sdkPath);
     }
@@ -126,7 +126,7 @@ namespace Wox.Plugin.Everything.Everything
         /// <param name="offset">The offset.</param>
         /// <param name="maxCount">The max count.</param>
         /// <returns></returns>
-        public List<SearchResult> Search(string keyWord, CancellationToken token, int offset = 0, int maxCount = 100)
+        public List<SearchResult> Search(string keyWord, CancellationToken token, int maxCount, int offset = 0)
         {
             if (string.IsNullOrEmpty(keyWord))
                 throw new ArgumentNullException(nameof(keyWord));
