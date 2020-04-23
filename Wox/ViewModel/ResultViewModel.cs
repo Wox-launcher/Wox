@@ -11,6 +11,8 @@ namespace Wox.ViewModel
 {
     public class ResultViewModel : BaseModel
     {
+        private Result _result;
+
         public ResultViewModel(Result result)
         {
             if (result != null)
@@ -42,7 +44,15 @@ namespace Wox.ViewModel
             }
         }
 
-        public Result Result { get; }
+        public Result Result
+        {
+            get => _result;
+            set
+            {
+                _result = value;
+                OnPropertyChanged();
+            }
+        }
 
         public override bool Equals(object obj)
         {

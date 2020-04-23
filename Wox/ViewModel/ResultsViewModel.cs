@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
+using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.UserSettings;
 using Wox.Plugin;
 
@@ -135,9 +136,9 @@ namespace Wox.ViewModel
         public void AddResults(List<Result> newRawResults, string resultId)
         {
 
-            var newResults = NewResults(newRawResults, resultId);
             lock (_addResultsLock)
             {
+                var newResults = NewResults(newRawResults, resultId);
                 // update UI in one run, so it can avoid UI flickering
                 Results.Update(newResults);
 
@@ -159,23 +160,21 @@ namespace Wox.ViewModel
             var results = Results.ToList();
             var oldResults = results.Where(r => r.Result.PluginID == resultId).ToList();
 
-            // Find the same results in A (old results) and B (new newResults)          
-            var sameResults = oldResults
-                                .Where(t1 => newResults.Any(x => x.Result.Equals(t1.Result)))
-                                .ToList();
+            // intersection of A (old results) and B (new newResults)
+            var intersection = oldResults.Intersect(newResults).ToList();
 
             // remove result of relative complement of B in A
-            foreach (var result in oldResults.Except(sameResults))
+            foreach (var result in oldResults.Except(intersection))
             {
                 results.Remove(result);
             }
 
-            // update result with B's score and index position
-            foreach (var sameResult in sameResults)
+            // update index for result in intersection of A and B
+            foreach (var commonResult in intersection)
             {
-                int oldIndex = results.IndexOf(sameResult);
+                int oldIndex = results.IndexOf(commonResult);
                 int oldScore = results[oldIndex].Result.Score;
-                var newResult = newResults[newResults.IndexOf(sameResult)];
+                var newResult = newResults[newResults.IndexOf(commonResult)];
                 int newScore = newResult.Result.Score;
                 if (newScore != oldScore)
                 {
@@ -183,6 +182,8 @@ namespace Wox.ViewModel
 
                     oldResult.Result.Score = newScore;
                     oldResult.Result.OriginQuery = newResult.Result.OriginQuery;
+                    oldResult.Result.TitleHighlightData = newResult.Result.TitleHighlightData;
+                    oldResult.Result.SubTitleHighlightData = newResult.Result.SubTitleHighlightData;
 
                     results.RemoveAt(oldIndex);
                     int newIndex = InsertIndexOf(newScore, results);
@@ -191,7 +192,7 @@ namespace Wox.ViewModel
             }
 
             // insert result in relative complement of A in B
-            foreach (var result in newResults.Except(sameResults))
+            foreach (var result in newResults.Except(intersection))
             {
                 int newIndex = InsertIndexOf(result.Result.Score, results);
                 results.Insert(newIndex, result);
@@ -254,6 +255,8 @@ namespace Wox.ViewModel
             /// <param name="newItems"></param>
             public void Update(List<ResultViewModel> newItems)
             {
+                CheckReentrancy();
+
                 int newCount = newItems.Count;
                 int oldCount = Items.Count;
                 int location = newCount > oldCount ? oldCount : newCount;
@@ -262,13 +265,25 @@ namespace Wox.ViewModel
                 {
                     ResultViewModel oldResult = this[i];
                     ResultViewModel newResult = newItems[i];
-                    if (!oldResult.Equals(newResult))
-                    { // result is not the same update it in the current index
-                        this[i] = newResult;
-                    }
-                    else if (oldResult.Result.Score != newResult.Result.Score)
+                    Log.Debug(
+                        $"|ResultCollection.Update| index {i} " +
+                              $"old<{oldResult.Result.Title} {oldResult.Result.Score}> " +
+                              $"new<{newResult.Result.Title} {newResult.Result.Score}>"
+                        );
+                    if (oldResult.Equals(newResult))
                     {
+                        Log.Debug($"|ResultCollection.Update| index <{i}> equal");
+                        // update following info no matter they are equal or not
+                        // because check equality will cause more computation
                         this[i].Result.Score = newResult.Result.Score;
+                        this[i].Result.TitleHighlightData = newResult.Result.TitleHighlightData;
+                        this[i].Result.SubTitleHighlightData = newResult.Result.SubTitleHighlightData;
+                    }
+                    else
+                    {
+                        // result is not the same update it in the current index
+                        this[i] = newResult;
+                        Log.Debug($"|ResultCollection.Update| index <{i}> not equal old<{oldResult.GetHashCode()}> new<{newResult.GetHashCode()}>");
                     }
                 }
 
@@ -277,6 +292,7 @@ namespace Wox.ViewModel
                 {
                     for (int i = oldCount; i < newCount; i++)
                     {
+                        Log.Debug($"|ResultCollection.Update| add index {i} new<{newItems[i].Result.Title}");
                         Add(newItems[i]);
                     }
                 }
