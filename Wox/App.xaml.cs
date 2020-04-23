@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
-using System.Timers;
 using System.Windows;
 using System.Collections.Generic;
 using Wox.Core;
@@ -143,7 +142,7 @@ namespace Wox
                 if (_settings.AutoUpdates)
                 {
                     // check udpate every 5 hours
-                    var timer = new Timer(1000 * 60 * 60 * 5);
+                    var timer = new System.Timers.Timer(1000 * 60 * 60 * 5);
                     timer.Elapsed += async (s, e) =>
                     {
                         await _updater.UpdateApp();
