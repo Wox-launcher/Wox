@@ -15,8 +15,6 @@ namespace Wox.Infrastructure.Image
     {
         private static readonly ImageCache ImageCache = new ImageCache();
         private static BinaryStorage<ConcurrentDictionary<string, int>> _storage;
-        private static readonly ConcurrentDictionary<string, string> GuidToKey = new ConcurrentDictionary<string, string>();
-        private static IImageHashGenerator _hashGenerator;
 
 
         private static readonly string[] ImageExtensions =
@@ -34,7 +32,6 @@ namespace Wox.Infrastructure.Image
         public static void Initialize()
         {
             _storage = new BinaryStorage<ConcurrentDictionary<string, int>>("Image");
-            _hashGenerator = new ImageHashGenerator();
             ImageCache.Usage = _storage.TryLoad(new ConcurrentDictionary<string, int>());
 
             foreach (var icon in new[] { Constant.DefaultIcon, Constant.ErrorIcon })
@@ -89,9 +86,9 @@ namespace Wox.Infrastructure.Image
             Cache
         }
 
-        private static ImageResult LoadInternal(string path, bool loadFullImage = false)
+        private static ImageResult LoadInternal(string path)
         {
-            Log.Debug(nameof(ImageLoader), $"image {path} {loadFullImage}");
+            Log.Debug(nameof(ImageLoader), $"image {path}");
             ImageSource image;
             ImageType type = ImageType.Error;
             try
@@ -136,20 +133,13 @@ namespace Wox.Infrastructure.Image
                     if (ImageExtensions.Contains(extension))
                     {
                         type = ImageType.ImageFile;
-                        if (loadFullImage)
-                        {
-                            image = LoadFullImage(path);
-                        }
-                        else
-                        {
-                            /* Although the documentation for GetImage on MSDN indicates that 
-                             * if a thumbnail is available it will return one, this has proved to not
-                             * be the case in many situations while testing. 
-                             * - Solution: explicitly pass the ThumbnailOnly flag
-                             */
-                            image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
-                                Constant.ThumbnailSize, ThumbnailOptions.ThumbnailOnly);
-                        }
+                        /* Although the documentation for GetImage on MSDN indicates that 
+                            * if a thumbnail is available it will return one, this has proved to not
+                            * be the case in many situations while testing. 
+                            * - Solution: explicitly pass the ThumbnailOnly flag
+                            */
+                        image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
+                            Constant.ThumbnailSize, ThumbnailOptions.ThumbnailOnly);
                     }
                     else
                     {
@@ -179,44 +169,12 @@ namespace Wox.Infrastructure.Image
             return new ImageResult(image, type);
         }
 
-        private static bool EnableImageHash = true;
-
-        public static ImageSource Load(string path, bool loadFullImage = false)
+        public static ImageSource Load(string path)
         {
-            var imageResult = LoadInternal(path, loadFullImage);
-
+            var imageResult = LoadInternal(path);
             var img = imageResult.ImageSource;
-            if (imageResult.ImageType != ImageType.Error && imageResult.ImageType != ImageType.Cache)
-            { // we need to get image hash
-                string hash = EnableImageHash ? _hashGenerator.GetHashFromImage(img) : null;
-                if (hash != null)
-                {
-                    if (GuidToKey.TryGetValue(hash, out string key))
-                    { // image already exists
-                        img = ImageCache[key];
-                    }
-                    else
-                    { // new guid
-                        GuidToKey[hash] = path;
-                    }
-                }
-
-                // update cache
-                ImageCache[path] = img;
-            }
-
-
             return img;
         }
 
-        private static BitmapImage LoadFullImage(string path)
-        {
-            BitmapImage image = new BitmapImage();
-            image.BeginInit();
-            image.CacheOption = BitmapCacheOption.OnLoad;
-            image.UriSource = new Uri(path);
-            image.EndInit();
-            return image;
-        }
     }
 }
