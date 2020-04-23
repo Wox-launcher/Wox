@@ -1,24 +1,16 @@
 ﻿using System;
-using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+
+using Microsoft.WindowsAPICodePack.Shell;
+
 using Wox.Infrastructure.Logger;
-using Wox.Infrastructure.Storage;
 
 namespace Wox.Infrastructure.Image
 {
     public static class ImageLoader
     {
-        private static readonly ImageCache ImageCache = new ImageCache();
-        private static BinaryStorage<ConcurrentDictionary<string, int>> _storage;
-        private static readonly ConcurrentDictionary<string, string> GuidToKey = new ConcurrentDictionary<string, string>();
-        private static IImageHashGenerator _hashGenerator;
-
-
         private static readonly string[] ImageExtensions =
         {
             ".png",
@@ -33,190 +25,103 @@ namespace Wox.Infrastructure.Image
 
         public static void Initialize()
         {
-            _storage = new BinaryStorage<ConcurrentDictionary<string, int>>("Image");
-            _hashGenerator = new ImageHashGenerator();
-            ImageCache.Usage = _storage.TryLoad(new ConcurrentDictionary<string, int>());
-
-            foreach (var icon in new[] { Constant.DefaultIcon, Constant.ErrorIcon })
-            {
-                ImageSource img = new BitmapImage(new Uri(icon));
-                img.Freeze();
-                ImageCache[icon] = img;
-            }
-
-            Task.Run(() =>
-            {
-                Stopwatch.Normal("|ImageLoader.Initialize|Preload images cost", () =>
-                {
-                    foreach (string key in ImageCache.Usage.Keys)
-                    {
-                        Load(key);
-                    }
-                });
-                string info = "|ImageLoader.Initialize|" +
-                              $"Number of preload images is <{ImageCache.Usage.Count}>, " +
-                              $"Images Number: {ImageCache.CacheSize()}, " +
-                              $"Unique Items {ImageCache.UniqueImagesInCache()}";
-                Log.Info(info);
-            });
         }
 
         public static void Save()
         {
-            ImageCache.Cleanup();
-            _storage.Save(ImageCache.Usage);
         }
 
-        private class ImageResult
-        {
-            public ImageResult(ImageSource imageSource, ImageType imageType)
-            {
-                ImageSource = imageSource;
-                ImageType = imageType;
-            }
 
-            public ImageType ImageType { get; }
-            public ImageSource ImageSource { get; }
-        }
-
-        private enum ImageType
+        private static ImageSource LoadInternal(string path)
         {
-            File,
-            Folder,
-            Data,
-            ImageFile,
-            Error,
-            Cache
-        }
-
-        private static ImageResult LoadInternal(string path, bool loadFullImage = false)
-        {
-            Log.Debug(nameof(ImageLoader), $"image {path} {loadFullImage}");
+            Log.Debug(nameof(ImageLoader), $"image {path}");
             ImageSource image;
-            ImageType type = ImageType.Error;
-            try
+
+            if (string.IsNullOrEmpty(path))
             {
-                if (string.IsNullOrEmpty(path))
-                {
-                    return new ImageResult(ImageCache[Constant.ErrorIcon], ImageType.Error);
-                }
-                if (ImageCache.ContainsKey(path))
-                {
-                    return new ImageResult(ImageCache[path], ImageType.Cache);
-                }
+                image = GetErrorImage();
+                return image;
+            }
 
-                if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                {
-                    var imageSource = new BitmapImage(new Uri(path));
-                    imageSource.Freeze();
-                    return new ImageResult(imageSource, ImageType.Data);
-                }
+            if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            {
+                image = new BitmapImage(new Uri(path));
+                image.Freeze();
+                return image;
+            }
 
-                if (!Path.IsPathRooted(path))
-                {
-                    path = Path.Combine(Constant.ProgramDirectory, "Images", Path.GetFileName(path));
-                }
+            if (!Path.IsPathRooted(path))
+            {
+                path = Path.Combine(Constant.ProgramDirectory, "Images", Path.GetFileName(path));
+            }
 
-                if (Directory.Exists(path))
-                {
-                    /* Directories can also have thumbnails instead of shell icons.
-                     * Generating thumbnails for a bunch of folders while scrolling through
-                     * results from Everything makes a big impact on performance and 
-                     * Wox responsibility. 
-                     * - Solution: just load the icon
-                     */
-                    type = ImageType.Folder;
-                    image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
-                        Constant.ThumbnailSize, ThumbnailOptions.IconOnly);
+            if (Directory.Exists(path))
+            {
+                // can be extended to support guid things
+                ShellObject shell = ShellFile.FromParsingName(path);
+                image = shell.Thumbnail.SmallBitmapSource;
+                image.Freeze();
+                return image;
+            }
 
-                }
-                else if (File.Exists(path))
+            if (File.Exists(path))
+            {
+                try
                 {
-                    var extension = Path.GetExtension(path).ToLower();
-                    if (ImageExtensions.Contains(extension))
-                    {
-                        type = ImageType.ImageFile;
-                        if (loadFullImage)
-                        {
-                            image = LoadFullImage(path);
-                        }
-                        else
-                        {
-                            /* Although the documentation for GetImage on MSDN indicates that 
-                             * if a thumbnail is available it will return one, this has proved to not
-                             * be the case in many situations while testing. 
-                             * - Solution: explicitly pass the ThumbnailOnly flag
-                             */
-                            image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
-                                Constant.ThumbnailSize, ThumbnailOptions.ThumbnailOnly);
-                        }
-                    }
-                    else
-                    {
-                        type = ImageType.File;
-                        image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
-                            Constant.ThumbnailSize, ThumbnailOptions.None);
-                    }
-                }
-                else
-                {
-                    image = ImageCache[Constant.ErrorIcon];
-                    path = Constant.ErrorIcon;
-                }
-
-                if (type != ImageType.Error)
-                {
+                    // https://stackoverflow.com/a/1751610/2833083
+                    // https://stackoverflow.com/questions/21751747/extract-thumbnail-for-any-file-in-windows
+                    // https://docs.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ishellitemimagefactory-getimage
+                    ShellFile shell = ShellFile.FromFilePath(path);
+                    // https://github.com/aybe/Windows-API-Code-Pack-1.1/blob/master/source/WindowsAPICodePack/Shell/Common/ShellThumbnail.cs#L333
+                    // https://github.com/aybe/Windows-API-Code-Pack-1.1/blob/master/source/WindowsAPICodePack/Shell/Common/DefaultShellImageSizes.cs#L46
+                    // small is (32, 32)
+                    image = shell.Thumbnail.SmallBitmapSource;
                     image.Freeze();
+                    return image;
                 }
-            }
-            catch (System.Exception e)
-            {
-                Log.Exception($"|ImageLoader.Load|Failed to get thumbnail for {path}", e);
-                type = ImageType.Error;
-                image = ImageCache[Constant.ErrorIcon];
-                ImageCache[path] = image;
-            }
-            return new ImageResult(image, type);
-        }
-
-        private static bool EnableImageHash = true;
-
-        public static ImageSource Load(string path, bool loadFullImage = false)
-        {
-            var imageResult = LoadInternal(path, loadFullImage);
-
-            var img = imageResult.ImageSource;
-            if (imageResult.ImageType != ImageType.Error && imageResult.ImageType != ImageType.Cache)
-            { // we need to get image hash
-                string hash = EnableImageHash ? _hashGenerator.GetHashFromImage(img) : null;
-                if (hash != null)
+                catch (ShellException e1)
                 {
-                    if (GuidToKey.TryGetValue(hash, out string key))
-                    { // image already exists
-                        img = ImageCache[key];
+                    try
+                    {
+                        // sometimes first try will throw exception, but second try will be ok.
+                        // so we try twice
+                        // Error while extracting thumbnail for C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Steam\\Steam.lnk
+                        ShellFile shellFile = ShellFile.FromFilePath(path);
+                        image = shellFile.Thumbnail.SmallBitmapSource;
+                        image.Freeze();
+                        return image;
                     }
-                    else
-                    { // new guid
-                        GuidToKey[hash] = path;
+                    catch (System.Exception e2)
+                    {
+                        Log.Exception($"|ImageLoader.Load|Failed to get thumbnail, first, {path}", e1);
+                        Log.Exception($"|ImageLoader.Load|Failed to get thumbnail, second, {path}", e2);
+                        image = GetErrorImage();
+                        return image;
                     }
                 }
-
-                // update cache
-                ImageCache[path] = img;
+            }
+            else
+            {
+                image = GetErrorImage();
+                return image;
             }
 
 
-            return img;
         }
 
-        private static BitmapImage LoadFullImage(string path)
+        private static ImageSource GetErrorImage()
         {
-            BitmapImage image = new BitmapImage();
-            image.BeginInit();
-            image.CacheOption = BitmapCacheOption.OnLoad;
-            image.UriSource = new Uri(path);
-            image.EndInit();
+            ShellFile shellFile = ShellFile.FromFilePath(Constant.ErrorIcon);
+            // small is (32, 32), refer comment above
+            ImageSource image = shellFile.Thumbnail.SmallBitmapSource;
+            image.Freeze();
             return image;
+        }
+
+        public static ImageSource Load(string path)
+        {
+            var img = LoadInternal(path);
+            return img;
         }
     }
 }
