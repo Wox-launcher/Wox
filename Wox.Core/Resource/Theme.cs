@@ -65,7 +65,7 @@ namespace Wox.Core.Resource
 
         public bool ChangeTheme(string theme)
         {
-            const string defaultTheme = "Dark";
+            const string defaultTheme = "Dark"; 
 
             string path = GetThemePath(theme);
             try
@@ -76,11 +76,14 @@ namespace Wox.Core.Resource
                 Settings.Theme = theme;
 
                 var dicts = Application.Current.Resources.MergedDictionaries;
+                
                 dicts.Remove(_oldResource);
                 var newResource = GetResourceDictionary();
                 dicts.Add(newResource);
                 _oldResource = newResource;
                 _oldTheme = Path.GetFileNameWithoutExtension(_oldResource.Source.AbsolutePath);
+                
+                SetBlurForWindow();
             }
             catch (DirectoryNotFoundException e)
             {
@@ -114,18 +117,22 @@ namespace Wox.Core.Resource
             };
 
             Style queryBoxStyle = dict["QueryBoxStyle"] as Style;
+
             if (queryBoxStyle != null)
             {
                 queryBoxStyle.Setters.Add(new Setter(TextBox.FontFamilyProperty, new FontFamily(Settings.QueryBoxFont)));
                 queryBoxStyle.Setters.Add(new Setter(TextBox.FontStyleProperty, FontHelper.GetFontStyleFromInvariantStringOrNormal(Settings.QueryBoxFontStyle)));
                 queryBoxStyle.Setters.Add(new Setter(TextBox.FontWeightProperty, FontHelper.GetFontWeightFromInvariantStringOrNormal(Settings.QueryBoxFontWeight)));
                 queryBoxStyle.Setters.Add(new Setter(TextBox.FontStretchProperty, FontHelper.GetFontStretchFromInvariantStringOrNormal(Settings.QueryBoxFontStretch)));
+            }
 
-                var caretBrushPropertyValue = queryBoxStyle.Setters.OfType<Setter>().Any(x => x.Property.Name == "CaretBrush");
-                var foregroundPropertyValue = queryBoxStyle.Setters.OfType<Setter>().Where(x => x.Property.Name == "Foreground")
-                    .Select(x => x.Value).FirstOrDefault();
-                if (!caretBrushPropertyValue && foregroundPropertyValue != null) //otherwise BaseQueryBoxStyle will handle styling
-                    queryBoxStyle.Setters.Add(new Setter(TextBox.CaretBrushProperty, foregroundPropertyValue));
+            Style queryTextSuggestionBoxStyle = dict["QueryTextSuggestionBoxStyle"] as Style;
+            if (queryTextSuggestionBoxStyle != null)
+            {
+                queryTextSuggestionBoxStyle.Setters.Add(new Setter(TextBox.FontFamilyProperty, new FontFamily(Settings.QueryBoxFont)));
+                queryTextSuggestionBoxStyle.Setters.Add(new Setter(TextBox.FontStyleProperty, FontHelper.GetFontStyleFromInvariantStringOrNormal(Settings.QueryBoxFontStyle)));
+                queryTextSuggestionBoxStyle.Setters.Add(new Setter(TextBox.FontWeightProperty, FontHelper.GetFontWeightFromInvariantStringOrNormal(Settings.QueryBoxFontWeight)));
+                queryTextSuggestionBoxStyle.Setters.Add(new Setter(TextBox.FontStretchProperty, FontHelper.GetFontStretchFromInvariantStringOrNormal(Settings.QueryBoxFontStretch)));
             }
 
             Style resultItemStyle = dict["ItemTitleStyle"] as Style;
@@ -214,29 +221,17 @@ namespace Wox.Core.Resource
         /// </summary>
         public void SetBlurForWindow()
         {
-
             // Exception of FindResource can't be cathed if global exception handle is set
             if (Environment.OSVersion.Version >= new Version(6, 2))
             {
-                var resource = Application.Current.TryFindResource("ThemeBlurEnabled");
-                bool blur;
-                if (resource is bool)
-                {
-                    blur = (bool)resource;
-                }
-                else
-                {
-                    blur = false;
-                }
 
-                if (blur)
-                {
-                    SetWindowAccent(Application.Current.MainWindow, AccentState.ACCENT_ENABLE_BLURBEHIND);
-                }
-                else
-                {
-                    SetWindowAccent(Application.Current.MainWindow, AccentState.ACCENT_DISABLED);
-                }
+                var resource = Application.Current.TryFindResource("ThemeBlurEnabled");
+                var blur = false;
+                if (resource is bool b)
+                    blur = b;
+
+                var accent = blur? AccentState.ACCENT_ENABLE_BLURBEHIND: AccentState.ACCENT_DISABLED;
+                SetWindowAccent(Application.Current.MainWindow, accent);
             }
         }
 
