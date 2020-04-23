@@ -1,8 +1,10 @@
 ﻿using System;
 using System.IO;
-using System.Linq;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+
+using Microsoft.WindowsAPICodePack.Shell;
+
 using Wox.Infrastructure.Logger;
 
 namespace Wox.Infrastructure.Image
@@ -34,53 +36,75 @@ namespace Wox.Infrastructure.Image
         {
             Log.Debug(nameof(ImageLoader), $"image {path}");
             ImageSource image;
-            try
+
+            if (string.IsNullOrEmpty(path))
             {
-                if (string.IsNullOrEmpty(path))
-                {
-                    image = GetErrorImage();
-                    return image;
-                }
-
-                if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                {
-                    image = new BitmapImage(new Uri(path));
-                    image.Freeze();
-                    return image;
-                }
-
-                if (!Path.IsPathRooted(path))
-                {
-                    path = Path.Combine(Constant.ProgramDirectory, "Images", Path.GetFileName(path));
-                }
-
-                if (Directory.Exists(path) || File.Exists(path))
-                {
-                    image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
-                        Constant.ThumbnailSize, ThumbnailOptions.None);
-                    image.Freeze();
-                    return image;
-                }
-                else
-                {
-                    image = GetErrorImage();
-                    return image;
-                }
-
-            }
-            catch (System.Exception e)
-            {
-                Log.Exception($"|ImageLoader.Load|Failed to get thumbnail for {path}", e);
                 image = GetErrorImage();
                 return image;
             }
+
+            if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            {
+                image = new BitmapImage(new Uri(path));
+                image.Freeze();
+                return image;
+            }
+
+            if (!Path.IsPathRooted(path))
+            {
+                path = Path.Combine(Constant.ProgramDirectory, "Images", Path.GetFileName(path));
+            }
+
+            if (Directory.Exists(path) || File.Exists(path))
+            {
+                try
+                {
+                    // https://stackoverflow.com/a/1751610/2833083
+                    // https://stackoverflow.com/questions/21751747/extract-thumbnail-for-any-file-in-windows
+                    // https://docs.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ishellitemimagefactory-getimage
+                    ShellFile shellFile = ShellFile.FromFilePath(path);
+                    // https://github.com/aybe/Windows-API-Code-Pack-1.1/blob/master/source/WindowsAPICodePack/Shell/Common/ShellThumbnail.cs#L333
+                    // https://github.com/aybe/Windows-API-Code-Pack-1.1/blob/master/source/WindowsAPICodePack/Shell/Common/DefaultShellImageSizes.cs#L46
+                    // small is (32, 32)
+                    image = shellFile.Thumbnail.SmallBitmapSource;
+                    image.Freeze();
+                    return image;
+                }
+                catch (System.Exception e1)
+                {
+                    try
+                    {
+                        // sometimes first try will throw exception, but second try will be ok.
+                        // so we try twice
+                        // Error while extracting thumbnail for C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Steam\\Steam.lnk
+                        ShellFile shellFile = ShellFile.FromFilePath(path);
+                        image = shellFile.Thumbnail.SmallBitmapSource;
+                        image.Freeze();
+                        return image;
+                    }
+                    catch (System.Exception e2)
+                    {
+                        Log.Exception($"|ImageLoader.Load|Failed to get thumbnail, first, {path}", e1);
+                        Log.Exception($"|ImageLoader.Load|Failed to get thumbnail, second, {path}", e2);
+                        image = GetErrorImage();
+                        return image;
+                    }
+                }
+            }
+            else
+            {
+                image = GetErrorImage();
+                return image;
+            }
+
+
         }
 
         private static ImageSource GetErrorImage()
         {
-            ImageSource image = WindowsThumbnailProvider.GetThumbnail(
-                Constant.ErrorIcon, Constant.ThumbnailSize, Constant.ThumbnailSize, ThumbnailOptions.None
-            );
+            ShellFile shellFile = ShellFile.FromFilePath(Constant.ErrorIcon);
+            // small is (32, 32), refer comment above
+            ImageSource image = shellFile.Thumbnail.SmallBitmapSource;
             image.Freeze();
             return image;
         }
