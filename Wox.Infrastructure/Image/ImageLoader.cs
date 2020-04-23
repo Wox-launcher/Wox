@@ -81,15 +81,9 @@ namespace Wox.Infrastructure.Image
 
                 if (Directory.Exists(path))
                 {
-                    /* Directories can also have thumbnails instead of shell icons.
-                     * Generating thumbnails for a bunch of folders while scrolling through
-                     * results from Everything makes a big impact on performance and 
-                     * Wox responsibility. 
-                     * - Solution: just load the icon
-                     */
                     type = ImageType.Folder;
                     image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
-                        Constant.ThumbnailSize, ThumbnailOptions.IconOnly);
+                        Constant.ThumbnailSize, ThumbnailOptions.None);
                     image.Freeze();
                     return new ImageResult(image, type);
 
@@ -100,13 +94,8 @@ namespace Wox.Infrastructure.Image
                     if (ImageExtensions.Contains(extension))
                     {
                         type = ImageType.ImageFile;
-                        /* Although the documentation for GetImage on MSDN indicates that 
-                            * if a thumbnail is available it will return one, this has proved to not
-                            * be the case in many situations while testing. 
-                            * - Solution: explicitly pass the ThumbnailOnly flag
-                            */
                         image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
-                            Constant.ThumbnailSize, ThumbnailOptions.ThumbnailOnly);
+                            Constant.ThumbnailSize, ThumbnailOptions.None);
                         image.Freeze();
                         return new ImageResult(image, type);
                     }
