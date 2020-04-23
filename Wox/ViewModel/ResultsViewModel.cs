@@ -191,14 +191,31 @@ namespace Wox.ViewModel
                 }
             }
 
+            int maxResults = _settings.MaxResultsToShow * 5;
             // insert result in relative complement of A in B
             foreach (var result in newResults.Except(intersection))
             {
-                int newIndex = InsertIndexOf(result.Result.Score, results);
-                results.Insert(newIndex, result);
+                if (results.Count <= maxResults)
+                {
+                    int newIndex = InsertIndexOf(result.Result.Score, results);
+                    results.Insert(newIndex, result);
+                }
+                else
+                {
+                    break;
+                }
             }
 
-            return results;
+            if (results.Count > maxResults)
+            {
+                var resultsCopy = results.GetRange(0, maxResults);
+                return resultsCopy;
+            }
+            else
+            {
+                return results;
+            }
+            
         }
         #endregion
 
