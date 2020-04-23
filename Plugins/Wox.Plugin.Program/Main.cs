@@ -20,8 +20,6 @@ namespace Wox.Plugin.Program
         internal static UWP.Application[] _uwps { get; set; }
         internal static Settings _settings { get; set; }
 
-        private static bool IsStartupIndexProgramsRequired => _settings.LastIndexTime.AddDays(3) < DateTime.Today;
-
         private static PluginInitContext _context;
 
         private static BinaryStorage<Win32[]> _win32Storage;
@@ -32,7 +30,7 @@ namespace Wox.Plugin.Program
         {
             _settingsStorage = new PluginJsonStorage<Settings>();
             _settings = _settingsStorage.Load();
-            
+
             preloadPrograms();
             IndexPrograms();
         }
@@ -123,14 +121,12 @@ namespace Wox.Plugin.Program
         {
             var a = Task.Run(() =>
             {
-                if (IsStartupIndexProgramsRequired || !_win32s.Any())
-                    Stopwatch.Normal("|Wox.Plugin.Program.Main|Win32Program index cost", IndexWin32Programs);
+                Stopwatch.Normal("|Wox.Plugin.Program.Main|Win32Program index cost", IndexWin32Programs);
             });
 
             var b = Task.Run(() =>
             {
-                if (IsStartupIndexProgramsRequired || !_uwps.Any())
-                    Stopwatch.Normal("|Wox.Plugin.Program.Main|Win32Program index cost", IndexUWPPrograms);
+                Stopwatch.Normal("|Wox.Plugin.Program.Main|Win32Program index cost", IndexUWPPrograms);
             });
 
             Task.WaitAll(a, b);
