@@ -32,7 +32,11 @@ namespace Wox.Plugin.Program
             _settings = _settingsStorage.Load();
 
             preloadPrograms();
-            IndexPrograms();
+
+            Task.Delay(2000).ContinueWith(_ =>
+            {
+                IndexPrograms();
+            });
         }
 
         private static void preloadPrograms()
