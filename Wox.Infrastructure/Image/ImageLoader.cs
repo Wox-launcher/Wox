@@ -51,6 +51,8 @@ namespace Wox.Infrastructure.Image
             Cache
         }
 
+        
+
         private static ImageResult LoadInternal(string path)
         {
             Log.Debug(nameof(ImageLoader), $"image {path}");
@@ -60,9 +62,8 @@ namespace Wox.Infrastructure.Image
             {
                 if (string.IsNullOrEmpty(path))
                 {
-                    image = new BitmapImage(new Uri(Constant.ErrorIcon));
+                    image = GetErrorImage();
                     type = ImageType.Error;
-                    image.Freeze();
                     return new ImageResult(image, type);
                 }
 
@@ -110,9 +111,8 @@ namespace Wox.Infrastructure.Image
                 }
                 else
                 {
-                    image = new BitmapImage(new Uri(Constant.ErrorIcon));
+                    image = GetErrorImage();
                     type = ImageType.Error;
-                    image.Freeze();
                     return new ImageResult(image, type);
                 }
 
@@ -121,10 +121,17 @@ namespace Wox.Infrastructure.Image
             {
                 Log.Exception($"|ImageLoader.Load|Failed to get thumbnail for {path}", e);
                 type = ImageType.Error;
-                image = new BitmapImage(new Uri(Constant.ErrorIcon));
-                image.Freeze();
+                image = GetErrorImage();
                 return new ImageResult(image, type);
             }
+        }
+
+        private static ImageSource GetErrorImage()
+        {
+            ImageSource image = WindowsThumbnailProvider.GetThumbnail(Constant.ErrorIcon, Constant.ThumbnailSize,
+                                    Constant.ThumbnailSize, ThumbnailOptions.None);
+            image.Freeze();
+            return image;
         }
 
         public static ImageSource Load(string path)
