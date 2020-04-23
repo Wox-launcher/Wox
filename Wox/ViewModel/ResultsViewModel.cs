@@ -134,10 +134,10 @@ namespace Wox.ViewModel
         /// </summary>
         public void AddResults(List<Result> newRawResults, string resultId)
         {
+
+            var newResults = NewResults(newRawResults, resultId);
             lock (_addResultsLock)
             {
-                var newResults = NewResults(newRawResults, resultId);
-
                 // update UI in one run, so it can avoid UI flickering
                 Results.Update(newResults);
 
