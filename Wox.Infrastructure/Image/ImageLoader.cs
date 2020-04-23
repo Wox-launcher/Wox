@@ -54,31 +54,12 @@ namespace Wox.Infrastructure.Image
                     path = Path.Combine(Constant.ProgramDirectory, "Images", Path.GetFileName(path));
                 }
 
-                if (Directory.Exists(path))
+                if (Directory.Exists(path) || File.Exists(path))
                 {
                     image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
                         Constant.ThumbnailSize, ThumbnailOptions.None);
                     image.Freeze();
                     return image;
-
-                }
-                else if (File.Exists(path))
-                {
-                    var extension = Path.GetExtension(path).ToLower();
-                    if (ImageExtensions.Contains(extension))
-                    {
-                        image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
-                            Constant.ThumbnailSize, ThumbnailOptions.None);
-                        image.Freeze();
-                        return image;
-                    }
-                    else
-                    {
-                        image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
-                            Constant.ThumbnailSize, ThumbnailOptions.None);
-                        image.Freeze();
-                        return image;
-                    }
                 }
                 else
                 {
@@ -97,8 +78,9 @@ namespace Wox.Infrastructure.Image
 
         private static ImageSource GetErrorImage()
         {
-            ImageSource image = WindowsThumbnailProvider.GetThumbnail(Constant.ErrorIcon, Constant.ThumbnailSize,
-                                    Constant.ThumbnailSize, ThumbnailOptions.None);
+            ImageSource image = WindowsThumbnailProvider.GetThumbnail(
+                Constant.ErrorIcon, Constant.ThumbnailSize, Constant.ThumbnailSize, ThumbnailOptions.None
+            );
             image.Freeze();
             return image;
         }
