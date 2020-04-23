@@ -19,7 +19,9 @@ namespace Wox.Converters
             var queryText = (string)values[0];
 
             if (string.IsNullOrEmpty(queryText))
-                return "Type here to search";
+            {
+                return string.Empty;
+            }
 
             // second prop is the current selected item result
             var val = values[1];
