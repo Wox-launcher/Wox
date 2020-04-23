@@ -136,10 +136,14 @@ namespace Wox.Plugin.Program
             Task.WaitAll(a, b);
 
             Log.Info($"|Wox.Plugin.Program.Main|Number of indexed win32 programs <{_win32s.Length}>");
+            foreach (var win32 in _win32s)
+            {
+                Log.Debug($"|Wox.Plugin.Program.Main| win32: {win32.Name}>");
+            }
             Log.Info($"|Wox.Plugin.Program.Main|Number of indexed uwps <{_uwps.Length}>");
             foreach (var uwp in _uwps)
             {
-                Log.Info($"|Wox.Plugin.Program.Main| uwp: {uwp.DisplayName}>");
+                Log.Debug($"|Wox.Plugin.Program.Main| uwp: {uwp.DisplayName}>");
             }
             _settings.LastIndexTime = DateTime.Today;
         }
