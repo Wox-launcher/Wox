@@ -10,6 +10,7 @@
         <Setter Property="FontSize" Value="38" />
     </Style>
     <Style x:Key="QueryTextSuggestionBoxStyle" BasedOn="{StaticResource BaseQueryTextSuggestionBoxStyle}" TargetType="{x:Type TextBox}">
+        <Setter Property="FontSize" Value="38" />
         <Setter Property="Background" Value="#EDEDED" />
     </Style>
     <Style x:Key="WindowBorderStyle" BasedOn="{StaticResource BaseWindowBorderStyle}" TargetType="{x:Type Border}">
