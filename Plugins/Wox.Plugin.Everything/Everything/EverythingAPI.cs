@@ -18,7 +18,7 @@ namespace Wox.Plugin.Everything.Everything
         /// <param name="offset">The offset.</param>
         /// <param name="maxCount">The max count.</param>
         /// <returns></returns>
-        List<SearchResult> Search(string keyWord, CancellationToken token, int offset = 0, int maxCount = 100);
+        List<SearchResult> Search(string keyWord, CancellationToken token, int offset = 0, int maxCount = 30);
 
         void Load(string sdkPath);
     }
