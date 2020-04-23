@@ -60,7 +60,7 @@
                                        Grid.Row="1" x:Name="SubTitle" 
                                        RenderOptions.ClearTypeHint="Enabled" >
                                 <vm:ResultsViewModel.FormattedText>
-                                    <MultiBinding Converter="{StaticResource HighlightTextConverter}" Mode="TwoWay">
+                                    <MultiBinding Converter="{StaticResource HighlightTextConverter}" >
                                         <Binding Path="Result.SubTitle" />
                                         <Binding Path="Result.SubTitleHighlightData" />
                                     </MultiBinding>
