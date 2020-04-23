@@ -55,22 +55,31 @@ namespace Wox.Infrastructure.Image
                 path = Path.Combine(Constant.ProgramDirectory, "Images", Path.GetFileName(path));
             }
 
-            if (Directory.Exists(path) || File.Exists(path))
+            if (Directory.Exists(path))
+            {
+                // can be extended to support guid things
+                ShellObject shell = ShellFile.FromParsingName(path);
+                image = shell.Thumbnail.SmallBitmapSource;
+                image.Freeze();
+                return image;
+            }
+
+            if (File.Exists(path))
             {
                 try
                 {
                     // https://stackoverflow.com/a/1751610/2833083
                     // https://stackoverflow.com/questions/21751747/extract-thumbnail-for-any-file-in-windows
                     // https://docs.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ishellitemimagefactory-getimage
-                    ShellFile shellFile = ShellFile.FromFilePath(path);
+                    ShellFile shell = ShellFile.FromFilePath(path);
                     // https://github.com/aybe/Windows-API-Code-Pack-1.1/blob/master/source/WindowsAPICodePack/Shell/Common/ShellThumbnail.cs#L333
                     // https://github.com/aybe/Windows-API-Code-Pack-1.1/blob/master/source/WindowsAPICodePack/Shell/Common/DefaultShellImageSizes.cs#L46
                     // small is (32, 32)
-                    image = shellFile.Thumbnail.SmallBitmapSource;
+                    image = shell.Thumbnail.SmallBitmapSource;
                     image.Freeze();
                     return image;
                 }
-                catch (System.Exception e1)
+                catch (ShellException e1)
                 {
                     try
                     {
