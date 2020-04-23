@@ -97,7 +97,7 @@
                 </StackPanel>
             </StackPanel>
         </TabItem>
-        <TabItem Header="{DynamicResource plugin}" Height="22" VerticalAlignment="Top">
+        <TabItem Header="{DynamicResource plugin}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="200" />
@@ -200,7 +200,7 @@
                 </Grid>
             </Grid>
         </TabItem>
-        <TabItem Header="{DynamicResource theme}" Height="24" VerticalAlignment="Bottom">
+        <TabItem Header="{DynamicResource theme}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="200" />
