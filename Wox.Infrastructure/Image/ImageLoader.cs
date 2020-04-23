@@ -1,22 +1,14 @@
 ﻿using System;
-using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Wox.Infrastructure.Logger;
-using Wox.Infrastructure.Storage;
 
 namespace Wox.Infrastructure.Image
 {
     public static class ImageLoader
     {
-        private static readonly ImageCache ImageCache = new ImageCache();
-        private static BinaryStorage<ConcurrentDictionary<string, int>> _storage;
-
-
         private static readonly string[] ImageExtensions =
         {
             ".png",
@@ -31,37 +23,10 @@ namespace Wox.Infrastructure.Image
 
         public static void Initialize()
         {
-            _storage = new BinaryStorage<ConcurrentDictionary<string, int>>("Image");
-            ImageCache.Usage = _storage.TryLoad(new ConcurrentDictionary<string, int>());
-
-            foreach (var icon in new[] { Constant.DefaultIcon, Constant.ErrorIcon })
-            {
-                ImageSource img = new BitmapImage(new Uri(icon));
-                img.Freeze();
-                ImageCache[icon] = img;
-            }
-
-            Task.Run(() =>
-            {
-                Stopwatch.Normal("|ImageLoader.Initialize|Preload images cost", () =>
-                {
-                    foreach (string key in ImageCache.Usage.Keys)
-                    {
-                        Load(key);
-                    }
-                });
-                string info = "|ImageLoader.Initialize|" +
-                              $"Number of preload images is <{ImageCache.Usage.Count}>, " +
-                              $"Images Number: {ImageCache.CacheSize()}, " +
-                              $"Unique Items {ImageCache.UniqueImagesInCache()}";
-                Log.Info(info);
-            });
         }
 
         public static void Save()
         {
-            ImageCache.Cleanup();
-            _storage.Save(ImageCache.Usage);
         }
 
         private class ImageResult
@@ -90,23 +55,23 @@ namespace Wox.Infrastructure.Image
         {
             Log.Debug(nameof(ImageLoader), $"image {path}");
             ImageSource image;
-            ImageType type = ImageType.Error;
+            ImageType type;
             try
             {
                 if (string.IsNullOrEmpty(path))
                 {
-                    return new ImageResult(ImageCache[Constant.ErrorIcon], ImageType.Error);
-                }
-                if (ImageCache.ContainsKey(path))
-                {
-                    return new ImageResult(ImageCache[path], ImageType.Cache);
+                    image = new BitmapImage(new Uri(Constant.ErrorIcon));
+                    type = ImageType.Error;
+                    image.Freeze();
+                    return new ImageResult(image, type);
                 }
 
                 if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
                 {
-                    var imageSource = new BitmapImage(new Uri(path));
-                    imageSource.Freeze();
-                    return new ImageResult(imageSource, ImageType.Data);
+                    image = new BitmapImage(new Uri(path));
+                    image.Freeze();
+                    type = ImageType.Data;
+                    return new ImageResult(image, type);
                 }
 
                 if (!Path.IsPathRooted(path))
@@ -125,6 +90,8 @@ namespace Wox.Infrastructure.Image
                     type = ImageType.Folder;
                     image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
                         Constant.ThumbnailSize, ThumbnailOptions.IconOnly);
+                    image.Freeze();
+                    return new ImageResult(image, type);
 
                 }
                 else if (File.Exists(path))
@@ -140,33 +107,35 @@ namespace Wox.Infrastructure.Image
                             */
                         image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
                             Constant.ThumbnailSize, ThumbnailOptions.ThumbnailOnly);
+                        image.Freeze();
+                        return new ImageResult(image, type);
                     }
                     else
                     {
                         type = ImageType.File;
                         image = WindowsThumbnailProvider.GetThumbnail(path, Constant.ThumbnailSize,
                             Constant.ThumbnailSize, ThumbnailOptions.None);
+                        image.Freeze();
+                        return new ImageResult(image, type);
                     }
                 }
                 else
                 {
-                    image = ImageCache[Constant.ErrorIcon];
-                    path = Constant.ErrorIcon;
+                    image = new BitmapImage(new Uri(Constant.ErrorIcon));
+                    type = ImageType.Error;
+                    image.Freeze();
+                    return new ImageResult(image, type);
                 }
 
-                if (type != ImageType.Error)
-                {
-                    image.Freeze();
-                }
             }
             catch (System.Exception e)
             {
                 Log.Exception($"|ImageLoader.Load|Failed to get thumbnail for {path}", e);
                 type = ImageType.Error;
-                image = ImageCache[Constant.ErrorIcon];
-                ImageCache[path] = image;
+                image = new BitmapImage(new Uri(Constant.ErrorIcon));
+                image.Freeze();
+                return new ImageResult(image, type);
             }
-            return new ImageResult(image, type);
         }
 
         public static ImageSource Load(string path)
@@ -175,6 +144,5 @@ namespace Wox.Infrastructure.Image
             var img = imageResult.ImageSource;
             return img;
         }
-
     }
 }
