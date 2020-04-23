@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
-using System.Timers;
 using System.Windows;
 using System.Collections.Generic;
 using Wox.Core;
@@ -17,6 +16,8 @@ using Wox.Infrastructure.UserSettings;
 using Wox.ViewModel;
 using Stopwatch = Wox.Infrastructure.Stopwatch;
 using CommandLine;
+using System.Threading;
+using System.Globalization;
 
 namespace Wox
 {
@@ -55,6 +56,8 @@ namespace Wox
         [STAThread]
         public static void Main()
         {
+            // force english exception message for better github issue
+            Thread.CurrentThread.CurrentUICulture = new CultureInfo("en-US");
             if (SingleInstance<App>.InitializeAsFirstInstance(Unique))
             {
                 using (var application = new App())
@@ -139,7 +142,7 @@ namespace Wox
                 if (_settings.AutoUpdates)
                 {
                     // check udpate every 5 hours
-                    var timer = new Timer(1000 * 60 * 60 * 5);
+                    var timer = new System.Timers.Timer(1000 * 60 * 60 * 5);
                     timer.Elapsed += async (s, e) =>
                     {
                         await _updater.UpdateApp(true, _settings.UpdateToPrereleases);

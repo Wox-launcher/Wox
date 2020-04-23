@@ -77,7 +77,7 @@ namespace Wox.Plugin.Program
                 {
                     return p.Title.ToLower().Contains(entry.EntryString);
                 }
-            }));
+            })).Take(30);
 
 
             return result.ToList();

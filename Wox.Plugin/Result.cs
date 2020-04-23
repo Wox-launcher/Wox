@@ -6,12 +6,14 @@ using System.Windows.Media;
 namespace Wox.Plugin
 {
 
-    public class Result
+    public class Result: BaseModel
     {
 
         private string _pluginDirectory;
         private string _icoPath;
+
         public string Title { get; set; }
+
         public string SubTitle { get; set; }
 
         /// <summary>
@@ -39,6 +41,8 @@ namespace Wox.Plugin
         public delegate ImageSource IconDelegate();
 
         public IconDelegate Icon;
+        private IList<int> _titleHighlightData;
+        private IList<int> _subTitleHighlightData;
 
 
         /// <summary>
@@ -51,12 +55,28 @@ namespace Wox.Plugin
         /// <summary>
         /// A list of indexes for the characters to be highlighted in Title
         /// </summary>
-        public IList<int> TitleHighlightData { get; set; }
+        public IList<int> TitleHighlightData
+        {
+            get => _titleHighlightData;
+            set
+            {
+                _titleHighlightData = value;
+                OnPropertyChanged();
+            }
+        }
 
         /// <summary>
         /// A list of indexes for the characters to be highlighted in SubTitle
         /// </summary>
-        public IList<int> SubTitleHighlightData { get; set; }
+        public IList<int> SubTitleHighlightData
+        {
+            get => _subTitleHighlightData;
+            set
+            {
+                _subTitleHighlightData = value;
+                OnPropertyChanged();
+            }
+        }
 
         /// <summary>
         /// Only results that originQuery match with current query will be displayed in the panel
@@ -82,13 +102,7 @@ namespace Wox.Plugin
         public override bool Equals(object obj)
         {
             var r = obj as Result;
-
-            var equality = string.Equals(r?.Title, Title) &&
-                           string.Equals(r?.SubTitle, SubTitle) &&
-                           string.Equals(r?.IcoPath, IcoPath) &&
-                           TitleHighlightData == r.TitleHighlightData &&
-                           SubTitleHighlightData == r.SubTitleHighlightData;
-
+            var equality = r?.Title == Title && r?.SubTitle == SubTitle;
             return equality;
         }
 
