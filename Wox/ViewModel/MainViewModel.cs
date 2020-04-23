@@ -14,6 +14,7 @@ using Wox.Core.Resource;
 using Wox.Helper;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Hotkey;
+using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
 using Wox.Infrastructure.UserSettings;
 using Wox.Plugin;
@@ -415,9 +416,10 @@ namespace Wox.ViewModel
                                 }
                             });
                         }
-                        catch (OperationCanceledException)
+                        catch (OperationCanceledException e)
                         {
                             // nothing to do here
+                            Log.Info($"|MainViewModel|canceled {query}");
                         }
                         
 
