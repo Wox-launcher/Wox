@@ -51,9 +51,10 @@ namespace Wox.Plugin.Everything
                         return results;
                     }
 
-                    foreach (var searchResult in searchList)
+                    for (int i = 0; i < searchList.Count; i++)
                     {
-                        var r = CreateResult(keyword, searchResult);
+                        SearchResult searchResult = searchList[i];
+                        var r = CreateResult(keyword, searchResult, i);
                         results.Add(r);
                     }
                 }
@@ -86,7 +87,7 @@ namespace Wox.Plugin.Everything
             return results;
         }
 
-        private Result CreateResult(string keyword, SearchResult searchResult)
+        private Result CreateResult(string keyword, SearchResult searchResult, int index)
         {
             var path = searchResult.FullPath;
 
@@ -97,6 +98,7 @@ namespace Wox.Plugin.Everything
             var r = new Result
             {
                 Title = Path.GetFileName(path),
+                Score = _settings.MaxSearchCount - index,
                 SubTitle = path,
                 IcoPath = path,
                 TitleHighlightData = StringMatcher.FuzzySearch(keyword, Path.GetFileName(path)).MatchData,
