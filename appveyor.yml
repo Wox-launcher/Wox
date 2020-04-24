@@ -14,6 +14,7 @@ build:
   project: Wox.sln
 after_test:
 - ps: Copy-Item $env:APPDATA\Wox\Logs\*\*.txt .
+- ps: ls Output\Packages
 artifacts:
 - path: 'Output\Packages\Wox-*.zip'
   name: installer

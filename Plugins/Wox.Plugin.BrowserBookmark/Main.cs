@@ -5,7 +5,7 @@ using Wox.Infrastructure.Storage;
 using Wox.Plugin.BrowserBookmark.Commands;
 using Wox.Plugin.BrowserBookmark.Models;
 using Wox.Plugin.BrowserBookmark.Views;
-using Wox.Plugin.SharedCommands;
+using Wox.Infrastructure;
 
 namespace Wox.Plugin.BrowserBookmark
 {

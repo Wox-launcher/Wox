@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
-namespace Wox.Plugin.SharedCommands
+namespace Wox.Infrastructure
 {
     public static class SearchWeb
     {

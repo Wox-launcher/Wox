@@ -1,12 +1,16 @@
-﻿using System;
+﻿using NLog;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using Wox.Infrastructure.Logger;
 
-namespace Wox.Plugin.SharedCommands
+namespace Wox.Infrastructure
 {
     public static class FilesFolders
     {
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
+
         public static void Copy(this string sourcePath, string targetPath)
         {
             // Get the subdirectories for the specified directory.
@@ -43,14 +47,12 @@ namespace Wox.Plugin.SharedCommands
                     Copy(subdir.FullName, temppath);
                 }
             }
-            catch (Exception e)
+            catch (System.Exception e)
             {
-#if DEBUG
-                throw e;
-#else
-                MessageBox.Show(string.Format("Copying path {0} has failed, it will now be deleted for consistency", targetPath));
+                string message = $"Copying path {targetPath} has failed, it will now be deleted for consistency";
+                Logger.WoxError(message, e);
+                MessageBox.Show(message);
                 RemoveFolderIfExists(targetPath);
-#endif
             }
 
         }
@@ -70,14 +72,12 @@ namespace Wox.Plugin.SharedCommands
 
                 return true;
             }
-            catch (Exception e)
+            catch (System.Exception e)
             {
-#if DEBUG
-                throw e;
-#else
-                MessageBox.Show(string.Format("Unable to verify folders and files between {0} and {1}", fromPath, toPath));
+                string message = $"Unable to verify folders and files between {fromPath} and {toPath}";
+                Logger.WoxError(message, e);
+                MessageBox.Show(message);
                 return false;
-#endif
             }
 
         }
@@ -89,13 +89,11 @@ namespace Wox.Plugin.SharedCommands
                 if (Directory.Exists(path))
                     Directory.Delete(path, true);
             }
-            catch (Exception e)
+            catch (System.Exception e)
             {
-#if DEBUG
-                throw e;
-#else
-                MessageBox.Show(string.Format("Not able to delete folder {0}, please go to the location and manually delete it", path));
-#endif
+                string message = $"Not able to delete folder { (object)path}, please go to the location and manually delete it";
+                Logger.WoxError(message, e);
+                MessageBox.Show(message);
             }
         }
 
@@ -116,13 +114,11 @@ namespace Wox.Plugin.SharedCommands
                 if (LocationExists(location))
                     Process.Start(location);
             }
-            catch (Exception e)
+            catch (System.Exception e)
             {
-#if DEBUG
-                throw e;
-#else
-                MessageBox.Show(string.Format("Unable to open location {0}, please check if it exists", location));
-#endif
+                string message = $"Unable to open location { (object)location}, please check if it exists";
+                Logger.WoxError(message, e);
+                MessageBox.Show(message);
             }
         }
     }

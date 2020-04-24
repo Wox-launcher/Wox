@@ -7,7 +7,7 @@ using System.Windows;
 using NLog;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Image;
-using Wox.Plugin.SharedCommands;
+using Wox.Infrastructure;
 
 namespace Wox.Plugin.Folder
 {
