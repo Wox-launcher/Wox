@@ -35,6 +35,7 @@ namespace Wox.Core.Plugin
 
             var query = new Query
             {
+
                 Terms = terms,
                 RawQuery = rawQuery,
                 ActionKeyword = actionKeyword,

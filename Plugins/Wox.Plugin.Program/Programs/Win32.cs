@@ -13,7 +13,6 @@ using NLog;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 using Wox.Plugin.Program.Logger;
-using Wox.Infrastructure;
 
 namespace Wox.Plugin.Program.Programs
 {

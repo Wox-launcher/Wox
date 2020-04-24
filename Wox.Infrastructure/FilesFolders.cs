@@ -3,6 +3,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using Wox.Infrastructure.Logger;
 
 namespace Wox.Infrastructure
 {
@@ -49,7 +50,7 @@ namespace Wox.Infrastructure
             catch (System.Exception e)
             {
                 string message = $"Copying path {targetPath} has failed, it will now be deleted for consistency";
-                Logger.Error(e, message);
+                Logger.WoxError(message, e);
                 MessageBox.Show(message);
                 RemoveFolderIfExists(targetPath);
             }
@@ -74,7 +75,7 @@ namespace Wox.Infrastructure
             catch (System.Exception e)
             {
                 string message = $"Unable to verify folders and files between {fromPath} and {toPath}";
-                Logger.Error(e, message);
+                Logger.WoxError(message, e);
                 MessageBox.Show(message);
                 return false;
             }
@@ -91,7 +92,7 @@ namespace Wox.Infrastructure
             catch (System.Exception e)
             {
                 string message = $"Not able to delete folder { (object)path}, please go to the location and manually delete it";
-                Logger.Error(e, message);
+                Logger.WoxError(message, e);
                 MessageBox.Show(message);
             }
         }
@@ -116,7 +117,7 @@ namespace Wox.Infrastructure
             catch (System.Exception e)
             {
                 string message = $"Unable to open location { (object)location}, please check if it exists";
-                Logger.Error(e, message);
+                Logger.WoxError(message, e);
                 MessageBox.Show(message);
             }
         }
