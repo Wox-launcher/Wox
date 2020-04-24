@@ -41,8 +41,6 @@ namespace Wox.Plugin
         public delegate ImageSource IconDelegate();
 
         public IconDelegate Icon;
-        private IList<int> _titleHighlightData;
-        private IList<int> _subTitleHighlightData;
 
 
         /// <summary>
@@ -55,28 +53,12 @@ namespace Wox.Plugin
         /// <summary>
         /// A list of indexes for the characters to be highlighted in Title
         /// </summary>
-        public IList<int> TitleHighlightData
-        {
-            get => _titleHighlightData;
-            set
-            {
-                _titleHighlightData = value;
-                OnPropertyChanged();
-            }
-        }
+        public IList<int> TitleHighlightData { get; set; }
 
         /// <summary>
         /// A list of indexes for the characters to be highlighted in SubTitle
         /// </summary>
-        public IList<int> SubTitleHighlightData
-        {
-            get => _subTitleHighlightData;
-            set
-            {
-                _subTitleHighlightData = value;
-                OnPropertyChanged();
-            }
-        }
+        public IList<int> SubTitleHighlightData { get; set; }
 
         /// <summary>
         /// Only results that originQuery match with current query will be displayed in the panel

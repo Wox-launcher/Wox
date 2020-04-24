@@ -47,14 +47,8 @@ namespace Wox.ViewModel
             }
         }
 
-        public Result Result
-        {
-            get => _result;
-            set
-            {
-                _result = value;
-                OnPropertyChanged();
-            }
+            // will get here either when icoPath has value\icon delegate is null\when had exception in delegate
+            return ImageLoader.Load(imagePath);
         }
 
         public override bool Equals(object obj)
