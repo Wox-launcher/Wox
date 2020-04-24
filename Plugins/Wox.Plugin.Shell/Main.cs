@@ -12,7 +12,7 @@ using NLog;
 using Wox.Infrastructure.Hotkey;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
-using Wox.Plugin.SharedCommands;
+using Wox.Infrastructure;
 using Application = System.Windows.Application;
 using Control = System.Windows.Controls.Control;
 using Keys = System.Windows.Forms.Keys;

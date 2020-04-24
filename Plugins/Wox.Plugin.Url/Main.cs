@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Windows.Controls;
 using Wox.Infrastructure.Storage;
-using Wox.Plugin.SharedCommands;
+using Wox.Infrastructure;
 
 namespace Wox.Plugin.Url
 {
@@ -90,7 +90,7 @@ namespace Wox.Plugin.Url
                                 
                                 return true;
                             }
-                            catch(Exception ex)
+                            catch(Exception)
                             {
                                 context.API.ShowMsg(string.Format(context.API.GetTranslation("wox_plugin_url_canot_open_url"), raw));
                                 return false;

@@ -10,7 +10,7 @@ using JetBrains.Annotations;
 using Squirrel;
 using Newtonsoft.Json;
 using Wox.Core.Resource;
-using Wox.Plugin.SharedCommands;
+using Wox.Infrastructure;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Http;
 using Wox.Infrastructure.Logger;

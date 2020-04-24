@@ -8,7 +8,6 @@ using NLog;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.UserSettings;
-using Wox.Plugin.SharedCommands;
 
 namespace Wox.Core.Configuration
 {
