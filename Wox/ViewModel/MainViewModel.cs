@@ -436,13 +436,11 @@ namespace Wox.ViewModel
                             // nothing to do here
                         }
 
-                        Logger.WoxInfo($"canceled {query} {token.IsCancellationRequested}");
                         if (!token.IsCancellationRequested)
                         { // update to hidden if this is still the current query
                             ProgressBarVisibility = Visibility.Hidden;
                             updateSource.Cancel();
                             updateSource.Dispose();
-                            Logger.WoxInfo($"progressbard hidden {query} {token.IsCancellationRequested} {ProgressBarVisibility}");
                         }
                     }, token);
                 }
