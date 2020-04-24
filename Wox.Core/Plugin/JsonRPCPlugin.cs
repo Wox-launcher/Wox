@@ -43,7 +43,7 @@ namespace Wox.Core.Plugin
             }
             catch (Exception e)
             {
-                Logger.WoxError($"|JsonRPCPlugin.Query|Exception when query <{query}>", e);
+                Logger.WoxError($"Exception when query <{query}>", e);
                 return null;
             }
         }
@@ -57,7 +57,7 @@ namespace Wox.Core.Plugin
             }
             catch (Exception e)
             {
-                Logger.WoxError($"|JsonRPCPlugin.LoadContextMenus|Exception on result <{selectedResult}>", e);
+                Logger.WoxError($"Exception on result <{selectedResult}>", e);
                 return null;
             }
         }
@@ -164,12 +164,12 @@ namespace Wox.Core.Plugin
                                     var error = standardError.ReadToEnd();
                                     if (!string.IsNullOrEmpty(error))
                                     {
-                                        Logger.WoxError($"|JsonRPCPlugin.Execute|{error}");
+                                        Logger.WoxError($"{error}");
                                         return string.Empty;
                                     }
                                     else
                                     {
-                                        Logger.WoxError("|JsonRPCPlugin.Execute|Empty standard output and standard error.");
+                                        Logger.WoxError("Empty standard output and standard error.");
                                         return string.Empty;
                                     }
                                 }
@@ -187,14 +187,14 @@ namespace Wox.Core.Plugin
                     }
                     else
                     {
-                        Logger.WoxError("|JsonRPCPlugin.Execute|Can't start new process");
+                        Logger.WoxError("Can't start new process");
                         return string.Empty;
                     }
                 }
             }
             catch (Exception e)
             {
-                Logger.WoxError($"|JsonRPCPlugin.Execute|Exception for filename <{startInfo.FileName}> with argument <{startInfo.Arguments}>", e);
+                Logger.WoxError($"Exception for filename <{startInfo.FileName}> with argument <{startInfo.Arguments}>", e);
                 return string.Empty;
             }
         }

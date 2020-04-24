@@ -77,7 +77,7 @@ namespace Wox
 
         private void OnStartup(object sender, StartupEventArgs e)
         {
-            Logger.StopWatchNormal("|App.OnStartup|Startup cost", () =>
+            Logger.StopWatchNormal("Startup cost", () =>
             {
                 Constant.Initialize();
 
@@ -126,7 +126,7 @@ namespace Wox
 
                 ParseCommandLineArgs(SingleInstance<App>.CommandLineArgs);
                 _mainVM.MainWindowVisibility = _settings.HideOnStartup ? Visibility.Hidden : Visibility.Visible;
-                Logger.WoxInfo("|App.OnStartup|End Wox startup ----------------------------------------------------  ");
+                Logger.WoxInfo("End Wox startup ----------------------------------------------------  ");
             });
         }
 

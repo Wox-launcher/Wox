@@ -25,7 +25,7 @@ namespace Wox.Plugin.WebSearch.SuggestionSources
             }
             catch (WebException e)
             {
-                Logger.WoxError("|Google.Suggestions|Can't get suggestion from google", e);
+                Logger.WoxError("Can't get suggestion from google", e);
                 return new List<string>();
                 ;
             }
@@ -37,7 +37,7 @@ namespace Wox.Plugin.WebSearch.SuggestionSources
             }
             catch (JsonSerializationException e)
             {
-                Logger.WoxError("|Google.Suggestions|can't parse suggestions", e);
+                Logger.WoxError("can't parse suggestions", e);
                 return new List<string>();
             }
             if (json != null)

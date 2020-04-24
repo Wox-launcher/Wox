@@ -44,7 +44,7 @@ namespace Wox.Core.Plugin
                     }
                     catch (Exception e)
                     {
-                        Logger.WoxError($"|PluginConfig.ParsePLuginConfigs|Can't delete <{directory}>", e);
+                        Logger.WoxError($"Can't delete <{directory}>", e);
                     }
                 }
                 else
@@ -63,7 +63,7 @@ namespace Wox.Core.Plugin
             string configPath = Path.Combine(pluginDirectory, PluginConfigName);
             if (!File.Exists(configPath))
             {
-                Logger.WoxError($"|PluginConfig.GetPluginMetadata|Didn't find config file <{configPath}>");
+                Logger.WoxError($"Didn't find config file <{configPath}>");
                 return null;
             }
 
@@ -79,20 +79,20 @@ namespace Wox.Core.Plugin
             }
             catch (Exception e)
             {
-                Logger.WoxError($"|PluginConfig.GetPluginMetadata|invalid json for config <{configPath}>", e);
+                Logger.WoxError($"invalid json for config <{configPath}>", e);
                 return null;
             }
 
 
             if (!AllowedLanguage.IsAllowed(metadata.Language))
             {
-                Logger.WoxError($"|PluginConfig.GetPluginMetadata|Invalid language <{metadata.Language}> for config <{configPath}>");
+                Logger.WoxError($"Invalid language <{metadata.Language}> for config <{configPath}>");
                 return null;
             }
 
             if (!File.Exists(metadata.ExecuteFilePath))
             {
-                Logger.WoxError($"|PluginConfig.GetPluginMetadata|execute file path didn't exist <{metadata.ExecuteFilePath}> for conifg <{configPath}");
+                Logger.WoxError($"execute file path didn't exist <{metadata.ExecuteFilePath}> for conifg <{configPath}");
                 return null;
             }
 

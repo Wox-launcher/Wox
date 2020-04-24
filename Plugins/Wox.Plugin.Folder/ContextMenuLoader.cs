@@ -187,7 +187,7 @@ namespace Wox.Plugin.Folder
 
         public void LogException(string message, Exception e)
         {
-            Logger.WoxError($"|Wox.Plugin.Folder.ContextMenu|{message}", e);
+            Logger.WoxError($"{message}", e);
         }
 
         private bool CanRunAsDifferentUser(string path)

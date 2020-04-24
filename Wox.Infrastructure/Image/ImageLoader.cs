@@ -95,8 +95,8 @@ namespace Wox.Infrastructure.Image
                     }
                     catch (System.Exception e2)
                     {
-                        Logger.WoxError($"|ImageLoader.Load|Failed to get thumbnail, first, {path}", e1);
-                        Logger.WoxError($"|ImageLoader.Load|Failed to get thumbnail, second, {path}", e2);
+                        Logger.WoxError($"Failed to get thumbnail, first, {path}", e1);
+                        Logger.WoxError($"Failed to get thumbnail, second, {path}", e2);
                         image = GetErrorImage();
                         return image;
                     }

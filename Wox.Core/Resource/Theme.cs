@@ -59,7 +59,7 @@ namespace Wox.Core.Resource
                     }
                     catch (Exception e)
                     {
-                        Logger.WoxError($"|Theme.MakesureThemeDirectoriesExist|Exception when create directory <{dir}>", e);
+                        Logger.WoxError($"Exception when create directory <{dir}>", e);
                     }
                 }
             }
@@ -89,7 +89,7 @@ namespace Wox.Core.Resource
             }
             catch (DirectoryNotFoundException e)
             {
-                Logger.WoxError($"|Theme.ChangeTheme|Theme <{theme}> path can't be found");
+                Logger.WoxError($"Theme <{theme}> path can't be found");
                 if (theme != defaultTheme)
                 {
                     MessageBox.Show(string.Format(InternationalizationManager.Instance.GetTranslation("theme_load_failure_path_not_exists"), theme));
@@ -99,7 +99,7 @@ namespace Wox.Core.Resource
             }
             catch (XamlParseException e)
             {
-                Logger.WoxError($"|Theme.ChangeTheme|Theme <{theme}> fail to parse");
+                Logger.WoxError($"Theme <{theme}> fail to parse");
                 if (theme != defaultTheme)
                 {
                     MessageBox.Show(string.Format(InternationalizationManager.Instance.GetTranslation("theme_load_failure_parse_error"), theme));

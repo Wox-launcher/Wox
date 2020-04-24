@@ -172,7 +172,7 @@ namespace Wox.Plugin.Program.Programs
             }
             catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
             {
-                ProgramLogger.LogException($"|Win32|Win32Program|{path}" +
+                ProgramLogger.LogException($"{path}" +
                                             $"|Permission denied when trying to load the program from {path}", e);
 
                 return new Win32() { Valid = false, Enabled = false };
@@ -196,7 +196,7 @@ namespace Wox.Plugin.Program.Programs
                 }
                 catch (COMException e)
                 {
-                    Logger.WoxError($"|Win32.LnkProgram|cannot get description <{path}>. HResult: <{e.HResult}>. Exception: <{e}>.");
+                    Logger.WoxError($"cannot get description <{path}>. HResult: <{e.HResult}>. Exception: <{e}>.");
                     bufferDescription.Clear();
                 }
                 description = bufferDescription.ToString();
@@ -230,7 +230,7 @@ namespace Wox.Plugin.Program.Programs
             catch (COMException e)
             {
                 // C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\MiracastView.lnk always cause exception
-                ProgramLogger.LogException($"|Win32|LnkProgram|{path}" +
+                ProgramLogger.LogException($"{path}" +
                                                 "|Error caused likely due to trying to get the description of the program", e);
 
                 program.Valid = false;
@@ -239,7 +239,7 @@ namespace Wox.Plugin.Program.Programs
 #if !DEBUG //Only do a catch all in production. This is so make developer aware of any unhandled exception and add the exception handling in.
             catch (Exception e)
             {
-                ProgramLogger.LogException($"|Win32|LnkProgram|{path}" +
+                ProgramLogger.LogException($"{path}" +
                                                 "|An unexpected error occurred in the calling method LnkProgram", e);
 
                 program.Valid = false;
@@ -262,7 +262,7 @@ namespace Wox.Plugin.Program.Programs
             }
             catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
             {
-                ProgramLogger.LogException($"|Win32|ExeProgram|{path}" +
+                ProgramLogger.LogException($"{path}" +
                                             $"|Permission denied when trying to load the program from {path}", e);
 
                 return new Win32() { Valid = false, Enabled = false };
@@ -289,14 +289,14 @@ namespace Wox.Plugin.Program.Programs
                         }
                         catch (DirectoryNotFoundException e)
                         {
-                            ProgramLogger.LogException($"|Win32|ProgramPaths|{currentDirectory}" +
+                            ProgramLogger.LogException($"{currentDirectory}" +
                                                 "|The directory trying to load the program from does not exist", e);
                         }
                     }
                 }
                 catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
                 {
-                    ProgramLogger.LogException($"|Win32|ProgramPaths|{currentDirectory}" +
+                    ProgramLogger.LogException($"{currentDirectory}" +
                                                 $"|Permission denied when trying to load programs from {currentDirectory}", e);
                 }
 
@@ -309,7 +309,7 @@ namespace Wox.Plugin.Program.Programs
                 }
                 catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
                 {
-                    ProgramLogger.LogException($"|Win32|ProgramPaths|{currentDirectory}" +
+                    ProgramLogger.LogException($"{currentDirectory}" +
                                                 $"|Permission denied when trying to load programs from {currentDirectory}", e);
                 }
             } while (folderQueue.Any());
@@ -426,7 +426,7 @@ namespace Wox.Plugin.Program.Programs
             }
             catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
             {
-                ProgramLogger.LogException($"|Win32|GetProgramPathFromRegistrySubKeys|{path}" +
+                ProgramLogger.LogException($"{path}" +
                                             $"|Permission denied when trying to load the program from {path}", e);
 
                 return string.Empty;
@@ -481,7 +481,7 @@ namespace Wox.Plugin.Program.Programs
 #if !DEBUG //Only do a catch all in production.
             catch (Exception e)
             {
-                ProgramLogger.LogException("|Win32|All|Not available|An unexpected error occurred", e);
+                ProgramLogger.LogException("An unexpected error occurred", e);
 
                 return new Win32[0];
             }

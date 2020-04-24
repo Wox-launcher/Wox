@@ -37,7 +37,7 @@ namespace Wox.Infrastructure
         {
             Format.setToneType(HanyuPinyinToneType.WITHOUT_TONE);
 
-            Logger.StopWatchNormal("|Wox.Infrastructure.Alphabet.Initialize|Preload pinyin cache", () =>
+            Logger.StopWatchNormal("Preload pinyin cache", () =>
             {
                 _pinyinStorage = new BinaryStorage<ConcurrentDictionary<string, string[][]>>("Pinyin");
                 PinyinCache = _pinyinStorage.TryLoad(new ConcurrentDictionary<string, string[][]>());
@@ -45,7 +45,7 @@ namespace Wox.Infrastructure
                 // force pinyin library static constructor initialize
                 PinyinHelper.toHanyuPinyinStringArray('T', Format);
             });
-            Logger.WoxInfo($"|Wox.Infrastructure.Alphabet.Initialize|Number of preload pinyin combination<{PinyinCache.Count}>");
+            Logger.WoxInfo($"Number of preload pinyin combination<{PinyinCache.Count}>");
         }
 
         public string Translate(string str)

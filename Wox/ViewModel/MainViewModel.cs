@@ -422,7 +422,7 @@ namespace Wox.ViewModel
                         catch (OperationCanceledException e)
                         {
                             // nothing to do here
-                            Logger.WoxInfo($"|MainViewModel|canceled {query}");
+                            Logger.WoxInfo($"canceled {query}");
                         }
                         
 

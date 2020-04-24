@@ -109,7 +109,7 @@ namespace Wox.Core.Plugin
             {
                 try
                 {
-                    var milliseconds = Logger.StopWatchDebug($"|PluginManager.InitializePlugins|Init method time cost for <{pair.Metadata.Name}>", () =>
+                    var milliseconds = Logger.StopWatchDebug($"Init method time cost for <{pair.Metadata.Name}>", () =>
                     {
                         pair.Plugin.Init(new PluginInitContext
                         {
@@ -118,7 +118,7 @@ namespace Wox.Core.Plugin
                         });
                     });
                     pair.Metadata.InitTime += milliseconds;
-                    Logger.WoxInfo($"|PluginManager.InitializePlugins|Total init cost for <{pair.Metadata.Name}> is <{pair.Metadata.InitTime}ms>");
+                    Logger.WoxInfo($"Total init cost for <{pair.Metadata.Name}> is <{pair.Metadata.InitTime}ms>");
                 }
                 catch (Exception e)
                 {
@@ -171,7 +171,7 @@ namespace Wox.Core.Plugin
             {
                 List<Result> results = null;
                 var metadata = pair.Metadata;
-                var milliseconds = Logger.StopWatchDebug($"|PluginManager.QueryForPlugin|Cost for {metadata.Name}", () =>
+                var milliseconds = Logger.StopWatchDebug($"Cost for {metadata.Name}", () =>
                 {
                     results = pair.Plugin.Query(query) ?? new List<Result>();
                     UpdatePluginMetadata(results, metadata, query);
@@ -182,7 +182,7 @@ namespace Wox.Core.Plugin
             }
             catch (Exception e)
             {
-                Logger.WoxError($"|PluginManager.QueryForPlugin|Exception for plugin <{pair.Metadata.Name}> when query <{query}>", e);
+                Logger.WoxError($"Exception for plugin <{pair.Metadata.Name}> when query <{query}>", e);
                 return new List<Result>();
             }
         }
@@ -243,7 +243,7 @@ namespace Wox.Core.Plugin
                 }
                 catch (Exception e)
                 {
-                    Logger.WoxError($"|PluginManager.GetContextMenusForPlugin|Can't load context menus for plugin <{metadata.Name}>", e);
+                    Logger.WoxError($"Can't load context menus for plugin <{metadata.Name}>", e);
                     return new List<Result>();
                 }
             }

@@ -61,7 +61,7 @@ namespace Wox.Infrastructure.Http
 
         public static async Task<string> Get([NotNull] string url, string encoding = "UTF-8")
         {
-            Logger.WoxDebug($"|Http.Get|Url <{url}>");
+            Logger.WoxDebug($"Url <{url}>");
             var request = WebRequest.CreateHttp(url);
             request.Method = "GET";
             request.Timeout = 1000;

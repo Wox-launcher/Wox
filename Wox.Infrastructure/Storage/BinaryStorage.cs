@@ -37,7 +37,7 @@ namespace Wox.Infrastructure.Storage
             {
                 if (new FileInfo(FilePath).Length == 0)
                 {
-                    Logger.WoxError($"|BinaryStorage.TryLoad|Zero length cache file <{FilePath}>");
+                    Logger.WoxError($"Zero length cache file <{FilePath}>");
                     Save(defaultData);
                     return defaultData;
                 }
@@ -50,7 +50,7 @@ namespace Wox.Infrastructure.Storage
             }
             else
             {
-                Logger.WoxInfo("|BinaryStorage.TryLoad|Cache file not exist, load default data");
+                Logger.WoxInfo("Cache file not exist, load default data");
                 Save(defaultData);
                 return defaultData;
             }
@@ -72,7 +72,7 @@ namespace Wox.Infrastructure.Storage
             }
             catch (System.Exception e)
             {
-                Logger.WoxError($"|BinaryStorage.Deserialize|Deserialize error for file <{FilePath}>", e);
+                Logger.WoxError($"Deserialize error for file <{FilePath}>", e);
                 return defaultData;
             }
             finally
@@ -112,7 +112,7 @@ namespace Wox.Infrastructure.Storage
                 }
                 catch (SerializationException e)
                 {
-                    Logger.WoxError($"|BinaryStorage.Save|serialize error for file <{FilePath}>", e);
+                    Logger.WoxError($"serialize error for file <{FilePath}>", e);
                 }
             }
         }

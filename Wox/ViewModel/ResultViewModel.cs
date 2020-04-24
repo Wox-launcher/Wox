@@ -37,7 +37,7 @@ namespace Wox.ViewModel
                     }
                     catch (Exception e)
                     {
-                        Logger.WoxError($"|ResultViewModel.Image|IcoPath is empty and exception when calling Icon() for result <{Result.Title}> of plugin <{Result.PluginDirectory}>", e);
+                        Logger.WoxError($"IcoPath is empty and exception when calling Icon() for result <{Result.Title}> of plugin <{Result.PluginDirectory}>", e);
                         imagePath = Constant.ErrorIcon;
                     }
                 }

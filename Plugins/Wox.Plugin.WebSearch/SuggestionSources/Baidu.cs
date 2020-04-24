@@ -27,7 +27,7 @@ namespace Wox.Plugin.WebSearch.SuggestionSources
             }
             catch (WebException e)
             {
-                Logger.WoxError("|Baidu.Suggestions|Can't get suggestion from baidu", e);
+                Logger.WoxError("Can't get suggestion from baidu", e);
                 return new List<string>();
             }
 
@@ -42,7 +42,7 @@ namespace Wox.Plugin.WebSearch.SuggestionSources
                 }
                 catch (JsonSerializationException e)
                 {
-                    Logger.WoxError("|Baidu.Suggestions|can't parse suggestions", e);
+                    Logger.WoxError("can't parse suggestions", e);
                     return new List<string>();
                 }
 

@@ -55,7 +55,7 @@ namespace Wox.Core.Resource
                 }
                 else
                 {
-                    Logger.WoxError($"|Internationalization.AddPluginLanguageDirectories|Can't find plugin path <{location}> for <{plugin.Metadata.Name}>");
+                    Logger.WoxError($"Can't find plugin path <{location}> for <{plugin.Metadata.Name}>");
                 }
             }
         }
@@ -79,7 +79,7 @@ namespace Wox.Core.Resource
             var language = AvailableLanguages.GetAvailableLanguages().FirstOrDefault(o => o.LanguageCode.ToLower() == lowercase);
             if (language == null)
             {
-                Logger.WoxError($"|Internationalization.GetLanguageByLanguageCode|Language code can't be found <{languageCode}>");
+                Logger.WoxError($"Language code can't be found <{languageCode}>");
                 return AvailableLanguages.English;
             }
             else
@@ -165,7 +165,7 @@ namespace Wox.Core.Resource
             }
             else
             {
-                Logger.WoxError($"|Internationalization.GetTranslation|No Translation for key {key}");
+                Logger.WoxError($"No Translation for key {key}");
                 return $"No Translation for key {key}";
             }
         }
@@ -183,7 +183,7 @@ namespace Wox.Core.Resource
                 }
                 catch (Exception e)
                 {
-                    Logger.WoxError($"|Internationalization.UpdatePluginMetadataTranslations|Failed for <{p.Metadata.Name}>", e);
+                    Logger.WoxError($"Failed for <{p.Metadata.Name}>", e);
                 }
             }
         }
@@ -199,7 +199,7 @@ namespace Wox.Core.Resource
                 }
                 else
                 {
-                    Logger.WoxError($"|Internationalization.LanguageFile|Language path can't be found <{path}>");
+                    Logger.WoxError($"Language path can't be found <{path}>");
                     string english = Path.Combine(folder, DefaultFile);
                     if (File.Exists(english))
                     {
@@ -207,7 +207,7 @@ namespace Wox.Core.Resource
                     }
                     else
                     {
-                        Logger.WoxError($"|Internationalization.LanguageFile|Default English Language path can't be found <{path}>");
+                        Logger.WoxError($"Default English Language path can't be found <{path}>");
                         return string.Empty;
                     }
                 }

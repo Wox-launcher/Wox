@@ -32,15 +32,15 @@ namespace Wox.Plugin.Program
 
         private static void preloadPrograms()
         {
-            Logger.StopWatchNormal("|Wox.Plugin.Program.Main|Preload programs cost", () =>
+            Logger.StopWatchNormal("Preload programs cost", () =>
             {
                 _win32Storage = new BinaryStorage<Win32[]>("Win32");
                 _win32s = _win32Storage.TryLoad(new Win32[] { });
                 _uwpStorage = new BinaryStorage<UWP.Application[]>("UWP");
                 _uwps = _uwpStorage.TryLoad(new UWP.Application[] { });
             });
-            Logger.WoxInfo($"|Wox.Plugin.Program.Main|Number of preload win32 programs <{_win32s.Length}>");
-            Logger.WoxInfo($"|Wox.Plugin.Program.Main|Number of preload uwps <{_uwps.Length}>");
+            Logger.WoxInfo($"Number of preload win32 programs <{_win32s.Length}>");
+            Logger.WoxInfo($"Number of preload uwps <{_uwps.Length}>");
         }   
 
         public void Save()
@@ -130,25 +130,25 @@ namespace Wox.Plugin.Program
         {
             var a = Task.Run(() =>
             {
-                Logger.StopWatchNormal("|Wox.Plugin.Program.Main|UWP Program index cost", IndexWin32Programs);
+                Logger.StopWatchNormal("UWP Program index cost", IndexWin32Programs);
             });
 
             var b = Task.Run(() =>
             {
-                Logger.StopWatchNormal("|Wox.Plugin.Program.Main|UWP Program index cost", IndexUWPPrograms);
+                Logger.StopWatchNormal("UWP Program index cost", IndexUWPPrograms);
             });
 
             Task.WaitAll(a, b);
 
-            Logger.WoxInfo($"|Wox.Plugin.Program.Main|Number of indexed win32 programs <{_win32s.Length}>");
+            Logger.WoxInfo($"Number of indexed win32 programs <{_win32s.Length}>");
             foreach (var win32 in _win32s)
             {
-                Logger.WoxDebug($"|Wox.Plugin.Program.Main| win32: {win32.Name}>");
+                Logger.WoxDebug($" win32: {win32.Name}>");
             }
-            Logger.WoxInfo($"|Wox.Plugin.Program.Main|Number of indexed uwps <{_uwps.Length}>");
+            Logger.WoxInfo($"Number of indexed uwps <{_uwps.Length}>");
             foreach (var uwp in _uwps)
             {
-                Logger.WoxDebug($"|Wox.Plugin.Program.Main| uwp: {uwp.DisplayName}>");
+                Logger.WoxDebug($" uwp: {uwp.DisplayName}>");
             }
             _settings.LastIndexTime = DateTime.Today;
         }
