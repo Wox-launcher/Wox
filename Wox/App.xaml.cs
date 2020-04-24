@@ -31,6 +31,7 @@ namespace Wox
         public static PublicAPIInstance API { get; private set; }
         private const string Unique = "Wox_Unique_Application_Mutex";
         private static bool _disposed;
+        public Settings Settings => _settings;
         private Settings _settings;
         private MainViewModel _mainVM;
         private SettingWindowViewModel _settingsVM;

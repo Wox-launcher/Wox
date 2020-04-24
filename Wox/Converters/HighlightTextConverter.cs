@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Media;
+using Wox.Core.Resource;
 
 namespace Wox.Converters
 {
@@ -26,6 +27,12 @@ namespace Wox.Converters
                 return new Run(text);
             }
 
+            var settings = (Application.Current as App).Settings;
+
+            var highlightStyle = FontHelper.GetFontStyleFromInvariantStringOrNormal(settings.ResultHighlightFontStyle);
+            var highlightWeight = FontHelper.GetFontWeightFromInvariantStringOrNormal(settings.ResultHighlightFontWeight);
+            var highlightStretch = FontHelper.GetFontStretchFromInvariantStringOrNormal(settings.ResultHighlightFontStretch);
+
             for (var i = 0; i < text.Length; i++)
             {
                 var currentCharacter = text.Substring(i, 1);
@@ -33,7 +40,9 @@ namespace Wox.Converters
                 {
                     textBlock.Inlines.Add((new Run(currentCharacter)
                     {
-                        FontWeight = FontWeights.Bold
+                        FontWeight = highlightWeight,
+                        FontStyle = highlightStyle,
+                        FontStretch = highlightStretch
                     }));
                 }
                 else
