@@ -36,7 +36,6 @@ namespace Wox.Infrastructure.Image
 
         private static ImageSource LoadInternal(string path)
         {
-            Logger.WoxDebug($"image {path}");
             ImageSource image;
 
             if (string.IsNullOrEmpty(path))
@@ -122,7 +121,9 @@ namespace Wox.Infrastructure.Image
 
         public static ImageSource Load(string path)
         {
+            Logger.WoxDebug($"load begin {path}");
             var img = LoadInternal(path);
+            Logger.WoxDebug($"load end {path}");
             return img;
         }
     }
