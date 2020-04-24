@@ -122,7 +122,7 @@ namespace Wox.Core
 
             var json = await Http.Get(api);
 
-            var releases = JsonConvert.DeserializeObject<List<GithubRelease>>(json);
+            var releases = JsonConvert.DeserializeObject<List<GithubRelease>>(json).AsEnumerable();
             if (!updateToPrereleases) {
                 releases = releases.Where(r => !r.Prerelease);
             }
