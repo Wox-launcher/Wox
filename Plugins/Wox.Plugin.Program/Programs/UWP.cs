@@ -83,7 +83,7 @@ namespace Wox.Plugin.Program.Programs
             else
             {
                 var e = Marshal.GetExceptionForHR((int)hResult);
-                ProgramLogger.LogException($"{path}" +
+                ProgramLogger.LogException($"|UWP|InitializeAppInfo|{path}" +
                                                 "|Error caused while trying to get the details of the UWP program", e);
 
                 Apps = new List<Application>().ToArray();
@@ -110,7 +110,7 @@ namespace Wox.Plugin.Program.Programs
             }
             else
             {
-                ProgramLogger.LogException($"{path}" +
+                ProgramLogger.LogException($"|UWP|XmlNamespaces|{path}" +
                                                 $"|Error occured while trying to get the XML from {path}", new ArgumentNullException());
 
                 return new string[] { };
@@ -135,7 +135,7 @@ namespace Wox.Plugin.Program.Programs
                 }
             }
 
-            ProgramLogger.LogException($"{Location}" +
+            ProgramLogger.LogException($"|UWP|XmlNamespaces|{Location}" +
                                                 "|Trying to get the package version of the UWP program, but a unknown UWP appmanifest version  "
                                                 + $"{FullName} from location {Location} is returned.", new FormatException());
 
@@ -158,7 +158,7 @@ namespace Wox.Plugin.Program.Programs
 #if !DEBUG
                     catch (Exception e)
                     {
-                        ProgramLogger.LogException($"An unexpected error occured and "
+                        ProgramLogger.LogException($"|UWP|All|{p.InstalledLocation}|An unexpected error occured and "
                                                         + $"unable to convert Package to UWP for {p.Id.FullName}", e);
                         return new Application[] { };
                     }
@@ -411,7 +411,7 @@ namespace Wox.Plugin.Program.Programs
                         }
                         else
                         {
-                            ProgramLogger.LogException($"Can't load null or empty result "
+                            ProgramLogger.LogException($"|UWP|ResourceFromPri|{Package.Location}|Can't load null or empty result "
                                                         + $"pri {source} in uwp location {Package.Location}", new NullReferenceException());
                             return string.Empty;
                         }
@@ -425,7 +425,7 @@ namespace Wox.Plugin.Program.Programs
                         // Microsoft.MicrosoftOfficeHub_17.7608.23501.0_x64__8wekyb3d8bbwe: ms-resource://Microsoft.MicrosoftOfficeHub/officehubintl/AppManifest_GetOffice_Description
                         // Microsoft.BingFoodAndDrink_3.0.4.336_x64__8wekyb3d8bbwe: ms-resource:AppDescription
                         var e = Marshal.GetExceptionForHR((int)hResult);
-                        ProgramLogger.LogException($"Load pri failed {source} with HResult {hResult} and location {Package.Location}", e);
+                        ProgramLogger.LogException($"|UWP|ResourceFromPri|{Package.Location}|Load pri failed {source} with HResult {hResult} and location {Package.Location}", e);
                         return string.Empty;
                     }
                 }
@@ -504,14 +504,14 @@ namespace Wox.Plugin.Program.Programs
                     }
                     else
                     {
-                        ProgramLogger.LogException($"{Package.Location}" +
+                        ProgramLogger.LogException($"|UWP|LogoPathFromUri|{Package.Location}" +
                                                     $"|{UserModelId} can't find logo uri for {uri} in package location: {Package.Location}", new FileNotFoundException());
                         return string.Empty;
                     }
                 }
                 else
                 {
-                    ProgramLogger.LogException($"{Package.Location}" +
+                    ProgramLogger.LogException($"|UWP|LogoPathFromUri|{Package.Location}" +
                                                     $"|Unable to find extension from {uri} for {UserModelId} " +
                                                     $"in package location {Package.Location}", new FileNotFoundException());
                     return string.Empty;
@@ -539,7 +539,7 @@ namespace Wox.Plugin.Program.Programs
                 }
                 else
                 {
-                    ProgramLogger.LogException($"{path}" +
+                    ProgramLogger.LogException($"|UWP|ImageFromPath|{path}" +
                                                     $"|Unable to get logo for {UserModelId} from {path} and" +
                                                     $" located in {Package.Location}", new FileNotFoundException());
                     return new BitmapImage(new Uri(Constant.ErrorIcon));
@@ -588,7 +588,7 @@ namespace Wox.Plugin.Program.Programs
                     }
                     else
                     {
-                        ProgramLogger.LogException($"{Package.Location}" +
+                        ProgramLogger.LogException($"|UWP|PlatedImage|{Package.Location}" +
                                                     $"|Unable to convert background string {BackgroundColor} " +
                                                     $"to color for {Package.Location}", new InvalidOperationException());
 
