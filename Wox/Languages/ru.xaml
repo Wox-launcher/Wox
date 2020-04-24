@@ -24,10 +24,11 @@
     <system:String x:Key="language">Язык</system:String>
     <system:String x:Key="maxShowResults">Максимальное количество результатов</system:String>
     <system:String x:Key="ignoreHotkeysOnFullscreen">Игнорировать горячие клавиши, если окно в полноэкранном режиме</system:String>
-    <system:String x:Key="pythonDirectory">Python Directory</system:String>
-    <system:String x:Key="autoUpdates">Auto Update</system:String>
-    <system:String x:Key="selectPythonDirectory">Select</system:String>
-    <system:String x:Key="hideOnStartup">Hide Wox on startup</system:String>
+    <system:String x:Key="pythonDirectory">Путь к Python</system:String>
+    <system:String x:Key="autoUpdates">Автообновление</system:String>
+    <system:String x:Key="updateToPrereleases">Обновлять до Пре-релизов</system:String>
+    <system:String x:Key="selectPythonDirectory">Выбрать</system:String>
+    <system:String x:Key="hideOnStartup">Запускать Wox в фоне</system:String>
     
     <!--Setting Plugin-->
     <system:String x:Key="plugin">Плагины</system:String>
@@ -79,9 +80,9 @@
     <system:String x:Key="website">Сайт</system:String>
     <system:String x:Key="version">Версия</system:String>
     <system:String x:Key="about_activate_times">Вы воспользовались Wox уже {0} раз</system:String>
-    <system:String x:Key="checkUpdates">Check for Updates</system:String>
-    <system:String x:Key="newVersionTips">New version {0} avaiable, please restart wox</system:String>
-    <system:String x:Key="releaseNotes">Release Notes:</system:String>
+    <system:String x:Key="checkUpdates">Проверить Обновления</system:String>
+    <system:String x:Key="newVersionTips">Доступна новая версия {0}, пожалуйста перезапустите Wox</system:String>
+    <system:String x:Key="releaseNotes">В этой версии:</system:String>
 
     <!--Action Keyword Setting Dialog-->
     <system:String x:Key="oldActionKeywords">Текущая горячая клавиша</system:String>

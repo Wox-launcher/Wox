@@ -30,6 +30,7 @@
     <system:String x:Key="ignoreHotkeysOnFullscreen">Tam ekran modunda kısayol tuşunu gözardı et</system:String>
     <system:String x:Key="pythonDirectory">Python Konumu</system:String>
     <system:String x:Key="autoUpdates">Otomatik Güncelle</system:String>
+    <system:String x:Key="updateToPrereleases">Update to Prereleases</system:String>
     <system:String x:Key="selectPythonDirectory">Seç</system:String>
     <system:String x:Key="hideOnStartup">Başlangıçta Wox'u gizle</system:String>
     <system:String x:Key="hideNotifyIcon">Sistem çekmecesi simgesini gizle</system:String>

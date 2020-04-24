@@ -26,6 +26,7 @@
     <system:String x:Key="ignoreHotkeysOnFullscreen">全螢幕模式下忽略熱鍵</system:String>
     <system:String x:Key="pythonDirectory">Python 路徑</system:String>
     <system:String x:Key="autoUpdates">自動更新</system:String>
+    <system:String x:Key="updateToPrereleases">Update to Prereleases</system:String>
     <system:String x:Key="selectPythonDirectory">選擇</system:String>
     <system:String x:Key="hideOnStartup">啟動時不顯示主視窗</system:String>
 
