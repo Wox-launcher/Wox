@@ -130,12 +130,12 @@ namespace Wox.Plugin.Program
         {
             var a = Task.Run(() =>
             {
-                Logger.StopWatchNormal("UWP Program index cost", IndexWin32Programs);
+                Logger.StopWatchNormal("Win32 index cost", IndexWin32Programs);
             });
 
             var b = Task.Run(() =>
             {
-                Logger.StopWatchNormal("UWP Program index cost", IndexUWPPrograms);
+                Logger.StopWatchNormal("UWP index cost", IndexUWPPrograms);
             });
 
             Task.WaitAll(a, b);

@@ -126,7 +126,7 @@ namespace Wox
 
         public void StopLoadingBar()
         {
-            _mainVM.ProgressBarVisibility = Visibility.Collapsed;
+            _mainVM.ProgressBarVisibility = Visibility.Hidden;
         }
 
         public void InstallPlugin(string path)

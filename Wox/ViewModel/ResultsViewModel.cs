@@ -283,16 +283,16 @@ namespace Wox.ViewModel
 
                 for (int i = 0; i < location; i++)
                 {
-                    ResultViewModel oldResult = this[i];
+                   ResultViewModel oldResult = this[i];
                     ResultViewModel newResult = newItems[i];
-                    Logger.WoxDebug(
+                    Logger.WoxTrace(
                         $"index {i} " +
                               $"old<{oldResult.Result.Title} {oldResult.Result.Score}> " +
                               $"new<{newResult.Result.Title} {newResult.Result.Score}>"
                         );
                     if (oldResult.Equals(newResult))
                     {
-                        Logger.WoxDebug($"index <{i}> equal");
+                        Logger.WoxTrace($"index <{i}> equal");
                         // update following info no matter they are equal or not
                         // because check equality will cause more computation
                         this[i].Result.Score = newResult.Result.Score;
@@ -303,7 +303,7 @@ namespace Wox.ViewModel
                     {
                         // result is not the same update it in the current index
                         this[i] = newResult;
-                        Logger.WoxDebug($"index <{i}> not equal old<{oldResult.GetHashCode()}> new<{newResult.GetHashCode()}>");
+                        Logger.WoxTrace($"index <{i}> not equal old<{oldResult.GetHashCode()}> new<{newResult.GetHashCode()}>");
                     }
                 }
 
@@ -312,7 +312,7 @@ namespace Wox.ViewModel
                 {
                     for (int i = oldCount; i < newCount; i++)
                     {
-                        Logger.WoxDebug($"Logger.WoxErroradd index {i} new<{newItems[i].Result.Title}");
+                        Logger.WoxTrace($"add {i} new<{newItems[i].Result.Title}");
                         Add(newItems[i]);
                     }
                 }

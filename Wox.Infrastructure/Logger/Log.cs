@@ -60,6 +60,17 @@ namespace Wox.Infrastructure.Logger
             logger.Error("-------------------------- End exception --------------------------");
         }
 
+        public static void WoxTrace(this NLog.Logger logger, string message, [CallerMemberName] string methodName = "")
+        {
+            // need change logging manually to see trace log
+            if (logger.IsTraceEnabled)
+            {
+                Debug.WriteLine($"DEBUG|{logger.Name}|{methodName}|{message}");
+                logger.Trace($"{methodName}|{message}");
+            }
+            
+        }
+
         public static void WoxDebug(this NLog.Logger logger, string message, [CallerMemberName] string methodName = "")
         {
             Debug.WriteLine($"DEBUG|{logger.Name}|{methodName}|{message}");
@@ -70,13 +81,13 @@ namespace Wox.Infrastructure.Logger
         public static void WoxInfo(this NLog.Logger logger, string message, [CallerMemberName] string methodName = "")
         {
             Debug.WriteLine($"INFO|{logger.Name}|{methodName}|{message}");
-            logger.Debug($"{methodName}|{message}");
+            logger.Info($"{methodName}|{message}");
         }
 
         public static void WoxError(this NLog.Logger logger, string message, [CallerMemberName] string methodName = "")
         {
             Debug.WriteLine($"ERROR|{logger.Name}|{methodName}|{message}");
-            logger.Debug($"{methodName}|{message}");
+            logger.Error($"{methodName}|{message}");
         }
 
         public static void WoxError(this NLog.Logger logger, string message, System.Exception exception, [CallerMemberName] string methodName = "")
