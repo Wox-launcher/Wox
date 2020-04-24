@@ -33,12 +33,16 @@ Download `Wox-xxx.exe` from [releases](https://github.com/Wox-launcher/Wox/relea
 
 Windows may complain about security due to code not being signed. This will be fixed later. 
 
-Versions marked as **pre-release** are unstable pre-release versions.
-
 - Requirements:
-  - .net >= 4.6.2
-  - If you want to integrate with [everything](https://www.voidtools.com/): `.exe` installer + use x64 if your windows is x64 + everything service is running. Version >= 1.3.4.686 is supported.
-  - If you use python plugins, install [python3](https://www.python.org/downloads/): `.exe` installer + add it to `%PATH%` or set it in WoX settings
+  - .NET >= 4.6.2 or Windows version >= 10 1607 (Anniversary Update)
+  - [Optional] Integrate with everything
+    1. Download `.exe` [installer](https://www.voidtools.com/)
+    2. "Install Everything Service" is checked
+    3. Use x64 if your windows is x64
+    4. Version >= 1.3.4.686 is supported
+  - [Optional] Use Python plugins
+    1. install [python3](https://www.python.org/downloads/)
+    2 add it to `%PATH%` or set it in WoX settings
 
 Usage
 -----
@@ -57,7 +61,6 @@ Contribution
 - Read [Coding Style](https://github.com/Wox-launcher/Wox/wiki/Coding-Style)
 - Send PR to master branch
 - I'd appreciate if you could solve [help_needed](https://github.com/Wox-launcher/Wox/issues?q=is%3Aopen+is%3Aissue+label%3Ahelp_needed) labeled issue
-- Don't hesitate to ask questions in the [issues](https://github.com/Wox-launcher/Wox/issues)
 
 Build
 -----
