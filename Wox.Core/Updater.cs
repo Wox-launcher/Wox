@@ -126,7 +126,7 @@ namespace Wox.Core
             if (!updateToPrereleases) {
                 releases = releases.Where(r => !r.Prerelease);
             }
-            latest = releases.OrderByDescending(r => r.PublishedAt).First();
+            var latest = releases.OrderByDescending(r => r.PublishedAt).First();
             
             var latestUrl = latest.HtmlUrl.Replace("/tag/", "/download/");
 
