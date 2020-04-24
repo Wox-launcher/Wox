@@ -18,29 +18,6 @@ namespace Wox.Plugin.Program.Logger
     /// </summary>
     internal static class ProgramLogger
     {
-        public const string DirectoryName = "Logs";
-
-        static ProgramLogger()
-        {
-            var path = Path.Combine(DataLocation.DataDirectory(), DirectoryName, Constant.Version);
-            if (!Directory.Exists(path))
-            {
-                Directory.CreateDirectory(path);
-            }
-
-            var configuration = new LoggingConfiguration();
-            var target = new FileTarget();
-            configuration.AddTarget("file", target);
-            target.FileName = path.Replace(@"\", "/") + "/${shortdate}.txt";
-#if DEBUG
-            var rule = new LoggingRule("*", LogLevel.Debug, target);
-#else
-            var rule = new LoggingRule("*", LogLevel.Error, target);
-#endif
-            configuration.LoggingRules.Add(rule);
-            LogManager.Configuration = configuration;
-        }
-
         /// <summary>
         /// Logs an exception
         /// </summary>
@@ -48,9 +25,9 @@ namespace Wox.Plugin.Program.Logger
         internal static void LogException(string classname, string callingMethodName, string loadingProgramPath,
             string interpretationMessage, Exception e)
         {
-            Debug.WriteLine($"ERROR{classname}|{callingMethodName}|{loadingProgramPath}|{interpretationMessage}");
+            Debug.WriteLine($"ERROR|{classname}|{callingMethodName}|{loadingProgramPath}|{interpretationMessage}");
 
-            var logger = LogManager.GetLogger("");
+            var logger = LogManager.GetLogger($"|{classname}|{callingMethodName}|");
 
             var innerExceptionNumber = 1;
 
