@@ -14,48 +14,43 @@ namespace Wox.ViewModel
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
-        private Result _result;
-
         public ResultViewModel(Result result)
         {
             if (result != null)
             {
                 Result = result;
+                Image = new Lazy<ImageSource>(() => {
+                    return SetImage(result);
+                });
             }
         }
 
-        public ImageSource Image
+        private ImageSource SetImage(Result result)
         {
-            get
+            string imagePath = result.IcoPath;
+            if (string.IsNullOrEmpty(imagePath) && result.Icon != null)
             {
-                var imagePath = Result.IcoPath;
-                if (string.IsNullOrEmpty(imagePath) && Result.Icon != null)
+                try
                 {
-                    try
-                    {
-                        return Result.Icon();
-                    }
-                    catch (Exception e)
-                    {
-                        Logger.WoxError($"IcoPath is empty and exception when calling Icon() for result <{Result.Title}> of plugin <{Result.PluginDirectory}>", e);
-                        imagePath = Constant.ErrorIcon;
-                    }
+                    return result.Icon();
                 }
-                
-                // will get here either when icoPath has value\icon delegate is null\when had exception in delegate
-                return ImageLoader.Load(imagePath);
+                catch (Exception e)
+                {
+                    Logger.WoxError($"IcoPath is empty and exception when calling Icon() for result <{Result.Title}> of plugin <{Result.PluginDirectory}>", e);
+                    imagePath = Constant.ErrorIcon;
+                }
             }
+
+            // will get here either when icoPath has value\icon delegate is null\when had exception in delegate
+            return ImageLoader.Load(imagePath);
         }
 
-        public Result Result
-        {
-            get => _result;
-            set
-            {
-                _result = value;
-                OnPropertyChanged();
-            }
-        }
+        // directly binding will cause unnecessory image load
+        // only binding get will cause load twice or more
+        // so use lazy binding
+        public Lazy<ImageSource> Image { get; set; }
+
+        public Result Result { get; set; }
 
         public override bool Equals(object obj)
         {
