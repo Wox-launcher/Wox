@@ -380,11 +380,14 @@ namespace Wox.ViewModel
 
         private void QueryResults()
         {
-            _updateSource?.Cancel();
-            _updateSource?.Dispose();
-            var currentUpdateSource = new CancellationTokenSource();
-            _updateSource = currentUpdateSource;
-            var token = _updateSource.Token;
+            if (_updateSource != null && !_updateSource.IsCancellationRequested)
+            {
+                _updateSource.Cancel();
+                _updateSource.Dispose();
+            }
+            var updateSource = new CancellationTokenSource();
+            _updateSource = updateSource;
+            var token = updateSource.Token;
             _updateToken = token;
 
             ProgressBarVisibility = Visibility.Hidden;
@@ -404,6 +407,7 @@ namespace Wox.ViewModel
                         if (!token.IsCancellationRequested)
                         {
                             ProgressBarVisibility = Visibility.Visible;
+                            Logger.WoxInfo($"progressbar visible {query} {token.IsCancellationRequested} {ProgressBarVisibility}");
                         }
                     }, token);
 
@@ -432,9 +436,13 @@ namespace Wox.ViewModel
                             // nothing to do here
                         }
 
+                        Logger.WoxInfo($"canceled {query} {token.IsCancellationRequested}");
                         if (!token.IsCancellationRequested)
                         { // update to hidden if this is still the current query
                             ProgressBarVisibility = Visibility.Hidden;
+                            updateSource.Cancel();
+                            updateSource.Dispose();
+                            Logger.WoxInfo($"progressbard hidden {query} {token.IsCancellationRequested} {ProgressBarVisibility}");
                         }
                     }, token);
                 }
