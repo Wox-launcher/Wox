@@ -123,7 +123,11 @@ namespace Wox.Core
             var json = await Http.Get(api);
 
             var releases = JsonConvert.DeserializeObject<List<GithubRelease>>(json);
-            var latest = releases.Where(r => !r.Prerelease || r.Prerelease == updateToPrereleases).OrderByDescending(r => r.PublishedAt).First();
+            if (!updateToPrereleases) {
+                releases = releases.Where(r => !r.Prerelease)
+            }
+            latest = releases.OrderByDescending(r => r.PublishedAt).First();
+            
             var latestUrl = latest.HtmlUrl.Replace("/tag/", "/download/");
 
             var client = new WebClient { Proxy = Http.WebProxy() };
