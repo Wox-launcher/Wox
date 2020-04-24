@@ -3,8 +3,8 @@ WoX
 
 ![Maintenance](https://img.shields.io/maintenance/yes/2020)
 [![Build status](https://ci.appveyor.com/api/projects/status/bfktntbivg32e103?svg=true)](https://ci.appveyor.com/project/bao-qian/wox)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/Wox-launcher/wox)](https://github.com/Wox-launcher/Wox/releases/latest)
-![GitHub Release Date](https://img.shields.io/github/release-date/Wox-launcher/wox)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/Wox-launcher/wox?include_prereleases)](https://github.com/Wox-launcher/Wox/releases)
+![GitHub Release Date](https://img.shields.io/github/release-date-pre/Wox-launcher/wox?nclude_prereleases)
 [![Github All Releases](https://img.shields.io/github/downloads/Wox-launcher/Wox/total.svg)](https://github.com/Wox-launcher/Wox/releases)
 
 **WoX** is a launcher for Windows that simply works. It's an alternative to [Alfred](https://www.alfredapp.com/) and [Launchy](http://www.launchy.net/).
