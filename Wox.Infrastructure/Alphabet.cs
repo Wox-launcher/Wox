@@ -6,6 +6,7 @@ using System.Text;
 using hyjiacan.util.p4n;
 using hyjiacan.util.p4n.format;
 using JetBrains.Annotations;
+using NLog;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
 using Wox.Infrastructure.UserSettings;
@@ -23,7 +24,9 @@ namespace Wox.Infrastructure
         private ConcurrentDictionary<string, string[][]> PinyinCache;
         private BinaryStorage<ConcurrentDictionary<string, string[][]>> _pinyinStorage;
         private Settings _settings;
-         
+
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
+
         public void Initialize([NotNull] Settings settings)
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
@@ -34,7 +37,7 @@ namespace Wox.Infrastructure
         {
             Format.setToneType(HanyuPinyinToneType.WITHOUT_TONE);
 
-            Stopwatch.Normal("|Wox.Infrastructure.Alphabet.Initialize|Preload pinyin cache", () =>
+            Logger.StopWatchNormal("|Wox.Infrastructure.Alphabet.Initialize|Preload pinyin cache", () =>
             {
                 _pinyinStorage = new BinaryStorage<ConcurrentDictionary<string, string[][]>>("Pinyin");
                 PinyinCache = _pinyinStorage.TryLoad(new ConcurrentDictionary<string, string[][]>());
@@ -42,7 +45,7 @@ namespace Wox.Infrastructure
                 // force pinyin library static constructor initialize
                 PinyinHelper.toHanyuPinyinStringArray('T', Format);
             });
-            Log.Info($"|Wox.Infrastructure.Alphabet.Initialize|Number of preload pinyin combination<{PinyinCache.Count}>");
+            Logger.WoxInfo($"|Wox.Infrastructure.Alphabet.Initialize|Number of preload pinyin combination<{PinyinCache.Count}>");
         }
 
         public string Translate(string str)

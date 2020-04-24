@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
+using NLog;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Image;
 using Wox.Plugin.SharedCommands;
@@ -13,6 +14,7 @@ namespace Wox.Plugin.Folder
     internal class ContextMenuLoader : IContextMenu
     {
         private readonly PluginInitContext _context;
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         public ContextMenuLoader(PluginInitContext context)
         {
@@ -185,7 +187,7 @@ namespace Wox.Plugin.Folder
 
         public void LogException(string message, Exception e)
         {
-            Log.Exception($"|Wox.Plugin.Folder.ContextMenu|{message}", e);
+            Logger.WoxError($"|Wox.Plugin.Folder.ContextMenu|{message}", e);
         }
 
         private bool CanRunAsDifferentUser(string path)

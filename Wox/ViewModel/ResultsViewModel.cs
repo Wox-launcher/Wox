@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
+using NLog;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.UserSettings;
 using Wox.Plugin;
@@ -39,6 +40,8 @@ namespace Wox.ViewModel
                 }
             };
         }
+
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         #endregion
 
@@ -282,14 +285,14 @@ namespace Wox.ViewModel
                 {
                     ResultViewModel oldResult = this[i];
                     ResultViewModel newResult = newItems[i];
-                    Log.Debug(
-                        $"|ResultCollection.Update| index {i} " +
+                    Logger.WoxDebug(
+                        $"index {i} " +
                               $"old<{oldResult.Result.Title} {oldResult.Result.Score}> " +
                               $"new<{newResult.Result.Title} {newResult.Result.Score}>"
                         );
                     if (oldResult.Equals(newResult))
                     {
-                        Log.Debug($"|ResultCollection.Update| index <{i}> equal");
+                        Logger.WoxDebug($"index <{i}> equal");
                         // update following info no matter they are equal or not
                         // because check equality will cause more computation
                         this[i].Result.Score = newResult.Result.Score;
@@ -300,7 +303,7 @@ namespace Wox.ViewModel
                     {
                         // result is not the same update it in the current index
                         this[i] = newResult;
-                        Log.Debug($"|ResultCollection.Update| index <{i}> not equal old<{oldResult.GetHashCode()}> new<{newResult.GetHashCode()}>");
+                        Logger.WoxDebug($"index <{i}> not equal old<{oldResult.GetHashCode()}> new<{newResult.GetHashCode()}>");
                     }
                 }
 
@@ -309,7 +312,7 @@ namespace Wox.ViewModel
                 {
                     for (int i = oldCount; i < newCount; i++)
                     {
-                        Log.Debug($"|ResultCollection.Update| add index {i} new<{newItems[i].Result.Title}");
+                        Logger.WoxDebug($"Logger.WoxErroradd index {i} new<{newItems[i].Result.Title}");
                         Add(newItems[i]);
                     }
                 }

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using NLog;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
@@ -33,6 +34,8 @@ namespace Wox.Core.Plugin
         public static PluginsSettings Settings;
         private static List<PluginMetadata> _metadatas;
         private static readonly string[] Directories = { Constant.PreinstalledDirectory, DataLocation.PluginsDirectory };
+
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         private static void ValidateUserDirectory()
         {
@@ -106,7 +109,7 @@ namespace Wox.Core.Plugin
             {
                 try
                 {
-                    var milliseconds = Stopwatch.Debug($"|PluginManager.InitializePlugins|Init method time cost for <{pair.Metadata.Name}>", () =>
+                    var milliseconds = Logger.StopWatchDebug($"|PluginManager.InitializePlugins|Init method time cost for <{pair.Metadata.Name}>", () =>
                     {
                         pair.Plugin.Init(new PluginInitContext
                         {
@@ -115,11 +118,11 @@ namespace Wox.Core.Plugin
                         });
                     });
                     pair.Metadata.InitTime += milliseconds;
-                    Log.Info($"|PluginManager.InitializePlugins|Total init cost for <{pair.Metadata.Name}> is <{pair.Metadata.InitTime}ms>");
+                    Logger.WoxInfo($"|PluginManager.InitializePlugins|Total init cost for <{pair.Metadata.Name}> is <{pair.Metadata.InitTime}ms>");
                 }
                 catch (Exception e)
                 {
-                    Log.Exception(nameof(PluginManager), $"Fail to Init plugin: {pair.Metadata.Name}", e);
+                    Logger.WoxError($"Fail to Init plugin: {pair.Metadata.Name}", e);
                     pair.Metadata.Disabled = true; 
                     failedPlugins.Enqueue(pair);
                 }
@@ -168,7 +171,7 @@ namespace Wox.Core.Plugin
             {
                 List<Result> results = null;
                 var metadata = pair.Metadata;
-                var milliseconds = Stopwatch.Debug($"|PluginManager.QueryForPlugin|Cost for {metadata.Name}", () =>
+                var milliseconds = Logger.StopWatchDebug($"|PluginManager.QueryForPlugin|Cost for {metadata.Name}", () =>
                 {
                     results = pair.Plugin.Query(query) ?? new List<Result>();
                     UpdatePluginMetadata(results, metadata, query);
@@ -179,7 +182,7 @@ namespace Wox.Core.Plugin
             }
             catch (Exception e)
             {
-                Log.Exception($"|PluginManager.QueryForPlugin|Exception for plugin <{pair.Metadata.Name}> when query <{query}>", e);
+                Logger.WoxError($"|PluginManager.QueryForPlugin|Exception for plugin <{pair.Metadata.Name}> when query <{query}>", e);
                 return new List<Result>();
             }
         }
@@ -240,7 +243,7 @@ namespace Wox.Core.Plugin
                 }
                 catch (Exception e)
                 {
-                    Log.Exception($"|PluginManager.GetContextMenusForPlugin|Can't load context menus for plugin <{metadata.Name}>", e);
+                    Logger.WoxError($"|PluginManager.GetContextMenusForPlugin|Can't load context menus for plugin <{metadata.Name}>", e);
                     return new List<Result>();
                 }
             }

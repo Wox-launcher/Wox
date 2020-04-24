@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Media;
+using NLog;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.UserSettings;
@@ -24,6 +25,7 @@ namespace Wox.Core.Resource
         private const string Extension = ".xaml";
         private string DirectoryPath => Path.Combine(Constant.ProgramDirectory, Folder);
         private string UserDirectoryPath => Path.Combine(DataLocation.DataDirectory(), Folder);
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         public Theme()
         {
@@ -57,7 +59,7 @@ namespace Wox.Core.Resource
                     }
                     catch (Exception e)
                     {
-                        Log.Exception($"|Theme.MakesureThemeDirectoriesExist|Exception when create directory <{dir}>", e);
+                        Logger.WoxError($"|Theme.MakesureThemeDirectoriesExist|Exception when create directory <{dir}>", e);
                     }
                 }
             }
@@ -87,7 +89,7 @@ namespace Wox.Core.Resource
             }
             catch (DirectoryNotFoundException e)
             {
-                Log.Error($"|Theme.ChangeTheme|Theme <{theme}> path can't be found");
+                Logger.WoxError($"|Theme.ChangeTheme|Theme <{theme}> path can't be found");
                 if (theme != defaultTheme)
                 {
                     MessageBox.Show(string.Format(InternationalizationManager.Instance.GetTranslation("theme_load_failure_path_not_exists"), theme));
@@ -97,7 +99,7 @@ namespace Wox.Core.Resource
             }
             catch (XamlParseException e)
             {
-                Log.Error($"|Theme.ChangeTheme|Theme <{theme}> fail to parse");
+                Logger.WoxError($"|Theme.ChangeTheme|Theme <{theme}> fail to parse");
                 if (theme != defaultTheme)
                 {
                     MessageBox.Show(string.Format(InternationalizationManager.Instance.GetTranslation("theme_load_failure_parse_error"), theme));

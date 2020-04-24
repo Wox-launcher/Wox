@@ -44,7 +44,7 @@ namespace Wox.Core.Configuration
             catch (Exception e)
             {
 #if !DEBUG
-                Log.Exception("Portable", "Error occured while disabling portable mode", e);
+                Logger.WoxError("Portable", "Error occured while disabling portable mode", e);
 #endif
                 throw;
             }
@@ -72,7 +72,7 @@ namespace Wox.Core.Configuration
             catch (Exception e)
             {
 #if !DEBUG
-                Log.Exception("Portable", "Error occured while enabling portable mode", e);
+                Logger.WoxError("Portable", "Error occured while enabling portable mode", e);
 #endif
                 throw;
             }

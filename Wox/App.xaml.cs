@@ -3,6 +3,12 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Collections.Generic;
+using System.Threading;
+using System.Globalization;
+
+using CommandLine;
+using NLog;
+
 using Wox.Core;
 using Wox.Core.Configuration;
 using Wox.Core.Plugin;
@@ -15,9 +21,8 @@ using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.UserSettings;
 using Wox.ViewModel;
 using Stopwatch = Wox.Infrastructure.Stopwatch;
-using CommandLine;
-using System.Threading;
-using System.Globalization;
+
+
 
 namespace Wox
 {
@@ -33,6 +38,8 @@ namespace Wox
         private readonly Portable _portable = new Portable();
         private readonly Alphabet _alphabet = new Alphabet();
         private StringMatcher _stringMatcher;
+        
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         private class Options
         {
@@ -70,14 +77,15 @@ namespace Wox
 
         private void OnStartup(object sender, StartupEventArgs e)
         {
-            Stopwatch.Normal("|App.OnStartup|Startup cost", () =>
+            Logger.StopWatchNormal("|App.OnStartup|Startup cost", () =>
             {
                 Constant.Initialize();
 
                 _portable.PreStartCleanUpAfterPortabilityUpdate();
 
-                Log.Info("|App.OnStartup|Begin Wox startup ----------------------------------------------------");
-                Log.Info($"|App.OnStartup|Runtime info:{ErrorReporting.RuntimeInfo()}");
+                
+                Logger.WoxInfo("Begin Wox startup----------------------------------------------------");
+                Logger.WoxInfo($"Runtime info:{ErrorReporting.RuntimeInfo()}");
                 RegisterAppDomainExceptions();
                 RegisterDispatcherUnhandledException();
 
@@ -96,7 +104,7 @@ namespace Wox
                 var window = new MainWindow(_settings, _mainVM);
                 API = new PublicAPIInstance(_settingsVM, _mainVM, _alphabet);
                 PluginManager.InitializePlugins(API);
-                Log.Info($"|App.OnStartup|Dependencies Info:{ErrorReporting.DependenciesInfo()}");
+                Logger.WoxInfo($"Info:{ErrorReporting.DependenciesInfo()}");
 
                 Current.MainWindow = window;
                 Current.MainWindow.Title = Constant.Wox;
@@ -118,7 +126,7 @@ namespace Wox
 
                 ParseCommandLineArgs(SingleInstance<App>.CommandLineArgs);
                 _mainVM.MainWindowVisibility = _settings.HideOnStartup ? Visibility.Hidden : Visibility.Visible;
-                Log.Info("|App.OnStartup|End Wox startup ----------------------------------------------------  ");
+                Logger.WoxInfo("|App.OnStartup|End Wox startup ----------------------------------------------------  ");
             });
         }
 

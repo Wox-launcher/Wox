@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Win32;
 using Shell;
+using NLog;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 using Wox.Plugin.Program.Logger;
@@ -34,6 +35,7 @@ namespace Wox.Plugin.Program.Programs
         private const string ApplicationReferenceExtension = "appref-ms";
         private const string ExeExtension = "exe";
 
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
         private int Score(string query)
         {
             var nameMatch = StringMatcher.FuzzySearch(query, Name);
@@ -194,7 +196,7 @@ namespace Wox.Plugin.Program.Programs
                 }
                 catch (COMException e)
                 {
-                    Log.Error($"|Win32.LnkProgram|cannot get description <{path}>. HResult: <{e.HResult}>. Exception: <{e}>.");
+                    Logger.WoxError($"|Win32.LnkProgram|cannot get description <{path}>. HResult: <{e.HResult}>. Exception: <{e}>.");
                     bufferDescription.Clear();
                 }
                 description = bufferDescription.ToString();

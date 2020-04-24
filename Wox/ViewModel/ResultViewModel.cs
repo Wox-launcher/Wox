@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Windows.Media;
 using System.Windows.Threading;
+using NLog;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Image;
 using Wox.Infrastructure.Logger;
@@ -11,6 +12,8 @@ namespace Wox.ViewModel
 {
     public class ResultViewModel : BaseModel
     {
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
         private Result _result;
 
         public ResultViewModel(Result result)
@@ -34,7 +37,7 @@ namespace Wox.ViewModel
                     }
                     catch (Exception e)
                     {
-                        Log.Exception($"|ResultViewModel.Image|IcoPath is empty and exception when calling Icon() for result <{Result.Title}> of plugin <{Result.PluginDirectory}>", e);
+                        Logger.WoxError($"|ResultViewModel.Image|IcoPath is empty and exception when calling Icon() for result <{Result.Title}> of plugin <{Result.PluginDirectory}>", e);
                         imagePath = Constant.ErrorIcon;
                     }
                 }

@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Input;
 using NHotkey;
 using NHotkey.Wpf;
+using NLog;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
 using Wox.Helper;
@@ -43,6 +44,8 @@ namespace Wox.ViewModel
         private bool _saved;
 
         private readonly Internationalization _translator;
+
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         #endregion
 
@@ -419,7 +422,7 @@ namespace Wox.ViewModel
                         catch (OperationCanceledException e)
                         {
                             // nothing to do here
-                            Log.Info($"|MainViewModel|canceled {query}");
+                            Logger.WoxInfo($"|MainViewModel|canceled {query}");
                         }
                         
 

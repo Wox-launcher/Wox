@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using WindowsInput;
 using WindowsInput.Native;
+using NLog;
 using Wox.Infrastructure.Hotkey;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
@@ -27,6 +28,8 @@ namespace Wox.Plugin.Shell
 
         private readonly Settings _settings;
         private readonly PluginJsonStorage<Settings> _storage;
+        
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         public Main()
         {
@@ -94,7 +97,7 @@ namespace Wox.Plugin.Shell
                 }
                 catch (Exception e)
                 {
-                    Log.Exception($"|Wox.Plugin.Shell.Main.Query|Exception when query for <{query}>", e);
+                    Logger.WoxError($"|Wox.Plugin.Shell.Main.Query|Exception when query for <{query}>", e);
                 }
                 return results;
             }
