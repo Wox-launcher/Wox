@@ -18,6 +18,7 @@ namespace Wox.Converters
         {
             var text = value[0] as string;
             var highlightData = value[1] as List<int>;
+            var selected = value[2] as bool? == true;
 
             var textBlock = new Span();
 
@@ -28,7 +29,11 @@ namespace Wox.Converters
             }
 
             var settings = (Application.Current as App).Settings;
+            var resources = ThemeManager.Instance.GetResourceDictionary();
 
+            var highlightColor = (Brush) (selected?
+                resources.Contains("ItemSelectedHighlightColor")? resources["ItemSelectedHighlightColor"]: Brushes.LightGray:
+                resources.Contains("ItemHighlightColor")? resources["ItemHighlightColor"]: Brushes.LightGray);
             var highlightStyle = FontHelper.GetFontStyleFromInvariantStringOrNormal(settings.ResultHighlightFontStyle);
             var highlightWeight = FontHelper.GetFontWeightFromInvariantStringOrNormal(settings.ResultHighlightFontWeight);
             var highlightStretch = FontHelper.GetFontStretchFromInvariantStringOrNormal(settings.ResultHighlightFontStretch);
@@ -40,6 +45,7 @@ namespace Wox.Converters
                 {
                     textBlock.Inlines.Add((new Run(currentCharacter)
                     {
+                        Foreground = highlightColor,
                         FontWeight = highlightWeight,
                         FontStyle = highlightStyle,
                         FontStretch = highlightStretch
@@ -47,10 +53,7 @@ namespace Wox.Converters
                 }
                 else
                 {
-                    textBlock.Inlines.Add(new Run(currentCharacter)
-                    {
-                        Foreground = Brushes.LightGray
-                    });
+                    textBlock.Inlines.Add(new Run(currentCharacter));
                 }
             }
             return textBlock;
