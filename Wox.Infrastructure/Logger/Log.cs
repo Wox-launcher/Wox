@@ -31,10 +31,8 @@ namespace Wox.Infrastructure.Logger
             var consoleTarget = new NLog.Targets.ConsoleTarget();
 #if DEBUG
             configuration.AddRule(LogLevel.Debug, LogLevel.Fatal, fileTarget);
-            configuration.AddRule(LogLevel.Debug, LogLevel.Fatal, consoleTarget);
 #else
             configuration.AddRule(LogLevel.Info, LogLevel.Fatal, fileTarget);
-            configuration.AddRule(LogLevel.Info, LogLevel.Fatal, consoleTarget);
 #endif
             LogManager.Configuration = configuration;
         }
