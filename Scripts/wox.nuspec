@@ -6,11 +6,13 @@
     <version>$version$</version>
     <authors>Wox</authors>
     <projectUrl>https://github.com/Wox-launcher/Wox</projectUrl>
-    <PackageIcon>Images/app.png</PackageIcon>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Wox - a launcher for windows</description>
+    <dependencies>
+      <group targetFramework=".NETFramework4.6.2" />
+    </dependencies>
   </metadata>
   <files>
-    <file src="**\*.*" exclude="Wox.vshost.exe;Wox.vshost.exe.config;Wox.vshost.exe.manifest;*.nupkg;Setup.exe;RELEASES"/>
+    <file src="**\*.*" target="lib\net462\" exclude="Wox.vshost.exe;Wox.vshost.exe.config;Wox.vshost.exe.manifest;*.nupkg;Setup.exe;RELEASES"/>
   </files>
 </package>
