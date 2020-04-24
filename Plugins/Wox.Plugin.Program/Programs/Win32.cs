@@ -196,7 +196,7 @@ namespace Wox.Plugin.Program.Programs
                 }
                 catch (COMException e)
                 {
-                    ProgramLogger.LogException($"|Win32|LnkProgram|cannot get description <{path}>. HResult: <{e.HResult}>", e);
+                    ProgramLogger.LogException($"|Win32|LnkProgram|{path}|cannot get description <{path}>. HResult: <{e.HResult}>", e);
                     bufferDescription.Clear();
                 }
                 description = bufferDescription.ToString();
