@@ -145,12 +145,12 @@ namespace Wox
                     var timer = new System.Timers.Timer(1000 * 60 * 60 * 5);
                     timer.Elapsed += async (s, e) =>
                     {
-                        await _updater.UpdateApp();
+                        await _updater.UpdateApp(true, _settings.UpdateToPrereleases);
                     };
                     timer.Start();
 
                     // check updates on startup
-                    await _updater.UpdateApp();
+                    await _updater.UpdateApp(true, _settings.UpdateToPrereleases);
                 }
             }).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
         }

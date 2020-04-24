@@ -56,6 +56,7 @@ namespace Wox.Infrastructure.UserSettings
         }
 
         public bool AutoUpdates { get; set; } = true;
+        public bool UpdateToPrereleases { get; set; } = false;
 
         public double WindowLeft { get; set; }
         public double WindowTop { get; set; }

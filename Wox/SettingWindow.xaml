@@ -38,32 +38,40 @@
     <TabControl Height="auto" SelectedIndex="0">
         <TabItem Header="{DynamicResource general}">
             <StackPanel Orientation="Vertical">
-                <CheckBox Margin="10" IsChecked="{Binding PortableMode}">
+                <StackPanel.Resources>
+                    <Style TargetType="CheckBox">
+                        <Setter Property="Margin" Value="10" />
+                    </Style>
+                </StackPanel.Resources>
+                <CheckBox IsChecked="{Binding PortableMode}">
                     <TextBlock Text="Portable Mode" />
                 </CheckBox>
-                <CheckBox Margin="10" IsChecked="{Binding Settings.StartWoxOnSystemStartup}"
+                <CheckBox IsChecked="{Binding Settings.StartWoxOnSystemStartup}"
                           Checked="OnAutoStartupChecked" Unchecked="OnAutoStartupUncheck">
                     <TextBlock Text="{DynamicResource startWoxOnSystemStartup}" />
                 </CheckBox>
-                <CheckBox Margin="10" IsChecked="{Binding Settings.HideOnStartup}">
+                <CheckBox IsChecked="{Binding Settings.HideOnStartup}">
                     <TextBlock Text="{DynamicResource hideOnStartup}" />
                 </CheckBox>
-                <CheckBox Margin="10" IsChecked="{Binding Settings.HideWhenDeactive}">
+                <CheckBox IsChecked="{Binding Settings.HideWhenDeactive}">
                     <TextBlock Text="{DynamicResource hideWoxWhenLoseFocus}" />
                 </CheckBox>
-                <CheckBox Margin="10" IsChecked="{Binding Settings.HideNotifyIcon}">
+                <CheckBox IsChecked="{Binding Settings.HideNotifyIcon}">
                     <TextBlock Text="{DynamicResource hideNotifyIcon}" />
                 </CheckBox>
-                <CheckBox Margin="10" IsChecked="{Binding Settings.RememberLastLaunchLocation}">
+                <CheckBox IsChecked="{Binding Settings.RememberLastLaunchLocation}">
                     <TextBlock Text="{DynamicResource rememberLastLocation}" />
                 </CheckBox>
-                <CheckBox Margin="10" IsChecked="{Binding Settings.IgnoreHotkeysOnFullscreen}">
+                <CheckBox IsChecked="{Binding Settings.IgnoreHotkeysOnFullscreen}">
                     <TextBlock Text="{DynamicResource ignoreHotkeysOnFullscreen}" />
                 </CheckBox>
-                <CheckBox Margin="10" IsChecked="{Binding Settings.AutoUpdates}">
+                <CheckBox IsChecked="{Binding Settings.AutoUpdates}">
                     <TextBlock Text="{DynamicResource autoUpdates}" />
                 </CheckBox>
-                <CheckBox Margin="10" IsChecked="{Binding ShouldUsePinyin}">
+                <CheckBox IsChecked="{Binding Settings.UpdateToPrereleases}">
+                    <TextBlock Text="{DynamicResource updateToPrereleases}" />
+                </CheckBox>
+                <CheckBox IsChecked="{Binding ShouldUsePinyin}">
                     <TextBlock Text="{DynamicResource ShouldUsePinyin}" />
                 </CheckBox>
                 <StackPanel Margin="10" Orientation="Horizontal">

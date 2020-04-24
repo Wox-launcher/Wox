@@ -26,6 +26,7 @@
     <system:String x:Key="ignoreHotkeysOnFullscreen">Ignorer genvejstaster i fuldskærmsmode</system:String>
     <system:String x:Key="pythonDirectory">Python bibliotek</system:String>
     <system:String x:Key="autoUpdates">Autoopdatering</system:String>
+    <system:String x:Key="updateToPrereleases">Update to Prereleases</system:String>
     <system:String x:Key="selectPythonDirectory">Vælg</system:String>
     <system:String x:Key="hideOnStartup">Skjul Wox ved opstart</system:String>
 

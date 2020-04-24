@@ -26,6 +26,7 @@
     <system:String x:Key="ignoreHotkeysOnFullscreen">Negeer sneltoetsen in fullscreen mode</system:String>
     <system:String x:Key="pythonDirectory">Python map</system:String>
     <system:String x:Key="autoUpdates">Automatische Update</system:String>
+    <system:String x:Key="updateToPrereleases">Update to Prereleases</system:String>
     <system:String x:Key="selectPythonDirectory">Selecteer</system:String>
     <system:String x:Key="hideOnStartup">Verberg Wox als systeem opstart</system:String>
 

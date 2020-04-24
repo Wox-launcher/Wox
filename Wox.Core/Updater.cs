@@ -28,11 +28,11 @@ namespace Wox.Core
             GitHubRepository = gitHubRepository;
         }
 
-        public async Task UpdateApp(bool silentIfLatestVersion = true)
+        public async Task UpdateApp(bool silentIfLatestVersion = true, bool updateToPrereleases = false)
         {
             try
             {
-                using (UpdateManager updateManager = await GitHubUpdateManager(GitHubRepository))
+                using (UpdateManager updateManager = await GitHubUpdateManager(GitHubRepository, updateToPrereleases))
                 {
                     UpdateInfo newUpdateInfo;
                     try
@@ -115,7 +115,7 @@ namespace Wox.Core
         }
 
         /// https://github.com/Squirrel/Squirrel.Windows/blob/master/src/Squirrel/UpdateManager.Factory.cs
-        private async Task<UpdateManager> GitHubUpdateManager(string repository)
+        private async Task<UpdateManager> GitHubUpdateManager(string repository, bool updateToPrereleases)
         {
             var uri = new Uri(repository);
             var api = $"https://api.github.com/repos{uri.AbsolutePath}/releases";
@@ -123,7 +123,11 @@ namespace Wox.Core
             var json = await Http.Get(api);
 
             var releases = JsonConvert.DeserializeObject<List<GithubRelease>>(json);
-            var latest = releases.Where(r => !r.Prerelease).OrderByDescending(r => r.PublishedAt).First();
+            if (!updateToPrereleases) {
+                releases = releases.Where(r => !r.Prerelease);
+            }
+            var latest = releases.OrderByDescending(r => r.PublishedAt).First();
+            
             var latestUrl = latest.HtmlUrl.Replace("/tag/", "/download/");
 
             var client = new WebClient { Proxy = Http.WebProxy() };

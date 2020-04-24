@@ -26,6 +26,7 @@
     <system:String x:Key="ignoreHotkeysOnFullscreen">Ignoriere Tastenkombination wenn Fenster im Vollbildmodus ist</system:String>
     <system:String x:Key="pythonDirectory">Python-Verzeichnis</system:String>
     <system:String x:Key="autoUpdates">Automatische Aktualisierung</system:String>
+    <system:String x:Key="updateToPrereleases">Update to Prereleases</system:String>
     <system:String x:Key="selectPythonDirectory">Auswählen</system:String>
     <system:String x:Key="hideOnStartup">Verstecke Wox bei Systemstart</system:String>
     
