@@ -65,20 +65,20 @@ namespace Wox.Infrastructure.Logger
         public static void WoxDebug(this NLog.Logger logger, string message, [CallerMemberName] string methodName = "")
         {
             Debug.WriteLine($"DEBUG|{logger.Name}|{methodName}|{message}");
-            logger.Debug($"|{methodName}|{message}");
+            logger.Debug($"{methodName}|{message}");
         }
 
 
         public static void WoxInfo(this NLog.Logger logger, string message, [CallerMemberName] string methodName = "")
         {
             Debug.WriteLine($"INFO|{logger.Name}|{methodName}|{message}");
-            logger.Debug($"|{methodName}|{message}");
+            logger.Debug($"{methodName}|{message}");
         }
 
         public static void WoxError(this NLog.Logger logger, string message, [CallerMemberName] string methodName = "")
         {
             Debug.WriteLine($"ERROR|{logger.Name}|{methodName}|{message}");
-            logger.Debug($"|{methodName}|{message}");
+            logger.Debug($"{methodName}|{message}");
         }
 
         public static void WoxError(this NLog.Logger logger, string message, System.Exception exception, [CallerMemberName] string methodName = "")
@@ -86,7 +86,7 @@ namespace Wox.Infrastructure.Logger
 #if DEBUG
             throw exception;
 #else
-            logger.Error(exception, $"|{methodName}|{message}");
+            logger.Error(exception, $"{methodName}|{message}");
 #endif
         }
     }
