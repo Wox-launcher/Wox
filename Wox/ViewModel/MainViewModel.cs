@@ -27,7 +27,6 @@ namespace Wox.ViewModel
     {
         #region Private Fields
 
-        private bool _isQueryRunning;
         private Query _lastQuery;
         private string _queryTextBeforeLeaveResults;
 
@@ -92,11 +91,14 @@ namespace Wox.ViewModel
                 var plugin = (IResultUpdated)pair.Plugin;
                 plugin.ResultsUpdated += (s, e) =>
                 {
+                    var token = _updateToken;
                     Task.Run(() =>
                     {
+                        if (token.IsCancellationRequested) { return; }
                         PluginManager.UpdatePluginMetadata(e.Results, pair.Metadata, e.Query);
+                        if (token.IsCancellationRequested) { return; }
                         UpdateResultView(e.Results, pair.Metadata, e.Query);
-                    }, _updateToken);
+                    }, token);
                 };
             }
         }
@@ -221,7 +223,7 @@ namespace Wox.ViewModel
                 Query();
             }
         }
-        
+
         /// <summary>
         /// we need move cursor to end when we manually changed query
         /// but we don't want to move cursor to end when query is updated from TextBox
@@ -378,43 +380,49 @@ namespace Wox.ViewModel
 
         private void QueryResults()
         {
-            if (!string.IsNullOrEmpty(QueryText))
-            {
-                _updateSource?.Cancel();
-                var currentUpdateSource = new CancellationTokenSource();
-                _updateSource = currentUpdateSource;
-                var currentCancellationToken = _updateSource.Token;
-                _updateToken = currentCancellationToken;
+            _updateSource?.Cancel();
+            _updateSource?.Dispose();
+            var currentUpdateSource = new CancellationTokenSource();
+            _updateSource = currentUpdateSource;
+            var token = _updateSource.Token;
+            _updateToken = token;
 
-                ProgressBarVisibility = Visibility.Hidden;
-                _isQueryRunning = true;
-                var query = QueryBuilder.Build(QueryText.Trim(), PluginManager.NonGlobalPlugins);
+            ProgressBarVisibility = Visibility.Hidden;
+            var queryText = QueryText.Trim();
+            if (!string.IsNullOrEmpty(queryText))
+            {
+                if (token.IsCancellationRequested) { return; }
+                var query = QueryBuilder.Build(queryText, PluginManager.NonGlobalPlugins);
                 if (query != null)
                 {
                     // handle the exclusiveness of plugin using action keyword
                     RemoveOldQueryResults(query);
-
                     _lastQuery = query;
-                    Task.Delay(200, currentCancellationToken).ContinueWith(_ =>
-                    { // start the progress bar if query takes more than 200 ms and this is the current running query and it didn't finish yet
-                        if (currentUpdateSource == _updateSource && _isQueryRunning)
+
+                    Task.Delay(200, token).ContinueWith(_ =>
+                    { // start the progress bar if query takes more than 200 ms
+                        if (!token.IsCancellationRequested)
                         {
                             ProgressBarVisibility = Visibility.Visible;
                         }
-                    }, currentCancellationToken);
+                    }, token);
 
-                    var plugins = PluginManager.ValidPluginsForQuery(query);
                     Task.Run(() =>
                     {
+                        if (token.IsCancellationRequested) { return; }
+                        var plugins = PluginManager.ValidPluginsForQuery(query);
+
                         // so looping will stop once it was cancelled
-                        var parallelOptions = new ParallelOptions { CancellationToken = currentCancellationToken };
+                        var parallelOptions = new ParallelOptions { CancellationToken = token };
                         try
                         {
                             Parallel.ForEach(plugins, parallelOptions, plugin =>
                             {
                                 if (!plugin.Metadata.Disabled)
                                 {
+                                    if (token.IsCancellationRequested) { return; }
                                     var results = PluginManager.QueryForPlugin(plugin, query);
+                                    if (token.IsCancellationRequested) { return; }
                                     UpdateResultView(results, plugin.Metadata, query);
                                 }
                             });
@@ -422,18 +430,13 @@ namespace Wox.ViewModel
                         catch (OperationCanceledException)
                         {
                             // nothing to do here
-                            Logger.WoxInfo($"canceled {query}");
                         }
-                        
 
-                        // this should happen once after all queries are done so progress bar should continue
-                        // until the end of all querying
-                        _isQueryRunning = false;
-                        if (currentUpdateSource == _updateSource)
+                        if (!token.IsCancellationRequested)
                         { // update to hidden if this is still the current query
                             ProgressBarVisibility = Visibility.Hidden;
                         }
-                    }, currentCancellationToken);
+                    }, token);
                 }
             }
             else
