@@ -19,7 +19,7 @@ namespace Wox.Plugin.Program.Logger
     internal static class ProgramLogger
     {
 
-        private static readonly NLog.Logger logger = LogManager.GetCurrentClassLogger();
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
         /// <summary>
         /// Logs an exception
@@ -34,7 +34,7 @@ namespace Wox.Plugin.Program.Logger
             var possibleResolution = "Not yet known";
             var errorStatus = "UNKNOWN";
 
-            logger.Error("------------- BEGIN Wox.Plugin.Program exception -------------");
+            Logger.Error("------------- BEGIN Wox.Plugin.Program exception -------------");
 
             do
             {
@@ -48,7 +48,7 @@ namespace Wox.Plugin.Program.Logger
 
                 calledMethod = string.IsNullOrEmpty(calledMethod) ? "Not available" : calledMethod;
 
-                logger.Error($"\nException full name: {e.GetType().FullName}"
+                Logger.Error($"\nException full name: {e.GetType().FullName}"
                              + $"\nError status: {errorStatus}"
                              + $"\nClass name: {classname}"
                              + $"\nCalling method: {callingMethodName}"
@@ -64,7 +64,7 @@ namespace Wox.Plugin.Program.Logger
                 e = e.InnerException;
             } while (e != null);
 
-            logger.Error("------------- END Wox.Plugin.Program exception -------------");
+            Logger.Error("------------- END Wox.Plugin.Program exception -------------");
         }
 
         /// <summary>
@@ -77,7 +77,7 @@ namespace Wox.Plugin.Program.Logger
             var parts = message.Split('|');
             if (parts.Length < 4)
             {
-                logger.Error(e, $"fail to log exception in program logger, parts length is too small: {parts.Length}, message: {message}");
+                Logger.Error(e, $"fail to log exception in program logger, parts length is too small: {parts.Length}, message: {message}");
             }
 
             var classname = parts[1];
