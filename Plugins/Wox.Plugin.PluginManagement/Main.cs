@@ -18,7 +18,6 @@ namespace Wox.Plugin.PluginManagement
     public class Main : IPlugin, IPluginI18n
     {
         private static string APIBASE = "http://api.wox.one";
-        private static string PluginConfigName = "plugin.json";
         private static string pluginSearchUrl = APIBASE + "/plugin/search/";
         private const string ListCommand = "list";
         private const string InstallCommand = "install";

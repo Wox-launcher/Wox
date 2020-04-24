@@ -87,7 +87,7 @@ namespace Wox.Core.Resource
                 
                 SetBlurForWindow();
             }
-            catch (DirectoryNotFoundException e)
+            catch (DirectoryNotFoundException)
             {
                 Logger.WoxError($"Theme <{theme}> path can't be found");
                 if (theme != defaultTheme)
@@ -97,7 +97,7 @@ namespace Wox.Core.Resource
                 }
                 return false;
             }
-            catch (XamlParseException e)
+            catch (XamlParseException)
             {
                 Logger.WoxError($"Theme <{theme}> fail to parse");
                 if (theme != defaultTheme)

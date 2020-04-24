@@ -14,7 +14,7 @@ namespace Wox.Core.Plugin
 
     internal abstract class PluginConfig
     {
-        private const string PluginConfigName = "plugin.json";
+        internal const string PluginConfigName = "plugin.json";
         private static readonly List<PluginMetadata> PluginMetadatas = new List<PluginMetadata>();
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 

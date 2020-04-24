@@ -419,7 +419,7 @@ namespace Wox.ViewModel
                                 }
                             });
                         }
-                        catch (OperationCanceledException e)
+                        catch (OperationCanceledException)
                         {
                             // nothing to do here
                             Logger.WoxInfo($"canceled {query}");

@@ -264,7 +264,7 @@ namespace Wox
 
         #endregion
 
-        private async void OnCheckUpdates(object sender, RoutedEventArgs e)
+        private void OnCheckUpdates(object sender, RoutedEventArgs e)
         {
             _viewModel.UpdateApp(); // TODO: change to command
         }
