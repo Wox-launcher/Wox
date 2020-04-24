@@ -450,7 +450,8 @@
     <PostBuildEvent>powershell.exe -NoProfile -ExecutionPolicy Bypass -File $(SolutionDir)Scripts\post_build.ps1 $(ConfigurationName) $(SolutionDir) $(TargetPath)</PostBuildEvent>
   </PropertyGroup>
   <PropertyGroup>
-    <PreBuildEvent>taskkill /f /fi "IMAGENAME eq Wox.exe"</PreBuildEvent>
+    <PreBuildEvent>
+    </PreBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
