@@ -2,6 +2,7 @@
 using System.Globalization;
 using System.IO;
 using Newtonsoft.Json;
+using NLog;
 using Wox.Infrastructure.Logger;
 
 namespace Wox.Infrastructure.Storage
@@ -18,6 +19,8 @@ namespace Wox.Infrastructure.Storage
         public const string FileSuffix = ".json";
         public string FilePath { get; set; }
         public string DirectoryPath { get; set; }
+
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
 
         internal JsonStrorage()
@@ -61,7 +64,7 @@ namespace Wox.Infrastructure.Storage
             catch (JsonException e)
             {
                 LoadDefault();
-                Log.Exception($"|JsonStrorage.Deserialize|Deserialize error for json <{FilePath}>", e);
+                Logger.WoxError($"Deserialize error for json <{FilePath}>", e);
             }
 
             if (_data == null)

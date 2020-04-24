@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using NLog;
 using Wox.Infrastructure.Http;
 using Wox.Infrastructure.Logger;
 
@@ -14,7 +15,7 @@ namespace Wox.Plugin.WebSearch.SuggestionSources
     public class Baidu : SuggestionSource
     {
         private readonly Regex _reg = new Regex("window.baidu.sug\\((.*)\\)");
-
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
         public override async Task<List<string>> Suggestions(string query)
         {
             string result;
@@ -26,7 +27,7 @@ namespace Wox.Plugin.WebSearch.SuggestionSources
             }
             catch (WebException e)
             {
-                Log.Exception("|Baidu.Suggestions|Can't get suggestion from baidu", e);
+                Logger.WoxError("Can't get suggestion from baidu", e);
                 return new List<string>();
             }
 
@@ -41,7 +42,7 @@ namespace Wox.Plugin.WebSearch.SuggestionSources
                 }
                 catch (JsonSerializationException e)
                 {
-                    Log.Exception("|Baidu.Suggestions|can't parse suggestions", e);
+                    Logger.WoxError("can't parse suggestions", e);
                     return new List<string>();
                 }
 

@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using Newtonsoft.Json;
+using NLog;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Http;
 using Wox.Infrastructure.Logger;
@@ -17,12 +18,13 @@ namespace Wox.Plugin.PluginManagement
     public class Main : IPlugin, IPluginI18n
     {
         private static string APIBASE = "http://api.wox.one";
-        private static string PluginConfigName = "plugin.json";
         private static string pluginSearchUrl = APIBASE + "/plugin/search/";
         private const string ListCommand = "list";
         private const string InstallCommand = "install";
         private const string UninstallCommand = "uninstall";
         private PluginInitContext context;
+
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         public List<Result> Query(Query query)
         {
@@ -120,7 +122,7 @@ namespace Wox.Plugin.PluginManagement
             {
                 //todo add option in log to decide give user prompt or not
                 context.API.ShowMsg("PluginManagement.ResultForInstallPlugin: Can't connect to Wox plugin website, check your conenction");
-                Log.Exception("|PluginManagement.ResultForInstallPlugin|Can't connect to Wox plugin website, check your conenction", e);
+                Logger.WoxError("Can't connect to Wox plugin website, check your conenction", e);
                 return new List<Result>();
             }
             List<WoxPluginResult> searchedPlugins;
@@ -131,7 +133,7 @@ namespace Wox.Plugin.PluginManagement
             catch (JsonSerializationException e)
             {
                 context.API.ShowMsg("PluginManagement.ResultForInstallPlugin: Coundn't parse api search results, Please update your Wox!");
-                Log.Exception("|PluginManagement.ResultForInstallPlugin|Coundn't parse api search results, Please update your Wox!", e);
+                Logger.WoxError("Coundn't parse api search results, Please update your Wox!", e);
                 return results;
             }
 
@@ -165,7 +167,7 @@ namespace Wox.Plugin.PluginManagement
                             catch (WebException e)
                             {
                                 context.API.ShowMsg($"PluginManagement.ResultForInstallPlugin: download failed for <{r.name}>");
-                                Log.Exception($"|PluginManagement.ResultForInstallPlugin|download failed for <{r.name}>", e);
+                                Logger.WoxError($"download failed for <{r.name}>", e);
                                 return false;
                             }
                             context.API.InstallPlugin(filePath);

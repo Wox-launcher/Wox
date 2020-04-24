@@ -4,6 +4,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Windows;
+using NLog;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.UserSettings;
@@ -13,6 +14,9 @@ namespace Wox.Core.Configuration
 {
     public class Portable : IPortable
     {
+
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
+
         /// <summary>
         /// As at Squirrel.Windows version 1.5.2, UpdateManager needs to be disposed after finish
         /// </summary>
@@ -44,7 +48,7 @@ namespace Wox.Core.Configuration
             catch (Exception e)
             {
 #if !DEBUG
-                Log.Exception("Portable", "Error occured while disabling portable mode", e);
+                Logger.WoxError("Error occured while disabling portable mode", e);
 #endif
                 throw;
             }
@@ -72,7 +76,7 @@ namespace Wox.Core.Configuration
             catch (Exception e)
             {
 #if !DEBUG
-                Log.Exception("Portable", "Error occured while enabling portable mode", e);
+                Logger.WoxError("Error occured while enabling portable mode", e);
 #endif
                 throw;
             }

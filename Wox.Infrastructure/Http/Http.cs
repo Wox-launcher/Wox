@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
+using NLog;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.UserSettings;
 
@@ -24,6 +25,9 @@ namespace Wox.Infrastructure.Http
         }
 
         public static HttpProxy Proxy { private get; set; }
+
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
+
         public static IWebProxy WebProxy()
         {
             if (Proxy != null && Proxy.Enabled && !string.IsNullOrEmpty(Proxy.Server))
@@ -57,7 +61,7 @@ namespace Wox.Infrastructure.Http
 
         public static async Task<string> Get([NotNull] string url, string encoding = "UTF-8")
         {
-            Log.Debug($"|Http.Get|Url <{url}>");
+            Logger.WoxDebug($"Url <{url}>");
             var request = WebRequest.CreateHttp(url);
             request.Method = "GET";
             request.Timeout = 1000;

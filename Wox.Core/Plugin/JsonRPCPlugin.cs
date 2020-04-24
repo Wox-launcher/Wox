@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Newtonsoft.Json;
+using NLog;
 using Wox.Infrastructure.Exception;
 using Wox.Infrastructure.Logger;
 using Wox.Plugin;
@@ -31,6 +32,8 @@ namespace Wox.Core.Plugin
         protected abstract string ExecuteCallback(JsonRPCRequestModel rpcRequest);
         protected abstract string ExecuteContextMenu(Result selectedResult);
 
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
         public List<Result> Query(Query query)
         {
             string output = ExecuteQuery(query);
@@ -40,7 +43,7 @@ namespace Wox.Core.Plugin
             }
             catch (Exception e)
             {
-                Log.Exception($"|JsonRPCPlugin.Query|Exception when query <{query}>", e);
+                Logger.WoxError($"Exception when query <{query}>", e);
                 return null;
             }
         }
@@ -54,7 +57,7 @@ namespace Wox.Core.Plugin
             }
             catch (Exception e)
             {
-                Log.Exception($"|JsonRPCPlugin.LoadContextMenus|Exception on result <{selectedResult}>", e);
+                Logger.WoxError($"Exception on result <{selectedResult}>", e);
                 return null;
             }
         }
@@ -161,12 +164,12 @@ namespace Wox.Core.Plugin
                                     var error = standardError.ReadToEnd();
                                     if (!string.IsNullOrEmpty(error))
                                     {
-                                        Log.Error($"|JsonRPCPlugin.Execute|{error}");
+                                        Logger.WoxError($"{error}");
                                         return string.Empty;
                                     }
                                     else
                                     {
-                                        Log.Error("|JsonRPCPlugin.Execute|Empty standard output and standard error.");
+                                        Logger.WoxError("Empty standard output and standard error.");
                                         return string.Empty;
                                     }
                                 }
@@ -184,14 +187,14 @@ namespace Wox.Core.Plugin
                     }
                     else
                     {
-                        Log.Error("|JsonRPCPlugin.Execute|Can't start new process");
+                        Logger.WoxError("Can't start new process");
                         return string.Empty;
                     }
                 }
             }
             catch (Exception e)
             {
-                Log.Exception($"|JsonRPCPlugin.Execute|Exception for filename <{startInfo.FileName}> with argument <{startInfo.Arguments}>", e);
+                Logger.WoxError($"Exception for filename <{startInfo.FileName}> with argument <{startInfo.Arguments}>", e);
                 return string.Empty;
             }
         }

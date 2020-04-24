@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using NLog;
 using Wox.Infrastructure.Logger;
 
 namespace Wox.Infrastructure
@@ -8,10 +10,11 @@ namespace Wox.Infrastructure
     {
         private static readonly Dictionary<string, long> Count = new Dictionary<string, long>();
         private static readonly object Locker = new object();
+
         /// <summary>
         /// This stopwatch will appear only in Debug mode
         /// </summary>
-        public static long Debug(string message, Action action)
+        public static long StopWatchDebug(this NLog.Logger logger, string message, Action action, [CallerMemberName] string methodName = "")
         {
             var stopWatch = new System.Diagnostics.Stopwatch();
             stopWatch.Start();
@@ -19,11 +22,11 @@ namespace Wox.Infrastructure
             stopWatch.Stop();
             var milliseconds = stopWatch.ElapsedMilliseconds;
             string info = $"{message} <{milliseconds}ms>";
-            Log.Debug(info);
+            logger.WoxDebug(info, methodName);
             return milliseconds;
         }
 
-        public static long Normal(string message, Action action)
+        public static long StopWatchNormal(this NLog.Logger logger, string message, Action action, [CallerMemberName] string methodName = "")
         {
             var stopWatch = new System.Diagnostics.Stopwatch();
             stopWatch.Start();
@@ -31,7 +34,7 @@ namespace Wox.Infrastructure
             stopWatch.Stop();
             var milliseconds = stopWatch.ElapsedMilliseconds;
             string info = $"{message} <{milliseconds}ms>";
-            Log.Info(info);
+            logger.WoxInfo(info, methodName);
             return milliseconds;
         }
 
@@ -60,7 +63,7 @@ namespace Wox.Infrastructure
             foreach (var key in Count.Keys)
             {
                 string info = $"{key} already cost {Count[key]}ms";
-                Log.Debug(info);
+                //Logger.WoxDebug(info);
             }
         }
     }

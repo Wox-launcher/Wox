@@ -15,6 +15,7 @@ using Wox.Infrastructure;
 using Wox.Infrastructure.Http;
 using Wox.Infrastructure.Logger;
 using System.IO;
+using NLog;
 using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Core
@@ -22,6 +23,7 @@ namespace Wox.Core
     public class Updater
     {
         public string GitHubRepository { get; }
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         public Updater(string gitHubRepository)
         {
@@ -42,7 +44,7 @@ namespace Wox.Core
                     }
                     catch (Exception e) when (e is HttpRequestException || e is WebException || e is SocketException)
                     {
-                        Log.Exception($"|Updater.UpdateApp|Check your connection and proxy settings to api.github.com.", e);
+                        Logger.WoxError($"Check your connection and proxy settings to api.github.com.", e);
                         updateManager.Dispose();
                         return;
                     }
@@ -50,7 +52,7 @@ namespace Wox.Core
                     var newReleaseVersion = Version.Parse(newUpdateInfo.FutureReleaseEntry.Version.ToString());
                     var currentVersion = Version.Parse(Constant.Version);
 
-                    Log.Info($"|Updater.UpdateApp|Future Release <{newUpdateInfo.FutureReleaseEntry.Formatted()}>");
+                    Logger.WoxInfo($"Future Release <{newUpdateInfo.FutureReleaseEntry.Formatted()}>");
 
                     if (newReleaseVersion <= currentVersion)
                     {
@@ -66,7 +68,7 @@ namespace Wox.Core
                     }
                     catch (Exception e) when (e is HttpRequestException || e is WebException || e is SocketException)
                     {
-                        Log.Exception($"|Updater.UpdateApp|Check your connection and proxy settings to github-cloud.s3.amazonaws.com.", e);
+                        Logger.WoxError($"Check your connection and proxy settings to github-cloud.s3.amazonaws.com.", e);
                         updateManager.Dispose();
                         return;
                     }
@@ -89,14 +91,14 @@ namespace Wox.Core
                     var newVersionTips = NewVersinoTips(newReleaseVersion.ToString());
 
                     MessageBox.Show(newVersionTips);
-                    Log.Info($"|Updater.UpdateApp|Update success:{newVersionTips}");
+                    Logger.WoxInfo($"Update success:{newVersionTips}");
 
 
                 }
             }
             catch (Exception e) when (e is HttpRequestException || e is WebException || e is SocketException)
             {
-                Log.Exception($"|Updater.UpdateApp|Please check your connection and proxy settings to api.github.com.", e);
+                Logger.WoxError($"Please check your connection and proxy settings to api.github.com.", e);
             }
 
         }

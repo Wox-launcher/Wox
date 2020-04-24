@@ -3,6 +3,8 @@ using System.Collections.ObjectModel;
 using System.Drawing;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using NLog;
+using Wox.Infrastructure.Logger;
 using Wox.Plugin;
 
 namespace Wox.Infrastructure.UserSettings
@@ -28,6 +30,7 @@ namespace Wox.Infrastructure.UserSettings
         public bool ShouldUsePinyin { get; set; } = false;
 
         internal StringMatcher.SearchPrecisionScore QuerySearchPrecision { get; private set; } = StringMatcher.SearchPrecisionScore.Regular;
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
         [JsonIgnore]
         public string QuerySearchPrecisionString
@@ -45,7 +48,7 @@ namespace Wox.Infrastructure.UserSettings
                 }
                 catch (ArgumentException e)
                 {
-                    Logger.Log.Exception(nameof(Settings), "Failed to load QuerySearchPrecisionString value from Settings file", e);
+                    Logger.WoxError("Failed to load QuerySearchPrecisionString value from Settings file", e);
 
                     QuerySearchPrecision = StringMatcher.SearchPrecisionScore.Regular;
                     StringMatcher.Instance.UserSettingSearchPrecision = StringMatcher.SearchPrecisionScore.Regular;

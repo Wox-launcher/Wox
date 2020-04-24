@@ -20,7 +20,7 @@ namespace Wox.Core.Plugin
                 }
                 UnZip(path, tempFoler, true);
 
-                string iniPath = Path.Combine(tempFoler, "plugin.json");
+                string iniPath = Path.Combine(tempFoler, PluginConfig.PluginConfigName);
                 if (!File.Exists(iniPath))
                 {
                     MessageBox.Show("Install failed: plugin config is missing");
@@ -94,7 +94,7 @@ namespace Wox.Core.Plugin
 
         private static PluginMetadata GetMetadataFromJson(string pluginDirectory)
         {
-            string configPath = Path.Combine(pluginDirectory, "plugin.json");
+            string configPath = Path.Combine(pluginDirectory, PluginConfig.PluginConfigName);
             PluginMetadata metadata;
 
             if (!File.Exists(configPath))

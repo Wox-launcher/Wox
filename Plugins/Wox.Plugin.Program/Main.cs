@@ -5,6 +5,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 using System.Windows.Controls;
+using NLog;
+using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
 using Wox.Plugin.Program.Programs;
@@ -26,19 +28,20 @@ namespace Wox.Plugin.Program
         private static BinaryStorage<UWP.Application[]> _uwpStorage;
         private PluginJsonStorage<Settings> _settingsStorage;
 
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
         private static void preloadPrograms()
         {
-            Stopwatch.Normal("|Wox.Plugin.Program.Main|Preload programs cost", () =>
+            Logger.StopWatchNormal("Preload programs cost", () =>
             {
                 _win32Storage = new BinaryStorage<Win32[]>("Win32");
                 _win32s = _win32Storage.TryLoad(new Win32[] { });
                 _uwpStorage = new BinaryStorage<UWP.Application[]>("UWP");
                 _uwps = _uwpStorage.TryLoad(new UWP.Application[] { });
             });
-            Log.Info($"|Wox.Plugin.Program.Main|Number of preload win32 programs <{_win32s.Length}>");
-            Log.Info($"|Wox.Plugin.Program.Main|Number of preload uwps <{_uwps.Length}>");
-        }
+            Logger.WoxInfo($"Number of preload win32 programs <{_win32s.Length}>");
+            Logger.WoxInfo($"Number of preload uwps <{_uwps.Length}>");
+        }   
 
         public void Save()
         {
@@ -127,25 +130,25 @@ namespace Wox.Plugin.Program
         {
             var a = Task.Run(() =>
             {
-                Stopwatch.Normal("|Wox.Plugin.Program.Main|Win32Program index cost", IndexWin32Programs);
+                Logger.StopWatchNormal("UWP Program index cost", IndexWin32Programs);
             });
 
             var b = Task.Run(() =>
             {
-                Stopwatch.Normal("|Wox.Plugin.Program.Main|Win32Program index cost", IndexUWPPrograms);
+                Logger.StopWatchNormal("UWP Program index cost", IndexUWPPrograms);
             });
 
             Task.WaitAll(a, b);
 
-            Log.Info($"|Wox.Plugin.Program.Main|Number of indexed win32 programs <{_win32s.Length}>");
+            Logger.WoxInfo($"Number of indexed win32 programs <{_win32s.Length}>");
             foreach (var win32 in _win32s)
             {
-                Log.Debug($"|Wox.Plugin.Program.Main| win32: {win32.Name}>");
+                Logger.WoxDebug($" win32: {win32.Name}>");
             }
-            Log.Info($"|Wox.Plugin.Program.Main|Number of indexed uwps <{_uwps.Length}>");
+            Logger.WoxInfo($"Number of indexed uwps <{_uwps.Length}>");
             foreach (var uwp in _uwps)
             {
-                Log.Debug($"|Wox.Plugin.Program.Main| uwp: {uwp.DisplayName}>");
+                Logger.WoxDebug($" uwp: {uwp.DisplayName}>");
             }
             _settings.LastIndexTime = DateTime.Today;
         }
@@ -217,7 +220,6 @@ namespace Wox.Plugin.Program
 
         public static void StartProcess(Func<ProcessStartInfo, Process> runProcess, ProcessStartInfo info)
         {
-            bool hide;
             try
             {
                 runProcess(info);

@@ -5,6 +5,7 @@ using System.Net;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using NLog;
 using Wox.Infrastructure.Http;
 using Wox.Infrastructure.Logger;
 
@@ -12,6 +13,8 @@ namespace Wox.Plugin.WebSearch.SuggestionSources
 {
     public class Google : SuggestionSource
     {
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
         public override async Task<List<string>> Suggestions(string query)
         {
             string result;
@@ -22,7 +25,7 @@ namespace Wox.Plugin.WebSearch.SuggestionSources
             }
             catch (WebException e)
             {
-                Log.Exception("|Google.Suggestions|Can't get suggestion from google", e);
+                Logger.WoxError("Can't get suggestion from google", e);
                 return new List<string>();
                 ;
             }
@@ -34,7 +37,7 @@ namespace Wox.Plugin.WebSearch.SuggestionSources
             }
             catch (JsonSerializationException e)
             {
-                Log.Exception("|Google.Suggestions|can't parse suggestions", e);
+                Logger.WoxError("can't parse suggestions", e);
                 return new List<string>();
             }
             if (json != null)

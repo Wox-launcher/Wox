@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using NLog;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Exception;
 using Wox.Infrastructure.Logger;
@@ -16,6 +17,7 @@ namespace Wox.Core.Plugin
         public const string PATH = "PATH";
         public const string Python = "python";
         public const string PythonExecutable = "pythonw.exe";
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         public static List<PluginPair> Plugins(List<PluginMetadata> metadatas, PluginsSettings settings)
         {
@@ -33,7 +35,7 @@ namespace Wox.Core.Plugin
 
             foreach (var metadata in metadatas)
             {
-                var milliseconds = Stopwatch.Debug($"|PluginsLoader.CSharpPlugins|Constructor init cost for {metadata.Name}", () =>
+                var milliseconds = Logger.StopWatchDebug($"Constructor init cost for {metadata.Name}", () =>
                 {
 
 #if DEBUG
@@ -49,7 +51,7 @@ namespace Wox.Core.Plugin
                     }
                     catch (Exception e)
                     {
-                        Log.Exception($"|PluginsLoader.CSharpPlugins|Couldn't load assembly for {metadata.Name}", e);
+                        Logger.WoxError($"Couldn't load assembly for {metadata.Name}", e);
                         return;
                     }
                     var types = assembly.GetTypes();
@@ -60,7 +62,7 @@ namespace Wox.Core.Plugin
                     }
                     catch (InvalidOperationException e)
                     {
-                        Log.Exception($"|PluginsLoader.CSharpPlugins|Can't find class implement IPlugin for <{metadata.Name}>", e);
+                        Logger.WoxError($"Can't find class implement IPlugin for <{metadata.Name}>", e);
                         return;
                     }
                     IPlugin plugin;
@@ -70,7 +72,7 @@ namespace Wox.Core.Plugin
                     }
                     catch (Exception e)
                     {
-                        Log.Exception($"|PluginsLoader.CSharpPlugins|Can't create instance for <{metadata.Name}>", e);
+                        Logger.WoxError($"Can't create instance for <{metadata.Name}>", e);
                         return;
                     }
 #endif
@@ -104,13 +106,13 @@ namespace Wox.Core.Plugin
                     }
                     else
                     {
-                        Log.Error("|PluginsLoader.PythonPlugins|Python can't be found in PATH.");
+                        Logger.WoxError("Python can't be found in PATH.");
                         return new List<PluginPair>();
                     }
                 }
                 else
                 {
-                    Log.Error("|PluginsLoader.PythonPlugins|PATH environment variable is not set.");
+                    Logger.WoxError("PATH environment variable is not set.");
                     return new List<PluginPair>();
                 }
             }
@@ -123,7 +125,7 @@ namespace Wox.Core.Plugin
                 }
                 else
                 {
-                    Log.Error("|PluginsLoader.PythonPlugins|Can't find python executable in <b ");
+                    Logger.WoxError("Can't find python executable in <b ");
                     return new List<PluginPair>();
                 }
             }

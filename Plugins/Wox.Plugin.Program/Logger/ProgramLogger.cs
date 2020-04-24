@@ -18,46 +18,23 @@ namespace Wox.Plugin.Program.Logger
     /// </summary>
     internal static class ProgramLogger
     {
-        public const string DirectoryName = "Logs";
 
-        static ProgramLogger()
-        {
-            var path = Path.Combine(DataLocation.DataDirectory(), DirectoryName, Constant.Version);
-            if (!Directory.Exists(path))
-            {
-                Directory.CreateDirectory(path);
-            }
-
-            var configuration = new LoggingConfiguration();
-            var target = new FileTarget();
-            configuration.AddTarget("file", target);
-            target.FileName = path.Replace(@"\", "/") + "/${shortdate}.txt";
-#if DEBUG
-            var rule = new LoggingRule("*", LogLevel.Debug, target);
-#else
-            var rule = new LoggingRule("*", LogLevel.Error, target);
-#endif
-            configuration.LoggingRules.Add(rule);
-            LogManager.Configuration = configuration;
-        }
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
         /// <summary>
         /// Logs an exception
         /// </summary>
-        [MethodImpl(MethodImplOptions.Synchronized)]
         internal static void LogException(string classname, string callingMethodName, string loadingProgramPath,
             string interpretationMessage, Exception e)
         {
-            Debug.WriteLine($"ERROR{classname}|{callingMethodName}|{loadingProgramPath}|{interpretationMessage}");
-
-            var logger = LogManager.GetLogger("");
+            Debug.WriteLine($"ERROR|{classname}|{callingMethodName}|{loadingProgramPath}|{interpretationMessage}");
 
             var innerExceptionNumber = 1;
 
             var possibleResolution = "Not yet known";
             var errorStatus = "UNKNOWN";
 
-            logger.Error("------------- BEGIN Wox.Plugin.Program exception -------------");
+            Logger.Error("------------- BEGIN Wox.Plugin.Program exception -------------");
 
             do
             {
@@ -71,7 +48,7 @@ namespace Wox.Plugin.Program.Logger
 
                 calledMethod = string.IsNullOrEmpty(calledMethod) ? "Not available" : calledMethod;
 
-                logger.Error($"\nException full name: {e.GetType().FullName}"
+                Logger.Error($"\nException full name: {e.GetType().FullName}"
                              + $"\nError status: {errorStatus}"
                              + $"\nClass name: {classname}"
                              + $"\nCalling method: {callingMethodName}"
@@ -87,22 +64,20 @@ namespace Wox.Plugin.Program.Logger
                 e = e.InnerException;
             } while (e != null);
 
-            logger.Error("------------- END Wox.Plugin.Program exception -------------");
+            Logger.Error("------------- END Wox.Plugin.Program exception -------------");
         }
 
         /// <summary>
         /// Please follow exception format: |class name|calling method name|loading program path|user friendly message that explains the error
         /// => Example: |Win32|LnkProgram|c:\..\chrome.exe|Permission denied on directory, but Wox should continue
         /// </summary>
-        [MethodImpl(MethodImplOptions.Synchronized)]
         internal static void LogException(string message, Exception e)
         {
             //Index 0 is always empty.
             var parts = message.Split('|');
             if (parts.Length < 4)
             {
-                var logger = LogManager.GetLogger("");
-                logger.Error(e, $"fail to log exception in program logger, parts length is too small: {parts.Length}, message: {message}");
+                Logger.Error(e, $"fail to log exception in program logger, parts length is too small: {parts.Length}, message: {message}");
             }
 
             var classname = parts[1];

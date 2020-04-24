@@ -63,7 +63,7 @@ namespace Wox.Plugin.Color
                     }
                 }).ToList();
             }
-            catch (Exception exception)
+            catch (Exception)
             {
                 // todo: log
                 return new List<Result>(0);

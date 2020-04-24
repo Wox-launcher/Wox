@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using NLog;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
@@ -28,6 +29,7 @@ namespace Wox.Plugin.Everything
         private Settings _settings;
         private PluginJsonStorage<Settings> _storage;
         private CancellationTokenSource _cancellationTokenSource;
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         public void Save()
         {
@@ -68,7 +70,7 @@ namespace Wox.Plugin.Everything
                 }
                 catch (Exception e)
                 {
-                    Log.Exception("EverythingPlugin", "Query Error", e);
+                    Logger.WoxError("Query Error", e);
                     results.Add(new Result
                     {
                         Title = _context.API.GetTranslation("wox_plugin_everything_query_error"),
@@ -175,7 +177,7 @@ namespace Wox.Plugin.Everything
             const string sdk = "EverythingSDK";
             var sdkDirectory = Path.Combine(pluginDirectory, sdk, CpuType());
             var sdkPath = Path.Combine(sdkDirectory, DLL);
-            Log.Info("Everything", $"sdk path {sdkPath}");
+            Logger.WoxInfo("Everything", $"sdk path {sdkPath}");
             Constant.EverythingSDKPath = sdkPath;
             _api.Load(sdkPath);
         }

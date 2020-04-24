@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Globalization;
 using System.Windows.Data;
+using NLog;
 using Wox.Infrastructure.Logger;
 using Wox.ViewModel;
 
@@ -8,6 +9,8 @@ namespace Wox.Converters
 {
     public class QuerySuggestionBoxConverter : IMultiValueConverter
     {
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
         public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
         {
             if (values.Length != 2)
@@ -50,7 +53,7 @@ namespace Wox.Converters
             }
             catch (Exception e)
             {
-                Log.Exception(nameof(QuerySuggestionBoxConverter), "fail to convert text for suggestion box", e);
+                Logger.WoxError("fail to convert text for suggestion box", e);
                 return string.Empty;
             }
         }

@@ -4,7 +4,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 using Microsoft.WindowsAPICodePack.Shell;
-
+using NLog;
 using Wox.Infrastructure.Logger;
 
 namespace Wox.Infrastructure.Image
@@ -22,6 +22,8 @@ namespace Wox.Infrastructure.Image
             ".ico"
         };
 
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
+
 
         public static void Initialize()
         {
@@ -34,7 +36,7 @@ namespace Wox.Infrastructure.Image
 
         private static ImageSource LoadInternal(string path)
         {
-            Log.Debug(nameof(ImageLoader), $"image {path}");
+            Logger.WoxDebug($"image {path}");
             ImageSource image;
 
             if (string.IsNullOrEmpty(path))
@@ -93,8 +95,8 @@ namespace Wox.Infrastructure.Image
                     }
                     catch (System.Exception e2)
                     {
-                        Log.Exception($"|ImageLoader.Load|Failed to get thumbnail, first, {path}", e1);
-                        Log.Exception($"|ImageLoader.Load|Failed to get thumbnail, second, {path}", e2);
+                        Logger.WoxError($"Failed to get thumbnail, first, {path}", e1);
+                        Logger.WoxError($"Failed to get thumbnail, second, {path}", e2);
                         image = GetErrorImage();
                         return image;
                     }
