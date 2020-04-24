@@ -124,7 +124,7 @@ namespace Wox.Core
 
             var releases = JsonConvert.DeserializeObject<List<GithubRelease>>(json);
             if (!updateToPrereleases) {
-                releases = releases.Where(r => !r.Prerelease)
+                releases = releases.Where(r => !r.Prerelease);
             }
             latest = releases.OrderByDescending(r => r.PublishedAt).First();
             
