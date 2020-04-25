@@ -130,14 +130,6 @@ namespace Wox
                 _mainVM.MainWindowVisibility = _settings.HideOnStartup ? Visibility.Hidden : Visibility.Visible;
 
                 Logger.WoxInfo($"SDK Info: {ExceptionFormatter.SDKInfo()}");
-                try
-                {
-                    throw new Exception("test", new Exception("test inner"));
-                }
-                catch (Exception ex)
-                {
-                    Logger.WoxError("≤‚ ‘“Ï≥£ ‰≥ˆ", ex);
-                }
                 Logger.WoxInfo("End Wox startup ----------------------------------------------------  ");
             });
         }
