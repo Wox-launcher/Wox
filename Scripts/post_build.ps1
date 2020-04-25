@@ -69,8 +69,8 @@ function Pack-Nuget ($path, $version, $output) {
     Write-Host "End build nuget library"
 }
 
-function Zip-Release ($path, $version, $output) {
-    Write-Host "Begin zip release"
+function Pack-Zip ($path, $version, $output) {
+    Write-Host "Begin pack zip"
 
     $input = "$path\Output\Release"
     Write-Host "Input path:  $input"
@@ -130,7 +130,7 @@ function Main {
     $isInCI = $env:APPVEYOR
     if ($isInCI) {
         Pack-Nuget $p $v $o
-        Zip-Release $p $v $o
+        Pack-Zip $p $v $o
     }
 
     Write-Host "List output directory"
