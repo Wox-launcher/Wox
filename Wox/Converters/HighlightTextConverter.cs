@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Media;
+using Wox.Core.Resource;
 
 namespace Wox.Converters
 {
@@ -17,6 +18,7 @@ namespace Wox.Converters
         {
             var text = value[0] as string;
             var highlightData = value[1] as List<int>;
+            var selected = value[2] as bool? == true;
 
             var textBlock = new Span();
 
@@ -26,6 +28,16 @@ namespace Wox.Converters
                 return new Run(text);
             }
 
+            var settings = (Application.Current as App).Settings;
+            var resources = ThemeManager.Instance.GetResourceDictionary();
+
+            var highlightColor = (Brush) (selected?
+                resources.Contains("ItemSelectedHighlightColor")? resources["ItemSelectedHighlightColor"]: resources["BaseItemSelectedHighlightColor"]:
+                resources.Contains("ItemHighlightColor")? resources["ItemHighlightColor"]: resources["BaseItemHighlightColor"]);
+            var highlightStyle = FontHelper.GetFontStyleFromInvariantStringOrNormal(settings.ResultHighlightFontStyle);
+            var highlightWeight = FontHelper.GetFontWeightFromInvariantStringOrNormal(settings.ResultHighlightFontWeight);
+            var highlightStretch = FontHelper.GetFontStretchFromInvariantStringOrNormal(settings.ResultHighlightFontStretch);
+
             for (var i = 0; i < text.Length; i++)
             {
                 var currentCharacter = text.Substring(i, 1);
@@ -33,15 +45,15 @@ namespace Wox.Converters
                 {
                     textBlock.Inlines.Add((new Run(currentCharacter)
                     {
-                        FontWeight = FontWeights.Bold
+                        Foreground = highlightColor,
+                        FontWeight = highlightWeight,
+                        FontStyle = highlightStyle,
+                        FontStretch = highlightStretch
                     }));
                 }
                 else
                 {
-                    textBlock.Inlines.Add(new Run(currentCharacter)
-                    {
-                        Foreground = Brushes.LightGray
-                    });
+                    textBlock.Inlines.Add(new Run(currentCharacter));
                 }
             }
             return textBlock;

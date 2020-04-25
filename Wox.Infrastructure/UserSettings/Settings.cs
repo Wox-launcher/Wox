@@ -22,6 +22,9 @@ namespace Wox.Infrastructure.UserSettings
         public string ResultFontStyle { get; set; }
         public string ResultFontWeight { get; set; }
         public string ResultFontStretch { get; set; }
+        public string ResultHighlightFontStyle { get; set; }
+        public string ResultHighlightFontWeight { get; set; }
+        public string ResultHighlightFontStretch { get; set; }
 
 
         /// <summary>
