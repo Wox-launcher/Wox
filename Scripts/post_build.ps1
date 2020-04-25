@@ -36,7 +36,7 @@ function Copy-Resources ($path, $config) {
     $target = "$output\$config"
     Copy-Item -Recurse -Force $project\Themes\* $target\Themes\
     Copy-Item -Recurse -Force $project\Images\* $target\Images\
-    Copy-Item -Recurse -Force $path\Plugins\HelloWorldPython $target\Plugins\HelloWorldPython
+    Copy-Item -Recurse -Force $path\Plugins\HelloWorldPython $target\Plugins
     Copy-Item -Recurse -Force $path\JsonRPC $target\JsonRPC
 }
 
@@ -47,7 +47,17 @@ function Delete-Unused ($path, $config) {
         Remove-Item -Path $target\Plugins -Include $i -Recurse 
         Write-Host "Deleting duplicated $i"
     }
+    $included = Get-ChildItem $target -Filter "*.pdb"
+    foreach ($i in $included){
+        Remove-Item -Path $target\Plugins -Include $i -Recurse 
+        Write-Host "Deleting duplicated $i"
+    }
+    Remove-Item -Path $target -Include "JetBrains.Annotations.dll" -Recurse 
     Remove-Item -Path $target -Include "*.xml" -Recurse 
+    Remove-Item -Path $target -Include "nunit.*" -Recurse 
+    Remove-Item -Path $target -Include "NUnit3.*" -Recurse 
+    Remove-Item -Path $target -Include "Moq.*" -Recurse 
+    Remove-Item -Path $target -Include "Wox.Test.*" -Recurse 
 }
 
 function Validate-Directory ($output) {

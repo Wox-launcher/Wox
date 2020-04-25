@@ -8,5 +8,6 @@
     "Language":"python",
     "Website":"https://github.com/Wox-launcher/Wox",
     "IcoPath":"Images\\app.png",
-    "ExecuteFileName":"main.py"
+    "ExecuteFileName":"main.py",
+    "Disabled": true
 }
