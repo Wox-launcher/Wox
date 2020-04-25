@@ -57,7 +57,7 @@ function Validate-Directory ($output) {
     New-Item $output -ItemType Directory -Force
 }
 
-function Pack-Nuget ($path, $version, $output) {
+function Pack-Nuget-API ($path, $version, $output) {
     Write-Host "Begin build nuget library"
 
     $spec = "$path\Scripts\wox.plugin.nuspec"
@@ -131,7 +131,7 @@ function Main {
     
     $isInCI = $env:APPVEYOR
     if ($isInCI) {
-        Pack-Nuget $p $v $o
+        Pack-Nuget-API $p $v $o
         Pack-Zip $p $v $o
     }
 
