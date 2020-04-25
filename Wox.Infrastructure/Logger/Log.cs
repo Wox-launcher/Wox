@@ -38,28 +38,6 @@ namespace Wox.Infrastructure.Logger
             LogManager.Configuration = configuration;
         }
 
-        private static void ExceptionInternal(string classAndMethod, string message, System.Exception e)
-        {
-            var logger = LogManager.GetLogger(classAndMethod);
-
-            System.Diagnostics.Debug.WriteLine($"ERROR|{classAndMethod}|{message}");
-
-            logger.Error("-------------------------- Begin exception --------------------------");
-            logger.Error(message);
-
-            do
-            {
-                logger.Error($"Exception full name:\n <{e.GetType().FullName}>");
-                logger.Error($"Exception message:\n <{e.Message}>");
-                logger.Error($"Exception stack trace:\n <{e.StackTrace}>");
-                logger.Error($"Exception source:\n <{e.Source}>");
-                logger.Error($"Exception target site:\n <{e.TargetSite}>");
-                logger.Error($"Exception HResult:\n <{e.HResult}>");
-                e = e.InnerException;
-            } while (e != null);
-
-            logger.Error("-------------------------- End exception --------------------------");
-        }
 
         public static void WoxTrace(this NLog.Logger logger, string message, [CallerMemberName] string methodName = "")
         {
