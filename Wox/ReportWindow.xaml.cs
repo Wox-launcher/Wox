@@ -9,6 +9,7 @@ using System.Windows.Documents;
 using Wox.Helper;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
+using Wox.Infrastructure.Exception;
 
 namespace Wox
 {
@@ -32,13 +33,9 @@ namespace Wox
             paragraph.Inlines.Add($"2. copy below exception message");
             ErrorTextbox.Document.Blocks.Add(paragraph);
 
-            StringBuilder content = new StringBuilder();
-            content.AppendLine(ErrorReporting.RuntimeInfo());
-            content.AppendLine($"Date: {DateTime.Now.ToString(CultureInfo.InvariantCulture)}");
-            content.AppendLine("Exception:");
-            content.AppendLine(exception.ToString());
+            var content = ExceptionFormatter.ExceptionWithRuntimeInfo(exception);
             paragraph = new Paragraph();
-            paragraph.Inlines.Add(content.ToString());
+            paragraph.Inlines.Add(content);
             ErrorTextbox.Document.Blocks.Add(paragraph);
         }
 

@@ -21,8 +21,7 @@ using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.UserSettings;
 using Wox.ViewModel;
 using Stopwatch = Wox.Infrastructure.Stopwatch;
-
-
+using Wox.Infrastructure.Exception;
 
 namespace Wox
 {
@@ -79,13 +78,16 @@ namespace Wox
         {
             Logger.StopWatchNormal("Startup cost", () =>
             {
-                Logger.WoxInfo("Begin Wox startup----------------------------------------------------");
-                Logger.WoxInfo($"Runtime info:{ErrorReporting.RuntimeInfo()}");
-
                 Constant.Initialize();
+
+                Logger.WoxInfo("Begin Wox startup----------------------------------------------------");
+                Logger.WoxInfo($"Runtime info:{ExceptionFormatter.RuntimeInfo()}");
+
 
                 RegisterAppDomainExceptions();
                 RegisterDispatcherUnhandledException();
+
+
 
                 _portable.PreStartCleanUpAfterPortabilityUpdate();
                 
@@ -105,7 +107,6 @@ namespace Wox
                 var window = new MainWindow(_settings, _mainVM);
                 API = new PublicAPIInstance(_settingsVM, _mainVM, _alphabet);
                 PluginManager.InitializePlugins(API);
-                Logger.WoxInfo($"Info:{ErrorReporting.DependenciesInfo()}");
 
                 Current.MainWindow = window;
                 Current.MainWindow.Title = Constant.Wox;
@@ -127,6 +128,16 @@ namespace Wox
 
                 ParseCommandLineArgs(SingleInstance<App>.CommandLineArgs);
                 _mainVM.MainWindowVisibility = _settings.HideOnStartup ? Visibility.Hidden : Visibility.Visible;
+
+                Logger.WoxInfo($"SDK Info: {ExceptionFormatter.SDKInfo()}");
+                try
+                {
+                    throw new Exception("test", new Exception("test inner"));
+                }
+                catch (Exception ex)
+                {
+                    Logger.WoxError("≤‚ ‘“Ï≥£ ‰≥ˆ", ex);
+                }
                 Logger.WoxInfo("End Wox startup ----------------------------------------------------  ");
             });
         }

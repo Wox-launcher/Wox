@@ -77,27 +77,19 @@ namespace Wox.Infrastructure.Exception
             sb.AppendLine(ex.StackTrace);
         }
 
-        private static StringBuilder RuntimeInfo()
+        public static StringBuilder RuntimeInfoFull()
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine(RuntimeInfo());
+            sb.AppendLine(SDKInfo());
+            sb.Append(AssemblyInfo());
+            return sb;
+        }
+
+        private static string AssemblyInfo()
         {
             StringBuilder sb = new StringBuilder();
 
-            sb.AppendLine("## Environment");
-            sb.AppendLine($"* Command Line: {Environment.CommandLine}");
-            sb.AppendLine($"* Timestamp: {DateTime.Now.ToString(CultureInfo.InvariantCulture)}");
-            sb.AppendLine($"* Wox version: {Constant.Version}");
-            sb.AppendLine($"* OS Version: {Environment.OSVersion.VersionString}");
-            sb.AppendLine($"* x64: {Environment.Is64BitOperatingSystem}");
-            sb.AppendLine($"* Python Path: {Constant.PythonPath}");
-            sb.AppendLine($"* Everything SDK Path: {Constant.EverythingSDKPath}");
-            sb.AppendLine($"* CLR Version: {Environment.Version}");
-            sb.AppendLine($"* Installed .NET Framework: ");
-            foreach (var result in GetFrameworkVersionFromRegistry())
-            {
-                sb.Append("   * ");
-                sb.AppendLine(result);
-            }
-
-            sb.AppendLine();
             sb.AppendLine("## Assemblies - " + AppDomain.CurrentDomain.FriendlyName);
             sb.AppendLine();
             foreach (var ass in AppDomain.CurrentDomain.GetAssemblies().OrderBy(o => o.GlobalAssemblyCache ? 50 : 0))
@@ -121,10 +113,37 @@ namespace Wox.Infrastructure.Exception
 
                 }
                 sb.AppendLine(")");
+            }
+            return sb.ToString();
+        }
 
+        public static string RuntimeInfo()
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("## Runtime Info");
+            sb.AppendLine($"* Command Line: {Environment.CommandLine}");
+            sb.AppendLine($"* Timestamp: {DateTime.Now.ToString(CultureInfo.InvariantCulture)}");
+            sb.AppendLine($"* Wox version: {Constant.Version}");
+            sb.AppendLine($"* OS Version: {Environment.OSVersion.VersionString}");
+            sb.AppendLine($"* x64: {Environment.Is64BitOperatingSystem}");
+            sb.AppendLine($"* CLR Version: {Environment.Version}");
+            sb.AppendLine($"* Installed .NET Framework: ");
+            foreach (var result in GetFrameworkVersionFromRegistry())
+            {
+                sb.Append("   * ");
+                sb.AppendLine(result);
             }
 
-            return sb;
+            return sb.ToString();
+        }
+
+        public static string SDKInfo()
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("## SDK Info");
+            sb.AppendLine($"* Python Path: {Constant.PythonPath}");
+            sb.AppendLine($"* Everything SDK Path: {Constant.EverythingSDKPath}");
+            return sb.ToString();
         }
 
         public static string ExceptionWithRuntimeInfo(System.Exception ex)
@@ -132,7 +151,7 @@ namespace Wox.Infrastructure.Exception
             StringBuilder sb = new StringBuilder();
             var formatted = FormattedAllExceptions(ex);
             sb.Append(formatted);
-            var info = RuntimeInfo();
+            var info = RuntimeInfoFull();
             sb.Append(info);
 
             return sb.ToString();

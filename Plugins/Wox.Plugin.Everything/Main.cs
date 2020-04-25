@@ -177,7 +177,7 @@ namespace Wox.Plugin.Everything
             const string sdk = "EverythingSDK";
             var sdkDirectory = Path.Combine(pluginDirectory, sdk, CpuType());
             var sdkPath = Path.Combine(sdkDirectory, DLL);
-            Logger.WoxInfo("Everything", $"sdk path {sdkPath}");
+            Logger.WoxDebug("Everything", $"sdk path {sdkPath}");
             Constant.EverythingSDKPath = sdkPath;
             _api.Load(sdkPath);
         }
