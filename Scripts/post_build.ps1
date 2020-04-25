@@ -95,13 +95,15 @@ function Pack-Squirrel-Installer ($path, $version, $output) {
 
     $nupkg = "$output\Wox.$version.nupkg"
     Write-Host "nupkg path: $nupkg"
-    $icon = "$path\Wox\Resources\app.ico"
-    Write-Host "icon: $icon"
+    
     # Squirrel.com: https://github.com/Squirrel/Squirrel.Windows/issues/369
     New-Alias Squirrel $env:USERPROFILE\.nuget\packages\squirrel.windows\1.9.1\tools\Squirrel.exe -Force
     # why we need Write-Output: https://github.com/Squirrel/Squirrel.Windows/issues/489#issuecomment-156039327
     # directory of releaseDir in squirrel can't be same as directory ($nupkg) in releasify
     $temp = "$output\Temp"
+    Write-Host "temp: $temp"
+    $icon = "$path\Wox\Resources\app.ico"
+    Write-Host "icon: $icon"
 
     Squirrel --releasify $nupkg --releaseDir $temp --setupIcon $icon --no-msi | Write-Output
     Move-Item $temp\* $output -Force
