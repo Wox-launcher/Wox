@@ -120,24 +120,21 @@ function Main {
     $v = Build-Version
     Copy-Resources $p $config
 
-    if ($config -eq "Release"){
-
-        Delete-Unused $p $config
-        $o = "$p\Output\Packages"
-        Validate-Directory $o
-        # making version static as multiple versions can exist in the nuget folder and in the case a breaking change is introduced.
-        New-Alias Nuget $env:USERPROFILE\.nuget\packages\NuGet.CommandLine\5.5.1\tools\NuGet.exe -Force
-        Pack-Squirrel-Installer $p $v $o
+    Delete-Unused $p $config
+    $o = "$p\Output\Packages"
+    Validate-Directory $o
+    # making version static as multiple versions can exist in the nuget folder and in the case a breaking change is introduced.
+    New-Alias Nuget $env:USERPROFILE\.nuget\packages\NuGet.CommandLine\5.5.1\tools\NuGet.exe -Force
+    Pack-Squirrel-Installer $p $v $o
     
-        $isInCI = $env:APPVEYOR
-        if ($isInCI) {
-            Pack-Nuget $p $v $o
-            Zip-Release $p $v $o
-        }
-
-        Write-Host "List output directory"
-        Get-ChildItem $o
+    $isInCI = $env:APPVEYOR
+    if ($isInCI) {
+        Pack-Nuget $p $v $o
+        Zip-Release $p $v $o
     }
+
+    Write-Host "List output directory"
+    Get-ChildItem $o
 }
 
 Main
