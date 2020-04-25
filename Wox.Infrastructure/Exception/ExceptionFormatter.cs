@@ -10,61 +10,62 @@ namespace Wox.Infrastructure.Exception
 {
     public class ExceptionFormatter
     {
-        public static string FormatExcpetion(System.Exception exception)
+        public static string FormattedException(System.Exception ex)
         {
-            return CreateExceptionReport(exception);
+            return FormattedAllExceptionInternal(ex).ToString();
         }
 
-        //todo log /display line by line 
-        private static string CreateExceptionReport(System.Exception ex)
+
+        private static StringBuilder FormattedAllExceptionInternal(System.Exception ex)
         {
             var sb = new StringBuilder();
-            sb.AppendLine();
-            sb.AppendLine("## Exception");
-            sb.AppendLine();
-            sb.AppendLine("```");
-
-            var exlist = new List<StringBuilder>();
-
+            sb.AppendLine("Exception begin --------------------");
+            int count = 1;
             while (ex != null)
             {
-                var exsb = new StringBuilder();
-                exsb.Append(ex.GetType().FullName);
-                exsb.Append(": ");
-                exsb.AppendLine(ex.Message);
+                sb.Append(ex.GetType().FullName);
+                sb.Append(": ");
+                sb.AppendLine(ex.Message);
+                sb.Append("   HResult: ");
+                sb.AppendLine(ex.HResult.ToString());
+
                 if (ex.Source != null)
                 {
-                    exsb.Append("   Source: ");
-                    exsb.AppendLine(ex.Source);
+                    sb.Append("   Source: ");
+                    sb.AppendLine(ex.Source);
                 }
                 if (ex.TargetSite != null)
                 {
-                    exsb.Append("   TargetAssembly: ");
-                    exsb.AppendLine(ex.TargetSite.Module.Assembly.ToString());
-                    exsb.Append("   TargetModule: ");
-                    exsb.AppendLine(ex.TargetSite.Module.ToString());
-                    exsb.Append("   TargetSite: ");
-                    exsb.AppendLine(ex.TargetSite.ToString());
+                    sb.Append("   TargetAssembly: ");
+                    sb.AppendLine(ex.TargetSite.Module.Assembly.ToString());
+                    sb.Append("   TargetModule: ");
+                    sb.AppendLine(ex.TargetSite.Module.ToString());
+                    sb.Append("   TargetSite: ");
+                    sb.AppendLine(ex.TargetSite.ToString());
                 }
-                exsb.AppendLine(ex.StackTrace);
-                exlist.Add(exsb);
+                sb.AppendLine("   StackTrace: --------------------");
+                sb.AppendLine(ex.StackTrace);
 
+                sb.Append("   InnerException ");
+                sb.Append(count);
+                sb.AppendLine(": --------------------");
                 ex = ex.InnerException;
             }
 
-            foreach (var result in exlist.Select(o => o.ToString()).Reverse())
-            {
-                sb.AppendLine(result);
-            }
-            sb.AppendLine("```");
+            sb.AppendLine("Exception end --------------------");
             sb.AppendLine();
+            return sb;
+        }
+
+        private static StringBuilder RuntimeInfo()
+        {
+            StringBuilder sb = new StringBuilder();
 
             sb.AppendLine("## Environment");
             sb.AppendLine($"* Command Line: {Environment.CommandLine}");
             sb.AppendLine($"* Timestamp: {DateTime.Now.ToString(CultureInfo.InvariantCulture)}");
             sb.AppendLine($"* Wox version: {Constant.Version}");
             sb.AppendLine($"* OS Version: {Environment.OSVersion.VersionString}");
-            sb.AppendLine($"* IntPtr Length: {IntPtr.Size}");
             sb.AppendLine($"* x64: {Environment.Is64BitOperatingSystem}");
             sb.AppendLine($"* Python Path: {Constant.PythonPath}");
             sb.AppendLine($"* Everything SDK Path: {Constant.EverythingSDKPath}");
@@ -92,18 +93,32 @@ namespace Wox.Infrastructure.Exception
                 else if (string.IsNullOrEmpty(ass.Location))
                 {
                     sb.Append("location is null or empty");
-                    
+
                 }
                 else
                 {
-                sb.Append(ass.Location);
-                    
+                    sb.Append(ass.Location);
+
                 }
                 sb.AppendLine(")");
+
             }
+
+            return sb;
+        }
+
+        public static string ExceptionWithRuntimeInfo(System.Exception ex)
+        {
+            StringBuilder sb = new StringBuilder();
+            var formatted = FormattedAllExceptionInternal(ex);
+            sb.Append(formatted);
+            var info = RuntimeInfo();
+            sb.Append(info);
 
             return sb.ToString();
         }
+
+
 
         // http://msdn.microsoft.com/en-us/library/hh925568%28v=vs.110%29.aspx
         private static List<string> GetFrameworkVersionFromRegistry()
@@ -155,19 +170,24 @@ namespace Wox.Infrastructure.Exception
                 {
                     int releaseKey = (int)ndpKey.GetValue("Release");
                     {
-                        if (releaseKey == 394806 || releaseKey == 394806) {
+                        if (releaseKey == 394806 || releaseKey == 394806)
+                        {
                             result.Add("v4.6.2");
                         }
-                        if (releaseKey == 460798 || releaseKey == 460805) {
+                        if (releaseKey == 460798 || releaseKey == 460805)
+                        {
                             result.Add("v4.7");
                         }
-                        if (releaseKey == 461308 || releaseKey == 461310) {
+                        if (releaseKey == 461308 || releaseKey == 461310)
+                        {
                             result.Add("v4.7.1");
                         }
-                        if (releaseKey == 461808 || releaseKey == 461814) {
+                        if (releaseKey == 461808 || releaseKey == 461814)
+                        {
                             result.Add("v4.7.2");
                         }
-                        if (releaseKey == 528040 || releaseKey == 528209 || releaseKey == 528049) {
+                        if (releaseKey == 528040 || releaseKey == 528209 || releaseKey == 528049)
+                        {
                             result.Add("v4.8");
                         }
 

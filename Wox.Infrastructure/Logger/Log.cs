@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using NLog;
 using NLog.Config;
 using NLog.Targets;
+using Wox.Infrastructure.Exception;
 using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Infrastructure.Logger
@@ -22,11 +23,11 @@ namespace Wox.Infrastructure.Logger
             {
                 Directory.CreateDirectory(CurrentLogDirectory);
             }
-
+            
             var configuration = new LoggingConfiguration();
             var fileTarget = new FileTarget()
             {
-                FileName = CurrentLogDirectory.Replace(@"\", "/") + "/${shortdate}.txt"
+                FileName = CurrentLogDirectory.Replace(@"\", "/") + "/${shortdate}.txt",
             };
             var consoleTarget = new NLog.Targets.ConsoleTarget();
 #if DEBUG
@@ -92,10 +93,10 @@ namespace Wox.Infrastructure.Logger
 
         public static void WoxError(this NLog.Logger logger, string message, System.Exception exception, [CallerMemberName] string methodName = "")
         {
+            Debug.WriteLine($"ERROR|{logger.Name}|{methodName}|{message}");
+            logger.Error($"{methodName}|{message}|{ExceptionFormatter.FormattedException(exception)}");
 #if DEBUG
             throw exception;
-#else
-            logger.Error(exception, $"{methodName}|{message}");
 #endif
         }
     }
