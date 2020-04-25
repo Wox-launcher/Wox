@@ -12,9 +12,10 @@ before_build:
 - ps: nuget restore
 build:
   project: Wox.sln
+after_build:
+- ps: powershell.exe -NoProfile -ExecutionPolicy Bypass -File Scripts\post_build.ps1
 after_test:
 - ps: Copy-Item $env:APPDATA\Wox\Logs\*\*.txt .
-- ps: powershell.exe -NoProfile -ExecutionPolicy Bypass -File Scripts\post_build.ps1
 artifacts:
 - path: 'Output\Packages\Wox-*.zip'
   name: installer
