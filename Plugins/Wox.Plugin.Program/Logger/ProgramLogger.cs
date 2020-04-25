@@ -90,9 +90,6 @@ namespace Wox.Plugin.Program.Logger
 
         private static bool IsKnownWinProgramError(Exception e, string callingMethodName)
         {
-            if (e.TargetSite?.Name == "GetDescription" && callingMethodName == "LnkProgram")
-                return true;
-
             if (e is SecurityException || e is UnauthorizedAccessException || e is DirectoryNotFoundException)
                 return true;
 
