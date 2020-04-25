@@ -15,9 +15,11 @@ using Windows.Management.Deployment;
 using AppxPackaing;
 using Shell;
 using Wox.Infrastructure;
+using Wox.Infrastructure.Logger;
 using Wox.Plugin.Program.Logger;
 using IStream = AppxPackaing.IStream;
 using Rect = System.Windows.Rect;
+using NLog;
 
 namespace Wox.Plugin.Program.Programs
 {
@@ -32,6 +34,8 @@ namespace Wox.Plugin.Program.Programs
         public Application[] Apps { get; set; }
 
         public PackageVersion Version { get; set; }
+
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
         public UWP(Package package)
         {
@@ -362,22 +366,23 @@ namespace Wox.Plugin.Program.Programs
                 Description = manifestApp.GetStringValue("Description");
                 BackgroundColor = manifestApp.GetStringValue("BackgroundColor");
                 Package = package;
-                DisplayName = ResourceFromPri(package.FullName, package.Name, DisplayName);
-                Description = ResourceFromPri(package.FullName, package.Name, Description);
+                DisplayName = ResourcesFromPri(package.FullName, package.Name, DisplayName);
+                Description = ResourcesFromPri(package.FullName, package.Name, Description);
                 LogoUri = LogoUriFromManifest(manifestApp);
-                LogoPath = LogoPathFromUri(LogoUri);
+                LogoPath = FilesFromPri(package.FullName, package.Name, LogoUri);
 
                 Enabled = true;
             }
 
-            internal string ResourceFromPri(string packageFullName, String name, string resourceReference)
+            internal string ResourcesFromPri(string packageFullName, String packageName, string resourceReference)
             {
                 const string prefix = "ms-resource:";
+                string result = "";
+                Logger.WoxDebug($"package: <{packageFullName}> res ref: <{resourceReference}>");
                 if (!string.IsNullOrWhiteSpace(resourceReference) && resourceReference.StartsWith(prefix))
                 {
 
-                    // use makepri to check whether the resource can be get, the error message is usually useless
-                    //makepri.exe"  dump /if "a\resources.pri" /of b.xml 
+                    
                     string key = resourceReference.Substring(prefix.Length);
                     string parsed;
                     if (key.StartsWith("//"))
@@ -395,46 +400,67 @@ namespace Wox.Plugin.Program.Programs
                         {
                             key = $"/Resources{key}";
                         }
-                        parsed = $"{prefix}//{name}{key}";
+                        parsed = $"{prefix}//{packageName}{key}";
                     }
 
-                    var outBuffer = new StringBuilder(128);
-                    string source = $"@{{{packageFullName}? {parsed}}}";
-                    var capacity = (uint)outBuffer.Capacity;
-                    var hResult = SHLoadIndirectString(source, outBuffer, capacity, IntPtr.Zero);
-                    if (hResult == Hresult.Ok)
+                    result = ResourceFromPriInternal(packageFullName, parsed);
+                }
+                else
+                {
+                    result = resourceReference;
+                }
+                Logger.WoxDebug($"package: <{packageFullName}> pri resource result: <{result}>");
+                return result;
+            }
+
+            private string FilesFromPri(string packageFullName, string packageName, string fileReference)
+            {
+                // all https://msdn.microsoft.com/windows/uwp/controls-and-patterns/tiles-and-notifications-app-assets
+                // windows 10 https://msdn.microsoft.com/en-us/library/windows/apps/dn934817.aspx
+                // windows 8.1 https://msdn.microsoft.com/en-us/library/windows/apps/hh965372.aspx#target_size
+                // windows 8 https://msdn.microsoft.com/en-us/library/windows/apps/br211475.aspx
+
+                Logger.WoxDebug($"package: <{packageFullName}> file ref: <{fileReference}>");
+                string parsed = $"ms-resource://{packageName}/Files/{fileReference.Replace("\\", "/")}";
+                string result = ResourceFromPriInternal(packageFullName, parsed);
+                Logger.WoxDebug($"package: <{packageFullName}> pri file result: <{result}>");
+                return result;
+            }
+
+            /// https://docs.microsoft.com/en-us/windows/win32/api/shlwapi/nf-shlwapi-shloadindirectstring
+            /// use makepri to check whether the resource can be get, the error message is usually useless
+            /// makepri.exe dump /if "a\resources.pri" /of b.xml 
+            private string ResourceFromPriInternal(string packageFullName, string parsed)
+            {
+                Logger.WoxDebug($"package: <{packageFullName}> pri parsed: <{parsed}>");
+                // following error probally due to buffer to small
+                // '200' violates enumeration constraint of '100 120 140 160 180'.
+                // 'Microsoft Corporation' violates pattern constraint of '\bms-resource:.{1,256}'.
+                var outBuffer = new StringBuilder(512);
+                string source = $"@{{{packageFullName}? {parsed}}}";
+                var capacity = (uint)outBuffer.Capacity;
+                var hResult = SHLoadIndirectString(source, outBuffer, capacity, IntPtr.Zero);
+                if (hResult == Hresult.Ok)
+                {
+                    var loaded = outBuffer.ToString();
+                    if (!string.IsNullOrEmpty(loaded))
                     {
-                        var loaded = outBuffer.ToString();
-                        if (!string.IsNullOrEmpty(loaded))
-                        {
-                            return loaded;
-                        }
-                        else
-                        {
-                            ProgramLogger.LogException($"|UWP|ResourceFromPri|{Package.Location}|Can't load null or empty result "
-                                                        + $"pri {source} in uwp location {Package.Location}", new NullReferenceException());
-                            return string.Empty;
-                        }
+                        return loaded;
                     }
                     else
                     {
-                        // https://github.com/Wox-launcher/Wox/issues/964
-                        // known hresult 2147942522:
-                        // 'Microsoft Corporation' violates pattern constraint of '\bms-resource:.{1,256}'.
-                        // for
-                        // Microsoft.MicrosoftOfficeHub_17.7608.23501.0_x64__8wekyb3d8bbwe: ms-resource://Microsoft.MicrosoftOfficeHub/officehubintl/AppManifest_GetOffice_Description
-                        // Microsoft.BingFoodAndDrink_3.0.4.336_x64__8wekyb3d8bbwe: ms-resource:AppDescription
-                        var e = Marshal.GetExceptionForHR((int)hResult);
-                        ProgramLogger.LogException($"|UWP|ResourceFromPri|{Package.Location}|Load pri failed {source} with HResult {hResult} and location {Package.Location}", e);
+                        ProgramLogger.LogException($"|UWP|ResourceFromPriInternal|{Package.Location}|Can't load null or empty result "
+                                                    + $"pri {source} in uwp location {Package.Location}", new NullReferenceException());
                         return string.Empty;
                     }
                 }
                 else
                 {
-                    return resourceReference;
+                    var e = Marshal.GetExceptionForHR((int)hResult);
+                    ProgramLogger.LogException($"|UWP|ResourceFromPriInternal|{Package.Location}|Load pri failed {source} with HResult {hResult} and location {Package.Location}", e);
+                    return string.Empty;
                 }
             }
-
 
             internal string LogoUriFromManifest(IAppxManifestApplication app)
             {
@@ -455,69 +481,6 @@ namespace Wox.Plugin.Program.Programs
                     return string.Empty;
                 }
             }
-
-            internal string LogoPathFromUri(string uri)
-            {
-                // all https://msdn.microsoft.com/windows/uwp/controls-and-patterns/tiles-and-notifications-app-assets
-                // windows 10 https://msdn.microsoft.com/en-us/library/windows/apps/dn934817.aspx
-                // windows 8.1 https://msdn.microsoft.com/en-us/library/windows/apps/hh965372.aspx#target_size
-                // windows 8 https://msdn.microsoft.com/en-us/library/windows/apps/br211475.aspx
-
-                string path;
-                if (uri.Contains("\\"))
-                {
-                    path = Path.Combine(Package.Location, uri);
-                }
-                else
-                {
-                    // for C:\Windows\MiracastView etc
-                    path = Path.Combine(Package.Location, "Assets", uri);
-                }
-
-                var extension = Path.GetExtension(path);
-                if (extension != null)
-                {
-                    var end = path.Length - extension.Length;
-                    var prefix = path.Substring(0, end);
-                    var paths = new List<string> { path };
-
-                    var scaleFactors = new Dictionary<PackageVersion, List<int>>
-                    {
-                        // scale factors on win10: https://docs.microsoft.com/en-us/windows/uwp/controls-and-patterns/tiles-and-notifications-app-assets#asset-size-tables,
-                        { PackageVersion.Windows10, new List<int> { 100, 125, 150, 200, 400 } },
-                        { PackageVersion.Windows81, new List<int> { 100, 120, 140, 160, 180 } },
-                        { PackageVersion.Windows8, new List<int> { 100 } }
-                    };
-
-                    if (scaleFactors.ContainsKey(Package.Version))
-                    {
-                        foreach (var factor in scaleFactors[Package.Version])
-                        {
-                            paths.Add($"{prefix}.scale-{factor}{extension}");
-                        }
-                    }
-
-                    var selected = paths.FirstOrDefault(File.Exists);
-                    if (!string.IsNullOrEmpty(selected))
-                    {
-                        return selected;
-                    }
-                    else
-                    {
-                        ProgramLogger.LogException($"|UWP|LogoPathFromUri|{Package.Location}" +
-                                                    $"|{UserModelId} can't find logo uri for {uri} in package location: {Package.Location}", new FileNotFoundException());
-                        return string.Empty;
-                    }
-                }
-                else
-                {
-                    ProgramLogger.LogException($"|UWP|LogoPathFromUri|{Package.Location}" +
-                                                    $"|Unable to find extension from {uri} for {UserModelId} " +
-                                                    $"in package location {Package.Location}", new FileNotFoundException());
-                    return string.Empty;
-                }
-            }
-
 
             public ImageSource Logo()
             {

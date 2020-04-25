@@ -8,11 +8,11 @@ using System.Security;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Win32;
-using Shell;
 using NLog;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 using Wox.Plugin.Program.Logger;
+using Microsoft.WindowsAPICodePack.Shell;
 
 namespace Wox.Plugin.Program.Programs
 {
@@ -181,70 +181,20 @@ namespace Wox.Plugin.Program.Programs
         private static Win32 LnkProgram(string path)
         {
             var program = Win32Program(path);
-            try
+            // need manually cast, no direct api from Windows-API-Code-Pack
+            var link = (ShellLink)ShellObject.FromParsingName(path);
+            program.Name = link.Name;
+            program.ExecutableName = link.Path;
+            var comments = link.Comments;
+            if (string.IsNullOrWhiteSpace(comments))
             {
-                var link = new ShellLink();
-                const uint STGM_READ = 0;
-                ((IPersistFile)link).Load(path, STGM_READ);
-                const int MAX_DESCRIPTION = 150;
-                StringBuilder bufferDescription = new StringBuilder(MAX_DESCRIPTION);
-                String description = String.Empty;
-                try
-                {
-                    link.GetDescription(bufferDescription, MAX_DESCRIPTION);
-                }
-                catch (COMException e)
-                {
-                    ProgramLogger.LogException($"|Win32|LnkProgram|{path}|cannot get description <{path}>. HResult: <{e.HResult}>", e);
-                    bufferDescription.Clear();
-                }
-                description = bufferDescription.ToString();
-                if (!string.IsNullOrEmpty(description))
-                {
-                    program.Description = description;
-                }
-                else
-                {
-                    const int MAX_PATH = 260;
-                    StringBuilder bufferPath = new StringBuilder(MAX_PATH);
-                    var data = new _WIN32_FIND_DATAW();
-                    const uint SLGP_SHORTPATH = 1;
-                    link.GetPath(bufferPath, bufferPath.Capacity, ref data, SLGP_SHORTPATH);
-                    var target = bufferPath.ToString();
-                    if (!string.IsNullOrEmpty(target))
-                    {
-                        var extension = Extension(target);
-                        if (extension == ExeExtension && File.Exists(target))
-                        {
-                            var info = FileVersionInfo.GetVersionInfo(target);
-                            if (!string.IsNullOrEmpty(info.FileDescription))
-                            {
-                                program.Description = info.FileDescription;
-                            }
-                        }
-                    }
-                }
-                return program;
+                program.Description = string.Empty;
             }
-            catch (COMException e)
+            else
             {
-                // C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\MiracastView.lnk always cause exception
-                ProgramLogger.LogException($"|Win32|LnkProgram|{path}" +
-                                                "|Error caused likely due to trying to get the description of the program", e);
-
-                program.Valid = false;
-                return program;
+                program.Description = comments;
             }
-#if !DEBUG //Only do a catch all in production. This is so make developer aware of any unhandled exception and add the exception handling in.
-            catch (Exception e)
-            {
-                ProgramLogger.LogException($"|Win32|LnkProgram|{path}" +
-                                                "|An unexpected error occurred in the calling method LnkProgram", e);
-
-                program.Valid = false;
-                return program;
-            }
-#endif
+            return program;
         }
 
         private static Win32 ExeProgram(string path)
