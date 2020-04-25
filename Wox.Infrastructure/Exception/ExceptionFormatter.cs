@@ -12,49 +12,69 @@ namespace Wox.Infrastructure.Exception
     {
         public static string FormattedException(System.Exception ex)
         {
-            return FormattedAllExceptionInternal(ex).ToString();
+            return FormattedAllExceptions(ex).ToString();
         }
 
 
-        private static StringBuilder FormattedAllExceptionInternal(System.Exception ex)
+        private static StringBuilder FormattedAllExceptions(System.Exception ex)
         {
             var sb = new StringBuilder();
             sb.AppendLine("Exception begin --------------------");
-            int count = 1;
+            int index = 1;
+            FormattedSingleException(ex, sb, 1);
+            ex = ex.InnerException;
             while (ex != null)
             {
-                sb.Append(ex.GetType().FullName);
-                sb.Append(": ");
-                sb.AppendLine(ex.Message);
-                sb.Append("   HResult: ");
-                sb.AppendLine(ex.HResult.ToString());
-
-                if (ex.Source != null)
-                {
-                    sb.Append("   Source: ");
-                    sb.AppendLine(ex.Source);
-                }
-                if (ex.TargetSite != null)
-                {
-                    sb.Append("   TargetAssembly: ");
-                    sb.AppendLine(ex.TargetSite.Module.Assembly.ToString());
-                    sb.Append("   TargetModule: ");
-                    sb.AppendLine(ex.TargetSite.Module.ToString());
-                    sb.Append("   TargetSite: ");
-                    sb.AppendLine(ex.TargetSite.ToString());
-                }
-                sb.AppendLine("   StackTrace: --------------------");
-                sb.AppendLine(ex.StackTrace);
-
-                sb.Append("   InnerException ");
-                sb.Append(count);
-                sb.AppendLine(": --------------------");
+                sb.Append(Indent(index));
+                sb.Append("InnerException ");
+                sb.Append(index);
+                sb.AppendLine(": ------------------------------------------------------------");
+                index = index + 1;
+                FormattedSingleException(ex, sb, index);
                 ex = ex.InnerException;
             }
 
-            sb.AppendLine("Exception end --------------------");
+            sb.AppendLine("Exception end ------------------------------------------------------------");
             sb.AppendLine();
             return sb;
+        }
+
+        private static string Indent(int indentLevel)
+        {
+            return new string(' ', indentLevel * 2);
+        }
+
+        private static void FormattedSingleException(System.Exception ex, StringBuilder sb, int indentLevel)
+        {
+            sb.Append(Indent(indentLevel));
+            sb.Append(ex.GetType().FullName);
+            sb.Append(": ");
+            sb.AppendLine(ex.Message);
+            sb.Append(Indent(indentLevel));
+            sb.Append("HResult: ");
+            sb.AppendLine(ex.HResult.ToString());
+
+            if (ex.Source != null)
+            {
+                sb.Append(Indent(indentLevel));
+                sb.Append("Source: ");
+                sb.AppendLine(ex.Source);
+            }
+            if (ex.TargetSite != null)
+            {
+                sb.Append(Indent(indentLevel));
+                sb.Append("TargetAssembly: ");
+                sb.AppendLine(ex.TargetSite.Module.Assembly.ToString());
+                sb.Append(Indent(indentLevel));
+                sb.Append("TargetModule: ");
+                sb.AppendLine(ex.TargetSite.Module.ToString());
+                sb.Append(Indent(indentLevel));
+                sb.Append("TargetSite: ");
+                sb.AppendLine(ex.TargetSite.ToString());
+            }
+            sb.Append(Indent(indentLevel));
+            sb.AppendLine("StackTrace: --------------------");
+            sb.AppendLine(ex.StackTrace);
         }
 
         private static StringBuilder RuntimeInfo()
@@ -110,7 +130,7 @@ namespace Wox.Infrastructure.Exception
         public static string ExceptionWithRuntimeInfo(System.Exception ex)
         {
             StringBuilder sb = new StringBuilder();
-            var formatted = FormattedAllExceptionInternal(ex);
+            var formatted = FormattedAllExceptions(ex);
             sb.Append(formatted);
             var info = RuntimeInfo();
             sb.Append(info);
