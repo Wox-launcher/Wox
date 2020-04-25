@@ -143,12 +143,12 @@ namespace Wox.Plugin.Program
             Logger.WoxInfo($"Number of indexed win32 programs <{_win32s.Length}>");
             foreach (var win32 in _win32s)
             {
-                Logger.WoxInfo($" win32: {win32.Name}>");
+                Logger.WoxDebug($" win32: {win32.Name}>");
             }
             Logger.WoxInfo($"Number of indexed uwps <{_uwps.Length}>");
             foreach (var uwp in _uwps)
             {
-                Logger.WoxInfo($" uwp: {uwp.DisplayName}>");
+                Logger.WoxDebug($" uwp: {uwp.DisplayName}>");
             }
             _settings.LastIndexTime = DateTime.Today;
         }
