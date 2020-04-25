@@ -39,8 +39,6 @@ function Copy-Resources ($path, $config) {
     Copy-Item -Recurse -Force $project\Images\* $target\Images\
     Copy-Item -Recurse -Force $path\Plugins\HelloWorldPython $target\Plugins\HelloWorldPython
     Copy-Item -Recurse -Force $path\JsonRPC $target\JsonRPC
-    # making version static as multiple versions can exist in the nuget folder and in the case a breaking change is introduced.
-    Copy-Item -Force $env:USERPROFILE\.nuget\packages\squirrel.windows\1.5.2\tools\Squirrel.exe $output\Update.exe
 }
 
 function Delete-Unused ($path, $config) {
