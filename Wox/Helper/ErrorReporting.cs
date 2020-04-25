@@ -42,15 +42,11 @@ namespace Wox.Helper
             var info = $"\nWox version: {Constant.Version}" +
                        $"\nOS Version: {Environment.OSVersion.VersionString}" +
                        $"\nIntPtr Length: {IntPtr.Size}" +
-                       $"\nx64: {Environment.Is64BitOperatingSystem}\n";
-            return info;
-        }
-
-        public static string DependenciesInfo()
-        {
-            var info = $"\nPython Path: {Constant.PythonPath}" +
+                       $"\nx64: {Environment.Is64BitOperatingSystem}" +
+                       $"\nPython Path: {Constant.PythonPath}" +
                        $"\nEverything SDK Path: {Constant.EverythingSDKPath}";
             return info;
         }
+
     }
 }
