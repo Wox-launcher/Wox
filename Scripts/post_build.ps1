@@ -69,7 +69,7 @@ function Pack-Nuget-API ($path, $version, $output) {
 function Pack-Zip ($path, $version, $output) {
     Write-Host "Begin pack zip"
 
-    $input = "$path\Output\Release"
+    $input = "$path\Output\$config"
     Write-Host "Input path:  $input"
     $file = "$output\Wox-$version.zip"
     Write-Host "Filename: $file"
@@ -86,9 +86,9 @@ function Pack-Squirrel-Installer ($path, $version, $output) {
 
     $spec = "$path\Scripts\wox.nuspec"
     Write-Host "nuspec path: $spec"
-    $input = "$path\Output\Release"
+    $input = "$path\Output\$config"
     Write-Host "Input path:  $input"
-    Nuget pack $spec -Version $version -Properties Configuration=Release -BasePath $input -OutputDirectory  $output
+    Nuget pack $spec -Version $version -Properties Configuration=$config -BasePath $input -OutputDirectory  $output
 
     $nupkg = "$output\Wox.$version.nupkg"
     Write-Host "nupkg path: $nupkg"
