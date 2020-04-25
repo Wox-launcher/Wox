@@ -263,7 +263,7 @@
                             </Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Margin" Value="5"/>
-                                <Setter Property="TextAlignment" Value="Left"/>
+                                <Setter Property="TextAlignment" Value="Right"/>
                                 <Setter Property="VerticalAlignment" Value="Center"/>
                             </Style>
                         </Grid.Resources>
@@ -319,6 +319,9 @@
                             </ComboBox.ItemTemplate>
                         </ComboBox>
                         
+                        
+                        <TextBlock Text="{DynamicResource resultItemHighlightFont}"
+                                   Grid.Column="1" Grid.Row="2" />
                         <ComboBox ItemsSource="{Binding SelectedResultFont.FamilyTypefaces}"
                                   SelectedItem="{Binding SelectedResultHighlightFontFaces}"
                                   Grid.Column="2" Grid.Row="2">
