@@ -23,7 +23,7 @@ namespace Wox.Test
 
         [TestCase("powershell", "PowerShell")]
         [TestCase("note", "Notepad")]
-        [TestCase("compu", "computer")]
+        [TestCase("this pc", "This PC")]
         public void Win32Test(string QueryText, string ResultTitle)
         {
             Query query = QueryBuilder.Build(QueryText.Trim(), new Dictionary<string, PluginPair>());
