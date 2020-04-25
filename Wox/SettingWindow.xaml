@@ -230,7 +230,7 @@
                 <Grid Margin="0" Grid.Column="1">
                     <Grid.RowDefinitions>
                         <RowDefinition />
-                        <RowDefinition Height="100" />
+                        <RowDefinition Height="150" />
                     </Grid.RowDefinitions>
                     <StackPanel Background="{Binding PreviewBackground}" Grid.Row="0" Margin="0">
                         <StackPanel Orientation="Horizontal" Margin="10"
@@ -263,7 +263,7 @@
                             </Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Margin" Value="5"/>
-                                <Setter Property="TextAlignment" Value="Left"/>
+                                <Setter Property="TextAlignment" Value="Right"/>
                                 <Setter Property="VerticalAlignment" Value="Center"/>
                             </Style>
                         </Grid.Resources>
@@ -273,6 +273,7 @@
                             <ColumnDefinition/>
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
+                            <RowDefinition/>
                             <RowDefinition/>
                             <RowDefinition/>
                         </Grid.RowDefinitions>
@@ -296,6 +297,7 @@
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
+
                         <TextBlock Text="{DynamicResource resultItemFont}"
                                    Grid.Column="0" Grid.Row="1" />
                         <ComboBox ItemsSource="{Binding Source={StaticResource SortedFontsResult}}"
@@ -304,6 +306,25 @@
                         <ComboBox ItemsSource="{Binding SelectedResultFont.FamilyTypefaces}"
                                   SelectedItem="{Binding SelectedResultFontFaces}"
                                   Grid.Column="2" Grid.Row="1">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <ItemsControl ItemsSource="{Binding AdjustedFaceNames}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Value}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        
+                        
+                        <TextBlock Text="{DynamicResource resultItemHighlightFont}"
+                                   Grid.Column="1" Grid.Row="2" />
+                        <ComboBox ItemsSource="{Binding SelectedResultFont.FamilyTypefaces}"
+                                  SelectedItem="{Binding SelectedResultHighlightFontFaces}"
+                                  Grid.Column="2" Grid.Row="2">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
                                     <ItemsControl ItemsSource="{Binding AdjustedFaceNames}">

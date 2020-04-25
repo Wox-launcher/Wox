@@ -53,6 +53,8 @@
                                     <MultiBinding Converter="{StaticResource HighlightTextConverter}" Mode="TwoWay">
                                         <Binding Path="Result.Title" Converter="{StaticResource MultilineTextConverter}" />
                                         <Binding Path="Result.TitleHighlightData" />
+                                        <Binding RelativeSource="{RelativeSource Mode=FindAncestor,AncestorType={x:Type ListBoxItem}}"
+                                                 Path="IsSelected" />
                                     </MultiBinding>
                                 </vm:ResultsViewModel.FormattedText>
                             </TextBlock>
@@ -62,6 +64,8 @@
                                     <MultiBinding Converter="{StaticResource HighlightTextConverter}" >
                                         <Binding Path="Result.SubTitle"  Converter="{StaticResource MultilineTextConverter}"/>
                                         <Binding Path="Result.SubTitleHighlightData" />
+                                        <Binding RelativeSource="{RelativeSource Mode=FindAncestor,AncestorType={x:Type ListBoxItem}}"
+                                                 Path="IsSelected" />
                                     </MultiBinding>
                                 </vm:ResultsViewModel.FormattedText>
                             </TextBlock>

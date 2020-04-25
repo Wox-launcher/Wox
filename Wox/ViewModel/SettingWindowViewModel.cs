@@ -404,6 +404,27 @@ namespace Wox.ViewModel
             }
         }
 
+        public FamilyTypeface SelectedResultHighlightFontFaces
+        {
+            get
+            {
+                var typeface = SyntaxSugars.CallOrRescueDefault(
+                    () => SelectedResultFont.ConvertFromInvariantStringsOrNormal(
+                        Settings.ResultHighlightFontStyle,
+                        Settings.ResultHighlightFontWeight,
+                        Settings.ResultHighlightFontStretch
+                        ));
+                return typeface;
+            }
+            set
+            {
+                Settings.ResultHighlightFontStretch = value.Stretch.ToString();
+                Settings.ResultHighlightFontWeight = value.Weight.ToString();
+                Settings.ResultHighlightFontStyle = value.Style.ToString();
+                ThemeManager.Instance.ChangeTheme(Settings.Theme);
+            }
+        }
+
         #endregion
 
         #region hotkey
