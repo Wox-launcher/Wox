@@ -1,17 +1,17 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using NLog;
-using Wox.Infrastructure;
 using Wox.Infrastructure.Exception;
 
 namespace Wox.Helper
 {
     public static class ErrorReporting
     {
-        private static void Report(Exception e)
+        private static void Report(Exception e, [CallerMemberName] string method = "")
         {
-            var logger = LogManager.GetLogger("UnHandledException");
+            var logger = LogManager.GetLogger(method);
             logger.Fatal(ExceptionFormatter.ExceptionWithRuntimeInfo(e));
             var reportWindow = new ReportWindow(e);
             reportWindow.Show();
