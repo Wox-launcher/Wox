@@ -29,6 +29,7 @@
         d:DataContext="{d:DesignInstance vm:MainViewModel}">
     <Window.Resources>
         <converters:QuerySuggestionBoxConverter x:Key="QuerySuggestionBoxConverter"/>
+        <converters:MultilineTextConverter x:Key="MultilineTextConverter"/>
     </Window.Resources>
     <Window.InputBindings>
         <KeyBinding Key="Escape" Command="{Binding EscCommand}"></KeyBinding>
