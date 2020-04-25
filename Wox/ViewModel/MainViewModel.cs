@@ -407,7 +407,7 @@ namespace Wox.ViewModel
                         if (!token.IsCancellationRequested)
                         {
                             ProgressBarVisibility = Visibility.Visible;
-                            Logger.WoxInfo($"progressbar visible {query} {token.IsCancellationRequested} {ProgressBarVisibility}");
+                            Logger.WoxDebug($"progressbar visible {query} {token.IsCancellationRequested} {ProgressBarVisibility}");
                         }
                     }, token);
 
