@@ -32,8 +32,8 @@ namespace Wox.Converters
             var resources = ThemeManager.Instance.GetResourceDictionary();
 
             var highlightColor = (Brush) (selected?
-                resources.Contains("ItemSelectedHighlightColor")? resources["ItemSelectedHighlightColor"]: Brushes.LightGray:
-                resources.Contains("ItemHighlightColor")? resources["ItemHighlightColor"]: Brushes.LightGray);
+                resources.Contains("ItemSelectedHighlightColor")? resources["ItemSelectedHighlightColor"]: resources["BaseItemSelectedHighlightColor"]:
+                resources.Contains("ItemHighlightColor")? resources["ItemHighlightColor"]: resources["BaseItemHighlightColor"]);
             var highlightStyle = FontHelper.GetFontStyleFromInvariantStringOrNormal(settings.ResultHighlightFontStyle);
             var highlightWeight = FontHelper.GetFontWeightFromInvariantStringOrNormal(settings.ResultHighlightFontWeight);
             var highlightStretch = FontHelper.GetFontStretchFromInvariantStringOrNormal(settings.ResultHighlightFontStretch);

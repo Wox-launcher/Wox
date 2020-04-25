@@ -54,6 +54,8 @@
     <Style x:Key="BasePendingLineStyle" TargetType="{x:Type Line}">
         <Setter Property="Stroke" Value="Blue" />
     </Style>
+    <SolidColorBrush x:Key="BaseItemHighlightColor" Color="LightGray"/>
+    <SolidColorBrush x:Key="BaseItemSelectedHighlightColor" Color="LightGray"/>
 
     <!-- Item Style -->
     <Style x:Key="BaseItemTitleStyle" TargetType="{x:Type TextBlock}">
