@@ -1,18 +1,18 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using NLog;
-using Wox.Infrastructure;
 using Wox.Infrastructure.Exception;
 
 namespace Wox.Helper
 {
     public static class ErrorReporting
     {
-        private static void Report(Exception e)
+        private static void Report(Exception e, [CallerMemberName] string method = "")
         {
-            var logger = LogManager.GetLogger("UnHandledException");
-            logger.Fatal(ExceptionFormatter.FormatExcpetion(e));
+            var logger = LogManager.GetLogger(method);
+            logger.Fatal(ExceptionFormatter.ExceptionWithRuntimeInfo(e));
             var reportWindow = new ReportWindow(e);
             reportWindow.Show();
         }
@@ -37,20 +37,5 @@ namespace Wox.Helper
             e.Handled = true;
         }
 
-        public static string RuntimeInfo()
-        {
-            var info = $"\nWox version: {Constant.Version}" +
-                       $"\nOS Version: {Environment.OSVersion.VersionString}" +
-                       $"\nIntPtr Length: {IntPtr.Size}" +
-                       $"\nx64: {Environment.Is64BitOperatingSystem}";
-            return info;
-        }
-
-        public static string DependenciesInfo()
-        {
-            var info = $"\nPython Path: {Constant.PythonPath}" +
-                       $"\nEverything SDK Path: {Constant.EverythingSDKPath}";
-            return info;
-        }
     }
 }
