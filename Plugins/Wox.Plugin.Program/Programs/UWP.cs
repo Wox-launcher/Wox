@@ -415,6 +415,11 @@ namespace Wox.Plugin.Program.Programs
 
             private string FilesFromPri(string packageFullName, string packageName, string fileReference)
             {
+                // all https://msdn.microsoft.com/windows/uwp/controls-and-patterns/tiles-and-notifications-app-assets
+                // windows 10 https://msdn.microsoft.com/en-us/library/windows/apps/dn934817.aspx
+                // windows 8.1 https://msdn.microsoft.com/en-us/library/windows/apps/hh965372.aspx#target_size
+                // windows 8 https://msdn.microsoft.com/en-us/library/windows/apps/br211475.aspx
+
                 Logger.WoxDebug($"package: <{packageFullName}> file ref: <{fileReference}>");
                 string parsed = $"ms-resource://{packageName}/Files/{fileReference.Replace("\\", "/")}";
                 string result = ResourceFromPriInternal(packageFullName, parsed);
@@ -476,69 +481,6 @@ namespace Wox.Plugin.Program.Programs
                     return string.Empty;
                 }
             }
-
-            internal string LogoPathFromUri(string uri)
-            {
-                // all https://msdn.microsoft.com/windows/uwp/controls-and-patterns/tiles-and-notifications-app-assets
-                // windows 10 https://msdn.microsoft.com/en-us/library/windows/apps/dn934817.aspx
-                // windows 8.1 https://msdn.microsoft.com/en-us/library/windows/apps/hh965372.aspx#target_size
-                // windows 8 https://msdn.microsoft.com/en-us/library/windows/apps/br211475.aspx
-
-                string path;
-                if (uri.Contains("\\"))
-                {
-                    path = Path.Combine(Package.Location, uri);
-                }
-                else
-                {
-                    // for C:\Windows\MiracastView etc
-                    path = Path.Combine(Package.Location, "Assets", uri);
-                }
-
-                var extension = Path.GetExtension(path);
-                if (extension != null)
-                {
-                    var end = path.Length - extension.Length;
-                    var prefix = path.Substring(0, end);
-                    var paths = new List<string> { path };
-
-                    var scaleFactors = new Dictionary<PackageVersion, List<int>>
-                    {
-                        // scale factors on win10: https://docs.microsoft.com/en-us/windows/uwp/controls-and-patterns/tiles-and-notifications-app-assets#asset-size-tables,
-                        { PackageVersion.Windows10, new List<int> { 100, 125, 150, 200, 400 } },
-                        { PackageVersion.Windows81, new List<int> { 100, 120, 140, 160, 180 } },
-                        { PackageVersion.Windows8, new List<int> { 100 } }
-                    };
-
-                    if (scaleFactors.ContainsKey(Package.Version))
-                    {
-                        foreach (var factor in scaleFactors[Package.Version])
-                        {
-                            paths.Add($"{prefix}.scale-{factor}{extension}");
-                        }
-                    }
-
-                    var selected = paths.FirstOrDefault(File.Exists);
-                    if (!string.IsNullOrEmpty(selected))
-                    {
-                        return selected;
-                    }
-                    else
-                    {
-                        ProgramLogger.LogException($"|UWP|LogoPathFromUri|{Package.Location}" +
-                                                    $"|{UserModelId} can't find logo uri for {uri} in package location: {Package.Location}", new FileNotFoundException());
-                        return string.Empty;
-                    }
-                }
-                else
-                {
-                    ProgramLogger.LogException($"|UWP|LogoPathFromUri|{Package.Location}" +
-                                                    $"|Unable to find extension from {uri} for {UserModelId} " +
-                                                    $"in package location {Package.Location}", new FileNotFoundException());
-                    return string.Empty;
-                }
-            }
-
 
             public ImageSource Logo()
             {
