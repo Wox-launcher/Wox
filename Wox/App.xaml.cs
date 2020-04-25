@@ -79,15 +79,16 @@ namespace Wox
         {
             Logger.StopWatchNormal("Startup cost", () =>
             {
-                Constant.Initialize();
-
-                _portable.PreStartCleanUpAfterPortabilityUpdate();
-
-                
                 Logger.WoxInfo("Begin Wox startup----------------------------------------------------");
                 Logger.WoxInfo($"Runtime info:{ErrorReporting.RuntimeInfo()}");
+
+                Constant.Initialize();
+
                 RegisterAppDomainExceptions();
                 RegisterDispatcherUnhandledException();
+
+                _portable.PreStartCleanUpAfterPortabilityUpdate();
+                
 
                 ImageLoader.Initialize();
 
