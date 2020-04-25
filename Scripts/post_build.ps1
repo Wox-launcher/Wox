@@ -77,7 +77,7 @@ function Pack-Zip ($path, $version, $output) {
     [Reflection.Assembly]::LoadWithPartialName("System.IO.Compression.FileSystem")
     [System.IO.Compression.ZipFile]::CreateFromDirectory($input, $file)
 
-    Write-Host "End zip release"
+    Write-Host "End pack zip"
 }
 
 function Pack-Squirrel-Installer ($path, $version, $output) {
