@@ -1,13 +1,12 @@
 param(
     [string]$config = "Release", 
-    [string]$solution,
-	[string]$targetpath
+    [string]$solution = "."
 )
-Write-Host "Config: $config"
+$ErrorActionPreference = "Stop"
 
 function Build-Version {
 	if ([string]::IsNullOrEmpty($env:APPVEYOR_BUILD_VERSION)) {
-		$v = (Get-Command ${TargetPath}).FileVersionInfo.FileVersion
+		$v = "1.5.0"
 	} else {
         $v = $env:APPVEYOR_BUILD_VERSION
     }
@@ -116,6 +115,7 @@ function Pack-Squirrel-Installer ($path, $version, $output) {
 }
 
 function Main {
+    Write-Host "Config: $config"
     $p = Build-Path
     $v = Build-Version
     Copy-Resources $p $config
