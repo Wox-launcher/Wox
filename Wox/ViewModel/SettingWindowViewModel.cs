@@ -308,7 +308,7 @@ namespace Wox.ViewModel
                         SubTitle = "Please star it!"
                     }
                 };
-                var vm = new ResultsViewModel();
+                var vm = new ResultsViewModel(Settings);
                 vm.AddResults(results, "PREVIEW");
                 return vm;
             }

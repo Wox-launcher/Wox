@@ -245,8 +245,8 @@
                                              Style="{DynamicResource QueryTextSuggestionBoxStyle}" Grid.Row="0" />
                                     <TextBox Text="{DynamicResource helloWox}" IsReadOnly="True"
                                              Style="{DynamicResource QueryBoxStyle}" Grid.Row="0" />
-                                    <ContentControl Visibility="Visible" Grid.Row="1">
-                                        <wox:ResultListBox DataContext="{Binding PreviewResults}" />
+                                    <ContentControl Grid.Row="1">
+                                        <wox:ResultListBox DataContext="{Binding PreviewResults, Mode=OneTime}" Visibility="Visible"/>
                                     </ContentControl>
                                 </Grid>
                             </Border>
