@@ -33,7 +33,7 @@ namespace Wox.Plugin.BrowserBookmark
 
         public List<Result> Query(Query query)
         {
-            string param = query.GetAllRemainingParameter().TrimStart();
+            string param = query.Search.TrimStart();
 
             // Should top results be returned? (true if no search parameters have been passed)
             var topResults = string.IsNullOrEmpty(param);
