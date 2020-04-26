@@ -55,17 +55,13 @@ namespace Wox.Plugin.Program
             }
             if (_editing == null)
             {
-                if (!ProgramSetting.ProgramSettingDisplayList.Any(x => x.UniqueIdentifier == Directory.Text))
+                var source = new ProgramSource
                 {
-                    var source = new ProgramSource
-                    {
-                        Location = Directory.Text,
-                        UniqueIdentifier = Directory.Text
-                    };
+                    Location = Directory.Text,
+                    UniqueIdentifier = Directory.Text
+                };
 
-                    _settings.ProgramSources.Insert(0, source);
-                    ProgramSetting.ProgramSettingDisplayList.Add(source);
-                }
+                _settings.ProgramSources.Insert(0, source);
             }
             else
             {

@@ -6,7 +6,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Wox.Plugin.Program.Views.Models;
-using Wox.Plugin.Program.Views.Commands;
 using Wox.Plugin.Program.Programs;
 using System.ComponentModel;
 using System.Windows.Data;
@@ -23,10 +22,6 @@ namespace Wox.Plugin.Program.Views
         private GridViewColumnHeader _lastHeaderClicked;
         private ListSortDirection _lastDirection;
 
-        // We do not save all program sources to settings, so using
-        // this as temporary holder for displaying all loaded programs sources. 
-        internal static List<ProgramSource> ProgramSettingDisplayList { get; set; }
-
         public ProgramSetting(PluginInitContext context, Settings settings, Win32[] win32s, UWP.Application[] uwps)
         {
             this.context = context;
@@ -37,8 +32,7 @@ namespace Wox.Plugin.Program.Views
 
         private void Setting_Loaded(object sender, RoutedEventArgs e)
         {
-            ProgramSettingDisplayList = _settings.ProgramSources.LoadProgramSources();
-            programSourceView.ItemsSource = ProgramSettingDisplayList;
+            programSourceView.ItemsSource = _settings.ProgramSources;
             programIgnoreView.ItemsSource = _settings.IgnoredSequence;
             StartMenuEnabled.IsChecked = _settings.EnableStartMenuSource;
             RegistryEnabled.IsChecked = _settings.EnableRegistrySource;
@@ -72,8 +66,6 @@ namespace Wox.Plugin.Program.Views
                                                     .Remove(_settings.ProgramSources
                                                                         .Where(x => x.UniqueIdentifier == t1.UniqueIdentifier)
                                                                         .FirstOrDefault()));
-            itemsToDelete.ForEach(x => ProgramSettingDisplayList.Remove(x));
-
             ReIndexing();
         }
 
@@ -131,7 +123,7 @@ namespace Wox.Plugin.Program.Views
             {
                 foreach (string directory in directories)
                 {
-                    if (Directory.Exists(directory) && !ProgramSettingDisplayList.Any(x => x.UniqueIdentifier == directory))
+                    if (Directory.Exists(directory))
                     {
                         var source = new ProgramSource
                         {
@@ -146,7 +138,6 @@ namespace Wox.Plugin.Program.Views
                 if (directoriesToAdd.Count() > 0)
                 {
                     directoriesToAdd.ForEach(x => _settings.ProgramSources.Add(x));
-                    directoriesToAdd.ForEach(x => ProgramSettingDisplayList.Add(x));                   
 
                     programSourceView.Items.Refresh();
                     ReIndexing();
@@ -164,13 +155,6 @@ namespace Wox.Plugin.Program.Views
         {
             _settings.EnableRegistrySource = RegistryEnabled.IsChecked ?? false;
             ReIndexing();
-        }
-
-        private void btnLoadAllProgramSource_OnClick(object sender, RoutedEventArgs e)
-        {
-            ProgramSettingDisplayList.LoadAllApplications();
-
-            programSourceView.Items.Refresh();
         }
 
         private void btnProgramSoureDelete_OnClick(object sender, RoutedEventArgs e)
