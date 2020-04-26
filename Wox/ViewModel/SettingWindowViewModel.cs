@@ -293,7 +293,7 @@ namespace Wox.ViewModel
                     {
                         Title = "Keyword plugin search.",
                         SubTitle = "search google with g search_term.",
-                        IcoPath = "Browser/Browser.png"
+                        IcoPath = "Images/browser.png"
                     },
                     new Result
                     {

@@ -123,7 +123,7 @@ namespace Wox.Infrastructure.Image
         {
             Logger.WoxDebug($"load begin {path}");
             var img = LoadInternal(path);
-            Logger.WoxDebug($"load end {path}");
+            Logger.WoxTrace($"load end {path}");
             return img;
         }
     }

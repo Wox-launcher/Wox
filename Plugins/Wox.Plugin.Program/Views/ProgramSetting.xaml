@@ -22,7 +22,6 @@
                 <CheckBox Name="RegistryEnabled" Click="RegistryEnabled_Click"  Margin="5" Content="{DynamicResource wox_plugin_program_index_registry}" />
             </StackPanel>
             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                <Button Height="30" HorizontalAlignment="Right" Margin="10" Width="100" x:Name="btnLoadAllProgramSource" Click="btnLoadAllProgramSource_OnClick" Content="{DynamicResource wox_plugin_program_all_programs}" />
                 <Button Height="30" HorizontalAlignment="Right" Margin="10" Width="100" x:Name="btnProgramSuffixes" Click="BtnProgramSuffixes_OnClick" Content="{DynamicResource wox_plugin_program_suffixes}" />
                 <Button Height="30" HorizontalAlignment="Right" Margin="10" Width="100" x:Name="btnReindex" Click="btnReindex_Click" Content="{DynamicResource wox_plugin_program_reindex}" />
             </StackPanel>
@@ -32,27 +31,8 @@
             PreviewMouseRightButtonUp="ProgramSourceView_PreviewMouseRightButtonUp"
             DragEnter="programSourceView_DragEnter"
             Drop="programSourceView_Drop" >
-            <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
-                    <EventSetter Event="PreviewMouseUp" Handler="Row_OnClick"/>
-                </Style>
-            </ListView.ItemContainerStyle>
             <ListView.View>
                 <GridView>
-                    <GridViewColumn Header="Name" Width="150">
-                        <GridViewColumn.CellTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding Name}"/>
-                            </DataTemplate>
-                        </GridViewColumn.CellTemplate>
-                    </GridViewColumn>
-                    <GridViewColumn Header="Enabled" Width="50">
-                        <GridViewColumn.CellTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding Enabled}"/>
-                            </DataTemplate>
-                        </GridViewColumn.CellTemplate>
-                    </GridViewColumn>
                     <GridViewColumn Header="{DynamicResource wox_plugin_program_location}" Width="550">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
@@ -69,7 +49,7 @@
                 <TextBlock Margin="10 0 0 0" Height="20" HorizontalAlignment="Center" Text="{DynamicResource wox_plugin_program_indexing}" />
             </StackPanel>
             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                <Button x:Name="btnProgramSourceStatus" Click="btnProgramSourceStatus_OnClick" Width="100" Margin="10" Content="{DynamicResource wox_plugin_program_disable}" />
+                <Button x:Name="btnProgramSourceStatus" Click="btnProgramSoureDelete_OnClick" Width="100" Margin="10" Content="{DynamicResource wox_plugin_program_delete}" />
                 <Button x:Name="btnAddProgramSource" Click="btnAddProgramSource_OnClick" Width="100" Margin="10" Content="{DynamicResource wox_plugin_program_add}"/>
                 <Button x:Name="btnEditProgramSource" Click="btnEditProgramSource_OnClick" Width="100" Margin="10" Content="{DynamicResource wox_plugin_program_edit}"/>
             </StackPanel>
@@ -80,7 +60,7 @@
             Drop="programSourceView_Drop" >
             <ListView.View>
                 <GridView>
-                    <GridViewColumn Header="{DynamicResource wox_plugin_program_location}"  Width="500">
+                    <GridViewColumn Header="{DynamicResource wox_plugin_program_location}"  Width="550">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding}"/>

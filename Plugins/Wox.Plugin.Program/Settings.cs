@@ -8,7 +8,6 @@ namespace Wox.Plugin.Program
     {
         public DateTime LastIndexTime { get; set; }
         public List<ProgramSource> ProgramSources { get; set; } = new List<ProgramSource>();
-        public List<DisabledProgramSource> DisabledProgramSources { get; set; } = new List<DisabledProgramSource>();
         public List<IgnoredEntry> IgnoredSequence { get; set; } = new List<IgnoredEntry>();
         public string[] ProgramSuffixes { get; set; } = {"bat", "appref-ms", "exe", "lnk"};
 
@@ -18,24 +17,22 @@ namespace Wox.Plugin.Program
 
         internal const char SuffixSeperator = ';';
 
-        /// <summary>
-        /// Contains user added folder location contents as well as all user disabled applications
-        /// </summary>
-        /// <remarks>
-        /// <para>Win32 class applications set UniqueIdentifier using their full file path</para>
-        /// <para>UWP class applications set UniqueIdentifier using their Application User Model ID</para>
-        /// <para>Custom user added program sources set UniqueIdentifier using their location</para>
-        /// </remarks>
         public class ProgramSource
         {
-            private string name;
-
             public string Location { get; set; }
-            public string Name { get => name ?? new DirectoryInfo(Location).Name; set => name = value; }
-            public bool Enabled { get; set; } = true;
-            public string UniqueIdentifier { get; set; }
+
+            public override bool Equals(object obj)
+            {
+                var s = obj as ProgramSource;
+                var equality = s?.Location == Location ;
+                return equality;
+            }
+
+            public override int GetHashCode()
+            {
+                return this.Location.GetHashCode();
+            }
         }
 
-        public class DisabledProgramSource : ProgramSource { }
     }
 }

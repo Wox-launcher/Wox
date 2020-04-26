@@ -72,8 +72,12 @@ namespace Wox.Plugin.Program.Programs
             var appxFactory = new AppxFactory();
             IStream stream;
             const uint noAttribute = 0x80;
-            const Stgm exclusiveRead = Stgm.Read | Stgm.ShareExclusive;
-            var hResult = SHCreateStreamOnFileEx(path, exclusiveRead, noAttribute, false, null, out stream);
+            // shared read will slow speed https://docs.microsoft.com/en-us/windows/win32/stg/stgm-constants
+            // but cannot find a way to release stearm, so use shared read
+            // exclusive read will cause exception during reinexing
+            // System.IO.FileLoadException: The process cannot access the file because it is being used by another process
+            const Stgm sharedRead = Stgm.Read | Stgm.ShareDenyNone;
+            var hResult = SHCreateStreamOnFileEx(path, sharedRead, noAttribute, false, null, out stream);
 
             if (hResult == Hresult.Ok)
             {
@@ -170,12 +174,7 @@ namespace Wox.Plugin.Program.Programs
                     return u.Apps;
                 }).ToArray();
 
-                var updatedListWithoutDisabledApps = applications
-                                                        .Where(t1 => !Main._settings.DisabledProgramSources
-                                                                        .Any(x => x.UniqueIdentifier == t1.UniqueIdentifier))
-                                                        .Select(x => x);
-
-                return updatedListWithoutDisabledApps.ToArray();
+                return applications;
             }
             else
             {
@@ -245,7 +244,6 @@ namespace Wox.Plugin.Program.Programs
         public class Application : IProgram
         {
             public string AppListEntry { get; set; }
-            public string UniqueIdentifier { get; set; }
             public string DisplayName { get; set; }
             public string Description { get; set; }
             public string UserModelId { get; set; }
@@ -354,7 +352,6 @@ namespace Wox.Plugin.Program.Programs
             public Application(IAppxManifestApplication manifestApp, UWP package)
             {
                 UserModelId = manifestApp.GetAppUserModelId();
-                UniqueIdentifier = manifestApp.GetAppUserModelId();
                 DisplayName = manifestApp.GetStringValue("DisplayName");
                 Description = manifestApp.GetStringValue("Description");
                 BackgroundColor = manifestApp.GetStringValue("BackgroundColor");
@@ -371,7 +368,7 @@ namespace Wox.Plugin.Program.Programs
             {
                 const string prefix = "ms-resource:";
                 string result = "";
-                Logger.WoxDebug($"package: <{packageFullName}> res ref: <{resourceReference}>");
+                Logger.WoxTrace($"package: <{packageFullName}> res ref: <{resourceReference}>");
                 if (!string.IsNullOrWhiteSpace(resourceReference) && resourceReference.StartsWith(prefix))
                 {
 
@@ -402,7 +399,7 @@ namespace Wox.Plugin.Program.Programs
                 {
                     result = resourceReference;
                 }
-                Logger.WoxDebug($"package: <{packageFullName}> pri resource result: <{result}>");
+                Logger.WoxTrace($"package: <{packageFullName}> pri resource result: <{result}>");
                 return result;
             }
 
@@ -413,10 +410,10 @@ namespace Wox.Plugin.Program.Programs
                 // windows 8.1 https://msdn.microsoft.com/en-us/library/windows/apps/hh965372.aspx#target_size
                 // windows 8 https://msdn.microsoft.com/en-us/library/windows/apps/br211475.aspx
 
-                Logger.WoxDebug($"package: <{packageFullName}> file ref: <{fileReference}>");
+                Logger.WoxTrace($"package: <{packageFullName}> file ref: <{fileReference}>");
                 string parsed = $"ms-resource://{packageName}/Files/{fileReference.Replace("\\", "/")}";
                 string result = ResourceFromPriInternal(packageFullName, parsed);
-                Logger.WoxDebug($"package: <{packageFullName}> pri file result: <{result}>");
+                Logger.WoxTrace($"package: <{packageFullName}> pri file result: <{result}>");
                 return result;
             }
 
@@ -425,7 +422,7 @@ namespace Wox.Plugin.Program.Programs
             /// makepri.exe dump /if "a\resources.pri" /of b.xml 
             private string ResourceFromPriInternal(string packageFullName, string parsed)
             {
-                Logger.WoxDebug($"package: <{packageFullName}> pri parsed: <{parsed}>");
+                Logger.WoxTrace($"package: <{packageFullName}> pri parsed: <{parsed}>");
                 // following error probally due to buffer to small
                 // '200' violates enumeration constraint of '100 120 140 160 180'.
                 // 'Microsoft Corporation' violates pattern constraint of '\bms-resource:.{1,256}'.
@@ -571,6 +568,7 @@ namespace Wox.Plugin.Program.Programs
         {
             Read = 0x0,
             ShareExclusive = 0x10,
+            ShareDenyNone = 0x40,
         }
 
         private enum Hresult : uint
