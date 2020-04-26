@@ -12,9 +12,7 @@ namespace Wox.Plugin.BrowserBookmark
 
         public List<Bookmark> GetBookmarks()
         {
-            bookmarks.Clear();
             LoadChromeBookmarks();
-
             return bookmarks;
         }
 
@@ -57,7 +55,7 @@ namespace Wox.Plugin.BrowserBookmark
                         !b.Url.StartsWith("vbscript:", StringComparison.OrdinalIgnoreCase);
                 return c;
             });
-            bookmarks = filtered.ToList();
+            bookmarks.AddRange(filtered);
         }
 
         private void LoadChromeBookmarks(string path, string name)
