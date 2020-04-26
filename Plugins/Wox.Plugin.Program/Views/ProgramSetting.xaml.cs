@@ -62,10 +62,7 @@ namespace Wox.Plugin.Program.Views
 
         private void DeleteProgramSources(List<ProgramSource> itemsToDelete)
         {
-            itemsToDelete.ForEach(t1 => _settings.ProgramSources
-                                                    .Remove(_settings.ProgramSources
-                                                                        .Where(x => x.UniqueIdentifier == t1.UniqueIdentifier)
-                                                                        .FirstOrDefault()));
+            _settings.ProgramSources = _settings.ProgramSources.Where(s => itemsToDelete.Contains(s)).ToList();
             ReIndexing();
         }
 
@@ -128,7 +125,6 @@ namespace Wox.Plugin.Program.Views
                         var source = new ProgramSource
                         {
                             Location = directory,
-                            UniqueIdentifier = directory
                         };
 
                         directoriesToAdd.Add(source);                        
