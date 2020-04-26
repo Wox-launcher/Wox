@@ -58,6 +58,7 @@ function Delete-Unused ($path, $config) {
     Remove-Item -Path $target -Include "NUnit3.*" -Recurse 
     Remove-Item -Path $target -Include "Moq.*" -Recurse 
     Remove-Item -Path $target -Include "Wox.Test.*" -Recurse 
+    Remove-Item -Path $target -Include "win-arm" -Recurse 
 }
 
 function Validate-Directory ($output) {

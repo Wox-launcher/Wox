@@ -1,4 +1,4 @@
-﻿using BinaryAnalysis.UnidecodeSharp;
+﻿//using BinaryAnalysis.UnidecodeSharp;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,7 +19,7 @@ namespace Wox.Plugin.BrowserBookmark
             set
             {
                 m_Name = value;
-                PinyinName = m_Name.Unidecode();
+                //PinyinName = m_Name.Unidecode();
             }
         }
         public string PinyinName { get; private set; }

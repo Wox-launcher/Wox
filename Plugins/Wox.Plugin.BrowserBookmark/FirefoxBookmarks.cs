@@ -1,22 +1,18 @@
 using System;
 using System.Collections.Generic;
-using System.Data.SQLite;
 using System.IO;
 using System.Linq;
+
+using Microsoft.Data.Sqlite;
+using NLog;
+
+using Wox.Infrastructure.Logger;
 
 namespace Wox.Plugin.BrowserBookmark
 {
     public class FirefoxBookmarks
     {
-        private const string queryAllBookmarks = @"SELECT moz_places.url, moz_bookmarks.title
-              FROM moz_places
-              INNER JOIN moz_bookmarks ON (
-                moz_bookmarks.fk NOT NULL AND moz_bookmarks.fk = moz_places.id
-              )              
-              ORDER BY moz_places.visit_count DESC
-            ";
-
-        private const string dbPathFormat = "Data Source ={0};Version=3;New=False;Compress=True;";
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
         /// <summary>
         /// Searches the places.sqlite db and returns all bookmarks
@@ -26,23 +22,37 @@ namespace Wox.Plugin.BrowserBookmark
             // Return empty list if the places.sqlite file cannot be found
             if (string.IsNullOrEmpty(PlacesPath) || !File.Exists(PlacesPath))
                 return new List<Bookmark>();
+            Logger.WoxDebug($"Firefox db path {PlacesPath}");
 
             var bookmarList = new List<Bookmark>();
 
             // create the connection string and init the connection
-            string dbPath = string.Format(dbPathFormat, PlacesPath);            
-            using (var dbConnection = new SQLiteConnection(dbPath))
+
+            string dbPath = $"Data Source={PlacesPath}";
+            using (var dbConnection = new SqliteConnection(dbPath))
             {
                 // Open connection to the database file and execute the query
                 dbConnection.Open();
-                var reader = new SQLiteCommand(queryAllBookmarks, dbConnection).ExecuteReader();
-
-                // return results in List<Bookmark> format
-                bookmarList = reader.Select(x => new Bookmark()
+                SqliteCommand command = dbConnection.CreateCommand();
+                command.CommandText = @"SELECT moz_places.url, moz_bookmarks.title
+                        FROM moz_places
+                        INNER JOIN moz_bookmarks ON (
+                            moz_bookmarks.fk NOT NULL AND moz_bookmarks.fk = moz_places.id
+                        )";
+                using (SqliteDataReader reader = command.ExecuteReader())
                 {
-                    Name = (x["title"] is DBNull) ? string.Empty : x["title"].ToString(),
-                    Url = x["url"].ToString()
-                }).ToList();
+                    while (reader.Read())
+                    {
+                        string url = reader.GetString(0) ?? string.Empty;
+                        string title = reader.GetString(1) ?? string.Empty;
+                        Logger.WoxTrace($"Firefox bookmark: <{title}> <{url}>");
+                        bookmarList.Add(new Bookmark()
+                        {
+                            Name = title,
+                            Url = url,
+                        });
+                    }
+                }
             }
 
             return bookmarList;
@@ -63,7 +73,8 @@ namespace Wox.Plugin.BrowserBookmark
 
                 // get firefox default profile directory from profiles.ini
                 string ini;
-                using (var sReader = new StreamReader(profileIni)) {
+                using (var sReader = new StreamReader(profileIni))
+                {
                     ini = sReader.ReadToEnd();
                 }
 
@@ -104,7 +115,7 @@ namespace Wox.Plugin.BrowserBookmark
 
                 var defaultProfileFolderName = defaultProfileFolderNameRaw.Split('=').Last();
 
-                var indexOfDefaultProfileAtttributePath = lines.IndexOf("Path="+ defaultProfileFolderName);
+                var indexOfDefaultProfileAtttributePath = lines.IndexOf("Path=" + defaultProfileFolderName);
 
                 // Seen in the example above, the IsRelative attribute is always above the Path attribute
                 var relativeAttribute = lines[indexOfDefaultProfileAtttributePath - 1];
@@ -116,14 +127,4 @@ namespace Wox.Plugin.BrowserBookmark
         }
     }
 
-    public static class Extensions
-    {
-        public static IEnumerable<T> Select<T>(this SQLiteDataReader reader, Func<SQLiteDataReader, T> projection)
-        {
-            while (reader.Read())
-            {
-                yield return projection(reader);
-            }
-        }
-    }
 }
