@@ -138,9 +138,9 @@ namespace Wox.ViewModel
         {
             lock (_addResultsLock)
             {
-                var newResults = NewResults(newRawResults, resultId);
-                // update UI in one run, so it can avoid UI flickering
                 var t = new CancellationTokenSource().Token;
+                var newResults = NewResults(newRawResults, resultId, t);
+                // update UI in one run, so it can avoid UI flickering
                 Results.Update(newResults, t);
 
                 if (Results.Count > 0)
@@ -163,7 +163,7 @@ namespace Wox.ViewModel
             lock (_addResultsLock)
             {
                 if (token.IsCancellationRequested) { return; }
-                var newResults = NewResults(newRawResults, resultId);
+                var newResults = NewResults(newRawResults, resultId, token);
                 // update UI in one run, so it can avoid UI flickering
                 if (token.IsCancellationRequested) { return; }
                 Results.Update(newResults, token);
@@ -180,24 +180,28 @@ namespace Wox.ViewModel
             }
         }
 
-        private List<ResultViewModel> NewResults(List<Result> newRawResults, string resultId)
+        private List<ResultViewModel> NewResults(List<Result> newRawResults, string resultId, CancellationToken token)
         {
             var newResults = newRawResults.Select(r => new ResultViewModel(r)).ToList();
             var results = Results.ToList();
             var oldResults = results.Where(r => r.Result.PluginID == resultId).ToList();
 
+            if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
             // intersection of A (old results) and B (new newResults)
             var intersection = oldResults.Intersect(newResults).ToList();
 
+            if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
             // remove result of relative complement of B in A
             foreach (var result in oldResults.Except(intersection))
             {
+                if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
                 results.Remove(result);
             }
 
             // update index for result in intersection of A and B
             foreach (var commonResult in intersection)
             {
+                if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
                 int oldIndex = results.IndexOf(commonResult);
                 int oldScore = results[oldIndex].Result.Score;
                 var newResult = newResults[newResults.IndexOf(commonResult)];
@@ -221,6 +225,7 @@ namespace Wox.ViewModel
             // insert result in relative complement of A in B
             foreach (var result in newResults.Except(intersection))
             {
+                if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
                 if (results.Count <= maxResults)
                 {
                     int newIndex = InsertIndexOf(result.Result.Score, results);
@@ -232,6 +237,7 @@ namespace Wox.ViewModel
                 }
             }
 
+            if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
             if (results.Count > maxResults)
             {
                 var resultsCopy = results.GetRange(0, maxResults);
