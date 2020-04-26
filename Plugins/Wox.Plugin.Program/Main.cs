@@ -177,48 +177,10 @@ namespace Wox.Plugin.Program
             {
                 menuOptions = program.ContextMenus(_context.API);
             }
-
-            menuOptions.Add(
-                                new Result
-                                {
-                                    Title = _context.API.GetTranslation("wox_plugin_program_disable_program"),
-                                    Action = c =>
-                                    {
-                                        DisableProgram(program);
-                                        _context.API.ShowMsg(_context.API.GetTranslation("wox_plugin_program_disable_dlgtitle_success"),
-                                                                _context.API.GetTranslation("wox_plugin_program_disable_dlgtitle_success_message"));
-                                        return false;
-                                    },
-                                    IcoPath = "Images/disable.png"
-                                }
-                           );
-
             return menuOptions;
         }
 
-        private void DisableProgram(IProgram programToDelete)
-        {
-            if (_settings.DisabledProgramSources.Any(x => x.UniqueIdentifier == programToDelete.UniqueIdentifier))
-                return;
-
-            if (_uwps.Any(x => x.UniqueIdentifier == programToDelete.UniqueIdentifier))
-                _uwps.Where(x => x.UniqueIdentifier == programToDelete.UniqueIdentifier).FirstOrDefault().Enabled = false;
-
-            if (_win32s.Any(x => x.UniqueIdentifier == programToDelete.UniqueIdentifier))
-                _win32s.Where(x => x.UniqueIdentifier == programToDelete.UniqueIdentifier).FirstOrDefault().Enabled = false;
-
-            _settings.DisabledProgramSources
-                     .Add(
-                             new Settings.DisabledProgramSource
-                             {
-                                 Name = programToDelete.Name,
-                                 Location = programToDelete.Location,
-                                 UniqueIdentifier = programToDelete.UniqueIdentifier,
-                                 Enabled = false
-                             }
-                         );
-        }
-
+        
         public static void StartProcess(Func<ProcessStartInfo, Process> runProcess, ProcessStartInfo info)
         {
             try
