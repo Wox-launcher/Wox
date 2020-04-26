@@ -174,12 +174,7 @@ namespace Wox.Plugin.Program.Programs
                     return u.Apps;
                 }).ToArray();
 
-                var updatedListWithoutDisabledApps = applications
-                                                        .Where(t1 => !Main._settings.DisabledProgramSources
-                                                                        .Any(x => x.UniqueIdentifier == t1.UniqueIdentifier))
-                                                        .Select(x => x);
-
-                return updatedListWithoutDisabledApps.ToArray();
+                return applications;
             }
             else
             {

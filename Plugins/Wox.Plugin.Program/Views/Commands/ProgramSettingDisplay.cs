@@ -24,25 +24,6 @@ namespace Wox.Plugin.Program.Views.Commands
                                                 }
                                         ));
 
-            // Even though these are disabled, we still want to display them so users can enable later on
-            Main._settings
-                .DisabledProgramSources
-                .Where(t1 => !Main._settings
-                                  .ProgramSources // program sourcces added above already, so exlcude
-                                  .Any(x => t1.UniqueIdentifier == x.UniqueIdentifier))
-                .Select(x => x)
-                .ToList()
-                .ForEach(x => list
-                              .Add(
-                                    new ProgramSource
-                                    {
-                                        Enabled = x.Enabled,
-                                        Location = x.Location,
-                                        Name = x.Name,
-                                        UniqueIdentifier = x.UniqueIdentifier
-                                    }
-                              ));
-
             return list;
         }
 
@@ -75,29 +56,6 @@ namespace Wox.Plugin.Program.Views.Commands
                                                          Enabled = t1.Enabled
                                                      }
                                               ));
-        }
-
-        internal static void StoreDisabledInSettings(this List<ProgramSource> list)
-        {
-            Main._settings.ProgramSources
-               .Where(t1 => ProgramSetting.ProgramSettingDisplayList.Any(x => x.UniqueIdentifier == t1.UniqueIdentifier && !x.Enabled))
-               .ToList()
-               .ForEach(t1 => t1.Enabled = false);
-
-            ProgramSetting.ProgramSettingDisplayList
-                .Where(t1 => !t1.Enabled
-                                && !Main._settings.DisabledProgramSources.Any(x => x.UniqueIdentifier == t1.UniqueIdentifier))
-                .ToList()
-                .ForEach(x => Main._settings.DisabledProgramSources
-                                            .Add(
-                                                    new Settings.DisabledProgramSource
-                                                    {
-                                                        Name = x.Name,
-                                                        Location = x.Location,
-                                                        UniqueIdentifier = x.UniqueIdentifier,
-                                                        Enabled = false
-                                                    }
-                                            ));
         }
 
     }
