@@ -11,8 +11,8 @@
         mc:Ignorable="d"
         Icon="Images\app.png"
         Title="{DynamicResource wox_settings}"
-        ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
+        MinHeight="500" MinWidth="800" 
         Height="600" Width="800" 
         Closed="OnClosed"
         d:DataContext="{d:DesignInstance vm:SettingWindowViewModel}">
@@ -37,7 +37,8 @@
 
     <TabControl Height="auto" SelectedIndex="0">
         <TabItem Header="{DynamicResource general}">
-            <StackPanel Orientation="Vertical">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Orientation="Vertical">
                 <StackPanel.Resources>
                     <Style TargetType="CheckBox">
                         <Setter Property="Margin" Value="10" />
@@ -104,6 +105,7 @@
                             Content="{DynamicResource selectPythonDirectory}" />
                 </StackPanel>
             </StackPanel>
+            </ScrollViewer>
         </TabItem>
         <TabItem Header="{DynamicResource plugin}">
             <Grid>
@@ -228,7 +230,7 @@
                 <Grid Margin="0" Grid.Column="1">
                     <Grid.RowDefinitions>
                         <RowDefinition />
-                        <RowDefinition Height="100" />
+                        <RowDefinition Height="150" />
                     </Grid.RowDefinitions>
                     <StackPanel Background="{Binding PreviewBackground}" Grid.Row="0" Margin="0">
                         <StackPanel Orientation="Horizontal" Margin="10"
@@ -240,9 +242,11 @@
                                         <RowDefinition />
                                     </Grid.RowDefinitions>
                                     <TextBox Text="{DynamicResource helloWox}" IsReadOnly="True"
+                                             Style="{DynamicResource QueryTextSuggestionBoxStyle}" Grid.Row="0" />
+                                    <TextBox Text="{DynamicResource helloWox}" IsReadOnly="True"
                                              Style="{DynamicResource QueryBoxStyle}" Grid.Row="0" />
-                                    <ContentControl Visibility="Visible" Grid.Row="1">
-                                        <wox:ResultListBox DataContext="{Binding PreviewResults}" />
+                                    <ContentControl Grid.Row="1">
+                                        <wox:ResultListBox DataContext="{Binding PreviewResults, Mode=OneTime}" Visibility="Visible"/>
                                     </ContentControl>
                                 </Grid>
                             </Border>
@@ -259,7 +263,7 @@
                             </Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Margin" Value="5"/>
-                                <Setter Property="TextAlignment" Value="Left"/>
+                                <Setter Property="TextAlignment" Value="Right"/>
                                 <Setter Property="VerticalAlignment" Value="Center"/>
                             </Style>
                         </Grid.Resources>
@@ -269,6 +273,7 @@
                             <ColumnDefinition/>
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
+                            <RowDefinition/>
                             <RowDefinition/>
                             <RowDefinition/>
                         </Grid.RowDefinitions>
@@ -292,6 +297,7 @@
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
+
                         <TextBlock Text="{DynamicResource resultItemFont}"
                                    Grid.Column="0" Grid.Row="1" />
                         <ComboBox ItemsSource="{Binding Source={StaticResource SortedFontsResult}}"
@@ -312,6 +318,25 @@
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
+                        
+                        
+                        <TextBlock Text="{DynamicResource resultItemHighlightFont}"
+                                   Grid.Column="1" Grid.Row="2" />
+                        <ComboBox ItemsSource="{Binding SelectedResultFont.FamilyTypefaces}"
+                                  SelectedItem="{Binding SelectedResultHighlightFontFaces}"
+                                  Grid.Column="2" Grid.Row="2">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <ItemsControl ItemsSource="{Binding AdjustedFaceNames}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Value}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                     </Grid>
                 </Grid>
             </Grid>
@@ -320,21 +345,21 @@
             <Grid Margin="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="35" />
-                    <RowDefinition Height="20" />
-                    <RowDefinition Height="400" />
-                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="30" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="50" />
                 </Grid.RowDefinitions>
                 <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Height="24"
-                            Margin="0,4,0,3">
+                            Margin="5 0">
                     <TextBlock VerticalAlignment="Center" Margin="0 0 10 0" Text="{DynamicResource woxHotkey}" />
                     <wox:HotkeyControl x:Name="HotkeyControl" HotkeyChanged="OnHotkeyChanged"
                                        Loaded="OnHotkeyControlLoaded" />
                 </StackPanel>
-                <TextBlock VerticalAlignment="Center" Grid.Row="1" Margin="0,3,10,2"
+                <TextBlock VerticalAlignment="Center" Grid.Row="1" Margin="10 0"
                            Text="{DynamicResource customQueryHotkey}" />
                 <ListView ItemsSource="{Binding Settings.CustomPluginHotkeys}"
                           SelectedItem="{Binding SelectedCustomPluginHotkey}"
-                          Margin="0 5 0 0" Grid.Row="2">
+                          Grid.Row="2">
                     <ListView.View>
                         <GridView>
                             <GridViewColumn Header="{DynamicResource hotkey}" Width="180">

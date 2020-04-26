@@ -5,6 +5,7 @@
     </ResourceDictionary.MergedDictionaries>
     <Style x:Key="QueryBoxStyle" BasedOn="{StaticResource BaseQueryBoxStyle}" TargetType="{x:Type TextBox}">
         <Setter Property="Foreground" Value="#cc1081" />
+        <Setter Property="CaretBrush" Value="#cc1081"/>
     </Style>
     <Style x:Key="QueryTextSuggestionBoxStyle" BasedOn="{StaticResource BaseQueryTextSuggestionBoxStyle}" TargetType="{x:Type TextBox}">
         <Setter Property="Background" Value="#1f1d1f" />
@@ -26,7 +27,7 @@
     <Style x:Key="ItemSubTitleSelectedStyle" BasedOn="{StaticResource BaseItemSubTitleSelectedStyle}" TargetType="{x:Type TextBlock}">
         <Setter Property="Foreground" Value="#c2c2c2" />
     </Style>
-    <SolidColorBrush x:Key="ItemSelectedBackgroundColor">#cc1081</SolidColorBrush>
+    <SolidColorBrush x:Key="ItemSelectedBackgroundColor" Color="#cc1081"/>
     <Style x:Key="ThumbStyle" BasedOn="{StaticResource BaseThumbStyle}" TargetType="{x:Type Thumb}" />
     <Style x:Key="ScrollBarStyle" BasedOn="{StaticResource BaseScrollBarStyle}" TargetType="{x:Type ScrollBar}" />
 </ResourceDictionary>

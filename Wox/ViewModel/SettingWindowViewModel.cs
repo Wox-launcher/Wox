@@ -280,35 +280,41 @@ namespace Wox.ViewModel
                     new Result
                     {
                         Title = "WoX is a launcher for Windows that simply works.",
-                        SubTitle = "You can call it Windows omni-eXecutor if you want a long name."
+                        SubTitle = "You can call it Windows omni-eXecutor if you want a long name.",
+                        IcoPath = "Images/app.png"
                     },
                     new Result
                     {
                         Title = "Search for everything—applications, folders, files and more.",
-                        SubTitle = "Use pinyin to search for programs. (yyy / wangyiyun → 网易云音乐)"
+                        SubTitle = "Use pinyin to search for programs. (yyy / wangyiyun → 网易云音乐)",
+                        IcoPath = "Images/search.png"
                     },
                     new Result
                     {
                         Title = "Keyword plugin search.",
-                        SubTitle = "search google with g search_term."
+                        SubTitle = "search google with g search_term.",
+                        IcoPath = "Browser/Browser.png"
                     },
                     new Result
                     {
                         Title = "Build custom themes at: ",
-                        SubTitle = Theme
+                        SubTitle = Theme,
+                        IcoPath = "Images/color.png"
                     },
                     new Result
                     {
                         Title = "Install plugins from: ",
-                        SubTitle = Plugin
+                        SubTitle = Plugin,
+                        IcoPath = "Images/plugin.png"
                     },
                     new Result
                     {
                         Title = $"Open Source: {_updater.GitHubRepository}",
-                        SubTitle = "Please star it!"
+                        SubTitle = "Please star it!",
+                        IcoPath = "Images/ok.png"
                     }
                 };
-                var vm = new ResultsViewModel();
+                var vm = new ResultsViewModel(Settings);
                 vm.AddResults(results, "PREVIEW");
                 return vm;
             }
@@ -400,6 +406,27 @@ namespace Wox.ViewModel
                 Settings.ResultFontStretch = value.Stretch.ToString();
                 Settings.ResultFontWeight = value.Weight.ToString();
                 Settings.ResultFontStyle = value.Style.ToString();
+                ThemeManager.Instance.ChangeTheme(Settings.Theme);
+            }
+        }
+
+        public FamilyTypeface SelectedResultHighlightFontFaces
+        {
+            get
+            {
+                var typeface = SyntaxSugars.CallOrRescueDefault(
+                    () => SelectedResultFont.ConvertFromInvariantStringsOrNormal(
+                        Settings.ResultHighlightFontStyle,
+                        Settings.ResultHighlightFontWeight,
+                        Settings.ResultHighlightFontStretch
+                        ));
+                return typeface;
+            }
+            set
+            {
+                Settings.ResultHighlightFontStretch = value.Stretch.ToString();
+                Settings.ResultHighlightFontWeight = value.Weight.ToString();
+                Settings.ResultHighlightFontStyle = value.Style.ToString();
                 ThemeManager.Instance.ChangeTheme(Settings.Theme);
             }
         }

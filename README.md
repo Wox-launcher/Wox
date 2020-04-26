@@ -6,6 +6,7 @@ WoX
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Wox-launcher/wox?include_prereleases)](https://github.com/Wox-launcher/Wox/releases)
 ![GitHub Release Date](https://img.shields.io/github/release-date-pre/Wox-launcher/wox?nclude_prereleases)
 [![Github All Releases](https://img.shields.io/github/downloads/Wox-launcher/Wox/total.svg)](https://github.com/Wox-launcher/Wox/releases)
+![Github commit activity](https://img.shields.io/github/commit-activity/w/Wox-launcher/Wox)
 
 **WoX** is a launcher for Windows that simply works. It's an alternative to [Alfred](https://www.alfredapp.com/) and [Launchy](http://www.launchy.net/).
 
@@ -42,7 +43,7 @@ Windows may complain about security due to code not being signed. This will be f
     4. Version >= 1.3.4.686 is supported
   - [Optional] Use Python plugins
     1. install [python3](https://www.python.org/downloads/)
-    2 add it to `%PATH%` or set it in WoX settings
+    2. add it to `%PATH%` or set it in WoX settings
 
 Usage
 -----
@@ -58,9 +59,8 @@ Contribution
 ------------
 
 - First and most importantly, star it!
-- Read [Coding Style](https://github.com/Wox-launcher/Wox/wiki/Coding-Style)
 - Send PR to master branch
-- I'd appreciate if you could solve [help_needed](https://github.com/Wox-launcher/Wox/issues?q=is%3Aopen+is%3Aissue+label%3Ahelp_needed) labeled issue
+- I'd appreciate if you could solve [help_wanted](https://github.com/Wox-launcher/Wox/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22) labeled issue
 
 Build
 -----

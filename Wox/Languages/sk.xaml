@@ -54,6 +54,7 @@
     <system:String x:Key="helloWox">Ahoj Wox</system:String>
     <system:String x:Key="queryBoxFont">Písmo poľa pre dopyt</system:String>
     <system:String x:Key="resultItemFont">Písmo výsledkov</system:String>
+    <system:String x:Key="resultItemHighlightFont">Result Item Highlight Font</system:String>
     <system:String x:Key="windowMode">Režim okno</system:String>
     <system:String x:Key="opacity">Nepriehľadnosť</system:String>
     <system:String x:Key="theme_load_failure_path_not_exists">Motív {0} neexistuje, použije sa predvolený motív</system:String>

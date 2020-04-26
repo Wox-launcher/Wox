@@ -194,7 +194,7 @@ namespace Wox.ViewModel
                 }
             }
 
-            int maxResults = _settings.MaxResultsToShow * 5;
+            int maxResults = MaxResults * 5;
             // insert result in relative complement of A in B
             foreach (var result in newResults.Except(intersection))
             {

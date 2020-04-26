@@ -49,7 +49,8 @@ namespace Wox.Converters
                     return string.Empty;
 
                 // When user typed lower case and result title is uppercase, we still want to display suggestion
-                return queryText + selectedResultPossibleSuggestion.Substring(queryText.Length);
+                var textConverter = new MultilineTextConverter();
+                return textConverter.Convert(queryText + selectedResultPossibleSuggestion.Substring(queryText.Length), null, null, culture);
             }
             catch (Exception e)
             {

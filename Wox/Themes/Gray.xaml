@@ -7,6 +7,7 @@
     </ResourceDictionary.MergedDictionaries>
     <Style x:Key="QueryBoxStyle" BasedOn="{StaticResource BaseQueryBoxStyle}" TargetType="{x:Type TextBox}">
         <Setter Property="Foreground" Value="#222222" />
+        <Setter Property="CaretBrush" Value="#222222"/>
         <Setter Property="FontSize" Value="38" />
     </Style>
     <Style x:Key="QueryTextSuggestionBoxStyle" BasedOn="{StaticResource BaseQueryTextSuggestionBoxStyle}" TargetType="{x:Type TextBox}">
@@ -37,7 +38,8 @@
            TargetType="{x:Type TextBlock}">
         <Setter Property="Foreground" Value="#ffffff" />
     </Style>
-    <SolidColorBrush x:Key="ItemSelectedBackgroundColor">#00AAF6</SolidColorBrush>
+    <SolidColorBrush x:Key="ItemHighlightColor" Color="DimGray"/>
+    <SolidColorBrush x:Key="ItemSelectedBackgroundColor" Color="#00AAF6"/>
     <Style x:Key="ThumbStyle" BasedOn="{StaticResource BaseThumbStyle}" TargetType="{x:Type Thumb}">
         <Setter Property="Template">
             <Setter.Value>

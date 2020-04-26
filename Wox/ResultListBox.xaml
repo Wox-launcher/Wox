@@ -33,6 +33,7 @@
                           Cursor="Hand" UseLayoutRounding="False">
                         <Grid.Resources>
                             <converter:HighlightTextConverter x:Key="HighlightTextConverter"/>
+                            <converter:MultilineTextConverter x:Key="MultilineTextConverter"/>
                         </Grid.Resources>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="32" />
@@ -50,8 +51,10 @@
                                        VerticalAlignment="Center" ToolTip="{Binding Result.Title}" x:Name="Title">
                                 <vm:ResultsViewModel.FormattedText>
                                     <MultiBinding Converter="{StaticResource HighlightTextConverter}" Mode="TwoWay">
-                                        <Binding Path="Result.Title" />
+                                        <Binding Path="Result.Title" Converter="{StaticResource MultilineTextConverter}" />
                                         <Binding Path="Result.TitleHighlightData" />
+                                        <Binding RelativeSource="{RelativeSource Mode=FindAncestor,AncestorType={x:Type ListBoxItem}}"
+                                                 Path="IsSelected" />
                                     </MultiBinding>
                                 </vm:ResultsViewModel.FormattedText>
                             </TextBlock>
@@ -59,8 +62,10 @@
                                        Grid.Row="1" x:Name="SubTitle" >
                                 <vm:ResultsViewModel.FormattedText>
                                     <MultiBinding Converter="{StaticResource HighlightTextConverter}" >
-                                        <Binding Path="Result.SubTitle" />
+                                        <Binding Path="Result.SubTitle"  Converter="{StaticResource MultilineTextConverter}"/>
                                         <Binding Path="Result.SubTitleHighlightData" />
+                                        <Binding RelativeSource="{RelativeSource Mode=FindAncestor,AncestorType={x:Type ListBoxItem}}"
+                                                 Path="IsSelected" />
                                     </MultiBinding>
                                 </vm:ResultsViewModel.FormattedText>
                             </TextBlock>

@@ -46,6 +46,7 @@
     <system:String x:Key="helloWox">Привет Wox</system:String>
     <system:String x:Key="queryBoxFont">Шрифт запросов</system:String>
     <system:String x:Key="resultItemFont">Шрифт результатов</system:String>
+    <system:String x:Key="resultItemHighlightFont">Шрифт выделения результатов</system:String>
     <system:String x:Key="windowMode">Оконный режим</system:String>
     <system:String x:Key="opacity">Прозрачность</system:String>
     
