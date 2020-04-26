@@ -19,7 +19,6 @@ namespace Wox.Plugin.Program.Programs
     public class Win32 : IProgram
     {
         public string Name { get; set; }
-        public string UniqueIdentifier { get; set; }
         public string IcoPath { get; set; }
         public string FullPath { get; set; }
         public string ParentDirectory { get; set; }
@@ -160,7 +159,6 @@ namespace Wox.Plugin.Program.Programs
                     Name = Path.GetFileNameWithoutExtension(path),
                     IcoPath = path,
                     FullPath = path,
-                    UniqueIdentifier = path,
                     ParentDirectory = Directory.GetParent(path).FullName,
                     Description = string.Empty,
                     Valid = true,
