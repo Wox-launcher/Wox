@@ -69,7 +69,6 @@
     <Compile Include="AddProgramSource.xaml.cs">
       <DependentUpon>AddProgramSource.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Logger\ProgramLogger.cs" />
     <Compile Include="Views\Commands\ProgramSettingDisplay.cs" />
     <Compile Include="FileChangeWatcher.cs" />
     <Compile Include="Views\Models\ProgramSource.cs" />

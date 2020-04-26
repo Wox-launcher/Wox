@@ -16,7 +16,6 @@ using AppxPackaing;
 using Shell;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
-using Wox.Plugin.Program.Logger;
 using IStream = AppxPackaing.IStream;
 using Rect = System.Windows.Rect;
 using NLog;
@@ -205,8 +204,7 @@ namespace Wox.Plugin.Program.Programs
                     }
                     catch (Exception e)
                     {
-                        ProgramLogger.LogException("UWP", "CurrentUserPackages", $"id", "An unexpected error occured and "
-                                                   + $"unable to verify if package is valid", e);
+                        Logger.WoxError($"cannot get package {u} {p.Id}", e);
                         return false;
                     }
 

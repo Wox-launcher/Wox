@@ -11,7 +11,6 @@ using Microsoft.Win32;
 using NLog;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
-using Wox.Plugin.Program.Logger;
 using Microsoft.WindowsAPICodePack.Shell;
 
 namespace Wox.Plugin.Program.Programs
