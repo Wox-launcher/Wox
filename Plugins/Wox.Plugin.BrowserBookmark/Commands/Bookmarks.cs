@@ -21,6 +21,7 @@ namespace Wox.Plugin.BrowserBookmark.Commands
             var mozBookmarks = new FirefoxBookmarks();
 
             //TODO: Let the user select which browser's bookmarks are displayed
+            
             var b1 = mozBookmarks.GetBookmarks();
             var b2 = chromeBookmarks.GetBookmarks();
             b1.AddRange(b2);
