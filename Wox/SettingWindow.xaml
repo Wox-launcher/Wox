@@ -9,7 +9,7 @@
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         x:Class="Wox.SettingWindow"
         mc:Ignorable="d"
-        Icon="Images\app.png"
+        Icon="app.png"
         Title="{DynamicResource wox_settings}"
         WindowStartupLocation="CenterScreen"
         MinHeight="500" MinWidth="800" 
