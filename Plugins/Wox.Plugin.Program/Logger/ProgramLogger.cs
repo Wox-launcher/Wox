@@ -38,7 +38,7 @@ namespace Wox.Plugin.Program.Logger
 
             do
             {
-                if (IsKnownWinProgramError(e, callingMethodName) || IsKnownUWPProgramError(e, callingMethodName))
+                if (IsKnownWinProgramError(e, callingMethodName))
                 {
                     possibleResolution = "Can be ignored and Wox should still continue, however the program may not be loaded";
                     errorStatus = "KNOWN";
@@ -96,15 +96,5 @@ namespace Wox.Plugin.Program.Logger
             return false;
         }
 
-        private static bool IsKnownUWPProgramError(Exception e, string callingMethodName)
-        {
-            if (e.HResult == -2147024864 && callingMethodName == "InitializeAppInfo")
-                return true;
-
-            if (callingMethodName == "XmlNamespaces")
-                return true;
-
-            return false;
-        }
     }
 }

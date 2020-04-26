@@ -57,8 +57,18 @@ namespace Wox.Plugin.Program.Programs
         {
             var path = Path.Combine(Location, "AppxManifest.xml");
 
-            var namespaces = XmlNamespaces(path);
-            InitPackageVersion(namespaces);
+            try
+            {
+                var namespaces = XmlNamespaces(path);
+                InitPackageVersion(namespaces);
+            }
+            catch (ArgumentException e)
+            {
+                Logger.WoxError(e.Message);
+                Apps = Apps = new List<Application>().ToArray();
+                return;
+            }
+
 
             var appxFactory = new AppxFactory();
             IStream stream;
@@ -83,20 +93,21 @@ namespace Wox.Plugin.Program.Programs
                     manifestApps.MoveNext();
                 }
                 Apps = apps.Where(a => a.AppListEntry != "none").ToArray();
+                return;
             }
             else
             {
                 var e = Marshal.GetExceptionForHR((int)hResult);
-                ProgramLogger.LogException($"|UWP|InitializeAppInfo|{path}" +
-                                                "|Error caused while trying to get the details of the UWP program", e);
-
+                Logger.WoxError($"Cannot not get UWP details {path}", e);
                 Apps = new List<Application>().ToArray();
+                return;
             }
         }
 
 
 
         /// http://www.hanselman.com/blog/GetNamespacesFromAnXMLDocumentWithXPathDocumentAndLINQToXML.aspx
+        /// <exception cref="ArgumentException"
         private string[] XmlNamespaces(string path)
         {
             XDocument z = XDocument.Load(path);
@@ -114,10 +125,7 @@ namespace Wox.Plugin.Program.Programs
             }
             else
             {
-                ProgramLogger.LogException($"|UWP|XmlNamespaces|{path}" +
-                                                $"|Error occured while trying to get the XML from {path}", new ArgumentNullException());
-
-                return new string[] { };
+                throw new ArgumentException("Cannot read XML from {path}");
             }
         }
 
@@ -139,11 +147,7 @@ namespace Wox.Plugin.Program.Programs
                 }
             }
 
-            ProgramLogger.LogException($"|UWP|XmlNamespaces|{Location}" +
-                                                "|Trying to get the package version of the UWP program, but a unknown UWP appmanifest version  "
-                                                + $"{FullName} from location {Location} is returned.", new FormatException());
-
-            Version = PackageVersion.Unknown;
+            throw new ArgumentException($"Unknown package version {string.Join(",", namespaces)}");
         }
 
         public static Application[] All()
@@ -210,12 +214,12 @@ namespace Wox.Plugin.Program.Programs
                     }
                     catch (Exception e)
                     {
-                        ProgramLogger.LogException("UWP" ,"CurrentUserPackages", $"id","An unexpected error occured and "
+                        ProgramLogger.LogException("UWP", "CurrentUserPackages", $"id", "An unexpected error occured and "
                                                    + $"unable to verify if package is valid", e);
                         return false;
                     }
-                    
-                    
+
+
                     return valid;
                 });
                 return ps;
@@ -382,7 +386,7 @@ namespace Wox.Plugin.Program.Programs
                 if (!string.IsNullOrWhiteSpace(resourceReference) && resourceReference.StartsWith(prefix))
                 {
 
-                    
+
                     string key = resourceReference.Substring(prefix.Length);
                     string parsed;
                     if (key.StartsWith("//"))
