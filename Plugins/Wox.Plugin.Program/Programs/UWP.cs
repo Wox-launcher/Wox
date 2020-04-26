@@ -16,7 +16,6 @@ using AppxPackaing;
 using Shell;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
-using Wox.Plugin.Program.Logger;
 using IStream = AppxPackaing.IStream;
 using Rect = System.Windows.Rect;
 using NLog;
@@ -57,8 +56,18 @@ namespace Wox.Plugin.Program.Programs
         {
             var path = Path.Combine(Location, "AppxManifest.xml");
 
-            var namespaces = XmlNamespaces(path);
-            InitPackageVersion(namespaces);
+            try
+            {
+                var namespaces = XmlNamespaces(path);
+                InitPackageVersion(namespaces);
+            }
+            catch (ArgumentException e)
+            {
+                Logger.WoxError(e.Message);
+                Apps = Apps = new List<Application>().ToArray();
+                return;
+            }
+
 
             var appxFactory = new AppxFactory();
             IStream stream;
@@ -83,20 +92,21 @@ namespace Wox.Plugin.Program.Programs
                     manifestApps.MoveNext();
                 }
                 Apps = apps.Where(a => a.AppListEntry != "none").ToArray();
+                return;
             }
             else
             {
                 var e = Marshal.GetExceptionForHR((int)hResult);
-                ProgramLogger.LogException($"|UWP|InitializeAppInfo|{path}" +
-                                                "|Error caused while trying to get the details of the UWP program", e);
-
+                Logger.WoxError($"Cannot not get UWP details {path}", e);
                 Apps = new List<Application>().ToArray();
+                return;
             }
         }
 
 
 
         /// http://www.hanselman.com/blog/GetNamespacesFromAnXMLDocumentWithXPathDocumentAndLINQToXML.aspx
+        /// <exception cref="ArgumentException"
         private string[] XmlNamespaces(string path)
         {
             XDocument z = XDocument.Load(path);
@@ -114,10 +124,7 @@ namespace Wox.Plugin.Program.Programs
             }
             else
             {
-                ProgramLogger.LogException($"|UWP|XmlNamespaces|{path}" +
-                                                $"|Error occured while trying to get the XML from {path}", new ArgumentNullException());
-
-                return new string[] { };
+                throw new ArgumentException("Cannot read XML from {path}");
             }
         }
 
@@ -139,11 +146,7 @@ namespace Wox.Plugin.Program.Programs
                 }
             }
 
-            ProgramLogger.LogException($"|UWP|XmlNamespaces|{Location}" +
-                                                "|Trying to get the package version of the UWP program, but a unknown UWP appmanifest version  "
-                                                + $"{FullName} from location {Location} is returned.", new FormatException());
-
-            Version = PackageVersion.Unknown;
+            throw new ArgumentException($"Unknown package version {string.Join(",", namespaces)}");
         }
 
         public static Application[] All()
@@ -159,20 +162,11 @@ namespace Wox.Plugin.Program.Programs
                     {
                         u = new UWP(p);
                     }
-#if !DEBUG
                     catch (Exception e)
                     {
-                        ProgramLogger.LogException($"|UWP|All|{p.InstalledLocation}|An unexpected error occured and "
-                                                        + $"unable to convert Package to UWP for {p.Id.FullName}", e);
+                        Logger.WoxError($"Cannot parse UWP {p.Id.FullName} {p.Id.Version} {p.Id}", e);
                         return new Application[] { };
                     }
-#endif
-#if DEBUG //make developer aware and implement handling
-                    catch
-                    {
-                        throw;
-                    }
-#endif
                     return u.Apps;
                 }).ToArray();
 
@@ -210,12 +204,11 @@ namespace Wox.Plugin.Program.Programs
                     }
                     catch (Exception e)
                     {
-                        ProgramLogger.LogException("UWP" ,"CurrentUserPackages", $"id","An unexpected error occured and "
-                                                   + $"unable to verify if package is valid", e);
+                        Logger.WoxError($"cannot get package {u} {p.Id}", e);
                         return false;
                     }
-                    
-                    
+
+
                     return valid;
                 });
                 return ps;
@@ -382,7 +375,7 @@ namespace Wox.Plugin.Program.Programs
                 if (!string.IsNullOrWhiteSpace(resourceReference) && resourceReference.StartsWith(prefix))
                 {
 
-                    
+
                     string key = resourceReference.Substring(prefix.Length);
                     string parsed;
                     if (key.StartsWith("//"))
@@ -449,15 +442,14 @@ namespace Wox.Plugin.Program.Programs
                     }
                     else
                     {
-                        ProgramLogger.LogException($"|UWP|ResourceFromPriInternal|{Package.Location}|Can't load null or empty result "
-                                                    + $"pri {source} in uwp location {Package.Location}", new NullReferenceException());
+                        Logger.WoxError($"Can't load null or empty result pri {source} in uwp location {Package.Location}");
                         return string.Empty;
                     }
                 }
                 else
                 {
                     var e = Marshal.GetExceptionForHR((int)hResult);
-                    ProgramLogger.LogException($"|UWP|ResourceFromPriInternal|{Package.Location}|Load pri failed {source} with HResult {hResult} and location {Package.Location}", e);
+                    Logger.WoxError($"Load pri failed {source} location {Package.Location}", e);
                     return string.Empty;
                 }
             }
@@ -502,9 +494,7 @@ namespace Wox.Plugin.Program.Programs
                 }
                 else
                 {
-                    ProgramLogger.LogException($"|UWP|ImageFromPath|{path}" +
-                                                    $"|Unable to get logo for {UserModelId} from {path} and" +
-                                                    $" located in {Package.Location}", new FileNotFoundException());
+                    Logger.WoxError($"|Unable to get logo for {UserModelId} from {path} and located in {Package.Location}");
                     return new BitmapImage(new Uri(Constant.ErrorIcon));
                 }
             }
@@ -551,10 +541,7 @@ namespace Wox.Plugin.Program.Programs
                     }
                     else
                     {
-                        ProgramLogger.LogException($"|UWP|PlatedImage|{Package.Location}" +
-                                                    $"|Unable to convert background string {BackgroundColor} " +
-                                                    $"to color for {Package.Location}", new InvalidOperationException());
-
+                        Logger.WoxError($"Unable to convert background string {BackgroundColor} to color for {Package.Location}");
                         return new BitmapImage(new Uri(Constant.ErrorIcon));
                     }
                 }
