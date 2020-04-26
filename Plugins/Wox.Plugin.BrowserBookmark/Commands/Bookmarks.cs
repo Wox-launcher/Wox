@@ -17,19 +17,14 @@ namespace Wox.Plugin.BrowserBookmark.Commands
 
         internal static List<Bookmark> LoadAllBookmarks()
         {
-            var allbookmarks = new List<Bookmark>();
-            
             var chromeBookmarks = new ChromeBookmarks();
             var mozBookmarks = new FirefoxBookmarks();
 
             //TODO: Let the user select which browser's bookmarks are displayed
-            // Add Firefox bookmarks
-            mozBookmarks.GetBookmarks().ForEach(x => allbookmarks.Add(x));
-
-            // Add Chrome bookmarks
-            chromeBookmarks.GetBookmarks().ForEach(x => allbookmarks.Add(x));
-
-            return allbookmarks.Distinct().ToList();
+            var b1 = mozBookmarks.GetBookmarks();
+            var b2 = chromeBookmarks.GetBookmarks();
+            b1.AddRange(b2);
+            return b1.Distinct().ToList();
         }
     }
 }
