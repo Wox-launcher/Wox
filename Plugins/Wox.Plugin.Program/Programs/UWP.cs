@@ -371,7 +371,7 @@ namespace Wox.Plugin.Program.Programs
             {
                 const string prefix = "ms-resource:";
                 string result = "";
-                Logger.WoxDebug($"package: <{packageFullName}> res ref: <{resourceReference}>");
+                Logger.WoxTrace($"package: <{packageFullName}> res ref: <{resourceReference}>");
                 if (!string.IsNullOrWhiteSpace(resourceReference) && resourceReference.StartsWith(prefix))
                 {
 
@@ -402,7 +402,7 @@ namespace Wox.Plugin.Program.Programs
                 {
                     result = resourceReference;
                 }
-                Logger.WoxDebug($"package: <{packageFullName}> pri resource result: <{result}>");
+                Logger.WoxTrace($"package: <{packageFullName}> pri resource result: <{result}>");
                 return result;
             }
 
@@ -413,10 +413,10 @@ namespace Wox.Plugin.Program.Programs
                 // windows 8.1 https://msdn.microsoft.com/en-us/library/windows/apps/hh965372.aspx#target_size
                 // windows 8 https://msdn.microsoft.com/en-us/library/windows/apps/br211475.aspx
 
-                Logger.WoxDebug($"package: <{packageFullName}> file ref: <{fileReference}>");
+                Logger.WoxTrace($"package: <{packageFullName}> file ref: <{fileReference}>");
                 string parsed = $"ms-resource://{packageName}/Files/{fileReference.Replace("\\", "/")}";
                 string result = ResourceFromPriInternal(packageFullName, parsed);
-                Logger.WoxDebug($"package: <{packageFullName}> pri file result: <{result}>");
+                Logger.WoxTrace($"package: <{packageFullName}> pri file result: <{result}>");
                 return result;
             }
 
@@ -425,7 +425,7 @@ namespace Wox.Plugin.Program.Programs
             /// makepri.exe dump /if "a\resources.pri" /of b.xml 
             private string ResourceFromPriInternal(string packageFullName, string parsed)
             {
-                Logger.WoxDebug($"package: <{packageFullName}> pri parsed: <{parsed}>");
+                Logger.WoxTrace($"package: <{packageFullName}> pri parsed: <{parsed}>");
                 // following error probally due to buffer to small
                 // '200' violates enumeration constraint of '100 120 140 160 180'.
                 // 'Microsoft Corporation' violates pattern constraint of '\bms-resource:.{1,256}'.
