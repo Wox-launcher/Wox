@@ -38,12 +38,6 @@ namespace Wox.Plugin.Program.Logger
 
             do
             {
-                if (IsKnownWinProgramError(e, callingMethodName))
-                {
-                    possibleResolution = "Can be ignored and Wox should still continue, however the program may not be loaded";
-                    errorStatus = "KNOWN";
-                }
-
                 var calledMethod = e.TargetSite != null ? e.TargetSite.ToString() : e.StackTrace;
 
                 calledMethod = string.IsNullOrEmpty(calledMethod) ? "Not available" : calledMethod;
@@ -86,14 +80,6 @@ namespace Wox.Plugin.Program.Logger
             var interpretationMessage = parts[4];
 
             LogException(classname, callingMethodName, loadingProgramPath, interpretationMessage, e);
-        }
-
-        private static bool IsKnownWinProgramError(Exception e, string callingMethodName)
-        {
-            if (e is DirectoryNotFoundException)
-                return true;
-
-            return false;
         }
 
     }

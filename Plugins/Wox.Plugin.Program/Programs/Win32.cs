@@ -229,20 +229,16 @@ namespace Wox.Plugin.Program.Programs
                 {
                     foreach (var suffix in suffixes)
                     {
-                        try
-                        {
-                            files.AddRange(Directory.EnumerateFiles(currentDirectory, $"*.{suffix}", SearchOption.TopDirectoryOnly));
-                        }
-                        catch (DirectoryNotFoundException e)
-                        {
-                            ProgramLogger.LogException($"|Win32|ProgramPaths|{currentDirectory}" +
-                                                "|The directory trying to load the program from does not exist", e);
-                        }
+                        files.AddRange(Directory.EnumerateFiles(currentDirectory, $"*.{suffix}", SearchOption.TopDirectoryOnly));
                     }
                 }
                 catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
                 {
                     Logger.WoxError($"Permission denied {currentDirectory}");
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    Logger.WoxError($"Directory not found {currentDirectory}");
                 }
 
                 try
