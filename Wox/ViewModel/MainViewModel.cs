@@ -396,11 +396,12 @@ namespace Wox.ViewModel
             {
                 if (token.IsCancellationRequested) { return; }
                 var query = QueryBuilder.Build(queryText, PluginManager.NonGlobalPlugins);
+                _lastQuery = query;
                 if (query != null)
                 {
                     // handle the exclusiveness of plugin using action keyword
+                    if (token.IsCancellationRequested) { return; }
                     RemoveOldQueryResults(query);
-                    _lastQuery = query;
 
                     Task.Delay(200, token).ContinueWith(_ =>
                     { // start the progress bar if query takes more than 200 ms
