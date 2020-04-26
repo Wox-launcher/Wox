@@ -96,7 +96,7 @@ namespace Wox.ViewModel
                         if (token.IsCancellationRequested) { return; }
                         PluginManager.UpdatePluginMetadata(e.Results, pair.Metadata, e.Query);
                         if (token.IsCancellationRequested) { return; }
-                        UpdateResultView(e.Results, pair.Metadata, e.Query);
+                        UpdateResultView(e.Results, pair.Metadata, e.Query, token);
                     }, token);
                 };
             }
@@ -436,7 +436,7 @@ namespace Wox.ViewModel
                                     Logger.WoxDebug($"canceled {token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId}  {queryText} {plugin.Metadata.Name}");
                                     return;
                                 }
-                                UpdateResultView(results, plugin.Metadata, query);
+                                UpdateResultView(results, plugin.Metadata, query, token);
                             }
                         }
 
@@ -680,10 +680,11 @@ namespace Wox.ViewModel
         /// <summary>
         /// To avoid deadlock, this method should not called from main thread
         /// </summary>
-        public void UpdateResultView(List<Result> list, PluginMetadata metadata, Query originQuery)
+        public void UpdateResultView(List<Result> list, PluginMetadata metadata, Query originQuery, CancellationToken token)
         {
             foreach (var result in list)
             {
+                if (token.IsCancellationRequested) { return; }
                 if (_topMostRecord.IsTopMost(result))
                 {
                     result.Score = int.MaxValue;
@@ -694,9 +695,10 @@ namespace Wox.ViewModel
                 }
             }
 
+            if (token.IsCancellationRequested) { return; }
             if (originQuery.RawQuery == _lastQuery.RawQuery)
             {
-                Results.AddResults(list, metadata.ID);
+                Results.AddResults(list, metadata.ID, token);
             }
 
             if (Results.Visbility != Visibility.Visible && list.Count > 0)

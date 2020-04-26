@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -133,17 +134,39 @@ namespace Wox.ViewModel
             Results.RemoveAll(r => r.Result.PluginID == metadata.ID);
         }
 
-        /// <summary>
-        /// To avoid deadlock, this method should not called from main thread
-        /// </summary>
         public void AddResults(List<Result> newRawResults, string resultId)
         {
-
             lock (_addResultsLock)
             {
                 var newResults = NewResults(newRawResults, resultId);
                 // update UI in one run, so it can avoid UI flickering
-                Results.Update(newResults);
+                var t = new CancellationTokenSource().Token;
+                Results.Update(newResults, t);
+
+                if (Results.Count > 0)
+                {
+                    Margin = new Thickness { Top = 8 };
+                    SelectedIndex = 0;
+                }
+                else
+                {
+                    Margin = new Thickness { Top = 0 };
+                }
+            }
+        }
+
+        /// <summary>
+        /// To avoid deadlock, this method should not called from main thread
+        /// </summary>
+        public void AddResults(List<Result> newRawResults, string resultId, System.Threading.CancellationToken token)
+        {
+            lock (_addResultsLock)
+            {
+                if (token.IsCancellationRequested) { return; }
+                var newResults = NewResults(newRawResults, resultId);
+                // update UI in one run, so it can avoid UI flickering
+                if (token.IsCancellationRequested) { return; }
+                Results.Update(newResults, token);
 
                 if (Results.Count > 0)
                 {
@@ -218,7 +241,7 @@ namespace Wox.ViewModel
             {
                 return results;
             }
-            
+
         }
         #endregion
 
@@ -273,7 +296,7 @@ namespace Wox.ViewModel
             /// Update the results collection with new results, try to keep identical results
             /// </summary>
             /// <param name="newItems"></param>
-            public void Update(List<ResultViewModel> newItems)
+            public void Update(List<ResultViewModel> newItems, System.Threading.CancellationToken token)
             {
                 CheckReentrancy();
 
@@ -283,7 +306,9 @@ namespace Wox.ViewModel
 
                 for (int i = 0; i < location; i++)
                 {
-                   ResultViewModel oldResult = this[i];
+                    if (token.IsCancellationRequested) { return; }
+
+                    ResultViewModel oldResult = this[i];
                     ResultViewModel newResult = newItems[i];
                     Logger.WoxTrace(
                         $"index {i} " +
@@ -312,6 +337,8 @@ namespace Wox.ViewModel
                 {
                     for (int i = oldCount; i < newCount; i++)
                     {
+                        if (token.IsCancellationRequested) { return; }
+
                         Logger.WoxTrace($"add {i} new<{newItems[i].Result.Title}");
                         Add(newItems[i]);
                     }
@@ -320,6 +347,8 @@ namespace Wox.ViewModel
                 {
                     for (int i = oldCount - 1; i >= newCount; i--)
                     {
+                        if (token.IsCancellationRequested) { return; }
+
                         RemoveAt(i);
                     }
                 }
