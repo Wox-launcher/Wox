@@ -39,7 +39,6 @@ namespace Wox.ViewModel
         private readonly TopMostRecord _topMostRecord;
 
         private CancellationTokenSource _updateSource;
-        private CancellationToken _updateToken;
         private bool _saved;
 
         private readonly Internationalization _translator;
@@ -91,7 +90,7 @@ namespace Wox.ViewModel
                 var plugin = (IResultUpdated)pair.Plugin;
                 plugin.ResultsUpdated += (s, e) =>
                 {
-                    var token = _updateToken;
+                    var token = _updateSource.Token;
                     Task.Run(() =>
                     {
                         if (token.IsCancellationRequested) { return; }
@@ -382,75 +381,84 @@ namespace Wox.ViewModel
         {
             if (_updateSource != null && !_updateSource.IsCancellationRequested)
             {
+                // first condition used for init run
+                // second condition used when task has already been canceled in last turn
                 _updateSource.Cancel();
                 _updateSource.Dispose();
+                Logger.WoxDebug($"cancel init {_updateSource.Token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId} {QueryText}");
             }
-            var updateSource = new CancellationTokenSource();
-            _updateSource = updateSource;
-            var token = updateSource.Token;
-            _updateToken = token;
+            var source = new CancellationTokenSource();
+            _updateSource = source;
+            var token = source.Token;
 
             ProgressBarVisibility = Visibility.Hidden;
+
             var queryText = QueryText.Trim();
-            if (!string.IsNullOrEmpty(queryText))
+            Task.Run(() =>
             {
-                if (token.IsCancellationRequested) { return; }
-                var query = QueryBuilder.Build(queryText, PluginManager.NonGlobalPlugins);
-                _lastQuery = query;
-                if (query != null)
+                if (!string.IsNullOrEmpty(queryText))
                 {
-                    // handle the exclusiveness of plugin using action keyword
                     if (token.IsCancellationRequested) { return; }
-                    RemoveOldQueryResults(query);
-
-                    Task.Delay(200, token).ContinueWith(_ =>
-                    { // start the progress bar if query takes more than 200 ms
-                        if (!token.IsCancellationRequested)
-                        {
-                            ProgressBarVisibility = Visibility.Visible;
-                            Logger.WoxDebug($"progressbar visible {query} {token.IsCancellationRequested} {ProgressBarVisibility}");
-                        }
-                    }, token);
-
-                    Task.Run(() =>
+                    var query = QueryBuilder.Build(queryText, PluginManager.NonGlobalPlugins);
+                    _lastQuery = query;
+                    if (query != null)
                     {
+                        // handle the exclusiveness of plugin using action keyword
+                        if (token.IsCancellationRequested) { return; }
+                        RemoveOldQueryResults(query);
+
+                        Task.Delay(200, token).ContinueWith(_ =>
+                        {
+                            Logger.WoxTrace($"progressbar visible 1 {token.GetHashCode()} {token.IsCancellationRequested}  {Thread.CurrentThread.ManagedThreadId}  {query} {ProgressBarVisibility}");
+                            // start the progress bar if query takes more than 200 ms
+                            if (!token.IsCancellationRequested)
+                            {
+                                ProgressBarVisibility = Visibility.Visible;
+                            }
+                        }, token);
+
+
                         if (token.IsCancellationRequested) { return; }
                         var plugins = PluginManager.ValidPluginsForQuery(query);
 
-                        // so looping will stop once it was cancelled
-                        var parallelOptions = new ParallelOptions { CancellationToken = token };
-                        try
+                        foreach (var plugin in plugins)
                         {
-                            Parallel.ForEach(plugins, parallelOptions, plugin =>
+                            if (!plugin.Metadata.Disabled)
                             {
-                                if (!plugin.Metadata.Disabled)
+                                if (token.IsCancellationRequested)
                                 {
-                                    if (token.IsCancellationRequested) { return; }
-                                    var results = PluginManager.QueryForPlugin(plugin, query);
-                                    if (token.IsCancellationRequested) { return; }
-                                    UpdateResultView(results, plugin.Metadata, query);
+                                    Logger.WoxDebug($"canceled {token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId}  {queryText} {plugin.Metadata.Name}");
+                                    return;
                                 }
-                            });
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            // nothing to do here
+                                var results = PluginManager.QueryForPlugin(plugin, query);
+                                if (token.IsCancellationRequested)
+                                {
+                                    Logger.WoxDebug($"canceled {token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId}  {queryText} {plugin.Metadata.Name}");
+                                    return;
+                                }
+                                UpdateResultView(results, plugin.Metadata, query);
+                            }
                         }
 
+                        Logger.WoxTrace($"progressbar visible 2 {token.GetHashCode()} {token.IsCancellationRequested}  {Thread.CurrentThread.ManagedThreadId}  {query} {ProgressBarVisibility}");
                         if (!token.IsCancellationRequested)
-                        { // update to hidden if this is still the current query
+                        { 
+                            // used to cancel previous progress bar visible task
+                            source.Cancel();
+                            source.Dispose();
+                            // update to hidden if this is still the current query
                             ProgressBarVisibility = Visibility.Hidden;
-                            updateSource.Cancel();
-                            updateSource.Dispose();
+                            
                         }
-                    }, token);
+                    }
                 }
-            }
-            else
-            {
-                Results.Clear();
-                Results.Visbility = Visibility.Collapsed;
-            }
+                else
+                {
+                    Results.Clear();
+                    Results.Visbility = Visibility.Collapsed;
+                }
+            }, token);
+
         }
 
         private void RemoveOldQueryResults(Query query)
