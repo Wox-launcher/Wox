@@ -171,9 +171,7 @@ namespace Wox.Plugin.Program.Programs
             }
             catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
             {
-                ProgramLogger.LogException($"|Win32|Win32Program|{path}" +
-                                            $"|Permission denied when trying to load the program from {path}", e);
-
+                Logger.WoxError($"Permission denied {path}");
                 return new Win32() { Valid = false, Enabled = false };
             }
         }
@@ -211,9 +209,8 @@ namespace Wox.Plugin.Program.Programs
             }
             catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
             {
-                ProgramLogger.LogException($"|Win32|ExeProgram|{path}" +
-                                            $"|Permission denied when trying to load the program from {path}", e);
 
+                Logger.WoxError($"Permission denied {path}");
                 return new Win32() { Valid = false, Enabled = false };
             }
         }
@@ -245,8 +242,7 @@ namespace Wox.Plugin.Program.Programs
                 }
                 catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
                 {
-                    ProgramLogger.LogException($"|Win32|ProgramPaths|{currentDirectory}" +
-                                                $"|Permission denied when trying to load programs from {currentDirectory}", e);
+                    Logger.WoxError($"Permission denied {currentDirectory}");
                 }
 
                 try
@@ -258,8 +254,7 @@ namespace Wox.Plugin.Program.Programs
                 }
                 catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
                 {
-                    ProgramLogger.LogException($"|Win32|ProgramPaths|{currentDirectory}" +
-                                                $"|Permission denied when trying to load programs from {currentDirectory}", e);
+                    Logger.WoxError($"Permission denied {currentDirectory}");
                 }
             } while (folderQueue.Any());
             return files;
@@ -375,9 +370,7 @@ namespace Wox.Plugin.Program.Programs
             }
             catch (Exception e) when (e is SecurityException || e is UnauthorizedAccessException)
             {
-                ProgramLogger.LogException($"|Win32|GetProgramPathFromRegistrySubKeys|{path}" +
-                                            $"|Permission denied when trying to load the program from {path}", e);
-
+                Logger.WoxError($"Permission denied {root.ToString()} {subkey}");
                 return string.Empty;
             }
         }

@@ -90,7 +90,7 @@ namespace Wox.Plugin.Program.Logger
 
         private static bool IsKnownWinProgramError(Exception e, string callingMethodName)
         {
-            if (e is SecurityException || e is UnauthorizedAccessException || e is DirectoryNotFoundException)
+            if (e is DirectoryNotFoundException)
                 return true;
 
             return false;
