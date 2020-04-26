@@ -1,8 +1,8 @@
-﻿using System;
+﻿using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 
 namespace Wox.Plugin.BrowserBookmark
 {
@@ -18,44 +18,46 @@ namespace Wox.Plugin.BrowserBookmark
             return bookmarks;
         }
 
+        private IEnumerable<JObject> GetNestedChildren(JObject jo)
+        {
+            List<JObject> nested = new List<JObject>();
+            JArray children = (JArray) jo["children"];
+            foreach(JObject c in children)
+            {
+                var type = c["type"].ToString();
+                if (type == "folder")
+                {
+                    var nc = GetNestedChildren(c);
+                    nested.AddRange(nc);
+                } else if (type == "url")
+                {
+                    nested.Add(c);
+                }
+            }
+            return nested;
+        }
+
+
         private void ParseChromeBookmarks(String path, string source)
         {
             if (!File.Exists(path)) return;
-
             string all = File.ReadAllText(path);
-            Regex nameRegex = new Regex("\"name\": \"(?<name>.*?)\"");
-            MatchCollection nameCollection = nameRegex.Matches(all);
-            Regex typeRegex = new Regex("\"type\": \"(?<type>.*?)\"");
-            MatchCollection typeCollection = typeRegex.Matches(all);
-            Regex urlRegex = new Regex("\"url\": \"(?<url>.*?)\"");
-            MatchCollection urlCollection = urlRegex.Matches(all);
-
-            List<string> names = (from Match match in nameCollection select match.Groups["name"].Value).ToList();
-            List<string> types = (from Match match in typeCollection select match.Groups["type"].Value).ToList();
-            List<string> urls = (from Match match in urlCollection select match.Groups["url"].Value).ToList();
-
-            int urlIndex = 0;
-            for (int i = 0; i < names.Count; i++)
+            JObject json = JObject.Parse(all);
+            var items = (JObject) json["roots"]["bookmark_bar"];
+            var flatterned = GetNestedChildren(items);
+            var bs = from item in flatterned select new Bookmark()
+                     {
+                         Name = (string)item["name"],
+                         Url = (string)item["url"],
+                         Source = source
+                     };
+            var filtered = bs.Where(b =>
             {
-                string name = DecodeUnicode(names[i]);
-                string type = types[i];
-                if (type == "url")
-                {
-                    string url = urls[urlIndex];
-                    urlIndex++;
-
-                    if (url == null) continue;
-                    if (url.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase)) continue;
-                    if (url.StartsWith("vbscript:", StringComparison.OrdinalIgnoreCase)) continue;
-
-                    bookmarks.Add(new Bookmark()
-                    {
-                        Name = name,
-                        Url = url,
-                        Source = source
-                    });
-                }
-            }
+                var c = !b.Url.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) &&
+                        !b.Url.StartsWith("vbscript:", StringComparison.OrdinalIgnoreCase);
+                return c;
+            });
+            bookmarks = filtered.ToList();
         }
 
         private void LoadChromeBookmarks(string path, string name)
@@ -65,6 +67,7 @@ namespace Wox.Plugin.BrowserBookmark
 
             foreach (var profile in paths)
             {
+                
                 if (File.Exists(Path.Combine(profile, "Bookmarks")))
                     ParseChromeBookmarks(Path.Combine(profile, "Bookmarks"), name + (Path.GetFileName(profile) == "Default" ? "" : (" (" + Path.GetFileName(profile) + ")")));
             }
@@ -78,10 +81,5 @@ namespace Wox.Plugin.BrowserBookmark
             LoadChromeBookmarks(Path.Combine(platformPath, @"Chromium\User Data"), "Chromium");
         }
 
-        private String DecodeUnicode(String dataStr)
-        {
-            Regex reg = new Regex(@"(?i)\\[uU]([0-9a-f]{4})");
-            return reg.Replace(dataStr, m => ((char)Convert.ToInt32(m.Groups[1].Value, 16)).ToString());
-        }
     }
 }
