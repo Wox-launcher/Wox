@@ -72,8 +72,12 @@ namespace Wox.Plugin.Program.Programs
             var appxFactory = new AppxFactory();
             IStream stream;
             const uint noAttribute = 0x80;
-            const Stgm exclusiveRead = Stgm.Read | Stgm.ShareExclusive;
-            var hResult = SHCreateStreamOnFileEx(path, exclusiveRead, noAttribute, false, null, out stream);
+            // shared read will slow speed https://docs.microsoft.com/en-us/windows/win32/stg/stgm-constants
+            // but cannot find a way to release stearm, so use shared read
+            // exclusive read will cause exception during reinexing
+            // System.IO.FileLoadException: The process cannot access the file because it is being used by another process
+            const Stgm sharedRead = Stgm.Read | Stgm.ShareDenyNone;
+            var hResult = SHCreateStreamOnFileEx(path, sharedRead, noAttribute, false, null, out stream);
 
             if (hResult == Hresult.Ok)
             {
@@ -571,6 +575,7 @@ namespace Wox.Plugin.Program.Programs
         {
             Read = 0x0,
             ShareExclusive = 0x10,
+            ShareDenyNone = 0x40,
         }
 
         private enum Hresult : uint

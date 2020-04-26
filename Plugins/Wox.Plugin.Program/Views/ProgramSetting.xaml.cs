@@ -173,7 +173,7 @@ namespace Wox.Plugin.Program.Views
             programSourceView.Items.Refresh();
         }
 
-        private void btnProgramSourceStatus_OnClick(object sender, RoutedEventArgs e)
+        private void btnProgramSoureDelete_OnClick(object sender, RoutedEventArgs e)
         {
             var selectedItems = programSourceView
                                 .SelectedItems.Cast<ProgramSource>()
@@ -186,39 +186,10 @@ namespace Wox.Plugin.Program.Views
                 return;
             }
 
-            if (selectedItems
-                .Where(t1 => !_settings
-                                .ProgramSources
-                                .Any(x => t1.UniqueIdentifier == x.UniqueIdentifier))
-                .Count() == 0)
-            {
-                var msg = string.Format(context.API.GetTranslation("wox_plugin_program_delete_program_source"));
-
-                if (MessageBox.Show(msg, string.Empty, MessageBoxButton.YesNo) == MessageBoxResult.No)
-                {
-                    return;
-                }
-
-                DeleteProgramSources(selectedItems);
-            }
-            else if (IsSelectedRowStatusEnabledMoreOrEqualThanDisabled(selectedItems))
-            {
-                ProgramSettingDisplayList.SetProgramSourcesStatus(selectedItems, false);
-
-                ProgramSettingDisplayList.StoreDisabledInSettings();
-            }
-            else
-            {
-                ProgramSettingDisplayList.SetProgramSourcesStatus(selectedItems, true);
-
-                ProgramSettingDisplayList.RemoveDisabledFromSettings();
-            }            
-            
-            if (selectedItems.IsReindexRequired())
-                ReIndexing();
+            DeleteProgramSources(selectedItems);
+            ReIndexing();
 
             programSourceView.SelectedItems.Clear();
-
             programSourceView.Items.Refresh();
         }
 
@@ -272,38 +243,6 @@ namespace Wox.Plugin.Program.Views
             dataView.SortDescriptions.Add(sd);
             dataView.Refresh();
         }
-
-        private bool IsSelectedRowStatusEnabledMoreOrEqualThanDisabled(List<ProgramSource> selectedItems)
-        {
-            return selectedItems.Where(x => x.Enabled).Count() >= selectedItems.Where(x => !x.Enabled).Count();
-        }
-
-        private void Row_OnClick(object sender, RoutedEventArgs e)
-        {
-            var selectedItems = programSourceView
-                .SelectedItems.Cast<ProgramSource>()
-                .ToList();
-
-            if (selectedItems
-                .Where(t1 => !_settings
-                                .ProgramSources
-                                .Any(x => t1.UniqueIdentifier == x.UniqueIdentifier))
-                .Count() == 0)
-            {
-                btnProgramSourceStatus.Content = context.API.GetTranslation("wox_plugin_program_delete");
-                return;
-            }
-
-            if (IsSelectedRowStatusEnabledMoreOrEqualThanDisabled(selectedItems))
-            {
-                btnProgramSourceStatus.Content = "Disable";
-            }
-            else
-            {
-                btnProgramSourceStatus.Content = "Enable";
-            }
-        }
-
 
         private void btnDeleteIgnored_OnClick(object sender, RoutedEventArgs e)
         {

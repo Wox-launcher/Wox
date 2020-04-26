@@ -120,6 +120,7 @@ namespace Wox.Plugin.Program
             var support = Environment.OSVersion.Version.Major >= windows10.Major;
 
             var applications = support ? UWP.All() : new UWP.Application[] { };
+            //var applications = new UWP.Application[] { };
             lock (IndexLock)
             {
                 _uwps = applications;
