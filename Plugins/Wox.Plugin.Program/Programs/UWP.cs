@@ -163,20 +163,11 @@ namespace Wox.Plugin.Program.Programs
                     {
                         u = new UWP(p);
                     }
-#if !DEBUG
                     catch (Exception e)
                     {
-                        ProgramLogger.LogException($"|UWP|All|{p.InstalledLocation}|An unexpected error occured and "
-                                                        + $"unable to convert Package to UWP for {p.Id.FullName}", e);
+                        Logger.WoxError($"Cannot parse UWP {p.Id.FullName} {p.Id.Version} {p.Id}", e);
                         return new Application[] { };
                     }
-#endif
-#if DEBUG //make developer aware and implement handling
-                    catch
-                    {
-                        throw;
-                    }
-#endif
                     return u.Apps;
                 }).ToArray();
 
@@ -453,15 +444,14 @@ namespace Wox.Plugin.Program.Programs
                     }
                     else
                     {
-                        ProgramLogger.LogException($"|UWP|ResourceFromPriInternal|{Package.Location}|Can't load null or empty result "
-                                                    + $"pri {source} in uwp location {Package.Location}", new NullReferenceException());
+                        Logger.WoxError($"Can't load null or empty result pri {source} in uwp location {Package.Location}");
                         return string.Empty;
                     }
                 }
                 else
                 {
                     var e = Marshal.GetExceptionForHR((int)hResult);
-                    ProgramLogger.LogException($"|UWP|ResourceFromPriInternal|{Package.Location}|Load pri failed {source} with HResult {hResult} and location {Package.Location}", e);
+                    Logger.WoxError($"Load pri failed {source} location {Package.Location}", e);
                     return string.Empty;
                 }
             }
@@ -506,9 +496,7 @@ namespace Wox.Plugin.Program.Programs
                 }
                 else
                 {
-                    ProgramLogger.LogException($"|UWP|ImageFromPath|{path}" +
-                                                    $"|Unable to get logo for {UserModelId} from {path} and" +
-                                                    $" located in {Package.Location}", new FileNotFoundException());
+                    Logger.WoxError($"|Unable to get logo for {UserModelId} from {path} and located in {Package.Location}");
                     return new BitmapImage(new Uri(Constant.ErrorIcon));
                 }
             }
@@ -555,10 +543,7 @@ namespace Wox.Plugin.Program.Programs
                     }
                     else
                     {
-                        ProgramLogger.LogException($"|UWP|PlatedImage|{Package.Location}" +
-                                                    $"|Unable to convert background string {BackgroundColor} " +
-                                                    $"to color for {Package.Location}", new InvalidOperationException());
-
+                        Logger.WoxError($"Unable to convert background string {BackgroundColor} to color for {Package.Location}");
                         return new BitmapImage(new Uri(Constant.ErrorIcon));
                     }
                 }

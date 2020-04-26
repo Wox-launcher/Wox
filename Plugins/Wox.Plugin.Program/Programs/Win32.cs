@@ -389,41 +389,48 @@ namespace Wox.Plugin.Program.Programs
 
         public static Win32[] All(Settings settings)
         {
+
+            var programs = new List<Win32>().AsParallel();
             try
             {
-                var programs = new List<Win32>().AsParallel();
-
                 var unregistered = UnregisteredPrograms(settings.ProgramSources, settings.ProgramSuffixes);
                 programs = programs.Concat(unregistered);
+            }
+            catch (Exception e)
+            {
+                Logger.WoxError("Cannot read win32", e);
+                return new Win32[] { };
+            }
+
+            try
+            {
                 if (settings.EnableRegistrySource)
                 {
                     var appPaths = AppPathsPrograms(settings.ProgramSuffixes);
                     programs = programs.Concat(appPaths);
                 }
+            }
+            catch (Exception e)
+            {
+                Logger.WoxError("Cannot read win32", e);
+                return new Win32[] { };
+            }
 
+            try
+            {
                 if (settings.EnableStartMenuSource)
                 {
                     var startMenu = StartMenuPrograms(settings.ProgramSuffixes);
                     programs = programs.Concat(startMenu);
                 }
-
-                return programs.ToArray();
             }
-#if DEBUG //This is to make developer aware of any unhandled exception and add in handling.
             catch (Exception e)
             {
-                throw e;
+                Logger.WoxError("Cannot read win32", e);
+                return new Win32[] { };
             }
-#endif
+            return programs.ToArray();
 
-#if !DEBUG //Only do a catch all in production.
-            catch (Exception e)
-            {
-                ProgramLogger.LogException("|Win32|All|Not available|An unexpected error occurred", e);
-
-                return new Win32[0];
-            }
-#endif
         }
     }
 }
