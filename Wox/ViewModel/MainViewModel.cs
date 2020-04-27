@@ -421,7 +421,12 @@ namespace Wox.ViewModel
                         if (token.IsCancellationRequested) { return; }
                         var plugins = PluginManager.ValidPluginsForQuery(query);
 
-                        foreach (var plugin in plugins)
+                        var option = new ParallelOptions()
+                        {
+                            CancellationToken = token,
+                        };
+
+                        Parallel.ForEach(plugins, plugin =>
                         {
                             if (!plugin.Metadata.Disabled)
                             {
@@ -438,17 +443,17 @@ namespace Wox.ViewModel
                                 }
                                 UpdateResultView(results, plugin.Metadata, query, token);
                             }
-                        }
+                        });
 
                         Logger.WoxTrace($"progressbar visible 2 {token.GetHashCode()} {token.IsCancellationRequested}  {Thread.CurrentThread.ManagedThreadId}  {query} {ProgressBarVisibility}");
                         if (!token.IsCancellationRequested)
-                        { 
+                        {
                             // used to cancel previous progress bar visible task
                             source.Cancel();
                             source.Dispose();
                             // update to hidden if this is still the current query
                             ProgressBarVisibility = Visibility.Hidden;
-                            
+
                         }
                     }
                 }
