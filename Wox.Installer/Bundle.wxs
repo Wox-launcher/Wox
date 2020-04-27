@@ -37,7 +37,7 @@
       <!-- passive / no ui install and add PATH env-->
       <ExePackage
         SourceFile="python-3.7.7.exe"
-        InstallCommand="/passive PrependPath=1 Include_test=0 Include_tcltk=0"
+        InstallCommand="/passive PrependPath=1 Include_doc=0 Include_test=0 Include_tcltk=0"
         UninstallCommand="/uninstall"
         InstallCondition="PythonCheckbox"
       />
