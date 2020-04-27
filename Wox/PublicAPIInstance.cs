@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using Squirrel;
@@ -157,7 +158,9 @@ namespace Wox
             });
             Task.Run(() =>
             {
-                _mainVM.UpdateResultView(results, plugin, query);
+
+                var t = new CancellationTokenSource().Token;
+                _mainVM.UpdateResultView(results, plugin, query, t);
             });
         }
 

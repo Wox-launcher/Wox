@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -133,17 +134,14 @@ namespace Wox.ViewModel
             Results.RemoveAll(r => r.Result.PluginID == metadata.ID);
         }
 
-        /// <summary>
-        /// To avoid deadlock, this method should not called from main thread
-        /// </summary>
         public void AddResults(List<Result> newRawResults, string resultId)
         {
-
             lock (_addResultsLock)
             {
-                var newResults = NewResults(newRawResults, resultId);
+                var t = new CancellationTokenSource().Token;
+                var newResults = NewResults(newRawResults, resultId, t);
                 // update UI in one run, so it can avoid UI flickering
-                Results.Update(newResults);
+                Results.Update(newResults, t);
 
                 if (Results.Count > 0)
                 {
@@ -157,24 +155,53 @@ namespace Wox.ViewModel
             }
         }
 
-        private List<ResultViewModel> NewResults(List<Result> newRawResults, string resultId)
+        /// <summary>
+        /// To avoid deadlock, this method should not called from main thread
+        /// </summary>
+        public void AddResults(List<Result> newRawResults, string resultId, System.Threading.CancellationToken token)
+        {
+            lock (_addResultsLock)
+            {
+                if (token.IsCancellationRequested) { return; }
+                var newResults = NewResults(newRawResults, resultId, token);
+                // update UI in one run, so it can avoid UI flickering
+                if (token.IsCancellationRequested) { return; }
+                Results.Update(newResults, token);
+
+                if (Results.Count > 0)
+                {
+                    Margin = new Thickness { Top = 8 };
+                    SelectedIndex = 0;
+                }
+                else
+                {
+                    Margin = new Thickness { Top = 0 };
+                }
+            }
+        }
+
+        private List<ResultViewModel> NewResults(List<Result> newRawResults, string resultId, CancellationToken token)
         {
             var newResults = newRawResults.Select(r => new ResultViewModel(r)).ToList();
             var results = Results.ToList();
             var oldResults = results.Where(r => r.Result.PluginID == resultId).ToList();
 
+            if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
             // intersection of A (old results) and B (new newResults)
             var intersection = oldResults.Intersect(newResults).ToList();
 
+            if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
             // remove result of relative complement of B in A
             foreach (var result in oldResults.Except(intersection))
             {
+                if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
                 results.Remove(result);
             }
 
             // update index for result in intersection of A and B
             foreach (var commonResult in intersection)
             {
+                if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
                 int oldIndex = results.IndexOf(commonResult);
                 int oldScore = results[oldIndex].Result.Score;
                 var newResult = newResults[newResults.IndexOf(commonResult)];
@@ -198,6 +225,7 @@ namespace Wox.ViewModel
             // insert result in relative complement of A in B
             foreach (var result in newResults.Except(intersection))
             {
+                if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
                 if (results.Count <= maxResults)
                 {
                     int newIndex = InsertIndexOf(result.Result.Score, results);
@@ -209,6 +237,7 @@ namespace Wox.ViewModel
                 }
             }
 
+            if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
             if (results.Count > maxResults)
             {
                 var resultsCopy = results.GetRange(0, maxResults);
@@ -218,7 +247,7 @@ namespace Wox.ViewModel
             {
                 return results;
             }
-            
+
         }
         #endregion
 
@@ -273,7 +302,7 @@ namespace Wox.ViewModel
             /// Update the results collection with new results, try to keep identical results
             /// </summary>
             /// <param name="newItems"></param>
-            public void Update(List<ResultViewModel> newItems)
+            public void Update(List<ResultViewModel> newItems, System.Threading.CancellationToken token)
             {
                 CheckReentrancy();
 
@@ -283,7 +312,9 @@ namespace Wox.ViewModel
 
                 for (int i = 0; i < location; i++)
                 {
-                   ResultViewModel oldResult = this[i];
+                    if (token.IsCancellationRequested) { return; }
+
+                    ResultViewModel oldResult = this[i];
                     ResultViewModel newResult = newItems[i];
                     Logger.WoxTrace(
                         $"index {i} " +
@@ -312,6 +343,8 @@ namespace Wox.ViewModel
                 {
                     for (int i = oldCount; i < newCount; i++)
                     {
+                        if (token.IsCancellationRequested) { return; }
+
                         Logger.WoxTrace($"add {i} new<{newItems[i].Result.Title}");
                         Add(newItems[i]);
                     }
@@ -320,6 +353,8 @@ namespace Wox.ViewModel
                 {
                     for (int i = oldCount - 1; i >= newCount; i--)
                     {
+                        if (token.IsCancellationRequested) { return; }
+
                         RemoveAt(i);
                     }
                 }

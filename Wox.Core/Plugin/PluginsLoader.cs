@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using NLog;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Exception;
@@ -33,7 +34,7 @@ namespace Wox.Core.Plugin
             var plugins = new List<PluginPair>();
             var metadatas = source.Where(o => o.Language.ToUpper() == AllowedLanguage.CSharp);
 
-            foreach (var metadata in metadatas)
+            Parallel.ForEach(metadatas, metadata =>
             {
                 var milliseconds = Logger.StopWatchDebug($"Constructor init cost for {metadata.Name}", () =>
                 {
@@ -85,7 +86,7 @@ namespace Wox.Core.Plugin
                 });
                 metadata.InitTime += milliseconds;
 
-            }
+            });
             return plugins;
         }
 

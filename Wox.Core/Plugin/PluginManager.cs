@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using NLog;
 using Wox.Infrastructure;
@@ -171,7 +172,7 @@ namespace Wox.Core.Plugin
             {
                 List<Result> results = null;
                 var metadata = pair.Metadata;
-                var milliseconds = Logger.StopWatchDebug($"Cost for {metadata.Name}", () =>
+                var milliseconds = Logger.StopWatchDebug($"Query <{query.RawQuery}> Cost for {metadata.Name}", () =>
                 {
                     results = pair.Plugin.Query(query) ?? new List<Result>();
                     UpdatePluginMetadata(results, metadata, query);
