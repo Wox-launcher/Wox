@@ -133,9 +133,12 @@ namespace Wox.Core.Resource
                     queryBoxStyle.Setters.Add(new Setter(TextBox.CaretBrushProperty, foregroundPropertyValue));
             }
 
-            Style queryTextSuggestionBoxStyle = dict.Contains("QueryTextSuggestionBoxStyle")? 
-                dict["QueryTextSuggestionBoxStyle"] as Style: 
-                new Style(typeof(TextBox), queryBoxStyle);
+            var queryTextSuggestionBoxStyle = new Style(typeof (TextBox), queryBoxStyle);
+            bool hasSuggestion = false;
+            if (dict.Contains("QueryTextSuggestionBoxStyle")) {
+                queryTextSuggestionBoxStyle = dict["QueryTextSuggestionBoxStyle"] as Style;
+                hasSuggestion = true;
+            }
             if (queryTextSuggestionBoxStyle != null)
             {
                 queryTextSuggestionBoxStyle.Setters.Add(new Setter(TextBox.FontFamilyProperty, new FontFamily(Settings.QueryBoxFont)));
@@ -149,6 +152,12 @@ namespace Wox.Core.Resource
             foreach (Setter setter in queryBoxStyleSetters) {
                 if (queryTextSuggestionBoxStyleSetters.All(x => x.Property != setter.Property))
                     queryBoxStyle.Setters.Add(setter);
+            }
+
+            if (hasSuggestion) {
+                queryTextSuggestionBoxStyle.Setters.OfType<Setter>().FirstOrDefault(x => x.Property.Name == "Background").Value = 
+                    queryBoxStyle.Setters.OfType<Setter>().FirstOrDefault(x => x.Property.Name == "Background").Value;
+                queryBoxStyle.Setters.OfType<Setter>().FirstOrDefault(x => x.Property.Name == "Background").Value = Brushes.Transparent;
             }
 
             Style resultItemStyle = dict["ItemTitleStyle"] as Style;
