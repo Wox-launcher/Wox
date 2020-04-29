@@ -30,6 +30,8 @@
     <Content Include="installer.png" />
     <Content Include="InstallerTheme.xml" />
     <Content Include="squirrel_nuget.ps1" />
+    <Content Include="wox.nuspec" />
+    <Content Include="wox.plugin.nuspec" />
   </ItemGroup>
   <Import Project="$(WixTargetsPath)" Condition=" '$(WixTargetsPath)' != '' " />
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets" Condition=" '$(WixTargetsPath)' == '' AND Exists('$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets') " />

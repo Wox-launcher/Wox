@@ -68,7 +68,7 @@ function Validate-Directory ($output) {
 function Pack-Nuget-API ($path, $version, $output) {
     Write-Host "Begin build nuget library"
 
-    $spec = "$path\Scripts\wox.plugin.nuspec"
+    $spec = "$path\Wox.Installer\wox.plugin.nuspec"
     Write-Host "nuspec path: $spec"
     Write-Host "Output path: $output"
 
@@ -95,7 +95,7 @@ function Pack-Squirrel-Installer ($path, $version, $output) {
     # msbuild based installer generation is not working in appveyor, not sure why
     Write-Host "Begin pack squirrel installer"
 
-    $spec = "$path\Scripts\wox.nuspec"
+    $spec = "$path\Wox.Installer\wox.nuspec"
     Write-Host "nuspec path: $spec"
     $input = "$path\Output\$config"
     Write-Host "Input path:  $input"
