@@ -1,6 +1,6 @@
 version: 1.3.{build}
 image: Visual Studio 2019
-configuration: Appveyor
+configuration: Release
 assembly_info:
   patch: true
   file: AssemblyInfo.*
@@ -13,6 +13,7 @@ build:
   project: Wox.sln
 after_test:
   - ps: Copy-Item $env:APPDATA\Wox\Logs\*\*.txt .
+  - msbuild Wox.Installer\Wox.Installer.wixproj /p:Configuration=Release /p:BuildProjectReferences=false /t:Build
 artifacts:
   - path: '*-*-*.txt'
     name: information
