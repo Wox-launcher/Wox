@@ -126,19 +126,7 @@ namespace Wox.ViewModel
         public void AddResults(List<Result> newRawResults, string resultId)
         {
             var t = new CancellationTokenSource().Token;
-            var newResults = NewResults(newRawResults, resultId, t);
-            // update UI in one run, so it can avoid UI flickering
-            Results.Update(newResults, t);
-
-            if (Results.Count > 0)
-            {
-                Margin = new Thickness { Top = 8 };
-                SelectedIndex = 0;
-            }
-            else
-            {
-                Margin = new Thickness { Top = 0 };
-            }
+            AddResults(newRawResults, resultId, t);
         }
 
         /// <summary>
