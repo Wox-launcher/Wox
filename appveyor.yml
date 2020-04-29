@@ -1,7 +1,6 @@
 version: 1.3.{build}
 image: Visual Studio 2019
 configuration: Release
-platform: Any CPU
 assembly_info:
   patch: true
   file: AssemblyInfo.*
@@ -14,7 +13,7 @@ build:
   project: Wox.sln
 after_test:
   - ps: Copy-Item $env:APPDATA\Wox\Logs\*\*.txt .
-  - ps: powershell.exe -NoProfile -ExecutionPolicy Bypass -File Scripts\post_build.ps1
+  - msbuild Wox.Installer\Wox.Installer.wixproj /p:Configuration=Release /p:BuildProjectReferences=false /t:Build"
 artifacts:
   - path: '*-*-*.txt'
     name: information
@@ -27,4 +26,3 @@ artifacts:
   - path: 'Output\Packages\Wox-*.*'
     name: installer
   - path: 'Output\Packages\RELEASES'
-    name: installer
