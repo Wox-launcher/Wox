@@ -20,7 +20,6 @@ namespace Wox.ViewModel
 
         public ResultCollection Results { get; }
 
-        private readonly object _addResultsLock = new object();
         private readonly object _collectionLock = new object();
         private readonly Settings _settings;
         private int MaxResults => _settings?.MaxResultsToShow ?? 6;
@@ -124,34 +123,21 @@ namespace Wox.ViewModel
             Results.Clear();
         }
 
-        public void RemoveResultsExcept(PluginMetadata metadata)
-        {
-            Results.RemoveAll(r => r.Result.PluginID != metadata.ID);
-        }
-
-        public void RemoveResultsFor(PluginMetadata metadata)
-        {
-            Results.RemoveAll(r => r.Result.PluginID == metadata.ID);
-        }
-
         public void AddResults(List<Result> newRawResults, string resultId)
         {
-            lock (_addResultsLock)
-            {
-                var t = new CancellationTokenSource().Token;
-                var newResults = NewResults(newRawResults, resultId, t);
-                // update UI in one run, so it can avoid UI flickering
-                Results.Update(newResults, t);
+            var t = new CancellationTokenSource().Token;
+            var newResults = NewResults(newRawResults, resultId, t);
+            // update UI in one run, so it can avoid UI flickering
+            Results.Update(newResults, t);
 
-                if (Results.Count > 0)
-                {
-                    Margin = new Thickness { Top = 8 };
-                    SelectedIndex = 0;
-                }
-                else
-                {
-                    Margin = new Thickness { Top = 0 };
-                }
+            if (Results.Count > 0)
+            {
+                Margin = new Thickness { Top = 8 };
+                SelectedIndex = 0;
+            }
+            else
+            {
+                Margin = new Thickness { Top = 0 };
             }
         }
 
@@ -160,23 +146,20 @@ namespace Wox.ViewModel
         /// </summary>
         public void AddResults(List<Result> newRawResults, string resultId, System.Threading.CancellationToken token)
         {
-            lock (_addResultsLock)
-            {
-                if (token.IsCancellationRequested) { return; }
-                var newResults = NewResults(newRawResults, resultId, token);
-                // update UI in one run, so it can avoid UI flickering
-                if (token.IsCancellationRequested) { return; }
-                Results.Update(newResults, token);
+            if (token.IsCancellationRequested) { return; }
+            var newResults = NewResults(newRawResults, resultId, token);
+            // update UI in one run, so it can avoid UI flickering
+            if (token.IsCancellationRequested) { return; }
+            Results.Update(newResults, token);
 
-                if (Results.Count > 0)
-                {
-                    Margin = new Thickness { Top = 8 };
-                    SelectedIndex = 0;
-                }
-                else
-                {
-                    Margin = new Thickness { Top = 0 };
-                }
+            if (Results.Count > 0)
+            {
+                Margin = new Thickness { Top = 8 };
+                SelectedIndex = 0;
+            }
+            else
+            {
+                Margin = new Thickness { Top = 0 };
             }
         }
 

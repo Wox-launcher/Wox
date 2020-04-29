@@ -7,9 +7,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using System.Collections.Concurrent;
+
 using NHotkey;
 using NHotkey.Wpf;
 using NLog;
+
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
 using Wox.Helper;
@@ -37,6 +40,7 @@ namespace Wox.ViewModel
         private readonly History _history;
         private readonly UserSelectedRecord _userSelectedRecord;
         private readonly TopMostRecord _topMostRecord;
+        private BlockingCollection<ResultsForUpdate> _resultsQueue;
 
         private CancellationTokenSource _updateSource;
         private bool _saved;
@@ -79,9 +83,26 @@ namespace Wox.ViewModel
                 SetHotkey(_settings.Hotkey, OnHotkey);
                 SetCustomPluginHotkey();
             }
+
+            RegisterResultConsume();
         }
 
-
+        private void RegisterResultConsume()
+        {
+            _resultsQueue = new BlockingCollection<ResultsForUpdate>();
+            Task.Run(() =>
+            {
+                while (true)
+                {
+                    ResultsForUpdate update = _resultsQueue.Take();
+                    
+                    if (!update.Token.IsCancellationRequested)
+                    {
+                        UpdateResultView(update.Results, update.Metadata, update.Query, update.Token);
+                    }
+                }
+            }).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
+        }
 
         private void RegisterResultsUpdatedEvent()
         {
@@ -90,13 +111,12 @@ namespace Wox.ViewModel
                 var plugin = (IResultUpdated)pair.Plugin;
                 plugin.ResultsUpdated += (s, e) =>
                 {
-                    var token = _updateSource.Token;
+                    CancellationToken token = _updateSource.Token;
                     Task.Run(() =>
                     {
                         if (token.IsCancellationRequested) { return; }
                         PluginManager.UpdatePluginMetadata(e.Results, pair.Metadata, e.Query);
-                        if (token.IsCancellationRequested) { return; }
-                        UpdateResultView(e.Results, pair.Metadata, e.Query, token);
+                        _resultsQueue.Add(new ResultsForUpdate(e.Results, pair.Metadata, e.Query, token));
                     }, token);
                 };
             }
@@ -384,8 +404,8 @@ namespace Wox.ViewModel
                 // first condition used for init run
                 // second condition used when task has already been canceled in last turn
                 _updateSource.Cancel();
-                _updateSource.Dispose();
                 Logger.WoxDebug($"cancel init {_updateSource.Token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId} {QueryText}");
+                _updateSource.Dispose();
             }
             var source = new CancellationTokenSource();
             _updateSource = source;
@@ -405,7 +425,6 @@ namespace Wox.ViewModel
                     {
                         // handle the exclusiveness of plugin using action keyword
                         if (token.IsCancellationRequested) { return; }
-                        RemoveOldQueryResults(query);
 
                         Task.Delay(200, token).ContinueWith(_ =>
                         {
@@ -441,7 +460,7 @@ namespace Wox.ViewModel
                                     Logger.WoxDebug($"canceled {token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId}  {queryText} {plugin.Metadata.Name}");
                                     return;
                                 }
-                                UpdateResultView(results, plugin.Metadata, query, token);
+                                _resultsQueue.Add(new ResultsForUpdate(results, plugin.Metadata, query, token));
                             }
                         });
 
@@ -464,30 +483,6 @@ namespace Wox.ViewModel
                 }
             }, token);
 
-        }
-
-        private void RemoveOldQueryResults(Query query)
-        {
-            string lastKeyword = _lastQuery.ActionKeyword;
-            string keyword = query.ActionKeyword;
-            if (string.IsNullOrEmpty(lastKeyword))
-            {
-                if (!string.IsNullOrEmpty(keyword))
-                {
-                    Results.RemoveResultsExcept(PluginManager.NonGlobalPlugins[keyword].Metadata);
-                }
-            }
-            else
-            {
-                if (string.IsNullOrEmpty(keyword))
-                {
-                    Results.RemoveResultsFor(PluginManager.NonGlobalPlugins[lastKeyword].Metadata);
-                }
-                else if (lastKeyword != keyword)
-                {
-                    Results.RemoveResultsExcept(PluginManager.NonGlobalPlugins[keyword].Metadata);
-                }
-            }
         }
 
         private Result ContextMenuTopMost(Result result)
@@ -687,6 +682,8 @@ namespace Wox.ViewModel
         /// </summary>
         public void UpdateResultView(List<Result> list, PluginMetadata metadata, Query originQuery, CancellationToken token)
         {
+            Logger.WoxTrace($"{metadata.Name}:{originQuery.RawQuery}");
+
             foreach (var result in list)
             {
                 if (token.IsCancellationRequested) { return; }
