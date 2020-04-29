@@ -33,9 +33,10 @@
     </WixExtension>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="post_build.ps1" />
     <Content Include="installer.png" />
     <Content Include="InstallerTheme.xml" />
-    <Content Include="squirrel_nuget.ps1" />
+    <Content Include="before_build.ps1" />
     <Content Include="wox.nuspec" />
     <Content Include="wox.plugin.nuspec" />
   </ItemGroup>
@@ -45,10 +46,10 @@
     <Error Text="The WiX Toolset v3.11 (or newer) build tools must be installed to build this project. To download the WiX Toolset, see http://wixtoolset.org/releases/" />
   </Target>
   <PropertyGroup>
-    <PreBuildEvent>powershell.exe -NoProfile -ExecutionPolicy Bypass -File $(ProjectDir)squirrel_nuget.ps1 -solution $(ProjectDir)..\</PreBuildEvent>
+    <PreBuildEvent>powershell.exe -NoProfile -ExecutionPolicy Bypass -File $(ProjectDir)before_build.ps1 -solution $(ProjectDir)..\</PreBuildEvent>
   </PropertyGroup>
   <PropertyGroup>
-    <PostBuildEvent />
+    <PostBuildEvent>powershell.exe -NoProfile -ExecutionPolicy Bypass -File $(ProjectDir)post_build.ps1 -solution $(ProjectDir)..\</PostBuildEvent>
   </PropertyGroup>
   <!--
 	To modify your build process, add your task inside one of the targets below and uncomment it.
