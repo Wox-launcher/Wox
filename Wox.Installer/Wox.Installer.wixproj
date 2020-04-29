@@ -14,14 +14,16 @@
     <IntermediateOutputPath>obj\$(Platform)\$(Configuration)\</IntermediateOutputPath>
     <DefineConstants>
     </DefineConstants>
-    <WixVariables>WoxVersion=1.5.0</WixVariables>
+    <WixVariables>
+    </WixVariables>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
     <OutputPath>..\Output\packages\</OutputPath>
     <IntermediateOutputPath>obj\$(Platform)\$(Configuration)\</IntermediateOutputPath>
     <DefineConstants>
     </DefineConstants>
-    <WixVariables>WoxVersion=1.5.0</WixVariables>
+    <WixVariables>
+    </WixVariables>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Bundle.wxs" />
@@ -46,10 +48,10 @@
     <Error Text="The WiX Toolset v3.11 (or newer) build tools must be installed to build this project. To download the WiX Toolset, see http://wixtoolset.org/releases/" />
   </Target>
   <PropertyGroup>
-    <PreBuildEvent>powershell.exe -NoProfile -ExecutionPolicy Bypass -File $(ProjectDir)before_build.ps1 -solution $(ProjectDir)..\</PreBuildEvent>
+    <PostBuildEvent>powershell.exe -NoProfile -ExecutionPolicy Bypass -File $(ProjectDir)post_build.ps1 -solution $(ProjectDir)..\</PostBuildEvent>
   </PropertyGroup>
   <PropertyGroup>
-    <PostBuildEvent>powershell.exe -NoProfile -ExecutionPolicy Bypass -File $(ProjectDir)post_build.ps1 -solution $(ProjectDir)..\</PostBuildEvent>
+    <PreBuildEvent>powershell.exe -NoProfile -ExecutionPolicy Bypass -File $(ProjectDir)before_build.ps1 -solution $(ProjectDir)..\</PreBuildEvent>
   </PropertyGroup>
   <!--
 	To modify your build process, add your task inside one of the targets below and uncomment it.

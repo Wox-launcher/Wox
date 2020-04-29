@@ -13,7 +13,7 @@ build:
   project: Wox.sln
 after_test:
   - ps: Copy-Item $env:APPDATA\Wox\Logs\*\*.txt .
-  - msbuild Wox.Installer\Wox.Installer.wixproj /p:Configuration=Release /p:BuildProjectReferences=false /t:Build /p:WixVariable="WoxVersion={version}"
+  - msbuild Wox.Installer\Wox.Installer.wixproj /p:Configuration=Release /p:BuildProjectReferences=false /t:Build"
 artifacts:
   - path: '*-*-*.txt'
     name: information

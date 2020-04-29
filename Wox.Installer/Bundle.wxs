@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <!-- todo run installer again, should not display uninstall -->
+  <?ifdef env.APPVEYOR_BUILD_VERSION ?>
+  <?define WoxVersion  = $(env.APPVEYOR_BUILD_VERSION) ?>
+  <?else?>
+  <?define WoxVersion  = "1.5.0"?>
+  <?endif?>
   <Bundle
-    Name="Wox Full Installer !(wix.WoxVersion)"
-    Version="!(wix.WoxVersion)"
+    Name="Wox Full Installer $(var.WoxVersion)"
+    Version="$(var.WoxVersion)"
     Manufacturer="Wox"
     UpgradeCode="f96edd7f-00c8-44b8-8ac7-1d500bbbaeea"
     DisableModify="yes"
@@ -43,7 +48,7 @@
       />
       <ExePackage
         Id="WoxPackage"
-        SourceFile="..\Output\packages\Wox-!(wix.WoxVersion).exe"
+        SourceFile="..\Output\packages\Wox-$(var.WoxVersion).exe"
         InstallCondition="WoxCheckbox"
       />
     </Chain>
