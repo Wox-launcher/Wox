@@ -126,6 +126,7 @@ function Pack-Squirrel-Installer ($path, $version, $output) {
 }
 
 function Main {
+    Write-Host $(Get-Location)
     Write-Host "Config: $config"
     $p = Build-Path
     $v = Build-Version
