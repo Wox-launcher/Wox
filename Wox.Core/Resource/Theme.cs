@@ -126,15 +126,29 @@ namespace Wox.Core.Resource
                 queryBoxStyle.Setters.Add(new Setter(TextBox.FontStyleProperty, FontHelper.GetFontStyleFromInvariantStringOrNormal(Settings.QueryBoxFontStyle)));
                 queryBoxStyle.Setters.Add(new Setter(TextBox.FontWeightProperty, FontHelper.GetFontWeightFromInvariantStringOrNormal(Settings.QueryBoxFontWeight)));
                 queryBoxStyle.Setters.Add(new Setter(TextBox.FontStretchProperty, FontHelper.GetFontStretchFromInvariantStringOrNormal(Settings.QueryBoxFontStretch)));
+
+                var caretBrushPropertyValue = queryBoxStyle.Setters.OfType<Setter>().Any(x => x.Property.Name == "CaretBrush");
+                var foregroundPropertyValue = queryBoxStyle.Setters.OfType<Setter>().FirstOrDefault(x => x.Property.Name == "Foreground")?.Value ?? Brushes.Black;
+                if (!caretBrushPropertyValue)
+                    queryBoxStyle.Setters.Add(new Setter(TextBox.CaretBrushProperty, foregroundPropertyValue));
             }
 
-            Style queryTextSuggestionBoxStyle = dict["QueryTextSuggestionBoxStyle"] as Style;
+            Style queryTextSuggestionBoxStyle = dict.Contains("QueryTextSuggestionBoxStyle")? 
+                dict["QueryTextSuggestionBoxStyle"] as Style: 
+                new Style(typeof(TextBox), queryBoxStyle);
             if (queryTextSuggestionBoxStyle != null)
             {
                 queryTextSuggestionBoxStyle.Setters.Add(new Setter(TextBox.FontFamilyProperty, new FontFamily(Settings.QueryBoxFont)));
                 queryTextSuggestionBoxStyle.Setters.Add(new Setter(TextBox.FontStyleProperty, FontHelper.GetFontStyleFromInvariantStringOrNormal(Settings.QueryBoxFontStyle)));
                 queryTextSuggestionBoxStyle.Setters.Add(new Setter(TextBox.FontWeightProperty, FontHelper.GetFontWeightFromInvariantStringOrNormal(Settings.QueryBoxFontWeight)));
                 queryTextSuggestionBoxStyle.Setters.Add(new Setter(TextBox.FontStretchProperty, FontHelper.GetFontStretchFromInvariantStringOrNormal(Settings.QueryBoxFontStretch)));
+            }
+
+            var queryBoxStyleSetters = queryBoxStyle.Setters.OfType<Setter>();
+            var queryTextSuggestionBoxStyleSetters = queryTextSuggestionBoxStyle.Setters.OfType<Setter>();
+            foreach (Setter setter in queryBoxStyleSetters) {
+                if (queryTextSuggestionBoxStyleSetters.All(x => x.Property != setter.Property))
+                    queryBoxStyle.Setters.Add(setter);
             }
 
             Style resultItemStyle = dict["ItemTitleStyle"] as Style;
