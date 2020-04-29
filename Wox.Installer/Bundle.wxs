@@ -2,8 +2,8 @@
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <!-- todo run installer again, should not display uninstall -->
   <Bundle
-    Name="Wox Full Installer 1.5"
-    Version="1.5"
+    Name="Wox Full Installer !(wix.WoxVersion)"
+    Version="!(wix.WoxVersion)"
     Manufacturer="Wox"
     UpgradeCode="f96edd7f-00c8-44b8-8ac7-1d500bbbaeea"
     DisableModify="yes"
@@ -42,7 +42,8 @@
         InstallCondition="PythonCheckbox"
       />
       <ExePackage
-        SourceFile="..\Output\packages\Wox-1.5.0.exe"
+        Id="WoxPackage"
+        SourceFile="..\Output\packages\Wox-!(wix.WoxVersion).exe"
         InstallCondition="WoxCheckbox"
       />
     </Chain>
