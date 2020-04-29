@@ -8,7 +8,7 @@
     <Style x:Key="QueryBoxStyle" BasedOn="{StaticResource BaseQueryBoxStyle}" TargetType="{x:Type TextBox}">
         <Setter Property="Foreground" Value="{%searchFieldTextColor%}" />
     </Style>
-        <Style x:Key="QueryTextSuggestionBoxStyle" BasedOn="{StaticResource BaseQueryTextSuggestionBoxStyle}" TargetType="{x:Type TextBox}">
+    <Style x:Key="QueryTextSuggestionBoxStyle" BasedOn="{StaticResource BaseQueryTextSuggestionBoxStyle}" TargetType="{x:Type TextBox}">
         <Setter Property="Background" Value="{%searchFieldBackgroundColor%}"/>
     </Style>
     <Style x:Key="WindowBorderStyle" BasedOn="{StaticResource BaseWindowBorderStyle}" TargetType="{x:Type Border}">
