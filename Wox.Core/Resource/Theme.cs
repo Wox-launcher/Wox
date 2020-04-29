@@ -127,9 +127,9 @@ namespace Wox.Core.Resource
                 queryBoxStyle.Setters.Add(new Setter(TextBox.FontWeightProperty, FontHelper.GetFontWeightFromInvariantStringOrNormal(Settings.QueryBoxFontWeight)));
                 queryBoxStyle.Setters.Add(new Setter(TextBox.FontStretchProperty, FontHelper.GetFontStretchFromInvariantStringOrNormal(Settings.QueryBoxFontStretch)));
 
-                var caretBrushPropertyValue = queryBoxStyle.Setters.OfType<Setter>().Any(x => x.Property.Name == "CaretBrush");
-                var foregroundPropertyValue = queryBoxStyle.Setters.OfType<Setter>().FirstOrDefault(x => x.Property.Name == "Foreground")?.Value ?? Brushes.Black;
-                if (!caretBrushPropertyValue)
+                var caretBrushPropertyValue = queryBoxStyle.Setters.OfType<Setter>().Any(x => x.Property == TextBox.CaretBrushProperty);
+                var foregroundPropertyValue = queryBoxStyle.Setters.OfType<Setter>().FirstOrDefault(x => x.Property == TextBox.ForegroundProperty)?.Value;
+                if (!caretBrushPropertyValue && foregroundPropertyValue != null)
                     queryBoxStyle.Setters.Add(new Setter(TextBox.CaretBrushProperty, foregroundPropertyValue));
             }
 
@@ -147,17 +147,18 @@ namespace Wox.Core.Resource
                 queryTextSuggestionBoxStyle.Setters.Add(new Setter(TextBox.FontStretchProperty, FontHelper.GetFontStretchFromInvariantStringOrNormal(Settings.QueryBoxFontStretch)));
             }
 
-            var queryBoxStyleSetters = queryBoxStyle.Setters.OfType<Setter>();
-            var queryTextSuggestionBoxStyleSetters = queryTextSuggestionBoxStyle.Setters.OfType<Setter>();
+            var queryBoxStyleSetters = queryBoxStyle.Setters.OfType<Setter>().ToList();
+            var queryTextSuggestionBoxStyleSetters = queryTextSuggestionBoxStyle.Setters.OfType<Setter>().ToList();
             foreach (Setter setter in queryBoxStyleSetters) {
                 if (queryTextSuggestionBoxStyleSetters.All(x => x.Property != setter.Property))
-                    queryBoxStyle.Setters.Add(setter);
+                    queryTextSuggestionBoxStyle.Setters.Add(setter);
             }
 
-            if (hasSuggestion) {
-                queryTextSuggestionBoxStyle.Setters.OfType<Setter>().FirstOrDefault(x => x.Property.Name == "Background").Value = 
-                    queryBoxStyle.Setters.OfType<Setter>().FirstOrDefault(x => x.Property.Name == "Background").Value;
-                queryBoxStyle.Setters.OfType<Setter>().FirstOrDefault(x => x.Property.Name == "Background").Value = Brushes.Transparent;
+            if (!hasSuggestion) {
+                queryTextSuggestionBoxStyle.Setters.OfType<Setter>().FirstOrDefault(x => x.Property == TextBox.BackgroundProperty).Value = 
+                    queryBoxStyle.Setters.OfType<Setter>().FirstOrDefault(x => x.Property == TextBox.BackgroundProperty)?.Value ??
+                    (dict["BaseQuerySuggestionBoxStyle"] as Style).Setters.OfType<Setter>().FirstOrDefault(x => x.Property == TextBox.BackgroundProperty).Value;
+                queryBoxStyle.Setters.OfType<Setter>().FirstOrDefault(x => x.Property == TextBox.BackgroundProperty).Value = Brushes.Transparent;
             }
 
             Style resultItemStyle = dict["ItemTitleStyle"] as Style;
