@@ -65,7 +65,7 @@ Contribution
 Build
 -----
 
-Install Visual Studio 2019 with .NET desktop development and Universal Windwos Platform development
+Install Visual Studio 2019 with .NET desktop development and Universal Windows Platform development
 
 Documentation
 -------------
