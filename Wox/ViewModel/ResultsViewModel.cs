@@ -18,7 +18,7 @@ namespace Wox.ViewModel
     {
         #region Private Fields
 
-        public ResultCollection Results { get; }
+        private ResultCollection Results { get; }
 
         private readonly object _collectionLock = new object();
         private readonly Settings _settings;
@@ -106,8 +106,10 @@ namespace Wox.ViewModel
 
         public void Clear()
         {
-            Results.Clear();
+            Results.RemoveAll();
         }
+
+        public int Count => Results.Count;
 
         public void AddResults(List<Result> newRawResults, string resultId)
         {
@@ -216,17 +218,9 @@ namespace Wox.ViewModel
         public class ResultCollection : ObservableCollection<ResultViewModel>
         {
 
-            public void RemoveAll(Predicate<ResultViewModel> predicate)
+            public void RemoveAll()
             {
-                CheckReentrancy();
-
-                for (int i = Count - 1; i >= 0; i--)
-                {
-                    if (predicate(this[i]))
-                    {
-                        RemoveAt(i);
-                    }
-                }
+                this.Clear();
             }
 
             /// <summary>

@@ -756,7 +756,7 @@ namespace Wox.ViewModel
 
             Results.AddResults(updates);
 
-            if (Results.Visbility != Visibility.Visible && Results.Results.Count > 0)
+            if (Results.Visbility != Visibility.Visible && Results.Count > 0)
             {
                 Results.Visbility = Visibility.Visible;
             }
