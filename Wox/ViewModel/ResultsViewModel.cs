@@ -59,20 +59,6 @@ namespace Wox.ViewModel
 
         #region Private Methods
 
-        private int InsertIndexOf(int newScore, IList<ResultViewModel> list)
-        {
-            int index = 0;
-            for (; index < list.Count; index++)
-            {
-                var result = list[index];
-                if (newScore > result.Result.Score)
-                {
-                    break;
-                }
-            }
-            return index;
-        }
-
         private int NewIndex(int i)
         {
             var n = Results.Count;
@@ -138,14 +124,23 @@ namespace Wox.ViewModel
         /// </summary>
         public void AddResults(List<ResultsForUpdate> updates)
         {
-            foreach (ResultsForUpdate update in updates)
+            var updatesNotCanceled = updates.Where(u => !u.Token.IsCancellationRequested);
+
+            CancellationToken token;
+            try
             {
-                if (update.Token.IsCancellationRequested) { return; }
-                var newResults = NewResults(update.Results, update.Metadata.ID, update.Token);
-                // update UI in one run, so it can avoid UI flickering
-                if (update.Token.IsCancellationRequested) { return; }
-                Results.Update(newResults, update.Token);
+                token = updates.Select(u => u.Token).Distinct().First();
             }
+            catch (InvalidOperationException e)
+            {
+                Logger.WoxError("more than one not canceled query result in same batch processing", e);
+                return;
+            }
+
+            List<ResultViewModel> newResults = NewResults(updates, token);
+            Logger.WoxTrace($"newResults {newResults.Count}");
+
+            Results.Update(newResults, token);
 
             if (Results.Count > 0)
             {
@@ -158,75 +153,33 @@ namespace Wox.ViewModel
             }
         }
 
-        private List<ResultViewModel> NewResults(List<Result> newRawResults, string resultId, CancellationToken token)
+        private List<ResultViewModel> NewResults(List<ResultsForUpdate> updates, CancellationToken token)
         {
-            var newResults = newRawResults.Select(r => new ResultViewModel(r)).ToList();
-            var results = Results.ToList();
-            var oldResults = results.Where(r => r.Result.PluginID == resultId).ToList();
-
-            if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
-            // intersection of A (old results) and B (new newResults)
-            var intersection = oldResults.Intersect(newResults).ToList();
-
-            if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
-            // remove result of relative complement of B in A
-            foreach (var result in oldResults.Except(intersection))
+            if (token.IsCancellationRequested) { return Results.ToList(); }
+            var newResults = Results.ToList();
+            if (updates.Count > 0)
             {
-                if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
-                results.Remove(result);
-            }
+                if (token.IsCancellationRequested) { return Results.ToList(); }
+                List<Result> resultsFromUpdates = updates.SelectMany(u => u.Results).ToList();
 
-            // update index for result in intersection of A and B
-            foreach (var commonResult in intersection)
-            {
-                if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
-                int oldIndex = results.IndexOf(commonResult);
-                int oldScore = results[oldIndex].Result.Score;
-                var newResult = newResults[newResults.IndexOf(commonResult)];
-                int newScore = newResult.Result.Score;
-                if (newScore != oldScore)
-                {
-                    var oldResult = results[oldIndex];
+                if (token.IsCancellationRequested) { return Results.ToList(); }
+                newResults.RemoveAll(r => updates.Any(u => u.ID == r.Result.PluginID));
 
-                    oldResult.Result.Score = newScore;
-                    oldResult.Result.OriginQuery = newResult.Result.OriginQuery;
-                    oldResult.Result.TitleHighlightData = newResult.Result.TitleHighlightData;
-                    oldResult.Result.SubTitleHighlightData = newResult.Result.SubTitleHighlightData;
+                if (token.IsCancellationRequested) { return Results.ToList(); }
+                IEnumerable<ResultViewModel> vm = resultsFromUpdates.Select(r => new ResultViewModel(r));
+                newResults.AddRange(vm);
 
-                    results.RemoveAt(oldIndex);
-                    int newIndex = InsertIndexOf(newScore, results);
-                    results.Insert(newIndex, oldResult);
-                }
-            }
+                if (token.IsCancellationRequested) { return Results.ToList(); }
+                List<ResultViewModel> sorted = newResults.OrderByDescending(r => r.Result.Score).Take(MaxResults * 4).ToList();
 
-            int maxResults = MaxResults * 5;
-            // insert result in relative complement of A in B
-            foreach (var result in newResults.Except(intersection))
-            {
-                if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
-                if (results.Count <= maxResults)
-                {
-                    int newIndex = InsertIndexOf(result.Result.Score, results);
-                    results.Insert(newIndex, result);
-                }
-                else
-                {
-                    break;
-                }
-            }
-
-            if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
-            if (results.Count > maxResults)
-            {
-                var resultsCopy = results.GetRange(0, maxResults);
-                return resultsCopy;
+                return sorted;
             }
             else
             {
-                return results;
+                return Results.ToList();
             }
-
         }
+
         #endregion
 
         #region FormattedText Dependency Property
@@ -283,6 +236,7 @@ namespace Wox.ViewModel
             public void Update(List<ResultViewModel> newItems, System.Threading.CancellationToken token)
             {
                 CheckReentrancy();
+                if (token.IsCancellationRequested) { return; }
 
                 int newCount = newItems.Count;
                 int oldCount = Items.Count;
