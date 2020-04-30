@@ -6,7 +6,7 @@ using System.Windows.Media;
 namespace Wox.Plugin
 {
 
-    public class Result: BaseModel
+    public class Result : BaseModel
     {
 
         private string _pluginDirectory;
@@ -84,14 +84,16 @@ namespace Wox.Plugin
         public override bool Equals(object obj)
         {
             var r = obj as Result;
-            var equality = r?.Title == Title && r?.SubTitle == SubTitle;
+            var equality = r?.PluginID == PluginID && r?.Title == Title && r?.SubTitle == SubTitle;
             return equality;
         }
 
         public override int GetHashCode()
         {
-            var hashcode = (Title?.GetHashCode() ?? 0) ^
-                           (SubTitle?.GetHashCode() ?? 0);
+            int hash1 = PluginID?.GetHashCode() ?? 0;
+            int hash2 = Title?.GetHashCode() ?? 0;
+            int hash3 = SubTitle?.GetHashCode() ?? 0;
+            int hashcode = hash1 ^ hash2 ^ hash3;
             return hashcode;
         }
 
