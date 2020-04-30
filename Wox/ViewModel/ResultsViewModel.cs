@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Windows;
@@ -20,11 +22,9 @@ namespace Wox.ViewModel
 
         public ResultCollection Results { get; }
 
-        private readonly object _addResultsLock = new object();
-        private readonly object _collectionLock = new object();
         private readonly Settings _settings;
         private int MaxResults => _settings?.MaxResultsToShow ?? 6;
-
+        private readonly object _collectionLock = new object();
         public ResultsViewModel()
         {
             Results = new ResultCollection();
@@ -59,20 +59,6 @@ namespace Wox.ViewModel
         #endregion
 
         #region Private Methods
-
-        private int InsertIndexOf(int newScore, IList<ResultViewModel> list)
-        {
-            int index = 0;
-            for (; index < list.Count; index++)
-            {
-                var result = list[index];
-                if (newScore > result.Result.Score)
-                {
-                    break;
-                }
-            }
-            return index;
-        }
 
         private int NewIndex(int i)
         {
@@ -121,134 +107,85 @@ namespace Wox.ViewModel
 
         public void Clear()
         {
-            Results.Clear();
+            Results.RemoveAll();
         }
 
-        public void RemoveResultsExcept(PluginMetadata metadata)
-        {
-            Results.RemoveAll(r => r.Result.PluginID != metadata.ID);
-        }
-
-        public void RemoveResultsFor(PluginMetadata metadata)
-        {
-            Results.RemoveAll(r => r.Result.PluginID == metadata.ID);
-        }
+        public int Count => Results.Count;
 
         public void AddResults(List<Result> newRawResults, string resultId)
         {
-            lock (_addResultsLock)
+            CancellationToken token = new CancellationTokenSource().Token;
+            List<ResultsForUpdate> updates = new List<ResultsForUpdate>()
             {
-                var t = new CancellationTokenSource().Token;
-                var newResults = NewResults(newRawResults, resultId, t);
-                // update UI in one run, so it can avoid UI flickering
-                Results.Update(newResults, t);
-
-                if (Results.Count > 0)
-                {
-                    Margin = new Thickness { Top = 8 };
-                    SelectedIndex = 0;
-                }
-                else
-                {
-                    Margin = new Thickness { Top = 0 };
-                }
-            }
+                new ResultsForUpdate(newRawResults, resultId, token)
+            };
+            AddResults(updates);
         }
 
         /// <summary>
         /// To avoid deadlock, this method should not called from main thread
         /// </summary>
-        public void AddResults(List<Result> newRawResults, string resultId, System.Threading.CancellationToken token)
+        public void AddResults(List<ResultsForUpdate> updates)
         {
-            lock (_addResultsLock)
+            var updatesNotCanceled = updates.Where(u => !u.Token.IsCancellationRequested);
+
+            CancellationToken token;
+            try
             {
-                if (token.IsCancellationRequested) { return; }
-                var newResults = NewResults(newRawResults, resultId, token);
-                // update UI in one run, so it can avoid UI flickering
-                if (token.IsCancellationRequested) { return; }
+                token = updates.Select(u => u.Token).Distinct().First();
+            }
+            catch (InvalidOperationException e)
+            {
+                Logger.WoxError("more than one not canceled query result in same batch processing", e);
+                return;
+            }
+
+            // https://stackoverflow.com/questions/14336750
+            lock (_collectionLock)
+            {
+                List<ResultViewModel> newResults = NewResults(updates, token);
+                Logger.WoxTrace($"newResults {newResults.Count}");
                 Results.Update(newResults, token);
-
-                if (Results.Count > 0)
-                {
-                    Margin = new Thickness { Top = 8 };
-                    SelectedIndex = 0;
-                }
-                else
-                {
-                    Margin = new Thickness { Top = 0 };
-                }
-            }
-        }
-
-        private List<ResultViewModel> NewResults(List<Result> newRawResults, string resultId, CancellationToken token)
-        {
-            var newResults = newRawResults.Select(r => new ResultViewModel(r)).ToList();
-            var results = Results.ToList();
-            var oldResults = results.Where(r => r.Result.PluginID == resultId).ToList();
-
-            if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
-            // intersection of A (old results) and B (new newResults)
-            var intersection = oldResults.Intersect(newResults).ToList();
-
-            if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
-            // remove result of relative complement of B in A
-            foreach (var result in oldResults.Except(intersection))
-            {
-                if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
-                results.Remove(result);
             }
 
-            // update index for result in intersection of A and B
-            foreach (var commonResult in intersection)
+            if (Results.Count > 0)
             {
-                if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
-                int oldIndex = results.IndexOf(commonResult);
-                int oldScore = results[oldIndex].Result.Score;
-                var newResult = newResults[newResults.IndexOf(commonResult)];
-                int newScore = newResult.Result.Score;
-                if (newScore != oldScore)
-                {
-                    var oldResult = results[oldIndex];
-
-                    oldResult.Result.Score = newScore;
-                    oldResult.Result.OriginQuery = newResult.Result.OriginQuery;
-                    oldResult.Result.TitleHighlightData = newResult.Result.TitleHighlightData;
-                    oldResult.Result.SubTitleHighlightData = newResult.Result.SubTitleHighlightData;
-
-                    results.RemoveAt(oldIndex);
-                    int newIndex = InsertIndexOf(newScore, results);
-                    results.Insert(newIndex, oldResult);
-                }
-            }
-
-            int maxResults = MaxResults * 5;
-            // insert result in relative complement of A in B
-            foreach (var result in newResults.Except(intersection))
-            {
-                if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
-                if (results.Count <= maxResults)
-                {
-                    int newIndex = InsertIndexOf(result.Result.Score, results);
-                    results.Insert(newIndex, result);
-                }
-                else
-                {
-                    break;
-                }
-            }
-
-            if (token.IsCancellationRequested) { return new List<ResultViewModel>(); }
-            if (results.Count > maxResults)
-            {
-                var resultsCopy = results.GetRange(0, maxResults);
-                return resultsCopy;
+                Margin = new Thickness { Top = 8 };
+                SelectedIndex = 0;
             }
             else
             {
-                return results;
+                Margin = new Thickness { Top = 0 };
             }
-
         }
+
+        private List<ResultViewModel> NewResults(List<ResultsForUpdate> updates, CancellationToken token)
+        {
+            if (token.IsCancellationRequested) { return Results.ToList(); }
+            var newResults = Results.ToList();
+            if (updates.Count > 0)
+            {
+                if (token.IsCancellationRequested) { return Results.ToList(); }
+                List<Result> resultsFromUpdates = updates.SelectMany(u => u.Results).ToList();
+
+                if (token.IsCancellationRequested) { return Results.ToList(); }
+                newResults.RemoveAll(r => updates.Any(u => u.ID == r.Result.PluginID));
+
+                if (token.IsCancellationRequested) { return Results.ToList(); }
+                IEnumerable<ResultViewModel> vm = resultsFromUpdates.Select(r => new ResultViewModel(r));
+                newResults.AddRange(vm);
+
+                if (token.IsCancellationRequested) { return Results.ToList(); }
+                List<ResultViewModel> sorted = newResults.OrderByDescending(r => r.Result.Score).Take(MaxResults * 4).ToList();
+
+                return sorted;
+            }
+            else
+            {
+                return Results.ToList();
+            }
+        }
+
         #endregion
 
         #region FormattedText Dependency Property
@@ -282,82 +219,29 @@ namespace Wox.ViewModel
         }
         #endregion
 
-        public class ResultCollection : ObservableCollection<ResultViewModel>
+        public class ResultCollection : Collection<ResultViewModel>, INotifyCollectionChanged
         {
+            public event NotifyCollectionChangedEventHandler CollectionChanged;
 
-            public void RemoveAll(Predicate<ResultViewModel> predicate)
+            public void RemoveAll()
             {
-                CheckReentrancy();
-
-                for (int i = Count - 1; i >= 0; i--)
-                {
-                    if (predicate(this[i]))
-                    {
-                        RemoveAt(i);
-                    }
-                }
+                this.Clear();
+                CollectionChanged.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
             }
 
-            /// <summary>
-            /// Update the results collection with new results, try to keep identical results
-            /// </summary>
-            /// <param name="newItems"></param>
-            public void Update(List<ResultViewModel> newItems, System.Threading.CancellationToken token)
+            public void Update(List<ResultViewModel> newItems, CancellationToken token)
             {
-                CheckReentrancy();
+                if (token.IsCancellationRequested) { return; }
 
-                int newCount = newItems.Count;
-                int oldCount = Items.Count;
-                int location = newCount > oldCount ? oldCount : newCount;
-
-                for (int i = 0; i < location; i++)
+                this.Clear();
+                foreach (var i in newItems)
                 {
-                    if (token.IsCancellationRequested) { return; }
-
-                    ResultViewModel oldResult = this[i];
-                    ResultViewModel newResult = newItems[i];
-                    Logger.WoxTrace(
-                        $"index {i} " +
-                              $"old<{oldResult.Result.Title} {oldResult.Result.Score}> " +
-                              $"new<{newResult.Result.Title} {newResult.Result.Score}>"
-                        );
-                    if (oldResult.Equals(newResult))
-                    {
-                        Logger.WoxTrace($"index <{i}> equal");
-                        // update following info no matter they are equal or not
-                        // because check equality will cause more computation
-                        this[i].Result.Score = newResult.Result.Score;
-                        this[i].Result.TitleHighlightData = newResult.Result.TitleHighlightData;
-                        this[i].Result.SubTitleHighlightData = newResult.Result.SubTitleHighlightData;
-                    }
-                    else
-                    {
-                        // result is not the same update it in the current index
-                        this[i] = newResult;
-                        Logger.WoxTrace($"index <{i}> not equal old<{oldResult.GetHashCode()}> new<{newResult.GetHashCode()}>");
-                    }
+                    if (token.IsCancellationRequested) { break; }
+                    this.Add(i);
                 }
+                // wpf use directx / double buffered already, so just reset all won't cause ui flickering
+                CollectionChanged.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
 
-
-                if (newCount >= oldCount)
-                {
-                    for (int i = oldCount; i < newCount; i++)
-                    {
-                        if (token.IsCancellationRequested) { return; }
-
-                        Logger.WoxTrace($"add {i} new<{newItems[i].Result.Title}");
-                        Add(newItems[i]);
-                    }
-                }
-                else
-                {
-                    for (int i = oldCount - 1; i >= newCount; i--)
-                    {
-                        if (token.IsCancellationRequested) { return; }
-
-                        RemoveAt(i);
-                    }
-                }
             }
         }
     }

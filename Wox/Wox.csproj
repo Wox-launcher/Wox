@@ -107,6 +107,7 @@
     <Compile Include="ViewModel\RelayCommand.cs" />
     <Compile Include="ViewModel\MainViewModel.cs" />
     <Compile Include="ViewModel\PluginViewModel.cs" />
+    <Compile Include="ViewModel\ResultsForUpdate.cs" />
     <Compile Include="ViewModel\ResultViewModel.cs" />
     <Compile Include="ViewModel\ResultsViewModel.cs" />
     <Compile Include="ViewModel\SettingWindowViewModel.cs" />
