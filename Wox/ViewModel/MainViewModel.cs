@@ -107,20 +107,14 @@ namespace Wox.ViewModel
                         updates.Add(tempUpdate);
                     }
 
-                    foreach (ResultsForUpdate update in updates)
-                    {
-                        if (!update.Token.IsCancellationRequested)
-                        {
-                            UpdateResultView(update.Results, update.Metadata, update.Query, update.Token);
-                        }
-                        update.Countdown.Signal();
-                    }
+                    UpdateResultView(updates);
 
                     DateTime currentTime = DateTime.Now;
                     Logger.WoxTrace($"start {startTime.Millisecond} end {currentTime.Millisecond}");
-                    foreach (var u in updates)
+                    foreach (var update in updates)
                     {
-                        Logger.WoxTrace($"update name:{u.Metadata.Name} count:{u.Results.Count} query:{u.Query} token:{u.Token.IsCancellationRequested}");
+                        Logger.WoxTrace($"update name:{update.Metadata.Name} count:{update.Results.Count} query:{update.Query} token:{update.Token.IsCancellationRequested}");
+                        update.Countdown.Signal();
                     }
                     DateTime viewExpired = startTime.AddMilliseconds(timeout);
                     if (currentTime < viewExpired)
@@ -142,6 +136,7 @@ namespace Wox.ViewModel
                 {
                     CancellationToken token = _updateSource.Token;
                     // todo async update don't need count down
+                    // init with 1 since every ResultsForUpdate will be countdown.signal()
                     CountdownEvent countdown = new CountdownEvent(1);
                     Task.Run(() =>
                     {
@@ -499,7 +494,16 @@ namespace Wox.ViewModel
                         {
                             Logger.WoxTrace($"progressbar visible 2 {token.GetHashCode()} {token.IsCancellationRequested}  {Thread.CurrentThread.ManagedThreadId}  {query} {ProgressBarVisibility}");
                             // wait all plugins has been processed
-                            countdown.Wait(token);
+                            try
+                            {
+                                countdown.Wait(token);
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                // todo: why we need hidden here and why progress bar is not working
+                                ProgressBarVisibility = Visibility.Hidden;
+                                return;
+                            }
                             if (!token.IsCancellationRequested)
                             {
                                 // used to cancel previous progress bar visible task
@@ -714,33 +718,45 @@ namespace Wox.ViewModel
             }
         }
 
+        public void UpdateResultView(List<Result> list, PluginMetadata metadata, Query originQuery, CancellationToken token)
+        {
+            CountdownEvent countdown = new CountdownEvent(1);
+            List<ResultsForUpdate> updates = new List<ResultsForUpdate>()
+            {
+                new ResultsForUpdate(list, metadata, originQuery, token, countdown)
+            };
+            UpdateResultView(updates);
+        }
+
         /// <summary>
         /// To avoid deadlock, this method should not called from main thread
         /// </summary>
-        public void UpdateResultView(List<Result> list, PluginMetadata metadata, Query originQuery, CancellationToken token)
+        public void UpdateResultView(List<ResultsForUpdate> updates)
         {
-            Logger.WoxTrace($"{metadata.Name}:{originQuery.RawQuery}");
-
-            foreach (var result in list)
+            foreach (ResultsForUpdate update in updates)
             {
-                if (token.IsCancellationRequested) { return; }
-                if (_topMostRecord.IsTopMost(result))
+                Logger.WoxTrace($"{update.Metadata.Name}:{update.Query.RawQuery}");
+                foreach (var result in update.Results)
                 {
-                    result.Score = int.MaxValue;
-                }
-                else if (!metadata.KeepResultRawScore)
-                {
-                    result.Score += _userSelectedRecord.GetSelectedCount(result) * 5;
+                    if (update.Token.IsCancellationRequested) { return; }
+                    if (_topMostRecord.IsTopMost(result))
+                    {
+                        result.Score = int.MaxValue;
+                    }
+                    else if (!update.Metadata.KeepResultRawScore)
+                    {
+                        result.Score += _userSelectedRecord.GetSelectedCount(result) * 5;
+                    }
+                    else
+                    {
+                        result.Score = result.Score;
+                    }
                 }
             }
 
-            if (token.IsCancellationRequested) { return; }
-            if (originQuery.RawQuery == _lastQuery.RawQuery)
-            {
-                Results.AddResults(list, metadata.ID, token);
-            }
+            Results.AddResults(updates);
 
-            if (Results.Visbility != Visibility.Visible && list.Count > 0)
+            if (Results.Visbility != Visibility.Visible && Results.Results.Count > 0)
             {
                 Results.Visbility = Visibility.Visible;
             }

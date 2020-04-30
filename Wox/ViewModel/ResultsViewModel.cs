@@ -125,20 +125,27 @@ namespace Wox.ViewModel
 
         public void AddResults(List<Result> newRawResults, string resultId)
         {
-            var t = new CancellationTokenSource().Token;
-            AddResults(newRawResults, resultId, t);
+            CancellationToken token = new CancellationTokenSource().Token;
+            List<ResultsForUpdate> updates = new List<ResultsForUpdate>()
+            {
+                new ResultsForUpdate(newRawResults, resultId, token)
+            };
+            AddResults(updates);
         }
 
         /// <summary>
         /// To avoid deadlock, this method should not called from main thread
         /// </summary>
-        public void AddResults(List<Result> newRawResults, string resultId, System.Threading.CancellationToken token)
+        public void AddResults(List<ResultsForUpdate> updates)
         {
-            if (token.IsCancellationRequested) { return; }
-            var newResults = NewResults(newRawResults, resultId, token);
-            // update UI in one run, so it can avoid UI flickering
-            if (token.IsCancellationRequested) { return; }
-            Results.Update(newResults, token);
+            foreach (ResultsForUpdate update in updates)
+            {
+                if (update.Token.IsCancellationRequested) { return; }
+                var newResults = NewResults(update.Results, update.Metadata.ID, update.Token);
+                // update UI in one run, so it can avoid UI flickering
+                if (update.Token.IsCancellationRequested) { return; }
+                Results.Update(newResults, update.Token);
+            }
 
             if (Results.Count > 0)
             {

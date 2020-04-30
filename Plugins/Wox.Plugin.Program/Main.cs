@@ -12,6 +12,7 @@ using Wox.Infrastructure.Storage;
 using Wox.Plugin.Program.Programs;
 using Wox.Plugin.Program.Views;
 using Stopwatch = Wox.Infrastructure.Stopwatch;
+using System.Threading;
 
 namespace Wox.Plugin.Program
 {
