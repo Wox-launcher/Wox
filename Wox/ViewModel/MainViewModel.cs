@@ -94,12 +94,12 @@ namespace Wox.ViewModel
             {
                 while (true)
                 {
-                    var first = _resultsQueue.Take();
+                    ResultsForUpdate first = _resultsQueue.Take();
                     List<ResultsForUpdate> updates = new List<ResultsForUpdate>() { first };
 
                     DateTime startTime = DateTime.Now;
                     int timeout = 50;
-                    var takeExpired = startTime.AddMilliseconds(timeout / 10);
+                    DateTime takeExpired = startTime.AddMilliseconds(timeout / 10);
 
                     ResultsForUpdate tempUpdate;
                     while (_resultsQueue.TryTake(out tempUpdate) && DateTime.Now < takeExpired)
@@ -122,7 +122,7 @@ namespace Wox.ViewModel
                     {
                         Logger.WoxTrace($"update name:{u.Metadata.Name} count:{u.Results.Count} query:{u.Query} token:{u.Token.IsCancellationRequested}");
                     }
-                    var viewExpired = startTime.AddMilliseconds(timeout);
+                    DateTime viewExpired = startTime.AddMilliseconds(timeout);
                     if (currentTime < viewExpired)
                     {
                         TimeSpan span = viewExpired - currentTime;
