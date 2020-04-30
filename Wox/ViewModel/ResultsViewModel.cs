@@ -28,6 +28,7 @@ namespace Wox.ViewModel
         public ResultsViewModel()
         {
             Results = new ResultCollection();
+            BindingOperations.EnableCollectionSynchronization(Results, _collectionLock);
         }
         public ResultsViewModel(Settings settings) : this()
         {
