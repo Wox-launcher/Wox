@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Windows;
@@ -18,16 +20,14 @@ namespace Wox.ViewModel
     {
         #region Private Fields
 
-        private ResultCollection Results { get; }
+        public ResultCollection Results { get; }
 
-        private readonly object _collectionLock = new object();
         private readonly Settings _settings;
         private int MaxResults => _settings?.MaxResultsToShow ?? 6;
-
+        private readonly object _collectionLock = new object();
         public ResultsViewModel()
         {
             Results = new ResultCollection();
-            BindingOperations.EnableCollectionSynchronization(Results, _collectionLock);
         }
         public ResultsViewModel(Settings settings) : this()
         {
@@ -141,7 +141,6 @@ namespace Wox.ViewModel
 
             List<ResultViewModel> newResults = NewResults(updates, token);
             Logger.WoxTrace($"newResults {newResults.Count}");
-
             Results.Update(newResults, token);
 
             if (Results.Count > 0)
@@ -215,75 +214,51 @@ namespace Wox.ViewModel
         }
         #endregion
 
-        public class ResultCollection : ObservableCollection<ResultViewModel>
+        internal class ResultUpdated
         {
+            public Result Sender { get; set; }
+            public string PropertyName { get; set; }
+        }
+
+        internal class ResultReplaced
+        {
+            public ResultViewModel Replaced { get; set; }
+        }
+
+        internal class ResultAdded
+        {
+            public ResultViewModel Added { get; set; }
+        }
+
+        internal class ResultRemoved
+        {
+            public ResultViewModel Removed { get; set; }
+        }
+
+
+        public class ResultCollection : Collection<ResultViewModel>, INotifyCollectionChanged
+        {
+            public event NotifyCollectionChangedEventHandler CollectionChanged;
 
             public void RemoveAll()
             {
                 this.Clear();
+                CollectionChanged.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
             }
 
-            /// <summary>
-            /// Update the results collection with new results, try to keep identical results
-            /// </summary>
-            /// <param name="newItems"></param>
-            public void Update(List<ResultViewModel> newItems, System.Threading.CancellationToken token)
+            public void Update(List<ResultViewModel> newItems, CancellationToken token)
             {
-                CheckReentrancy();
                 if (token.IsCancellationRequested) { return; }
 
-                int newCount = newItems.Count;
-                int oldCount = Items.Count;
-                int location = newCount > oldCount ? oldCount : newCount;
-
-                for (int i = 0; i < location; i++)
+                this.Clear();
+                foreach(var i in newItems)
                 {
-                    if (token.IsCancellationRequested) { return; }
-
-                    ResultViewModel oldResult = this[i];
-                    ResultViewModel newResult = newItems[i];
-                    Logger.WoxTrace(
-                        $"index {i} " +
-                              $"old<{oldResult.Result.Title} {oldResult.Result.Score}> " +
-                              $"new<{newResult.Result.Title} {newResult.Result.Score}>"
-                        );
-                    if (oldResult.Equals(newResult))
-                    {
-                        Logger.WoxTrace($"index <{i}> equal");
-                        // update following info no matter they are equal or not
-                        // because check equality will cause more computation
-                        this[i].Result.Score = newResult.Result.Score;
-                        this[i].Result.TitleHighlightData = newResult.Result.TitleHighlightData;
-                        this[i].Result.SubTitleHighlightData = newResult.Result.SubTitleHighlightData;
-                    }
-                    else
-                    {
-                        // result is not the same update it in the current index
-                        this[i] = newResult;
-                        Logger.WoxTrace($"index <{i}> not equal old<{oldResult.GetHashCode()}> new<{newResult.GetHashCode()}>");
-                    }
+                    if (token.IsCancellationRequested) { break; }
+                    this.Add(i);
                 }
+                // wpf use directx / double buffered already, so just reset all won't cause ui flickering
+                CollectionChanged.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
 
-
-                if (newCount >= oldCount)
-                {
-                    for (int i = oldCount; i < newCount; i++)
-                    {
-                        if (token.IsCancellationRequested) { return; }
-
-                        Logger.WoxTrace($"add {i} new<{newItems[i].Result.Title}");
-                        Add(newItems[i]);
-                    }
-                }
-                else
-                {
-                    for (int i = oldCount - 1; i >= newCount; i--)
-                    {
-                        if (token.IsCancellationRequested) { return; }
-
-                        RemoveAt(i);
-                    }
-                }
             }
         }
     }

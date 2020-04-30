@@ -10,7 +10,7 @@ using Wox.Plugin;
 
 namespace Wox.ViewModel
 {
-    public class ResultViewModel : BaseModel
+    public class ResultViewModel
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
