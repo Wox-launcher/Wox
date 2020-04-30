@@ -42,7 +42,7 @@ namespace Wox.Plugin.Program
             });
             Logger.WoxInfo($"Number of preload win32 programs <{_win32s.Length}>");
             Logger.WoxInfo($"Number of preload uwps <{_uwps.Length}>");
-        }   
+        }
 
         public void Save()
         {
@@ -55,11 +55,8 @@ namespace Wox.Plugin.Program
         {
             Win32[] win32;
             UWP.Application[] uwps;
-            lock (IndexLock)
-            { // just take the reference inside the lock to eliminate query time issues.
-                win32 = _win32s;
-                uwps = _uwps;
-            }
+            win32 = _win32s;
+            uwps = _uwps;
 
             var results1 = win32.AsParallel()
                 .Where(p => p.Enabled)
@@ -94,7 +91,7 @@ namespace Wox.Plugin.Program
 
             preloadPrograms();
 
-            Task.Delay(2000).ContinueWith(_ =>
+            Task.Delay(20000).ContinueWith(_ =>
             {
                 IndexPrograms();
             });
@@ -109,10 +106,7 @@ namespace Wox.Plugin.Program
         public static void IndexWin32Programs()
         {
             var win32S = Win32.All(_settings);
-            lock (IndexLock)
-            {
-                _win32s = win32S;
-            }
+            _win32s = win32S;
         }
 
         public static void IndexUWPPrograms()
@@ -122,10 +116,7 @@ namespace Wox.Plugin.Program
 
             var applications = support ? UWP.All() : new UWP.Application[] { };
             //var applications = new UWP.Application[] { };
-            lock (IndexLock)
-            {
-                _uwps = applications;
-            }
+            _uwps = applications;
         }
 
         public static void IndexPrograms()
@@ -181,7 +172,7 @@ namespace Wox.Plugin.Program
             return menuOptions;
         }
 
-        
+
         public static void StartProcess(Func<ProcessStartInfo, Process> runProcess, ProcessStartInfo info)
         {
             try
