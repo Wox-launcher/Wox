@@ -22,6 +22,7 @@ using Wox.Infrastructure.UserSettings;
 using Wox.ViewModel;
 using Stopwatch = Wox.Infrastructure.Stopwatch;
 using Wox.Infrastructure.Exception;
+using Sentry;
 
 namespace Wox
 {
@@ -38,7 +39,7 @@ namespace Wox
         private readonly Portable _portable = new Portable();
         private readonly Alphabet _alphabet = new Alphabet();
         private StringMatcher _stringMatcher;
-        
+
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         private class Options
@@ -63,7 +64,6 @@ namespace Wox
         [STAThread]
         public static void Main()
         {
-            // force english exception message for better github issue
             Thread.CurrentThread.CurrentUICulture = new CultureInfo("en-US");
             if (SingleInstance<App>.InitializeAsFirstInstance(Unique))
             {
@@ -88,10 +88,10 @@ namespace Wox
                 RegisterAppDomainExceptions();
                 RegisterDispatcherUnhandledException();
 
-
+                //throw new Exception("sentry wox exception");
 
                 _portable.PreStartCleanUpAfterPortabilityUpdate();
-                
+
 
                 ImageLoader.Initialize();
 

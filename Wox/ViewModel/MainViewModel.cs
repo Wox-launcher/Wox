@@ -490,7 +490,7 @@ namespace Wox.ViewModel
                                     return;
                                 }
                                 _resultsQueue.Add(new ResultsForUpdate(results, plugin.Metadata, query, token, countdown));
-                            }, token);
+                            }, token).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
                         }
 
                         Task.Run(() =>
