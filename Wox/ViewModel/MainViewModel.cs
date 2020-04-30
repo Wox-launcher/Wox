@@ -472,23 +472,26 @@ namespace Wox.ViewModel
                         };
                         CountdownEvent countdown = new CountdownEvent(plugins.Count);
 
-                        Parallel.ForEach(plugins, plugin =>
+                        foreach (var plugin in plugins)
                         {
-                            if (token.IsCancellationRequested)
+                            Task.Run(() =>
                             {
-                                Logger.WoxTrace($"canceled {token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId}  {queryText} {plugin.Metadata.Name}");
-                                countdown.Signal();
-                                return;
-                            }
-                            var results = PluginManager.QueryForPlugin(plugin, query);
-                            if (token.IsCancellationRequested)
-                            {
-                                Logger.WoxTrace($"canceled {token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId}  {queryText} {plugin.Metadata.Name}");
-                                countdown.Signal();
-                                return;
-                            }
-                            _resultsQueue.Add(new ResultsForUpdate(results, plugin.Metadata, query, token, countdown));
-                        });
+                                if (token.IsCancellationRequested)
+                                {
+                                    Logger.WoxTrace($"canceled {token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId}  {queryText} {plugin.Metadata.Name}");
+                                    countdown.Signal();
+                                    return;
+                                }
+                                var results = PluginManager.QueryForPlugin(plugin, query);
+                                if (token.IsCancellationRequested)
+                                {
+                                    Logger.WoxTrace($"canceled {token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId}  {queryText} {plugin.Metadata.Name}");
+                                    countdown.Signal();
+                                    return;
+                                }
+                                _resultsQueue.Add(new ResultsForUpdate(results, plugin.Metadata, query, token, countdown));
+                            }, token);
+                        }
 
                         Task.Run(() =>
                         {
