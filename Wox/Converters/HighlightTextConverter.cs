@@ -9,18 +9,43 @@ using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Media;
 using Wox.Core.Resource;
+using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Converters
 {
+    internal class HightLightStyle
+    {
+        public Brush Color { get; set; }
+        public FontStyle FontStyle { get; set; }
+        public FontWeight FontWeight { get; set; }
+        public FontStretch FontStretch { get; set; }
+
+        internal HightLightStyle(bool selected)
+        {
+            var app = Application.Current as App;
+            Settings settings = app.Settings;
+            ResourceDictionary resources = app.Resources;
+
+            Color = (Brush)(selected ?
+                resources.Contains("ItemSelectedHighlightColor") ? resources["ItemSelectedHighlightColor"] : resources["BaseItemSelectedHighlightColor"] :
+                resources.Contains("ItemHighlightColor") ? resources["ItemHighlightColor"] : resources["BaseItemHighlightColor"]);
+            FontStyle = FontHelper.GetFontStyleFromInvariantStringOrNormal(settings.ResultHighlightFontStyle);
+            FontWeight = FontHelper.GetFontWeightFromInvariantStringOrNormal(settings.ResultHighlightFontWeight);
+            FontStretch = FontHelper.GetFontStretchFromInvariantStringOrNormal(settings.ResultHighlightFontStretch);
+        }
+
+    }
     public class HighlightTextConverter : IMultiValueConverter
     {
+        private static Lazy<HightLightStyle> _highLightStyle = new Lazy<HightLightStyle>(() => new HightLightStyle(false));
+        private static Lazy<HightLightStyle> _highLightSelectedStyle = new Lazy<HightLightStyle>(() => new HightLightStyle(true));
+
         public object Convert(object[] value, Type targetType, object parameter, CultureInfo cultureInfo)
         {
             var text = value[0] as string;
             var highlightData = value[1] as List<int>;
             var selected = value[2] as bool? == true;
 
-            var textBlock = new Span();
 
             if (highlightData == null || !highlightData.Any())
             {
@@ -28,16 +53,17 @@ namespace Wox.Converters
                 return new Run(text);
             }
 
-            var settings = (Application.Current as App).Settings;
-            ResourceDictionary resources = Application.Current.Resources;
-
-            var highlightColor = (Brush) (selected?
-                resources.Contains("ItemSelectedHighlightColor")? resources["ItemSelectedHighlightColor"]: resources["BaseItemSelectedHighlightColor"]:
-                resources.Contains("ItemHighlightColor")? resources["ItemHighlightColor"]: resources["BaseItemHighlightColor"]);
-            var highlightStyle = FontHelper.GetFontStyleFromInvariantStringOrNormal(settings.ResultHighlightFontStyle);
-            var highlightWeight = FontHelper.GetFontWeightFromInvariantStringOrNormal(settings.ResultHighlightFontWeight);
-            var highlightStretch = FontHelper.GetFontStretchFromInvariantStringOrNormal(settings.ResultHighlightFontStretch);
-
+            HightLightStyle style;
+            if (selected)
+            {
+                style = _highLightSelectedStyle.Value;
+            }
+            else
+            {
+                style = _highLightStyle.Value;
+            }
+            
+            var textBlock = new Span();
             for (var i = 0; i < text.Length; i++)
             {
                 var currentCharacter = text.Substring(i, 1);
@@ -45,10 +71,10 @@ namespace Wox.Converters
                 {
                     textBlock.Inlines.Add((new Run(currentCharacter)
                     {
-                        Foreground = highlightColor,
-                        FontWeight = highlightWeight,
-                        FontStyle = highlightStyle,
-                        FontStretch = highlightStretch
+                        Foreground = style.Color,
+                        FontWeight = style.FontWeight,
+                        FontStyle = style.FontStyle,
+                        FontStretch = style.FontStretch
                     }));
                 }
                 else
