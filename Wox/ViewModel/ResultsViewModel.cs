@@ -214,28 +214,6 @@ namespace Wox.ViewModel
         }
         #endregion
 
-        internal class ResultUpdated
-        {
-            public Result Sender { get; set; }
-            public string PropertyName { get; set; }
-        }
-
-        internal class ResultReplaced
-        {
-            public ResultViewModel Replaced { get; set; }
-        }
-
-        internal class ResultAdded
-        {
-            public ResultViewModel Added { get; set; }
-        }
-
-        internal class ResultRemoved
-        {
-            public ResultViewModel Removed { get; set; }
-        }
-
-
         public class ResultCollection : Collection<ResultViewModel>, INotifyCollectionChanged
         {
             public event NotifyCollectionChangedEventHandler CollectionChanged;
