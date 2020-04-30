@@ -91,7 +91,7 @@ namespace Wox.Plugin.Program
 
             preloadPrograms();
 
-            Task.Delay(20000).ContinueWith(_ =>
+            Task.Delay(2000).ContinueWith(_ =>
             {
                 IndexPrograms();
             });
