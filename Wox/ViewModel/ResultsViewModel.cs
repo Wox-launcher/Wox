@@ -140,9 +140,13 @@ namespace Wox.ViewModel
                 return;
             }
 
-            List<ResultViewModel> newResults = NewResults(updates, token);
-            Logger.WoxTrace($"newResults {newResults.Count}");
-            Results.Update(newResults, token);
+            // https://stackoverflow.com/questions/14336750
+            lock (_collectionLock)
+            {
+                List<ResultViewModel> newResults = NewResults(updates, token);
+                Logger.WoxTrace($"newResults {newResults.Count}");
+                Results.Update(newResults, token);
+            }
 
             if (Results.Count > 0)
             {
@@ -230,7 +234,7 @@ namespace Wox.ViewModel
                 if (token.IsCancellationRequested) { return; }
 
                 this.Clear();
-                foreach(var i in newItems)
+                foreach (var i in newItems)
                 {
                     if (token.IsCancellationRequested) { break; }
                     this.Add(i);
