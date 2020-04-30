@@ -6,7 +6,6 @@ using Mindscape.Raygun4Net;
 using NLog;
 using NLog.Config;
 using NLog.Targets;
-using Sentry;
 using Wox.Infrastructure.Exception;
 using Wox.Infrastructure.UserSettings;
 
