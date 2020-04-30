@@ -94,11 +94,40 @@ namespace Wox.ViewModel
             {
                 while (true)
                 {
-                    ResultsForUpdate update = _resultsQueue.Take();
-                    
-                    if (!update.Token.IsCancellationRequested)
+                    var first = _resultsQueue.Take();
+                    List<ResultsForUpdate> updates = new List<ResultsForUpdate>() { first };
+
+                    DateTime startTime = DateTime.Now;
+                    int timeout = 50;
+                    var takeExpired = startTime.AddMilliseconds(timeout / 10);
+
+                    ResultsForUpdate tempUpdate;
+                    while (_resultsQueue.TryTake(out tempUpdate) && DateTime.Now < takeExpired)
                     {
-                        UpdateResultView(update.Results, update.Metadata, update.Query, update.Token);
+                        updates.Add(tempUpdate);
+                    }
+
+                    foreach (ResultsForUpdate update in updates)
+                    {
+                        if (!update.Token.IsCancellationRequested)
+                        {
+                            UpdateResultView(update.Results, update.Metadata, update.Query, update.Token);
+                        }
+                        update.Countdown.Signal();
+                    }
+
+                    DateTime currentTime = DateTime.Now;
+                    Logger.WoxTrace($"start {startTime.Millisecond} end {currentTime.Millisecond}");
+                    foreach (var u in updates)
+                    {
+                        Logger.WoxTrace($"update name:{u.Metadata.Name} count:{u.Results.Count} query:{u.Query} token:{u.Token.IsCancellationRequested}");
+                    }
+                    var viewExpired = startTime.AddMilliseconds(timeout);
+                    if (currentTime < viewExpired)
+                    {
+                        TimeSpan span = viewExpired - currentTime;
+                        Logger.WoxTrace($"expired { viewExpired.Millisecond} span {span.TotalMilliseconds}");
+                        Thread.Sleep(span);
                     }
                 }
             }).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
@@ -112,11 +141,13 @@ namespace Wox.ViewModel
                 plugin.ResultsUpdated += (s, e) =>
                 {
                     CancellationToken token = _updateSource.Token;
+                    // todo async update don't need count down
+                    CountdownEvent countdown = new CountdownEvent(1);
                     Task.Run(() =>
                     {
                         if (token.IsCancellationRequested) { return; }
                         PluginManager.UpdatePluginMetadata(e.Results, pair.Metadata, e.Query);
-                        _resultsQueue.Add(new ResultsForUpdate(e.Results, pair.Metadata, e.Query, token));
+                        _resultsQueue.Add(new ResultsForUpdate(e.Results, pair.Metadata, e.Query, token, countdown));
                     }, token);
                 };
             }
@@ -438,42 +469,48 @@ namespace Wox.ViewModel
 
 
                         if (token.IsCancellationRequested) { return; }
-                        var plugins = PluginManager.ValidPluginsForQuery(query);
+                        var plugins = PluginManager.ValidPluginsForQuery(query).Where(p => !p.Metadata.Disabled).ToList();
 
                         var option = new ParallelOptions()
                         {
                             CancellationToken = token,
                         };
+                        CountdownEvent countdown = new CountdownEvent(plugins.Count);
 
                         Parallel.ForEach(plugins, plugin =>
                         {
-                            if (!plugin.Metadata.Disabled)
+                            if (token.IsCancellationRequested)
                             {
-                                if (token.IsCancellationRequested)
-                                {
-                                    Logger.WoxDebug($"canceled {token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId}  {queryText} {plugin.Metadata.Name}");
-                                    return;
-                                }
-                                var results = PluginManager.QueryForPlugin(plugin, query);
-                                if (token.IsCancellationRequested)
-                                {
-                                    Logger.WoxDebug($"canceled {token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId}  {queryText} {plugin.Metadata.Name}");
-                                    return;
-                                }
-                                _resultsQueue.Add(new ResultsForUpdate(results, plugin.Metadata, query, token));
+                                Logger.WoxTrace($"canceled {token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId}  {queryText} {plugin.Metadata.Name}");
+                                countdown.Signal();
+                                return;
+                            }
+                            var results = PluginManager.QueryForPlugin(plugin, query);
+                            if (token.IsCancellationRequested)
+                            {
+                                Logger.WoxTrace($"canceled {token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId}  {queryText} {plugin.Metadata.Name}");
+                                countdown.Signal();
+                                return;
+                            }
+                            _resultsQueue.Add(new ResultsForUpdate(results, plugin.Metadata, query, token, countdown));
+                        });
+
+                        Task.Run(() =>
+                        {
+                            Logger.WoxTrace($"progressbar visible 2 {token.GetHashCode()} {token.IsCancellationRequested}  {Thread.CurrentThread.ManagedThreadId}  {query} {ProgressBarVisibility}");
+                            // wait all plugins has been processed
+                            countdown.Wait(token);
+                            if (!token.IsCancellationRequested)
+                            {
+                                // used to cancel previous progress bar visible task
+                                source.Cancel();
+                                source.Dispose();
+                                // update to hidden if this is still the current query
+                                ProgressBarVisibility = Visibility.Hidden;
                             }
                         });
 
-                        Logger.WoxTrace($"progressbar visible 2 {token.GetHashCode()} {token.IsCancellationRequested}  {Thread.CurrentThread.ManagedThreadId}  {query} {ProgressBarVisibility}");
-                        if (!token.IsCancellationRequested)
-                        {
-                            // used to cancel previous progress bar visible task
-                            source.Cancel();
-                            source.Dispose();
-                            // update to hidden if this is still the current query
-                            ProgressBarVisibility = Visibility.Hidden;
 
-                        }
                     }
                 }
                 else

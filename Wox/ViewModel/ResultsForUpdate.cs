@@ -16,13 +16,15 @@ namespace Wox.ViewModel
 
         public Query Query { get; }
         public CancellationToken Token { get; }
+        public CountdownEvent Countdown { get; }
 
-        public ResultsForUpdate(List<Result> results, PluginMetadata metadata, Query query, CancellationToken token)
+        public ResultsForUpdate(List<Result> results, PluginMetadata metadata, Query query, CancellationToken token, CountdownEvent countdown)
         {
             Results = results;
             Metadata = metadata;
             Query = query;
             Token = token;
+            Countdown = countdown;
         }
 
     }
