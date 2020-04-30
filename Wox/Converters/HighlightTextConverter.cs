@@ -29,7 +29,7 @@ namespace Wox.Converters
             }
 
             var settings = (Application.Current as App).Settings;
-            var resources = ThemeManager.Instance.GetResourceDictionary();
+            ResourceDictionary resources = Application.Current.Resources;
 
             var highlightColor = (Brush) (selected?
                 resources.Contains("ItemSelectedHighlightColor")? resources["ItemSelectedHighlightColor"]: resources["BaseItemSelectedHighlightColor"]:
