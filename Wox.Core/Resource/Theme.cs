@@ -85,6 +85,8 @@ namespace Wox.Core.Resource
                 dicts.Add(newResource);
                 _oldResource = newResource;
                 _oldTheme = Path.GetFileNameWithoutExtension(_oldResource.Source.AbsolutePath);
+                HighLightStyle = new HightLightStyle(false);
+                HighLightSelectedStyle = new HightLightStyle(true);
                 
                 SetBlurForWindow();
             }
@@ -187,6 +189,9 @@ namespace Wox.Core.Resource
             }
             return dict;
         }
+
+        public HightLightStyle HighLightStyle = new HightLightStyle();
+        public HightLightStyle HighLightSelectedStyle = new HightLightStyle();
 
         public List<string> LoadAvailableThemes()
         {
@@ -292,5 +297,34 @@ namespace Wox.Core.Resource
             Marshal.FreeHGlobal(accentPtr);
         }
         #endregion
+    }
+    
+    public class HightLightStyle
+    {
+        public Brush Color { get; set; }
+        public FontStyle FontStyle { get; set; }
+        public FontWeight FontWeight { get; set; }
+        public FontStretch FontStretch { get; set; }
+
+        public HightLightStyle()
+        {
+            Color = Brushes.Black;
+            FontStyle = FontStyles.Normal;
+            FontWeight = FontWeights.Normal;
+            FontStretch = FontStretches.Normal;
+        }
+        
+        public HightLightStyle(bool selected)
+        {
+            ResourceDictionary resources = ThemeManager.Instance.GetResourceDictionary();
+
+            Color = (Brush)(selected ?
+                resources.Contains("ItemSelectedHighlightColor") ? resources["ItemSelectedHighlightColor"] : resources["BaseItemSelectedHighlightColor"] :
+                resources.Contains("ItemHighlightColor") ? resources["ItemHighlightColor"] : resources["BaseItemHighlightColor"]);
+            FontStyle = FontHelper.GetFontStyleFromInvariantStringOrNormal(Settings.Instance.ResultHighlightFontStyle);
+            FontWeight = FontHelper.GetFontWeightFromInvariantStringOrNormal(Settings.Instance.ResultHighlightFontWeight);
+            FontStretch = FontHelper.GetFontStretchFromInvariantStringOrNormal(Settings.Instance.ResultHighlightFontStretch);
+        }
+
     }
 }

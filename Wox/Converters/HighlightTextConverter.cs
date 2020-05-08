@@ -7,38 +7,14 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Documents;
-using System.Windows.Media;
 using Wox.Core.Resource;
-using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Converters
 {
-    internal class HightLightStyle
-    {
-        public Brush Color { get; set; }
-        public FontStyle FontStyle { get; set; }
-        public FontWeight FontWeight { get; set; }
-        public FontStretch FontStretch { get; set; }
-
-        internal HightLightStyle(bool selected)
-        {
-            var app = Application.Current as App;
-            Settings settings = Settings.Instance;
-            ResourceDictionary resources = app.Resources;
-
-            Color = (Brush)(selected ?
-                resources.Contains("ItemSelectedHighlightColor") ? resources["ItemSelectedHighlightColor"] : resources["BaseItemSelectedHighlightColor"] :
-                resources.Contains("ItemHighlightColor") ? resources["ItemHighlightColor"] : resources["BaseItemHighlightColor"]);
-            FontStyle = FontHelper.GetFontStyleFromInvariantStringOrNormal(settings.ResultHighlightFontStyle);
-            FontWeight = FontHelper.GetFontWeightFromInvariantStringOrNormal(settings.ResultHighlightFontWeight);
-            FontStretch = FontHelper.GetFontStretchFromInvariantStringOrNormal(settings.ResultHighlightFontStretch);
-        }
-
-    }
     public class HighlightTextConverter : IMultiValueConverter
     {
-        private static Lazy<HightLightStyle> _highLightStyle = new Lazy<HightLightStyle>(() => new HightLightStyle(false));
-        private static Lazy<HightLightStyle> _highLightSelectedStyle = new Lazy<HightLightStyle>(() => new HightLightStyle(true));
+        private static HightLightStyle Default => ThemeManager.Instance.HighLightStyle;
+        private static HightLightStyle Selected => ThemeManager.Instance.HighLightSelectedStyle;
 
         public object Convert(object[] value, Type targetType, object parameter, CultureInfo cultureInfo)
         {
@@ -53,15 +29,7 @@ namespace Wox.Converters
                 return new Run(text);
             }
 
-            HightLightStyle style;
-            if (selected)
-            {
-                style = _highLightSelectedStyle.Value;
-            }
-            else
-            {
-                style = _highLightStyle.Value;
-            }
+            HightLightStyle style = selected? Selected: Default;
             
             var textBlock = new Span();
             for (var i = 0; i < text.Length; i++)

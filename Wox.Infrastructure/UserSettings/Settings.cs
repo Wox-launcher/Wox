@@ -21,13 +21,9 @@ namespace Wox.Infrastructure.UserSettings
 
         private static WoxJsonStorage<Settings> _storage = new WoxJsonStorage<Settings>();
         private static Settings _instance = _storage.Load();
-        public static Settings Instance {
-            get {
-                return _instance;
-            }
-        }
+        public static Settings Instance => _instance;
 
-        #endregion
+    #endregion
 
         public string Hotkey { get; set; } = "Alt + Space";
         public string Language { get; set; } = "en";
