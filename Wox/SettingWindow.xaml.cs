@@ -34,7 +34,7 @@ namespace Wox
         public SettingWindow(IPublicAPI api, SettingWindowViewModel viewModel)
         {
             InitializeComponent();
-            _settings = viewModel.Settings;
+            _settings = Settings.Instance;
             DataContext = viewModel;
             _viewModel = viewModel;
             _api = api;

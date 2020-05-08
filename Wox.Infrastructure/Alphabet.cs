@@ -27,9 +27,9 @@ namespace Wox.Infrastructure
 
         private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
-        public void Initialize([NotNull] Settings settings)
+        public void Initialize()
         {
-            _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            _settings = Settings.Instance;
             InitializePinyinHelpers();
         }
 

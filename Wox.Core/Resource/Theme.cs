@@ -29,6 +29,7 @@ namespace Wox.Core.Resource
 
         public Theme()
         {
+            Settings = Settings.Instance;
             _themeDirectories.Add(DirectoryPath);
             _themeDirectories.Add(UserDirectoryPath);
             MakesureThemeDirectoriesExist();

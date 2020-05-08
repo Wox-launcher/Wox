@@ -23,14 +23,12 @@ namespace Wox.ViewModel
     {
         private readonly Updater _updater;
         private readonly IPortable _portable;
-        private readonly WoxJsonStorage<Settings> _storage;
 
         public SettingWindowViewModel(Updater updater, IPortable portable)
         {
             _updater = updater;
             _portable = portable;
-            _storage = new WoxJsonStorage<Settings>();
-            Settings = _storage.Load();
+            Settings = Settings.Instance;
             Settings.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(Settings.ActivateTimes))
@@ -70,7 +68,7 @@ namespace Wox.ViewModel
 
         public void Save()
         {
-            _storage.Save();
+            Settings.Save();
         }
 
         #region general

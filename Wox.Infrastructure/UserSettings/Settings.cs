@@ -5,12 +5,30 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using NLog;
 using Wox.Infrastructure.Logger;
+using Wox.Infrastructure.Storage;
 using Wox.Plugin;
 
 namespace Wox.Infrastructure.UserSettings
 {
     public class Settings : BaseModel
     {
+        #region Save/Load
+
+        public static void Save()
+        {
+            _storage.Save();
+        }
+
+        private static WoxJsonStorage<Settings> _storage = new WoxJsonStorage<Settings>();
+        private static Settings _instance = _storage.Load();
+        public static Settings Instance {
+            get {
+                return _instance;
+            }
+        }
+
+        #endregion
+
         public string Hotkey { get; set; } = "Alt + Space";
         public string Language { get; set; } = "en";
         public string Theme { get; set; } = "Dark";

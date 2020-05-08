@@ -23,7 +23,7 @@ namespace Wox.Converters
         internal HightLightStyle(bool selected)
         {
             var app = Application.Current as App;
-            Settings settings = app.Settings;
+            Settings settings = Settings.Instance;
             ResourceDictionary resources = app.Resources;
 
             Color = (Brush)(selected ?
