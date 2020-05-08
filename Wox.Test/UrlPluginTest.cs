@@ -7,10 +7,16 @@ namespace Wox.Test
     [TestFixture]
     public class UrlPluginTest
     {
+        
+        [OneTimeSetUp]
+        public void Setup()
+        {
+            Constant.Initialize();
+        }
+
         [Test]
         public void URLMatchTest()
         {
-            Constant.Initialize();
 
             var plugin = new Main();
             Assert.IsTrue(plugin.IsURL("http://www.google.com"));
