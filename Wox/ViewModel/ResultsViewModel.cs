@@ -221,7 +221,7 @@ namespace Wox.ViewModel
 
         public class ResultCollection : Collection<ResultViewModel>, INotifyCollectionChanged
         {
-            public event NotifyCollectionChangedEventHandler CollectionChanged;
+            public event NotifyCollectionChangedEventHandler CollectionChanged = (sender, args) => { };
 
             public void RemoveAll()
             {

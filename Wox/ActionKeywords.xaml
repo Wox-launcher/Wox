@@ -2,7 +2,6 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="ActionKeywords"
-        Icon="Images\app.png"
         ResizeMode="NoResize"
         Loaded="ActionKeyword_OnLoaded"
         WindowStartupLocation="CenterScreen"
