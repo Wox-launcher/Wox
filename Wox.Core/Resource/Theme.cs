@@ -46,6 +46,7 @@ namespace Wox.Core.Resource
                 return found;
             });
             _oldTheme = Path.GetFileNameWithoutExtension(_oldResource.Source.AbsolutePath);
+            AutoReload();
         }
 
         private void MakesureThemeDirectoriesExist()
@@ -219,6 +220,27 @@ namespace Wox.Core.Resource
 
             return string.Empty;
         }
+
+        #region Automatic theme reload based on UI Accent Color Change
+
+        private object UISettings;
+
+        private void AutoReload()
+        {
+            if (Environment.OSVersion.Version >= new Version(10, 0)) {
+                var uiSettings = new Windows.UI.ViewManagement.UISettings();
+                uiSettings.ColorValuesChanged +=
+                    (sender, args) => {
+                        Application.Current.Dispatcher.Invoke(
+                            () => {
+                                ChangeTheme(Settings.Theme);
+                            });
+                    };
+                UISettings = uiSettings;
+            }
+        }
+
+        #endregion
 
         #region Blur Handling
         /*
