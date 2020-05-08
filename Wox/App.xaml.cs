@@ -76,8 +76,6 @@ namespace Wox
         {
             Logger.StopWatchNormal("Startup cost", () =>
             {
-                Constant.Initialize();
-
                 Logger.WoxInfo("Begin Wox startup----------------------------------------------------");
                 Logger.WoxInfo($"Runtime info:{ExceptionFormatter.RuntimeInfo()}");
                 Settings.Instance.ToString();

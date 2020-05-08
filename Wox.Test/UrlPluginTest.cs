@@ -7,13 +7,6 @@ namespace Wox.Test
     [TestFixture]
     public class UrlPluginTest
     {
-        
-        [OneTimeSetUp]
-        public void Setup()
-        {
-            Constant.Initialize();
-        }
-
         [Test]
         public void URLMatchTest()
         {
