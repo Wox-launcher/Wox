@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -50,14 +51,31 @@ namespace Wox.Image
 
             if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
             {
-                image = new BitmapImage(new Uri(path));
-                image.Freeze();
+                var bitmapImage = new BitmapImage(new Uri(path))
+                {
+                    DecodePixelHeight = 32,
+                    DecodePixelWidth = 32
+                };
+                image = bitmapImage;
                 return image;
             }
 
             if (!Path.IsPathRooted(path))
             {
                 path = Path.Combine(Constant.ProgramDirectory, "Images", Path.GetFileName(path));
+            }
+
+            bool normalImage = ImageExtensions.Select(e => path.EndsWith(e)).Any();
+            if (normalImage)
+            {
+                var bitmapImage = new BitmapImage(new Uri(path))
+                {
+                    DecodePixelHeight = 32,
+                    DecodePixelWidth = 32
+                };
+                image = bitmapImage;
+                image.Freeze();
+                return image;
             }
 
             if (Directory.Exists(path))
