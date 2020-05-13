@@ -34,8 +34,6 @@ function Copy-Resources ($path, $config) {
     $project = "$path\Wox"
     $output = "$path\Output"
     $target = "$output\$config"
-    Copy-Item -Recurse -Force $project\Themes\* $target\Themes\
-    Copy-Item -Recurse -Force $project\Images\* $target\Images\
     Copy-Item -Recurse -Force $path\Plugins\HelloWorldPython $target\Plugins
     Copy-Item -Recurse -Force $path\JsonRPC $target\JsonRPC
 }
