@@ -1,4 +1,3 @@
-﻿@@ -1,129 +0,0 @@
 ﻿using System;
 using System.IO;
 using System.Windows.Media;
@@ -6,9 +5,10 @@ using System.Windows.Media.Imaging;
 
 using Microsoft.WindowsAPICodePack.Shell;
 using NLog;
+using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 
-namespace Wox.Infrastructure.Image
+namespace Wox.Image
 {
     public static class ImageLoader
     {
@@ -25,10 +25,14 @@ namespace Wox.Infrastructure.Image
         private static ImageCache _cache;
 
         private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
-
+        private static ImageSource _defaultFileImage;
 
         public static void Initialize()
         {
+            string defaultFilePath = Path.Combine(Constant.ImagesDirectory, "file.png");
+            _defaultFileImage = new BitmapImage(new Uri(defaultFilePath));
+            _defaultFileImage.Freeze();
+
             _cache = new ImageCache(LoadInternal);
         }
 
@@ -126,5 +130,21 @@ namespace Wox.Infrastructure.Image
             Logger.WoxTrace($"load end {path}");
             return img;
         }
+
+        /// <summary>
+        /// return cache if exist,
+        /// or return default image immediatly and use updateImageCallback to return new image
+        /// </summary>
+        /// <param name="path"></param>
+        /// <param name="updateImageCallback"></param>
+        /// <returns></returns>
+        public static ImageSource Load(string path, Action<ImageSource> updateImageCallback)
+        {
+            Logger.WoxDebug($"load begin {path}");
+            var img = _cache.GetOrAdd(path, _defaultFileImage, updateImageCallback);
+            Logger.WoxTrace($"load end {path}");
+            return img;
+        }
+
     }
 }
