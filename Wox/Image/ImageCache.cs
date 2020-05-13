@@ -59,7 +59,6 @@ namespace Wox.Image
             {
                 bool success = _cache.TryRemove(pair.Key, out CacheEntry entry);
                 Logger.WoxDebug($"remove expired: <{success}> entry: <{pair.Key}>");
-                throw new System.Exception("test timer exception caught");
             }
         }
 
