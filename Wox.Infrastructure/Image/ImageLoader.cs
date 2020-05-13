@@ -21,16 +21,20 @@ namespace Wox.Infrastructure.Image
             ".tiff",
             ".ico"
         };
+        private static ImageCache _cache;
 
         private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
 
         public static void Initialize()
         {
+            _cache = new ImageCache();
         }
 
         private static ImageSource LoadInternal(string path)
         {
+            Logger.WoxDebug($"load from disk {path}");
+
             ImageSource image;
 
             if (string.IsNullOrEmpty(path))
@@ -117,7 +121,7 @@ namespace Wox.Infrastructure.Image
         public static ImageSource Load(string path)
         {
             Logger.WoxDebug($"load begin {path}");
-            var img = LoadInternal(path);
+            var img = _cache.GetOrAdd(path, LoadInternal);
             Logger.WoxTrace($"load end {path}");
             return img;
         }

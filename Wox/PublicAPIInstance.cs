@@ -77,7 +77,6 @@ namespace Wox
             _mainVM.Save();
             _settingsVM.Save();
             PluginManager.Save();
-            ImageLoader.Save();
             _alphabet.Save();
         }
 
