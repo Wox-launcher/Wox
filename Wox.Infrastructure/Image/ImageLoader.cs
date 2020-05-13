@@ -28,7 +28,7 @@ namespace Wox.Infrastructure.Image
 
         public static void Initialize()
         {
-            _cache = new ImageCache();
+            _cache = new ImageCache(LoadInternal);
         }
 
         private static ImageSource LoadInternal(string path)
@@ -121,7 +121,7 @@ namespace Wox.Infrastructure.Image
         public static ImageSource Load(string path)
         {
             Logger.WoxDebug($"load begin {path}");
-            var img = _cache.GetOrAdd(path, LoadInternal);
+            var img = _cache.GetOrAdd(path);
             Logger.WoxTrace($"load end {path}");
             return img;
         }
