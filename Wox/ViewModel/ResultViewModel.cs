@@ -1,16 +1,18 @@
 ﻿using System;
+using System.Windows.Forms;
 using System.Windows.Media;
 using System.Windows.Threading;
 using NLog;
+
+using Wox.Image;
 using Wox.Infrastructure;
-using Wox.Infrastructure.Image;
 using Wox.Infrastructure.Logger;
 using Wox.Plugin;
 
 
 namespace Wox.ViewModel
 {
-    public class ResultViewModel
+    public class ResultViewModel: BaseModel
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
@@ -42,7 +44,13 @@ namespace Wox.ViewModel
             }
 
             // will get here either when icoPath has value\icon delegate is null\when had exception in delegate
-            return ImageLoader.Load(imagePath);
+            return ImageLoader.Load(imagePath, UpdateImageCallback);
+        }
+
+        public void UpdateImageCallback(ImageSource image)
+        {
+            Image = new Lazy<ImageSource>(() => image);
+            OnPropertyChanged(nameof(Image));
         }
 
         // directly binding will cause unnecessory image load

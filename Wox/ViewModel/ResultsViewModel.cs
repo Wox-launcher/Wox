@@ -226,7 +226,10 @@ namespace Wox.ViewModel
             public void RemoveAll()
             {
                 this.Clear();
-                CollectionChanged.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+                if (CollectionChanged != null)
+                {
+                    CollectionChanged.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+                }
             }
 
             public void Update(List<ResultViewModel> newItems, CancellationToken token)
@@ -239,9 +242,11 @@ namespace Wox.ViewModel
                     if (token.IsCancellationRequested) { break; }
                     this.Add(i);
                 }
-                // wpf use directx / double buffered already, so just reset all won't cause ui flickering
-                CollectionChanged.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
-
+                if (CollectionChanged != null)
+                {
+                    // wpf use directx / double buffered already, so just reset all won't cause ui flickering
+                    CollectionChanged.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+                }
             }
         }
     }

@@ -1,13 +1,15 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 using Microsoft.WindowsAPICodePack.Shell;
 using NLog;
+using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 
-namespace Wox.Infrastructure.Image
+namespace Wox.Image
 {
     public static class ImageLoader
     {
@@ -21,21 +23,24 @@ namespace Wox.Infrastructure.Image
             ".tiff",
             ".ico"
         };
+        private static ImageCache _cache;
 
         private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
-
+        private static ImageSource _defaultFileImage;
 
         public static void Initialize()
         {
-        }
+            string defaultFilePath = Path.Combine(Constant.ImagesDirectory, "file.png");
+            _defaultFileImage = new BitmapImage(new Uri(defaultFilePath));
+            _defaultFileImage.Freeze();
 
-        public static void Save()
-        {
+            _cache = new ImageCache(LoadInternal);
         }
-
 
         private static ImageSource LoadInternal(string path)
         {
+            Logger.WoxDebug($"load from disk {path}");
+
             ImageSource image;
 
             if (string.IsNullOrEmpty(path))
@@ -46,14 +51,31 @@ namespace Wox.Infrastructure.Image
 
             if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
             {
-                image = new BitmapImage(new Uri(path));
-                image.Freeze();
+                var bitmapImage = new BitmapImage(new Uri(path))
+                {
+                    DecodePixelHeight = 32,
+                    DecodePixelWidth = 32
+                };
+                image = bitmapImage;
                 return image;
             }
 
             if (!Path.IsPathRooted(path))
             {
                 path = Path.Combine(Constant.ProgramDirectory, "Images", Path.GetFileName(path));
+            }
+
+            bool normalImage = ImageExtensions.Any(e => path.EndsWith(e));
+            if (normalImage)
+            {
+                var bitmapImage = new BitmapImage(new Uri(path))
+                {
+                    DecodePixelHeight = 32,
+                    DecodePixelWidth = 32
+                };
+                image = bitmapImage;
+                image.Freeze();
+                return image;
             }
 
             if (Directory.Exists(path))
@@ -122,9 +144,25 @@ namespace Wox.Infrastructure.Image
         public static ImageSource Load(string path)
         {
             Logger.WoxDebug($"load begin {path}");
-            var img = LoadInternal(path);
+            var img = _cache.GetOrAdd(path);
             Logger.WoxTrace($"load end {path}");
             return img;
         }
+
+        /// <summary>
+        /// return cache if exist,
+        /// or return default image immediatly and use updateImageCallback to return new image
+        /// </summary>
+        /// <param name="path"></param>
+        /// <param name="updateImageCallback"></param>
+        /// <returns></returns>
+        public static ImageSource Load(string path, Action<ImageSource> updateImageCallback)
+        {
+            Logger.WoxDebug($"load begin {path}");
+            var img = _cache.GetOrAdd(path, _defaultFileImage, updateImageCallback);
+            Logger.WoxTrace($"load end {path}");
+            return img;
+        }
+
     }
 }
