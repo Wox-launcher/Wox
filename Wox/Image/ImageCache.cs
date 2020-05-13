@@ -31,7 +31,7 @@ namespace Wox.Image
     {
         private readonly TimeSpan _expiredTime = new TimeSpan(24, 0, 0);
         private readonly TimeSpan _checkInterval = new TimeSpan(0, 1, 0);
-        private const int _cacheLimit = 100;
+        private const int _cacheLimit = 500;
         private readonly object _addLock = new object();
 
         private readonly ConcurrentDictionary<String, CacheEntry> _cache;
