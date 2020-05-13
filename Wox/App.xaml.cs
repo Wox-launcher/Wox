@@ -16,7 +16,7 @@ using Wox.Core.Resource;
 using Wox.Helper;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Http;
-using Wox.Infrastructure.Image;
+using Wox.Image;
 using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.UserSettings;
 using Wox.ViewModel;

@@ -2,7 +2,6 @@
 using System.Windows.Media;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
-using Wox.Infrastructure.Image;
 
 namespace Wox.Plugin.WebSearch
 {
@@ -21,9 +20,6 @@ namespace Wox.Plugin.WebSearch
         [NotNull]
         [JsonIgnore]
         internal string IconPath => Path.Combine(Main.ImagesDirectory, Icon);
-
-        [JsonIgnore]
-        public ImageSource Image => ImageLoader.Load(IconPath);
 
         public string Url { get; set; }
         public bool Enabled { get; set; }

@@ -6,7 +6,7 @@ using Wox.Core;
 using Wox.Core.Configuration;
 using Wox.Core.Plugin;
 using Wox.Infrastructure;
-using Wox.Infrastructure.Image;
+using Wox.Image;
 using Wox.Infrastructure.UserSettings;
 using Wox.Plugin;
 using Wox.ViewModel;

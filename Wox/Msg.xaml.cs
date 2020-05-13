@@ -7,7 +7,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using Wox.Helper;
 using Wox.Infrastructure;
-using Wox.Infrastructure.Image;
+using Wox.Image;
 
 namespace Wox
 {

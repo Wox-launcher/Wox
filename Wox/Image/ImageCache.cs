@@ -1,3 +1,4 @@
+﻿@@ -1,98 +0,0 @@
 ﻿using NLog;
 using System;
 using System.Collections.Concurrent;
@@ -73,7 +74,7 @@ namespace Wox.Infrastructure.Image
                 entry = new CacheEntry(key, image);
                 _cache[key] = entry;
                 _cacheSorted.Add(entry);
-                
+
                 int currentCount = _cache.Count;
                 if (currentCount > _cacheLimit)
                 {

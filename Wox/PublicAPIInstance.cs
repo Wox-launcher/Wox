@@ -12,7 +12,7 @@ using Wox.Core.Resource;
 using Wox.Helper;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Hotkey;
-using Wox.Infrastructure.Image;
+using Wox.Image;
 using Wox.Plugin;
 using Wox.ViewModel;
 

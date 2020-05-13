@@ -2,7 +2,7 @@
 using System.Windows.Media;
 using Wox.Plugin;
 using Wox.Core.Resource;
-using Wox.Infrastructure.Image;
+using Wox.Image;
 
 namespace Wox.ViewModel
 {
