@@ -29,11 +29,6 @@ namespace Wox.Infrastructure.Image
         {
         }
 
-        public static void Save()
-        {
-        }
-
-
         private static ImageSource LoadInternal(string path)
         {
             ImageSource image;
