@@ -65,7 +65,7 @@ namespace Wox.Image
                 path = Path.Combine(Constant.ProgramDirectory, "Images", Path.GetFileName(path));
             }
 
-            bool normalImage = ImageExtensions.Select(e => path.EndsWith(e)).Any();
+            bool normalImage = ImageExtensions.Any(e => path.EndsWith(e));
             if (normalImage)
             {
                 var bitmapImage = new BitmapImage(new Uri(path))
