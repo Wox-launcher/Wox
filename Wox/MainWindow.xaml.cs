@@ -32,11 +32,11 @@ namespace Wox
 
         #endregion
 
-        public MainWindow(Settings settings, MainViewModel mainVM)
+        public MainWindow(MainViewModel mainVM)
         {
             DataContext = mainVM;
             _viewModel = mainVM;
-            _settings = settings;
+            _settings = Settings.Instance;
             InitializeComponent();
         }
         public MainWindow()

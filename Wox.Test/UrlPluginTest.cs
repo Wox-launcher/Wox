@@ -1,4 +1,5 @@
 ﻿using NUnit.Framework;
+using Wox.Infrastructure;
 using Wox.Plugin.Url;
 
 namespace Wox.Test
@@ -9,6 +10,7 @@ namespace Wox.Test
         [Test]
         public void URLMatchTest()
         {
+
             var plugin = new Main();
             Assert.IsTrue(plugin.IsURL("http://www.google.com"));
             Assert.IsTrue(plugin.IsURL("https://www.google.com"));

@@ -21,23 +21,20 @@ namespace Wox.Test
         {
             // todo remove i18n from application / ui, so it can be tested in a modular way
             new App();
-
-            Constant.Initialize();
             ImageLoader.Initialize();
 
             Updater updater = new Updater("");
             Portable portable = new Portable();
             SettingWindowViewModel settingsVm = new SettingWindowViewModel(updater, portable);
-            Settings settings = settingsVm.Settings;
 
             Alphabet alphabet = new Alphabet();
-            alphabet.Initialize(settings);
+            alphabet.Initialize();
             StringMatcher stringMatcher = new StringMatcher(alphabet);
             StringMatcher.Instance = stringMatcher;
-            stringMatcher.UserSettingSearchPrecision = settings.QuerySearchPrecision;
+            stringMatcher.UserSettingSearchPrecision = Settings.Instance.QuerySearchPrecision;
 
-            PluginManager.LoadPlugins(settings.PluginSettings);
-            MainViewModel mainVm = new MainViewModel(settings, false);
+            PluginManager.LoadPlugins(Settings.Instance.PluginSettings);
+            MainViewModel mainVm = new MainViewModel(false);
             PublicAPIInstance api = new PublicAPIInstance(settingsVm, mainVm, alphabet);
             PluginManager.InitializePlugins(api);
 

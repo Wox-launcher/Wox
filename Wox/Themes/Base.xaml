@@ -22,8 +22,7 @@
                                       Background="{TemplateBinding Background}">
                             <ScrollViewer.ContentTemplate>
                                 <DataTemplate>
-                                    <Grid Background="{Binding Background, ElementName=PART_ContentHost}"
-                                          RenderOptions.ClearTypeHint="Enabled">
+                                    <Grid Background="{Binding Background, ElementName=PART_ContentHost}">
                                         <ContentPresenter
                                             Content="{Binding Path=Content, ElementName=PART_ContentHost}" />
                                     </Grid>
@@ -49,6 +48,7 @@
     <Style x:Key="BaseWindowStyle" TargetType="{x:Type Window}">
         <Setter Property="Width" Value="800" />
         <Setter Property="MaxWidth" Value="800" />
+        <Setter Property="RenderOptions.ClearTypeHint" Value="Enabled"/>
     </Style>
 
     <Style x:Key="BasePendingLineStyle" TargetType="{x:Type Line}">
@@ -62,22 +62,18 @@
         <Setter Property="Foreground" Value="#FFFFF8" />
         <Setter Property="FontSize" Value="18" />
         <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="RenderOptions.ClearTypeHint" Value="Enabled"/>
     </Style>
     <Style x:Key="BaseItemSubTitleStyle" TargetType="{x:Type TextBlock}">
         <Setter Property="Foreground" Value="#D9D9D4" />
-        <Setter Property="RenderOptions.ClearTypeHint" Value="Enabled"/>
     </Style>
 
     <Style x:Key="BaseItemTitleSelectedStyle" TargetType="{x:Type TextBlock}">
         <Setter Property="Foreground" Value="#FFFFF8" />
         <Setter Property="FontSize" Value="18" />
         <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="RenderOptions.ClearTypeHint" Value="Enabled"/>
     </Style>
     <Style x:Key="BaseItemSubTitleSelectedStyle" TargetType="{x:Type TextBlock}">
         <Setter Property="Foreground" Value="#D9D9D4" />
-        <Setter Property="RenderOptions.ClearTypeHint" Value="Enabled"/>
     </Style>
 
     <Style x:Key="BaseListboxStyle" TargetType="{x:Type ListBox}">

@@ -26,6 +26,7 @@ namespace Wox.Core.Resource
 
         public Internationalization()
         {
+            Settings = Settings.Instance;
             AddPluginLanguageDirectories();
             LoadDefaultLanguage();
             // we don't want to load /Languages/en.xaml twice

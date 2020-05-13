@@ -30,8 +30,6 @@ namespace Wox
         public static PublicAPIInstance API { get; private set; }
         private const string Unique = "Wox_Unique_Application_Mutex";
         private static bool _disposed;
-        public Settings Settings => _settings;
-        private Settings _settings;
         private MainViewModel _mainVM;
         private SettingWindowViewModel _settingsVM;
         private readonly Updater _updater = new Updater(Wox.Properties.Settings.Default.GithubRepo);
@@ -78,11 +76,9 @@ namespace Wox
         {
             Logger.StopWatchNormal("Startup cost", () =>
             {
-                Constant.Initialize();
-
                 Logger.WoxInfo("Begin Wox startup----------------------------------------------------");
                 Logger.WoxInfo($"Runtime info:{ExceptionFormatter.RuntimeInfo()}");
-
+                Settings.Instance.ToString();
 
                 RegisterAppDomainExceptions();
                 RegisterDispatcherUnhandledException();
@@ -95,16 +91,15 @@ namespace Wox
                 ImageLoader.Initialize();
 
                 _settingsVM = new SettingWindowViewModel(_updater, _portable);
-                _settings = _settingsVM.Settings;
 
-                _alphabet.Initialize(_settings);
+                _alphabet.Initialize();
                 _stringMatcher = new StringMatcher(_alphabet);
                 StringMatcher.Instance = _stringMatcher;
-                _stringMatcher.UserSettingSearchPrecision = _settings.QuerySearchPrecision;
+                _stringMatcher.UserSettingSearchPrecision = Settings.Instance.QuerySearchPrecision;
 
-                PluginManager.LoadPlugins(_settings.PluginSettings);
-                _mainVM = new MainViewModel(_settings);
-                var window = new MainWindow(_settings, _mainVM);
+                PluginManager.LoadPlugins(Settings.Instance.PluginSettings);
+                _mainVM = new MainViewModel();
+                var window = new MainWindow(_mainVM);
                 API = new PublicAPIInstance(_settingsVM, _mainVM, _alphabet);
                 PluginManager.InitializePlugins(API);
 
@@ -113,13 +108,12 @@ namespace Wox
 
                 // todo temp fix for instance code logic
                 // load plugin before change language, because plugin language also needs be changed
-                InternationalizationManager.Instance.Settings = _settings;
-                InternationalizationManager.Instance.ChangeLanguage(_settings.Language);
+                InternationalizationManager.Instance.Settings = Settings.Instance;
+                InternationalizationManager.Instance.ChangeLanguage(Settings.Instance.Language);
                 // main windows needs initialized before theme change because of blur settigns
-                ThemeManager.Instance.Settings = _settings;
-                ThemeManager.Instance.ChangeTheme(_settings.Theme);
+                ThemeManager.Instance.ChangeTheme(Settings.Instance.Theme);
 
-                Http.Proxy = _settings.Proxy;
+                Http.Proxy = Settings.Instance.Proxy;
 
                 RegisterExitEvents();
 
@@ -127,7 +121,7 @@ namespace Wox
                 AutoUpdates();
 
                 ParseCommandLineArgs(SingleInstance<App>.CommandLineArgs);
-                _mainVM.MainWindowVisibility = _settings.HideOnStartup ? Visibility.Hidden : Visibility.Visible;
+                _mainVM.MainWindowVisibility = Settings.Instance.HideOnStartup ? Visibility.Hidden : Visibility.Visible;
 
                 Logger.WoxInfo($"SDK Info: {ExceptionFormatter.SDKInfo()}");
                 Logger.WoxInfo("End Wox startup ----------------------------------------------------  ");
@@ -137,7 +131,7 @@ namespace Wox
 
         private void AutoStartup()
         {
-            if (_settings.StartWoxOnSystemStartup)
+            if (Settings.Instance.StartWoxOnSystemStartup)
             {
                 if (!SettingWindow.StartupSet())
                 {
@@ -151,18 +145,18 @@ namespace Wox
         {
             Task.Run(async () =>
             {
-                if (_settings.AutoUpdates)
+                if (Settings.Instance.AutoUpdates)
                 {
                     // check udpate every 5 hours
                     var timer = new System.Timers.Timer(1000 * 60 * 60 * 5);
                     timer.Elapsed += async (s, e) =>
                     {
-                        await _updater.UpdateApp(true, _settings.UpdateToPrereleases);
+                        await _updater.UpdateApp(true, Settings.Instance.UpdateToPrereleases);
                     };
                     timer.Start();
 
                     // check updates on startup
-                    await _updater.UpdateApp(true, _settings.UpdateToPrereleases);
+                    await _updater.UpdateApp(true, Settings.Instance.UpdateToPrereleases);
                 }
             }).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
         }

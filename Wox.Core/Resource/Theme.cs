@@ -29,6 +29,7 @@ namespace Wox.Core.Resource
 
         public Theme()
         {
+            Settings = Settings.Instance;
             _themeDirectories.Add(DirectoryPath);
             _themeDirectories.Add(UserDirectoryPath);
             MakesureThemeDirectoriesExist();
@@ -45,6 +46,7 @@ namespace Wox.Core.Resource
                 return found;
             });
             _oldTheme = Path.GetFileNameWithoutExtension(_oldResource.Source.AbsolutePath);
+            AutoReload();
         }
 
         private void MakesureThemeDirectoriesExist()
@@ -84,6 +86,8 @@ namespace Wox.Core.Resource
                 dicts.Add(newResource);
                 _oldResource = newResource;
                 _oldTheme = Path.GetFileNameWithoutExtension(_oldResource.Source.AbsolutePath);
+                HighLightStyle = new HightLightStyle(false);
+                HighLightSelectedStyle = new HightLightStyle(true);
                 
                 SetBlurForWindow();
             }
@@ -187,6 +191,9 @@ namespace Wox.Core.Resource
             return dict;
         }
 
+        public HightLightStyle HighLightStyle = new HightLightStyle();
+        public HightLightStyle HighLightSelectedStyle = new HightLightStyle();
+
         public List<string> LoadAvailableThemes()
         {
             List<string> themes = new List<string>();
@@ -213,6 +220,27 @@ namespace Wox.Core.Resource
 
             return string.Empty;
         }
+
+        #region Automatic theme reload based on UI Accent Color Change
+
+        private object UISettings;
+
+        private void AutoReload()
+        {
+            if (Environment.OSVersion.Version >= new Version(10, 0)) {
+                var uiSettings = new Windows.UI.ViewManagement.UISettings();
+                uiSettings.ColorValuesChanged +=
+                    (sender, args) => {
+                        Application.Current.Dispatcher.Invoke(
+                            () => {
+                                ChangeTheme(Settings.Theme);
+                            });
+                    };
+                UISettings = uiSettings;
+            }
+        }
+
+        #endregion
 
         #region Blur Handling
         /*
@@ -291,5 +319,34 @@ namespace Wox.Core.Resource
             Marshal.FreeHGlobal(accentPtr);
         }
         #endregion
+    }
+    
+    public class HightLightStyle
+    {
+        public Brush Color { get; set; }
+        public FontStyle FontStyle { get; set; }
+        public FontWeight FontWeight { get; set; }
+        public FontStretch FontStretch { get; set; }
+
+        public HightLightStyle()
+        {
+            Color = Brushes.Black;
+            FontStyle = FontStyles.Normal;
+            FontWeight = FontWeights.Normal;
+            FontStretch = FontStretches.Normal;
+        }
+        
+        public HightLightStyle(bool selected)
+        {
+            ResourceDictionary resources = ThemeManager.Instance.GetResourceDictionary();
+
+            Color = (Brush)(selected ?
+                resources.Contains("ItemSelectedHighlightColor") ? resources["ItemSelectedHighlightColor"] : resources["BaseItemSelectedHighlightColor"] :
+                resources.Contains("ItemHighlightColor") ? resources["ItemHighlightColor"] : resources["BaseItemHighlightColor"]);
+            FontStyle = FontHelper.GetFontStyleFromInvariantStringOrNormal(Settings.Instance.ResultHighlightFontStyle);
+            FontWeight = FontHelper.GetFontWeightFromInvariantStringOrNormal(Settings.Instance.ResultHighlightFontWeight);
+            FontStretch = FontHelper.GetFontStretchFromInvariantStringOrNormal(Settings.Instance.ResultHighlightFontStretch);
+        }
+
     }
 }

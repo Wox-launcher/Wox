@@ -53,14 +53,14 @@ namespace Wox.ViewModel
 
         #region Constructor
 
-        public MainViewModel(Settings settings, bool useUI = true)
+        public MainViewModel(bool useUI = true)
         {
             _saved = false;
             _queryTextBeforeLeaveResults = "";
             _queryText = "";
             _lastQuery = new Query();
 
-            _settings = settings;
+            _settings = Settings.Instance;
 
             _historyItemsStorage = new WoxJsonStorage<History>();
             _userSelectedRecordStorage = new WoxJsonStorage<UserSelectedRecord>();
