@@ -56,7 +56,8 @@ namespace Wox.Plugin.WebSearch
                     if (string.IsNullOrEmpty(keyword))
                     {
                         var result = new Result
-                        {
+                        { 
+                            Score=100,
                             Title = subtitle,
                             SubTitle = string.Empty,
                             IcoPath = searchSource.IconPath
@@ -69,7 +70,7 @@ namespace Wox.Plugin.WebSearch
                         {
                             Title = title,
                             SubTitle = subtitle,
-                            Score = 6,
+                            Score = 100,
                             IcoPath = searchSource.IconPath,
                             ActionKeywordAssigned = searchSource.ActionKeyword == SearchSourceGlobalPluginWildCardSign ? string.Empty : searchSource.ActionKeyword,
                             Action = c =>
