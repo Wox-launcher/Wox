@@ -467,7 +467,7 @@ namespace Wox.ViewModel
 
 
                         if (token.IsCancellationRequested) { return; }
-                        var plugins = PluginManager.ValidPluginsForQuery(query).Where(p => !p.Metadata.Disabled).ToList();
+                        var plugins = PluginManager.AllPlugins;
 
                         var option = new ParallelOptions()
                         {

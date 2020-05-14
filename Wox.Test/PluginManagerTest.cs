@@ -46,7 +46,7 @@ namespace Wox.Test
         {
             
             Query query = QueryBuilder.Build(QueryText.Trim(), PluginManager.NonGlobalPlugins);
-            List<PluginPair> plugins = PluginManager.ValidPluginsForQuery(query);
+            List<PluginPair> plugins = PluginManager.AllPlugins;
             Result result = plugins.SelectMany(
                     p => PluginManager.QueryForPlugin(p, query)
                 )

@@ -71,7 +71,7 @@ namespace Wox.Core.Plugin
 
         public static void ReloadData()
         {
-            foreach(var plugin in AllPlugins)
+            foreach (var plugin in AllPlugins)
             {
                 var reloadablePlugin = plugin.Plugin as IReloadable;
                 reloadablePlugin?.ReloadData();
@@ -124,7 +124,7 @@ namespace Wox.Core.Plugin
                 catch (Exception e)
                 {
                     Logger.WoxError($"Fail to Init plugin: {pair.Metadata.Name}", e);
-                    pair.Metadata.Disabled = true; 
+                    pair.Metadata.Disabled = true;
                     failedPlugins.Enqueue(pair);
                 }
             });
@@ -153,33 +153,36 @@ namespace Wox.Core.Plugin
             PluginInstaller.Install(path);
         }
 
-        public static List<PluginPair> ValidPluginsForQuery(Query query)
-        {
-            if (NonGlobalPlugins.ContainsKey(query.ActionKeyword) && !string.IsNullOrEmpty(query.ActionKeyword))
-            {
-                var plugin = NonGlobalPlugins[query.ActionKeyword];
-                return new List<PluginPair> { plugin };
-            }
-            else
-            {
-                return GlobalPlugins;
-            }
-        }
-
         public static List<Result> QueryForPlugin(PluginPair pair, Query query)
         {
             try
             {
-                List<Result> results = null;
                 var metadata = pair.Metadata;
-                var milliseconds = Logger.StopWatchDebug($"Query <{query.RawQuery}> Cost for {metadata.Name}", () =>
+                if (!metadata.Disabled)
                 {
-                    results = pair.Plugin.Query(query) ?? new List<Result>();
-                    UpdatePluginMetadata(results, metadata, query);
-                });
-                metadata.QueryCount += 1;
-                metadata.AvgQueryTime = metadata.QueryCount == 1 ? milliseconds : (metadata.AvgQueryTime + milliseconds) / 2;
-                return results;
+                    bool validGlobalQuery = string.IsNullOrEmpty(query.ActionKeyword) && pair.Metadata.ActionKeywords[0] == Query.GlobalPluginWildcardSign;
+                    bool validNonGlobalQuery = pair.Metadata.ActionKeywords.Contains(query.ActionKeyword);
+                    if (validGlobalQuery || validNonGlobalQuery)
+                    {
+                        List<Result> results = new List<Result>();
+                        var milliseconds = Logger.StopWatchDebug($"Query <{query.RawQuery}> Cost for {metadata.Name}", () =>
+                        {
+                            results = pair.Plugin.Query(query) ?? new List<Result>();
+                            UpdatePluginMetadata(results, metadata, query);
+                        });
+                        metadata.QueryCount += 1;
+                        metadata.AvgQueryTime = metadata.QueryCount == 1 ? milliseconds : (metadata.AvgQueryTime + milliseconds) / 2;
+                        return results;
+                    }
+                    else
+                    {
+                        return new List<Result>();
+                    }
+                }
+                else
+                {
+                    return new List<Result>();
+                }
             }
             catch (Exception e)
             {
@@ -302,10 +305,10 @@ namespace Wox.Core.Plugin
             {
                 GlobalPlugins.Remove(plugin);
             }
-            
-            if(oldActionkeyword != Query.GlobalPluginWildcardSign)
+
+            if (oldActionkeyword != Query.GlobalPluginWildcardSign)
                 NonGlobalPlugins.Remove(oldActionkeyword);
-            
+
 
             plugin.Metadata.ActionKeywords.Remove(oldActionkeyword);
         }
