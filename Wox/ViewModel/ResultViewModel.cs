@@ -12,7 +12,7 @@ using Wox.Plugin;
 
 namespace Wox.ViewModel
 {
-    public class ResultViewModel: BaseModel
+    public class ResultViewModel : BaseModel
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
@@ -21,7 +21,8 @@ namespace Wox.ViewModel
             if (result != null)
             {
                 Result = result;
-                Image = new Lazy<ImageSource>(() => {
+                Image = new Lazy<ImageSource>(() =>
+                {
                     return SetImage(result);
                 });
             }
@@ -32,19 +33,26 @@ namespace Wox.ViewModel
             string imagePath = result.IcoPath;
             if (string.IsNullOrEmpty(imagePath) && result.Icon != null)
             {
-                try
+                var r = result;
+                ImageSource func(string key)
                 {
-                    return result.Icon();
+                    try
+                    {
+                        return r.Icon();
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.WoxError($"IcoPath is empty and exception when calling Icon() for result <{r.Title}> of plugin <{r.PluginDirectory}>", e);
+                        return ImageLoader.Load(Constant.ErrorIcon, UpdateImageCallback);
+                    }
                 }
-                catch (Exception e)
-                {
-                    Logger.WoxError($"IcoPath is empty and exception when calling Icon() for result <{Result.Title}> of plugin <{Result.PluginDirectory}>", e);
-                    imagePath = Constant.ErrorIcon;
-                }
+                return ImageLoader.Load(result.Title, func, UpdateImageCallback);
             }
-
-            // will get here either when icoPath has value\icon delegate is null\when had exception in delegate
-            return ImageLoader.Load(imagePath, UpdateImageCallback);
+            else
+            {
+                // will get here either when icoPath has value\icon delegate is null\when had exception in delegate
+                return ImageLoader.Load(imagePath, UpdateImageCallback);
+            }
         }
 
         public void UpdateImageCallback(ImageSource image)

@@ -36,14 +36,12 @@ namespace Wox.Image
 
         private readonly ConcurrentDictionary<String, CacheEntry> _cache;
         private readonly SortedSet<CacheEntry> _cacheSorted;
-        private readonly Func<string, ImageSource> _imageFactory;
 
         private readonly System.Threading.Timer timer;
         private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
-        public ImageCache(Func<string, ImageSource> imageFactory)
+        public ImageCache()
         {
-            _imageFactory = imageFactory;
             _cache = new ConcurrentDictionary<string, CacheEntry>();
             _cacheSorted = new SortedSet<CacheEntry>(new CacheEntryComparer());
             timer = new System.Threading.Timer(ExpirationCheck, null, _checkInterval, _checkInterval);
@@ -68,20 +66,20 @@ namespace Wox.Image
         /// </summary>
         /// <param name="key"></param>
         /// <returns></returns>
-        public ImageSource GetOrAdd([NotNull] string key)
+        public ImageSource GetOrAdd([NotNull] string key, Func<string, ImageSource> imageFactory)
         {
             key.RequireNonNull();
             CacheEntry entry;
             bool getResult = _cache.TryGetValue(key, out entry);
             if (!getResult)
             {
-                entry = Add(key);
+                entry = Add(key, imageFactory);
             }
             entry.ExpiredDate = DateTime.Now + _expiredTime;
             return entry.Image;
         }
 
-        public ImageSource GetOrAdd([NotNull] string key, ImageSource defaultImage, Action<ImageSource> updateImageCallback)
+        public ImageSource GetOrAdd([NotNull] string key, ImageSource defaultImage, Func<string, ImageSource> imageFactory, Action<ImageSource> updateImageCallback)
         {
             key.RequireNonNull();
             CacheEntry getEntry;
@@ -90,7 +88,7 @@ namespace Wox.Image
             {
                 var t = Task.Run(() =>
                 {
-                    CacheEntry addEntry = Add(key);
+                    CacheEntry addEntry = Add(key, imageFactory);
                     addEntry.ExpiredDate = DateTime.Now + _expiredTime;
                     updateImageCallback(addEntry.Image);
                 }).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
@@ -103,12 +101,12 @@ namespace Wox.Image
             }
         }
 
-        private CacheEntry Add(string key)
+        private CacheEntry Add(string key, Func<string, ImageSource> imageFactory)
         {
             lock (_addLock)
             {
                 CacheEntry entry;
-                ImageSource image = _imageFactory(key);
+                ImageSource image = imageFactory(key);
                 entry = new CacheEntry(key, image);
                 _cache[key] = entry;
                 _cacheSorted.Add(entry);
