@@ -53,6 +53,16 @@ namespace Wox.Infrastructure.Exception
             sb.Append(Indent(indentLevel));
             sb.Append("HResult: ");
             sb.AppendLine(ex.HResult.ToString());
+            foreach(object key in ex.Data.Keys)
+            {
+                object value = ex.Data[key];
+                sb.Append(Indent(indentLevel));
+                sb.Append("Data: <");
+                sb.Append(key);
+                sb.Append("> -> <");
+                sb.Append(value);
+                sb.AppendLine(">");
+            }
 
             if (ex.Source != null)
             {

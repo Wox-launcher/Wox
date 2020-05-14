@@ -101,6 +101,7 @@ namespace Wox.Plugin.Program.Programs
             else
             {
                 var e = Marshal.GetExceptionForHR((int)hResult);
+                e.Data.Add(nameof(path), path);
                 Logger.WoxError($"Cannot not get UWP details {path}", e);
                 Apps = new List<Application>().ToArray();
                 return;
@@ -168,7 +169,8 @@ namespace Wox.Plugin.Program.Programs
                     }
                     catch (Exception e)
                     {
-                        Logger.WoxError($"Cannot parse UWP {p.Id.FullName} {p.Id.Version} {p.Id}", e);
+                        e.Data.Add(nameof(p.Id.FullName), p.Id.FullName);
+                        Logger.WoxError($"Cannot parse UWP {p.Id.FullName}", e);
                         return new Application[] { };
                     }
                     return u.Apps;
@@ -203,7 +205,9 @@ namespace Wox.Plugin.Program.Programs
                     }
                     catch (Exception e)
                     {
-                        Logger.WoxError($"cannot get package {u} {p.Id}", e);
+                        e.Data.Add(nameof(u), u);
+                        e.Data.Add(nameof(p.Id.FullName), p.Id.FullName);
+                        Logger.WoxError($"cannot get package {u} {p.Id.FullName}", e);
                         return false;
                     }
 
@@ -397,8 +401,19 @@ namespace Wox.Plugin.Program.Programs
                         }
                         parsed = $"{prefix}//{packageName}{key}";
                     }
-                    Logger.WoxDebug($"resourceReference {resourceReference} parsed <{parsed}> package <{packageFullName}>");
-                    result = ResourceFromPriInternal(packageFullName, parsed);
+                    string message = $"resourceReference {resourceReference} parsed <{parsed}> package <{packageFullName}>";
+                    Logger.WoxDebug(message);
+                    try
+                    {
+                        result = ResourceFromPriInternal(packageFullName, parsed);
+                    }
+                    catch (Exception e)
+                    {
+                        e.Data.Add(nameof(resourceReference), resourceReference);
+                        e.Data.Add(nameof(ResourcesFromPri) + nameof(parsed), parsed);
+                        e.Data.Add(nameof(ResourcesFromPri) + nameof(packageFullName), packageFullName);
+                        throw e;
+                    }
                 }
                 else
                 {
@@ -417,9 +432,19 @@ namespace Wox.Plugin.Program.Programs
 
                 Logger.WoxTrace($"package: <{packageFullName}> file ref: <{fileReference}>");
                 string parsed = $"ms-resource://{packageName}/Files/{fileReference.Replace("\\", "/")}";
-                string result = ResourceFromPriInternal(packageFullName, parsed);
-                Logger.WoxTrace($"package: <{packageFullName}> pri file result: <{result}>");
-                return result;
+                try
+                {
+                    string result = ResourceFromPriInternal(packageFullName, parsed);
+                    Logger.WoxTrace($"package: <{packageFullName}> pri file result: <{result}>");
+                    return result;
+                }
+                catch (Exception e)
+                {
+                    e.Data.Add(nameof(fileReference), fileReference);
+                    e.Data.Add(nameof(FilesFromPri) + nameof(parsed), parsed);
+                    e.Data.Add(nameof(FilesFromPri) + nameof(packageFullName), packageFullName);
+                    throw e;
+                }
             }
 
             /// https://docs.microsoft.com/en-us/windows/win32/api/shlwapi/nf-shlwapi-shloadindirectstring
@@ -451,6 +476,10 @@ namespace Wox.Plugin.Program.Programs
                 else
                 {
                     var e = Marshal.GetExceptionForHR((int)hResult);
+                    e.Data.Add(nameof(source), source);
+                    e.Data.Add(nameof(Package.Location), Package.Location);
+                    e.Data.Add(nameof(packageFullName), packageFullName);
+                    e.Data.Add(nameof(parsed), parsed);
                     Logger.WoxError($"Load pri failed {source} location {Package.Location}", e);
                     return string.Empty;
                 }
