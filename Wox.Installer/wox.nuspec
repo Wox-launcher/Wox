@@ -3,6 +3,7 @@
   <metadata>
     <id>Wox</id>
     <title>Wox</title>
+    <iconUrl>https://raw.githubusercontent.com/Wox-launcher/Wox/master/Wox/Resources/app.ico</iconUrl>
     <version>$version$</version>
     <authors>Wox</authors>
     <projectUrl>https://github.com/Wox-launcher/Wox</projectUrl>
