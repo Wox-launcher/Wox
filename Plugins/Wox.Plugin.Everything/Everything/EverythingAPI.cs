@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -25,11 +26,8 @@ namespace Wox.Plugin.Everything.Everything
 
     public sealed class EverythingApi : IEverythingApi
     {
-        private const int BufferSize = 4096;
 
         private readonly object _syncObject = new object();
-        // cached buffer to remove redundant allocations.
-        private readonly StringBuilder _buffer = new StringBuilder(BufferSize);
 
         public enum StateCode
         {
@@ -41,6 +39,26 @@ namespace Wox.Plugin.Everything.Everything
             CreateThreadError,
             InvalidIndexError,
             InvalidCallError
+        }
+        public enum RequestFlag
+        {
+
+            FileName = 0x00000001,
+            Path = 0x00000002,
+            FullPathAndFileName = 0x00000004,
+            Extenssion = 0x00000008,
+            Size = 0x00000010,
+            DateCreated = 0x00000020,
+            DateModified = 0x00000040,
+            DateAccessed = 0x00000080,
+            Attributes = 0x00000100,
+            FileListFileName = 0x00000200,
+            RunCount = 0x00000400,
+            DateRun = 0x00000800,
+            DateRecentlyChanged = 0x00001000,
+            HighlightedFileName = 0x00002000,
+            HighlightedPath = 0x00004000,
+            HighlightedFullPathAndFileName = 0x00008000,
         }
 
         /// <summary>
@@ -145,9 +163,10 @@ namespace Wox.Plugin.Everything.Everything
                     keyWord = keyWord.Substring(1);
                 }
 
-                EverythingApiDllImport.Everything_SetSearchW(keyWord);
+                EverythingApiDllImport.Everything_SetRequestFlags(RequestFlag.HighlightedFileName | RequestFlag.HighlightedFullPathAndFileName);
                 EverythingApiDllImport.Everything_SetOffset(offset);
                 EverythingApiDllImport.Everything_SetMax(maxCount);
+                EverythingApiDllImport.Everything_SetSearchW(keyWord);
 
                 if (token.IsCancellationRequested)
                 {
@@ -162,16 +181,30 @@ namespace Wox.Plugin.Everything.Everything
                 }
 
                 var results = new List<SearchResult>();
-                for (int idx = 0; idx < EverythingApiDllImport.Everything_GetNumResults(); ++idx)
+                int count = EverythingApiDllImport.Everything_GetNumResults();
+                for (int idx = 0; idx < count; ++idx)
                 {
                     if (token.IsCancellationRequested)
                     {
                         return null;
                     }
+                    // https://www.voidtools.com/forum/viewtopic.php?t=8169
+                    string fileNameHighted = Marshal.PtrToStringUni(EverythingApiDllImport.Everything_GetResultHighlightedFileNameW(idx));
+                    string fullPathHighted = Marshal.PtrToStringUni(EverythingApiDllImport.Everything_GetResultHighlightedFullPathAndFileNameW(idx));
+                    if (fileNameHighted == null | fullPathHighted == null)
+                    {
+                        CheckAndThrowExceptionOnError();
+                    }
+                    ConvertHightlightFormat(fileNameHighted, out List<int> fileNameHightlightData, out string fileName);
+                    ConvertHightlightFormat(fullPathHighted, out List<int> fullPathHightlightData, out string fullPath);
 
-                    EverythingApiDllImport.Everything_GetResultFullPathNameW(idx, _buffer, BufferSize);
-
-                    var result = new SearchResult { FullPath = _buffer.ToString() };
+                    var result = new SearchResult
+                    {
+                        FileName = fileName,
+                        FileNameHightData = fileNameHightlightData,
+                        FullPath = fullPath,
+                        FullPathHightData = fullPathHightlightData,
+                    };
                     if (EverythingApiDllImport.Everything_IsFolderResult(idx))
                         result.Type = ResultType.Folder;
                     else if (EverythingApiDllImport.Everything_IsFileResult(idx))
@@ -184,6 +217,31 @@ namespace Wox.Plugin.Everything.Everything
 
                 return results;
             }
+        }
+
+        private static void ConvertHightlightFormat(string contentHightlighted, out List<int> hightlightData, out string fn)
+        {
+            hightlightData = new List<int>();
+            StringBuilder content = new StringBuilder();
+            bool flag = false;
+            char[] contentArray = contentHightlighted.ToCharArray();
+            for (int i = 0; i < contentArray.Length; i++)
+            {
+                char current = contentHightlighted[i];
+                if (current == '*')
+                {
+                    flag = !flag;
+                }
+                else
+                {
+                    if (flag)
+                    {
+                        hightlightData.Add(i);
+                    }
+                    content.Append(current);
+                }
+            }
+            fn = content.ToString();
         }
 
         [DllImport("kernel32.dll")]

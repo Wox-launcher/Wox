@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Wox.Plugin.Everything.Everything
@@ -85,6 +86,23 @@ namespace Wox.Plugin.Everything.Everything
 
         [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
         internal static extern void Everything_GetResultFullPathNameW(int nIndex, StringBuilder lpString, int nMaxCount);
+        // https://www.voidtools.com/forum/viewtopic.php?t=8169
+        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
+        public static extern IntPtr Everything_GetResultFileNameW(int nIndex);
+        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
+        public static extern IntPtr Everything_GetResultHighlightedPathW(int nIndex);
+        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
+        public static extern IntPtr Everything_GetResultHighlightedFileNameW(int nIndex);
+        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
+        public static extern IntPtr Everything_GetResultHighlightedFullPathAndFileNameW(int nIndex);
+        [DllImport(Main.DLL)]
+        public static extern int Everything_GetMajorVersion();
+        [DllImport(Main.DLL)]
+        public static extern int Everything_GetMinorVersion();
+        [DllImport(Main.DLL)]
+        public static extern int Everything_GetRevision();
+        [DllImport(Main.DLL)]
+        public static extern void Everything_SetRequestFlags(EverythingApi.RequestFlag flag);
 
         [DllImport(Main.DLL)]
         internal static extern void Everything_Reset();
