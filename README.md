@@ -43,7 +43,7 @@ Option 2: download `Wox.*.exe`, which only include wox itself. You may install E
     1. Download `.exe` [installer](https://www.voidtools.com/)
     2. "Install Everything Service" is checked
     3. Use x64 if your windows is x64
-    4. Version >= 1.3.4.686 is supported
+    4. Version >= 1.4.1 is supported
   - [Optional] Use Python plugins
     1. install [python3](https://www.python.org/downloads/)
     2. add it to `%PATH%` or set it in WoX settings
