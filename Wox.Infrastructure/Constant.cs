@@ -9,10 +9,11 @@ namespace Wox.Infrastructure
     public static class Constant
     {
         public const string Wox = "Wox";
+        public static readonly string WoxExecutable = $"{Wox}.exe";
         public const string Plugins = "Plugins";
 
         private static Assembly Assembly = Assembly.GetExecutingAssembly();
-        public static string ExecutablePath = Assembly.Location.NonNull();
+        public static string ExecutablePath = Path.Combine(Path.GetDirectoryName(Assembly.Location), WoxExecutable);
         public static string Version = FileVersionInfo.GetVersionInfo(ExecutablePath).ProductVersion;
 
         public static string ProgramDirectory = Directory.GetParent(ExecutablePath).ToString();
