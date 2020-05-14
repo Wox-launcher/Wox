@@ -18,15 +18,15 @@ namespace Wox.Plugin.ControlPanel
         public void Init(PluginInitContext context)
         {
             this.context = context;
-            controlPanelItems = ControlPanelList.Create(48);
             iconFolder = Path.Combine(context.CurrentPluginMetadata.PluginDirectory, @"Images\ControlPanelIcons\");
-            fileType = ".bmp";
-
             if (!Directory.Exists(iconFolder))
             {
                 Directory.CreateDirectory(iconFolder);
             }
 
+            fileType = ".bmp";
+            controlPanelItems = ControlPanelList.Create(32, iconFolder, fileType);
+            
             foreach (ControlPanelItem item in controlPanelItems)
             {
                 if (!File.Exists(iconFolder + item.GUID + fileType) && item.Icon != null)
