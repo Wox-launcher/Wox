@@ -528,7 +528,7 @@ namespace Wox.ViewModel
                     Results.Clear();
                     Results.Visbility = Visibility.Collapsed;
                 }
-            }, token);
+            }, token).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
 
         }
 
