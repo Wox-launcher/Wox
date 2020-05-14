@@ -20,7 +20,7 @@ namespace Wox.Plugin.Everything
     {
 
         public const string DLL = "Everything.dll";
-        private readonly IEverythingApi _api = new EverythingApi();
+        private readonly EverythingApi _api = new EverythingApi();
 
 
 
@@ -47,7 +47,7 @@ namespace Wox.Plugin.Everything
 
                 try
                 {
-                    var searchList = _api.Search(keyword, cts.Token, maxCount: _settings.MaxSearchCount);
+                    var searchList = _api.Search(keyword, cts.Token, _settings.MaxSearchCount);
                     if (searchList == null)
                     {
                         return results;

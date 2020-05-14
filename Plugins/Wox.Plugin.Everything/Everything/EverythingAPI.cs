@@ -9,22 +9,8 @@ using Wox.Plugin.Everything.Everything.Exceptions;
 
 namespace Wox.Plugin.Everything.Everything
 {
-    public interface IEverythingApi
-    {
-        /// <summary>
-        /// Searches the specified key word.
-        /// </summary>
-        /// <param name="keyWord">The key word.</param>
-        /// <param name="token">token that allow cancellation</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="maxCount">The max count.</param>
-        /// <returns></returns>
-        List<SearchResult> Search(string keyWord, CancellationToken token, int maxCount, int offset = 0);
 
-        void Load(string sdkPath);
-    }
-
-    public sealed class EverythingApi : IEverythingApi
+    public sealed class EverythingApi
     {
 
         private readonly object _syncObject = new object();
@@ -144,27 +130,27 @@ namespace Wox.Plugin.Everything.Everything
         /// <param name="offset">The offset.</param>
         /// <param name="maxCount">The max count.</param>
         /// <returns></returns>
-        public List<SearchResult> Search(string keyWord, CancellationToken token, int maxCount, int offset = 0)
+        public List<SearchResult> Search(string keyWord, CancellationToken token, int maxCount)
         {
             if (string.IsNullOrEmpty(keyWord))
                 throw new ArgumentNullException(nameof(keyWord));
-
-            if (offset < 0)
-                throw new ArgumentOutOfRangeException(nameof(offset));
-
             if (maxCount < 0)
                 throw new ArgumentOutOfRangeException(nameof(maxCount));
-
             lock (_syncObject)
             {
+
                 if (keyWord.StartsWith("@"))
                 {
                     EverythingApiDllImport.Everything_SetRegex(true);
                     keyWord = keyWord.Substring(1);
                 }
+                else
+                {
+                    EverythingApiDllImport.Everything_SetRegex(false);
+                }
 
                 EverythingApiDllImport.Everything_SetRequestFlags(RequestFlag.HighlightedFileName | RequestFlag.HighlightedFullPathAndFileName);
-                EverythingApiDllImport.Everything_SetOffset(offset);
+                EverythingApiDllImport.Everything_SetOffset(0);
                 EverythingApiDllImport.Everything_SetMax(maxCount);
                 EverythingApiDllImport.Everything_SetSearchW(keyWord);
 
