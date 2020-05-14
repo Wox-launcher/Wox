@@ -20,7 +20,7 @@ namespace Wox.Plugin.Everything
     {
 
         public const string DLL = "Everything.dll";
-        private readonly IEverythingApi _api = new EverythingApi();
+        private readonly EverythingApi _api = new EverythingApi();
 
 
 
@@ -47,7 +47,7 @@ namespace Wox.Plugin.Everything
 
                 try
                 {
-                    var searchList = _api.Search(keyword, cts.Token, maxCount: _settings.MaxSearchCount);
+                    var searchList = _api.Search(keyword, cts.Token, _settings.MaxSearchCount);
                     if (searchList == null)
                     {
                         return results;
@@ -99,11 +99,12 @@ namespace Wox.Plugin.Everything
 
             var r = new Result
             {
-                Title = Path.GetFileName(path),
                 Score = _settings.MaxSearchCount - index,
-                SubTitle = path,
-                IcoPath = path,
-                TitleHighlightData = StringMatcher.FuzzySearch(keyword, Path.GetFileName(path)).MatchData,
+                Title = searchResult.FileName,
+                TitleHighlightData = searchResult.FileNameHightData,
+                SubTitle = searchResult.FullPath,
+                SubTitleHighlightData = searchResult.FullPathHightData,
+                IcoPath = searchResult.FullPath,
                 Action = c =>
                 {
                     bool hide;
@@ -128,7 +129,7 @@ namespace Wox.Plugin.Everything
                     return hide;
                 },
                 ContextData = searchResult,
-                SubTitleHighlightData = StringMatcher.FuzzySearch(keyword, path).MatchData
+                
             };
             return r;
         }
@@ -177,7 +178,7 @@ namespace Wox.Plugin.Everything
             const string sdk = "EverythingSDK";
             var sdkDirectory = Path.Combine(pluginDirectory, sdk, CpuType());
             var sdkPath = Path.Combine(sdkDirectory, DLL);
-            Logger.WoxDebug("Everything", $"sdk path {sdkPath}");
+            Logger.WoxDebug($"sdk path <{sdkPath}>");
             Constant.EverythingSDKPath = sdkPath;
             _api.Load(sdkPath);
         }

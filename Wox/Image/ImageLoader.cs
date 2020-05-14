@@ -34,7 +34,7 @@ namespace Wox.Image
             _defaultFileImage = new BitmapImage(new Uri(defaultFilePath));
             _defaultFileImage.Freeze();
 
-            _cache = new ImageCache(LoadInternal);
+            _cache = new ImageCache();
         }
 
         private static ImageSource LoadInternal(string path)
@@ -144,7 +144,7 @@ namespace Wox.Image
         public static ImageSource Load(string path)
         {
             Logger.WoxDebug($"load begin {path}");
-            var img = _cache.GetOrAdd(path);
+            var img = _cache.GetOrAdd(path, LoadInternal);
             Logger.WoxTrace($"load end {path}");
             return img;
         }
@@ -159,7 +159,15 @@ namespace Wox.Image
         public static ImageSource Load(string path, Action<ImageSource> updateImageCallback)
         {
             Logger.WoxDebug($"load begin {path}");
-            var img = _cache.GetOrAdd(path, _defaultFileImage, updateImageCallback);
+            var img = _cache.GetOrAdd(path, _defaultFileImage, LoadInternal, updateImageCallback);
+            Logger.WoxTrace($"load end {path}");
+            return img;
+        }
+
+        public static ImageSource Load(string path, Func<string, ImageSource> imageFactory, Action<ImageSource> updateImageCallback)
+        {
+            Logger.WoxDebug($"load begin {path}");
+            var img = _cache.GetOrAdd(path, _defaultFileImage, imageFactory, updateImageCallback);
             Logger.WoxTrace($"load end {path}");
             return img;
         }

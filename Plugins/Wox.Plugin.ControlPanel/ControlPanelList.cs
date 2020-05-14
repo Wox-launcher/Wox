@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32;
@@ -49,7 +50,7 @@ namespace Wox.Plugin.ControlPanel
         static RegistryKey nameSpace = Registry.LocalMachine.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ControlPanel\\NameSpace");
         static RegistryKey clsid = Registry.ClassesRoot.OpenSubKey("CLSID");
 
-        public static List<ControlPanelItem> Create(uint iconSize)
+        public static List<ControlPanelItem> Create(uint iconSize, string iconFolder, string fileType)
         {
             int size = (int)iconSize;
             RegistryKey currentKey;
@@ -59,9 +60,9 @@ namespace Wox.Plugin.ControlPanel
             string infoTip;
             Icon myIcon;
 
-            foreach (string key in nameSpace.GetSubKeyNames())
+            foreach (string guid in nameSpace.GetSubKeyNames())
             {
-                currentKey = clsid.OpenSubKey(key);
+                currentKey = clsid.OpenSubKey(guid);
                 if (currentKey != null)
                 {
                     executablePath = getExecutablePath(currentKey);
@@ -74,9 +75,14 @@ namespace Wox.Plugin.ControlPanel
                         {
                             infoTip = getInfoTip(currentKey);
 
-                            myIcon = getIcon(currentKey, size);
-
-                            controlPanelItems.Add(new ControlPanelItem(localizedString, infoTip, key, executablePath, myIcon));
+                            if (!File.Exists(iconFolder + guid + fileType))
+                            {
+                                myIcon = getIcon(currentKey, size);
+                                controlPanelItems.Add(new ControlPanelItem(localizedString, infoTip, guid, executablePath, myIcon));
+                            } else
+                            {
+                                controlPanelItems.Add(new ControlPanelItem(localizedString, infoTip, guid, executablePath));
+                            }
                         }
                     }
                 }

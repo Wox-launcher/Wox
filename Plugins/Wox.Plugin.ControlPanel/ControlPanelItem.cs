@@ -21,5 +21,12 @@ namespace Wox.Plugin.ControlPanel
             Icon = newIcon;
             GUID = newGUID;
         }
+        public ControlPanelItem(string newLocalizedString, string newInfoTip, string newGUID, ProcessStartInfo newExecutablePath)
+        {
+            LocalizedString = newLocalizedString;
+            InfoTip = newInfoTip;
+            ExecutablePath = newExecutablePath;
+            GUID = newGUID;
+        }
     }
 }
