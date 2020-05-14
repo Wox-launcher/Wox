@@ -375,6 +375,11 @@ namespace Wox.Plugin.Program.Programs
 
                     string key = resourceReference.Substring(prefix.Length);
                     string parsed;
+                    // DisplayName
+                    // Microsoft.ScreenSketch_10.1907.2471.0_x64__8wekyb3d8bbwe -> ms-resource:AppName/Text
+                    // Microsoft.OneConnect_5.2002.431.0_x64__8wekyb3d8bbwe -> ms-resource:/OneConnectStrings/OneConnect/AppDisplayName
+                    // ImmersiveControlPanel -> ms-resource:DisplayName
+                    // Microsoft.ConnectivityStore_1.1604.4.0_x64__8wekyb3d8bbwe -> ms-resource://Microsoft.ConnectivityStore/MSWifiResources/AppDisplayName
                     if (key.StartsWith("//"))
                     {
                         parsed = $"{prefix}{key}";
@@ -386,13 +391,13 @@ namespace Wox.Plugin.Program.Programs
                             key = $"/{key}";
                         }
 
-                        if (!key.ToLower().Contains("resources"))
+                        if (!key.ToLower().Contains("resources") && key.Count(c => c == '/') <= 3)
                         {
                             key = $"/Resources{key}";
                         }
                         parsed = $"{prefix}//{packageName}{key}";
                     }
-
+                    Logger.WoxDebug($"resourceReference {resourceReference} parsed <{parsed}> package <{packageFullName}>");
                     result = ResourceFromPriInternal(packageFullName, parsed);
                 }
                 else
