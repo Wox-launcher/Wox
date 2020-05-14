@@ -134,16 +134,19 @@ namespace Wox.ViewModel
                 var plugin = (IResultUpdated)pair.Plugin;
                 plugin.ResultsUpdated += (s, e) =>
                 {
-                    CancellationToken token = _updateSource.Token;
-                    // todo async update don't need count down
-                    // init with 1 since every ResultsForUpdate will be countdown.signal()
-                    CountdownEvent countdown = new CountdownEvent(1);
-                    Task.Run(() =>
+                    if (!_updateSource.IsCancellationRequested)
                     {
-                        if (token.IsCancellationRequested) { return; }
-                        PluginManager.UpdatePluginMetadata(e.Results, pair.Metadata, e.Query);
-                        _resultsQueue.Add(new ResultsForUpdate(e.Results, pair.Metadata, e.Query, token, countdown));
-                    }, token);
+                        CancellationToken token = _updateSource.Token;
+                        // todo async update don't need count down
+                        // init with 1 since every ResultsForUpdate will be countdown.signal()
+                        CountdownEvent countdown = new CountdownEvent(1);
+                        Task.Run(() =>
+                        {
+                            if (token.IsCancellationRequested) { return; }
+                            PluginManager.UpdatePluginMetadata(e.Results, pair.Metadata, e.Query);
+                            _resultsQueue.Add(new ResultsForUpdate(e.Results, pair.Metadata, e.Query, token, countdown));
+                        }, token);
+                    }
                 };
             }
         }
