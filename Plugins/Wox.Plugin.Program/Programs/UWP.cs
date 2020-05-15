@@ -401,8 +401,7 @@ namespace Wox.Plugin.Program.Programs
                         }
                         parsed = $"{prefix}//{packageName}{key}";
                     }
-                    string message = $"resourceReference {resourceReference} parsed <{parsed}> package <{packageFullName}>";
-                    Logger.WoxDebug(message);
+                    Logger.WoxTrace($"resourceReference {resourceReference} parsed <{parsed}> package <{packageFullName}>");
                     try
                     {
                         result = ResourceFromPriInternal(packageFullName, parsed);
