@@ -93,12 +93,11 @@ namespace Wox.Image
             bool imageInsideWoxDirectory = IsSubdirectory(parent1, subPath) || IsSubdirectory(parent2, subPath);
             if (normalImage && imageInsideWoxDirectory)
             {
-                var bitmapImage = new BitmapImage(new Uri(path))
+                image = new BitmapImage(new Uri(path))
                 {
                     DecodePixelHeight = 32,
                     DecodePixelWidth = 32
                 };
-                image = bitmapImage;
                 image.Freeze();
                 return image;
             }
@@ -159,10 +158,16 @@ namespace Wox.Image
 
         private static ImageSource GetErrorImage()
         {
-            ShellFile shellFile = ShellFile.FromFilePath(Constant.ErrorIcon);
-            // small is (32, 32), refer comment above
-            ImageSource image = shellFile.Thumbnail.SmallBitmapSource;
-            image.Freeze();
+            ImageSource image = _cache.GetOrAdd(Constant.ErrorIcon, (_) =>
+            {
+                BitmapImage bitmap = new BitmapImage(new Uri(Constant.ErrorIcon))
+                {
+                    DecodePixelHeight = 32,
+                    DecodePixelWidth = 32
+                };
+                bitmap.Freeze();
+                return bitmap;
+            });
             return image;
         }
 
