@@ -8,6 +8,7 @@ using Microsoft.WindowsAPICodePack.Shell;
 using NLog;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
+using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Image
 {
@@ -37,6 +38,24 @@ namespace Wox.Image
             _cache = new ImageCache();
         }
 
+        private static bool IsSubdirectory(DirectoryInfo di1, DirectoryInfo di2)
+        {
+            bool isParent = false;
+            while (di2.Parent != null)
+            {
+                if (di2.Parent.FullName == di1.FullName)
+                {
+                    isParent = true;
+                    break;
+                }
+                else
+                {
+                    di2 = di2.Parent;
+                }
+            }
+            return isParent;
+        }
+
         private static ImageSource LoadInternal(string path)
         {
             Logger.WoxDebug($"load from disk {path}");
@@ -60,13 +79,19 @@ namespace Wox.Image
                 return image;
             }
 
-            if (!Path.IsPathRooted(path))
+            bool normalImage = ImageExtensions.Any(e => path.EndsWith(e));
+            if (!Path.IsPathRooted(path) && normalImage)
             {
                 path = Path.Combine(Constant.ProgramDirectory, "Images", Path.GetFileName(path));
             }
 
-            bool normalImage = ImageExtensions.Any(e => path.EndsWith(e));
-            if (normalImage)
+
+            var parent1 = new DirectoryInfo(Constant.ProgramDirectory);
+            var parent2 = new DirectoryInfo(DataLocation.DataDirectory());
+            var subPath = new DirectoryInfo(path);
+            Logger.WoxTrace($"{path} {subPath} {parent1} {parent2}");
+            bool imageInsideWoxDirectory = IsSubdirectory(parent1, subPath) || IsSubdirectory(parent2, subPath);
+            if (normalImage && imageInsideWoxDirectory)
             {
                 var bitmapImage = new BitmapImage(new Uri(path))
                 {
