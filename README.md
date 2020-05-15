@@ -75,3 +75,11 @@ Documentation
 - [Wiki](https://github.com/Wox-launcher/Wox/wiki)
 - Outdated doc: [WoX doc](http://doc.wox.one).
 - Just ask questions in [issues](https://github.com/Wox-launcher/Wox/issues) for now.
+
+Thanks
+------
+
+I would like to thank
+
+- [Raygun](https://raygun.com/) for their free crash reporting account.
+- JetBrains for Open Source licence.
