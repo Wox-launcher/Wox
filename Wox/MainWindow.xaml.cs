@@ -5,6 +5,9 @@ using System.Windows.Input;
 using System.Windows.Media.Animation;
 using System.Windows.Controls;
 using System.Windows.Forms;
+
+using NLog;
+using Wox.Infrastructure.Logger;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
 using Wox.Helper;
@@ -18,19 +21,17 @@ using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using MessageBox = System.Windows.MessageBox;
 using NotifyIcon = System.Windows.Forms.NotifyIcon;
 
+
 namespace Wox
 {
     public partial class MainWindow
     {
 
-        #region Private Fields
-
         private readonly Storyboard _progressBarStoryboard = new Storyboard();
         private Settings _settings;
         private NotifyIcon _notifyIcon;
         private MainViewModel _viewModel;
-
-        #endregion
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
         public MainWindow(MainViewModel mainVM)
         {
@@ -154,7 +155,18 @@ namespace Wox
 
         private void OnMouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ChangedButton == MouseButton.Left) DragMove();
+            if (e.ChangedButton == MouseButton.Left)
+            {
+                try
+                {
+                    DragMove();
+                }
+                catch (InvalidOperationException ex)
+                {
+                    // https://github.com/Wox-launcher/Wox/issues/811
+                    Logger.WoxError($"Cannot dray {ex.Message}");
+                }
+            }
         }
 
         private void OnPreviewMouseButtonDown(object sender, MouseButtonEventArgs e)
