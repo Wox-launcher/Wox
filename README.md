@@ -39,9 +39,8 @@ Installation
   - .NET >= 4.6.2 or Windows version >= 10 1607 (Anniversary Update)
   - [Optional] Integrate with everything
     1. Download `.exe` [installer](https://www.voidtools.com/)
-    2. "Install Everything Service" is checked
-    3. Use x64 if your windows is x64
-    4. Version >= 1.4.1 is supported
+    2. Use x64 if your windows is x64
+    3. Version >= 1.4.1 is supported
   - [Optional] Use Python plugins
     1. install [python3](https://www.python.org/downloads/)
     2. add it to `%PATH%` or set it in WoX settings

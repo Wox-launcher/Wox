@@ -2,7 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:system="clr-namespace:System;assembly=mscorlib">
 
-    <system:String x:Key="wox_plugin_everything_is_not_running">Everything Service 尚未啟動</system:String>
+    <system:String x:Key="wox_plugin_everything_is_not_running">Everything Client 尚未啟動</system:String>
     <system:String x:Key="wox_plugin_everything_query_error">Everything 套件發生錯誤（Enter 複製具體錯誤訊息）</system:String>
     <system:String x:Key="wox_plugin_everything_copied">複製成功</system:String>
     <system:String x:Key="wox_plugin_everything_canot_start">無法啟動 {0}</system:String>
