@@ -30,12 +30,10 @@ Features
 Installation
 ------------
 
-Download from [releases](https://github.com/Wox-launcher/Wox/releases).
-
-Windows may complain about security due to code not being signed. This will be fixed later. 
-
-Option 1: download `Wox-Full-Installer.*.exe`, which include all dependency.
-Option 2: download `Wox.*.exe`, which only include wox itself. You may install Everything and Python using below instruction.
+- Download from [releases](https://github.com/Wox-launcher/Wox/releases).
+  - Option 1: download `Wox-Full-Installer.*.exe`, which include all dependency.
+  - Option 2: download `Wox.*.exe`, which only include wox itself. You may install Everything and Python using below instruction.
+- Windows may complain about security due to code not being signed. This will be fixed later. 
 
 - Requirements:
   - .NET >= 4.6.2 or Windows version >= 10 1607 (Anniversary Update)
