@@ -49,14 +49,21 @@ namespace Wox.Image
 
         private void ExpirationCheck(object state)
         {
-            DateTime now = DateTime.Now;
-            Logger.WoxDebug($"ExpirationCheck start {now}");
-            List<KeyValuePair<string, CacheEntry>> pairs = _cache.Where(pair => now > pair.Value.ExpiredDate).ToList();
-
-            foreach (KeyValuePair<string, CacheEntry> pair in pairs)
+            try
             {
-                bool success = _cache.TryRemove(pair.Key, out CacheEntry entry);
-                Logger.WoxDebug($"remove expired: <{success}> entry: <{pair.Key}>");
+                DateTime now = DateTime.Now;
+                Logger.WoxDebug($"ExpirationCheck start {now}");
+                List<KeyValuePair<string, CacheEntry>> pairs = _cache.Where(pair => now > pair.Value.ExpiredDate).ToList();
+
+                foreach (KeyValuePair<string, CacheEntry> pair in pairs)
+                {
+                    bool success = _cache.TryRemove(pair.Key, out CacheEntry entry);
+                    Logger.WoxDebug($"remove expired: <{success}> entry: <{pair.Key}>");
+                }
+            } catch (Exception e)
+            {
+                e.Data.Add(nameof(state), state);
+                Logger.WoxError($"error check image cache with state: {state}", e);
             }
         }
 
