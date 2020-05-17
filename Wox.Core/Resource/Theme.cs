@@ -227,7 +227,8 @@ namespace Wox.Core.Resource
 
         private void AutoReload()
         {
-            if (Environment.OSVersion.Version >= new Version(10, 0)) {
+            var support = Environment.OSVersion.Version.Major >= new Version(10, 0).Major;
+            if (support) {
                 var uiSettings = new Windows.UI.ViewManagement.UISettings();
                 uiSettings.ColorValuesChanged +=
                     (sender, args) => {
