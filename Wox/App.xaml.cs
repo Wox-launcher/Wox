@@ -32,7 +32,6 @@ namespace Wox
         private static bool _disposed;
         private MainViewModel _mainVM;
         private SettingWindowViewModel _settingsVM;
-        private readonly Updater _updater = new Updater(Wox.Properties.Settings.Default.GithubRepo);
         private readonly Portable _portable = new Portable();
         private readonly Alphabet _alphabet = new Alphabet();
         private StringMatcher _stringMatcher;
@@ -91,7 +90,7 @@ namespace Wox
 
                 ImageLoader.Initialize();
 
-                _settingsVM = new SettingWindowViewModel(_updater, _portable);
+                _settingsVM = new SettingWindowViewModel(_portable);
 
                 _alphabet.Initialize();
                 _stringMatcher = new StringMatcher(_alphabet);
@@ -119,7 +118,6 @@ namespace Wox
                 RegisterExitEvents();
 
                 AutoStartup();
-                AutoUpdates();
 
                 ParseCommandLineArgs(SingleInstance<App>.CommandLineArgs);
                 _mainVM.MainWindowVisibility = Settings.Instance.HideOnStartup ? Visibility.Hidden : Visibility.Visible;
@@ -139,27 +137,6 @@ namespace Wox
                     SettingWindow.SetStartup();
                 }
             }
-        }
-
-        //[Conditional("RELEASE")]
-        private void AutoUpdates()
-        {
-            Task.Run(async () =>
-            {
-                if (Settings.Instance.AutoUpdates)
-                {
-                    // check udpate every 5 hours
-                    var timer = new System.Timers.Timer(1000 * 60 * 60 * 5);
-                    timer.Elapsed += async (s, e) =>
-                    {
-                        await _updater.UpdateApp(true, Settings.Instance.UpdateToPrereleases);
-                    };
-                    timer.Start();
-
-                    // check updates on startup
-                    await _updater.UpdateApp(true, Settings.Instance.UpdateToPrereleases);
-                }
-            }).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
         }
 
         private void RegisterExitEvents()
