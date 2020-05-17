@@ -35,6 +35,7 @@ namespace Wox.Image
         private readonly object _updateLock = new object();
 
         private readonly ConcurrentDictionary<string, CacheEntry> _cache;
+        BlockingCollection<CacheEntry> _cacheQueue;
         private readonly SortedSet<CacheEntry> _cacheSorted;
 
         private readonly System.Threading.Timer timer;
