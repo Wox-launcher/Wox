@@ -228,6 +228,7 @@ namespace Wox.Core.Resource
         private void AutoReload()
         {
             var support = Environment.OSVersion.Version.Major >= new Version(10, 0).Major;
+            Logger.WoxInfo($"Runtime Version {Environment.OSVersion.Version} {support}");
             if (support) {
                 var uiSettings = new Windows.UI.ViewManagement.UISettings();
                 uiSettings.ColorValuesChanged +=
