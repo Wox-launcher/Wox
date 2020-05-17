@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-
+using ICSharpCode.SharpZipLib.Core;
 using Microsoft.WindowsAPICodePack.Shell;
 using NLog;
 using Wox.Infrastructure;
@@ -80,12 +80,21 @@ namespace Wox.Image
 
             if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
             {
-                var bitmapImage = new BitmapImage(new Uri(path))
+                try
                 {
-                    DecodePixelHeight = 32,
-                    DecodePixelWidth = 32
-                };
-                image = bitmapImage;
+                    image = new BitmapImage(new Uri(path))
+                    {
+                        DecodePixelHeight = 32,
+                        DecodePixelWidth = 32
+                    };
+                }
+                catch (Exception e)
+                {
+                    e.Data.Add(nameof(path), path);
+                    Logger.WoxError($"cannot load {path}", e);
+                    return GetErrorImage();
+                }
+                image.Freeze();
                 return image;
             }
 
@@ -103,20 +112,38 @@ namespace Wox.Image
             bool imageInsideWoxDirectory = IsSubdirectory(parent1, subPath) || IsSubdirectory(parent2, subPath);
             if (normalImage && imageInsideWoxDirectory)
             {
-                image = new BitmapImage(new Uri(path))
+                try
                 {
-                    DecodePixelHeight = 32,
-                    DecodePixelWidth = 32
-                };
+                    image = new BitmapImage(new Uri(path))
+                    {
+                        DecodePixelHeight = 32,
+                        DecodePixelWidth = 32
+                    };
+                }
+                catch (Exception e)
+                {
+                    e.Data.Add(nameof(path), path);
+                    Logger.WoxError($"cannot load {path}", e);
+                    return GetErrorImage();
+                }
                 image.Freeze();
                 return image;
             }
 
             if (Directory.Exists(path))
             {
-                // can be extended to support guid things
-                ShellObject shell = ShellFile.FromParsingName(path);
-                image = shell.Thumbnail.SmallBitmapSource;
+                try
+                {
+                    // can be extended to support guid things
+                    ShellObject shell = ShellFile.FromParsingName(path);
+                    image = shell.Thumbnail.SmallBitmapSource;
+                }
+                catch (Exception e)
+                {
+                    e.Data.Add(nameof(path), path);
+                    Logger.WoxError($"cannot load {path}", e);
+                    return GetErrorImage();
+                }
                 image.Freeze();
                 return image;
             }
