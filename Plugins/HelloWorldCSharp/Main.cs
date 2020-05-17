@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -15,7 +16,7 @@ namespace HelloWorldCSharp
             {
                 Title = "Hello World from CSharp",
                 SubTitle = $"Query: {query.Search}",
-                IcoPath = "app.png"
+                IcoPath = Path.Combine("Images", "app.png")
             };
             return new List<Result> {result};
         }
