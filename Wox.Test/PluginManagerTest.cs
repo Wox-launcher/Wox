@@ -23,9 +23,8 @@ namespace Wox.Test
             new App();
             ImageLoader.Initialize();
 
-            Updater updater = new Updater("");
             Portable portable = new Portable();
-            SettingWindowViewModel settingsVm = new SettingWindowViewModel(updater, portable);
+            SettingWindowViewModel settingsVm = new SettingWindowViewModel(portable);
 
             Alphabet alphabet = new Alphabet();
             alphabet.Initialize();
