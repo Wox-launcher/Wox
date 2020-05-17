@@ -34,7 +34,7 @@ namespace Wox.Image
         private const int _cacheLimit = 500;
         private readonly object _updateLock = new object();
 
-        private readonly ConcurrentDictionary<String, CacheEntry> _cache;
+        private readonly ConcurrentDictionary<string, CacheEntry> _cache;
         private readonly SortedSet<CacheEntry> _cacheSorted;
 
         private readonly System.Threading.Timer timer;
@@ -43,6 +43,7 @@ namespace Wox.Image
         public ImageCache()
         {
             _cache = new ConcurrentDictionary<string, CacheEntry>();
+            _cacheQueue = new BlockingCollection<CacheEntry>();
             _cacheSorted = new SortedSet<CacheEntry>(new CacheEntryComparer());
             timer = new System.Threading.Timer(ExpirationCheck, null, _checkInterval, _checkInterval);
         }
@@ -60,7 +61,8 @@ namespace Wox.Image
                     bool success = _cache.TryRemove(pair.Key, out CacheEntry entry);
                     Logger.WoxDebug($"remove expired: <{success}> entry: <{pair.Key}>");
                 }
-            } catch (Exception e)
+            }
+            catch (Exception e)
             {
                 e.Data.Add(nameof(state), state);
                 Logger.WoxError($"error check image cache with state: {state}", e);
@@ -82,7 +84,8 @@ namespace Wox.Image
             {
                 entry = Add(key, imageFactory);
                 return entry.Image;
-            } else
+            }
+            else
             {
                 UpdateDate(entry);
                 return entry.Image;
@@ -105,7 +108,10 @@ namespace Wox.Image
             }
             else
             {
-                UpdateDate(getEntry);
+                var t = Task.Run(() =>
+                {
+                    UpdateDate(getEntry);
+                }).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
                 return getEntry.Image;
             }
         }
@@ -135,12 +141,9 @@ namespace Wox.Image
 
         private void UpdateDate(CacheEntry entry)
         {
-            lock (_updateLock)
-            {
-                _cacheSorted.Remove(entry);
-                entry.ExpiredDate = DateTime.Now + _expiredTime;
-                _cacheSorted.Add(entry);
-            }
+            _cacheSorted.Remove(entry);
+            entry.ExpiredDate = DateTime.Now + _expiredTime;
+            _cacheSorted.Add(entry);
         }
     }
 
