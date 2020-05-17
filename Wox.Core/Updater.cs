@@ -88,6 +88,10 @@ namespace Wox.Core
             {
                 Logger.WoxError($"Please check your connection and proxy settings to api.github.com.", e);
             }
+            catch (Exception e)
+            {
+                Logger.WoxError($"cannot check update", e);
+            }
 
         }
 
