@@ -28,13 +28,23 @@ namespace Wox.Image
 
         private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
         private static ImageSource _defaultFileImage;
+        private static ImageSource _errorImage;
 
         public static void Initialize()
         {
             string defaultFilePath = Path.Combine(Constant.ImagesDirectory, "file.png");
-            _defaultFileImage = new BitmapImage(new Uri(defaultFilePath));
+            _defaultFileImage = new BitmapImage(new Uri(defaultFilePath))
+            {
+                DecodePixelHeight = 32,
+                DecodePixelWidth = 32
+            };
             _defaultFileImage.Freeze();
-
+            _errorImage = new BitmapImage(new Uri(Constant.ErrorIcon))
+            {
+                DecodePixelHeight = 32,
+                DecodePixelWidth = 32
+            };
+            _errorImage.Freeze();
             _cache = new ImageCache();
         }
 
@@ -158,17 +168,7 @@ namespace Wox.Image
 
         private static ImageSource GetErrorImage()
         {
-            ImageSource image = _cache.GetOrAdd(Constant.ErrorIcon, (_) =>
-            {
-                BitmapImage bitmap = new BitmapImage(new Uri(Constant.ErrorIcon))
-                {
-                    DecodePixelHeight = 32,
-                    DecodePixelWidth = 32
-                };
-                bitmap.Freeze();
-                return bitmap;
-            });
-            return image;
+            return _errorImage;
         }
 
         public static ImageSource Load(string path)
