@@ -32,7 +32,6 @@ namespace Wox.Image
         private readonly TimeSpan _expiredTime = new TimeSpan(24, 0, 0);
         private readonly TimeSpan _checkInterval = new TimeSpan(0, 1, 0);
         private const int _cacheLimit = 500;
-        private readonly object _updateLock = new object();
 
         private readonly ConcurrentDictionary<string, CacheEntry> _cache;
         BlockingCollection<CacheEntry> _cacheQueue;
@@ -47,6 +46,26 @@ namespace Wox.Image
             _cacheQueue = new BlockingCollection<CacheEntry>();
             _cacheSorted = new SortedSet<CacheEntry>(new CacheEntryComparer());
             timer = new System.Threading.Timer(ExpirationCheck, null, _checkInterval, _checkInterval);
+            Task.Run(() =>
+            {
+                while (true)
+                {
+                    CacheEntry entry = _cacheQueue.Take();
+                    int currentCount = _cache.Count;
+                    if (currentCount > _cacheLimit)
+                    {
+                        CacheEntry min = _cacheSorted.Min;
+                        _cacheSorted.Remove(min);
+                        bool removeResult = _cache.TryRemove(min.Key, out _);
+                        Logger.WoxDebug($"remove exceed: <{removeResult}> entry: <{min.Key}>");
+                    }
+                    else
+                    {
+                        _cacheSorted.Remove(entry);
+                    }
+                    _cacheSorted.Add(entry);
+                }
+            }).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
         }
 
         private void ExpirationCheck(object state)
@@ -109,42 +128,25 @@ namespace Wox.Image
             }
             else
             {
-                var t = Task.Run(() =>
-                {
-                    UpdateDate(getEntry);
-                }).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
+                UpdateDate(getEntry);
                 return getEntry.Image;
             }
         }
 
         private CacheEntry Add(string key, Func<string, ImageSource> imageFactory)
         {
-            lock (_updateLock)
-            {
-                CacheEntry entry;
-                ImageSource image = imageFactory(key);
-                entry = new CacheEntry(key, image, DateTime.Now + _expiredTime);
-                _cache[key] = entry;
-                _cacheSorted.Add(entry);
-
-                int currentCount = _cache.Count;
-                if (currentCount > _cacheLimit)
-                {
-                    CacheEntry min = _cacheSorted.Min;
-                    _cacheSorted.Remove(min);
-                    bool removeResult = _cache.TryRemove(min.Key, out _);
-                    Logger.WoxDebug($"remove exceed: <{removeResult}> entry: <{min.Key}>");
-                }
-
-                return entry;
-            }
+            CacheEntry entry;
+            ImageSource image = imageFactory(key);
+            entry = new CacheEntry(key, image, DateTime.Now + _expiredTime);
+            _cache[key] = entry;
+            _cacheQueue.Add(entry);
+            return entry;
         }
 
         private void UpdateDate(CacheEntry entry)
         {
-            _cacheSorted.Remove(entry);
             entry.ExpiredDate = DateTime.Now + _expiredTime;
-            _cacheSorted.Add(entry);
+            _cacheQueue.Add(entry);
         }
     }
 
