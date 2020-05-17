@@ -44,7 +44,7 @@ namespace Wox.Image
     class ImageCache
     {
         private readonly TimeSpan _expiredTime = new TimeSpan(24, 0, 0);
-        private readonly TimeSpan _checkInterval = new TimeSpan(0, 1, 0);
+        private readonly TimeSpan _checkInterval = new TimeSpan(1, 0, 0);
         private const int _cacheLimit = 500;
 
         private readonly ConcurrentDictionary<string, CacheEntry> _cache;

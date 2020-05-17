@@ -5,6 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Windows.Automation.Peers;
 using Microsoft.Win32;
 
 namespace Wox.Plugin.ControlPanel
@@ -75,14 +76,13 @@ namespace Wox.Plugin.ControlPanel
                         {
                             infoTip = getInfoTip(currentKey);
 
-                            if (!File.Exists(iconFolder + guid + fileType))
+                            string iconPath = Path.Combine(iconFolder, $"{guid}{fileType}");
+                            if (!File.Exists(iconPath))
                             {
                                 myIcon = getIcon(currentKey, size);
-                                controlPanelItems.Add(new ControlPanelItem(localizedString, infoTip, guid, executablePath, myIcon));
-                            } else
-                            {
-                                controlPanelItems.Add(new ControlPanelItem(localizedString, infoTip, guid, executablePath));
+                                myIcon.ToBitmap().Save(iconPath);
                             }
+                            controlPanelItems.Add(new ControlPanelItem(localizedString, infoTip, guid, executablePath, iconPath));
                         }
                     }
                 }
@@ -109,7 +109,7 @@ namespace Wox.Plugin.ControlPanel
                 string input = "\"" + Environment.ExpandEnvironmentVariables(currentKey.OpenSubKey("Shell\\Open\\Command").GetValue(null).ToString()) + "\"";
                 executablePath.FileName = "cmd.exe";
                 executablePath.Arguments = "/C " + input;
-                executablePath.WindowStyle = ProcessWindowStyle.Hidden;   
+                executablePath.WindowStyle = ProcessWindowStyle.Hidden;
             }
             else
             {

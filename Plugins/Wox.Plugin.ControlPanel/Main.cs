@@ -1,10 +1,12 @@
-﻿using System;
+﻿using NLog;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Wox.Infrastructure;
+using Wox.Infrastructure.Logger;
 
 namespace Wox.Plugin.ControlPanel
 {
@@ -14,6 +16,8 @@ namespace Wox.Plugin.ControlPanel
         private List<ControlPanelItem> controlPanelItems = new List<ControlPanelItem>();
         private string iconFolder;
         private string fileType;
+
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
         public void Init(PluginInitContext context)
         {
@@ -26,14 +30,6 @@ namespace Wox.Plugin.ControlPanel
 
             fileType = ".bmp";
             controlPanelItems = ControlPanelList.Create(32, iconFolder, fileType);
-            
-            foreach (ControlPanelItem item in controlPanelItems)
-            {
-                if (!File.Exists(iconFolder + item.GUID + fileType) && item.Icon != null)
-                {
-                    item.Icon.ToBitmap().Save(iconFolder + item.GUID + fileType);
-                }
-            }
         }
 
         public List<Result> Query(Query query)
@@ -53,17 +49,20 @@ namespace Wox.Plugin.ControlPanel
                         Title = item.LocalizedString,
                         SubTitle = item.InfoTip,
                         Score = item.Score,
-                        IcoPath = Path.Combine(context.CurrentPluginMetadata.PluginDirectory,
-                            @"Images\\ControlPanelIcons\\" + item.GUID + fileType),
+                        IcoPath = item.IconPath,
                         Action = e =>
                         {
                             try
                             {
                                 Process.Start(item.ExecutablePath);
                             }
-                            catch (Exception)
+                            catch (Exception ex)
                             {
-                                //Silently Fail for now.. todo
+                                ex.Data.Add(nameof(item.LocalizedString), item.LocalizedString);
+                                ex.Data.Add(nameof(item.ExecutablePath), item.ExecutablePath);
+                                ex.Data.Add(nameof(item.IconPath), item.IconPath);
+                                ex.Data.Add(nameof(item.GUID), item.GUID);
+                                Logger.WoxError($"cannot start control panel item {item.ExecutablePath}", ex);
                             }
                             return true;
                         }
