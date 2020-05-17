@@ -27,6 +27,20 @@ namespace Wox.Image
         }
     }
 
+    class UpdateCallbackEntry
+    {
+        internal string Key;
+        internal Func<string, ImageSource> ImageFactory;
+        internal Action<ImageSource> UpdateImageCallback;
+
+        public UpdateCallbackEntry(string key, Func<string, ImageSource> imageFactory, Action<ImageSource> updateImageCallback)
+        {
+            Key = key;
+            ImageFactory = imageFactory;
+            UpdateImageCallback = updateImageCallback;
+        }
+    }
+
     class ImageCache
     {
         private readonly TimeSpan _expiredTime = new TimeSpan(24, 0, 0);
@@ -36,6 +50,7 @@ namespace Wox.Image
         private readonly ConcurrentDictionary<string, CacheEntry> _cache;
         BlockingCollection<CacheEntry> _cacheQueue;
         private readonly SortedSet<CacheEntry> _cacheSorted;
+        BlockingCollection<UpdateCallbackEntry> _updateQueue;
 
         private readonly System.Threading.Timer timer;
         private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
@@ -43,8 +58,10 @@ namespace Wox.Image
         public ImageCache()
         {
             _cache = new ConcurrentDictionary<string, CacheEntry>();
-            _cacheQueue = new BlockingCollection<CacheEntry>();
             _cacheSorted = new SortedSet<CacheEntry>(new CacheEntryComparer());
+            _cacheQueue = new BlockingCollection<CacheEntry>();
+            _updateQueue = new BlockingCollection<UpdateCallbackEntry>();
+
             timer = new System.Threading.Timer(ExpirationCheck, null, _checkInterval, _checkInterval);
             Task.Run(() =>
             {
@@ -64,6 +81,15 @@ namespace Wox.Image
                         _cacheSorted.Remove(entry);
                     }
                     _cacheSorted.Add(entry);
+                }
+            }).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
+            Task.Run(() =>
+            {
+                while (true)
+                {
+                    UpdateCallbackEntry entry = _updateQueue.Take();
+                    CacheEntry addEntry = Add(entry.Key, entry.ImageFactory);
+                    entry.UpdateImageCallback(addEntry.Image);
                 }
             }).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
         }
@@ -119,11 +145,7 @@ namespace Wox.Image
             bool getResult = _cache.TryGetValue(key, out getEntry);
             if (!getResult)
             {
-                var t = Task.Run(() =>
-                {
-                    CacheEntry addEntry = Add(key, imageFactory);
-                    updateImageCallback(addEntry.Image);
-                }).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
+                _updateQueue.Add(new UpdateCallbackEntry(key, imageFactory, updateImageCallback));
                 return defaultImage;
             }
             else
