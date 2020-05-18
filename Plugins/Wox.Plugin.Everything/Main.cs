@@ -28,7 +28,7 @@ namespace Wox.Plugin.Everything
 
         private Settings _settings;
         private PluginJsonStorage<Settings> _storage;
-        private CancellationTokenSource _cancellationTokenSource;
+        private CancellationTokenSource _updateSource;
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         public void Save()
@@ -38,8 +38,16 @@ namespace Wox.Plugin.Everything
 
         public List<Result> Query(Query query)
         {
-            _cancellationTokenSource?.Cancel(); // cancel if already exist
-            var cts = _cancellationTokenSource = new CancellationTokenSource();
+            if (_updateSource != null && !_updateSource.IsCancellationRequested)
+            {
+                _updateSource.Cancel();
+                Logger.WoxDebug($"cancel init {_updateSource.Token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId} {query.RawQuery}");
+                _updateSource.Dispose();
+            }
+            var source = new CancellationTokenSource();
+            _updateSource = source;
+            var token = source.Token;
+
             var results = new List<Result>();
             if (!string.IsNullOrEmpty(query.Search))
             {
@@ -47,14 +55,12 @@ namespace Wox.Plugin.Everything
 
                 try
                 {
-                    var searchList = _api.Search(keyword, cts.Token, _settings.MaxSearchCount);
-                    if (searchList == null)
-                    {
-                        return results;
-                    }
-
+                    if (token.IsCancellationRequested) { return results; }
+                    var searchList = _api.Search(keyword, token, _settings.MaxSearchCount);
+                    if (token.IsCancellationRequested) { return results; }
                     for (int i = 0; i < searchList.Count; i++)
                     {
+                        if (token.IsCancellationRequested) { return results; }
                         SearchResult searchResult = searchList[i];
                         var r = CreateResult(keyword, searchResult, i);
                         results.Add(r);
