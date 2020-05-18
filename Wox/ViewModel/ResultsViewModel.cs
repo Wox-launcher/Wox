@@ -168,6 +168,12 @@ namespace Wox.ViewModel
                 if (token.IsCancellationRequested) { return Results.ToList(); }
                 List<Result> resultsFromUpdates = updates.SelectMany(u => u.Results).ToList();
 
+                //remove duplicates in updates. 
+                //In WebSearch plugin, updates are added via normal result as well as RegisterResultsUpdatedEvent (from IResultUpdated)
+                var dups = resultsFromUpdates.GroupBy(s => s).Where(s => s.Count() > 1).Select(s => s.First());
+                foreach (var dup in dups)
+                     resultsFromUpdates.Remove(dup);
+
                 if (token.IsCancellationRequested) { return Results.ToList(); }
                 newResults.RemoveAll(r => updates.Any(u => u.ID == r.Result.PluginID));
 
