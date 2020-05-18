@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -13,6 +14,7 @@ using Wox.Plugin.Program.Programs;
 using Wox.Plugin.Program.Views;
 using Stopwatch = Wox.Infrastructure.Stopwatch;
 using System.Threading;
+using Windows.ApplicationModel.Background;
 
 namespace Wox.Plugin.Program
 {
@@ -64,34 +66,62 @@ namespace Wox.Plugin.Program
             _updateSource = source;
             var token = source.Token;
 
-            if (token.IsCancellationRequested) { return new List<Result>(); }
-            var results1 = _win32s.AsParallel()
-                .Where(p => p.Enabled)
-                .Select(p => p.Result(query.Search, _context.API));
-            
-            if (token.IsCancellationRequested) { return new List<Result>(); }
-            var results2 = _uwps.AsParallel()
-                .Where(p => p.Enabled)
-                .Select(p => p.Result(query.Search, _context.API));
+            ConcurrentBag<Result> resultRaw = new ConcurrentBag<Result>();
 
             if (token.IsCancellationRequested) { return new List<Result>(); }
-            var result = results1.Concat(results2)
-                .Where(r => r != null && r.Score > 0)
-                .Where(p => !_settings.IgnoredSequence.Any(entry =>
+            Parallel.ForEach(_win32s, (program, state) =>
             {
-                if (token.IsCancellationRequested) { return false; }
-                if (entry.IsRegex)
+                if (token.IsCancellationRequested) { state.Break(); }
+                if (program.Enabled)
                 {
-                    return Regex.Match(p.Title, entry.EntryString).Success;
+                    var r = program.Result(query.Search, _context.API);
+                    if (r != null && r.Score > 0)
+                    {
+                        resultRaw.Add(r);
+                    }
                 }
-                else
+            });
+            if (token.IsCancellationRequested) { return new List<Result>(); }
+            Parallel.ForEach(_uwps, (program, state) =>
+            {
+                if (token.IsCancellationRequested) { state.Break(); }
+                if (program.Enabled)
                 {
-                    return p.Title.ToLower().Contains(entry.EntryString);
+                    var r = program.Result(query.Search, _context.API);
+                    if (token.IsCancellationRequested) { state.Break(); }
+                    if (r != null && r.Score > 0)
+                    {
+                        resultRaw.Add(r);
+                    }
                 }
-            })).Take(30);
+            });
 
-
-            return result.ToList();
+            if (token.IsCancellationRequested) { return new List<Result>(); }
+            OrderedParallelQuery<Result> sorted = resultRaw.AsParallel().OrderByDescending(r => r.Score);
+            List<Result> results = new List<Result>();
+            foreach (Result r in sorted) {
+                if (token.IsCancellationRequested) { return new List<Result>(); }
+                var ignored = _settings.IgnoredSequence.Any(entry =>
+                {
+                    if (entry.IsRegex)
+                    {
+                        return Regex.Match(r.Title, entry.EntryString).Success;
+                    }
+                    else
+                    {
+                        return r.Title.ToLower().Contains(entry.EntryString);
+                    }
+                });
+                if (!ignored)
+                {
+                    results.Add(r);
+                }
+                if (results.Count == 30)
+                {
+                    break;
+                }
+            }
+            return results;
         }
 
         public void Init(PluginInitContext context)
