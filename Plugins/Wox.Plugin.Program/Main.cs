@@ -24,6 +24,7 @@ namespace Wox.Plugin.Program
         internal static Settings _settings { get; set; }
 
         private static PluginInitContext _context;
+        private CancellationTokenSource _updateSource;
 
         private static BinaryStorage<Win32[]> _win32Storage;
         private static BinaryStorage<UWP.Application[]> _uwpStorage;
@@ -53,16 +54,12 @@ namespace Wox.Plugin.Program
 
         public List<Result> Query(Query query)
         {
-            Win32[] win32;
-            UWP.Application[] uwps;
-            win32 = _win32s;
-            uwps = _uwps;
 
-            var results1 = win32.AsParallel()
+            var results1 = _win32s.AsParallel()
                 .Where(p => p.Enabled)
                 .Select(p => p.Result(query.Search, _context.API));
 
-            var results2 = uwps.AsParallel()
+            var results2 = _uwps.AsParallel()
                 .Where(p => p.Enabled)
                 .Select(p => p.Result(query.Search, _context.API));
 
