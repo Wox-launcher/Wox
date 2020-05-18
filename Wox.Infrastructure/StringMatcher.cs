@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
+using System.Collections.Specialized;
 using System.Linq;
+using System.Runtime.Caching;
 using static Wox.Infrastructure.StringMatcher;
 
 namespace Wox.Infrastructure
@@ -12,10 +13,18 @@ namespace Wox.Infrastructure
         public SearchPrecisionScore UserSettingSearchPrecision { get; set; }
 
         private readonly IAlphabet _alphabet;
+        private MemoryCache _cache;
 
         public StringMatcher(IAlphabet alphabet = null)
         {
             _alphabet = alphabet;
+
+            NameValueCollection config = new NameValueCollection();
+            config.Add("pollingInterval", "00:05:00");
+            config.Add("physicalMemoryLimitPercentage", "1");
+            config.Add("cacheMemoryLimitMegabytes", "50");
+
+            _cache = new MemoryCache("StringMatcherCache", config);
         }
 
         public static StringMatcher Instance { get; internal set; }
@@ -48,7 +57,18 @@ namespace Wox.Infrastructure
             if (string.IsNullOrEmpty(stringToCompare) || string.IsNullOrEmpty(query)) return new MatchResult(false, UserSettingSearchPrecision);
             var fullStringToCompareWithoutCase = stringToCompare.ToLower();
             var queryWithoutCase = query.ToLower();
-            return FuzzyMatchInternal(queryWithoutCase, fullStringToCompareWithoutCase);
+
+            string key = $"{queryWithoutCase}|{fullStringToCompareWithoutCase}";
+            MatchResult match = _cache[key] as MatchResult;
+            if (match == null)
+            {
+                match = FuzzyMatchInternal(queryWithoutCase, fullStringToCompareWithoutCase);
+                CacheItemPolicy policy = new CacheItemPolicy();
+                policy.SlidingExpiration = new TimeSpan(1, 0, 0);
+                _cache.Set(key, match, policy);
+            }
+
+            return match;
         }
         /// <summary>
         /// Current method:
@@ -136,7 +156,7 @@ namespace Wox.Infrastructure
                     currentQuerySubstringCharacterIndex = 0;
                 }
             }
-            
+
             // proceed to calculate score if every char or substring without whitespaces matched
             if (allQuerySubstringsMatched)
             {
@@ -145,10 +165,10 @@ namespace Wox.Infrastructure
                 return new MatchResult(true, UserSettingSearchPrecision, indexList, score);
             }
 
-            return new MatchResult (false, UserSettingSearchPrecision);
+            return new MatchResult(false, UserSettingSearchPrecision);
         }
 
-        private static bool AllPreviousCharsMatched(int startIndexToVerify, int currentQuerySubstringCharacterIndex, 
+        private static bool AllPreviousCharsMatched(int startIndexToVerify, int currentQuerySubstringCharacterIndex,
                                                         string fullStringToCompareWithoutCase, string currentQuerySubstring)
         {
             var allMatch = true;
@@ -163,7 +183,7 @@ namespace Wox.Infrastructure
 
             return allMatch;
         }
-        
+
         private static List<int> GetUpdatedIndexList(int startIndexToVerify, int currentQuerySubstringCharacterIndex, int firstMatchIndexInWord, List<int> indexList)
         {
             var updatedList = new List<int>();
