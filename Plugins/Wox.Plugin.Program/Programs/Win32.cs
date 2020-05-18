@@ -12,6 +12,7 @@ using NLog;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 using Microsoft.WindowsAPICodePack.Shell;
+using Windows.ApplicationModel.Resources;
 
 namespace Wox.Plugin.Program.Programs
 {
@@ -33,29 +34,13 @@ namespace Wox.Plugin.Program.Programs
         private const string ExeExtension = "exe";
 
         private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
-        private int Score(string query)
-        {
-            var nameMatch = StringMatcher.FuzzySearch(query, Name);
-            var descriptionMatch = StringMatcher.FuzzySearch(query, Description);
-            var executableNameMatch = StringMatcher.FuzzySearch(query, ExecutableName);
-            var score = new[] { nameMatch.Score, descriptionMatch.Score, executableNameMatch.Score }.Max();
-            return score;
-        }
-
 
         public Result Result(string query, IPublicAPI api)
         {
-            var score = Score(query);
-            if (score <= 0)
-            { // no need to create result if this is zero
-                return null;
-            }
-
             var result = new Result
             {
                 SubTitle = FullPath,
                 IcoPath = IcoPath,
-                Score = score,
                 ContextData = this,
                 Action = e =>
                 {
@@ -71,23 +56,23 @@ namespace Wox.Plugin.Program.Programs
                 }
             };
 
-            if (Description.Length >= Name.Length &&
-                Description.Substring(0, Name.Length) == Name)
+            string title;
+            if (Description.Length >= Name.Length && Description.Substring(0, Name.Length) == Name)
             {
-                result.Title = Description;
-                result.TitleHighlightData = StringMatcher.FuzzySearch(query, Description).MatchData;
+                title = Description;
             }
             else if (!string.IsNullOrEmpty(Description))
             {
-                var title = $"{Name}: {Description}";
-                result.Title = title;
-                result.TitleHighlightData = StringMatcher.FuzzySearch(query, title).MatchData;
+                title = $"{Name}: {Description}";
             }
             else
             {
-                result.Title = Name;
-                result.TitleHighlightData = StringMatcher.FuzzySearch(query, Name).MatchData;
+                title = Name;
             }
+            var match = StringMatcher.FuzzySearch(query, title);
+            result.Title = title;
+            result.Score = match.Score;
+            result.TitleHighlightData = match.MatchData;
 
             return result;
         }

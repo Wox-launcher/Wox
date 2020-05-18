@@ -262,27 +262,12 @@ namespace Wox.Plugin.Program.Programs
             public string LogoPath { get; set; }
             public UWP Package { get; set; }
 
-            private int Score(string query)
-            {
-                var displayNameMatch = StringMatcher.FuzzySearch(query, DisplayName);
-                var descriptionMatch = StringMatcher.FuzzySearch(query, Description);
-                var score = new[] { displayNameMatch.Score, descriptionMatch.Score }.Max();
-                return score;
-            }
-
             public Result Result(string query, IPublicAPI api)
             {
-                var score = Score(query);
-                if (score <= 0)
-                { // no need to create result if score is 0
-                    return null;
-                }
-
                 var result = new Result
                 {
                     SubTitle = Package.Location,
                     Icon = Logo,
-                    Score = score,
                     ContextData = this,
                     Action = e =>
                     {
@@ -291,23 +276,25 @@ namespace Wox.Plugin.Program.Programs
                     }
                 };
 
+                string title;
                 if (Description.Length >= DisplayName.Length &&
                     Description.Substring(0, DisplayName.Length) == DisplayName)
                 {
-                    result.Title = Description;
-                    result.TitleHighlightData = StringMatcher.FuzzySearch(query, Description).MatchData;
+                    title = Description;
                 }
                 else if (!string.IsNullOrEmpty(Description))
                 {
-                    var title = $"{DisplayName}: {Description}";
-                    result.Title = title;
-                    result.TitleHighlightData = StringMatcher.FuzzySearch(query, title).MatchData;
+                    title = $"{DisplayName}: {Description}";
                 }
                 else
                 {
-                    result.Title = DisplayName;
-                    result.TitleHighlightData = StringMatcher.FuzzySearch(query, DisplayName).MatchData;
+                    title = DisplayName;
                 }
+                var match = StringMatcher.FuzzySearch(query, title);
+                result.Title = title;
+                result.Score = match.Score;
+                result.TitleHighlightData = match.MatchData;
+
                 return result;
             }
 
