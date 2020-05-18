@@ -54,19 +54,32 @@ namespace Wox.Plugin.Program
 
         public List<Result> Query(Query query)
         {
+            if (_updateSource != null && !_updateSource.IsCancellationRequested)
+            {
+                _updateSource.Cancel();
+                Logger.WoxDebug($"cancel init {_updateSource.Token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId} {query.RawQuery}");
+                _updateSource.Dispose();
+            }
+            var source = new CancellationTokenSource();
+            _updateSource = source;
+            var token = source.Token;
 
+            if (token.IsCancellationRequested) { return new List<Result>(); }
             var results1 = _win32s.AsParallel()
                 .Where(p => p.Enabled)
                 .Select(p => p.Result(query.Search, _context.API));
-
+            
+            if (token.IsCancellationRequested) { return new List<Result>(); }
             var results2 = _uwps.AsParallel()
                 .Where(p => p.Enabled)
                 .Select(p => p.Result(query.Search, _context.API));
 
+            if (token.IsCancellationRequested) { return new List<Result>(); }
             var result = results1.Concat(results2)
                 .Where(r => r != null && r.Score > 0)
                 .Where(p => !_settings.IgnoredSequence.Any(entry =>
             {
+                if (token.IsCancellationRequested) { return false; }
                 if (entry.IsRegex)
                 {
                     return Regex.Match(p.Title, entry.EntryString).Success;
