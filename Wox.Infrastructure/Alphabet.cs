@@ -33,7 +33,7 @@ namespace Wox.Infrastructure
             config.Add("pollingInterval", "00:05:00");
             config.Add("physicalMemoryLimitPercentage", "1");
             config.Add("cacheMemoryLimitMegabytes", "30");
-            _cache = new MemoryCache("StringMatcherCache", config);
+            _cache = new MemoryCache("AlphabetCache", config);
 
             _settings = Settings.Instance;
             InitializePinyinHelpers();
