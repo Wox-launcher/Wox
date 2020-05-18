@@ -22,8 +22,7 @@ namespace Wox.Infrastructure
             NameValueCollection config = new NameValueCollection();
             config.Add("pollingInterval", "00:05:00");
             config.Add("physicalMemoryLimitPercentage", "1");
-            config.Add("cacheMemoryLimitMegabytes", "50");
-
+            config.Add("cacheMemoryLimitMegabytes", "30");
             _cache = new MemoryCache("StringMatcherCache", config);
         }
 
@@ -64,7 +63,7 @@ namespace Wox.Infrastructure
             {
                 match = FuzzyMatchInternal(queryWithoutCase, fullStringToCompareWithoutCase);
                 CacheItemPolicy policy = new CacheItemPolicy();
-                policy.SlidingExpiration = new TimeSpan(1, 0, 0);
+                policy.SlidingExpiration = new TimeSpan(12, 0, 0);
                 _cache.Set(key, match, policy);
             }
 
