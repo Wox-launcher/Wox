@@ -8,7 +8,6 @@ namespace Wox.Infrastructure
 {
     public class StringMatcher
     {
-        private readonly MatchOption _defaultMatchOption = new MatchOption();
 
         public SearchPrecisionScore UserSettingSearchPrecision { get; set; }
 
@@ -40,9 +39,17 @@ namespace Wox.Infrastructure
 
         public MatchResult FuzzyMatch(string query, string stringToCompare)
         {
-            return FuzzyMatch(query, stringToCompare, _defaultMatchOption);
-        }
+            query = query.Trim();
+            if (_alphabet != null)
+            {
+                stringToCompare = _alphabet.Translate(stringToCompare);
+            }
 
+            if (string.IsNullOrEmpty(stringToCompare) || string.IsNullOrEmpty(query)) return new MatchResult(false, UserSettingSearchPrecision);
+            var fullStringToCompareWithoutCase = stringToCompare.ToLower();
+            var queryWithoutCase = query.ToLower();
+            return FuzzyMatchInternal(queryWithoutCase, fullStringToCompareWithoutCase);
+        }
         /// <summary>
         /// Current method:
         /// Character matching + substring matching;
@@ -54,22 +61,9 @@ namespace Wox.Infrastructure
         /// 6. Move onto the next substring's characters until all substrings are checked.
         /// 7. Consider success and move onto scoring if every char or substring without whitespaces matched
         /// </summary>
-        public MatchResult FuzzyMatch(string query, string stringToCompare, MatchOption opt)
+        public MatchResult FuzzyMatchInternal(string query, string stringToCompare)
         {
-            if (string.IsNullOrEmpty(stringToCompare) || string.IsNullOrEmpty(query)) return new MatchResult (false, UserSettingSearchPrecision);
-            
-            query = query.Trim();
-
-            if (_alphabet != null)
-            {
-                stringToCompare = _alphabet.Translate(stringToCompare);
-            }
-
-            var fullStringToCompareWithoutCase = opt.IgnoreCase ? stringToCompare.ToLower() : stringToCompare;
-
-            var queryWithoutCase = opt.IgnoreCase ? query.ToLower() : query;
-                        
-            var querySubstrings = queryWithoutCase.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            var querySubstrings = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             int currentQuerySubstringIndex = 0;
             var currentQuerySubstring = querySubstrings[currentQuerySubstringIndex];
             var currentQuerySubstringCharacterIndex = 0;
@@ -83,9 +77,9 @@ namespace Wox.Infrastructure
 
             var indexList = new List<int>();
 
-            for (var compareStringIndex = 0; compareStringIndex < fullStringToCompareWithoutCase.Length; compareStringIndex++)
+            for (var compareStringIndex = 0; compareStringIndex < stringToCompare.Length; compareStringIndex++)
             {
-                if (fullStringToCompareWithoutCase[compareStringIndex] != currentQuerySubstring[currentQuerySubstringCharacterIndex])
+                if (stringToCompare[compareStringIndex] != currentQuerySubstring[currentQuerySubstringCharacterIndex])
                 {
                     matchFoundInPreviousLoop = false;
                     continue;
@@ -109,7 +103,7 @@ namespace Wox.Infrastructure
                     // in order to do so we need to verify all previous chars are part of the pattern
                     var startIndexToVerify = compareStringIndex - currentQuerySubstringCharacterIndex;
 
-                    if (AllPreviousCharsMatched(startIndexToVerify, currentQuerySubstringCharacterIndex, fullStringToCompareWithoutCase, currentQuerySubstring))
+                    if (AllPreviousCharsMatched(startIndexToVerify, currentQuerySubstringCharacterIndex, stringToCompare, currentQuerySubstring))
                     {
                         matchFoundInPreviousLoop = true;
 
@@ -287,20 +281,4 @@ namespace Wox.Infrastructure
         }
     }
 
-    public class MatchOption
-    {
-        /// <summary>
-        /// prefix of match char, use for hightlight
-        /// </summary>
-        [Obsolete("this is never used")]
-        public string Prefix { get; set; } = "";
-
-        /// <summary>
-        /// suffix of match char, use for hightlight
-        /// </summary>
-        [Obsolete("this is never used")]
-        public string Suffix { get; set; } = "";
-
-        public bool IgnoreCase { get; set; } = true;
-    }
 }
