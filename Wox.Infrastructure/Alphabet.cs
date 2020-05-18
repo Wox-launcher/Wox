@@ -1,14 +1,14 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
+using System.Runtime.Caching;
 using System.Text;
 using hyjiacan.util.p4n;
 using hyjiacan.util.p4n.format;
-using JetBrains.Annotations;
 using NLog;
 using Wox.Infrastructure.Logger;
-using Wox.Infrastructure.Storage;
 using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Infrastructure
@@ -21,14 +21,20 @@ namespace Wox.Infrastructure
     public class Alphabet : IAlphabet
     {
         private readonly HanyuPinyinOutputFormat Format = new HanyuPinyinOutputFormat();
-        private ConcurrentDictionary<string, string[][]> PinyinCache;
-        private BinaryStorage<ConcurrentDictionary<string, string[][]>> _pinyinStorage;
+        private MemoryCache _cache;
+
         private Settings _settings;
 
         private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
         public void Initialize()
         {
+            NameValueCollection config = new NameValueCollection();
+            config.Add("pollingInterval", "00:05:00");
+            config.Add("physicalMemoryLimitPercentage", "1");
+            config.Add("cacheMemoryLimitMegabytes", "30");
+            _cache = new MemoryCache("StringMatcherCache", config);
+
             _settings = Settings.Instance;
             InitializePinyinHelpers();
         }
@@ -36,21 +42,20 @@ namespace Wox.Infrastructure
         private void InitializePinyinHelpers()
         {
             Format.setToneType(HanyuPinyinToneType.WITHOUT_TONE);
-
-            Logger.StopWatchNormal("Preload pinyin cache", () =>
-            {
-                _pinyinStorage = new BinaryStorage<ConcurrentDictionary<string, string[][]>>("Pinyin");
-                PinyinCache = _pinyinStorage.TryLoad(new ConcurrentDictionary<string, string[][]>());
-
-                // force pinyin library static constructor initialize
-                PinyinHelper.toHanyuPinyinStringArray('T', Format);
-            });
-            Logger.WoxInfo($"Number of preload pinyin combination<{PinyinCache.Count}>");
+            PinyinHelper.toHanyuPinyinStringArray('T', Format);
         }
 
-        public string Translate(string str)
+        public string Translate(string key)
         {
-            return ConvertChineseCharactersToPinyin(str);
+            string pinyin = _cache[key] as string;
+            if (pinyin == null)
+            {
+                pinyin = ConvertChineseCharactersToPinyin(key);
+                CacheItemPolicy policy = new CacheItemPolicy();
+                policy.SlidingExpiration = new TimeSpan(12, 0, 0);
+                _cache.Set(key, pinyin, policy);
+            }
+            return pinyin;
         }
 
         public string ConvertChineseCharactersToPinyin(string source)
@@ -63,26 +68,21 @@ namespace Wox.Infrastructure
 
             if (!ContainsChinese(source))
                 return source;
-                
+
             var combination = PinyinCombination(source);
-            
-            var pinyinArray=combination.Select(x => string.Join("", x));
+
+            var pinyinArray = combination.Select(x => string.Join("", x));
             var acronymArray = combination.Select(Acronym).Distinct();
 
             var joinedSingleStringCombination = new StringBuilder();
             var all = acronymArray.Concat(pinyinArray);
             all.ToList().ForEach(x => joinedSingleStringCombination.Append(x));
-
-            return joinedSingleStringCombination.ToString();
+            var result = joinedSingleStringCombination.ToString();
+            return result;
         }
 
         public void Save()
         {
-            if (!_settings.ShouldUsePinyin)
-            {
-                return; 
-            }
-            _pinyinStorage.Save(PinyinCache);
         }
 
         private static string[] EmptyStringArray = new string[0];
@@ -122,32 +122,24 @@ namespace Wox.Infrastructure
                 return Empty2DStringArray;
             }
 
-            if (!PinyinCache.ContainsKey(characters))
+            var allPinyins = new List<string[]>();
+            foreach (var c in characters)
             {
-                var allPinyins = new List<string[]>();
-                foreach (var c in characters)
+                var pinyins = PinyinHelper.toHanyuPinyinStringArray(c, Format);
+                if (pinyins != null)
                 {
-                    var pinyins = PinyinHelper.toHanyuPinyinStringArray(c, Format);
-                    if (pinyins != null)
-                    {
-                        var r = pinyins.Distinct().ToArray();
-                        allPinyins.Add(r);
-                    }
-                    else
-                    {
-                        var r = new[] { c.ToString() };
-                        allPinyins.Add(r);
-                    }
+                    var r = pinyins.Distinct().ToArray();
+                    allPinyins.Add(r);
                 }
+                else
+                {
+                    var r = new[] { c.ToString() };
+                    allPinyins.Add(r);
+                }
+            }
 
-                var combination = allPinyins.Aggregate(Combination).Select(c => c.Split(';')).ToArray();
-                PinyinCache[characters] = combination;
-                return combination;
-            }
-            else
-            {
-                return PinyinCache[characters];
-            }
+            var combination = allPinyins.Aggregate(Combination).Select(c => c.Split(';')).ToArray();
+            return combination;
         }
 
         public string Acronym(string[] pinyin)
