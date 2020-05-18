@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -13,6 +14,7 @@ using Wox.Plugin.Program.Programs;
 using Wox.Plugin.Program.Views;
 using Stopwatch = Wox.Infrastructure.Stopwatch;
 using System.Threading;
+using Windows.ApplicationModel.Background;
 
 namespace Wox.Plugin.Program
 {
@@ -24,6 +26,7 @@ namespace Wox.Plugin.Program
         internal static Settings _settings { get; set; }
 
         private static PluginInitContext _context;
+        private CancellationTokenSource _updateSource;
 
         private static BinaryStorage<Win32[]> _win32Storage;
         private static BinaryStorage<UWP.Application[]> _uwpStorage;
@@ -53,35 +56,72 @@ namespace Wox.Plugin.Program
 
         public List<Result> Query(Query query)
         {
-            Win32[] win32;
-            UWP.Application[] uwps;
-            win32 = _win32s;
-            uwps = _uwps;
-
-            var results1 = win32.AsParallel()
-                .Where(p => p.Enabled)
-                .Select(p => p.Result(query.Search, _context.API));
-
-            var results2 = uwps.AsParallel()
-                .Where(p => p.Enabled)
-                .Select(p => p.Result(query.Search, _context.API));
-
-            var result = results1.Concat(results2)
-                .Where(r => r != null && r.Score > 0)
-                .Where(p => !_settings.IgnoredSequence.Any(entry =>
+            if (_updateSource != null && !_updateSource.IsCancellationRequested)
             {
-                if (entry.IsRegex)
-                {
-                    return Regex.Match(p.Title, entry.EntryString).Success;
-                }
-                else
-                {
-                    return p.Title.ToLower().Contains(entry.EntryString);
-                }
-            })).Take(30);
+                _updateSource.Cancel();
+                Logger.WoxDebug($"cancel init {_updateSource.Token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId} {query.RawQuery}");
+                _updateSource.Dispose();
+            }
+            var source = new CancellationTokenSource();
+            _updateSource = source;
+            var token = source.Token;
 
+            ConcurrentBag<Result> resultRaw = new ConcurrentBag<Result>();
 
-            return result.ToList();
+            if (token.IsCancellationRequested) { return new List<Result>(); }
+            Parallel.ForEach(_win32s, (program, state) =>
+            {
+                if (token.IsCancellationRequested) { state.Break(); }
+                if (program.Enabled)
+                {
+                    var r = program.Result(query.Search, _context.API);
+                    if (r != null && r.Score > 0)
+                    {
+                        resultRaw.Add(r);
+                    }
+                }
+            });
+            if (token.IsCancellationRequested) { return new List<Result>(); }
+            Parallel.ForEach(_uwps, (program, state) =>
+            {
+                if (token.IsCancellationRequested) { state.Break(); }
+                if (program.Enabled)
+                {
+                    var r = program.Result(query.Search, _context.API);
+                    if (token.IsCancellationRequested) { state.Break(); }
+                    if (r != null && r.Score > 0)
+                    {
+                        resultRaw.Add(r);
+                    }
+                }
+            });
+
+            if (token.IsCancellationRequested) { return new List<Result>(); }
+            OrderedParallelQuery<Result> sorted = resultRaw.AsParallel().OrderByDescending(r => r.Score);
+            List<Result> results = new List<Result>();
+            foreach (Result r in sorted) {
+                if (token.IsCancellationRequested) { return new List<Result>(); }
+                var ignored = _settings.IgnoredSequence.Any(entry =>
+                {
+                    if (entry.IsRegex)
+                    {
+                        return Regex.Match(r.Title, entry.EntryString).Success;
+                    }
+                    else
+                    {
+                        return r.Title.ToLower().Contains(entry.EntryString);
+                    }
+                });
+                if (!ignored)
+                {
+                    results.Add(r);
+                }
+                if (results.Count == 30)
+                {
+                    break;
+                }
+            }
+            return results;
         }
 
         public void Init(PluginInitContext context)
