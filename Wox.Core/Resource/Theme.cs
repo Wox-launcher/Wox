@@ -46,7 +46,14 @@ namespace Wox.Core.Resource
                 return found;
             });
             _oldTheme = Path.GetFileNameWithoutExtension(_oldResource.Source.AbsolutePath);
-            AutoReload();
+
+            // https://github.com/Wox-launcher/Wox/issues/2935
+            var support = Environment.OSVersion.Version.Major >= new Version(10, 0).Major;
+            Logger.WoxInfo($"Runtime Version {Environment.OSVersion.Version} {support}");
+            if (support)
+            {
+                AutoReload();
+            }
         }
 
         private void MakesureThemeDirectoriesExist()
@@ -69,7 +76,7 @@ namespace Wox.Core.Resource
 
         public bool ChangeTheme(string theme)
         {
-            const string defaultTheme = "Dark"; 
+            const string defaultTheme = "Dark";
 
             string path = GetThemePath(theme);
             try
@@ -80,7 +87,7 @@ namespace Wox.Core.Resource
                 Settings.Theme = theme;
 
                 var dicts = Application.Current.Resources.MergedDictionaries;
-                
+
                 dicts.Remove(_oldResource);
                 var newResource = GetResourceDictionary();
                 dicts.Add(newResource);
@@ -88,7 +95,7 @@ namespace Wox.Core.Resource
                 _oldTheme = Path.GetFileNameWithoutExtension(_oldResource.Source.AbsolutePath);
                 HighLightStyle = new HightLightStyle(false);
                 HighLightSelectedStyle = new HightLightStyle(true);
-                
+
                 SetBlurForWindow();
             }
             catch (DirectoryNotFoundException)
@@ -138,7 +145,8 @@ namespace Wox.Core.Resource
 
             var queryTextSuggestionBoxStyle = new Style(typeof(TextBox), queryBoxStyle);
             bool hasSuggestion = false;
-            if (dict.Contains("QueryTextSuggestionBoxStyle")) {
+            if (dict.Contains("QueryTextSuggestionBoxStyle"))
+            {
                 queryTextSuggestionBoxStyle = dict["QueryTextSuggestionBoxStyle"] as Style;
                 hasSuggestion = true;
             }
@@ -153,7 +161,8 @@ namespace Wox.Core.Resource
 
             var queryBoxStyleSetters = queryBoxStyle.Setters.OfType<Setter>().ToList();
             var queryTextSuggestionBoxStyleSetters = queryTextSuggestionBoxStyle.Setters.OfType<Setter>().ToList();
-            foreach (Setter setter in queryBoxStyleSetters) {
+            foreach (Setter setter in queryBoxStyleSetters)
+            {
                 if (setter.Property == TextBox.BackgroundProperty)
                     continue;
                 if (setter.Property == TextBox.ForegroundProperty)
@@ -162,14 +171,17 @@ namespace Wox.Core.Resource
                     queryTextSuggestionBoxStyle.Setters.Add(setter);
             }
 
-            if (!hasSuggestion) {
+            if (!hasSuggestion)
+            {
                 var backgroundBrush = queryBoxStyle.Setters.OfType<Setter>().FirstOrDefault(x => x.Property == TextBox.BackgroundProperty)?.Value ??
                     (dict["BaseQuerySuggestionBoxStyle"] as Style).Setters.OfType<Setter>().FirstOrDefault(x => x.Property == TextBox.BackgroundProperty).Value;
                 queryBoxStyle.Setters.OfType<Setter>().FirstOrDefault(x => x.Property == TextBox.BackgroundProperty).Value = Brushes.Transparent;
-                if (queryTextSuggestionBoxStyle.Setters.OfType<Setter>().Any(x => x.Property == TextBox.BackgroundProperty)) {
+                if (queryTextSuggestionBoxStyle.Setters.OfType<Setter>().Any(x => x.Property == TextBox.BackgroundProperty))
+                {
                     queryTextSuggestionBoxStyle.Setters.OfType<Setter>().First(x => x.Property == TextBox.BackgroundProperty).Value = backgroundBrush;
                 }
-                else {
+                else
+                {
                     queryTextSuggestionBoxStyle.Setters.Add(new Setter(TextBox.BackgroundProperty, backgroundBrush));
                 }
             }
@@ -227,19 +239,18 @@ namespace Wox.Core.Resource
 
         private void AutoReload()
         {
-            var support = Environment.OSVersion.Version.Major >= new Version(10, 0).Major;
-            Logger.WoxInfo($"Runtime Version {Environment.OSVersion.Version} {support}");
-            if (support) {
-                var uiSettings = new Windows.UI.ViewManagement.UISettings();
-                uiSettings.ColorValuesChanged +=
-                    (sender, args) => {
-                        Application.Current.Dispatcher.Invoke(
-                            () => {
-                                ChangeTheme(Settings.Theme);
-                            });
-                    };
-                UISettings = uiSettings;
-            }
+
+            var uiSettings = new Windows.UI.ViewManagement.UISettings();
+            uiSettings.ColorValuesChanged +=
+                (sender, args) =>
+                {
+                    Application.Current.Dispatcher.Invoke(
+                        () =>
+                        {
+                            ChangeTheme(Settings.Theme);
+                        });
+                };
+            UISettings = uiSettings;
         }
 
         #endregion
@@ -295,7 +306,7 @@ namespace Wox.Core.Resource
                 if (resource is bool b)
                     blur = b;
 
-                var accent = blur? AccentState.ACCENT_ENABLE_BLURBEHIND: AccentState.ACCENT_DISABLED;
+                var accent = blur ? AccentState.ACCENT_ENABLE_BLURBEHIND : AccentState.ACCENT_DISABLED;
                 SetWindowAccent(Application.Current.MainWindow, accent);
             }
         }
@@ -322,7 +333,7 @@ namespace Wox.Core.Resource
         }
         #endregion
     }
-    
+
     public class HightLightStyle
     {
         public Brush Color { get; set; }
@@ -337,7 +348,7 @@ namespace Wox.Core.Resource
             FontWeight = FontWeights.Normal;
             FontStretch = FontStretches.Normal;
         }
-        
+
         public HightLightStyle(bool selected)
         {
             ResourceDictionary resources = ThemeManager.Instance.GetResourceDictionary();
