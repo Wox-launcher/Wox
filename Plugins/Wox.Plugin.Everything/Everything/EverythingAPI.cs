@@ -200,18 +200,20 @@ namespace Wox.Plugin.Everything.Everything
             StringBuilder content = new StringBuilder();
             bool flag = false;
             char[] contentArray = contentHightlighted.ToCharArray();
+            int count = 0;
             for (int i = 0; i < contentArray.Length; i++)
             {
                 char current = contentHightlighted[i];
                 if (current == '*')
                 {
                     flag = !flag;
+                    count = count + 1;
                 }
                 else
                 {
                     if (flag)
                     {
-                        hightlightData.Add(i);
+                        hightlightData.Add(i - count);
                     }
                     content.Append(current);
                 }
