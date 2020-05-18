@@ -22,15 +22,13 @@ namespace Wox
     {
         private readonly SettingWindowViewModel _settingsVM;
         private readonly MainViewModel _mainVM;
-        private readonly Alphabet _alphabet;
 
         #region Constructor
 
-        public PublicAPIInstance(SettingWindowViewModel settingsVM, MainViewModel mainVM, Alphabet alphabet)
+        public PublicAPIInstance(SettingWindowViewModel settingsVM, MainViewModel mainVM)
         {
             _settingsVM = settingsVM;
             _mainVM = mainVM;
-            _alphabet = alphabet;
             GlobalHotkey.Instance.hookedKeyboardCallback += KListener_hookedKeyboardCallback;
             WebRequest.RegisterPrefix("data", new DataWebRequestFactory());
         }
@@ -77,7 +75,6 @@ namespace Wox
             _mainVM.Save();
             _settingsVM.Save();
             PluginManager.Save();
-            _alphabet.Save();
         }
 
         public void ReloadAllPluginData()

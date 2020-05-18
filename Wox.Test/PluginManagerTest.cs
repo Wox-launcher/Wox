@@ -26,15 +26,13 @@ namespace Wox.Test
             Portable portable = new Portable();
             SettingWindowViewModel settingsVm = new SettingWindowViewModel(portable);
 
-            Alphabet alphabet = new Alphabet();
-            alphabet.Initialize();
-            StringMatcher stringMatcher = new StringMatcher(alphabet);
+            StringMatcher stringMatcher = new StringMatcher();
             StringMatcher.Instance = stringMatcher;
             stringMatcher.UserSettingSearchPrecision = Settings.Instance.QuerySearchPrecision;
 
             PluginManager.LoadPlugins(Settings.Instance.PluginSettings);
             MainViewModel mainVm = new MainViewModel(false);
-            PublicAPIInstance api = new PublicAPIInstance(settingsVm, mainVm, alphabet);
+            PublicAPIInstance api = new PublicAPIInstance(settingsVm, mainVm);
             PluginManager.InitializePlugins(api);
 
         }
