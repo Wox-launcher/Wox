@@ -48,7 +48,6 @@
     <Compile Include="..\SolutionAssemblyInfo.cs">
       <Link>Properties\SolutionAssemblyInfo.cs</Link>
     </Compile>
-    <Compile Include="PluginProgramTest.cs" />
     <Compile Include="FuzzyMatcherTest.cs" />
     <Compile Include="PluginManagerTest.cs" />
     <Compile Include="QueryBuilderTest.cs" />
