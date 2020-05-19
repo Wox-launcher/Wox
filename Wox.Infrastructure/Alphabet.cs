@@ -25,23 +25,30 @@ namespace Wox.Infrastructure
 
         public string Translate(string content)
         {
-            string result = _cache[content] as string;
-            if (result == null)
+            if (_settings.ShouldUsePinyin)
             {
-                if (_settings.ShouldUsePinyin && WordsHelper.HasChinese(content))
+                string result = _cache[content] as string;
+                if (result == null)
                 {
-                    // todo change first pinyin to full pinyin list, but current fuzzy match algorithm won't support first char match
-                    result = WordsHelper.GetFirstPinyin(content);
+                    if (WordsHelper.HasChinese(content))
+                    {
+                        // todo change first pinyin to full pinyin list, but current fuzzy match algorithm won't support first char match
+                        result = WordsHelper.GetFirstPinyin(content);
+                    }
+                    else
+                    {
+                        result = content;
+                    }
+                    CacheItemPolicy policy = new CacheItemPolicy();
+                    policy.SlidingExpiration = new TimeSpan(12, 0, 0);
+                    _cache.Set(content, result, policy);
                 }
-                else
-                {
-                    result = content;
-                }
-                CacheItemPolicy policy = new CacheItemPolicy();
-                policy.SlidingExpiration = new TimeSpan(12, 0, 0);
-                _cache.Set(content, result, policy);
+                return result;
             }
-            return result;
+            else
+            {
+                return content;
+            }
         }
     }
 }
