@@ -43,7 +43,7 @@ namespace Wox.Core
                     }
                     catch (Exception e) when (e is HttpRequestException || e is WebException || e is SocketException)
                     {
-                        Logger.WoxError($"Check your connection and proxy settings to api.github.com.", e);
+                        Logger.WoxError($"Check your connection and proxy settings to api.github.com. {e.Message}");
                         updateManager.Dispose();
                         return;
                     }
@@ -67,7 +67,7 @@ namespace Wox.Core
                     }
                     catch (Exception e) when (e is HttpRequestException || e is WebException || e is SocketException)
                     {
-                        Logger.WoxError($"Check your connection and proxy settings to github-cloud.s3.amazonaws.com.", e);
+                        Logger.WoxError($"Check your connection and proxy settings to github-cloud.s3.amazonaws.com. {e.Message}");
                         updateManager.Dispose();
                         return;
                     }
@@ -86,11 +86,11 @@ namespace Wox.Core
             }
             catch (Exception e) when (e is HttpRequestException || e is WebException || e is SocketException)
             {
-                Logger.WoxError($"Please check your connection and proxy settings to api.github.com.", e);
+                Logger.WoxError($"Please check your connection and proxy settings {e.Message}");
             }
             catch (Exception e)
             {
-                Logger.WoxError($"cannot check update", e);
+                Logger.WoxError($"cannot check update {e.Message}");
             }
 
         }
