@@ -52,7 +52,7 @@ namespace Wox.ViewModel
             }
             else
             {
-                await _updater.UpdateApp(false);
+                await _updater.UpdateApp(false, Settings.UpdateToPrereleases);
             }
         }
 
