@@ -28,7 +28,18 @@ namespace Wox
             var directory = new DirectoryInfo(path);
             var log = directory.GetFiles().OrderByDescending(f => f.LastWriteTime).First();
 
-            var paragraph = Hyperlink("You can help us to fix this issue by opening issue in: ", Constant.Issue);
+            Paragraph paragraph;
+            string websiteKey = nameof(Plugin.PluginPair.Metadata.Website);
+            if (exception.Data.Contains(websiteKey))
+            {
+                paragraph = Hyperlink("You can help plugin author to fix this issue by opening issue in: ", exception.Data[websiteKey].ToString());
+                paragraph.Inlines.Add($"Plugin Name {exception.Data[nameof(Plugin.PluginPair.Metadata.Name)]}");
+                paragraph.Inlines.Add($"Plugin ID {exception.Data[nameof(Plugin.PluginPair.Metadata.ID)]}");
+            }
+            else
+            {
+                paragraph = Hyperlink("You can help us to fix this issue by opening issue in: ", Constant.Issue);
+            }
             paragraph.Inlines.Add($"1. upload log file: {log.FullName}\n");
             paragraph.Inlines.Add($"2. copy below exception message");
             ErrorTextbox.Document.Blocks.Add(paragraph);

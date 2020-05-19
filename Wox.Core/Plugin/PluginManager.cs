@@ -167,7 +167,16 @@ namespace Wox.Core.Plugin
                         List<Result> results = new List<Result>();
                         var milliseconds = Logger.StopWatchDebug($"Query <{query.RawQuery}> Cost for {metadata.Name}", () =>
                         {
-                            results = pair.Plugin.Query(query) ?? new List<Result>();
+                            try
+                            {
+                                results = pair.Plugin.Query(query) ?? new List<Result>();
+                            }
+                            catch (Exception e)
+                            {
+                                e.Data.Add(nameof(pair.Metadata.ID), pair.Metadata.ID);
+                                e.Data.Add(nameof(pair.Metadata.Name), pair.Metadata.Name);
+                                e.Data.Add(nameof(pair.Metadata.Website), pair.Metadata.Website);
+                            }
                             UpdatePluginMetadata(results, metadata, query);
                         });
                         metadata.QueryCount += 1;
