@@ -168,9 +168,11 @@ namespace Wox.Infrastructure.Exception
             return sb.ToString();
         }
 
-        public static string ExceptionWithRuntimeInfo(System.Exception ex)
+        public static string ExceptionWithRuntimeInfo(System.Exception ex, string id)
         {
             StringBuilder sb = new StringBuilder();
+            sb.Append("Error id: ");
+            sb.AppendLine(id);
             var formatted = FormattedAllExceptions(ex);
             sb.Append(formatted);
             var info = RuntimeInfoFull();
