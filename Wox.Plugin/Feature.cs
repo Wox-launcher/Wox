@@ -11,10 +11,10 @@ namespace Wox.Plugin
         List<Result> LoadContextMenus(Result selectedResult);
     }
 
-    [Obsolete("If a plugin has a action keyword, then it is exclusive. This interface will be remove in v1.3.0")]
+    [Obsolete("If a plugin has a action keyword, then it is exclusive. This interface will be remove in v1.4.0")]
     public interface IExclusiveQuery : IFeatures
     {
-        [Obsolete("If a plugin has a action keyword, then it is exclusive. This method will be remove in v1.3.0")]
+        [Obsolete("If a plugin has a action keyword, then it is exclusive. This method will be remove in v1.4.0")]
         bool IsExclusiveQuery(Query query);
     }
 

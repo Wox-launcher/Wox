@@ -143,7 +143,7 @@ namespace Wox
 
         public event WoxGlobalKeyboardEventHandler GlobalKeyboardEvent;
 
-        [Obsolete("This will be removed in Wox 1.3")]
+        [Obsolete("This will be removed in Wox 1.4")]
         public void PushResults(Query query, PluginMetadata plugin, List<Result> results)
         {
             results.ForEach(o =>
