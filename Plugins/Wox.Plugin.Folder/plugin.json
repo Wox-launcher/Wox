@@ -6,7 +6,7 @@
     "Author":"Wox",
     "Version":"1.0.0",
     "Language":"csharp",
-    "Website":"http://www.wox.one/plugin",
+    "Website":"https://github.com/Wox-launcher/Wox",
     "ExecuteFileName":"Wox.Plugin.Folder.dll",
     "IcoPath":"Images\\folder.png"
 }

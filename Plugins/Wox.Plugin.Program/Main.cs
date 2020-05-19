@@ -56,6 +56,7 @@ namespace Wox.Plugin.Program
 
         public List<Result> Query(Query query)
         {
+
             if (_updateSource != null && !_updateSource.IsCancellationRequested)
             {
                 _updateSource.Cancel();
