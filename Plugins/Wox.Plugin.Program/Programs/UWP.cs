@@ -382,7 +382,7 @@ namespace Wox.Plugin.Program.Programs
                             key = $"/{key}";
                         }
 
-                        if (!key.ToLower().Contains("resources") && key.Count(c => c == '/') <= 3)
+                        if (!key.ToLower().Contains("resources") && key.Count(c => c == '/') < 3)
                         {
                             key = $"/Resources{key}";
                         }
