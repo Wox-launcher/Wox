@@ -1,8 +1,10 @@
+using NLog;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
 using System.Runtime.Caching;
+using Wox.Infrastructure.Logger;
 using static Wox.Infrastructure.StringMatcher;
 
 namespace Wox.Infrastructure
@@ -12,12 +14,15 @@ namespace Wox.Infrastructure
 
         public SearchPrecisionScore UserSettingSearchPrecision { get; set; }
 
-        private readonly IAlphabet _alphabet;
+        private readonly Alphabet _alphabet;
         private MemoryCache _cache;
 
-        public StringMatcher(IAlphabet alphabet = null)
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
+
+        public StringMatcher()
         {
-            _alphabet = alphabet;
+            _alphabet = new Alphabet();
+            _alphabet.Initialize();
 
             NameValueCollection config = new NameValueCollection();
             config.Add("pollingInterval", "00:05:00");
@@ -48,15 +53,11 @@ namespace Wox.Infrastructure
         public MatchResult FuzzyMatch(string query, string stringToCompare)
         {
             query = query.Trim();
-            if (_alphabet != null)
-            {
-                stringToCompare = _alphabet.Translate(stringToCompare);
-            }
-
             if (string.IsNullOrEmpty(stringToCompare) || string.IsNullOrEmpty(query)) return new MatchResult(false, UserSettingSearchPrecision);
-            var fullStringToCompareWithoutCase = stringToCompare.ToLower();
             var queryWithoutCase = query.ToLower();
-
+            string translated = _alphabet.Translate(stringToCompare);
+            var fullStringToCompareWithoutCase = translated.ToLower();
+            
             string key = $"{queryWithoutCase}|{fullStringToCompareWithoutCase}";
             MatchResult match = _cache[key] as MatchResult;
             if (match == null)
@@ -69,6 +70,7 @@ namespace Wox.Infrastructure
 
             return match;
         }
+
         /// <summary>
         /// Current method:
         /// Character matching + substring matching;
@@ -80,7 +82,7 @@ namespace Wox.Infrastructure
         /// 6. Move onto the next substring's characters until all substrings are checked.
         /// 7. Consider success and move onto scoring if every char or substring without whitespaces matched
         /// </summary>
-        public MatchResult FuzzyMatchInternal(string query, string stringToCompare)
+        public MatchResult FuzzyMatchInternal(string query, string translated)
         {
             var querySubstrings = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             int currentQuerySubstringIndex = 0;
@@ -96,9 +98,9 @@ namespace Wox.Infrastructure
 
             var indexList = new List<int>();
 
-            for (var compareStringIndex = 0; compareStringIndex < stringToCompare.Length; compareStringIndex++)
+            for (var compareStringIndex = 0; compareStringIndex < translated.Length; compareStringIndex++)
             {
-                if (stringToCompare[compareStringIndex] != currentQuerySubstring[currentQuerySubstringCharacterIndex])
+                if (translated[compareStringIndex] != currentQuerySubstring[currentQuerySubstringCharacterIndex])
                 {
                     matchFoundInPreviousLoop = false;
                     continue;
@@ -122,7 +124,7 @@ namespace Wox.Infrastructure
                     // in order to do so we need to verify all previous chars are part of the pattern
                     var startIndexToVerify = compareStringIndex - currentQuerySubstringCharacterIndex;
 
-                    if (AllPreviousCharsMatched(startIndexToVerify, currentQuerySubstringCharacterIndex, stringToCompare, currentQuerySubstring))
+                    if (AllPreviousCharsMatched(startIndexToVerify, currentQuerySubstringCharacterIndex, translated, currentQuerySubstring))
                     {
                         matchFoundInPreviousLoop = true;
 
@@ -134,6 +136,7 @@ namespace Wox.Infrastructure
                 }
 
                 lastMatchIndex = compareStringIndex + 1;
+
                 indexList.Add(compareStringIndex);
 
                 currentQuerySubstringCharacterIndex++;
@@ -159,7 +162,7 @@ namespace Wox.Infrastructure
             // proceed to calculate score if every char or substring without whitespaces matched
             if (allQuerySubstringsMatched)
             {
-                var score = CalculateSearchScore(query, stringToCompare, firstMatchIndex, lastMatchIndex - firstMatchIndex, allSubstringsContainedInCompareString);
+                var score = CalculateSearchScore(query, translated, firstMatchIndex, lastMatchIndex - firstMatchIndex, allSubstringsContainedInCompareString);
 
                 return new MatchResult(true, UserSettingSearchPrecision, indexList, score);
             }

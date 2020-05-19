@@ -33,7 +33,6 @@ namespace Wox
         private MainViewModel _mainVM;
         private SettingWindowViewModel _settingsVM;
         private readonly Portable _portable = new Portable();
-        private readonly Alphabet _alphabet = new Alphabet();
         private StringMatcher _stringMatcher;
 
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
@@ -92,15 +91,14 @@ namespace Wox
 
                 _settingsVM = new SettingWindowViewModel(_portable);
 
-                _alphabet.Initialize();
-                _stringMatcher = new StringMatcher(_alphabet);
+                _stringMatcher = new StringMatcher();
                 StringMatcher.Instance = _stringMatcher;
                 _stringMatcher.UserSettingSearchPrecision = Settings.Instance.QuerySearchPrecision;
 
                 PluginManager.LoadPlugins(Settings.Instance.PluginSettings);
                 _mainVM = new MainViewModel();
                 var window = new MainWindow(_mainVM);
-                API = new PublicAPIInstance(_settingsVM, _mainVM, _alphabet);
+                API = new PublicAPIInstance(_settingsVM, _mainVM);
                 PluginManager.InitializePlugins(API);
 
                 Current.MainWindow = window;
