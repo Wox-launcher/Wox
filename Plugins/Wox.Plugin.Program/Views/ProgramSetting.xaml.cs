@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using Wox.Plugin.Program.Views.Models;
 using Wox.Plugin.Program.Programs;
 using System.ComponentModel;
 using System.Windows.Data;
@@ -52,23 +51,15 @@ namespace Wox.Plugin.Program.Views
         private void btnAddProgramSource_OnClick(object sender, RoutedEventArgs e)
         {
             var add = new AddProgramSource(context, _settings);
-            if(add.ShowDialog() ?? false)
+            if (add.ShowDialog() ?? false)
             {
                 ReIndexing();
             }
-
-            programSourceView.Items.Refresh();
-        }
-
-        private void DeleteProgramSources(List<ProgramSource> itemsToDelete)
-        {
-            _settings.ProgramSources = _settings.ProgramSources.Where(s => itemsToDelete.Contains(s)).ToList();
-            ReIndexing();
         }
 
         private void btnEditProgramSource_OnClick(object sender, RoutedEventArgs e)
         {
-            var selectedProgramSource = programSourceView.SelectedItem as Settings.ProgramSource;
+            var selectedProgramSource = programSourceView.SelectedItem as ProgramSource;
             if (selectedProgramSource != null)
             {
                 var add = new AddProgramSource(selectedProgramSource, _settings);
@@ -127,15 +118,13 @@ namespace Wox.Plugin.Program.Views
                             Location = directory,
                         };
 
-                        directoriesToAdd.Add(source);                        
+                        directoriesToAdd.Add(source);
                     }
                 }
 
                 if (directoriesToAdd.Count() > 0)
                 {
                     directoriesToAdd.ForEach(x => _settings.ProgramSources.Add(x));
-
-                    programSourceView.Items.Refresh();
                     ReIndexing();
                 }
             }
@@ -165,12 +154,12 @@ namespace Wox.Plugin.Program.Views
                 MessageBox.Show(msg);
                 return;
             }
-
-            DeleteProgramSources(selectedItems);
-            ReIndexing();
-
-            programSourceView.SelectedItems.Clear();
-            programSourceView.Items.Refresh();
+            else
+            {
+                _settings.ProgramSources.RemoveAll(s => selectedItems.Contains(s));
+                programSourceView.SelectedItems.Clear();
+                ReIndexing();
+            }
         }
 
         private void ProgramSourceView_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
@@ -207,7 +196,7 @@ namespace Wox.Plugin.Program.Views
                     var sortBy = columnBinding?.Path.Path ?? headerClicked.Column.Header as string;
 
                     Sort(sortBy, direction);
-                    
+
                     _lastHeaderClicked = headerClicked;
                     _lastDirection = direction;
                 }

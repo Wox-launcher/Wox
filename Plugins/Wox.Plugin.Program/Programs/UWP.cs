@@ -350,12 +350,12 @@ namespace Wox.Plugin.Program.Programs
                 DisplayName = ResourcesFromPri(package.FullName, package.Name, DisplayName);
                 Description = ResourcesFromPri(package.FullName, package.Name, Description);
                 LogoUri = LogoUriFromManifest(manifestApp);
-                LogoPath = FilesFromPri(package.FullName, package.Name, LogoUri);
+                LogoPath = PathFromUri(package.FullName, package.Name, package.Location, LogoUri);
 
                 Enabled = true;
             }
 
-            internal string ResourcesFromPri(string packageFullName, String packageName, string resourceReference)
+            internal string ResourcesFromPri(string packageFullName, string packageName, string resourceReference)
             {
                 const string prefix = "ms-resource:";
                 string result = "";
@@ -382,7 +382,7 @@ namespace Wox.Plugin.Program.Programs
                             key = $"/{key}";
                         }
 
-                        if (!key.ToLower().Contains("resources") && key.Count(c => c == '/') <= 3)
+                        if (!key.ToLower().Contains("resources") && key.Count(c => c == '/') < 3)
                         {
                             key = $"/Resources{key}";
                         }
@@ -409,7 +409,7 @@ namespace Wox.Plugin.Program.Programs
                 return result;
             }
 
-            private string FilesFromPri(string packageFullName, string packageName, string fileReference)
+            private string PathFromUri(string packageFullName, string packageName, string packageLocation, string fileReference)
             {
                 // all https://msdn.microsoft.com/windows/uwp/controls-and-patterns/tiles-and-notifications-app-assets
                 // windows 10 https://msdn.microsoft.com/en-us/library/windows/apps/dn934817.aspx
@@ -417,19 +417,28 @@ namespace Wox.Plugin.Program.Programs
                 // windows 8 https://msdn.microsoft.com/en-us/library/windows/apps/br211475.aspx
 
                 Logger.WoxTrace($"package: <{packageFullName}> file ref: <{fileReference}>");
-                string parsed = $"ms-resource://{packageName}/Files/{fileReference.Replace("\\", "/")}";
-                try
+                string path = Path.Combine(packageLocation, fileReference);
+                if (File.Exists(path))
                 {
-                    string result = ResourceFromPriInternal(packageFullName, parsed);
-                    Logger.WoxTrace($"package: <{packageFullName}> pri file result: <{result}>");
-                    return result;
+                    // for 28671Petrroll.PowerPlanSwitcher_0.4.4.0_x86__ge82akyxbc7z4
+                    return path;
                 }
-                catch (Exception e)
+                else
                 {
-                    e.Data.Add(nameof(fileReference), fileReference);
-                    e.Data.Add(nameof(FilesFromPri) + nameof(parsed), parsed);
-                    e.Data.Add(nameof(FilesFromPri) + nameof(packageFullName), packageFullName);
-                    throw e;
+                    string parsed = $"ms-resource://{packageName}/Files/{fileReference.Replace("\\", "/")}";
+                    try
+                    {
+                        string result = ResourceFromPriInternal(packageFullName, parsed);
+                        Logger.WoxTrace($"package: <{packageFullName}> pri file result: <{result}>");
+                        return result;
+                    }
+                    catch (Exception e)
+                    {
+                        e.Data.Add(nameof(fileReference), fileReference);
+                        e.Data.Add(nameof(PathFromUri) + nameof(parsed), parsed);
+                        e.Data.Add(nameof(PathFromUri) + nameof(packageFullName), packageFullName);
+                        throw e;
+                    }
                 }
             }
 

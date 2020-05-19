@@ -89,12 +89,6 @@ namespace Wox.Plugin.WebSearch
                         };
 
                         results.Add(result);
-                        ResultsUpdated?.Invoke(this, new ResultUpdatedEventArgs
-                        {
-                            Results = results,
-                            Query = query
-                        });
-
                         UpdateResultsFromSuggestion(results, keyword, subtitle, searchSource, query);                        
                     }
                 }
