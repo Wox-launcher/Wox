@@ -57,6 +57,7 @@ namespace Wox.Infrastructure
             var queryWithoutCase = query.ToLower();
             string translated = _alphabet.Translate(stringToCompare);
             var fullStringToCompareWithoutCase = translated.ToLower();
+            
             string key = $"{queryWithoutCase}|{fullStringToCompareWithoutCase}";
             MatchResult match = _cache[key] as MatchResult;
             if (match == null)
