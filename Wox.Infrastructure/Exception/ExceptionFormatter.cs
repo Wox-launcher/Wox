@@ -137,6 +137,7 @@ namespace Wox.Infrastructure.Exception
             sb.AppendLine($"* OS Version: {Environment.OSVersion.VersionString}");
             sb.AppendLine($"* x64 OS: {Environment.Is64BitOperatingSystem}");
             sb.AppendLine($"* x64 Process: {Environment.Is64BitProcess}");
+            sb.AppendLine($"* CurrentUICulture: {CultureInfo.CurrentUICulture.Name}");
             sb.AppendLine($"* CLR Version: {Environment.Version}");
             sb.AppendLine($"* Installed .NET Framework: ");
             foreach (var result in GetFrameworkVersionFromRegistry())
