@@ -2,8 +2,13 @@
 using System.Linq;
 
 using NUnit.Framework;
+using Wox.Core.Configuration;
 using Wox.Core.Plugin;
+using Wox.Image;
+using Wox.Infrastructure;
+using Wox.Infrastructure.UserSettings;
 using Wox.Plugin;
+using Wox.ViewModel;
 
 namespace Wox.Test
 {
@@ -16,9 +21,23 @@ namespace Wox.Test
         [OneTimeSetUp]
         public void Setup()
         {
+            new App();
+            Settings.Initialize();
+            Portable portable = new Portable();
+            SettingWindowViewModel settingsVm = new SettingWindowViewModel(portable);
+            StringMatcher stringMatcher = new StringMatcher();
+            StringMatcher.Instance = stringMatcher;
+            stringMatcher.UserSettingSearchPrecision = Settings.Instance.QuerySearchPrecision;
+            PluginManager.LoadPlugins(Settings.Instance.PluginSettings);
+            MainViewModel mainVm = new MainViewModel(false);
+            PublicAPIInstance api = new PublicAPIInstance(settingsVm, mainVm);
+            PluginManager.InitializePlugins(api);
+
             plugin = new Plugin.Program.Main();
-            plugin.loadSettings();
-            Plugin.Program.Main.IndexPrograms();
+            plugin.InitSync(new PluginInitContext()
+            {
+                API = api,
+            });
         }
 
         [TestCase("powershell", "PowerShell")]

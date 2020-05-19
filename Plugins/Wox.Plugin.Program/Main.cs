@@ -99,7 +99,8 @@ namespace Wox.Plugin.Program
             if (token.IsCancellationRequested) { return new List<Result>(); }
             OrderedParallelQuery<Result> sorted = resultRaw.AsParallel().OrderByDescending(r => r.Score);
             List<Result> results = new List<Result>();
-            foreach (Result r in sorted) {
+            foreach (Result r in sorted)
+            {
                 if (token.IsCancellationRequested) { return new List<Result>(); }
                 var ignored = _settings.IgnoredSequence.Any(entry =>
                 {
@@ -135,6 +136,13 @@ namespace Wox.Plugin.Program
             {
                 IndexPrograms();
             });
+        }
+
+        public void InitSync(PluginInitContext context)
+        {
+            _context = context;
+            loadSettings();
+            IndexPrograms();
         }
 
         public void loadSettings()
