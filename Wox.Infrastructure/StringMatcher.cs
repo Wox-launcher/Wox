@@ -53,6 +53,7 @@ namespace Wox.Infrastructure
         public MatchResult FuzzyMatch(string query, string stringToCompare)
         {
             query = query.Trim();
+            if (string.IsNullOrEmpty(stringToCompare) || string.IsNullOrEmpty(query)) return new MatchResult(false, UserSettingSearchPrecision);
             string[] translated;
             var queryWithoutCase = query.ToLower();
             string key = $"{queryWithoutCase}|{stringToCompare}";
@@ -60,7 +61,6 @@ namespace Wox.Infrastructure
             if (match == null)
             {
                 translated = _alphabet.Translate(stringToCompare);
-                if (string.IsNullOrEmpty(stringToCompare) || string.IsNullOrEmpty(query)) return new MatchResult(false, UserSettingSearchPrecision);
                 var fullStringToCompareWithoutCase = string.Join("", translated).ToLower();
 
                 match = FuzzyMatchInternal(queryWithoutCase, fullStringToCompareWithoutCase, translated);
