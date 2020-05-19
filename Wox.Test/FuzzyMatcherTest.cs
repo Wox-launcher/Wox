@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using NUnit.Framework;
 using Wox.Infrastructure;
+using Wox.Infrastructure.UserSettings;
 using Wox.Plugin;
 
 namespace Wox.Test
@@ -147,7 +148,7 @@ namespace Wox.Test
         [TestCase("chr", "Candy Crush Saga from King", StringMatcher.SearchPrecisionScore.Regular, false)]
         [TestCase("chr", "Candy Crush Saga from King", StringMatcher.SearchPrecisionScore.None, true)]
         [TestCase("ccs", "Candy Crush Saga from King", StringMatcher.SearchPrecisionScore.Low, true)]
-        [TestCase("cand", "Candy Crush Saga from King",StringMatcher.SearchPrecisionScore.Regular, true)]
+        [TestCase("cand", "Candy Crush Saga from King", StringMatcher.SearchPrecisionScore.Regular, true)]
         [TestCase("cand", "Help cure hope raise on mind entity Chrome", StringMatcher.SearchPrecisionScore.Regular, false)]
         public void WhenGivenDesiredPrecisionThenShouldReturnAllResultsGreaterOrEqual(
             string queryString,
@@ -156,7 +157,7 @@ namespace Wox.Test
             bool expectedPrecisionResult)
         {
             // When            
-            var matcher = new StringMatcher {UserSettingSearchPrecision = expectedPrecisionScore};
+            var matcher = new StringMatcher { UserSettingSearchPrecision = expectedPrecisionScore };
 
             // Given
             var matchResult = matcher.FuzzyMatch(queryString, compareString);
@@ -221,5 +222,31 @@ namespace Wox.Test
                 $"Raw Score: {matchResult.RawScore}{Environment.NewLine}" +
                 $"Precision Score: {(int)expectedPrecisionScore}");
         }
+
+        [TestCase("yd", "有道词典")]
+        [TestCase("txqq", "腾讯qq")]
+        [TestCase("tx", "腾讯qq")]
+        [TestCase("yyy", "网易云音乐")]
+        public void WhenGivenChinese(string queryString, string stringToCompare)
+        {
+            Settings.Instance.ShouldUsePinyin = true;
+            var matcher = new StringMatcher { UserSettingSearchPrecision = StringMatcher.SearchPrecisionScore.Regular };
+
+            var matchResult = matcher.FuzzyMatch(queryString, stringToCompare);
+
+            Debug.WriteLine("");
+            Debug.WriteLine("###############################################");
+            string output = $"QueryString: {queryString}{Environment.NewLine}" +
+            $"CompareString: {stringToCompare}{Environment.NewLine}" +
+            $"Score: {matchResult.RawScore} {matchResult.Score}{Environment.NewLine}" +
+            $"MatchData: {matchResult.MatchData}{Environment.NewLine}";
+            Debug.WriteLine(output);
+            Debug.WriteLine("###############################################");
+            Debug.WriteLine("");
+
+            // Should
+            Assert.AreEqual(true, matchResult.IsSearchPrecisionScoreMet(), output);
+        }
+
     }
 }

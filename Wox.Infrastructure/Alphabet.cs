@@ -15,16 +15,17 @@ namespace Wox.Infrastructure
             _settings = Settings.Instance;
         }
 
-        public string[] Translate(string content)
+        public string Translate(string content)
         {
-            string[] result;
+            string result;
             if (_settings.ShouldUsePinyin && WordsHelper.HasChinese(content))
             {
-                result = WordsHelper.GetPinyinList(content);
+                // todo change first pinyin to full pinyin list, but current fuzzy match algorithm won't support first char match
+                result = WordsHelper.GetFirstPinyin(content);
             }
             else
             {
-                result = content.Select(c => c.ToString()).ToArray();
+                result = content;
             }
             return result;
         }

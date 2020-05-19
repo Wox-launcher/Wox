@@ -54,16 +54,14 @@ namespace Wox.Infrastructure
         {
             query = query.Trim();
             if (string.IsNullOrEmpty(stringToCompare) || string.IsNullOrEmpty(query)) return new MatchResult(false, UserSettingSearchPrecision);
-            string[] translated;
             var queryWithoutCase = query.ToLower();
-            string key = $"{queryWithoutCase}|{stringToCompare}";
+            string translated = _alphabet.Translate(stringToCompare);
+            var fullStringToCompareWithoutCase = translated.ToLower();
+            string key = $"{queryWithoutCase}|{fullStringToCompareWithoutCase}";
             MatchResult match = _cache[key] as MatchResult;
             if (match == null)
             {
-                translated = _alphabet.Translate(stringToCompare);
-                var fullStringToCompareWithoutCase = string.Join("", translated).ToLower();
-
-                match = FuzzyMatchInternal(queryWithoutCase, fullStringToCompareWithoutCase, translated);
+                match = FuzzyMatchInternal(queryWithoutCase, fullStringToCompareWithoutCase);
                 CacheItemPolicy policy = new CacheItemPolicy();
                 policy.SlidingExpiration = new TimeSpan(12, 0, 0);
                 _cache.Set(key, match, policy);
@@ -72,28 +70,6 @@ namespace Wox.Infrastructure
             return match;
         }
 
-        private int OriginIndexFromTranslated(int index, string[] translatedList)
-        {
-            int lengthOutter = translatedList.Length;
-            int count = 0;
-            for (int i = 0; i < lengthOutter; i++)
-            {
-                string part = translatedList[i];
-                int lengthInner = part.Length;
-                for (int j = 0; j < lengthInner; j++)
-                {
-                    if (index == count)
-                    {
-                        return i;
-                    }
-                    else
-                    {
-                        count = count + 1;
-                    }
-                }
-            }
-            throw new ArgumentException($"{nameof(OriginIndexFromTranslated)} cannot get index {index} {string.Join(",", translatedList)}");
-        }
         /// <summary>
         /// Current method:
         /// Character matching + substring matching;
@@ -105,7 +81,7 @@ namespace Wox.Infrastructure
         /// 6. Move onto the next substring's characters until all substrings are checked.
         /// 7. Consider success and move onto scoring if every char or substring without whitespaces matched
         /// </summary>
-        public MatchResult FuzzyMatchInternal(string query, string translated, string[] translatedList)
+        public MatchResult FuzzyMatchInternal(string query, string translated)
         {
             var querySubstrings = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             int currentQuerySubstringIndex = 0;
@@ -160,7 +136,7 @@ namespace Wox.Infrastructure
 
                 lastMatchIndex = compareStringIndex + 1;
 
-                indexList.Add(OriginIndexFromTranslated(compareStringIndex, translatedList));
+                indexList.Add(compareStringIndex);
 
                 currentQuerySubstringCharacterIndex++;
 
