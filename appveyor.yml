@@ -26,3 +26,8 @@ artifacts:
   - path: 'Output\Packages\Wox-*.*'
     name: installer
   - path: 'Output\Packages\RELEASES'
+    name: installer
+  - path: 'Wox.Installer\Everything*.exe'
+    name: installer
+  - path: 'Wox.Installer\python*.exe'
+    name: installer
