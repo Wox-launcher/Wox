@@ -17,22 +17,7 @@ namespace Wox.Plugin.Program
 
         internal const char SuffixSeperator = ';';
 
-        public class ProgramSource
-        {
-            public string Location { get; set; }
-
-            public override bool Equals(object obj)
-            {
-                var s = obj as ProgramSource;
-                var equality = s?.Location == Location ;
-                return equality;
-            }
-
-            public override int GetHashCode()
-            {
-                return this.Location.GetHashCode();
-            }
-        }
+        
 
     }
 }

@@ -70,7 +70,7 @@
       <DependentUpon>AddProgramSource.xaml</DependentUpon>
     </Compile>
     <Compile Include="FileChangeWatcher.cs" />
-    <Compile Include="Views\Models\ProgramSource.cs" />
+    <Compile Include="ProgramSource.cs" />
     <Compile Include="Programs\IProgram.cs" />
     <Compile Include="Programs\UWP.cs" />
     <Compile Include="Programs\Win32.cs" />

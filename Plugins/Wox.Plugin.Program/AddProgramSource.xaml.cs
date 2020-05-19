@@ -3,8 +3,6 @@ using System.Windows;
 
 using Ookii.Dialogs.Wpf; // may be removed later https://github.com/dotnet/wpf/issues/438
 
-using Wox.Plugin.Program.Views.Models;
-using Wox.Plugin.Program.Views;
 
 
 namespace Wox.Plugin.Program
@@ -15,7 +13,7 @@ namespace Wox.Plugin.Program
     public partial class AddProgramSource
     {
         private PluginInitContext _context;
-        private Settings.ProgramSource _editing;
+        private ProgramSource _editing;
         private Settings _settings;
 
         public AddProgramSource(PluginInitContext context, Settings settings)
@@ -26,7 +24,7 @@ namespace Wox.Plugin.Program
             Directory.Focus();
         }
 
-        public AddProgramSource(Settings.ProgramSource edit, Settings settings)
+        public AddProgramSource(ProgramSource edit, Settings settings)
         {
             _editing = edit;
             _settings = settings;
