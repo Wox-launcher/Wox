@@ -33,8 +33,16 @@ namespace Wox
             if (exception.Data.Contains(websiteKey))
             {
                 paragraph = Hyperlink("You can help plugin author to fix this issue by opening issue in: ", exception.Data[websiteKey].ToString());
-                paragraph.Inlines.Add($"Plugin Name {exception.Data[nameof(Plugin.PluginPair.Metadata.Name)]}");
-                paragraph.Inlines.Add($"Plugin ID {exception.Data[nameof(Plugin.PluginPair.Metadata.ID)]}");
+                string nameKey = nameof(Plugin.PluginPair.Metadata.Name);
+                if (exception.Data.Contains(nameKey))
+                {
+                    paragraph.Inlines.Add($"Plugin Name {exception.Data[nameKey]}");
+                }
+                string idKey = nameof(Plugin.PluginPair.Metadata.ID);
+                if (exception.Data.Contains(idKey))
+                {
+                    paragraph.Inlines.Add($"Plugin ID {exception.Data[idKey]}");
+                }
             }
             else
             {
