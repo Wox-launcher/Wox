@@ -34,6 +34,7 @@ namespace Wox
         private SettingWindowViewModel _settingsVM;
         private readonly Portable _portable = new Portable();
         private StringMatcher _stringMatcher;
+        private static string _systemLanguage;
 
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
@@ -59,6 +60,7 @@ namespace Wox
         [STAThread]
         public static void Main()
         {
+            _systemLanguage = CultureInfo.CurrentUICulture.Name;
             Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
             Thread.CurrentThread.CurrentUICulture = CultureInfo.InvariantCulture;
             if (SingleInstance<App>.InitializeAsFirstInstance(Unique))
@@ -80,6 +82,7 @@ namespace Wox
 
                 Logger.WoxInfo("Begin Wox startup----------------------------------------------------");
                 Settings.Initialize();
+                ExceptionFormatter.Initialize(_systemLanguage, Settings.Instance.Language);
                 Logger.WoxInfo(ExceptionFormatter.RuntimeInfo());
 
                 _portable.PreStartCleanUpAfterPortabilityUpdate();

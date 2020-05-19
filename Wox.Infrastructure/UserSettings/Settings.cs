@@ -25,7 +25,6 @@ namespace Wox.Infrastructure.UserSettings
         public static void Initialize()
         {
             Instance = _storage.Load();
-            Logger.WoxInfo($"Wox Language: {Instance.Language}");
         }
 
         #endregion

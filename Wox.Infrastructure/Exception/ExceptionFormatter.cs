@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Windows;
 using System.Xml;
 using Microsoft.Win32;
 
@@ -10,6 +12,13 @@ namespace Wox.Infrastructure.Exception
 {
     public class ExceptionFormatter
     {
+        private static string _systemLanguage;
+        private static string _woxLanguage;
+        public static void Initialize(string systemLanguage, string woxLanguage)
+        {
+            _systemLanguage = systemLanguage;
+            _woxLanguage = woxLanguage;
+        }
         public static string FormattedException(System.Exception ex)
         {
             return FormattedAllExceptions(ex).ToString();
@@ -137,7 +146,8 @@ namespace Wox.Infrastructure.Exception
             sb.AppendLine($"* OS Version: {Environment.OSVersion.VersionString}");
             sb.AppendLine($"* x64 OS: {Environment.Is64BitOperatingSystem}");
             sb.AppendLine($"* x64 Process: {Environment.Is64BitProcess}");
-            sb.AppendLine($"* CurrentUICulture: {CultureInfo.CurrentUICulture.Name}");
+            sb.AppendLine($"* System Language: {_systemLanguage}");
+            sb.AppendLine($"* Wox Language: {_woxLanguage}");
             sb.AppendLine($"* CLR Version: {Environment.Version}");
             sb.AppendLine($"* Installed .NET Framework: ");
             foreach (var result in GetFrameworkVersionFromRegistry())
