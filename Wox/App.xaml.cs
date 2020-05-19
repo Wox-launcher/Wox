@@ -22,6 +22,7 @@ using Wox.Infrastructure.UserSettings;
 using Wox.ViewModel;
 using Stopwatch = Wox.Infrastructure.Stopwatch;
 using Wox.Infrastructure.Exception;
+using Sentry;
 
 namespace Wox
 {
@@ -34,6 +35,7 @@ namespace Wox
         private SettingWindowViewModel _settingsVM;
         private readonly Portable _portable = new Portable();
         private StringMatcher _stringMatcher;
+        private static string _systemLanguage;
 
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
@@ -59,14 +61,19 @@ namespace Wox
         [STAThread]
         public static void Main()
         {
+            _systemLanguage = CultureInfo.CurrentUICulture.Name;
             Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
             Thread.CurrentThread.CurrentUICulture = CultureInfo.InvariantCulture;
-            if (SingleInstance<App>.InitializeAsFirstInstance(Unique))
+
+            using (ErrorReporting.InitializedSentry(_systemLanguage))
             {
-                using (var application = new App())
+                if (SingleInstance<App>.InitializeAsFirstInstance(Unique))
                 {
-                    application.InitializeComponent();
-                    application.Run();
+                    using (var application = new App())
+                    {
+                        application.InitializeComponent();
+                        application.Run();
+                    }
                 }
             }
         }
@@ -75,17 +82,17 @@ namespace Wox
         {
             Logger.StopWatchNormal("Startup cost", () =>
             {
-                Logger.WoxInfo("Begin Wox startup----------------------------------------------------");
-                Logger.WoxInfo($"Runtime info:{ExceptionFormatter.RuntimeInfo()}");
-                Settings.Instance.ToString();
-
                 RegisterAppDomainExceptions();
                 RegisterDispatcherUnhandledException();
 
-                //throw new Exception("sentry wox exception");
+                Logger.WoxInfo("Begin Wox startup----------------------------------------------------");
+                Settings.Initialize();
+                ExceptionFormatter.Initialize(_systemLanguage, Settings.Instance.Language);
+                InsertWoxLanguageIntoLog();
+
+                Logger.WoxInfo(ExceptionFormatter.RuntimeInfo());
 
                 _portable.PreStartCleanUpAfterPortabilityUpdate();
-
 
                 ImageLoader.Initialize();
 
@@ -125,6 +132,17 @@ namespace Wox
             });
         }
 
+        private static void InsertWoxLanguageIntoLog()
+        {
+            Log.updateSettingsInfo(Settings.Instance.Language);
+            Settings.Instance.PropertyChanged += (s, ev) =>
+            {
+                if (ev.PropertyName == nameof(Settings.Instance.Language))
+                {
+                    Log.updateSettingsInfo(Settings.Instance.Language);
+                }
+            };
+        }
 
         private void AutoStartup()
         {
@@ -147,7 +165,7 @@ namespace Wox
         /// <summary>
         /// let exception throw as normal is better for Debug
         /// </summary>
-        [Conditional("RELEASE")]
+        //[Conditional("RELEASE")]
         private void RegisterDispatcherUnhandledException()
         {
             DispatcherUnhandledException += ErrorReporting.DispatcherUnhandledException;
@@ -157,7 +175,7 @@ namespace Wox
         /// <summary>
         /// let exception throw as normal is better for Debug
         /// </summary>
-        [Conditional("RELEASE")]
+        //[Conditional("RELEASE")]
         private static void RegisterAppDomainExceptions()
         {
             AppDomain.CurrentDomain.UnhandledException += ErrorReporting.UnhandledExceptionHandleMain;
@@ -169,7 +187,7 @@ namespace Wox
             // but if sessionending is not called, exit won't be called when log off / shutdown
             if (!_disposed)
             {
-                API.SaveAppAllSettings();
+                API?.SaveAppAllSettings();
                 _disposed = true;
             }
         }

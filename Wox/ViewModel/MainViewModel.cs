@@ -74,9 +74,9 @@ namespace Wox.ViewModel
             History = new ResultsViewModel(_settings);
             _selectedResults = Results;
 
-            _translator = InternationalizationManager.Instance;
             if (useUI)
             {
+                _translator = InternationalizationManager.Instance;
                 InitializeKeyCommands();
                 RegisterResultsUpdatedEvent();
 

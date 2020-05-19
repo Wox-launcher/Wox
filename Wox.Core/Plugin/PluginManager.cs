@@ -123,6 +123,9 @@ namespace Wox.Core.Plugin
                 }
                 catch (Exception e)
                 {
+                    e.Data.Add(nameof(pair.Metadata.ID), pair.Metadata.ID);
+                    e.Data.Add(nameof(pair.Metadata.Name), pair.Metadata.Name);
+                    e.Data.Add(nameof(pair.Metadata.Website), pair.Metadata.Website);
                     Logger.WoxError($"Fail to Init plugin: {pair.Metadata.Name}", e);
                     pair.Metadata.Disabled = true;
                     failedPlugins.Enqueue(pair);
@@ -186,6 +189,9 @@ namespace Wox.Core.Plugin
             }
             catch (Exception e)
             {
+                e.Data.Add(nameof(pair.Metadata.ID), pair.Metadata.ID);
+                e.Data.Add(nameof(pair.Metadata.Name), pair.Metadata.Name);
+                e.Data.Add(nameof(pair.Metadata.Website), pair.Metadata.Website);
                 Logger.WoxError($"Exception for plugin <{pair.Metadata.Name}> when query <{query}>", e);
                 return new List<Result>();
             }

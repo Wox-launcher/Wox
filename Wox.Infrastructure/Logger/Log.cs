@@ -2,10 +2,10 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
-using Mindscape.Raygun4Net;
 using NLog;
 using NLog.Config;
 using NLog.Targets;
+using Sentry;
 using Wox.Infrastructure.Exception;
 using Wox.Infrastructure.UserSettings;
 
@@ -14,8 +14,9 @@ namespace Wox.Infrastructure.Logger
     public static class Log
     {
         public const string DirectoryName = "Logs";
-        private static RaygunClient _raygunClient = new RaygunClient("LG5MX0YYMCpCN2AtD0fdZw");
         public static string CurrentLogDirectory { get; }
+
+        private static string _woxLanguage = "not set";
 
         static Log()
         {
@@ -74,10 +75,25 @@ namespace Wox.Infrastructure.Logger
         {
             Debug.WriteLine($"ERROR|{logger.Name}|{methodName}|{message}");
             logger.Error($"{methodName}|{message}|{ExceptionFormatter.FormattedException(exception)}");
-            _raygunClient.Send(exception);
+            SendException(exception);
 #if DEBUG
             throw exception;
 #endif
+        }
+
+        public static void updateSettingsInfo(string woxLanguage)
+        {
+            _woxLanguage = woxLanguage;
+
+            SentrySdk.ConfigureScope(scope =>
+            {
+                scope.SetTag("woxLanguage", _woxLanguage);
+            });
+        }
+
+        public static void SendException(System.Exception exception)
+        {
+            SentrySdk.CaptureException(exception);
         }
     }
 }

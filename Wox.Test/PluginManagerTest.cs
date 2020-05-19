@@ -21,6 +21,7 @@ namespace Wox.Test
         {
             // todo remove i18n from application / ui, so it can be tested in a modular way
             new App();
+            Settings.Initialize();
             ImageLoader.Initialize();
 
             Portable portable = new Portable();

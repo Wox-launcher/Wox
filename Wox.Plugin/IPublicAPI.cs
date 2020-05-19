@@ -14,7 +14,7 @@ namespace Wox.Plugin
         /// <param name="query"></param>
         /// <param name="plugin"></param>
         /// <param name="results"></param>
-        [Obsolete("This method will be removed in Wox 1.3")]
+        [Obsolete("This method will be removed in Wox 1.4")]
         void PushResults(Query query, PluginMetadata plugin, List<Result> results);
 
         /// <summary>

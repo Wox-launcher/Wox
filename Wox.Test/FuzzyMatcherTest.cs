@@ -20,6 +20,12 @@ namespace Wox.Test
         private const string OneOneOneOne = "1111";
         private const string MicrosoftSqlServerManagementStudio = "Microsoft SQL Server Management Studio";
 
+        [OneTimeSetUp]
+        public void setUp()
+        {
+            Settings.Initialize();
+        }
+
         public List<string> GetSearchStrings()
             => new List<string>
             {

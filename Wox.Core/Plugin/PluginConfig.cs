@@ -79,6 +79,8 @@ namespace Wox.Core.Plugin
             }
             catch (Exception e)
             {
+                e.Data.Add(nameof(configPath), configPath);
+                e.Data.Add(nameof(pluginDirectory), pluginDirectory);
                 Logger.WoxError($"invalid json for config <{configPath}>", e);
                 return null;
             }
