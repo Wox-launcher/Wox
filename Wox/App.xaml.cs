@@ -75,14 +75,12 @@ namespace Wox
         {
             Logger.StopWatchNormal("Startup cost", () =>
             {
-                Logger.WoxInfo("Begin Wox startup----------------------------------------------------");
-                Logger.WoxInfo($"Runtime info:{ExceptionFormatter.RuntimeInfo()}");
-                Settings.Instance.ToString();
-
                 RegisterAppDomainExceptions();
                 RegisterDispatcherUnhandledException();
 
-                //throw new Exception("sentry wox exception");
+                Logger.WoxInfo("Begin Wox startup----------------------------------------------------");
+                Logger.WoxInfo($"Runtime info:{ExceptionFormatter.RuntimeInfo()}");
+                Settings.Instance.ToString();
 
                 _portable.PreStartCleanUpAfterPortabilityUpdate();
 
