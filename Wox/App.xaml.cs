@@ -79,11 +79,10 @@ namespace Wox
                 RegisterDispatcherUnhandledException();
 
                 Logger.WoxInfo("Begin Wox startup----------------------------------------------------");
-                Logger.WoxInfo($"Runtime info:{ExceptionFormatter.RuntimeInfo()}");
-                Settings.Instance.ToString();
+                Settings.Initialize();
+                Logger.WoxInfo(ExceptionFormatter.RuntimeInfo());
 
                 _portable.PreStartCleanUpAfterPortabilityUpdate();
-
 
                 ImageLoader.Initialize();
 

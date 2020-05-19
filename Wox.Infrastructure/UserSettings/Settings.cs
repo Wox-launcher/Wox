@@ -20,10 +20,16 @@ namespace Wox.Infrastructure.UserSettings
         }
 
         private static WoxJsonStorage<Settings> _storage = new WoxJsonStorage<Settings>();
-        private static Settings _instance = _storage.Load();
-        public static Settings Instance => _instance;
+        private static Settings _instance;
+        public static Settings Instance = _instance;
 
-    #endregion
+        public static void Initialize()
+        {
+            _instance = _storage.Load();
+            Logger.WoxInfo($"Wox Language: {_instance.Language}");
+        }
+
+        #endregion
 
         public string Hotkey { get; set; } = "Alt + Space";
         public string Language { get; set; } = "en";
