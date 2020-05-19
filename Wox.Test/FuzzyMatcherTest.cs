@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -223,10 +223,10 @@ namespace Wox.Test
                 $"Precision Score: {(int)expectedPrecisionScore}");
         }
 
-        [TestCase("yd", "ÓĞµÀ´Êµä")]
-        [TestCase("txqq", "ÌÚÑ¶qq")]
-        [TestCase("tx", "ÌÚÑ¶qq")]
-        [TestCase("yyy", "ÍøÒ×ÔÆÒôÀÖ")]
+        [TestCase("yd", "æœ‰é“è¯å…¸")]
+        [TestCase("txqq", "è…¾è®¯qq")]
+        [TestCase("tx", "è…¾è®¯qq")]
+        [TestCase("yyy", "ç½‘æ˜“äº‘éŸ³ä¹")]
         public void WhenGivenChinese(string queryString, string stringToCompare)
         {
             Settings.Instance.ShouldUsePinyin = true;
