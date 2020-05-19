@@ -21,7 +21,6 @@ namespace Wox.Test
         [OneTimeSetUp]
         public void Setup()
         {
-            new App();
             Settings.Initialize();
             Portable portable = new Portable();
             SettingWindowViewModel settingsVm = new SettingWindowViewModel(portable);
@@ -31,7 +30,6 @@ namespace Wox.Test
             PluginManager.LoadPlugins(Settings.Instance.PluginSettings);
             MainViewModel mainVm = new MainViewModel(false);
             PublicAPIInstance api = new PublicAPIInstance(settingsVm, mainVm);
-            PluginManager.InitializePlugins(api);
 
             plugin = new Plugin.Program.Main();
             plugin.InitSync(new PluginInitContext()
