@@ -54,16 +54,15 @@ namespace Wox.Infrastructure
         {
             query = query.Trim();
             string[] translated;
-            translated = _alphabet.Translate(stringToCompare);
-
-            if (string.IsNullOrEmpty(stringToCompare) || string.IsNullOrEmpty(query)) return new MatchResult(false, UserSettingSearchPrecision);
-            var fullStringToCompareWithoutCase = string.Join("", translated).ToLower();
             var queryWithoutCase = query.ToLower();
-
-            string key = $"{queryWithoutCase}|{fullStringToCompareWithoutCase}";
+            string key = $"{queryWithoutCase}|{stringToCompare}";
             MatchResult match = _cache[key] as MatchResult;
             if (match == null)
             {
+                translated = _alphabet.Translate(stringToCompare);
+                if (string.IsNullOrEmpty(stringToCompare) || string.IsNullOrEmpty(query)) return new MatchResult(false, UserSettingSearchPrecision);
+                var fullStringToCompareWithoutCase = string.Join("", translated).ToLower();
+
                 match = FuzzyMatchInternal(queryWithoutCase, fullStringToCompareWithoutCase, translated);
                 CacheItemPolicy policy = new CacheItemPolicy();
                 policy.SlidingExpiration = new TimeSpan(12, 0, 0);
