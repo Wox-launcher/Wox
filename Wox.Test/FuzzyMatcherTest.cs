@@ -20,16 +20,9 @@ namespace Wox.Test
         private const string OneOneOneOne = "1111";
         private const string MicrosoftSqlServerManagementStudio = "Microsoft SQL Server Management Studio";
 
-        [OneTimeSetUp]
-        public void setUp()
-        {
-            Settings.Initialize();
-        }
-
-
         public List<string> GetSearchStrings()
-        => new List<string>
-        {
+            => new List<string>
+            {
                 Chrome,
                 "Choose which programs you want Windows to use for activities like web browsing, editing photos, sending e-mail, and playing music.",
                 HelpCureHopeRaiseOnMindEntityChrome,
@@ -38,7 +31,7 @@ namespace Wox.Test
                 "Add, change, and manage fonts on your computer",
                 LastIsChrome,
                 OneOneOneOne
-        };
+            };
 
         public List<int> GetPrecisionScores()
         {

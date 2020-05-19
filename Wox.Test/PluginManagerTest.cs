@@ -21,7 +21,6 @@ namespace Wox.Test
         {
             // todo remove i18n from application / ui, so it can be tested in a modular way
             new App();
-            Settings.Initialize();
             ImageLoader.Initialize();
 
             Portable portable = new Portable();
@@ -51,17 +50,6 @@ namespace Wox.Test
                 .OrderByDescending(r => r.Score)
                 .First();
 
-            Assert.IsTrue(result.Title.StartsWith(ResultTitle));
-        }
-
-        [TestCase("powershell", "PowerShell")]
-        [TestCase("note", "Notepad")]
-        [TestCase("this pc", "This PC")]
-        public void Win32Test(string QueryText, string ResultTitle)
-        {
-            PluginPair pair = PluginManager.AllPlugins.Where(p => p.Plugin.GetType() == typeof(Plugin.Program.Main)).First();
-            Query query = QueryBuilder.Build(QueryText.Trim(), new Dictionary<string, PluginPair>());
-            Result result = pair.Plugin.Query(query).OrderByDescending(r => r.Score).First();
             Assert.IsTrue(result.Title.StartsWith(ResultTitle));
         }
     }
