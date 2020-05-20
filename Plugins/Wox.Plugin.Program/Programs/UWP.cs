@@ -425,7 +425,8 @@ namespace Wox.Plugin.Program.Programs
                 }
                 else
                 {
-                    string parsed = $"ms-resource://{packageName}/Files/{fileReference.Replace("\\", "/")}";
+                    // https://docs.microsoft.com/en-us/windows/uwp/app-resources/pri-apis-scenario-1
+                    string parsed = $"ms-resource:///Files/{fileReference.Replace("\\", "/")}";
                     try
                     {
                         string result = ResourceFromPriInternal(packageFullName, parsed);
