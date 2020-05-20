@@ -11,6 +11,7 @@ using Sentry;
 using Sentry.Protocol;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Exception;
+using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Helper
 {
@@ -64,8 +65,12 @@ namespace Wox.Helper
             });
             SentrySdk.ConfigureScope(scope =>
             {
+                scope.SetExtra("commandLine", Environment.CommandLine);
+                scope.SetExtra("portableMode", DataLocation.PortableDataLocationInUse());
                 scope.SetTag("systemLanguage", systemLanguage);
                 scope.SetTag("timezone", TimeZoneInfo.Local.DisplayName);
+                scope.SetExtra("x64OS", Environment.Is64BitOperatingSystem);
+                scope.SetExtra("x64Process", Environment.Is64BitProcess);
             });
             return s;
         }

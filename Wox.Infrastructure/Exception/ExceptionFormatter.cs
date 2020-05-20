@@ -7,6 +7,7 @@ using System.Threading;
 using System.Windows;
 using System.Xml;
 using Microsoft.Win32;
+using Wox.Infrastructure.UserSettings;
 
 namespace Wox.Infrastructure.Exception
 {
@@ -141,6 +142,7 @@ namespace Wox.Infrastructure.Exception
             StringBuilder sb = new StringBuilder();
             sb.AppendLine("## Runtime Info");
             sb.AppendLine($"* Command Line: {Environment.CommandLine}");
+            sb.AppendLine($"* Portable Mode: {DataLocation.PortableDataLocationInUse()}");
             sb.AppendLine($"* Timestamp: {DateTime.Now.ToString(CultureInfo.InvariantCulture)}");
             sb.AppendLine($"* Wox version: {Constant.Version}");
             sb.AppendLine($"* OS Version: {Environment.OSVersion.VersionString}");
