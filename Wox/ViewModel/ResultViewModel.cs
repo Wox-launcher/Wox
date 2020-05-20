@@ -34,24 +34,33 @@ namespace Wox.ViewModel
             if (string.IsNullOrEmpty(imagePath) && result.Icon != null)
             {
                 var r = result;
-                ImageSource func(string key)
+                try
                 {
-                    try
-                    {
-                        return r.Icon();
-                    }
-                    catch (Exception e)
-                    {
-                        Logger.WoxError($"IcoPath is empty and exception when calling Icon() for result <{r.Title}> of plugin <{r.PluginDirectory}>", e);
-                        return ImageLoader.Load(Constant.ErrorIcon, UpdateImageCallback);
-                    }
+                    return r.Icon();
                 }
-                return ImageLoader.Load(result.Title, func, UpdateImageCallback);
+                catch (Exception e)
+                {
+                    e.Data.Add(nameof(result.Title), result.Title);
+                    e.Data.Add(nameof(result.PluginID), result.PluginID);
+                    e.Data.Add(nameof(result.PluginDirectory), result.PluginDirectory);
+                    e.Data.Add(nameof(result.IcoPath), result.IcoPath);
+                    Logger.WoxError($"IcoPath is empty and exception when calling Icon() for result <{r.Title}> of plugin <{r.PluginDirectory}>", e);
+                    return ImageLoader.GetErrorImage();
+                }
             }
-            else
+            try
             {
                 // will get here either when icoPath has value\icon delegate is null\when had exception in delegate
-                return ImageLoader.Load(imagePath, UpdateImageCallback);
+                return ImageLoader.Load(imagePath, UpdateImageCallback, result.Title, result.PluginID, result.PluginDirectory);
+            }
+            catch (Exception e)
+            {
+                e.Data.Add(nameof(result.Title), result.Title);
+                e.Data.Add(nameof(result.PluginID), result.PluginID);
+                e.Data.Add(nameof(result.PluginDirectory), result.PluginDirectory);
+                e.Data.Add(nameof(result.IcoPath), result.IcoPath);
+                Logger.WoxError($"Cannot read image {result.IcoPath}", e);
+                return ImageLoader.GetErrorImage();
             }
         }
 
