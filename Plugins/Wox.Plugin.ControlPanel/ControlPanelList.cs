@@ -8,6 +8,7 @@ using System.Text;
 using System.Windows.Automation.Peers;
 using Microsoft.Win32;
 using NLog;
+using Wox.Infrastructure;
 using Wox.Infrastructure.Logger;
 
 namespace Wox.Plugin.ControlPanel
