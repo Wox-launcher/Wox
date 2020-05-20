@@ -183,6 +183,7 @@ namespace Wox
 
         public void Dispose()
         {
+            Logger.WoxInfo("Wox Start Displose");
             // if sessionending is called, exit proverbially be called when log off / shutdown
             // but if sessionending is not called, exit won't be called when log off / shutdown
             if (!_disposed)
@@ -190,6 +191,7 @@ namespace Wox
                 API?.SaveAppAllSettings();
                 _disposed = true;
             }
+            Logger.WoxInfo("Wox End Displose");
         }
 
         public void OnSecondAppStarted(IList<string> args)

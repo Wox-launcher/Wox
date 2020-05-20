@@ -8,8 +8,6 @@ namespace Wox.Plugin
 
     public class Result : BaseModel
     {
-
-        private string _pluginDirectory;
         private string _icoPath;
 
         public string Title { get; set; }
@@ -27,7 +25,9 @@ namespace Wox.Plugin
             get { return _icoPath; }
             set
             {
-                if (!string.IsNullOrEmpty(PluginDirectory) && !Path.IsPathRooted(value))
+                // todo, use icon path type enum in the future
+                string key = "EmbededIcon:";
+                if (!string.IsNullOrEmpty(PluginDirectory) && !Path.IsPathRooted(value) && !value.StartsWith(key))
                 {
                     _icoPath = Path.Combine(value, IcoPath);
                 }
@@ -68,18 +68,7 @@ namespace Wox.Plugin
         /// <summary>
         /// Plugin directory
         /// </summary>
-        public string PluginDirectory
-        {
-            get { return _pluginDirectory; }
-            set
-            {
-                _pluginDirectory = value;
-                if (!string.IsNullOrEmpty(IcoPath) && !Path.IsPathRooted(IcoPath))
-                {
-                    IcoPath = Path.Combine(value, IcoPath);
-                }
-            }
-        }
+        public string PluginDirectory { get; set; }
 
         public override bool Equals(object obj)
         {

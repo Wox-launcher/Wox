@@ -1,6 +1,10 @@
 ﻿using System;
+using System.CodeDom.Compiler;
+using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using ICSharpCode.SharpZipLib.Core;
@@ -29,6 +33,8 @@ namespace Wox.Image
         private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
         private static ImageSource _defaultFileImage;
         private static ImageSource _errorImage;
+
+
 
         public static void Initialize()
         {
@@ -66,6 +72,8 @@ namespace Wox.Image
             return isParent;
         }
 
+
+
         private static ImageSource LoadInternal(string path)
         {
             Logger.WoxDebug($"load from disk {path}");
@@ -76,6 +84,13 @@ namespace Wox.Image
             {
                 image = GetErrorImage();
                 return image;
+            }
+
+
+            string key = "EmbededIcon:";
+            if (path.StartsWith(key))
+            {
+                return EmbededIcon.GetImage(key, path, 32);
             }
 
             if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
@@ -193,7 +208,7 @@ namespace Wox.Image
 
         }
 
-        private static ImageSource GetErrorImage()
+        public static ImageSource GetErrorImage()
         {
             return _errorImage;
         }
@@ -201,7 +216,19 @@ namespace Wox.Image
         public static ImageSource Load(string path)
         {
             Logger.WoxDebug($"load begin {path}");
-            var img = _cache.GetOrAdd(path, LoadInternal);
+            var img = _cache.GetOrAdd(path, (string p) =>
+            {
+                try
+                {
+                    return LoadInternal(p);
+                }
+                catch (Exception e)
+                {
+                    e.Data.Add(nameof(p), p);
+                    Logger.WoxError($"cannot load image sync <{p}>", e);
+                    return GetErrorImage();
+                }
+            });
             Logger.WoxTrace($"load end {path}");
             return img;
         }
@@ -213,10 +240,26 @@ namespace Wox.Image
         /// <param name="path"></param>
         /// <param name="updateImageCallback"></param>
         /// <returns></returns>
-        public static ImageSource Load(string path, Action<ImageSource> updateImageCallback)
+        internal static ImageSource Load(string path, Action<ImageSource> updateImageCallback, string title, string pluginID, string pluginDirectory)
         {
             Logger.WoxDebug($"load begin {path}");
-            var img = _cache.GetOrAdd(path, _defaultFileImage, LoadInternal, updateImageCallback);
+            var img = _cache.GetOrAdd(path, _defaultFileImage, (string p) =>
+            {
+                try
+                {
+                    return LoadInternal(p);
+                }
+                catch (Exception e)
+                {
+                    e.Data.Add(nameof(title), title);
+                    e.Data.Add(nameof(pluginID), pluginID);
+                    e.Data.Add(nameof(pluginDirectory), pluginDirectory);
+                    e.Data.Add(nameof(p), p);
+                    Logger.WoxError($"cannot load image async <{p}>", e);
+                    return GetErrorImage();
+                }
+            }, updateImageCallback
+            );
             Logger.WoxTrace($"load end {path}");
             return img;
         }
