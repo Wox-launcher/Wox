@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
@@ -71,6 +72,18 @@ namespace Wox.Helper
 
         public static string SendException(Exception exception)
         {
+            string pluginDiretoryKey = nameof(Plugin.PluginPair.Metadata.PluginDirectory);
+            if (exception.Data.Contains(pluginDiretoryKey))
+            {
+                string pluginDirectory = exception.Data[pluginDiretoryKey] as string;
+                bool debug = pluginDirectory.Contains(@"\Output\Release") || pluginDirectory.Contains(@"\Output\Release");
+                bool thirdParty = !pluginDirectory.Contains(Constant.ProgramDirectory);
+                if (debug || thirdParty)
+                {
+                    return SentryId.Empty.ToString();
+                }
+            }
+
             SentryId id = SentryId.Empty;
             SentrySdk.WithScope(scope =>
             {
