@@ -26,7 +26,7 @@ namespace Wox.Helper
 
         public static void UnhandledExceptionHandleTask(Task t)
         {
-            SentryId id = SentrySdk.CaptureException(t.Exception);
+            string id = SendException(t.Exception);
             Application.Current.Dispatcher.Invoke(() =>
             {
                 Report(t.Exception, id.ToString());
@@ -35,7 +35,7 @@ namespace Wox.Helper
 
         public static void UnhandledExceptionHandleMain(object sender, UnhandledExceptionEventArgs e)
         {
-            SentryId id = SentrySdk.CaptureException(e.ExceptionObject as Exception);
+            string id = SendException(e.ExceptionObject as Exception);
             //handle non-ui main thread exceptions
             Application.Current.Dispatcher.Invoke(() =>
             {
@@ -45,8 +45,8 @@ namespace Wox.Helper
 
         public static void DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
-            SentryId id = SentrySdk.CaptureException(e.Exception);
-            Report(e.Exception, id.ToString());
+            string id = SendException(e.Exception);
+            Report(e.Exception, id);
             //prevent application exist, so the user can copy prompted error info
             e.Handled = true;
         }
@@ -67,6 +67,17 @@ namespace Wox.Helper
                 scope.SetTag("timezone", TimeZoneInfo.Local.DisplayName);
             });
             return s;
+        }
+
+        public static string SendException(Exception exception)
+        {
+            SentryId id = SentryId.Empty;
+            SentrySdk.WithScope(scope =>
+            {
+                scope.Level = SentryLevel.Fatal;
+                id = SentrySdk.CaptureException(exception);
+            });
+            return id.ToString();
         }
     }
 }

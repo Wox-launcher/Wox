@@ -101,7 +101,11 @@ namespace Wox.Infrastructure.Logger
 
         public static void SendException(System.Exception exception)
         {
-            SentrySdk.CaptureException(exception);
+            SentrySdk.WithScope(scope =>
+            {
+                scope.Level = Sentry.Protocol.SentryLevel.Error;
+                SentrySdk.CaptureException(exception);
+            });
         }
     }
 }
