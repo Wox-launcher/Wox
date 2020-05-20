@@ -63,28 +63,35 @@ namespace Wox.Plugin.ControlPanel
 
             foreach (string guid in nameSpace.GetSubKeyNames())
             {
-                currentKey = clsid.OpenSubKey(guid);
-                if (currentKey != null)
+                try
                 {
-                    executablePath = getExecutablePath(currentKey);
-
-                    if (!(executablePath == null)) //Cannot have item without executable path
+                    currentKey = clsid.OpenSubKey(guid);
+                    if (currentKey != null)
                     {
-                        localizedString = getLocalizedString(currentKey);
+                        executablePath = getExecutablePath(currentKey);
 
-                        if (!string.IsNullOrEmpty(localizedString))//Cannot have item without Title
+                        if (!(executablePath == null)) //Cannot have item without executable path
                         {
-                            infoTip = getInfoTip(currentKey);
+                            localizedString = getLocalizedString(currentKey);
 
-                            string iconPath = Path.Combine(iconFolder, $"{guid}{fileType}");
-                            if (!File.Exists(iconPath))
+                            if (!string.IsNullOrEmpty(localizedString))//Cannot have item without Title
                             {
-                                myIcon = getIcon(currentKey, size);
-                                myIcon.ToBitmap().Save(iconPath);
+                                infoTip = getInfoTip(currentKey);
+
+                                string iconPath = Path.Combine(iconFolder, $"{guid}{fileType}");
+                                if (!File.Exists(iconPath))
+                                {
+                                    myIcon = getIcon(currentKey, size);
+                                    myIcon.ToBitmap().Save(iconPath);
+                                }
+                                controlPanelItems.Add(new ControlPanelItem(localizedString, infoTip, guid, executablePath, iconPath));
                             }
-                            controlPanelItems.Add(new ControlPanelItem(localizedString, infoTip, guid, executablePath, iconPath));
                         }
                     }
+                }
+                catch (Exception e)
+                {
+                    e.Data.Add(nameof(guid), guid);
                 }
             }
 
