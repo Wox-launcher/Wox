@@ -97,6 +97,8 @@ namespace Wox.Plugin.ControlPanel
                 catch (Exception e)
                 {
                     e.Data.Add(nameof(guid), guid);
+                    Logger.WoxError($"cannot parse control panel item {guid}", e);
+                    continue;
                 }
             }
 
