@@ -107,6 +107,7 @@ namespace Wox.ViewModel
                         updates.Add(tempUpdate);
                     }
 
+
                     UpdateResultView(updates);
 
                     DateTime currentTime = DateTime.Now;
@@ -492,6 +493,7 @@ namespace Wox.ViewModel
                                     countdown.Signal();
                                     return;
                                 }
+
                                 _resultsQueue.Add(new ResultsForUpdate(results, plugin.Metadata, query, token, countdown));
                             }, token).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
                         }

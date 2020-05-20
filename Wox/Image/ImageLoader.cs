@@ -86,6 +86,13 @@ namespace Wox.Image
                 return image;
             }
 
+
+            string key = "EmbededIcon:";
+            if (path.StartsWith(key))
+            {
+                return EmbededIcon.GetImage(key, path, 32);
+            }
+
             if (path.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
             {
                 try
@@ -218,7 +225,7 @@ namespace Wox.Image
                 catch (Exception e)
                 {
                     e.Data.Add(nameof(p), p);
-                    Logger.WoxError($"cannot load image {p}", e);
+                    Logger.WoxError($"cannot load image sync <{p}>", e);
                     return GetErrorImage();
                 }
             });
@@ -248,7 +255,7 @@ namespace Wox.Image
                     e.Data.Add(nameof(pluginID), pluginID);
                     e.Data.Add(nameof(pluginDirectory), pluginDirectory);
                     e.Data.Add(nameof(p), p);
-                    Logger.WoxError($"cannot load image {p}", e);
+                    Logger.WoxError($"cannot load image async <{p}>", e);
                     return GetErrorImage();
                 }
             }, updateImageCallback

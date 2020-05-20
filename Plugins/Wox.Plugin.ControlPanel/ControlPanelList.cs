@@ -16,20 +16,11 @@ namespace Wox.Plugin.ControlPanel
     //from:https://raw.githubusercontent.com/CoenraadS/Windows-Control-Panel-Items
     public static class ControlPanelList
     {
-        private const uint GROUP_ICON = 14;
         private const uint LOAD_LIBRARY_AS_DATAFILE = 0x00000002;
         private const string CONTROL = @"%SystemRoot%\System32\control.exe";
 
         private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
-        private delegate bool EnumResNameDelegate(
-        IntPtr hModule,
-        IntPtr lpszType,
-        IntPtr lpszName,
-        IntPtr lParam);
-
-        [DllImport("kernel32.dll", EntryPoint = "EnumResourceNamesW", CharSet = CharSet.Unicode, SetLastError = true)]
-        static extern bool EnumResourceNamesWithID(IntPtr hModule, uint lpszType, EnumResNameDelegate lpEnumFunc, IntPtr lParam);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         static extern IntPtr LoadLibraryEx(string lpFileName, IntPtr hFile, uint dwFlags);
@@ -40,31 +31,24 @@ namespace Wox.Plugin.ControlPanel
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         static extern int LoadString(IntPtr hInstance, uint uID, StringBuilder lpBuffer, int nBufferMax);
 
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        static extern IntPtr LoadImage(IntPtr hinst, IntPtr lpszName, uint uType,
-        int cxDesired, int cyDesired, uint fuLoad);
 
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        extern static bool DestroyIcon(IntPtr handle);
 
         [DllImport("kernel32.dll")]
         static extern IntPtr FindResource(IntPtr hModule, IntPtr lpName, IntPtr lpType);
 
-        static IntPtr defaultIconPtr;
+
 
 
         static RegistryKey nameSpace = Registry.LocalMachine.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ControlPanel\\NameSpace");
         static RegistryKey clsid = Registry.ClassesRoot.OpenSubKey("CLSID");
 
-        public static List<ControlPanelItem> Create(uint iconSize, string iconFolder, string fileType)
+        public static List<ControlPanelItem> Create()
         {
-            int size = (int)iconSize;
             RegistryKey currentKey;
             ProcessStartInfo executablePath;
             List<ControlPanelItem> controlPanelItems = new List<ControlPanelItem>();
             string localizedString;
             string infoTip;
-            Icon myIcon;
 
             foreach (string guid in nameSpace.GetSubKeyNames())
             {
@@ -83,11 +67,14 @@ namespace Wox.Plugin.ControlPanel
                             {
                                 infoTip = getInfoTip(currentKey);
 
-                                string iconPath = Path.Combine(iconFolder, $"{guid}{fileType}");
-                                if (!File.Exists(iconPath))
+                                string iconPath;
+                                if (currentKey.OpenSubKey("DefaultIcon") != null && currentKey.OpenSubKey("DefaultIcon").GetValue(null) != null)
                                 {
-                                    myIcon = getIcon(currentKey, size);
-                                    myIcon.ToBitmap().Save(iconPath);
+                                    iconPath = currentKey.OpenSubKey("DefaultIcon").GetValue(null).ToString();
+                                }
+                                else
+                                {
+                                    iconPath = Constant.ErrorIcon;
                                 }
                                 controlPanelItems.Add(new ControlPanelItem(localizedString, infoTip, guid, executablePath, iconPath));
                             }
@@ -237,72 +224,6 @@ namespace Wox.Plugin.ControlPanel
             return infoTip;
         }
 
-        private static Icon getIcon(RegistryKey currentKey, int iconSize)
-        {
-            IntPtr iconPtr = IntPtr.Zero;
-            List<string> iconString;
-            IntPtr dataFilePointer;
-            IntPtr iconIndex;
-            Icon myIcon = null;
-
-            if (currentKey.OpenSubKey("DefaultIcon") != null)
-            {
-                if (currentKey.OpenSubKey("DefaultIcon").GetValue(null) != null)
-                {
-                    string iconStringRaw = currentKey.OpenSubKey("DefaultIcon").GetValue(null).ToString();
-                    iconString = new List<string>(iconStringRaw.Split(new[] { ',' }, 2));
-                    if (string.IsNullOrEmpty(iconString[0]))
-                    {
-                        // fallback to default icon
-                        return null;
-                    }
-
-                    if (iconString[0][0] == '@')
-                    {
-                        iconString[0] = iconString[0].Substring(1);
-                    }
-                    Logger.WoxTrace($"{nameof(iconStringRaw)}: {iconStringRaw}");
-                    dataFilePointer = LoadLibraryEx(iconString[0], IntPtr.Zero, LOAD_LIBRARY_AS_DATAFILE);
-
-                    if (iconString.Count == 2)
-                    {
-                        iconIndex = (IntPtr)sanitizeUint(iconString[1]);
-
-                        iconPtr = LoadImage(dataFilePointer, iconIndex, 1, iconSize, iconSize, 0);
-                    }
-
-                    if (iconPtr == IntPtr.Zero)
-                    {
-                        defaultIconPtr = IntPtr.Zero;
-                        EnumResourceNamesWithID(dataFilePointer, GROUP_ICON, EnumRes, IntPtr.Zero); //Iterate through resources. 
-
-                        iconPtr = LoadImage(dataFilePointer, defaultIconPtr, 1, iconSize, iconSize, 0);
-                    }
-
-                    FreeLibrary(dataFilePointer);
-
-                    if (iconPtr != IntPtr.Zero)
-                    {
-                        try
-                        {
-                            myIcon = Icon.FromHandle(iconPtr);
-                            myIcon = (Icon)myIcon.Clone(); //Remove pointer dependancy.
-                        }
-                        catch
-                        {
-                            //Silently fail for now.
-                        }
-                    }
-                }
-            }
-
-            if (iconPtr != IntPtr.Zero)
-            {
-                DestroyIcon(iconPtr);
-            }
-            return myIcon;
-        }
-
         private static uint sanitizeUint(string args) //Remove all chars before and after first set of digits.
         {
             int x = 0;
@@ -351,10 +272,6 @@ namespace Wox.Plugin.ControlPanel
             return Marshal.PtrToStringUni(value);
         }
 
-        private static bool EnumRes(IntPtr hModule, IntPtr lpszType, IntPtr lpszName, IntPtr lParam)
-        {
-            defaultIconPtr = lpszName;
-            return false;
-        }
+
     }
 }

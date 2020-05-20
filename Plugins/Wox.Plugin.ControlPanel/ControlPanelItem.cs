@@ -19,7 +19,8 @@ namespace Wox.Plugin.ControlPanel
             InfoTip = newInfoTip;
             ExecutablePath = newExecutablePath;
             GUID = newGUID;
-            IconPath = iconPath;
+            string key = "EmbededIcon:";
+            IconPath = $"{key}{iconPath}";
         }
     }
 }

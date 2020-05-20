@@ -22,14 +22,7 @@ namespace Wox.Plugin.ControlPanel
         public void Init(PluginInitContext context)
         {
             this.context = context;
-            iconFolder = Path.Combine(context.CurrentPluginMetadata.PluginDirectory, @"Images\ControlPanelIcons\");
-            if (!Directory.Exists(iconFolder))
-            {
-                Directory.CreateDirectory(iconFolder);
-            }
-
-            fileType = ".bmp";
-            controlPanelItems = ControlPanelList.Create(32, iconFolder, fileType);
+            controlPanelItems = ControlPanelList.Create();
         }
 
         public List<Result> Query(Query query)
