@@ -38,6 +38,11 @@ namespace Wox
                 {
                     paragraph.Inlines.Add($"Plugin Name {exception.Data[nameKey]}");
                 }
+                string pluginDiretoryKey = nameof(Plugin.PluginPair.Metadata.PluginDirectory);
+                if (exception.Data.Contains(pluginDiretoryKey))
+                {
+                    paragraph.Inlines.Add($"Plugin Directory {exception.Data[pluginDiretoryKey]}");
+                }
                 string idKey = nameof(Plugin.PluginPair.Metadata.ID);
                 if (exception.Data.Contains(idKey))
                 {

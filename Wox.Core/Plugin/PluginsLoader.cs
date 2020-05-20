@@ -54,6 +54,7 @@ namespace Wox.Core.Plugin
                     {
                         e.Data.Add(nameof(metadata.ID), metadata.ID);
                         e.Data.Add(nameof(metadata.Name), metadata.Name);
+                        e.Data.Add(nameof(metadata.PluginDirectory), metadata.PluginDirectory);
                         e.Data.Add(nameof(metadata.Website), metadata.Website);
                         Logger.WoxError($"Couldn't load assembly for {metadata.Name}", e);
                         return;
@@ -68,6 +69,7 @@ namespace Wox.Core.Plugin
                     {
                         e.Data.Add(nameof(metadata.ID), metadata.ID);
                         e.Data.Add(nameof(metadata.Name), metadata.Name);
+                        e.Data.Add(nameof(metadata.PluginDirectory), metadata.PluginDirectory);
                         e.Data.Add(nameof(metadata.Website), metadata.Website);
                         Logger.WoxError($"Can't find class implement IPlugin for <{metadata.Name}>", e);
                         return;
@@ -81,6 +83,7 @@ namespace Wox.Core.Plugin
                     {
                         e.Data.Add(nameof(metadata.ID), metadata.ID);
                         e.Data.Add(nameof(metadata.Name), metadata.Name);
+                        e.Data.Add(nameof(metadata.PluginDirectory), metadata.PluginDirectory);
                         e.Data.Add(nameof(metadata.Website), metadata.Website);
                         Logger.WoxError($"Can't create instance for <{metadata.Name}>", e);
                         return;
