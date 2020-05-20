@@ -190,6 +190,9 @@ namespace Wox
             {
                 API?.SaveAppAllSettings();
                 _disposed = true;
+                // todo temp fix to exist application
+                // should notify child thread programmaly
+                Environment.Exit(0);
             }
             Logger.WoxInfo("Wox End Displose");
         }
