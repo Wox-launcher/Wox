@@ -12,15 +12,12 @@ using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
 using Wox.Plugin.Program.Programs;
 using Wox.Plugin.Program.Views;
-using Stopwatch = Wox.Infrastructure.Stopwatch;
 using System.Threading;
-using Windows.ApplicationModel.Background;
 
 namespace Wox.Plugin.Program
 {
     public class Main : ISettingProvider, IPlugin, IPluginI18n, IContextMenu, ISavable, IReloadable
     {
-        private static readonly object IndexLock = new object();
         internal static Win32[] _win32s { get; set; }
         internal static UWP.Application[] _uwps { get; set; }
         internal static Settings _settings { get; set; }

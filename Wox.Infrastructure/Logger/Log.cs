@@ -101,7 +101,23 @@ namespace Wox.Infrastructure.Logger
 
         public static void SendException(System.Exception exception)
         {
-            SentrySdk.CaptureException(exception);
+            string pluginDiretoryKey = nameof(Plugin.PluginPair.Metadata.PluginDirectory);
+            if (exception.Data.Contains(pluginDiretoryKey))
+            {
+                string pluginDirectory = exception.Data[pluginDiretoryKey] as string;
+                bool debug = pluginDirectory.Contains(@"\Output\Release") || pluginDirectory.Contains(@"\Output\Release");
+                bool thirdParty = !pluginDirectory.Contains(Constant.ProgramDirectory);
+                if (debug || thirdParty)
+                {
+                    return;
+                }
+            }
+
+            SentrySdk.WithScope(scope =>
+            {
+                scope.Level = Sentry.Protocol.SentryLevel.Error;
+                SentrySdk.CaptureException(exception);
+            });
         }
     }
 }
