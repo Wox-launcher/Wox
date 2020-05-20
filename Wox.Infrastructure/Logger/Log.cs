@@ -25,7 +25,7 @@ namespace Wox.Infrastructure.Logger
             {
                 Directory.CreateDirectory(CurrentLogDirectory);
             }
-            
+
             var configuration = new LoggingConfiguration();
             var fileTarget = new FileTarget()
             {
@@ -49,7 +49,7 @@ namespace Wox.Infrastructure.Logger
                 Debug.WriteLine($"DEBUG|{logger.Name}|{methodName}|{message}");
                 logger.Trace($"{methodName}|{message}");
             }
-            
+
         }
 
         public static void WoxDebug(this NLog.Logger logger, string message, [CallerMemberName] string methodName = "")
@@ -71,13 +71,21 @@ namespace Wox.Infrastructure.Logger
             logger.Error($"{methodName}|{message}");
         }
 
-        public static void WoxError(this NLog.Logger logger, string message, System.Exception exception, [CallerMemberName] string methodName = "")
+        public static void WoxError(
+            this NLog.Logger logger, string message, System.Exception exception, bool throwException = true, bool sendException = true, [CallerMemberName] string methodName = "")
         {
             Debug.WriteLine($"ERROR|{logger.Name}|{methodName}|{message}");
             logger.Error($"{methodName}|{message}|{ExceptionFormatter.FormattedException(exception)}");
-            SendException(exception);
+            if (sendException)
+            {
+                SendException(exception);
+            }
+
 #if DEBUG
-            throw exception;
+            if (throwException)
+            {
+                throw exception;
+            }
 #endif
         }
 

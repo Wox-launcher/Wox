@@ -19,6 +19,8 @@ using Wox.Infrastructure.Logger;
 using IStream = AppxPackaing.IStream;
 using Rect = System.Windows.Rect;
 using NLog;
+using System.Collections.Concurrent;
+using Windows.UI.Xaml.Controls;
 
 namespace Wox.Plugin.Program.Programs
 {
@@ -160,23 +162,26 @@ namespace Wox.Plugin.Program.Programs
             var support = Environment.OSVersion.Version.Major >= windows10.Major;
             if (support)
             {
-                var applications = CurrentUserPackages().AsParallel().SelectMany(p =>
+                ConcurrentBag<Application> bag = new ConcurrentBag<Application>();
+                Parallel.ForEach(CurrentUserPackages(), (p, state) =>
                 {
                     UWP u;
                     try
                     {
                         u = new UWP(p);
+                        foreach (var a in u.Apps)
+                        {
+                            bag.Add(a);
+                        }
                     }
                     catch (Exception e)
                     {
                         e.Data.Add(nameof(p.Id.FullName), p.Id.FullName);
-                        Logger.WoxError($"Cannot parse UWP {p.Id.FullName}", e);
-                        return new Application[] { };
+                        Logger.WoxError($"Cannot parse UWP {p.Id.FullName}", e, false, true);
                     }
-                    return u.Apps;
-                }).ToArray();
-
-                return applications;
+                }
+                );
+                return bag.ToArray();
             }
             else
             {
