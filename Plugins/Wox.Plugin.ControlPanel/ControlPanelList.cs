@@ -7,6 +7,8 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Automation.Peers;
 using Microsoft.Win32;
+using NLog;
+using Wox.Infrastructure.Logger;
 
 namespace Wox.Plugin.ControlPanel
 {
@@ -16,6 +18,8 @@ namespace Wox.Plugin.ControlPanel
         private const uint GROUP_ICON = 14;
         private const uint LOAD_LIBRARY_AS_DATAFILE = 0x00000002;
         private const string CONTROL = @"%SystemRoot%\System32\control.exe";
+
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
         private delegate bool EnumResNameDelegate(
         IntPtr hModule,
@@ -242,7 +246,8 @@ namespace Wox.Plugin.ControlPanel
             {
                 if (currentKey.OpenSubKey("DefaultIcon").GetValue(null) != null)
                 {
-                    iconString = new List<string>(currentKey.OpenSubKey("DefaultIcon").GetValue(null).ToString().Split(new[] { ',' }, 2));
+                    string iconStringRaw = currentKey.OpenSubKey("DefaultIcon").GetValue(null).ToString();
+                    iconString = new List<string>(iconStringRaw.Split(new[] { ',' }, 2));
                     if (string.IsNullOrEmpty(iconString[0]))
                     {
                         // fallback to default icon
@@ -253,7 +258,7 @@ namespace Wox.Plugin.ControlPanel
                     {
                         iconString[0] = iconString[0].Substring(1);
                     }
-
+                    Logger.WoxTrace($"{nameof(iconStringRaw)}: {iconStringRaw}");
                     dataFilePointer = LoadLibraryEx(iconString[0], IntPtr.Zero, LOAD_LIBRARY_AS_DATAFILE);
 
                     if (iconString.Count == 2)
