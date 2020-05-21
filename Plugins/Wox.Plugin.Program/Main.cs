@@ -133,6 +133,7 @@ namespace Wox.Plugin.Program
             Task.Delay(2000).ContinueWith(_ =>
             {
                 IndexPrograms();
+                Save();
             });
         }
 
@@ -190,6 +191,7 @@ namespace Wox.Plugin.Program
                 Logger.WoxDebug($" uwp: <{uwp.DisplayName}> <{uwp.UserModelId}>");
             }
             _settings.LastIndexTime = DateTime.Today;
+            
         }
 
         public Control CreateSettingPanel()
