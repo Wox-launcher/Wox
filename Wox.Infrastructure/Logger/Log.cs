@@ -101,6 +101,7 @@ namespace Wox.Infrastructure.Logger
 
         public static void SendException(System.Exception exception)
         {
+#if !DEBUG
             string pluginDiretoryKey = nameof(Plugin.PluginPair.Metadata.PluginDirectory);
             if (exception.Data.Contains(pluginDiretoryKey))
             {
@@ -118,6 +119,9 @@ namespace Wox.Infrastructure.Logger
                 scope.Level = Sentry.Protocol.SentryLevel.Error;
                 SentrySdk.CaptureException(exception);
             });
+#endif
         }
+
     }
+
 }
