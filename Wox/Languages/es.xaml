@@ -1,0 +1,148 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:system="clr-namespace:System; assembly=mscorlib">
+    <! - MainWindow ->
+    <system:String x:Key="registerHotkeyFailed">Error al registrar la tecla de acceso rápido: {0}</system:String>
+    <system:String x:Key="couldnotStartCmd">No se pudo iniciar {0}</system:String>
+    <system:String x:Key="invalidWoxPluginFileFormat">Formato de archivo del complemento Wox no válido</system:String>
+    <system:String x:Key="setAsTopMostInThisQuery">Establecer como superior en esta búsqueda</​​system:String>
+    <system:String x:Key="cancelTopMostInThisQuery">Cancelar en la parte superior de esta búsqueda</​​system:String>
+    <system:String x:Key="executeQuery">Ejecutar búsqueda: {0}</system:String>
+    <system:String x:Key="lastExecuteTime">Último tiempo de ejecución: {0}</system:String>
+    <system:String x:Key="iconTrayOpen">Abrir</system:String>
+    <system:String x:Key="iconTraySettings">Configuración</system:String>
+    <system:String x:Key="iconTrayAbout">Acerca de</system:String>
+    <system:String x:Key="iconTrayExit">Salir</system:String>
+
+    <! - Configuración general ->
+    <system:String x:Key="wox_settings">Configuración de Wox</system:String>
+    <system:String x:Key="general">General</system:String>
+    <system:String x:Key="startWoxOnSystemStartup">Iniciar Wox al iniciar el sistema</system:String>
+    <system:String x:Key="hideWoxWhenLoseFocus">Ocultar Wox cuando se pierde el foco</system:String>
+    <system:String x:Key="dontPromptUpdateMsg">No mostrar notificaciones de nueva versión</system:String>
+    <system:String x:Key="rememberLastLocation">Recordar la última ubicación de inicio</system:String>
+    <system:String x:Key="language">Idioma</system:String>
+    <system:String x:Key="lastQueryMode">Último estilo de búsqueda</​​system:String>
+    <system:String x:Key="LastQueryPreserved">Conservar la última búsqueda</​​system:String>
+    <system:String x:Key="LastQuerySelected">Seleccione la última búsqueda</​​system:String>
+    <system:String x:Key="LastQueryEmpty">Vaciar la última búsqueda</​​system:String>
+    <system:String x:Key="maxShowResults">Se muestran los resultados máximos</system:String>
+    <system:String x:Key="ignoreHotkeysOnFullscreen">Ignorar teclas de acceso rápido en modo de pantalla completa</​​system:String>
+    <system:String x:Key="pythonDirectory">Directorio de Python</system:String>
+    <system:String x:Key="autoUpdates">Actualización automática</system:String>
+    <system:String x:Key="updateToPrereleases">Actualizaciones Beta</system:String>
+    <system:String x:Key="selectPythonDirectory">Seleccionar</system:String>
+    <system:String x:Key="hideOnStartup">Ocultar Wox al inicio</system:String>
+    <system:String x:Key="hideNotifyIcon">Ocultar el icono de la bandeja</system:String>
+    <system:String x:Key="querySearchPrecision">Precisión de búsqueda</​​system:String>
+    <system:String x:Key="shouldUsePinyin">Usar Pinyin</system:String>
+
+    <! - Complemento de configuración ->
+    <system:String x:Key="plugin">Plugins</system:String>
+    <system:String x:Key="browserMorePlugins">Buscar más complementos</system:String>
+    <system:String x:Key="disable">Desactivar</system:String>
+    <system:String x:Key="actionKeywords">Palabras clave de acción</system:String>
+    <system:String x:Key="pluginDirectory">Directorio de complementos</system:String>
+    <system:String x:Key="author">Autor</system:String>
+    <system:String x:Key="plugin_init_time">Tiempo de inicio: {0} ms</system:String>
+    <system:String x:Key="plugin_query_time">Tiempo de búsqueda: {0} ms</system:String>
+
+    <! - Tema de configuración ->
+    <system:String x:Key="theme">Tema</system:String>
+    <system:String x:Key="browserMoreThemes">Buscar más temas</system:String>
+    <system:String x:Key="helloWox">Hola Wox</system:String>
+    <system:String x:Key="queryBoxFont">Fuente del cuadro de búsqueda</​​system:String>
+    <system:String x:Key="resultItemFont">Fuente del elemento de resultado</system:String>
+    <system:String x:Key="resultItemHighlightFont">Fuente de resaltado del elemento de resultado</system:String>
+    <system:String x:Key="windowMode">Modo de ventana</system:String>
+    <system:String x:Key="opacity">Opacidad</system:String>
+    <system:String x:Key="theme_load_failure_path_not_exists">El tema {0} no existe, recurre al tema predeterminado</system:String>
+    <system:String x:Key="theme_load_failure_parse_error">Error al cargar el tema {0}, recurre al tema predeterminado</system:String>
+
+    <! - Configuración de teclas de acceso rápido ->
+    <system:String x:Key="hotkey">Hotkey</system:String>
+    <system:String x:Key="woxHotkey">Wox Hotkey</system:String>
+    <system:String x:Key="customQueryHotkey">Tecla rápida de búsqueda personalizada</system:String>
+    <system:String x:Key="delete">Eliminar</system:String>
+    <system:String x:Key="edit">Editar</system:String>
+    <system:String x:Key="add">Agregar</system:String>
+    <system:String x:Key="pleaseSelectAnItem">Seleccione un elemento</system:String>
+    <system:String x:Key="deleteCustomHotkeyWarning">¿Está seguro de que desea eliminar la tecla de acceso rápido del complemento {0}?</system:String>
+
+<! - Proxy de configuración ->
+    <system:String x:Key="proxy">Proxy HTTP</system:String>
+    <system:String x:Key="enableProxy">Habilitar proxy HTTP</system:String>
+    <system:String x:Key="server">Servidor HTTP</system:String>
+    <system:String x:Key="port">Puerto</system:String>
+    <system:String x:Key="userName">Nombre de usuario</system:String>
+    <system:String x:Key="password">Contraseña</system:String>
+    <system:String x:Key="testProxy">Proxy de prueba</system:String>
+    <system:String x:Key="save">Guardar</system:String>
+    <system:String x:Key="serverCantBeEmpty">El campo del servidor no puede estar vacío</system:String>
+    <system:String x:Key="portCantBeEmpty">El campo del puerto no puede estar vacío</system:String>
+    <system:String x:Key="invalidPortFormat">Formato de puerto no válido</system:String>
+    <system:String x:Key="saveProxySuccessfully">Configuración de proxy guardada con éxito</system:String>
+    <system:String x:Key="proxyIsCorrect">Proxy configurado correctamente</system:String>
+    <system:String x:Key="proxyConnectFailed">Error en la conexión del proxy</system:String>
+
+    <! - Configuración Acerca de ->
+    <system:String x:Key="about">Acerca de</system:String>
+    <system:String x:Key="website">Sitio web</system:String>
+    <system:String x:Key="version">Versión</system:String>
+    <system:String x:Key="about_activate_times">Ha activado Wox {0} veces</system:String>
+    <system:String x:Key="checkUpdates">Buscar actualizaciones</system:String>
+    <system:String x:Key="newVersionTips">Nueva versión {0} disponible, reinicie Wox.</system:String>
+    <system:String x:Key="checkUpdatesFailed">Las actualizaciones de verificación fallaron, verifique su conexión y configuración de proxy a api.github.com.</system:String>
+    <system:String x:Key="downloadUpdatesFailed">
+        La desacrga de actualizaciones falló, verifique su conexión y configuración de proxy a github-cloud.s3.amazonaws.com,
+        o vaya a https://github.com/Wox-launcher/Wox/releases para descargar la actualizacion manualmente.
+    </system:String>
+    <system:String x:Key="releaseNotes">Notas de la versión:</system:String>
+
+    <! - Diálogo de configuración de palabras clave de acción ->
+    <system:String x:Key="oldActionKeywords">Palabra clave de acción anterior</system:String>
+    <system:String x:Key="newActionKeywords">Nueva palabra clave de acción</system:String>
+    <system:String x:Key="cancel">Cancelar</system:String>
+    <system:String x:Key="done">Listo</system:String>
+    <system:String x:Key="cannotFindSpecifiedPlugin">No se puede encontrar el complemento especificado</system:String>
+    <system:String x:Key="newActionKeywordsCannotBeEmpty">La nueva palabra clave de acción no puede estar vacía</system:String>
+    <system:String x:Key="newActionKeywordsHasBeenAssigned">Se han asignado nuevas palabras clave de acción a otro complemento, asigne otra nueva palabra clave de acción</system:String>
+    <system:String x:Key="success">Success</system:String>
+    <system:String x:Key="actionkeyword_tips">Use * si no desea especificar una palabra clave de acción</system:String>
+
+    <! - Diálogo de teclas de acceso rápido de búsqueda personalizada ->
+    <system:String x:Key="preview">Vista previa</system:String>
+    <system:String x:Key="hotkeyIsNotUnavailable">La tecla de acceso rápido no está disponible, seleccione una nueva tecla de acceso rápido</system:String>
+    <system:String x:Key="invalidPluginHotkey">Hotkey del complemento no válido</system:String>
+    <system:String x:Key="update">Actualización</system:String>
+
+    <! - Control de teclas de acceso rápido ->
+    <system:String x:Key="hotkeyUnavailable">Hotkey no disponible</system:String>
+
+    <! - Reporte de errores ->
+    <system:String x:Key="reportWindow_version">Versión</system:String>
+    <system:String x:Key="reportWindow_time">Hora</system:String>
+    <system:String x:Key="reportWindow_reproduce">Díganos cómo se bloqueó la aplicación para que podamos solucionarlo</system:String>
+    <system:String x:Key="reportWindow_send_report">Enviar informe</system:String>
+    <system:String x:Key="reportWindow_cancel">Cancelar</system:String>
+    <system:String x:Key="reportWindow_general">General</system:String>
+    <system:String x:Key="reportWindow_exceptions">Excepciones</system:String>
+    <system:String x:Key="reportWindow_exception_type">Tipo de excepción</system:String>
+    <system:String x:Key="reportWindow_source">Fuente</system:String>
+    <system:String x:Key="reportWindow_stack_trace">Seguimiento de pila</system:String>
+    <system:String x:Key="reportWindow_sending">Envío</system:String>
+    <system:String x:Key="reportWindow_report_succeed">Informe enviado correctamente</system:String>
+    <system:String x:Key="reportWindow_report_failed">Error al enviar el informe</system:String>
+    <system:String x:Key="reportWindow_wox_got_an_error">Wox recibió un error</system:String>
+
+	<! - Actualizar ->
+    <system:String x:Key="update_wox_update_new_version_available">La nueva versión de Wox {0} ya está disponible</system:String>
+    <system:String x:Key="update_wox_update_error">Se produjo un error al intentar instalar actualizaciones de software</system:String>
+    <system:String x:Key="update_wox_update">Actualización</system:String>
+    <system:String x:Key="update_wox_update_cancel">Cancelar</system:String>
+    <system:String x:Key="update_wox_update_restart_wox_tip">Esta actualización reiniciará Wox</system:String>
+    <system:String x:Key="update_wox_update_upadte_files">Los siguientes archivos se actualizarán</system:String>
+    <system:String x:Key="update_wox_update_files">Actualizar archivos</system:String>
+    <system:String x:Key="update_wox_update_upadte_description">Descripción de la actualización</system:String>
+
+</ResourceDictionary>
