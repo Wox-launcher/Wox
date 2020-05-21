@@ -66,7 +66,7 @@ namespace Wox.Plugin.Program.Programs
             catch (ArgumentException e)
             {
                 Logger.WoxError(e.Message);
-                Apps = Apps = new List<Application>().ToArray();
+                Apps = new List<Application>().ToArray();
                 return;
             }
 
@@ -98,6 +98,7 @@ namespace Wox.Plugin.Program.Programs
                     manifestApps.MoveNext();
                 }
                 Apps = apps.Where(a => a.AppListEntry != "none").ToArray();
+                Marshal.ReleaseComObject(stream);
                 return;
             }
             else
@@ -106,6 +107,7 @@ namespace Wox.Plugin.Program.Programs
                 e.Data.Add(nameof(path), path);
                 Logger.WoxError($"Cannot not get UWP details {path}", e);
                 Apps = new List<Application>().ToArray();
+                Marshal.ReleaseComObject(stream);
                 return;
             }
         }
@@ -158,37 +160,27 @@ namespace Wox.Plugin.Program.Programs
 
         public static Application[] All()
         {
-            var windows10 = new Version(10, 0);
-            var support = Environment.OSVersion.Version.Major >= windows10.Major;
-            if (support)
+            ConcurrentBag<Application> bag = new ConcurrentBag<Application>();
+            Parallel.ForEach(CurrentUserPackages(), (p, state) =>
             {
-                ConcurrentBag<Application> bag = new ConcurrentBag<Application>();
-                Parallel.ForEach(CurrentUserPackages(), (p, state) =>
+                UWP u;
+                try
                 {
-                    UWP u;
-                    try
+                    u = new UWP(p);
+                    foreach (var a in u.Apps)
                     {
-                        u = new UWP(p);
-                        foreach (var a in u.Apps)
-                        {
-                            bag.Add(a);
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        e.Data.Add(nameof(p.Id.FullName), p.Id.FullName);
-                        Logger.WoxError($"Cannot parse UWP {p.Id.FullName}", e, false, true);
+                        bag.Add(a);
                     }
                 }
-                );
-                return bag.ToArray();
+                catch (Exception e)
+                {
+                    e.Data.Add(nameof(p.Id.FullName), p.Id.FullName);
+                    Logger.WoxError($"Cannot parse UWP {p.Id.FullName}", e, false, true);
+                }
             }
-            else
-            {
-                return new Application[] { };
-            }
+            );
+            return bag.ToArray();
         }
-
         private static IEnumerable<Package> CurrentUserPackages()
         {
             var u = WindowsIdentity.GetCurrent().User;
