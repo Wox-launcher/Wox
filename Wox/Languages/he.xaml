@@ -40,7 +40,7 @@
     <!--Setting Plugin-->
     <system:String x:Key="plugin">תוסף</system:String>
     <system:String x:Key="browserMorePlugins">מצא עוד תוספים</system:String>
-    <system:String x:Key="disable">כבה תוסף</system:String>
+    <system:String x:Key="disable">השבת תוסף</system:String>
     <system:String x:Key="actionKeywords">מילות מפתח לפעולה</system:String>
     <system:String x:Key="pluginDirectory">תיקיית התוסף</system:String>
     <system:String x:Key="author">יוצר</system:String>
