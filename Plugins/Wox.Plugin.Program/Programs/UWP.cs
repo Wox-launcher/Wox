@@ -210,7 +210,7 @@ namespace Wox.Plugin.Program.Programs
                     }
                     catch (Exception e)
                     {
-                        e.Data.Add(nameof(u), u);
+                        e.Data.Add(nameof(id), id);
                         e.Data.Add(nameof(p.Id.FullName), p.Id.FullName);
                         Logger.WoxError($"cannot get package {u} {p.Id.FullName}", e);
                         return false;
