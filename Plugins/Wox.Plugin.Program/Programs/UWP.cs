@@ -210,12 +210,19 @@ namespace Wox.Plugin.Program.Programs
                     }
                     catch (Exception e)
                     {
-                        e.Data.Add(nameof(u), u);
+                        Type t = u.GetType();
+                        if (t.IsSerializable)
+                        {
+                            e.Data.Add(nameof(u), u);
+                        }
+                        else
+                        {
+                            e.Data.Add(nameof(u), "Error: u not Serializable");
+                        }
                         e.Data.Add(nameof(p.Id.FullName), p.Id.FullName);
                         Logger.WoxError($"cannot get package {u} {p.Id.FullName}", e);
                         return false;
                     }
-
 
                     return valid;
                 });
