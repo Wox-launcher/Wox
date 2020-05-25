@@ -192,7 +192,6 @@ namespace Wox.Plugin.Program.Programs
                 }
                 var valueFolder = packageKey.GetValue("PackageRootFolder");
                 var valueID = packageKey.GetValue("PackageID");
-
                 if (valueID != null && valueFolder != null && actiable.Contains(valueID))
                 {
                     string location = (string)valueFolder;
