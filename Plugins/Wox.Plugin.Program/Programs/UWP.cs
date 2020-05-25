@@ -4,14 +4,10 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Security.Principal;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Xml.Linq;
-using Windows.ApplicationModel;
-using Windows.Management.Deployment;
 using AppxPackaing;
 using Shell;
 using Wox.Infrastructure;
@@ -20,12 +16,8 @@ using IStream = AppxPackaing.IStream;
 using Rect = System.Windows.Rect;
 using NLog;
 using System.Collections.Concurrent;
-using Windows.UI.Xaml.Controls;
 using Microsoft.Win32;
 using System.Xml;
-using Windows.ApplicationModel.Activation;
-using System.Security.Cryptography;
-using Sentry.Protocol;
 
 namespace Wox.Plugin.Program.Programs
 {
