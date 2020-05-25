@@ -24,6 +24,7 @@ using Windows.UI.Xaml.Controls;
 using Microsoft.Win32;
 using System.Xml;
 using Windows.ApplicationModel.Activation;
+using System.Security.Cryptography;
 
 namespace Wox.Plugin.Program.Programs
 {
@@ -41,21 +42,6 @@ namespace Wox.Plugin.Program.Programs
 
         private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
-        //public UWP(string packageFolder)
-        //{
-        //    Location = packageFolder;
-        //    Name = packageFolder.Id.Name;
-        //    FullName = packageFolder.Id.FullName;
-        //    id = packageFolder.Id.FamilyName;
-        //    InitializeAppInfo();
-        //    Apps = Apps.Where(a =>
-        //    {
-        //        var valid =
-        //            !string.IsNullOrEmpty(a.UserModelId) &&
-        //            !string.IsNullOrEmpty(a.DisplayName);
-        //        return valid;
-        //    }).ToArray();
-        //}
         public UWP(string id, string location)
         {
             FullName = id;
@@ -69,46 +55,6 @@ namespace Wox.Plugin.Program.Programs
         {
             var path = Path.Combine(Location, "AppxManifest.xml");
             InitXmlInfo(path);
-
-            var appxFactory = new AppxFactory();
-            IStream stream;
-            const uint noAttribute = 0x80;
-            // shared read will slow speed https://docs.microsoft.com/en-us/windows/win32/stg/stgm-constants
-            // but cannot find a way to release stearm, so use shared read
-            // exclusive read will cause exception during reinexing
-            // System.IO.FileLoadException: The process cannot access the file because it is being used by another process
-            const Stgm sharedRead = Stgm.Read | Stgm.ShareDenyNone;
-            var hResult = SHCreateStreamOnFileEx(path, sharedRead, noAttribute, false, null, out stream);
-
-            if (hResult == Hresult.Ok)
-            {
-                var reader = appxFactory.CreateManifestReader(stream);
-                var manifestApps = reader.GetApplications();
-                var apps = new List<Application>();
-                while (manifestApps.GetHasCurrent() != 0)
-                {
-                    var manifestApp = manifestApps.GetCurrent();
-                    var appListEntry = manifestApp.GetStringValue("AppListEntry");
-                    if (appListEntry != "none")
-                    {
-                        var app = new Application(manifestApp, this);
-                        apps.Add(app);
-                    }
-                    manifestApps.MoveNext();
-                }
-                Apps = apps.Where(a => a.AppListEntry != "none").ToArray();
-                Marshal.ReleaseComObject(stream);
-                return;
-            }
-            else
-            {
-                var e = Marshal.GetExceptionForHR((int)hResult);
-                e.Data.Add(nameof(path), path);
-                Logger.WoxError($"Cannot not get UWP details {path}", e);
-                Apps = new List<Application>().ToArray();
-                Marshal.ReleaseComObject(stream);
-                return;
-            }
         }
 
 
@@ -119,52 +65,93 @@ namespace Wox.Plugin.Program.Programs
             using (var reader = XmlReader.Create(path))
             {
                 bool success = reader.ReadToFollowing("Package");
-                if (success)
+                if (!success) { throw new ArgumentException($"Cannot read Package key from {path}"); }
+
+                Version = PackageVersion.Unknown;
+                for (int i = 0; i < reader.AttributeCount; i++)
                 {
-                    Version = PackageVersion.Unknown;
-                    for (int i = 0; i < reader.AttributeCount; i++)
+                    string schema = reader.GetAttribute(i);
+                    if (schema != null)
                     {
-                        string schema = reader.GetAttribute(i);
-                        if (schema != null)
+                        if (schema == "http://schemas.microsoft.com/appx/manifest/foundation/windows10")
                         {
-                            if (schema == "http://schemas.microsoft.com/appx/manifest/foundation/windows10")
-                            {
-                                Version = PackageVersion.Windows10;
-                            }
-                            else if (schema == "http://schemas.microsoft.com/appx/2013/manifest")
-                            {
-                                Version = PackageVersion.Windows81;
-                            }
-                            else if (schema == "http://schemas.microsoft.com/appx/2010/manifest")
-                            {
-                                Version = PackageVersion.Windows8;
-                            }
-                            else
-                            {
-                                continue;
-                            }
+                            Version = PackageVersion.Windows10;
+                        }
+                        else if (schema == "http://schemas.microsoft.com/appx/2013/manifest")
+                        {
+                            Version = PackageVersion.Windows81;
+                        }
+                        else if (schema == "http://schemas.microsoft.com/appx/2010/manifest")
+                        {
+                            Version = PackageVersion.Windows8;
+                        }
+                        else
+                        {
+                            continue;
                         }
                     }
-                    if (Version == PackageVersion.Unknown)
-                    {
-                        throw new ArgumentException($"Unknowen schema version {path}");
-                    }
+                }
+                if (Version == PackageVersion.Unknown)
+                {
+                    throw new ArgumentException($"Unknowen schema version {path}");
                 }
 
                 success = reader.ReadToFollowing("Identity");
+                if (!success) { throw new ArgumentException($"Cannot read Identity key from {path}"); }
                 if (success)
                 {
-                    string name = reader.GetAttribute("Name");
-                    if (name != null)
-                    {
-                        Name = name;
-                    }
+                    Name = reader.GetAttribute("Name");
                 }
 
-                else
+                success = reader.ReadToFollowing("Applications");
+                if (!success) { throw new ArgumentException($"Cannot read Applications key from {path}"); }
+                success = reader.ReadToDescendant("Application");
+                if (!success) { throw new ArgumentException($"Cannot read Applications key from {path}"); }
+                List<Application> apps = new List<Application>();
+                do
                 {
-                    throw new ArgumentException($"Cannot read Package key from {path}");
-                }
+                    string id = reader.GetAttribute("Id");
+                    
+                    reader.ReadToFollowing("uap:VisualElements");
+                    string displayName = reader.GetAttribute("DisplayName");
+                    string description = reader.GetAttribute("Description");
+                    string backgroundColor = reader.GetAttribute("BackgroundColor");
+                    string appListEntry = reader.GetAttribute("AppListEntry");
+
+                    if (appListEntry == "none")
+                    {
+                        continue;
+                    }
+
+                    string logoUri = string.Empty;
+                    if (Version == PackageVersion.Windows10)
+                    {
+                        logoUri = reader.GetAttribute("Square44x44Logo");
+                    }
+                    else if (Version == PackageVersion.Windows81)
+                    {
+                        logoUri = reader.GetAttribute("Square30x30Logo");
+                    }
+                    else if (Version == PackageVersion.Windows8)
+                    {
+                        logoUri = reader.GetAttribute("SmallLogo");
+                    }
+                    else
+                    {
+                        throw new ArgumentException($"Unknowen schema version {path}");
+                    }
+
+                    if (string.IsNullOrEmpty(displayName) || string.IsNullOrEmpty(id))
+                    {
+                        continue;
+                    }
+
+                    Application app = new Application(this, FullName, Name, displayName, description, logoUri, backgroundColor);
+                    app.UserModelId = $"{FamilyName}!{id}";
+
+                    apps.Add(app);
+                } while (reader.ReadToFollowing("Application"));
+                Apps = apps.ToArray();
             }
         }
 
@@ -284,7 +271,6 @@ namespace Wox.Plugin.Program.Programs
         [Serializable]
         public class Application : IProgram
         {
-            public string AppListEntry { get; set; }
             public string DisplayName { get; set; }
             public string Description { get; set; }
             public string UserModelId { get; set; }
@@ -295,7 +281,6 @@ namespace Wox.Plugin.Program.Programs
 
             public bool Enabled { get; set; }
 
-            public string LogoUri { get; set; }
             public string LogoPath { get; set; }
             public UWP Package { get; set; }
 
@@ -377,19 +362,14 @@ namespace Wox.Plugin.Program.Programs
                 });
             }
 
-            public Application(IAppxManifestApplication manifestApp, UWP package)
+            public Application(UWP package, string fullName, string name, string displayname, string description, string logoUri, string backgroundColor)
             {
-                UserModelId = manifestApp.GetAppUserModelId();
-                DisplayName = manifestApp.GetStringValue("DisplayName");
-                Description = manifestApp.GetStringValue("Description");
-                BackgroundColor = manifestApp.GetStringValue("BackgroundColor");
-                Package = package;
-                DisplayName = ResourcesFromPri(package.FullName, package.Name, DisplayName);
-                Description = ResourcesFromPri(package.FullName, package.Name, Description);
-                LogoUri = LogoUriFromManifest(manifestApp);
-                LogoPath = PathFromUri(package.FullName, package.Name, package.Location, LogoUri);
-
                 Enabled = true;
+                Package = package;
+                DisplayName = ResourcesFromPri(fullName, name, displayname);
+                Description = ResourcesFromPri(fullName, name, description);
+                LogoPath = PathFromUri(fullName, name, Location, logoUri);
+                BackgroundColor = backgroundColor;
             }
 
             internal string ResourcesFromPri(string packageFullName, string packageName, string resourceReference)
