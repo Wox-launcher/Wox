@@ -24,6 +24,7 @@ namespace Wox.Core.Resource
         public static Language Turkish = new Language("tr", "Türkçe");
         public static Language Spanish = new Language("es", "Español");
         public static Language Hebrew = new Language("he", "עברית");
+        public static Language Portuguese = new Language("pt", "Português");
 
         public static List<Language> GetAvailableLanguages()
         {
@@ -49,6 +50,7 @@ namespace Wox.Core.Resource
                 Norwegian_Bokmal,
                 Slovak,
                 Turkish
+                Portuguese,
             };
             return languages;
         }
