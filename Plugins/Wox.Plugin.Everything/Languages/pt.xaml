@@ -17,6 +17,7 @@
     <system:String x:Key="wox_plugin_everything_plugin_name">Everything</system:String>
     <system:String x:Key="wox_plugin_everything_plugin_description">Pesquisar ficheiros com Everything</system:String>
 
-    <system:String x:Key="wox_plugin_everything_use_location_as_working_dir">Utilizar localização dos resultados como diretório de trabalho executável</system:String>
+    <system:String x:Key="wox_plugin_everything_use_location_as_working_dir">Utilizar loacl dos resultados como diretório de trabalho executável</system:String>
+
 
 </ResourceDictionary>
