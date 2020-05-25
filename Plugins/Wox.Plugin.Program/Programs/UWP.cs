@@ -149,27 +149,6 @@ namespace Wox.Plugin.Program.Programs
             }
         }
 
-        private void InitPackageVersion(List<string> namespaces)
-        {
-            var versionFromNamespace = new Dictionary<string, PackageVersion>
-            {
-                {"http://schemas.microsoft.com/appx/manifest/foundation/windows10", PackageVersion.Windows10},
-                {"http://schemas.microsoft.com/appx/2013/manifest", PackageVersion.Windows81},
-                {"http://schemas.microsoft.com/appx/2010/manifest", PackageVersion.Windows8},
-            };
-
-            foreach (var n in versionFromNamespace.Keys)
-            {
-                if (namespaces.Contains(n))
-                {
-                    Version = versionFromNamespace[n];
-                    return;
-                }
-            }
-
-            throw new ArgumentException($"Unknown package version {string.Join(",", namespaces)}");
-        }
-
         public static Application[] All()
         {
             ConcurrentBag<Application> bag = new ConcurrentBag<Application>();
