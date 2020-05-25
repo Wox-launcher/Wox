@@ -20,23 +20,7 @@ namespace Wox.Plugin
         /// </summary>
         public string ActionKeywordAssigned { get; set; }
 
-        public string IcoPath
-        {
-            get { return _icoPath; }
-            set
-            {
-                // todo, use icon path type enum in the future
-                string key = "EmbededIcon:";
-                if (!string.IsNullOrEmpty(PluginDirectory) && !Path.IsPathRooted(value) && !value.StartsWith(key))
-                {
-                    _icoPath = Path.Combine(PluginDirectory, value);
-                }
-                else
-                {
-                    _icoPath = value;
-                }
-            }
-        }
+        public string IcoPath { get; set; }
 
         public delegate ImageSource IconDelegate();
 
