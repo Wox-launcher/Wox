@@ -50,7 +50,10 @@ namespace Wox.Plugin.Program.Programs
                         WorkingDirectory = ParentDirectory
                     };
 
-                    Main.StartProcess(Process.Start, info);
+                    if (e.SpecialKeyState.CtrlPressed)
+                        Main.StartProcess(Process.Start, ShellCommand.SetProcessStartInfo(info.FileName, info.WorkingDirectory, "", "runas"));
+                    else
+                        Main.StartProcess(Process.Start, info);
 
                     return true;
                 }
