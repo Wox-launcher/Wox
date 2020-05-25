@@ -19,4 +19,5 @@
 
     <system:String x:Key="wox_plugin_everything_use_location_as_working_dir">Utilizar loacl dos resultados como diretório de trabalho executável</system:String>
 
+
 </ResourceDictionary>

@@ -77,6 +77,7 @@ namespace Wox.Helper
 
         public static string SendException(Exception exception)
         {
+#if !DEBUG
             string pluginDiretoryKey = nameof(Plugin.PluginPair.Metadata.PluginDirectory);
             if (exception.Data.Contains(pluginDiretoryKey))
             {
@@ -96,6 +97,9 @@ namespace Wox.Helper
                 id = SentrySdk.CaptureException(exception);
             });
             return id.ToString();
+#else
+            return SentryId.Empty.ToString();
+#endif
         }
     }
 }

@@ -124,7 +124,7 @@ namespace Wox.Plugin.Folder
 
                             return true;
                         },
-                        IcoPath = "Images/user.png"
+                        IcoPath = "Images/app.png"
                     });
             }
 
