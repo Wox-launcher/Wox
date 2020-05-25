@@ -93,7 +93,7 @@ namespace Wox.Plugin.Program.Programs
 
                         return true;
                     },
-                    IcoPath = "Images/user.png"
+                    IcoPath = "Images/app.png"
                 },
                 new Result
                 {
