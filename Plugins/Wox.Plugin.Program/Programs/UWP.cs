@@ -25,6 +25,7 @@ using Microsoft.Win32;
 using System.Xml;
 using Windows.ApplicationModel.Activation;
 using System.Security.Cryptography;
+using Sentry.Protocol;
 
 namespace Wox.Plugin.Program.Programs
 {
@@ -51,17 +52,10 @@ namespace Wox.Plugin.Program.Programs
         }
 
 
+        /// <exception cref="ArgumentException"
         private void InitializeAppInfo()
         {
             var path = Path.Combine(Location, "AppxManifest.xml");
-            InitXmlInfo(path);
-        }
-
-
-
-        /// <exception cref="ArgumentException"
-        private void InitXmlInfo(string path)
-        {
             using (var reader = XmlReader.Create(path))
             {
                 bool success = reader.ReadToFollowing("Package");
@@ -111,7 +105,7 @@ namespace Wox.Plugin.Program.Programs
                 do
                 {
                     string id = reader.GetAttribute("Id");
-                    
+
                     reader.ReadToFollowing("uap:VisualElements");
                     string displayName = reader.GetAttribute("DisplayName");
                     string description = reader.GetAttribute("Description");
@@ -146,8 +140,8 @@ namespace Wox.Plugin.Program.Programs
                         continue;
                     }
 
-                    Application app = new Application(this, FullName, Name, displayName, description, logoUri, backgroundColor);
-                    app.UserModelId = $"{FamilyName}!{id}";
+                    string userModelId = $"{FamilyName}!{id}";
+                    Application app = new Application(this, userModelId, FullName, Name, displayName, description, logoUri, backgroundColor);
 
                     apps.Add(app);
                 } while (reader.ReadToFollowing("Application"));
@@ -362,8 +356,9 @@ namespace Wox.Plugin.Program.Programs
                 });
             }
 
-            public Application(UWP package, string fullName, string name, string displayname, string description, string logoUri, string backgroundColor)
+            public Application(UWP package, string userModelID, string fullName, string name, string displayname, string description, string logoUri, string backgroundColor)
             {
+                UserModelId = userModelID;
                 Enabled = true;
                 Package = package;
                 DisplayName = ResourcesFromPri(fullName, name, displayname);
