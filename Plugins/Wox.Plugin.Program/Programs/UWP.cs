@@ -21,15 +21,18 @@ using Rect = System.Windows.Rect;
 using NLog;
 using System.Collections.Concurrent;
 using Windows.UI.Xaml.Controls;
+using Microsoft.Win32;
+using System.Xml;
+using Windows.ApplicationModel.Activation;
 
 namespace Wox.Plugin.Program.Programs
 {
     [Serializable]
     public class UWP
     {
-        public string Name { get; }
         public string FullName { get; }
         public string FamilyName { get; }
+        public string Name { get; set; }
         public string Location { get; set; }
 
         public Application[] Apps { get; set; }
@@ -38,38 +41,34 @@ namespace Wox.Plugin.Program.Programs
 
         private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
-        public UWP(Package package)
+        //public UWP(string packageFolder)
+        //{
+        //    Location = packageFolder;
+        //    Name = packageFolder.Id.Name;
+        //    FullName = packageFolder.Id.FullName;
+        //    id = packageFolder.Id.FamilyName;
+        //    InitializeAppInfo();
+        //    Apps = Apps.Where(a =>
+        //    {
+        //        var valid =
+        //            !string.IsNullOrEmpty(a.UserModelId) &&
+        //            !string.IsNullOrEmpty(a.DisplayName);
+        //        return valid;
+        //    }).ToArray();
+        //}
+        public UWP(string id, string location)
         {
-            Location = package.InstalledLocation.Path;
-            Name = package.Id.Name;
-            FullName = package.Id.FullName;
-            FamilyName = package.Id.FamilyName;
-            InitializeAppInfo();
-            Apps = Apps.Where(a =>
-            {
-                var valid =
-                    !string.IsNullOrEmpty(a.UserModelId) &&
-                    !string.IsNullOrEmpty(a.DisplayName);
-                return valid;
-            }).ToArray();
+            FullName = id;
+            var parts = id.Split(new char[] { '_' }, StringSplitOptions.RemoveEmptyEntries);
+            FamilyName = $"{parts[0]}_{parts[2]}";
+            Location = location;
         }
+
 
         private void InitializeAppInfo()
         {
             var path = Path.Combine(Location, "AppxManifest.xml");
-
-            try
-            {
-                var namespaces = XmlNamespaces(path);
-                InitPackageVersion(namespaces);
-            }
-            catch (ArgumentException e)
-            {
-                Logger.WoxError(e.Message);
-                Apps = new List<Application>().ToArray();
-                return;
-            }
-
+            InitXmlInfo(path);
 
             var appxFactory = new AppxFactory();
             IStream stream;
@@ -114,30 +113,62 @@ namespace Wox.Plugin.Program.Programs
 
 
 
-        /// http://www.hanselman.com/blog/GetNamespacesFromAnXMLDocumentWithXPathDocumentAndLINQToXML.aspx
         /// <exception cref="ArgumentException"
-        private string[] XmlNamespaces(string path)
+        private void InitXmlInfo(string path)
         {
-            XDocument z = XDocument.Load(path);
-            if (z.Root != null)
+            using (var reader = XmlReader.Create(path))
             {
-                var namespaces = z.Root.Attributes().
-                    Where(a => a.IsNamespaceDeclaration).
-                    GroupBy(
-                        a => a.Name.Namespace == XNamespace.None ? string.Empty : a.Name.LocalName,
-                        a => XNamespace.Get(a.Value)
-                    ).Select(
-                        g => g.First().ToString()
-                    ).ToArray();
-                return namespaces;
-            }
-            else
-            {
-                throw new ArgumentException("Cannot read XML from {path}");
+                bool success = reader.ReadToFollowing("Package");
+                if (success)
+                {
+                    Version = PackageVersion.Unknown;
+                    for (int i = 0; i < reader.AttributeCount; i++)
+                    {
+                        string schema = reader.GetAttribute(i);
+                        if (schema != null)
+                        {
+                            if (schema == "http://schemas.microsoft.com/appx/manifest/foundation/windows10")
+                            {
+                                Version = PackageVersion.Windows10;
+                            }
+                            else if (schema == "http://schemas.microsoft.com/appx/2013/manifest")
+                            {
+                                Version = PackageVersion.Windows81;
+                            }
+                            else if (schema == "http://schemas.microsoft.com/appx/2010/manifest")
+                            {
+                                Version = PackageVersion.Windows8;
+                            }
+                            else
+                            {
+                                continue;
+                            }
+                        }
+                    }
+                    if (Version == PackageVersion.Unknown)
+                    {
+                        throw new ArgumentException($"Unknowen schema version {path}");
+                    }
+                }
+
+                success = reader.ReadToFollowing("Identity");
+                if (success)
+                {
+                    string name = reader.GetAttribute("Name");
+                    if (name != null)
+                    {
+                        Name = name;
+                    }
+                }
+
+                else
+                {
+                    throw new ArgumentException($"Cannot read Package key from {path}");
+                }
             }
         }
 
-        private void InitPackageVersion(string[] namespaces)
+        private void InitPackageVersion(List<string> namespaces)
         {
             var versionFromNamespace = new Dictionary<string, PackageVersion>
             {
@@ -161,74 +192,83 @@ namespace Wox.Plugin.Program.Programs
         public static Application[] All()
         {
             ConcurrentBag<Application> bag = new ConcurrentBag<Application>();
-            Parallel.ForEach(CurrentUserPackages(), (p, state) =>
+            Parallel.ForEach(PackageFoldersFromRegistry(), (package, state) =>
             {
-                UWP u;
                 try
                 {
-                    u = new UWP(p);
-                    foreach (var a in u.Apps)
+                    package.InitializeAppInfo();
+                    foreach (var a in package.Apps)
                     {
                         bag.Add(a);
                     }
                 }
                 catch (Exception e)
                 {
-                    e.Data.Add(nameof(p.Id.FullName), p.Id.FullName);
-                    Logger.WoxError($"Cannot parse UWP {p.Id.FullName}", e, false, true);
+                    e.Data.Add(nameof(package.FullName), package.FullName);
+                    e.Data.Add(nameof(package.Location), package.Location);
+                    Logger.WoxError($"Cannot parse UWP {package.Location}", e);
                 }
             }
             );
             return bag.ToArray();
         }
-        private static IEnumerable<Package> CurrentUserPackages()
+
+        public static List<UWP> PackageFoldersFromRegistry()
         {
-            var u = WindowsIdentity.GetCurrent().User;
 
-            if (u != null)
+            var actiable = new HashSet<string>();
+            string activableReg = @"Software\Classes\ActivatableClasses\Package";
+            var activableRegSubkey = Registry.CurrentUser.OpenSubKey(activableReg);
+            foreach (string name in activableRegSubkey.GetSubKeyNames())
             {
-                var id = u.Value;
-                var m = new PackageManager();
-                var ps = m.FindPackagesForUser(id);
-                ps = ps.Where(p =>
+                actiable.Add(name);
+            }
+
+            var packages = new List<UWP>();
+            string packageReg = @"Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages";
+            var packageRegSubkey = Registry.CurrentUser.OpenSubKey(packageReg);
+            foreach (var name in packageRegSubkey.GetSubKeyNames())
+            {
+                var packageKey = packageRegSubkey.OpenSubKey(name);
+                var framework = packageKey.GetValue("Framework");
+                if (framework != null)
                 {
-                    bool valid;
-                    try
+                    if ((int)framework == 1)
                     {
-                        var f = p.IsFramework;
-                        var d = p.IsDevelopmentMode;
-                        var path = p.InstalledLocation.Path;
-                        valid = !f && !d && !string.IsNullOrEmpty(path);
+                        continue;
                     }
-                    catch (Exception e)
-                    {
-                        e.Data.Add(nameof(u), u);
-                        e.Data.Add(nameof(p.Id.FullName), p.Id.FullName);
-                        Logger.WoxError($"cannot get package {u} {p.Id.FullName}", e);
-                        return false;
-                    }
+                }
+                var valueFolder = packageKey.GetValue("PackageRootFolder");
+                var valueID = packageKey.GetValue("PackageID");
 
+                if (valueID != null && valueFolder != null && actiable.Contains(valueID))
+                {
+                    string location = (string)valueFolder;
+                    string id = (string)valueID;
+                    UWP uwp = new UWP(id, location);
+                    packages.Add(uwp);
+                }
+            }
 
-                    return valid;
-                });
-                return ps;
-            }
-            else
-            {
-                return new Package[] { };
-            }
+            // only exception windows.immersivecontrolpanel_10.0.2.1000_neutral_neutral_cw5n1h2txyewy
+            string settingsID = actiable.First(a => a.StartsWith("windows.immersivecontrolpanel"));
+            string settingsLocation = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "ImmersiveControlPanel");
+            UWP swttings = new UWP(settingsID, settingsLocation);
+            packages.Add(swttings);
+
+            return packages;
         }
 
         public override string ToString()
         {
-            return FamilyName;
+            return FullName;
         }
 
         public override bool Equals(object obj)
         {
             if (obj is UWP uwp)
             {
-                return FamilyName.Equals(uwp.FamilyName);
+                return FullName.Equals(uwp.FullName);
             }
             else
             {
@@ -238,7 +278,7 @@ namespace Wox.Plugin.Program.Programs
 
         public override int GetHashCode()
         {
-            return FamilyName.GetHashCode();
+            return FullName.GetHashCode();
         }
 
         [Serializable]
@@ -470,7 +510,6 @@ namespace Wox.Plugin.Program.Programs
                 {
                     var e = Marshal.GetExceptionForHR((int)hResult);
                     e.Data.Add(nameof(source), source);
-                    e.Data.Add(nameof(Package.Location), Package.Location);
                     e.Data.Add(nameof(packageFullName), packageFullName);
                     e.Data.Add(nameof(parsed), parsed);
                     Logger.WoxError($"Load pri failed {source} location {Package.Location}", e);
