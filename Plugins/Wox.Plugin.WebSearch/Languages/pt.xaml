@@ -6,7 +6,7 @@
     <system:String x:Key="wox_plugin_websearch_edit">Editar</system:String>
     <system:String x:Key="wox_plugin_websearch_add">Adicionar</system:String>
     <system:String x:Key="wox_plugin_websearch_confirm">Confirmar</system:String>
-    <system:String x:Key="wox_plugin_websearch_action_keyword">palavra-chave da ação</system:String>
+    <system:String x:Key="wox_plugin_websearch_action_keyword">Palavra-chave da ação</system:String>
     <system:String x:Key="wox_plugin_websearch_url">URL</system:String>
     <system:String x:Key="wox_plugin_websearch_search">Pesquisa</system:String>
     <system:String x:Key="wox_plugin_websearch_enable_suggestion">Ativar sugestões de pesquisa</system:String>
