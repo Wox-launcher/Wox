@@ -74,6 +74,7 @@ namespace Wox.Plugin.BrowserBookmark
                 {
                     Title = c.Name,
                     SubTitle = c.Url,
+                    PluginDirectory = context.CurrentPluginMetadata.PluginDirectory,
                     IcoPath = @"Images\bookmark.png",
                     Score = 5,
                     Action = (e) =>

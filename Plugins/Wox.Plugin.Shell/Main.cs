@@ -353,7 +353,7 @@ namespace Wox.Plugin.Shell
                         Task.Run(() =>Execute(ShellCommand.RunAsDifferentUser, PrepareProcessStartInfo(selectedResult.Title)));
                         return true;
                     },
-                    IcoPath = "Images/user.png"
+                    IcoPath = "Images/app.png"
                 },
                 new Result
                 {
