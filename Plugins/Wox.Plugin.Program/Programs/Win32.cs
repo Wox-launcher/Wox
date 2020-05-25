@@ -210,7 +210,10 @@ namespace Wox.Plugin.Program.Programs
         private static ParallelQuery<Win32> StartMenuPrograms(string[] suffixes)
         {
             var directory1 = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
+            // some program is not inside program directory, e.g. docker desktop
+            directory1 = Directory.GetParent(directory1).FullName;
             var directory2 = Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms);
+            directory2 = Directory.GetParent(directory2).FullName;
             var paths1 = ProgramPaths(directory1, suffixes);
             var paths2 = ProgramPaths(directory2, suffixes);
             var paths = paths1.Concat(paths2);
