@@ -1,0 +1,9 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:system="clr-namespace:System;assembly=mscorlib">
+
+	<!--Plugin Info-->
+	<system:String x:Key="wox_plugin_browserbookmark_plugin_name">Marcadores do navegador</system:String>
+	<system:String x:Key="wox_plugin_browserbookmark_plugin_description">Pesquisa nos marcadores dos navegadores</system:String>
+
+</ResourceDictionary>
