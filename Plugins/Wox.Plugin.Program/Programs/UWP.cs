@@ -46,8 +46,8 @@ namespace Wox.Plugin.Program.Programs
         public UWP(string id, string location)
         {
             FullName = id;
-            var parts = id.Split(new char[] { '_' }, StringSplitOptions.RemoveEmptyEntries);
-            FamilyName = $"{parts[0]}_{parts[2]}";
+            string[] parts = id.Split(new char[] { '_' }, StringSplitOptions.RemoveEmptyEntries);
+            FamilyName = $"{parts[0]}_{parts[parts.Length - 1]}";
             Location = location;
         }
 
