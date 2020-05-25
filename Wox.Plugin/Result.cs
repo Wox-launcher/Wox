@@ -29,7 +29,7 @@ namespace Wox.Plugin
                 string key = "EmbededIcon:";
                 if (!string.IsNullOrEmpty(PluginDirectory) && !Path.IsPathRooted(value) && !value.StartsWith(key))
                 {
-                    _icoPath = Path.Combine(value, IcoPath);
+                    _icoPath = Path.Combine(PluginDirectory, value);
                 }
                 else
                 {
