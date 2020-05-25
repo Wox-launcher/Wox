@@ -129,33 +129,24 @@ namespace Wox.Test
             }
         }
 
-        [TestCase(Chrome, Chrome, 137)]
-        [TestCase(Chrome, LastIsChrome, 83)]
-        [TestCase(Chrome, HelpCureHopeRaiseOnMindEntityChrome, 21)]
-        [TestCase(Chrome, UninstallOrChangeProgramsOnYourComputer, 15)]
-        [TestCase(Chrome, CandyCrushSagaFromKing, 0)]
-        [TestCase("sql", MicrosoftSqlServerManagementStudio, 56)]
-        [TestCase("sql  manag", MicrosoftSqlServerManagementStudio, 79)]//double spacing intended
-        public void WhenGivenQueryStringThenShouldReturnCurrentScoring(string queryString, string compareString, int expectedScore)
-        {
-            // When, Given
-            var matcher = new StringMatcher();
-            var rawScore = matcher.FuzzyMatch(queryString, compareString).RawScore;
-
-            // Should
-            Assert.AreEqual(expectedScore, rawScore, $"Expected score for compare string '{compareString}': {expectedScore}, Actual: {rawScore}");
-        }
-
+        [TestCase("setti", "Settings", StringMatcher.SearchPrecisionScore.Regular, true)]
+        [TestCase("vs19", "Visual Studio 2019", StringMatcher.SearchPrecisionScore.Regular, true)]
+        [TestCase("vs2019", "Visual Studio 2019", StringMatcher.SearchPrecisionScore.Regular, true)]
+        [TestCase("vsc", "Visual Studio Code", StringMatcher.SearchPrecisionScore.Regular, true)]
+        [TestCase(Chrome, Chrome, StringMatcher.SearchPrecisionScore.Regular, true)]
+        [TestCase(Chrome, LastIsChrome, StringMatcher.SearchPrecisionScore.Regular, true)]
+        [TestCase(Chrome, HelpCureHopeRaiseOnMindEntityChrome, StringMatcher.SearchPrecisionScore.Regular, true)]
+        [TestCase(Chrome, UninstallOrChangeProgramsOnYourComputer, StringMatcher.SearchPrecisionScore.Regular, true)]
+        [TestCase(Chrome, CandyCrushSagaFromKing, StringMatcher.SearchPrecisionScore.Regular, false)]
+        [TestCase("sql", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, true)]
+        [TestCase("sql  manag", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, true)]
         [TestCase("goo", "Google Chrome", StringMatcher.SearchPrecisionScore.Regular, true)]
         [TestCase("chr", "Google Chrome", StringMatcher.SearchPrecisionScore.Low, true)]
         [TestCase("chr", "Chrome", StringMatcher.SearchPrecisionScore.Regular, true)]
-        [TestCase("chr", "Help cure hope raise on mind entity Chrome", StringMatcher.SearchPrecisionScore.Regular, false)]
-        [TestCase("chr", "Help cure hope raise on mind entity Chrome", StringMatcher.SearchPrecisionScore.Low, true)]
-        [TestCase("chr", "Candy Crush Saga from King", StringMatcher.SearchPrecisionScore.Regular, false)]
+        [TestCase("chr", "Help cure hope raise on mind entity Chrome", StringMatcher.SearchPrecisionScore.Low, true)] 
         [TestCase("chr", "Candy Crush Saga from King", StringMatcher.SearchPrecisionScore.None, true)]
         [TestCase("ccs", "Candy Crush Saga from King", StringMatcher.SearchPrecisionScore.Low, true)]
         [TestCase("cand", "Candy Crush Saga from King", StringMatcher.SearchPrecisionScore.Regular, true)]
-        [TestCase("cand", "Help cure hope raise on mind entity Chrome", StringMatcher.SearchPrecisionScore.Regular, false)]
         public void WhenGivenDesiredPrecisionThenShouldReturnAllResultsGreaterOrEqual(
             string queryString,
             string compareString,
@@ -184,20 +175,20 @@ namespace Wox.Test
         }
 
         [TestCase("exce", "OverLeaf-Latex: An online LaTeX editor", StringMatcher.SearchPrecisionScore.Regular, false)]
-        [TestCase("term", "Windows Terminal (Preview)", StringMatcher.SearchPrecisionScore.Regular, true)]
+        [TestCase("term", "Windows Terminal", StringMatcher.SearchPrecisionScore.Regular, true)]
         [TestCase("sql s managa", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, false)]
         [TestCase("sql' s manag", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, false)]
         [TestCase("sql s manag", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, true)]
         [TestCase("sql manag", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, true)]
         [TestCase("sql", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, true)]
         [TestCase("sql serv", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, true)]
-        [TestCase("sqlserv", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, false)]
-        [TestCase("sql servman", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, false)]
+        [TestCase("sqlserv", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, true)]
+        [TestCase("sql servman", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, true)]
         [TestCase("sql serv man", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, true)]
         [TestCase("sql studio", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, true)]
         [TestCase("mic", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, true)]
         [TestCase("chr", "Shutdown", StringMatcher.SearchPrecisionScore.Regular, false)]
-        [TestCase("mssms", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, false)]
+        [TestCase("mssms", MicrosoftSqlServerManagementStudio, StringMatcher.SearchPrecisionScore.Regular, true)]
         [TestCase("chr", "Change settings for text-to-speech and for speech recognition (if installed).", StringMatcher.SearchPrecisionScore.Regular, false)]
         [TestCase("ch r", "Change settings for text-to-speech and for speech recognition (if installed).", StringMatcher.SearchPrecisionScore.Regular, true)]
         [TestCase("a test", "This is a test", StringMatcher.SearchPrecisionScore.Regular, true)]

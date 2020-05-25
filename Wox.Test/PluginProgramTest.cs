@@ -38,7 +38,7 @@ namespace Wox.Test
             });
         }
 
-        [TestCase("powershell", "PowerShell")]
+        [TestCase("powershell", "Windows PowerShell")]
         [TestCase("note", "Notepad")]
         [TestCase("computer", "computer")]
         public void Win32Test(string QueryText, string ResultTitle)
