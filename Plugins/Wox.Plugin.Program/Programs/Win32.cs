@@ -24,7 +24,6 @@ namespace Wox.Plugin.Program.Programs
         public string FullPath { get; set; }
         public string ParentDirectory { get; set; }
         public string ExecutableName { get; set; }
-        public string Description { get; set; }
         public bool Valid { get; set; }
         public bool Enabled { get; set; }
         public string Location => ParentDirectory;
@@ -55,21 +54,8 @@ namespace Wox.Plugin.Program.Programs
                 }
             };
 
-            string title;
-            if (Description.Length >= Name.Length && Description.Substring(0, Name.Length) == Name)
-            {
-                title = Description;
-            }
-            else if (!string.IsNullOrEmpty(Description))
-            {
-                title = $"{Name}: {Description}";
-            }
-            else
-            {
-                title = Name;
-            }
-            var match = StringMatcher.FuzzySearch(query, title);
-            result.Title = title;
+            var match = StringMatcher.FuzzySearch(query, Name);
+            result.Title = Name;
             result.Score = match.Score;
             result.TitleHighlightData = match.MatchData;
 
@@ -144,7 +130,6 @@ namespace Wox.Plugin.Program.Programs
                     IcoPath = path,
                     FullPath = path,
                     ParentDirectory = Directory.GetParent(path).FullName,
-                    Description = string.Empty,
                     Valid = true,
                     Enabled = true
                 };

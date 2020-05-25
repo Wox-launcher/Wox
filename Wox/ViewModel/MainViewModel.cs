@@ -753,7 +753,7 @@ namespace Wox.ViewModel
                     }
                     else if (!update.Metadata.KeepResultRawScore)
                     {
-                        result.Score += _userSelectedRecord.GetSelectedCount(result) * 5;
+                        result.Score += _userSelectedRecord.GetSelectedCount(result) * 10;
                     }
                     else
                     {

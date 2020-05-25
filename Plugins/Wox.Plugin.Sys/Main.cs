@@ -1,3 +1,4 @@
+using NLog;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -6,6 +7,7 @@ using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Interop;
 using Wox.Infrastructure;
+using Wox.Infrastructure.Logger;
 using Application = System.Windows.Application;
 using Control = System.Windows.Controls.Control;
 using FormsApplication = System.Windows.Forms.Application;
@@ -44,6 +46,8 @@ namespace Wox.Plugin.Sys
 
         #endregion
 
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
+
         public Control CreateSettingPanel()
         {
             var results = Commands();
@@ -57,20 +61,10 @@ namespace Wox.Plugin.Sys
             foreach (var c in commands)
             {
                 var titleMatch = StringMatcher.FuzzySearch(query.Search, c.Title);
-                var subTitleMatch = StringMatcher.FuzzySearch(query.Search, c.SubTitle);
-
-                var score = Math.Max(titleMatch.Score, subTitleMatch.Score);
-                if (score > 0)
+                if (titleMatch.Score > 0)
                 {
-                    c.Score = score;
-                    if (score == titleMatch.Score)
-                    {
-                        c.TitleHighlightData = titleMatch.MatchData;
-                    }
-                    else 
-                    {
-                        c.SubTitleHighlightData = subTitleMatch.MatchData;
-                    }
+                    c.Score = titleMatch.Score;
+                    c.TitleHighlightData = titleMatch.MatchData;
                     results.Add(c);
                 }
             }
@@ -237,9 +231,10 @@ namespace Wox.Plugin.Sys
                 },
                 new Result
                 {
+                    PluginDirectory = context.CurrentPluginMetadata.PluginDirectory,
                     Title = "Check For Update",
                     SubTitle = "Check for new Wox update",
-                    IcoPath = "Images\\checkupdate.png",
+                    IcoPath = "Images\\update.png",
                     Action = c =>
                     {
                         Application.Current.MainWindow.Hide();

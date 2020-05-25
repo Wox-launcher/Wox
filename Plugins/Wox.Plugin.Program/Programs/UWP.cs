@@ -267,19 +267,39 @@ namespace Wox.Plugin.Program.Programs
                     Description.Substring(0, DisplayName.Length) == DisplayName)
                 {
                     title = Description;
+                    result.Title = title;
+                    var match = StringMatcher.FuzzySearch(query, title);
+                    result.Score = match.Score;
+                    result.TitleHighlightData = match.MatchData;
                 }
                 else if (!string.IsNullOrEmpty(Description))
                 {
                     title = $"{DisplayName}: {Description}";
+                    var match1 = StringMatcher.FuzzySearch(query, DisplayName);
+                    var match2 = StringMatcher.FuzzySearch(query, title);
+                    if (match1.Score > match2.Score)
+                    {
+                        result.Score = match1.Score;
+                        result.TitleHighlightData = match1.MatchData;
+                    }
+                    else
+                    {
+                        result.Score = match2.Score;
+                        result.TitleHighlightData = match2.MatchData;
+                    }
+                    result.Title = title;
+
                 }
                 else
                 {
                     title = DisplayName;
+                    result.Title = title;
+                    var match = StringMatcher.FuzzySearch(query, title);
+                    result.Score = match.Score;
+                    result.TitleHighlightData = match.MatchData;
                 }
-                var match = StringMatcher.FuzzySearch(query, title);
-                result.Title = title;
-                result.Score = match.Score;
-                result.TitleHighlightData = match.MatchData;
+
+
 
                 return result;
             }

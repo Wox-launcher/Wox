@@ -65,7 +65,6 @@
     <Compile Include="Storage\WoxJsonStorage.cs" />
     <Compile Include="StringMatcher.cs" />
     <Compile Include="Http\Http.cs" />
-    <Compile Include="FuzzyMatcher.cs" />
     <Compile Include="Hotkey\GlobalHotkey.cs" />
     <Compile Include="Hotkey\HotkeyModel.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

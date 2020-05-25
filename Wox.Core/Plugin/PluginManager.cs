@@ -207,6 +207,13 @@ namespace Wox.Core.Plugin
                 r.PluginID = metadata.ID;
                 r.OriginQuery = query;
 
+                string key = "EmbededIcon:";
+                // todo, use icon path type enum in the future
+                if (!string.IsNullOrEmpty(r.PluginDirectory) && !string.IsNullOrEmpty(r.IcoPath) && !Path.IsPathRooted(r.IcoPath) && !r.IcoPath.StartsWith(key))
+                {
+                    r.IcoPath = Path.Combine(r.PluginDirectory, r.IcoPath);
+                }
+
                 // ActionKeywordAssigned is used for constructing MainViewModel's query text auto-complete suggestions 
                 // Plugins may have multi-actionkeywords eg. WebSearches. In this scenario it needs to be overriden on the plugin level 
                 if (metadata.ActionKeywords.Count == 1)

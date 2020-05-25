@@ -32,14 +32,14 @@ namespace Wox.Plugin.ControlPanel
             foreach (var item in controlPanelItems)
             {
                 var titleMatch = StringMatcher.FuzzySearch(query.Search, item.LocalizedString);
-                var subTitleMatch = StringMatcher.FuzzySearch(query.Search, item.InfoTip);
-                
-                item.Score = Math.Max(titleMatch.Score, subTitleMatch.Score);
+
+                item.Score = titleMatch.Score;
                 if (item.Score > 0)
                 {
                     var result = new Result
                     {
                         Title = item.LocalizedString,
+                        TitleHighlightData = titleMatch.MatchData,
                         SubTitle = item.InfoTip,
                         Score = item.Score,
                         IcoPath = item.IconPath,
@@ -61,14 +61,7 @@ namespace Wox.Plugin.ControlPanel
                         }
                     };
 
-                    if (item.Score == titleMatch.Score)
-                    {
-                        result.TitleHighlightData = titleMatch.MatchData;
-                    }
-                    else
-                    {
-                        result.SubTitleHighlightData = subTitleMatch.MatchData;
-                    }
+                    
 
                     results.Add(result);
                 }

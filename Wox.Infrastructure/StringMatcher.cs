@@ -33,18 +33,6 @@ namespace Wox.Infrastructure
 
         public static StringMatcher Instance { get; internal set; }
 
-        [Obsolete("This method is obsolete and should not be used. Please use the static function StringMatcher.FuzzySearch")]
-        public static int Score(string source, string target)
-        {
-            return FuzzySearch(target, source).Score;
-        }
-
-        [Obsolete("This method is obsolete and should not be used. Please use the static function StringMatcher.FuzzySearch")]
-        public static bool IsMatch(string source, string target)
-        {
-            return Score(source, target) > 0;
-        }
-
         public static MatchResult FuzzySearch(string query, string stringToCompare)
         {
             return Instance.FuzzyMatch(query, stringToCompare);
@@ -56,13 +44,14 @@ namespace Wox.Infrastructure
             if (string.IsNullOrEmpty(stringToCompare) || string.IsNullOrEmpty(query)) return new MatchResult(false, UserSettingSearchPrecision);
             var queryWithoutCase = query.ToLower();
             string translated = _alphabet.Translate(stringToCompare);
-            var fullStringToCompareWithoutCase = translated.ToLower();
-            
-            string key = $"{queryWithoutCase}|{fullStringToCompareWithoutCase}";
+
+            string key = $"{queryWithoutCase}|{translated}";
             MatchResult match = _cache[key] as MatchResult;
             if (match == null)
             {
-                match = FuzzyMatchInternal(queryWithoutCase, fullStringToCompareWithoutCase);
+                match = FuzzyMatchRecurrsive(
+                    queryWithoutCase, translated, 0, 0, new List<int>()
+                );
                 CacheItemPolicy policy = new CacheItemPolicy();
                 policy.SlidingExpiration = new TimeSpan(12, 0, 0);
                 _cache.Set(key, match, policy);
@@ -71,167 +60,139 @@ namespace Wox.Infrastructure
             return match;
         }
 
-        /// <summary>
-        /// Current method:
-        /// Character matching + substring matching;
-        /// 1. Query search string is split into substrings, separator is whitespace.
-        /// 2. Check each query substring's characters against full compare string,
-        /// 3. if a character in the substring is matched, loop back to verify the previous character.
-        /// 4. If previous character also matches, and is the start of the substring, update list.
-        /// 5. Once the previous character is verified, move on to the next character in the query substring.
-        /// 6. Move onto the next substring's characters until all substrings are checked.
-        /// 7. Consider success and move onto scoring if every char or substring without whitespaces matched
-        /// </summary>
-        public MatchResult FuzzyMatchInternal(string query, string translated)
+        public MatchResult FuzzyMatchRecurrsive(
+            string query, string stringToCompare, int queryCurrentIndex, int stringCurrentIndex, List<int> sourceMatchData
+        )
         {
-            var querySubstrings = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            int currentQuerySubstringIndex = 0;
-            var currentQuerySubstring = querySubstrings[currentQuerySubstringIndex];
-            var currentQuerySubstringCharacterIndex = 0;
-
-            var firstMatchIndex = -1;
-            var firstMatchIndexInWord = -1;
-            var lastMatchIndex = 0;
-            bool allQuerySubstringsMatched = false;
-            bool matchFoundInPreviousLoop = false;
-            bool allSubstringsContainedInCompareString = true;
-
-            var indexList = new List<int>();
-
-            for (var compareStringIndex = 0; compareStringIndex < translated.Length; compareStringIndex++)
+            if (queryCurrentIndex == query.Length || stringCurrentIndex == stringToCompare.Length)
             {
-                if (translated[compareStringIndex] != currentQuerySubstring[currentQuerySubstringCharacterIndex])
-                {
-                    matchFoundInPreviousLoop = false;
-                    continue;
-                }
+                return new MatchResult(false, UserSettingSearchPrecision);
+            }
 
-                if (firstMatchIndex < 0)
-                {
-                    // first matched char will become the start of the compared string
-                    firstMatchIndex = compareStringIndex;
-                }
+            bool recursiveMatch = false;
+            List<int> bestRecursiveMatchData = new List<int>();
+            int bestRecursiveScore = 0;
 
-                if (currentQuerySubstringCharacterIndex == 0)
+            List<int> matchs = new List<int>();
+            if (sourceMatchData.Count > 0)
+            {
+                foreach (var data in sourceMatchData)
                 {
-                    // first letter of current word
-                    matchFoundInPreviousLoop = true;
-                    firstMatchIndexInWord = compareStringIndex;
+                    matchs.Add(data);
                 }
-                else if (!matchFoundInPreviousLoop)
-                {
-                    // we want to verify that there is not a better match if this is not a full word
-                    // in order to do so we need to verify all previous chars are part of the pattern
-                    var startIndexToVerify = compareStringIndex - currentQuerySubstringCharacterIndex;
+            }
 
-                    if (AllPreviousCharsMatched(startIndexToVerify, currentQuerySubstringCharacterIndex, translated, currentQuerySubstring))
+            while (queryCurrentIndex < query.Length && stringCurrentIndex < stringToCompare.Length)
+            {
+                char queryLower = char.ToLower(query[queryCurrentIndex]);
+                char stringToCompareLower = char.ToLower(stringToCompare[stringCurrentIndex]);
+                if (queryLower == stringToCompareLower)
+                {
+                    MatchResult match = FuzzyMatchRecurrsive(
+                        query, stringToCompare, queryCurrentIndex, stringCurrentIndex + 1, matchs
+                    );
+
+                    if (match.Success)
                     {
-                        matchFoundInPreviousLoop = true;
+                        if (!recursiveMatch || match.RawScore > bestRecursiveScore)
+                        {
+                            bestRecursiveMatchData = new List<int>();
+                            foreach (int data in match.MatchData)
+                            {
+                                bestRecursiveMatchData.Add(data);
+                            }
+                            bestRecursiveScore = match.Score;
+                        }
+                        recursiveMatch = true;
+                    }
 
-                        // if it's the beginning character of the first query substring that is matched then we need to update start index
-                        firstMatchIndex = currentQuerySubstringIndex == 0 ? startIndexToVerify : firstMatchIndex;
+                    matchs.Add(stringCurrentIndex);
+                    queryCurrentIndex += 1;
+                }
+                stringCurrentIndex += 1;
+            }
 
-                        indexList = GetUpdatedIndexList(startIndexToVerify, currentQuerySubstringCharacterIndex, firstMatchIndexInWord, indexList);
+            bool matched = queryCurrentIndex == query.Length;
+            int outScore;
+            if (matched)
+            {
+                outScore = 100;
+                int penality = 3 * matchs[0];
+                outScore = outScore - penality;
+
+                int unmatched = stringToCompare.Length - matchs.Count;
+                outScore = outScore - (5 * unmatched);
+
+                int consecutiveMatch = 0;
+                for (int i = 0; i < matchs.Count; i++)
+                {
+                    int indexCurent = matchs[i];
+                    if (i > 0)
+                    {
+                        int indexPrevious = matchs[i - 1];
+                        if (indexCurent == indexPrevious + 1)
+                        {
+                            consecutiveMatch += 1;
+                            outScore += 10 * consecutiveMatch;
+                        } else
+                        {
+                            consecutiveMatch = 0;
+                        }
+                    }
+
+                    char current = stringToCompare[indexCurent];
+                    bool currentUpper = char.IsUpper(current);
+                    if (indexCurent > 0)
+                    {
+                        char neighbor = stringToCompare[indexCurent - 1];
+                        if (currentUpper && char.IsLower(neighbor))
+                        {
+                            outScore += 30;
+                        }
+
+                        bool isNeighbourSeparator = neighbor == '_' || neighbor == ' ';
+                        if (isNeighbourSeparator)
+                        {
+                            outScore += 50;
+                            if (currentUpper)
+                            {
+                                outScore += 50;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        outScore += 50;
+                        if (currentUpper)
+                        {
+                            outScore += 50;
+                        }
                     }
                 }
+            }
+            else
+            {
+                outScore = 0;
+            }
 
-                lastMatchIndex = compareStringIndex + 1;
-
-                indexList.Add(compareStringIndex);
-
-                currentQuerySubstringCharacterIndex++;
-
-                // if finished looping through every character in the current substring
-                if (currentQuerySubstringCharacterIndex == currentQuerySubstring.Length)
+            if (recursiveMatch && (!matched || bestRecursiveScore > outScore))
+            {
+                matchs = new List<int>();
+                foreach (int data in bestRecursiveMatchData)
                 {
-                    // if any of the substrings was not matched then consider as all are not matched
-                    allSubstringsContainedInCompareString = matchFoundInPreviousLoop && allSubstringsContainedInCompareString;
-
-                    currentQuerySubstringIndex++;
-
-                    allQuerySubstringsMatched = AllQuerySubstringsMatched(currentQuerySubstringIndex, querySubstrings.Length);
-                    if (allQuerySubstringsMatched)
-                        break;
-
-                    // otherwise move to the next query substring
-                    currentQuerySubstring = querySubstrings[currentQuerySubstringIndex];
-                    currentQuerySubstringCharacterIndex = 0;
+                    matchs.Add(data);
                 }
+                outScore = bestRecursiveScore;
+                return new MatchResult(true, UserSettingSearchPrecision, matchs, outScore);
             }
-
-            // proceed to calculate score if every char or substring without whitespaces matched
-            if (allQuerySubstringsMatched)
+            else if (matched)
             {
-                var score = CalculateSearchScore(query, translated, firstMatchIndex, lastMatchIndex - firstMatchIndex, allSubstringsContainedInCompareString);
-
-                return new MatchResult(true, UserSettingSearchPrecision, indexList, score);
+                return new MatchResult(true, UserSettingSearchPrecision, matchs, outScore);
             }
-
-            return new MatchResult(false, UserSettingSearchPrecision);
-        }
-
-        private static bool AllPreviousCharsMatched(int startIndexToVerify, int currentQuerySubstringCharacterIndex,
-                                                        string fullStringToCompareWithoutCase, string currentQuerySubstring)
-        {
-            var allMatch = true;
-            for (int indexToCheck = 0; indexToCheck < currentQuerySubstringCharacterIndex; indexToCheck++)
+            else
             {
-                if (fullStringToCompareWithoutCase[startIndexToVerify + indexToCheck] !=
-                    currentQuerySubstring[indexToCheck])
-                {
-                    allMatch = false;
-                }
+                return new MatchResult(false, UserSettingSearchPrecision);
             }
-
-            return allMatch;
-        }
-
-        private static List<int> GetUpdatedIndexList(int startIndexToVerify, int currentQuerySubstringCharacterIndex, int firstMatchIndexInWord, List<int> indexList)
-        {
-            var updatedList = new List<int>();
-
-            indexList.RemoveAll(x => x >= firstMatchIndexInWord);
-
-            updatedList.AddRange(indexList);
-
-            for (int indexToCheck = 0; indexToCheck < currentQuerySubstringCharacterIndex; indexToCheck++)
-            {
-                updatedList.Add(startIndexToVerify + indexToCheck);
-            }
-
-            return updatedList;
-        }
-
-        private static bool AllQuerySubstringsMatched(int currentQuerySubstringIndex, int querySubstringsLength)
-        {
-            return currentQuerySubstringIndex >= querySubstringsLength;
-        }
-
-        private static int CalculateSearchScore(string query, string stringToCompare, int firstIndex, int matchLen, bool allSubstringsContainedInCompareString)
-        {
-            // A match found near the beginning of a string is scored more than a match found near the end
-            // A match is scored more if the characters in the patterns are closer to each other, 
-            // while the score is lower if they are more spread out
-            var score = 100 * (query.Length + 1) / ((1 + firstIndex) + (matchLen + 1));
-
-            // A match with less characters assigning more weights
-            if (stringToCompare.Length - query.Length < 5)
-            {
-                score += 20;
-            }
-            else if (stringToCompare.Length - query.Length < 10)
-            {
-                score += 10;
-            }
-
-            if (allSubstringsContainedInCompareString)
-            {
-                int count = query.Count(c => !char.IsWhiteSpace(c));
-                int factor = count < 4 ? 10 : 5;
-                score += factor * count;
-            }
-
-            return score;
         }
 
         public enum SearchPrecisionScore
