@@ -17,7 +17,7 @@
     <system:String x:Key="wox_plugin_sys_emptyrecyclebin">Esvaziar reciclagem</system:String>
     <system:String x:Key="wox_plugin_sys_hibernate">Hibernar computador</system:String>
     <system:String x:Key="wox_plugin_sys_save_all_settings">Guardar todas as definições Wox</system:String>
-    <system:String x:Key="wox_plugin_sys_reload_plugin_data">Recarrega os dados do plugin com o novo conteúdo adicionado. Os plugins têm que ter esta funcionalidade.</system:String>
+    <system:String x:Key="wox_plugin_sys_reload_plugin_data">Recarrega os dados do plugin com o novo conteúdo. Os plugins têm que ter esta funcionalidade.</system:String>
 
     <!--Dialogs-->
     <system:String x:Key="wox_plugin_sys_dlgtitle_success">Sucesso</system:String>
@@ -27,6 +27,6 @@
     <system:String x:Key="wox_plugin_sys_dlgtext_restart_computer">Tem a certeza de que deseja reiniciar o computador?</system:String>
 
     <system:String x:Key="wox_plugin_sys_plugin_name">Comandos do sistema</system:String>
-    <system:String x:Key="wox_plugin_sys_plugin_description">Disponibiliza os comandos relacionados com o sistema (desligar, bloquear, definições...</system:String>
+    <system:String x:Key="wox_plugin_sys_plugin_description">Disponibiliza os comandos relacionados com o sistema (desligar, bloquear, definições...)</system:String>
 
 </ResourceDictionary>
