@@ -1,0 +1,32 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:system="clr-namespace:System;assembly=mscorlib">
+
+    <!--Command List-->
+    <system:String x:Key="wox_plugin_sys_command">Príkaz</system:String>
+    <system:String x:Key="wox_plugin_sys_desc">Popis</system:String>
+
+    <system:String x:Key="wox_plugin_sys_shutdown_computer">Vypnúť počítač</system:String>
+    <system:String x:Key="wox_plugin_sys_restart_computer">Reštartovať počítač</system:String>
+    <system:String x:Key="wox_plugin_sys_log_off">Odhlásiť</system:String>
+    <system:String x:Key="wox_plugin_sys_lock">Zamknúť počítač</system:String>
+    <system:String x:Key="wox_plugin_sys_exit">Zatvoriť Wox</system:String>
+    <system:String x:Key="wox_plugin_sys_restart">Reštartovať Wox</system:String>
+    <system:String x:Key="wox_plugin_sys_setting">Nastaviť</system:String>
+    <system:String x:Key="wox_plugin_sys_sleep">Uspať počítač</system:String>
+    <system:String x:Key="wox_plugin_sys_emptyrecyclebin">Vysypať kôš</system:String>
+    <system:String x:Key="wox_plugin_sys_hibernate">Hibernovať počítač</system:String>
+    <system:String x:Key="wox_plugin_sys_save_all_settings">Uložiť všetky nastavenia Woxu</system:String>
+    <system:String x:Key="wox_plugin_sys_reload_plugin_data">Aktualizovať všetky dáta pluginov od spustenia Woxu. Pluginy musia túto funkciu podporovať.</system:String>
+
+    <!--Dialogs-->
+    <system:String x:Key="wox_plugin_sys_dlgtitle_success">Úspešné</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_all_settings_saved">Všetky nastavenia Woxu uložené</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_all_applicableplugins_reloaded">Všetky dáta pluginov aktualizované</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_shutdown_computer">Naozaj chcete počítač vypnúť?</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_restart_computer">Naozaj chcete počítač reštartovať?</system:String>
+
+    <system:String x:Key="wox_plugin_sys_plugin_name">Systémové príkazy</system:String>
+    <system:String x:Key="wox_plugin_sys_plugin_description">Poskytuje príkazy súvisiace so systémom ako je vypnutie, uzamknutie počítača atď.</system:String>
+
+</ResourceDictionary>
