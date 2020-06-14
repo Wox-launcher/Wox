@@ -1,0 +1,14 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:system="clr-namespace:System;assembly=mscorlib">
+
+    <system:String x:Key="wox_plugin_cmd_relace_winr">החלף את Win+R</system:String>
+    <system:String x:Key="wox_plugin_cmd_leave_cmd_open">אל תסגור את חלון שורת הפקודה (cmd) לאחר הרצת פקודה</system:String>
+    <system:String x:Key="wox_plugin_cmd_always_run_as_administrator">תמיד הרץ כמנהל מערכת</system:String>
+    <system:String x:Key="wox_plugin_cmd_run_as_different_user">הרץ כמשתמש אחר</system:String>
+    <system:String x:Key="wox_plugin_cmd_plugin_name">שורת הפקודה</system:String>
+    <system:String x:Key="wox_plugin_cmd_plugin_description">אפשר להריץ פקודות מתוך Wox. פקודות צריכות להתחיל ב ></system:String>
+    <system:String x:Key="wox_plugin_cmd_cmd_has_been_executed_times">פקודה זו כבר הורצה {0} פעמים</system:String>
+    <system:String x:Key="wox_plugin_cmd_execute_through_shell">הרץ פקודה דרך שורת הפקודה</system:String>
+    <system:String x:Key="wox_plugin_cmd_run_as_administrator">הרץ כמנהל מערכת</system:String>
+</ResourceDictionary>

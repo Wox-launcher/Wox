@@ -1,0 +1,32 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:system="clr-namespace:System;assembly=mscorlib">
+
+    <!--Command List-->
+    <system:String x:Key="wox_plugin_sys_command">פקודה</system:String>
+    <system:String x:Key="wox_plugin_sys_desc">תיאור</system:String>
+
+    <system:String x:Key="wox_plugin_sys_shutdown_computer">כבה את המחשב</system:String>
+    <system:String x:Key="wox_plugin_sys_restart_computer">הפעל מחדש את המחשב</system:String>
+    <system:String x:Key="wox_plugin_sys_log_off">התנתק</system:String>
+    <system:String x:Key="wox_plugin_sys_lock">נעל את המחשב</system:String>
+    <system:String x:Key="wox_plugin_sys_exit">סגור את Wox</system:String>
+    <system:String x:Key="wox_plugin_sys_restart">הפעל מחדש את Wox</system:String>
+    <system:String x:Key="wox_plugin_sys_setting">שנה הגדרות לתוכנה זו</system:String>
+    <system:String x:Key="wox_plugin_sys_sleep">הכנס את המחשב לשינה (Sleep)</system:String>
+    <system:String x:Key="wox_plugin_sys_emptyrecyclebin">רוקן את סל המחזור</system:String>
+    <system:String x:Key="wox_plugin_sys_hibernate">הכנס את המחשב לשינה (Hibernate)</system:String>
+    <system:String x:Key="wox_plugin_sys_save_all_settings">שמור את כל ההגדרות של Wox</system:String>
+    <system:String x:Key="wox_plugin_sys_reload_plugin_data">טוען נתונים חדשים לתוסף לאחר אתחול של Wox. תוספים צריכים שתהיה להם כבר את היכולת הזאת.</system:String>
+
+    <!--Dialogs-->
+    <system:String x:Key="wox_plugin_sys_dlgtitle_success">הצלחה</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_all_settings_saved">כל ההגדרות של Wox נשמרו</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_all_applicableplugins_reloaded">טען מחדש את כל הנתונים של התוספים שיש בהם צורך</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_shutdown_computer">האם אתה בטוח שאתה רוצה לכבות את המחשב?</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_restart_computer">האם אתה בטוח שאתה רוצה לאתחל את המחשב?</system:String>
+
+    <system:String x:Key="wox_plugin_sys_plugin_name">פקודות מערכת</system:String>
+    <system:String x:Key="wox_plugin_sys_plugin_description">מנגיש פקודות מערכת רלוונטיות. כמו למשל כיבוי, נעילה, הגדרות וכו'.</system:String>
+
+</ResourceDictionary>
