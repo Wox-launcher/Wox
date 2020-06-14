@@ -31,7 +31,7 @@
     <system:String x:Key="pythonDirectory">Diretório Python</system:String>
     <system:String x:Key="autoUpdates">Atualização automática</system:String>
     <system:String x:Key="updateToPrereleases">Atualizar para versões de teste</system:String>
-    <system:String x:Key="selectPythonDirectory">Selecionar/system:String>
+    <system:String x:Key="selectPythonDirectory">Selecionar</system:String>
     <system:String x:Key="hideOnStartup">Ocultar Wox ao iniciar</system:String>
     <system:String x:Key="hideNotifyIcon">Ocultar ícone da bandeja</system:String>
     <system:String x:Key="querySearchPrecision">Precisão da pesquisa</system:String>
