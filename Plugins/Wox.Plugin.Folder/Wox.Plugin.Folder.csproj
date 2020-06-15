@@ -113,6 +113,13 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Languages\pt.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\Wox.Infrastructure\Wox.Infrastructure.csproj">
       <Project>{4fd29318-a8ab-4d8f-aa47-60bc241b8da3}</Project>
       <Name>Wox.Infrastructure</Name>
