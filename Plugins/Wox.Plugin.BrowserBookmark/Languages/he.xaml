@@ -1,0 +1,9 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:system="clr-namespace:System;assembly=mscorlib">
+
+	<!--Plugin Info-->
+	<system:String x:Key="wox_plugin_browserbookmark_plugin_name">סייר הסימניות</system:String>
+	<system:String x:Key="wox_plugin_browserbookmark_plugin_description">חפש את הסימניות של הדפדפן שלך</system:String>
+
+</ResourceDictionary>
