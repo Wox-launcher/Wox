@@ -77,13 +77,13 @@
                 </CheckBox>
                 <StackPanel Margin="10" Orientation="Horizontal">
                     <TextBlock Text="{DynamicResource querySearchPrecision}" />
-                    <ComboBox Margin="10 0 0 0" Width="120"
+                    <ComboBox Margin="10 0 0 0"
                               ItemsSource="{Binding QuerySearchPrecisionStrings}" 
                               SelectedItem="{Binding Settings.QuerySearchPrecisionString}" />
                 </StackPanel>
                 <StackPanel Margin="10" Orientation="Horizontal">
                     <TextBlock Text="{DynamicResource lastQueryMode}" />
-                    <ComboBox Margin="10 0 0 0" Width="120"
+                    <ComboBox Margin="10 0 0 0"
                               ItemsSource="{Binding LastQueryModes}" SelectedValue="{Binding Settings.LastQueryMode}"
                               DisplayMemberPath="Display" SelectedValuePath="Value" />
                 </StackPanel>
@@ -139,6 +139,7 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
                 </DockPanel>
+                <GridSplitter Width="3"/>
                 <Grid Grid.Column="1">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -187,12 +188,12 @@
                                     <TextBlock Text="{DynamicResource actionKeywords}"
                                                Visibility="{Binding ActionKeywordsVisibility}"
                                                Cursor="Hand" Foreground="Blue"
-                                               Margin="20 0 0 0"
-                                               MouseUp="OnPluginActionKeywordsClick" />
+                                               Margin="20,0,0,0"
+                                               MouseUp="OnPluginActionKeywordsClick" Padding="0,0,5,0" />
                                     <TextBlock Text="{Binding ActionKeywordsText}"
                                                Visibility="{Binding ActionKeywordsVisibility}"
                                                ToolTip="Change Action Keywords"
-                                               Margin="5 0 0 0" Cursor="Hand" Foreground="Blue"
+                                               Margin="0 0 0 0" Cursor="Hand" Foreground="Blue"
                                                MouseUp="OnPluginActionKeywordsClick" />
                                     <TextBlock Text="{Binding InitilizaTime}" Margin="10 0 0 0" />
                                     <TextBlock Text="{Binding QueryTime}" Margin="10 0 0 0" />
@@ -224,9 +225,10 @@
                     </TextBlock>
 
                     <ListBox SelectedItem="{Binding SelectedTheme}" ItemsSource="{Binding Themes}"
-                             Margin="10, 0, 10, 10" Width="180"
+                             Margin="10, 0, 10, 10"
                              HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
                 </DockPanel>
+                <GridSplitter Width="3"/>
                 <Grid Margin="0" Grid.Column="1">
                     <Grid.RowDefinitions>
                         <RowDefinition />
