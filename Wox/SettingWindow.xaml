@@ -280,7 +280,7 @@
                             <RowDefinition/>
                         </Grid.RowDefinitions>
                         <TextBlock Text="{DynamicResource queryBoxFont}"
-                                   Grid.Column="0" Grid.Row="0" />
+                                   Grid.Column="0" Grid.Row="0" HorizontalAlignment="Left" />
                         <ComboBox ItemsSource="{Binding Source={StaticResource SortedFontsQuery}}"
                                   SelectedItem="{Binding SelectedQueryBoxFont}"
                                   Grid.Column="1" Grid.Row="0"/>
@@ -301,7 +301,7 @@
                         </ComboBox>
 
                         <TextBlock Text="{DynamicResource resultItemFont}"
-                                   Grid.Column="0" Grid.Row="1" />
+                                   Grid.Column="0" Grid.Row="1" HorizontalAlignment="Left" />
                         <ComboBox ItemsSource="{Binding Source={StaticResource SortedFontsResult}}"
                                   SelectedItem="{Binding SelectedResultFont}"
                                   Grid.Column="1" Grid.Row="1"/>
@@ -320,10 +320,7 @@
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        
-                        
-                        <TextBlock Text="{DynamicResource resultItemHighlightFont}"
-                                   Grid.Column="1" Grid.Row="2" />
+                        <TextBlock Text="{DynamicResource resultItemHighlightFont}" Grid.Row="2" HorizontalAlignment="Left" />
                         <ComboBox ItemsSource="{Binding SelectedResultFont.FamilyTypefaces}"
                                   SelectedItem="{Binding SelectedResultHighlightFontFaces}"
                                   Grid.Column="2" Grid.Row="2">
@@ -339,6 +336,7 @@
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
+                        <TextBlock Grid.Row="2" Grid.Column="1" HorizontalAlignment="Center" Text="{DynamicResource resultItemHighlightFontSameAbove}" />
                     </Grid>
                 </Grid>
             </Grid>
