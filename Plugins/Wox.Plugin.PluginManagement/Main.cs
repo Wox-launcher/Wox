@@ -149,29 +149,23 @@ namespace Wox.Plugin.PluginManagement
                     SubTitleHighlightData = StringMatcher.FuzzySearch(query.SecondSearch, r.description).MatchData,
                     Action = c =>
                     {
-                        MessageBoxResult result = MessageBox.Show("Are you sure you wish to install the \'" + r.name + "\' plugin",
-                            "Install plugin", MessageBoxButton.YesNo);
+                        string folder = Path.Combine(Path.GetTempPath(), "WoxPluginDownload");
+                        if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
+                        string filePath = Path.Combine(folder, Guid.NewGuid().ToString() + ".wox");
 
-                        if (result == MessageBoxResult.Yes)
+                        string pluginUrl = APIBASE + "/media/" + r1.plugin_file;
+
+                        try
                         {
-                            string folder = Path.Combine(Path.GetTempPath(), "WoxPluginDownload");
-                            if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
-                            string filePath = Path.Combine(folder, Guid.NewGuid().ToString() + ".wox");
-
-                            string pluginUrl = APIBASE + "/media/" + r1.plugin_file;
-
-                            try
-                            {
-                                Http.Download(pluginUrl, filePath);
-                            }
-                            catch (WebException e)
-                            {
-                                context.API.ShowMsg($"PluginManagement.ResultForInstallPlugin: download failed for <{r.name}>");
-                                Logger.WoxError($"download failed for <{r.name}>", e);
-                                return false;
-                            }
-                            context.API.InstallPlugin(filePath);
+                            Http.Download(pluginUrl, filePath);
                         }
+                        catch (WebException e)
+                        {
+                            context.API.ShowMsg($"PluginManagement.ResultForInstallPlugin: download failed for <{r.name}>");
+                            Logger.WoxError($"download failed for <{r.name}>", e);
+                            return false;
+                        }
+                        context.API.InstallPlugin(filePath);
                         return false;
                     }
                 });
