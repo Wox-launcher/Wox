@@ -45,7 +45,7 @@
                     </Style>
                 </StackPanel.Resources>
                 <CheckBox IsChecked="{Binding PortableMode}">
-                    <TextBlock Text="Portable Mode" />
+                    <TextBlock Text="{DynamicResource portableMode}" />
                 </CheckBox>
                 <CheckBox IsChecked="{Binding Settings.StartWoxOnSystemStartup}"
                           Checked="OnAutoStartupChecked" Unchecked="OnAutoStartupUncheck">
