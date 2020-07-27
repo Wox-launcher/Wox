@@ -54,6 +54,7 @@
     <system:String x:Key="queryBoxFont">Tipo de letra da caixa de consulta</system:String>
     <system:String x:Key="resultItemFont">Tipo de letra dos resultados</system:String>
     <system:String x:Key="resultItemHighlightFont">Tipo de letra dos resultados destacados</system:String>
+    <system:String x:Key="resultItemHighlightFontSameAbove">Tamanho igual ao de cima</system:String>
     <system:String x:Key="windowMode">Modo de janela</system:String>
     <system:String x:Key="opacity">Opacidade</system:String>
     <system:String x:Key="theme_load_failure_path_not_exists">O tema {0} não existe, será utilizado o tema padrão</system:String>
