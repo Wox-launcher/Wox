@@ -17,6 +17,7 @@
     <!--Setting General-->
     <system:String x:Key="wox_settings">Definições Wox</system:String>
     <system:String x:Key="general">Geral</system:String>
+    <system:String x:Key="portableMode">Modo portátil</system:String>
     <system:String x:Key="startWoxOnSystemStartup">Iniciar Wox no arranque do sistema</system:String>
     <system:String x:Key="hideWoxWhenLoseFocus">Ocultar Wox ao perder o foco</system:String>
     <system:String x:Key="dontPromptUpdateMsg">Não notificar acerca de novas versões</system:String>
