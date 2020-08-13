@@ -446,7 +446,8 @@ namespace Wox.ViewModel
 
             ProgressBarVisibility = Visibility.Hidden;
 
-            var queryText = QueryText.Trim();
+            // support unix-style path separators
+            var queryText = QueryText.Trim().Replace("/", "\\");
             Task.Run(() =>
             {
                 if (!string.IsNullOrEmpty(queryText))
