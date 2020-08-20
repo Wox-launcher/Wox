@@ -17,6 +17,7 @@
     <!--Setting General-->
     <system:String x:Key="wox_settings">Nastavenia Wox</system:String>
     <system:String x:Key="general">Všeobecné</system:String>
+    <system:String x:Key="portableMode">Prenosný režim</system:String>
     <system:String x:Key="startWoxOnSystemStartup">Spustiť Wox po štarte systému</system:String>
     <system:String x:Key="hideWoxWhenLoseFocus">Schovať Wox po strate fokusu</system:String>
     <system:String x:Key="dontPromptUpdateMsg">Nezobrazovať upozornenia na novú verziu</system:String>
