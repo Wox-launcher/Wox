@@ -78,5 +78,5 @@ Thanks
 
 I would like to thank
 
-- [Raygun](https://raygun.com/) for their free crash reporting account.
+- [Sentry](https://sentry.io/) for their free crash reporting account.
 - JetBrains for Open Source licence.
