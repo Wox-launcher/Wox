@@ -17,6 +17,7 @@
     <!--设置，通用-->
     <system:String x:Key="wox_settings">Wox设置</system:String>
     <system:String x:Key="general">通用</system:String>
+    <system:String x:Key="portableMode">便携模式</system:String>
     <system:String x:Key="startWoxOnSystemStartup">开机启动</system:String>
     <system:String x:Key="hideWoxWhenLoseFocus">失去焦点时自动隐藏Wox</system:String>
     <system:String x:Key="dontPromptUpdateMsg">不显示新版本提示</system:String>
@@ -30,8 +31,8 @@
     <system:String x:Key="ignoreHotkeysOnFullscreen">全屏模式下忽略热键</system:String>
     <system:String x:Key="pythonDirectory">Python 路径</system:String>
     <system:String x:Key="autoUpdates">自动更新</system:String>
-    <system:String x:Key="updateToPrereleases">Update to Prereleases</system:String>
-    <system:String x:Key="selectPythonDirectory">Select</system:String>
+    <system:String x:Key="updateToPrereleases">更新到预发布版本</system:String>
+    <system:String x:Key="selectPythonDirectory">选择</system:String>
     <system:String x:Key="hideOnStartup">启动时不显示主窗口</system:String>
     <system:String x:Key="hideNotifyIcon">隐藏任务栏图标</system:String>
     <system:String x:Key="querySearchPrecision">搜索精度</system:String>
@@ -54,6 +55,7 @@
     <system:String x:Key="queryBoxFont">查询框字体</system:String>
     <system:String x:Key="resultItemFont">结果项字体</system:String>
     <system:String x:Key="resultItemHighlightFont">结果项中的高亮字体</system:String>
+    <system:String x:Key="resultItemHighlightFontSameAbove">同上</system:String>
     <system:String x:Key="windowMode">窗口模式</system:String>
     <system:String x:Key="opacity">透明度</system:String>
     <system:String x:Key="theme_load_failure_path_not_exists">无法找到主题 {0} ，切换为默认主题</system:String>

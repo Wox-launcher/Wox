@@ -47,23 +47,24 @@ namespace Wox.Core.Plugin
                     .Replace("|", "_")
                     + "-" + Guid.NewGuid();
                 string newPluginPath = Path.Combine(pluginFolerPath, newPluginName);
-                string content = $"Do you want to install following plugin?{Environment.NewLine}{Environment.NewLine}" +
-                                 $"Name: {plugin.Name}{Environment.NewLine}" +
-                                 $"Version: {plugin.Version}{Environment.NewLine}" +
-                                 $"Author: {plugin.Author}";
                 PluginPair existingPlugin = PluginManager.GetPluginForId(plugin.ID);
-
+                string content = $"Do you want to install following plugin and restart Wox?{Environment.NewLine}{Environment.NewLine}" +
+                                 $"Name: {plugin.Name}{Environment.NewLine}";
                 if (existingPlugin != null)
                 {
-                    content = $"Do you want to update following plugin?{Environment.NewLine}{Environment.NewLine}" +
-                              $"Name: {plugin.Name}{Environment.NewLine}" +
-                              $"Old Version: {existingPlugin.Metadata.Version}" +
-                              $"{Environment.NewLine}New Version: {plugin.Version}" +
-                              $"{Environment.NewLine}Author: {plugin.Author}";
+                    content += $"Old Version: {existingPlugin.Metadata.Version}{Environment.NewLine}" +
+                              $"New Version: {plugin.Version}{Environment.NewLine}" +
+                              $"Author: {plugin.Author}";
                 }
+                else
+                {
+                    content += $"Version: {plugin.Version}{Environment.NewLine}" +
+                              $"Author: {plugin.Author}";
+                }
+                content += $"{Environment.NewLine}{Environment.NewLine}If you choose No, the plugin will take effect since next time Wox starts.";
 
-                var result = MessageBox.Show(content, "Install plugin", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                if (result == MessageBoxResult.Yes)
+                var result = MessageBox.Show(content, "Install plugin", MessageBoxButton.YesNoCancel, MessageBoxImage.Question, MessageBoxResult.No);
+                if (result != MessageBoxResult.Cancel)
                 {
                     if (existingPlugin != null && Directory.Exists(existingPlugin.Metadata.PluginDirectory))
                     {
@@ -74,17 +75,15 @@ namespace Wox.Core.Plugin
                     UnZip(path, newPluginPath, true);
                     Directory.Delete(tempFoler, true);
 
-                    //exsiting plugins may be has loaded by application,
-                    //if we try to delelte those kind of plugins, we will get a  error that indicate the
+                    //existing plugins may be has loaded by application,
+                    //if we try to delete those kind of plugins, we will get a  error that indicate the
                     //file is been used now.
-                    //current solution is to restart wox. Ugly.
+                    //current solution is to restart Wox. Ugly.
                     //if (MainWindow.Initialized)
                     //{
                     //    Plugins.Initialize();
                     //}
-                    if (MessageBox.Show($"You have installed plugin {plugin.Name} successfully.{Environment.NewLine}" +
-                                        "Restart Wox to take effect?",
-                                        "Install plugin", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                    if (result == MessageBoxResult.Yes)
                     {
                         PluginManager.API.RestarApp();
                     }

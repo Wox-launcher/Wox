@@ -2,13 +2,13 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:system="clr-namespace:System;assembly=mscorlib">
     <!--MainWindow-->
-    <system:String x:Key="registerHotkeyFailed">Регистрация хоткея {0} не удалась</system:String>
+    <system:String x:Key="registerHotkeyFailed">Регистрация горячей клавиши {0} не удалась</system:String>
     <system:String x:Key="couldnotStartCmd">Не удалось запустить {0}</system:String>
-    <system:String x:Key="invalidWoxPluginFileFormat">Неверный формат файла wox плагина</system:String>
-    <system:String x:Key="setAsTopMostInThisQuery">Отображать это окно выше всех при этом запросе</system:String>
-    <system:String x:Key="cancelTopMostInThisQuery">Не отображать это окно выше всех при этом запросе</system:String>
-    <system:String x:Key="executeQuery">Выполнить запрос:{0}</system:String>
-    <system:String x:Key="lastExecuteTime">Последний раз выполнен в:{0}</system:String>
+    <system:String x:Key="invalidWoxPluginFileFormat">Неверный формат файла Wox плагина</system:String>
+    <system:String x:Key="setAsTopMostInThisQuery">Отображать выше всех в этом запросе</system:String>
+    <system:String x:Key="cancelTopMostInThisQuery">Не отображать выше всех в этом запросе</system:String>
+    <system:String x:Key="executeQuery">Выполнить запрос: {0}</system:String>
+    <system:String x:Key="lastExecuteTime">Последний запуск: {0}</system:String>
     <system:String x:Key="iconTrayOpen">Открыть</system:String>
     <system:String x:Key="iconTraySettings">Настройки</system:String>
     <system:String x:Key="iconTrayAbout">О Wox</system:String>
@@ -16,29 +16,37 @@
 
     <!--Setting General-->
     <system:String x:Key="wox_settings">Настройки Wox</system:String>
-    <system:String x:Key="general">Общие</system:String>
-    <system:String x:Key="startWoxOnSystemStartup">Запускать Wox при запуске системы</system:String>
-    <system:String x:Key="hideWoxWhenLoseFocus">Скрывать Wox если потерян фокус</system:String>
-    <system:String x:Key="dontPromptUpdateMsg">Не отображать сообщение об обновлении когда доступна новая версия</system:String>
+    <system:String x:Key="general">Основные</system:String>
+    <system:String x:Key="portableMode">Портативный(portable) режим</system:String>
+    <system:String x:Key="startWoxOnSystemStartup">Запускать Wox при загрузке системы</system:String>
+    <system:String x:Key="hideWoxWhenLoseFocus">Скрывать Wox при потере фокуса</system:String>
+    <system:String x:Key="dontPromptUpdateMsg">Не отображать сообщение об возможности обновления</system:String>
     <system:String x:Key="rememberLastLocation">Запомнить последнее место запуска</system:String>
     <system:String x:Key="language">Язык</system:String>
+    <system:String x:Key="lastQueryMode">Стиль последнего запроса</system:String>
+    <system:String x:Key="LastQueryPreserved">Сохранить последний запрос</system:String>
+    <system:String x:Key="LastQuerySelected">Выбрать послений запрос</system:String>
+    <system:String x:Key="LastQueryEmpty">Пустой последний запрос</system:String>
     <system:String x:Key="maxShowResults">Максимальное количество результатов</system:String>
-    <system:String x:Key="ignoreHotkeysOnFullscreen">Игнорировать горячие клавиши, если окно в полноэкранном режиме</system:String>
+    <system:String x:Key="ignoreHotkeysOnFullscreen">Игнорировать горячие клавиши в полноэкранном режиме</system:String>
     <system:String x:Key="pythonDirectory">Путь к Python</system:String>
     <system:String x:Key="autoUpdates">Автообновление</system:String>
-    <system:String x:Key="updateToPrereleases">Обновлять до Пре-релизов</system:String>
+    <system:String x:Key="updateToPrereleases">Обновлять до пре-релиза</system:String>
     <system:String x:Key="selectPythonDirectory">Выбрать</system:String>
-    <system:String x:Key="hideOnStartup">Запускать Wox в фоне</system:String>
+    <system:String x:Key="hideOnStartup">Скрыть Wox при загрузке</system:String>
+    <system:String x:Key="hideNotifyIcon">Скрыть иконку в трее</system:String>
+    <system:String x:Key="querySearchPrecision">Точность поискового запроса</system:String>
+    <system:String x:Key="ShouldUsePinyin">Использовать Пиньинь(иероглифы)</system:String>
     
     <!--Setting Plugin-->
     <system:String x:Key="plugin">Плагины</system:String>
     <system:String x:Key="browserMorePlugins">Найти больше плагинов</system:String>
     <system:String x:Key="disable">Отключить</system:String>
-    <system:String x:Key="actionKeywords">Ключевое слово</system:String>
-    <system:String x:Key="pluginDirectory">Папка</system:String>
+    <system:String x:Key="actionKeywords">Ключевые слова</system:String>
+    <system:String x:Key="pluginDirectory">Директория</system:String>
     <system:String x:Key="author">Автор</system:String>
-    <system:String x:Key="plugin_init_time">Инициализация: {0}ms</system:String>
-    <system:String x:Key="plugin_query_time">Запрос: {0}ms</system:String>
+    <system:String x:Key="plugin_init_time">Время загрузки: {0}мсек</system:String>
+    <system:String x:Key="plugin_query_time">Время запроса: {0}мсек</system:String>
 
     <!--Setting Theme-->
     <system:String x:Key="theme">Темы</system:String>
@@ -49,11 +57,13 @@
     <system:String x:Key="resultItemHighlightFont">Шрифт выделения результатов</system:String>
     <system:String x:Key="windowMode">Оконный режим</system:String>
     <system:String x:Key="opacity">Прозрачность</system:String>
+    <system:String x:Key="theme_load_failure_path_not_exists">Тема {0} не существует, возврат к стандартной теме</system:String>
+    <system:String x:Key="theme_load_failure_parse_error">Ошибка при загрузке темы {0}, возврат к стандартной теме</system:String>
     
     <!--Setting Hotkey-->
     <system:String x:Key="hotkey">Горячие клавиши</system:String>
     <system:String x:Key="woxHotkey">Горячая клавиша Wox</system:String>
-    <system:String x:Key="customQueryHotkey">Задаваемые горячие клавиши для запросов</system:String>
+    <system:String x:Key="customQueryHotkey">Пользовательские горячие клавиши</system:String>
     <system:String x:Key="delete">Удалить</system:String>
     <system:String x:Key="edit">Изменить</system:String>
     <system:String x:Key="add">Добавить</system:String>
@@ -61,9 +71,9 @@
     <system:String x:Key="deleteCustomHotkeyWarning">Вы уверены что хотите удалить горячую клавишу для плагина {0}?</system:String>
 
     <!--Setting Proxy-->
-    <system:String x:Key="proxy">HTTP Прокси</system:String>
+    <system:String x:Key="proxy">HTTP прокси</system:String>
     <system:String x:Key="enableProxy">Включить HTTP прокси</system:String>
-    <system:String x:Key="server">HTTP Сервер</system:String>
+    <system:String x:Key="server">HTTP cервер</system:String>
     <system:String x:Key="port">Порт</system:String>
     <system:String x:Key="userName">Логин</system:String>
     <system:String x:Key="password">Пароль</system:String>
@@ -81,8 +91,13 @@
     <system:String x:Key="website">Сайт</system:String>
     <system:String x:Key="version">Версия</system:String>
     <system:String x:Key="about_activate_times">Вы воспользовались Wox уже {0} раз</system:String>
-    <system:String x:Key="checkUpdates">Проверить Обновления</system:String>
-    <system:String x:Key="newVersionTips">Доступна новая версия {0}, пожалуйста перезапустите Wox</system:String>
+    <system:String x:Key="checkUpdates">Проверить oбновления</system:String>
+    <system:String x:Key="newVersionTips">Доступна новая версия {0}, пожалуйста перезапустите Wox.</system:String>
+    <system:String x:Key="checkUpdatesFailed">Check updates failed, please check your connection and proxy settings to api.github.com.</system:String>
+    <system:String x:Key="downloadUpdatesFailed">
+        Ошибка при загрузке обновления, пожалуйста проверьте свои настройки соединия и прокси к github-cloud.s3.amazonaws.com, 
+        или скачайте обновление вручную с https://github.com/Wox-launcher/Wox/releases.
+    </system:String>
     <system:String x:Key="releaseNotes">В этой версии:</system:String>
 
     <!--Action Keyword Setting Dialog-->
@@ -122,7 +137,7 @@
     <system:String x:Key="reportWindow_wox_got_an_error">Произошёл сбой в Wox</system:String>
 
     <!--update-->
-    <system:String x:Key="update_wox_update_new_version_available">Доступна новая версия Wox V{0}</system:String>
+    <system:String x:Key="update_wox_update_new_version_available">Доступна новая версия Wox {0}</system:String>
     <system:String x:Key="update_wox_update_error">Произошла ошибка при попытке установить обновление</system:String>
     <system:String x:Key="update_wox_update">Обновить</system:String>
     <system:String x:Key="update_wox_update_cancel">Отмена</system:String>

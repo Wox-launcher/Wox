@@ -104,11 +104,11 @@ namespace Wox.Plugin.Program
                 {
                     if (entry.IsRegex)
                     {
-                        return Regex.Match(r.Title, entry.EntryString).Success;
+                        return Regex.Match(r.Title, entry.EntryString).Success || Regex.Match(r.SubTitle, entry.EntryString).Success;
                     }
                     else
                     {
-                        return r.Title.ToLower().Contains(entry.EntryString);
+                        return r.Title.ToLower().Contains(entry.EntryString) || r.SubTitle.ToLower().Contains(entry.EntryString);
                     }
                 });
                 if (!ignored)

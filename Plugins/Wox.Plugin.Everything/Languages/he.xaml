@@ -1,0 +1,22 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:system="clr-namespace:System;assembly=mscorlib">
+
+    <system:String x:Key="wox_plugin_everything_is_not_running">תהליכון Everything לא פועל כרגע</system:String>
+    <system:String x:Key="wox_plugin_everything_query_error">שגיאה בלתשאל את Everything</system:String>
+    <system:String x:Key="wox_plugin_everything_copied">הועתק</system:String>
+    <system:String x:Key="wox_plugin_everything_canot_start">אין אפשרות למחוק את {0}</system:String>
+    <system:String x:Key="wox_plugin_everything_open_containing_folder">פתח את תקיית האב</system:String>
+    <system:String x:Key="wox_plugin_everything_open_with_editor">פתח באמצעות {0}</system:String>
+    <system:String x:Key="wox_plugin_everything_editor_path">כתובת העורך</system:String>
+    <system:String x:Key="wox_plugin_everything_copy_path">העתק מיקום</system:String>
+    <system:String x:Key="wox_plugin_everything_copy">העתק</system:String>
+    <system:String x:Key="wox_plugin_everything_delete">מחק</system:String>
+    <system:String x:Key="wox_plugin_everything_canot_delete">אין אפשרות למחוק את {0}</system:String>
+    
+    <system:String x:Key="wox_plugin_everything_plugin_name">Everything</system:String>
+    <system:String x:Key="wox_plugin_everything_plugin_description">חפש קבצים שעל הדיסק על ידי שימוש ב Everything</system:String>
+
+    <system:String x:Key="wox_plugin_everything_use_location_as_working_dir">השתמש במיקום של תוצאת החיפוש כתיקיית העבודה עבור הרצות של תוכנות</system:String>
+
+</ResourceDictionary>

@@ -33,6 +33,7 @@
     <Window.InputBindings>
         <KeyBinding Key="Escape" Command="{Binding EscCommand}"></KeyBinding>
         <KeyBinding Key="F1" Command="{Binding StartHelpCommand}"></KeyBinding>
+        <KeyBinding Key="F5" Command="{Binding RefreshCommand}"></KeyBinding>
         <KeyBinding Key="Tab" Command="{Binding SelectNextItemCommand}"></KeyBinding>
         <KeyBinding Key="Tab" Modifiers="Shift" Command="{Binding SelectPrevItemCommand}"></KeyBinding>
         <KeyBinding Key="N" Modifiers="Ctrl" Command="{Binding SelectNextItemCommand}"></KeyBinding>

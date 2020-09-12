@@ -17,6 +17,7 @@
     <!--Setting General-->
     <system:String x:Key="wox_settings">Nastavenia Wox</system:String>
     <system:String x:Key="general">Všeobecné</system:String>
+    <system:String x:Key="portableMode">Prenosný režim</system:String>
     <system:String x:Key="startWoxOnSystemStartup">Spustiť Wox po štarte systému</system:String>
     <system:String x:Key="hideWoxWhenLoseFocus">Schovať Wox po strate fokusu</system:String>
     <system:String x:Key="dontPromptUpdateMsg">Nezobrazovať upozornenia na novú verziu</system:String>
@@ -54,7 +55,8 @@
     <system:String x:Key="helloWox">Ahoj Wox</system:String>
     <system:String x:Key="queryBoxFont">Písmo poľa pre dopyt</system:String>
     <system:String x:Key="resultItemFont">Písmo výsledkov</system:String>
-    <system:String x:Key="resultItemHighlightFont">Písmo zvýraznených výsledkov</system:String>																							 
+    <system:String x:Key="resultItemHighlightFont">Písmo zvýraznených výsledkov</system:String>
+   	<system:String x:Key="resultItemHighlightFontSameAbove">Rovnaké ako vyššie</system:String>
     <system:String x:Key="windowMode">Režim okno</system:String>
     <system:String x:Key="opacity">Nepriehľadnosť</system:String>
     <system:String x:Key="theme_load_failure_path_not_exists">Motív {0} neexistuje, použije sa predvolený motív</system:String>

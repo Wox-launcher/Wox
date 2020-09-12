@@ -194,6 +194,8 @@ namespace Wox.ViewModel
                 Process.Start("http://doc.wox.one/");
             });
 
+            RefreshCommand = new RelayCommand(_ => Refresh());
+
             OpenResultCommand = new RelayCommand(index =>
             {
                 var results = SelectedResults;
@@ -333,6 +335,7 @@ namespace Wox.ViewModel
         public ICommand SelectPrevPageCommand { get; set; }
         public ICommand SelectFirstResultCommand { get; set; }
         public ICommand StartHelpCommand { get; set; }
+        public ICommand RefreshCommand { get; set; }
         public ICommand LoadContextMenuCommand { get; set; }
         public ICommand LoadHistoryCommand { get; set; }
         public ICommand OpenResultCommand { get; set; }
@@ -443,7 +446,8 @@ namespace Wox.ViewModel
 
             ProgressBarVisibility = Visibility.Hidden;
 
-            var queryText = QueryText.Trim();
+            // support unix-style path separators
+            var queryText = QueryText.Trim().Replace("/", "\\");
             Task.Run(() =>
             {
                 if (!string.IsNullOrEmpty(queryText))
@@ -532,6 +536,11 @@ namespace Wox.ViewModel
                 }
             }, token).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
 
+        }
+
+        private void Refresh()
+        {
+            PluginManager.ReloadData();
         }
 
         private Result ContextMenuTopMost(Result result)
