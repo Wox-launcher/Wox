@@ -149,15 +149,14 @@ namespace Wox.Plugin.Program.Programs
             var paths = new List<string>();
             try
             {
-                IEnumerable<string> files = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories);
-                foreach (var path in files)
+                IEnumerable<FileSystemInfo> files = FileSystemEnumerable.Search(directory, "*", SearchOption.AllDirectories);
+                foreach (var fileInfo in files)
                 {
-                    var extension = Path.GetExtension(path);
-                    if (extension.Length > 1)
+                    if (fileInfo.Extension.Length > 1)
                     {
-                        if (suffixes.Contains(extension.Substring(1)))
+                        if (suffixes.Contains(fileInfo.Extension.Substring(1)))
                         {
-                            paths.Add(path);
+                            paths.Add(fileInfo.FullName);
                         }
                     }
                 }
