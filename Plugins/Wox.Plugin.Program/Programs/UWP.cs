@@ -48,6 +48,12 @@ namespace Wox.Plugin.Program.Programs
         private void InitializeAppInfo()
         {
             var path = Path.Combine(Location, "AppxManifest.xml");
+            if (!File.Exists(path))
+            {
+                Logger.Info($"Could not find manifest file {path}");
+                Apps = Array.Empty<Application>();
+                return;
+            }
             using (var reader = XmlReader.Create(path))
             {
                 bool success = reader.ReadToFollowing("Package");
