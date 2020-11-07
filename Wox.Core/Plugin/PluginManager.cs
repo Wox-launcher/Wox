@@ -164,7 +164,7 @@ namespace Wox.Core.Plugin
                 var metadata = pair.Metadata;
                 if (!metadata.Disabled)
                 {
-                    bool validGlobalQuery = string.IsNullOrEmpty(query.ActionKeyword) && pair.Metadata.ActionKeywords[0] == Query.GlobalPluginWildcardSign;
+                    bool validGlobalQuery = string.IsNullOrEmpty(query.ActionKeyword) && pair.Metadata.ActionKeywords.Contains(Query.GlobalPluginWildcardSign);
                     bool validNonGlobalQuery = pair.Metadata.ActionKeywords.Contains(query.ActionKeyword);
                     if (validGlobalQuery || validNonGlobalQuery)
                     {
