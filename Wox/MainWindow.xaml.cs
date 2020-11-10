@@ -83,6 +83,19 @@ namespace Wox
                             _viewModel.LastQuerySelected = true;
                         }
                     }
+                    return;
+                }
+
+                if (e.PropertyName == nameof(MainViewModel.ProgressBarVisibility))
+                {
+                    if (_viewModel.ProgressBarVisibility == Visibility.Visible)
+                    {
+                        ProgressBar.BeginStoryboard(_progressBarStoryboard);
+                    }
+                    else
+                    {
+                        _progressBarStoryboard.Stop(ProgressBar);
+                    }
                 }
             };
             _settings.PropertyChanged += (o, e) =>
@@ -148,7 +161,6 @@ namespace Wox
             _progressBarStoryboard.Children.Add(da);
             _progressBarStoryboard.Children.Add(da1);
             _progressBarStoryboard.RepeatBehavior = RepeatBehavior.Forever;
-            ProgressBar.BeginStoryboard(_progressBarStoryboard);
             _viewModel.ProgressBarVisibility = Visibility.Hidden;
         }
 
