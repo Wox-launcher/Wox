@@ -791,6 +791,7 @@
     <Content Include="KeyboardLayouts\quz-PE 3179 Quechua (Peru).json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="KeyboardLayouts\README.md" />
     <Content Include="KeyboardLayouts\rm-CH 1047 Romansh (Switzerland).json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
