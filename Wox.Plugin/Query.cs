@@ -11,9 +11,10 @@ namespace Wox.Plugin
         /// <summary>
         /// to allow unit tests for plug ins
         /// </summary>
-        public Query(string rawQuery, string search, string[] terms, string actionKeyword = "")
+        public Query(string rawQuery, string search, List<string> multilingualSearch, string[] terms, string actionKeyword = "")
         {
             Search = search;
+            MultilingualSearch = multilingualSearch;
             RawQuery = rawQuery;
             Terms = terms;
             ActionKeyword = actionKeyword;
@@ -32,6 +33,11 @@ namespace Wox.Plugin
         /// so this property will always give you the "real" query part of the query
         /// </summary>
         public string Search { get; internal set; }
+        
+        /// <summary>
+        /// Search part of a query typed in all user-installed keyboard languages.
+        /// </summary>
+        public List<string> MultilingualSearch { get; internal set; }
 
         /// <summary>
         /// The raw query splited into a string array.

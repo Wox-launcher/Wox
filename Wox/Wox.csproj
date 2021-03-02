@@ -218,6 +218,774 @@
     <None Include="Images\warning.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <Content Include="KeyboardLayouts\aa-Latn-DJ 8192 Unknown Locale (aa-Latn-DJ).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\aa-Latn-ER 9216 Unknown Locale (aa-Latn-ER).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\aa-Latn-ET 10240 Unknown Locale (aa-Latn-ET).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\af-NA 11264 Afrikaans (Namibia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\af-ZA 1078 Afrikaans (South Africa).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\am-ET 1118 Amharic (Ethiopia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-AE 14337 Arabic (United Arab Emirates).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-BH 15361 Arabic (Bahrain).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-DZ 5121 Arabic (Algeria).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-EG 3073 Arabic (Egypt).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-IQ 2049 Arabic (Iraq).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-JO 11265 Arabic (Jordan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-KW 13313 Arabic (Kuwait).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-LB 12289 Arabic (Lebanon).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-LY 4097 Arabic (Libya).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-MA 6145 Arabic (Morocco).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-OM 8193 Arabic (Oman).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-QA 16385 Arabic (Qatar).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-SA 1025 Arabic (Saudi Arabia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-SY 10241 Arabic (Syria).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-TN 7169 Arabic (Tunisia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ar-YE 9217 Arabic (Yemen).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\arn-CL 1146 Mapuche (Chile).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\as-IN 1101 Assamese (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\az-Cyrl-AZ 2092 Azerbaijani (Cyrillic, Azerbaijan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\az-Latn-AZ 1068 Azerbaijani (Latin, Azerbaijan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ba-RU 1133 Bashkir (Russia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\be-BY 1059 Belarusian (Belarus).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\bg-BG 1026 Bulgarian (Bulgaria).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\bn-BD 2117 Bangla (Bangladesh).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\bn-IN 1093 Bengali (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\bo-CN 1105 Tibetan (China).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\br-FR 1150 Breton (France).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\bs-Cyrl-BA 8218 Bosnian (Cyrillic, Bosnia and Herzegovina).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\bs-Latn-BA 5146 Bosnian (Latin, Bosnia &amp; Herzegovina).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ca-ES 1027 Catalan (Catalan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ca-ES-valencia 2051 Valencian (Spain).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\chr-Cher-US 1116 Cherokee (Cherokee, United States).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\co-FR 1155 Corsican (France).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\cs-CZ 1029 Czech (Czechia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\cy-GB 1106 Welsh (United Kingdom).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\da-DK 1030 Danish (Denmark).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\de-AT 3079 German (Austria).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\de-CH 2055 German (Switzerland).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\de-DE 1031 German (Germany).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\de-LI 5127 German (Liechtenstein).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\de-LU 4103 German (Luxembourg).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\dsb-DE 2094 Lower Sorbian (Germany).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\dv-MV 1125 Divehi (Maldives).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\dz-BT 3153 Dzongkha (Bhutan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\el-GR 1032 Greek (Greece).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-029 9225 English (Caribbean).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-AE 19465 English (United Arab Emirates).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-AU 3081 English (Australia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-BZ 10249 English (Belize).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-CA 4105 English (Canada).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-GB 2057 English (United Kingdom).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-HK 15369 English (Hong Kong SAR).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-ID 14345 English (Indonesia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-IE 6153 English (Ireland).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-IN 16393 English (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-JM 8201 English (Jamaica).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-MY 17417 English (Malaysia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-NZ 5129 English (New Zealand).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-PH 13321 English (Philippines).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-SG 18441 English (Singapore).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-TT 11273 English (Trinidad &amp; Tobago).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-US 1033 English (United States).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-US.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-ZA 7177 English (South Africa).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\en-ZW 12297 English (Zimbabwe).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-419 22538 Spanish (Latin America).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-AR 11274 Spanish (Argentina).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-BO 16394 Spanish (Bolivia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-CL 13322 Spanish (Chile).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-CO 9226 Spanish (Colombia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-CR 5130 Spanish (Costa Rica).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-CU 23562 Spanish (Cuba).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-DO 7178 Spanish (Dominican Republic).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-EC 12298 Spanish (Ecuador).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-ES 3082 Spanish (Spain, International Sort).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-GT 4106 Spanish (Guatemala).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-HN 18442 Spanish (Honduras).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-MX 2058 Spanish (Mexico).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-NI 19466 Spanish (Nicaragua).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-PA 6154 Spanish (Panama).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-PE 10250 Spanish (Peru).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-PR 20490 Spanish (Puerto Rico).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-PY 15370 Spanish (Paraguay).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-SV 17418 Spanish (El Salvador).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-US 21514 Spanish (United States).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-UY 14346 Spanish (Uruguay).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\es-VE 8202 Spanish (Venezuela).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\et-EE 1061 Estonian (Estonia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\eu-ES 1069 Basque (Basque).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fa-IR 1065 Persian (Iran).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ff-Latn-NG 1127 Fulah (Latin, Nigeria).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ff-Latn-SN 2151 Fulah (Latin, Senegal).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fi-FI 1035 Finnish (Finland).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fil-PH 1124 Filipino (Philippines).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fo-FO 1080 Faroese (Faroe Islands).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fr-029 7180 French (Caribbean).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fr-BE 2060 French (Belgium).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fr-CA 3084 French (Canada).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fr-CD 9228 French Congo (DRC).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fr-CH 4108 French (Switzerland).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fr-CI 12300 French (Côte d’Ivoire).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fr-CM 11276 French (Cameroon).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fr-FR 1036 French (France).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fr-HT 15372 French (Haiti).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fr-LU 5132 French (Luxembourg).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fr-MA 14348 French (Morocco).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fr-MC 6156 French (Monaco).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fr-ML 13324 French (Mali).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fr-RE 8204 French (Réunion).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fr-SN 10252 French (Senegal).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\fy-NL 1122 Western Frisian (Netherlands).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ga-IE 2108 Irish (Ireland).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\gd-GB 1169 Scottish Gaelic (United Kingdom).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\gl-ES 1110 Galician (Galician).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\gn-PY 1140 Guarani (Paraguay).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\gsw-FR 1156 Alsatian (France).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\gu-IN 1095 Gujarati (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ha-Latn-NG 1128 Hausa (Latin, Nigeria).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\haw-US 1141 Hawaiian (United States).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\he-IL 1037 Hebrew (Israel).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\hi-IN 1081 Hindi (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\hr-BA 4122 Croatian (Bosnia &amp; Herzegovina).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\hr-HR 1050 Croatian (Croatia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\hsb-DE 1070 Upper Sorbian (Germany).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\hu-HU 1038 Hungarian (Hungary).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\hy-AM 1067 Armenian (Armenia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\id-ID 1057 Indonesian (Indonesia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ig-NG 1136 Igbo (Nigeria).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ii-CN 1144 Yi (China).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ii-CN 1144 Yi （China）.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\is-IS 1039 Icelandic (Iceland).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\it-CH 2064 Italian (Switzerland).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\it-IT 1040 Italian (Italy).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\iu-Cans-CA 1117 Inuktitut (Syllabics, Canada).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\iu-Latn-CA 2141 Inuktitut (Latin, Canada).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ja-JP 1041 Japanese (Japan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ka-GE 1079 Georgian (Georgia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\kk-KZ 1087 Kazakh (Kazakhstan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\kl-GL 1135 Kalaallisut (Greenland).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\km-KH 1107 Khmer (Cambodia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\kn-IN 1099 Kannada (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ko-KR 1042 Korean (Korea) .json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ko-KR 1042 Korean (Korea).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\kok-IN 1111 Konkani (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\kr-Latn-NG 1137 Kanuri (Nigeria).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ks-Deva-IN 2144 Kashmiri (Devanagari).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ku-Arab-IQ 1170 Central Kurdish (Iraq).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ky-KG 1088 Kyrgyz (Kyrgyzstan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\la-001 1142 Latin (World).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\lb-LU 1134 Luxembourgish (Luxembourg).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\lo-LA 1108 Lao (Laos).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\lt-LT 1063 Lithuanian (Lithuania).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\lv-LV 1062 Latvian (Latvia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\mi-NZ 1153 Maori (New Zealand).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\mk-MK 1071 Macedonian (North Macedonia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ml-IN 1100 Malayalam (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\mn-MN 1104 Mongolian (Mongolia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\mn-Mong-CN 2128 Mongolian (Traditional Mongolian, China).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\mn-Mong-MN 3152 Mongolian (Traditional Mongolian, Mongolia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\moh-CA 1148 Mohawk (Mohawk).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\mr-IN 1102 Marathi (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ms-BN 2110 Malay (Brunei).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ms-MY 1086 Malay (Malaysia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\mt-MT 1082 Maltese (Malta).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\my-MM 1109 Burmese (Myanmar).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\nb-NO 1044 Norwegian Bokmål (Norway).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ne-IN 2145 Nepali (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ne-NP 1121 Nepali (Nepal).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\nl-BE 2067 Dutch (Belgium).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\nl-NL 1043 Dutch (Netherlands).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\nn-NO 2068 Norwegian Nynorsk (Norway).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\nso-ZA 1132 Sesotho sa Leboa (South Africa).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\oc-FR 1154 Occitan (France).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\om-ET 1138 Oromo (Ethiopia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\or-IN 1096 Odia (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\pa-Arab-PK 2118 Punjabi (Pakistan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\pa-IN 1094 Punjabi (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\pl-PL 1045 Polish (Poland).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\prs-AF 1164 Dari (Afghanistan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\pt-BR 1046 Portuguese (Brazil).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\pt-PT 2070 Portuguese (Portugal).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\quc-Latn-GT 1158 K'iche' (Guatemala).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\quz-BO 1131 Quechua (Bolivia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\quz-EC 2155 Quechua (Ecuador).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\quz-PE 3179 Quechua (Peru).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\rm-CH 1047 Romansh (Switzerland).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ro-MD 2072 Romanian (Moldova).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ro-RO 1048 Romanian (Romania).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ru-MD 2073 Russian (Moldova).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ru-RU 1049 Russian (Russia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\rw-RW 1159 Kinyarwanda (Rwanda).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sa-IN 1103 Sanskrit (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sah-RU 1157 Sakha (Russia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sd-Arab-PK 2137 Sindhi (Pakistan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sd-Deva-IN 1113 Sindhi (Devanagari, India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\se-FI 3131 Sami, Northern (Finland).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\se-NO 1083 Sami, Northern (Norway).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\se-SE 2107 Sami, Northern (Sweden).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\si-LK 1115 Sinhala (Sri Lanka).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sk-SK 1051 Slovak (Slovakia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sl-SI 1060 Slovenian (Slovenia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sma-NO 6203 Sami, Southern (Norway).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sma-SE 7227 Sami, Southern (Sweden).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\smj-NO 4155 Sami, Lule (Norway).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\smj-SE 5179 Sami, Lule (Sweden).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\smn-FI 9275 Sami, Inari (Finland).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sms-FI 8251 Sami, Skolt (Finland).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\so-SO 1143 Somali (Somalia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sq-AL 1052 Albanian (Albania).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sr-Cyrl-BA 7194 Serbian (Cyrillic, Bosnia and Herzegovina).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sr-Cyrl-ME 12314 Serbian (Cyrillic, Montenegro).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sr-Cyrl-RS 10266 Serbian (Cyrillic, Serbia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sr-Latn-BA 6170 Serbian (Latin, Bosnia &amp; Herzegovina).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sr-Latn-ME 11290 Serbian (Latin, Montenegro).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sr-Latn-RS 9242 Serbian (Latin, Serbia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\st-ZA 1072 Sesotho (South Africa).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sv-FI 2077 Swedish (Finland).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sv-SE 1053 Swedish (Sweden).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\sw-KE 1089 Kiswahili (Kenya).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\syr-SY 1114 Syriac (Syria).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ta-IN 1097 Tamil (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ta-LK 2121 Tamil (Sri Lanka).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\te-IN 1098 Telugu (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\tg-Cyrl-TJ 1064 Tajik (Cyrillic, Tajikistan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\th-TH 1054 Thai (Thailand).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ti-ET 1139 Tigrinya （Ethiopia）.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\tk-TM 1090 Turkmen (Turkmenistan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\tn-BW 2098 Setswana (Botswana).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\tn-ZA 1074 Setswana (South Africa).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\tr-TR 1055 Turkish (Turkey).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ts-ZA 1073 Xitsonga (South Africa).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\tt-RU 1092 Tatar (Russia).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\tzm-Arab-MA 1119 Central Atlas Tamazight (Arabic, Morocco).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\tzm-Latn-DZ 2143 Central Atlas Tamazight (Latin, Algeria).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\tzm-Tfng-MA 4191 Central Atlas Tamazight (Tifinagh, Morocco).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ug-CN 1152 Uyghur (China).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\uk-UA 1058 Ukrainian (Ukraine).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ur-IN 2080 Urdu (India).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ur-PK 1056 Urdu (Pakistan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\uz-Cyrl-UZ 2115 Uzbek (Cyrillic, Uzbekistan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\uz-Latn-UZ 1091 Uzbek (Latin, Uzbekistan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\ve-ZA 1075 Venda (South Africa).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\vi-VN 1066 Vietnamese (Vietnam).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\wo-SN 1160 Wolof (Senegal).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\xh-ZA 1076 isiXhosa (South Africa).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\yi-001 1085 Yiddish (World).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\yo-NG 1130 Yoruba (Nigeria).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\zh-CN 2052 Chinese (Simplified, China) .json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\zh-TW 1028 Chinese (Traditional, Taiwan).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="KeyboardLayouts\zu-ZA 1077 isiZulu (South Africa).json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Themes\System Dark.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
