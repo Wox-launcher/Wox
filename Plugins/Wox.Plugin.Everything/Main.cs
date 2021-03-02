@@ -38,57 +38,75 @@ namespace Wox.Plugin.Everything
 
         public List<Result> Query(Query query)
         {
-            if (_updateSource != null && !_updateSource.IsCancellationRequested)
-            {
-                _updateSource.Cancel();
-                Logger.WoxDebug($"cancel init {_updateSource.Token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId} {query.RawQuery}");
-                _updateSource.Dispose();
-            }
-            var source = new CancellationTokenSource();
-            _updateSource = source;
-            var token = source.Token;
-
             var results = new List<Result>();
-            if (!string.IsNullOrEmpty(query.Search))
+            foreach (var _query in query.MultilingualSearch)
             {
-                var keyword = query.Search;
+                if (_updateSource != null && !_updateSource.IsCancellationRequested)
+                {
+                    _updateSource.Cancel();
+                    Logger.WoxDebug(
+                        $"cancel init {_updateSource.Token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId} {_query}");
+                    _updateSource.Dispose();
+                }
 
-                try
+                var source = new CancellationTokenSource();
+                _updateSource = source;
+                var token = source.Token;
+
+                if (!string.IsNullOrEmpty(_query))
                 {
-                    if (token.IsCancellationRequested) { return results; }
-                    var searchList = _api.Search(keyword, token, _settings.MaxSearchCount);
-                    if (token.IsCancellationRequested) { return results; }
-                    for (int i = 0; i < searchList.Count; i++)
+                    var keyword = _query;
+
+                    try
                     {
-                        if (token.IsCancellationRequested) { return results; }
-                        SearchResult searchResult = searchList[i];
-                        var r = CreateResult(keyword, searchResult, i);
-                        results.Add(r);
-                    }
-                }
-                catch (IPCErrorException)
-                {
-                    results.Add(new Result
-                    {
-                        Title = _context.API.GetTranslation("wox_plugin_everything_is_not_running"),
-                        IcoPath = "Images\\warning.png"
-                    });
-                }
-                catch (Exception e)
-                {
-                    Logger.WoxError("Query Error", e);
-                    results.Add(new Result
-                    {
-                        Title = _context.API.GetTranslation("wox_plugin_everything_query_error"),
-                        SubTitle = e.Message,
-                        Action = _ =>
+                        if (token.IsCancellationRequested)
                         {
-                            Clipboard.SetText(e.Message + "\r\n" + e.StackTrace);
-                            _context.API.ShowMsg(_context.API.GetTranslation("wox_plugin_everything_copied"), null, string.Empty);
-                            return false;
-                        },
-                        IcoPath = "Images\\error.png"
-                    });
+                            return results;
+                        }
+
+                        var searchList = _api.Search(keyword, token, _settings.MaxSearchCount);
+                        if (token.IsCancellationRequested)
+                        {
+                            return results;
+                        }
+
+                        for (int i = 0; i < searchList.Count; i++)
+                        {
+                            if (token.IsCancellationRequested)
+                            {
+                                return results;
+                            }
+
+                            SearchResult searchResult = searchList[i];
+                            var r = CreateResult(keyword, searchResult, i);
+                            results.Add(r);
+                        }
+                    }
+                    catch (IPCErrorException)
+                    {
+                        results.Add(new Result
+                        {
+                            Title = _context.API.GetTranslation("wox_plugin_everything_is_not_running"),
+                            IcoPath = "Images\\warning.png"
+                        });
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.WoxError("Query Error", e);
+                        results.Add(new Result
+                        {
+                            Title = _context.API.GetTranslation("wox_plugin_everything_query_error"),
+                            SubTitle = e.Message,
+                            Action = _ =>
+                            {
+                                Clipboard.SetText(e.Message + "\r\n" + e.StackTrace);
+                                _context.API.ShowMsg(_context.API.GetTranslation("wox_plugin_everything_copied"), null,
+                                    string.Empty);
+                                return false;
+                            },
+                            IcoPath = "Images\\error.png"
+                        });
+                    }
                 }
             }
 
