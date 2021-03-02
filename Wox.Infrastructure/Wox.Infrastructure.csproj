@@ -56,6 +56,7 @@
     <Compile Include="Helper.cs" />
     <Compile Include="Hotkey\InterceptKeys.cs" />
     <Compile Include="Hotkey\KeyEvent.cs" />
+    <Compile Include="KeyboardLayout.cs" />
     <Compile Include="Logger\Log.cs" />
     <Compile Include="Storage\ISavable.cs" />
     <Compile Include="Storage\PluginJsonStorage.cs" />

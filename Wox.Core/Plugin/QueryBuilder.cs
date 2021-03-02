@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using Wox.Infrastructure;
 using Wox.Plugin;
 
 namespace Wox.Core.Plugin
@@ -33,6 +35,11 @@ namespace Wox.Core.Plugin
                 search = rawQuery;
             }
 
+            
+            var layoutDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
+                "KeyboardLayouts");
+            var multilingualSearch = KeyboardLayout.Convert(search, layoutDir).Result;
+
             var query = new Query
             {
 
@@ -40,6 +47,7 @@ namespace Wox.Core.Plugin
                 RawQuery = rawQuery,
                 ActionKeyword = actionKeyword,
                 Search = search,
+                MultilingualSearch = multilingualSearch,
                 // Obsolete value initialisation
                 ActionName = actionKeyword,
                 ActionParameters = actionParameters

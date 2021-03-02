@@ -58,16 +58,21 @@ namespace Wox.Plugin.Sys
         {
             var commands = Commands();
             var results = new List<Result>();
-            foreach (var c in commands)
+            foreach (var input in query.MultilingualSearch)
             {
-                var titleMatch = StringMatcher.FuzzySearch(query.Search, c.Title);
-                if (titleMatch.Score > 0)
+                foreach (var c in commands)
                 {
-                    c.Score = titleMatch.Score;
-                    c.TitleHighlightData = titleMatch.MatchData;
-                    results.Add(c);
-                }
+                    // the same way if it only one word
+                    var titleMatch = StringMatcher.FuzzySearch(input, c.Title);
+                    if (titleMatch.Score > 0)
+                    {
+                        c.Score = titleMatch.Score;
+                        c.TitleHighlightData = titleMatch.MatchData;
+                        results.Add(c);
+                    }
+                }    
             }
+            
             return results;
         }
 

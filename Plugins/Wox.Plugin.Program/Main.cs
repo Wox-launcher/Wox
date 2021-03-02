@@ -53,11 +53,12 @@ namespace Wox.Plugin.Program
 
         public List<Result> Query(Query query)
         {
-
+            var logQuery = query.MultilingualSearch.Aggregate("", (current, q) => current + "/" + q);
+            
             if (_updateSource != null && !_updateSource.IsCancellationRequested)
             {
                 _updateSource.Cancel();
-                Logger.WoxDebug($"cancel init {_updateSource.Token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId} {query.RawQuery}");
+                Logger.WoxDebug($"cancel init {_updateSource.Token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId} {logQuery}");
                 _updateSource.Dispose();
             }
             var source = new CancellationTokenSource();
@@ -67,32 +68,42 @@ namespace Wox.Plugin.Program
             ConcurrentBag<Result> resultRaw = new ConcurrentBag<Result>();
 
             if (token.IsCancellationRequested) { return new List<Result>(); }
-            Parallel.ForEach(_win32s, (program, state) =>
+
+            Parallel.ForEach(query.MultilingualSearch, (_query, state) =>
             {
-                if (token.IsCancellationRequested) { state.Break(); }
-                if (program.Enabled)
+                Parallel.ForEach(_win32s, (program) =>
                 {
-                    var r = program.Result(query.Search, _context.API);
-                    if (r != null && r.Score > 0)
-                    {
-                        resultRaw.Add(r);
-                    }
-                }
-            });
-            if (token.IsCancellationRequested) { return new List<Result>(); }
-            Parallel.ForEach(_uwps, (program, state) =>
-            {
-                if (token.IsCancellationRequested) { state.Break(); }
-                if (program.Enabled)
-                {
-                    var r = program.Result(query.Search, _context.API);
                     if (token.IsCancellationRequested) { state.Break(); }
-                    if (r != null && r.Score > 0)
+                    if (program.Enabled)
                     {
-                        resultRaw.Add(r);
+                        var r = program.Result(_query, _context.API);
+                        if (r != null && r.Score > 0)
+                        {
+                            resultRaw.Add(r);
+                        }
                     }
-                }
+                });    
             });
+            
+            if (token.IsCancellationRequested) { return new List<Result>(); }
+
+            Parallel.ForEach(query.MultilingualSearch, (_query, state) =>
+            {
+                Parallel.ForEach(_uwps, (program) =>
+                {
+                    if (token.IsCancellationRequested) { state.Break(); }
+                    if (program.Enabled)
+                    {
+                        var r = program.Result(_query, _context.API);
+                        if (token.IsCancellationRequested) { state.Break(); }
+                        if (r != null && r.Score > 0)
+                        {
+                            resultRaw.Add(r);
+                        }
+                    }
+                });    
+            });
+            
 
             if (token.IsCancellationRequested) { return new List<Result>(); }
             OrderedParallelQuery<Result> sorted = resultRaw.AsParallel().OrderByDescending(r => r.Score);

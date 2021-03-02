@@ -29,9 +29,21 @@ namespace Wox.Plugin.ControlPanel
         {
             List<Result> results = new List<Result>();
 
+            foreach (var input in query.MultilingualSearch)
+            {
+                results.AddRange(ControlPanelSearch(input));
+            }
+
+            List<Result> panelItems = results.OrderByDescending(o => o.Score).Take(5).ToList();
+            return panelItems;
+        }
+
+        private List<Result> ControlPanelSearch(string input)
+        {
+            var results = new List<Result>();
             foreach (var item in controlPanelItems)
             {
-                var titleMatch = StringMatcher.FuzzySearch(query.Search, item.LocalizedString);
+                var titleMatch = StringMatcher.FuzzySearch(input, item.LocalizedString);
 
                 item.Score = titleMatch.Score;
                 if (item.Score > 0)
@@ -57,18 +69,17 @@ namespace Wox.Plugin.ControlPanel
                                 ex.Data.Add(nameof(item.GUID), item.GUID);
                                 Logger.WoxError($"cannot start control panel item {item.ExecutablePath}", ex);
                             }
+
                             return true;
                         }
                     };
 
-                    
 
                     results.Add(result);
                 }
             }
 
-            List<Result> panelItems = results.OrderByDescending(o => o.Score).Take(5).ToList();
-            return panelItems;
+            return results;
         }
 
         public string GetTranslatedPluginTitle()

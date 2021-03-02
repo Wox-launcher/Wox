@@ -51,13 +51,18 @@ namespace Wox.Plugin.Folder
 
         public List<Result> Query(Query query)
         {
-            var results = GetUserFolderResults(query);
+            var inputs = query.MultilingualSearch;
+            var results = new List<Result>();
+            foreach (var input in inputs)
+            {
+                results.AddRange(GetUserFolderResults(query, input));
 
-            string search = query.Search.ToLower();
-            if (!IsDriveOrSharedFolder(search))
-                return results;
+                string search = query.Search.ToLower();
+                if (!IsDriveOrSharedFolder(input))
+                    return results;
 
-            results.AddRange(QueryInternal_Directory_Exists(query));
+                results.AddRange(QueryInternal_Directory_Exists(query, input));
+            }
 
             // todo why was this hack here?
             foreach (var result in results)
@@ -88,14 +93,14 @@ namespace Wox.Plugin.Folder
             return false;
         }
 
-        private Result CreateFolderResult(string title, string subtitle, string path, Query query)
+        private Result CreateFolderResult(string title, string subtitle, string path, Query query, string input)
         {
             return new Result
             {
                 Title = title,
                 IcoPath = path,
                 SubTitle = subtitle,
-                TitleHighlightData = StringMatcher.FuzzySearch(query.Search, title).MatchData,
+                TitleHighlightData = StringMatcher.FuzzySearch(input, title).MatchData,
                 Action = c =>
                 {
                     if (c.SpecialKeyState.CtrlPressed)
@@ -122,13 +127,12 @@ namespace Wox.Plugin.Folder
             };
         }
 
-        private List<Result> GetUserFolderResults(Query query)
+        private List<Result> GetUserFolderResults(Query query, string input)
         {
-            string search = query.Search.ToLower();
             var userFolderLinks = _settings.FolderLinks.Where(
-                x => x.Nickname.StartsWith(search, StringComparison.OrdinalIgnoreCase));
+                x => x.Nickname.StartsWith(input, StringComparison.OrdinalIgnoreCase));
             var results = userFolderLinks.Select(item =>
-                CreateFolderResult(item.Nickname, DefaultFolderSubtitleString, item.Path, query)).ToList();
+                CreateFolderResult(item.Nickname, DefaultFolderSubtitleString, item.Path, query, input)).ToList();
             return results;
         }
 
@@ -150,22 +154,21 @@ namespace Wox.Plugin.Folder
             '?', '*', '>'
         };
 
-        private List<Result> QueryInternal_Directory_Exists(Query query)
+        private List<Result> QueryInternal_Directory_Exists(Query query, string input)
         {
-            var search = query.Search;
             var results = new List<Result>();
-            var hasSpecial = search.IndexOfAny(_specialSearchChars) >= 0;
+            var hasSpecial = input.IndexOfAny(_specialSearchChars) >= 0;
             string incompleteName = "";
-            if (hasSpecial || !Directory.Exists(search + "\\"))
+            if (hasSpecial || !Directory.Exists(input + "\\"))
             {
                 // if folder doesn't exist, we want to take the last part and use it afterwards to help the user 
                 // find the right folder.
-                int index = search.LastIndexOf('\\');
-                if (index > 0 && index < (search.Length - 1))
+                int index = input.LastIndexOf('\\');
+                if (index > 0 && index < (input.Length - 1))
                 {
-                    incompleteName = search.Substring(index + 1).ToLower();
-                    search = search.Substring(0, index + 1);
-                    if (!Directory.Exists(search))
+                    incompleteName = input.Substring(index + 1).ToLower();
+                    input = input.Substring(0, index + 1);
+                    if (!Directory.Exists(input))
                     {
                         return results;
                     }
@@ -178,13 +181,13 @@ namespace Wox.Plugin.Folder
             else
             {
                 // folder exist, add \ at the end of doesn't exist
-                if (!search.EndsWith("\\"))
+                if (!input.EndsWith("\\"))
                 {
-                    search += "\\";
+                    input += "\\";
                 }
             }
 
-            results.Add(CreateOpenCurrentFolderResult(incompleteName, search));
+            results.Add(CreateOpenCurrentFolderResult(incompleteName, input));
 
             var searchOption = SearchOption.TopDirectoryOnly;
             incompleteName += "*";
@@ -206,7 +209,7 @@ namespace Wox.Plugin.Folder
             try
             {
                 // search folder and add results
-                var directoryInfo = new DirectoryInfo(search);
+                var directoryInfo = new DirectoryInfo(input);
                 var fileSystemInfos = directoryInfo.GetFileSystemInfos(incompleteName, searchOption);
 
                 foreach (var fileSystemInfo in fileSystemInfos)
@@ -218,11 +221,11 @@ namespace Wox.Plugin.Folder
                         if (searchOption == SearchOption.AllDirectories)
                             folderSubtitleString = fileSystemInfo.FullName;
 
-                        folderList.Add(CreateFolderResult(fileSystemInfo.Name, folderSubtitleString, fileSystemInfo.FullName, query));
+                        folderList.Add(CreateFolderResult(fileSystemInfo.Name, folderSubtitleString, fileSystemInfo.FullName, query, input));
                     }
                     else
                     {
-                        fileList.Add(CreateFileResult(fileSystemInfo.FullName, query));
+                        fileList.Add(CreateFileResult(fileSystemInfo.FullName, input));
                     }
                 }
             }
@@ -242,14 +245,14 @@ namespace Wox.Plugin.Folder
             return results.Concat(folderList.OrderBy(x => x.Title)).Concat(fileList.OrderBy(x => x.Title)).ToList();
         }
 
-        private static Result CreateFileResult(string filePath, Query query)
+        private static Result CreateFileResult(string filePath, string query)
         {
             var result = new Result
             {
                 Title = Path.GetFileName(filePath),
                 SubTitle = filePath,
                 IcoPath = filePath,
-                TitleHighlightData = StringMatcher.FuzzySearch(query.Search, Path.GetFileName(filePath)).MatchData,
+                TitleHighlightData = StringMatcher.FuzzySearch(query, Path.GetFileName(filePath)).MatchData,
                 Action = c =>
                 {
                     try

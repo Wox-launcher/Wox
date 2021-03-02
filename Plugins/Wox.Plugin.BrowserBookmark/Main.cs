@@ -53,24 +53,32 @@ namespace Wox.Plugin.BrowserBookmark
 
         public List<Result> Query(Query query)
         {
-            string param = query.Search.TrimStart();
+            var @params = query.MultilingualSearch;
 
             // Should top results be returned? (true if no search parameters have been passed)
-            var topResults = string.IsNullOrEmpty(param);
+            var topResults = @params.Count == 0;
 
             lock (_updateLock)
             {
 
                 var returnList = cachedBookmarks;
 
+                var paramsResult = new List<Bookmark>();
                 if (!topResults)
                 {
-                    // Since we mixed chrome and firefox bookmarks, we should order them again                
-                    returnList = cachedBookmarks.Where(o => Bookmarks.MatchProgram(o, param)).ToList();
-                    returnList = returnList.OrderByDescending(o => o.Score).ToList();
+                    var tempList = new List<Bookmark>();
+                    
+                    foreach (var param in @params)
+                    {
+                        var temp = cachedBookmarks.Where(o => Bookmarks.MatchProgram(o, param)).ToList();
+                        paramsResult.AddRange(temp);
+                    }
+
+                    // Since we mixed chrome and firefox bookmarks, we should order them again    
+                    paramsResult = paramsResult.OrderByDescending(o => o.Score).ToList();
                 }
 
-                var results = returnList.Select(c => new Result()
+                var results = paramsResult.Select(c => new Result()
                 {
                     Title = c.Name,
                     SubTitle = c.Url,
