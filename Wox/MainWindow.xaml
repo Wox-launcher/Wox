@@ -49,6 +49,8 @@
         <KeyBinding Key="Enter" Command="{Binding OpenResultCommand}"></KeyBinding>
         <KeyBinding Key="Enter" Modifiers="Ctrl" Command="{Binding OpenResultCommand}"></KeyBinding>
         <KeyBinding Key="Enter" Modifiers="Alt" Command="{Binding OpenResultCommand}"></KeyBinding>
+        <KeyBinding Key="Apps" Command="{Binding LoadContextMenuCommand}"></KeyBinding>
+        <KeyBinding Key="F10" Modifiers="Shift" Command="{Binding LoadContextMenuCommand}"></KeyBinding>
         <KeyBinding Key="D1" Modifiers="Alt" Command="{Binding OpenResultCommand}" CommandParameter="0"></KeyBinding>
         <KeyBinding Key="D2" Modifiers="Alt" Command="{Binding OpenResultCommand}" CommandParameter="1"></KeyBinding>
         <KeyBinding Key="D3" Modifiers="Alt" Command="{Binding OpenResultCommand}" CommandParameter="2"></KeyBinding>
@@ -73,12 +75,13 @@
                     </TextBox.Text>
                 </TextBox>
                 <TextBox x:Name="QueryTextBox"
-                    Style="{DynamicResource QueryBoxStyle}"
+                     Style="{DynamicResource QueryBoxStyle}"
                      Text="{Binding QueryText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      PreviewDragOver="OnPreviewDragOver"
                      TextChanged="OnTextChanged"
                      AllowDrop="True"
-                     Visibility="Visible">
+                     Visibility="Visible"
+                     ContextMenuService.IsEnabled="False">
                     <TextBox.ContextMenu>
                         <ContextMenu>
                             <MenuItem Command="ApplicationCommands.Cut"/>
