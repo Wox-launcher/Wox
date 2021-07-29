@@ -93,7 +93,7 @@ namespace Wox.Plugin.Sys
                                                      MessageBoxButton.YesNo, MessageBoxImage.Warning);
                         if (reuslt == MessageBoxResult.Yes)
                         {
-                            Process.Start("shutdown", "/s /t 0");
+                            Process.Start("shutdown", "/s /hybrid /t 0");
                         }
                         return true;
                     }
