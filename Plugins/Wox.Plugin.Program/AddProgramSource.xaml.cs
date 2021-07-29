@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Windows;
 
 using Ookii.Dialogs.Wpf; // may be removed later https://github.com/dotnet/wpf/issues/438
@@ -45,7 +46,7 @@ namespace Wox.Plugin.Program
 
         private void ButtonAdd_OnClick(object sender, RoutedEventArgs e)
         {
-            string s = Directory.Text;
+            string s = Environment.ExpandEnvironmentVariables(Directory.Text);
             if (!System.IO.Directory.Exists(s))
             {
                 System.Windows.MessageBox.Show(_context.API.GetTranslation("wox_plugin_program_invalid_path"));
