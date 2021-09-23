@@ -16,7 +16,7 @@
     "Author":"Wox",
     "Version":"1.0",
     "Language":"python",
-    "Website":"https://github.com/Wox-launche/Wox",
+    "Website":"https://github.com/Wox-launcher/Wox",
     "IcoPath":"Images\\app.png",
     "ExecuteFileName":"main.py"
 }
