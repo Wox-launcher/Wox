@@ -6,20 +6,23 @@ using System.Linq;
 using System.Runtime.Caching;
 using Wox.Infrastructure.Logger;
 using static Wox.Infrastructure.StringMatcher;
+using System.Threading;
 
 namespace Wox.Infrastructure
 {
     public class StringMatcher
     {
-
+        
         public SearchPrecisionScore UserSettingSearchPrecision { get; set; }
 
         private readonly Alphabet _alphabet;
         private MemoryCache _cache;
 
+        private Nullable<CancellationToken> _token = null;
+
         private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
-        public StringMatcher()
+        public StringMatcher(Nullable<CancellationToken> token = null)
         {
             _alphabet = new Alphabet();
             _alphabet.Initialize();
@@ -29,6 +32,11 @@ namespace Wox.Infrastructure
             config.Add("physicalMemoryLimitPercentage", "1");
             config.Add("cacheMemoryLimitMegabytes", "30");
             _cache = new MemoryCache("StringMatcherCache", config);
+
+            if (token != null)
+            {
+                _token = token;
+            }
         }
 
         public static StringMatcher Instance { get; internal set; }
@@ -64,6 +72,7 @@ namespace Wox.Infrastructure
             string query, string stringToCompare, int queryCurrentIndex, int stringCurrentIndex, List<int> sourceMatchData
         )
         {
+            if (_token?.IsCancellationRequested ?? false) { return new MatchResult(false, UserSettingSearchPrecision); }
             if (queryCurrentIndex == query.Length || stringCurrentIndex == stringToCompare.Length)
             {
                 return new MatchResult(false, UserSettingSearchPrecision);
@@ -84,6 +93,7 @@ namespace Wox.Infrastructure
 
             while (queryCurrentIndex < query.Length && stringCurrentIndex < stringToCompare.Length)
             {
+                if (_token?.IsCancellationRequested ?? false) { return new MatchResult(false, UserSettingSearchPrecision); }
                 char queryLower = char.ToLower(query[queryCurrentIndex]);
                 char stringToCompareLower = char.ToLower(stringToCompare[stringCurrentIndex]);
                 if (queryLower == stringToCompareLower)
@@ -126,6 +136,7 @@ namespace Wox.Infrastructure
                 int consecutiveMatch = 0;
                 for (int i = 0; i < matchs.Count; i++)
                 {
+                    if (_token?.IsCancellationRequested ?? false) { return new MatchResult(false, UserSettingSearchPrecision); }
                     int indexCurent = matchs[i];
                     if (i > 0)
                     {

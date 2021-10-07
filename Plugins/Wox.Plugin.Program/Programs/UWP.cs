@@ -248,7 +248,7 @@ namespace Wox.Plugin.Program.Programs
             public string LogoPath { get; set; }
             public UWP Package { get; set; }
 
-            public Result Result(string query, IPublicAPI api)
+            public Result Result(string query, IPublicAPI api, StringMatcher stringMatcher)
             {
                 var result = new Result
                 {
@@ -268,15 +268,15 @@ namespace Wox.Plugin.Program.Programs
                 {
                     title = Description;
                     result.Title = title;
-                    var match = StringMatcher.FuzzySearch(query, title);
+                    var match = stringMatcher.FuzzyMatch(query, title);
                     result.Score = match.Score;
                     result.TitleHighlightData = match.MatchData;
                 }
                 else if (!string.IsNullOrEmpty(Description))
                 {
                     title = $"{DisplayName}: {Description}";
-                    var match1 = StringMatcher.FuzzySearch(query, DisplayName);
-                    var match2 = StringMatcher.FuzzySearch(query, title);
+                    var match1 = stringMatcher.FuzzyMatch(query, DisplayName);
+                    var match2 = stringMatcher.FuzzyMatch(query, title);
                     if (match1.Score > match2.Score)
                     {
                         result.Score = match1.Score;
@@ -294,7 +294,7 @@ namespace Wox.Plugin.Program.Programs
                 {
                     title = DisplayName;
                     result.Title = title;
-                    var match = StringMatcher.FuzzySearch(query, title);
+                    var match = stringMatcher.FuzzyMatch(query, title);
                     result.Score = match.Score;
                     result.TitleHighlightData = match.MatchData;
                 }

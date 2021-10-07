@@ -30,7 +30,7 @@ namespace Wox.Plugin.Program.Programs
 
         private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
-        public Result Result(string query, IPublicAPI api)
+        public Result Result(string query, IPublicAPI api, StringMatcher stringMatcher)
         {
             var result = new Result
             {
@@ -54,7 +54,7 @@ namespace Wox.Plugin.Program.Programs
                 }
             };
 
-            var match = StringMatcher.FuzzySearch(query, Name);
+            var match = stringMatcher.FuzzyMatch(query, Name);
             result.Title = Name;
             result.Score = match.Score;
             result.TitleHighlightData = match.MatchData;

@@ -23,7 +23,7 @@ namespace Wox.Plugin.Program
         internal static Settings _settings { get; set; }
 
         private static PluginInitContext _context;
-        private CancellationTokenSource _updateSource;
+        private CancellationTokenSource _updateSource = new CancellationTokenSource();
 
         private static BinaryStorage<Win32[]> _win32Storage;
         private static BinaryStorage<UWP.Application[]> _uwpStorage;
@@ -53,74 +53,101 @@ namespace Wox.Plugin.Program
 
         public List<Result> Query(Query query)
         {
-
-            if (_updateSource != null && !_updateSource.IsCancellationRequested)
+            lock(this)
             {
-                _updateSource.Cancel();
-                Logger.WoxDebug($"cancel init {_updateSource.Token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId} {query.RawQuery}");
-                _updateSource.Dispose();
-            }
-            var source = new CancellationTokenSource();
-            _updateSource = source;
-            var token = source.Token;
-
-            ConcurrentBag<Result> resultRaw = new ConcurrentBag<Result>();
-
-            if (token.IsCancellationRequested) { return new List<Result>(); }
-            Parallel.ForEach(_win32s, (program, state) =>
-            {
-                if (token.IsCancellationRequested) { state.Break(); }
-                if (program.Enabled)
+                if (_updateSource != null)
                 {
-                    var r = program.Result(query.Search, _context.API);
-                    if (r != null && r.Score > 0)
+                    if (!_updateSource.IsCancellationRequested)
                     {
-                        resultRaw.Add(r);
-                    }
-                }
-            });
-            if (token.IsCancellationRequested) { return new List<Result>(); }
-            Parallel.ForEach(_uwps, (program, state) =>
-            {
-                if (token.IsCancellationRequested) { state.Break(); }
-                if (program.Enabled)
-                {
-                    var r = program.Result(query.Search, _context.API);
-                    if (token.IsCancellationRequested) { state.Break(); }
-                    if (r != null && r.Score > 0)
-                    {
-                        resultRaw.Add(r);
-                    }
-                }
-            });
-
-            if (token.IsCancellationRequested) { return new List<Result>(); }
-            OrderedParallelQuery<Result> sorted = resultRaw.AsParallel().OrderByDescending(r => r.Score);
-            List<Result> results = new List<Result>();
-            foreach (Result r in sorted)
-            {
-                if (token.IsCancellationRequested) { return new List<Result>(); }
-                var ignored = _settings.IgnoredSequence.Any(entry =>
-                {
-                    if (entry.IsRegex)
-                    {
-                        return Regex.Match(r.Title, entry.EntryString).Success || Regex.Match(r.SubTitle, entry.EntryString).Success;
+                        _updateSource.Cancel();
+                        Logger.WoxDebug($"cancel init {_updateSource.Token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId} {query.RawQuery}");
+                        _updateSource.Dispose();
                     }
                     else
                     {
-                        return r.Title.ToLower().Contains(entry.EntryString) || r.SubTitle.ToLower().Contains(entry.EntryString);
+                        Logger.WoxDebug($"already cancelled init ... {Thread.CurrentThread.ManagedThreadId} {query.RawQuery}");
+                    }
+                }
+
+                _updateSource = new CancellationTokenSource();
+            }
+            
+            var token = _updateSource.Token;
+            StringMatcher sm = new StringMatcher(token);
+            try
+            {
+                ParallelOptions po = new ParallelOptions();
+                po.CancellationToken = token;
+
+                ConcurrentBag<Result> resultRaw = new ConcurrentBag<Result>();
+
+                if (token.IsCancellationRequested) { return new List<Result>(); }
+                Parallel.ForEach(_win32s, po, (program, state) =>
+                {
+                    if (token.IsCancellationRequested) { state.Break(); }
+                    if (program.Enabled)
+                    {
+                        var r = program.Result(query.Search, _context.API, sm);
+                        if (r != null && r.Score > 0)
+                        {
+                            resultRaw.Add(r);
+                        }
                     }
                 });
-                if (!ignored)
+                if (token.IsCancellationRequested) { return new List<Result>(); }
+                Parallel.ForEach(_uwps, po, (program, state) =>
                 {
-                    results.Add(r);
-                }
-                if (results.Count == 30)
+                    if (token.IsCancellationRequested) { state.Break(); }
+                    if (program.Enabled)
+                    {
+                        var r = program.Result(query.Search, _context.API, sm);
+                        if (token.IsCancellationRequested) { state.Break(); }
+                        if (r != null && r.Score > 0)
+                        {
+                            resultRaw.Add(r);
+                        }
+                    }
+                });
+
+                if (token.IsCancellationRequested) { return new List<Result>(); }
+                OrderedParallelQuery<Result> sorted = null;
+                List<Result> results = new List<Result>();
+
+                sorted = resultRaw.AsParallel().WithCancellation(token).OrderByDescending(r => r.Score);
+
+                if (token.IsCancellationRequested) { return new List<Result>(); }
+
+                foreach (Result r in sorted)
                 {
-                    break;
+                    if (token.IsCancellationRequested) { return new List<Result>(); }
+                    var ignored = _settings.IgnoredSequence.Any(entry =>
+                    {
+                        if (entry.IsRegex)
+                        {
+                            return Regex.Match(r.Title, entry.EntryString).Success || Regex.Match(r.SubTitle, entry.EntryString).Success;
+                        }
+                        else
+                        {
+                            return r.Title.ToLower().Contains(entry.EntryString) || r.SubTitle.ToLower().Contains(entry.EntryString);
+                        }
+                    });
+                    if (!ignored)
+                    {
+                        results.Add(r);
+                    }
+                    if (results.Count == 30)
+                    {
+                        break;
+                    }
                 }
+
+
+                return results;
             }
-            return results;
+            catch (OperationCanceledException)
+            {
+                return new List<Result>();
+            }
         }
 
         public void Init(PluginInitContext context)
