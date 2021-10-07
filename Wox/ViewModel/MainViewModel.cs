@@ -444,17 +444,22 @@ namespace Wox.ViewModel
 
         private void QueryResults()
         {
-            if (_updateSource != null && !_updateSource.IsCancellationRequested)
+            CancellationTokenSource source;
+            CancellationToken token;
+            lock (this)
             {
-                // first condition used for init run
-                // second condition used when task has already been canceled in last turn
-                _updateSource.Cancel();
-                Logger.WoxDebug($"cancel init {_updateSource.Token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId} {QueryText}");
-                _updateSource.Dispose();
+                if (_updateSource != null && !_updateSource.IsCancellationRequested)
+                {
+                    // first condition used for init run
+                    // second condition used when task has already been canceled in last turn
+                    _updateSource.Cancel();
+                    Logger.WoxDebug($"cancel init {_updateSource.Token.GetHashCode()} {Thread.CurrentThread.ManagedThreadId} {QueryText}");
+                    _updateSource.Dispose();
+                }
+                source = new CancellationTokenSource();
+                _updateSource = source;
+                token = source.Token;
             }
-            var source = new CancellationTokenSource();
-            _updateSource = source;
-            var token = source.Token;
 
             ProgressBarVisibility = Visibility.Hidden;
 
@@ -471,13 +476,19 @@ namespace Wox.ViewModel
                         // handle the exclusiveness of plugin using action keyword
                         if (token.IsCancellationRequested) { return; }
 
-                        Task.Delay(200, token).ContinueWith(_ =>
+                        CancellationTokenSource progressBarSource = new CancellationTokenSource();
+                        CancellationTokenSource progressBarLinkedSource = CancellationTokenSource.CreateLinkedTokenSource(token, progressBarSource.Token);
+
+                        Task.Delay(200, progressBarLinkedSource.Token).ContinueWith(_ =>
                         {
                             Logger.WoxTrace($"progressbar visible 1 {token.GetHashCode()} {token.IsCancellationRequested}  {Thread.CurrentThread.ManagedThreadId}  {query} {ProgressBarVisibility}");
                             // start the progress bar if query takes more than 200 ms
-                            if (!token.IsCancellationRequested)
+                            if (!progressBarLinkedSource.Token.IsCancellationRequested)
                             {
-                                ProgressBarVisibility = Visibility.Visible;
+                                Application.Current.Dispatcher.Invoke(() =>
+                                {
+                                    ProgressBarVisibility = Visibility.Visible;
+                                });
                             }
                         }, token);
 
@@ -522,22 +533,16 @@ namespace Wox.ViewModel
                                 countdown.Wait(token);
                             }
                             catch (OperationCanceledException)
-                            {
-                                // todo: why we need hidden here and why progress bar is not working
-                                ProgressBarVisibility = Visibility.Hidden;
-                                return;
-                            }
-                            if (!token.IsCancellationRequested)
+                            { }
+                            finally
                             {
                                 // used to cancel previous progress bar visible task
-                                source.Cancel();
-                                source.Dispose();
+                                progressBarSource.Cancel();
+                                progressBarSource.Dispose();
                                 // update to hidden if this is still the current query
                                 ProgressBarVisibility = Visibility.Hidden;
                             }
                         });
-
-
                     }
                 }
                 else
@@ -766,7 +771,12 @@ namespace Wox.ViewModel
                 Logger.WoxTrace($"{update.Metadata.Name}:{update.Query.RawQuery}");
                 foreach (var result in update.Results)
                 {
-                    if (update.Token.IsCancellationRequested) { return; }
+                    if (update.Token.IsCancellationRequested)
+                    {
+                        // Maybe next updates' token are new, so don't give up here
+                        Logger.WoxTrace($"(Token expired, Skipping current plugin)");
+                        break;
+                    }
                     if (_topMostRecord.IsTopMost(result))
                     {
                         result.Score = int.MaxValue;
@@ -780,8 +790,20 @@ namespace Wox.ViewModel
                         result.Score = result.Score;
                     }
                 }
+                if (update.Token.IsCancellationRequested)
+                {
+                    continue;
+                }
             }
 
+            foreach (var update in updates)
+            {
+                if (update.Token.IsCancellationRequested)
+                {
+                    continue;
+                }
+            }
+            
             Results.AddResults(updates);
 
             if (Results.Visbility != Visibility.Visible && Results.Count > 0)

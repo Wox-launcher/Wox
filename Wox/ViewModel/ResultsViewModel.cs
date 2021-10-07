@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -132,18 +132,20 @@ namespace Wox.ViewModel
             CancellationToken token;
             try
             {
-                token = updates.Select(u => u.Token).Distinct().First();
+                token = updatesNotCanceled.Select(u => u.Token).Distinct().First();
             }
-            catch (InvalidOperationException e)
+            catch (InvalidOperationException)
             {
-                Logger.WoxError("more than one not canceled query result in same batch processing", e);
+                // This is common, so WoxError -> WoxDebug
+                Logger.WoxDebug("more than one not canceled query result in same batch processing"); // ?
                 return;
             }
+
 
             // https://stackoverflow.com/questions/14336750
             lock (_collectionLock)
             {
-                List<ResultViewModel> newResults = NewResults(updates, token);
+                List<ResultViewModel> newResults = NewResults(updatesNotCanceled.ToList(), token);
                 Logger.WoxTrace($"newResults {newResults.Count}");
                 Results.Update(newResults, token);
             }
