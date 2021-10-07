@@ -173,7 +173,7 @@ namespace Wox.ViewModel
                 }
                 else
                 {
-                    MainWindowVisibility = Visibility.Collapsed;
+                    MainWindowVisibility = Visibility.Hidden;
                 }
             });
 
@@ -225,7 +225,7 @@ namespace Wox.ViewModel
 
                     if (hideWindow)
                     {
-                        MainWindowVisibility = Visibility.Collapsed;
+                        MainWindowVisibility = Visibility.Hidden;
                     }
 
                     if (SelectedIsFromQueryResults())
@@ -733,7 +733,7 @@ namespace Wox.ViewModel
             }
             else
             {
-                MainWindowVisibility = Visibility.Collapsed;
+                MainWindowVisibility = Visibility.Hidden;
             }
         }
 
