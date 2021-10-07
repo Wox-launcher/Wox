@@ -102,11 +102,21 @@ namespace Wox.ViewModel
                     DateTime takeExpired = startTime.AddMilliseconds(timeout / 10);
 
                     ResultsForUpdate tempUpdate;
-                    while (_resultsQueue.TryTake(out tempUpdate) && DateTime.Now < takeExpired)
+                    while (true)
                     {
-                        updates.Add(tempUpdate);
+                        bool tryTakeSuccess = _resultsQueue.TryTake(out tempUpdate);
+                        if (tryTakeSuccess)
+                        {
+                            updates.Add(tempUpdate);
+                        }
+                        else
+                        {
+                            if (DateTime.Now >= takeExpired)
+                            {
+                                break;
+                            }
+                        }
                     }
-
 
                     UpdateResultView(updates);
 
