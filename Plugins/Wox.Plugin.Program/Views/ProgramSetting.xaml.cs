@@ -35,6 +35,7 @@ namespace Wox.Plugin.Program.Views
             programIgnoreView.ItemsSource = _settings.IgnoredSequence;
             StartMenuEnabled.IsChecked = _settings.EnableStartMenuSource;
             RegistryEnabled.IsChecked = _settings.EnableRegistrySource;
+            UsePathEnvVar.IsChecked = _settings.UsePathEnvVar;
         }
 
         private void ReIndexing()
@@ -116,6 +117,7 @@ namespace Wox.Plugin.Program.Views
                         var source = new ProgramSource
                         {
                             Location = directory,
+                            SearchOption = SearchOption.AllDirectories,
                         };
 
                         directoriesToAdd.Add(source);
@@ -139,6 +141,12 @@ namespace Wox.Plugin.Program.Views
         private void RegistryEnabled_Click(object sender, RoutedEventArgs e)
         {
             _settings.EnableRegistrySource = RegistryEnabled.IsChecked ?? false;
+            ReIndexing();
+        }
+
+        private void UsePathEnvVar_Click(object sender, RoutedEventArgs e)
+        {
+            _settings.UsePathEnvVar = UsePathEnvVar.IsChecked ?? false;
             ReIndexing();
         }
 

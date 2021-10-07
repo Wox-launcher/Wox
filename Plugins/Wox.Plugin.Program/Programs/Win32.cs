@@ -142,14 +142,14 @@ namespace Wox.Plugin.Program.Programs
             }
         }
 
-        private static IEnumerable<string> ProgramPaths(string directory, string[] suffixes)
+        private static IEnumerable<string> ProgramPaths(string directory, SearchOption searchOption, string[] suffixes)
         {
             if (!Directory.Exists(directory))
                 return new string[] { };
             var paths = new List<string>();
             try
             {
-                IEnumerable<string> files = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories);
+                IEnumerable<string> files = Directory.EnumerateFiles(directory, "*", searchOption);
                 foreach (var path in files)
                 {
                     var extension = Path.GetExtension(path);
@@ -187,12 +187,31 @@ namespace Wox.Plugin.Program.Programs
             }
         }
 
-        private static ParallelQuery<Win32> UnregisteredPrograms(List<ProgramSource> sources, string[] suffixes)
+        private static ParallelQuery<Win32> UnregisteredPrograms(List<ProgramSource> sources, string[] suffixes, bool usePathEnvVar)
         {
-            var paths = sources.Select(s => s.Location)
-                               .Select(Environment.ExpandEnvironmentVariables)
-                               .Where(Directory.Exists)
-                               .SelectMany(location => ProgramPaths(location, suffixes));
+            if (usePathEnvVar)
+            {
+                var sourcesWithPathEnvVar = sources.ToList();
+                sourcesWithPathEnvVar.AddRange(Environment.GetEnvironmentVariable("PATH").Split(new char[1] { Path.PathSeparator })
+                    .Where(p => p.Trim().Length > 0)
+                    .Select(p =>
+                        new ProgramSource()
+                        {
+                            Location = p.Trim(),
+                            SearchOption = SearchOption.TopDirectoryOnly,
+                        }
+                    ));
+                sources = sourcesWithPathEnvVar;
+            }
+            
+            var paths = sources
+                               .Select(s => new ProgramSource()
+                               {
+                                   Location = Environment.ExpandEnvironmentVariables(s.Location),
+                                   SearchOption = s.SearchOption,
+                               })
+                               .Where(s => Directory.Exists(s.Location))
+                               .SelectMany(s => ProgramPaths(s.Location, s.SearchOption, suffixes));
             var programs = paths.AsParallel().Select(Win32Program);
             return programs;
         }
@@ -204,8 +223,8 @@ namespace Wox.Plugin.Program.Programs
             directory1 = Directory.GetParent(directory1).FullName;
             var directory2 = Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms);
             directory2 = Directory.GetParent(directory2).FullName;
-            var paths1 = ProgramPaths(directory1, suffixes);
-            var paths2 = ProgramPaths(directory2, suffixes);
+            var paths1 = ProgramPaths(directory1, SearchOption.AllDirectories, suffixes);
+            var paths2 = ProgramPaths(directory2, SearchOption.AllDirectories, suffixes);
             var paths = paths1.Concat(paths2);
 
             var programs = paths.AsParallel().Select(Win32Program);
@@ -294,7 +313,7 @@ namespace Wox.Plugin.Program.Programs
             var programs = new List<Win32>().AsParallel();
             try
             {
-                var unregistered = UnregisteredPrograms(settings.ProgramSources, settings.ProgramSuffixes);
+                var unregistered = UnregisteredPrograms(settings.ProgramSources, settings.ProgramSuffixes, settings.UsePathEnvVar);
                 programs = programs.Concat(unregistered);
             }
             catch (Exception e)

@@ -57,6 +57,7 @@ namespace Wox.Plugin.Program
                 var source = new ProgramSource
                 {
                     Location = Directory.Text,
+                    SearchOption = System.IO.SearchOption.AllDirectories,
                 };
 
                 _settings.ProgramSources.Insert(0, source);

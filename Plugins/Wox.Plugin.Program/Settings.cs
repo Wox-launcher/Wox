@@ -15,6 +15,8 @@ namespace Wox.Plugin.Program
 
         public bool EnableRegistrySource { get; set; } = false;
 
+        public bool UsePathEnvVar { get; set; } = false;
+
         internal const char SuffixSeperator = ';';
 
         

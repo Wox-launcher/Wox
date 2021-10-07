@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,6 +10,8 @@ namespace Wox.Plugin.Program
     public class ProgramSource
     {
         public string Location { get; set; }
+
+        public SearchOption SearchOption { get; set; }
 
         public override bool Equals(object obj)
         {
