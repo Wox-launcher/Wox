@@ -132,6 +132,28 @@ namespace Wox.ViewModel
             }
         }
 
+        private int ContainedIndex(int i)
+        {
+            var n = Results.Count;
+            if (n > 0)
+            {
+                if (i < 0)
+                {
+                    return 0;
+                }
+                if (i >= n)
+                {
+                    return n - 1;
+                }
+                return i;
+            }
+            else
+            {
+                // SelectedIndex returns -1 if selection is empty.
+                return -1;
+            }
+        }
+
 
         #endregion
 
@@ -139,22 +161,22 @@ namespace Wox.ViewModel
 
         public void SelectNextResult()
         {
-            SelectedIndex = NewIndex(SelectedIndex + 1);
+            SelectedIndex = ContainedIndex(SelectedIndex + 1);
         }
 
         public void SelectPrevResult()
         {
-            SelectedIndex = NewIndex(SelectedIndex - 1);
+            SelectedIndex = ContainedIndex(SelectedIndex - 1);
         }
 
         public void SelectNextPage()
         {
-            SelectedIndex = NewIndex(SelectedIndex + MaxResults);
+            SelectedIndex = ContainedIndex(SelectedIndex + MaxResults);
         }
 
         public void SelectPrevPage()
         {
-            SelectedIndex = NewIndex(SelectedIndex - MaxResults);
+            SelectedIndex = ContainedIndex(SelectedIndex - MaxResults);
         }
 
         public void SelectFirstResult()
