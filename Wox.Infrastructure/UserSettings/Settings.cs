@@ -103,6 +103,8 @@ namespace Wox.Infrastructure.UserSettings
 
         public bool StartWoxOnSystemStartup { get; set; } = true;
         public bool HideOnStartup { get; set; }
+
+        public bool ShouldBeTopmost { get; set; } = true;
         bool _hideNotifyIcon { get; set; }
         public bool HideNotifyIcon
         {

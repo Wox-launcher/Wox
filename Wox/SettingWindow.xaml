@@ -54,6 +54,9 @@
                 <CheckBox IsChecked="{Binding Settings.HideOnStartup}">
                     <TextBlock Text="{DynamicResource hideOnStartup}" />
                 </CheckBox>
+                <CheckBox IsChecked="{Binding Settings.ShouldBeTopmost}">
+                    <TextBlock Text="{DynamicResource shouldBeTopmost}" />
+                </CheckBox>
                 <CheckBox IsChecked="{Binding Settings.HideWhenDeactive}">
                     <TextBlock Text="{DynamicResource hideWoxWhenLoseFocus}" />
                 </CheckBox>

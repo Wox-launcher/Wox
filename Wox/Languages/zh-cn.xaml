@@ -34,6 +34,7 @@
     <system:String x:Key="updateToPrereleases">更新到预发布版本</system:String>
     <system:String x:Key="selectPythonDirectory">选择</system:String>
     <system:String x:Key="hideOnStartup">启动时不显示主窗口</system:String>
+    <system:String x:Key="shouldBeTopmost">保持Wox在最顶端（更改后重启Wox生效）</system:String>
     <system:String x:Key="hideNotifyIcon">隐藏任务栏图标</system:String>
     <system:String x:Key="querySearchPrecision">搜索精度</system:String>
     <system:String x:Key="ShouldUsePinyin">启用拼音模块</system:String>

@@ -328,6 +328,8 @@ namespace Wox.ViewModel
 
         public Visibility MainWindowVisibility { get; set; }
 
+        public bool Topmost { get; set; }
+
         public ICommand EscCommand { get; set; }
         public ICommand SelectNextItemCommand { get; set; }
         public ICommand SelectPrevItemCommand { get; set; }

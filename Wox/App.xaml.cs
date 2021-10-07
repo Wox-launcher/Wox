@@ -126,6 +126,7 @@ namespace Wox
 
                 ParseCommandLineArgs(SingleInstance<App>.CommandLineArgs);
                 _mainVM.MainWindowVisibility = Settings.Instance.HideOnStartup ? Visibility.Hidden : Visibility.Visible;
+                _mainVM.Topmost = Settings.Instance.ShouldBeTopmost;
 
                 Logger.WoxInfo($"SDK Info: {ExceptionFormatter.SDKInfo()}");
                 Logger.WoxInfo("End Wox startup ----------------------------------------------------  ");
