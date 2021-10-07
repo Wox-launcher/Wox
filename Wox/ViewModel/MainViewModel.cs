@@ -461,6 +461,8 @@ namespace Wox.ViewModel
                 token = source.Token;
             }
 
+            Results.UserChangedIndex = false;
+
             ProgressBarVisibility = Visibility.Hidden;
 
             var queryText = QueryText.Trim();

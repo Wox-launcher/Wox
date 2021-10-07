@@ -5,6 +5,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -25,11 +26,28 @@ namespace Wox.ViewModel
         private readonly Settings _settings;
         private int MaxResults => _settings?.MaxResultsToShow ?? 6;
         private readonly object _collectionLock = new object();
+        public volatile bool CollectionJustChanged = false;
+        public volatile bool UserChangedIndex = false;
+        public object _selectedIndexLock = new object();
+
         public ResultsViewModel()
         {
             Results = new ResultCollection();
             BindingOperations.EnableCollectionSynchronization(Results, _collectionLock);
+            Results.CollectionChangedPrioritized += (token) =>
+            {
+                // Mark collection as changed, so that the selected item should be updated to the first item in ResultListBox.
+                // When ResultListBox finished its update, CollectionJustChanged is checked. If it is true, set it to false, then update SelectedIndex to -1 (and then to 0).
+                CollectionJustChanged = true;
+
+                // Try Changing SelectedIndex, so that "SelectedIndex's TargetUpdated" aka SelectedIndex.set will always be invoked.
+                Task.Delay(0).ContinueWith(___ =>
+                {
+                    SelectedIndex = -1;
+                });                
+            };
         }
+
         public ResultsViewModel(Settings settings) : this()
         {
             _settings = settings;
@@ -50,7 +68,46 @@ namespace Wox.ViewModel
 
         public int MaxHeight => MaxResults * 50;
 
-        public int SelectedIndex { get; set; }
+        private int _selectedIndex;
+        public int SelectedIndex {
+            get { return _selectedIndex; }
+            set
+            {
+                lock (_selectedIndexLock)
+                {
+                    _selectedIndex = value;
+
+                    if (CollectionJustChanged)
+                    {
+                        if (!UserChangedIndex)
+                        {
+                            Task.Delay(1).ContinueWith(___ =>
+                            {
+                                CollectionJustChanged = false;
+                                SelectedIndex = 0;
+                            });
+                            Task.Delay(50).ContinueWith(___ =>
+                            {
+                                CollectionJustChanged = false; // Delay setting CollectionJustChanged = false, because SelectedIndex could change multiple times (but to the same value) after collection changed
+                                SelectedIndex = 0;
+                            });
+                        }
+                    }
+                    else
+                    {
+                        if (_selectedIndex < 0)
+                        {
+                            SelectedIndex = 0;
+                        }
+
+                        if (value != -1 && value != 0)
+                        {
+                            UserChangedIndex = true;
+                        }
+                    }
+                }
+            }
+        }
 
         public ResultViewModel SelectedItem { get; set; }
         public Thickness Margin { get; set; }
@@ -107,7 +164,10 @@ namespace Wox.ViewModel
 
         public void Clear()
         {
-            Results.RemoveAll();
+            lock (_collectionLock)
+            {
+                Results.RemoveAll();
+            }
         }
 
         public int Count => Results.Count;
@@ -153,7 +213,6 @@ namespace Wox.ViewModel
             if (Results.Count > 0)
             {
                 Margin = new Thickness { Top = 8 };
-                SelectedIndex = 0;
             }
             else
             {
@@ -221,8 +280,10 @@ namespace Wox.ViewModel
         }
         #endregion
 
+        public delegate void NotifyCollectionChangedPrioritizedEventHandler(CancellationToken token);
         public class ResultCollection : Collection<ResultViewModel>, INotifyCollectionChanged
         {
+            public event NotifyCollectionChangedPrioritizedEventHandler CollectionChangedPrioritized;
             public event NotifyCollectionChangedEventHandler CollectionChanged;
 
             public void RemoveAll()
@@ -243,6 +304,10 @@ namespace Wox.ViewModel
                 {
                     if (token.IsCancellationRequested) { break; }
                     this.Add(i);
+                }
+                if (CollectionChangedPrioritized != null)
+                {
+                    CollectionChangedPrioritized.Invoke(token);
                 }
                 if (CollectionChanged != null)
                 {
