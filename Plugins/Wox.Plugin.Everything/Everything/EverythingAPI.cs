@@ -117,7 +117,7 @@ namespace Wox.Plugin.Everything.Everything
         /// <param name="offset">The offset.</param>
         /// <param name="maxCount">The max count.</param>
         /// <returns></returns>
-        public List<SearchResult> Search(string keyWord, CancellationToken token, int maxCount)
+        public List<SearchResult> Search(string keyWord, CancellationToken token, int maxCount, List<IncludedFolder> includedFolders)
         {
             var results = new List<SearchResult>();
 
@@ -135,6 +135,12 @@ namespace Wox.Plugin.Everything.Everything
             else
             {
                 EverythingApiDllImport.Everything_SetRegex(false);
+            }
+
+            var includedFoldersNotEmpty = includedFolders.Where(f => !f.Path.Trim().Equals("")).ToList();
+            if (includedFoldersNotEmpty.Count != 0)
+            {
+                keyWord = "path:" + string.Join("|", includedFoldersNotEmpty.Select(f => "\"" + f.Path + "\"")) + " " + keyWord;
             }
 
             if (token.IsCancellationRequested) { return results; }

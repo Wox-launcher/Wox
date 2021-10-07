@@ -56,7 +56,7 @@ namespace Wox.Plugin.Everything
                 try
                 {
                     if (token.IsCancellationRequested) { return results; }
-                    var searchList = _api.Search(keyword, token, _settings.MaxSearchCount);
+                    var searchList = _api.Search(keyword, token, _settings.MaxSearchCount, _settings.IncludedFolders);
                     if (token.IsCancellationRequested) { return results; }
                     for (int i = 0; i < searchList.Count; i++)
                     {

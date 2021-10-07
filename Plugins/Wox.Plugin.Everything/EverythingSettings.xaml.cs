@@ -29,6 +29,7 @@ namespace Wox.Plugin.Everything
             };
 
             EditorPath.Content = _settings.EditorPath;
+            IncludedFoldersGrid.ItemsSource = _settings.IncludedFolders;
         }
 
         private void EditorPath_Clicked(object sender, RoutedEventArgs e)

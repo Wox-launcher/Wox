@@ -16,6 +16,6 @@
     
     <system:String x:Key="wox_plugin_everything_plugin_name">Everything</system:String>
     <system:String x:Key="wox_plugin_everything_plugin_description">利用 Everything 搜索磁盘文件</system:String>
-
+    <system:String x:Key="wox_plugin_everything_included_folders">限定只列出列表中文件夹下的文件（若列表为空，则无此限制）</system:String>
     <system:String x:Key="wox_plugin_everything_use_location_as_working_dir">使用应用程序的位置为可执行的工作目录</system:String>
 </ResourceDictionary>

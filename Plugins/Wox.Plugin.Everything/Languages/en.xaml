@@ -9,6 +9,7 @@
     <system:String x:Key="wox_plugin_everything_open_containing_folder">Open parent folder</system:String>
     <system:String x:Key="wox_plugin_everything_open_with_editor">Open with {0}</system:String>
     <system:String x:Key="wox_plugin_everything_editor_path">Editor Path</system:String>
+    <system:String x:Key="wox_plugin_everything_included_folders">Only List Results in Following Folders (If empty, list results in whole system)</system:String>
     <system:String x:Key="wox_plugin_everything_copy_path">Copy path</system:String>
     <system:String x:Key="wox_plugin_everything_copy">Copy</system:String>
     <system:String x:Key="wox_plugin_everything_delete">Delete</system:String>
