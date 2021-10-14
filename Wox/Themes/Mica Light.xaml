@@ -28,34 +28,38 @@
     <Style x:Key="QueryBoxStyle" BasedOn="{StaticResource BaseQueryBoxStyle}" TargetType="{x:Type TextBox}">
         <Setter Property="Foreground" Value="#000000" />
         <Setter Property="CaretBrush" Value="#000000"/>
-        <Setter Property="Padding" Value="8 0" />
+        <Setter Property="BorderBrush" Value="#dee8ea" />
+        <Setter Property="BorderThickness" Value="1 1 1 0" />
+        <Setter Property="Padding" Value="8 0 8 2" />
         <Setter Property="Margin" Value="0 -2 0 0" />
         <Setter Property="Height" Value="40" />
         <Setter Property="FontSize" Value="24" />
-        <Setter Property="BorderThickness" Value="1 1 1 0" />
-        <Setter Property="BorderBrush" Value="#dee8ea" />
         <Setter Property="Template" Value="{StaticResource QueryBoxTemplate}" />
     </Style>
     <Style x:Key="QueryTextSuggestionBoxStyle" BasedOn="{StaticResource BaseQueryTextSuggestionBoxStyle}" TargetType="{x:Type TextBox}">
         <Setter Property="Background" Value="#f9fcfd" />
-        <Setter Property="BorderThickness" Value="0 0 0 2" />
-        <Setter Property="Padding" Value="8 1 0 0" />
-        <Setter Property="Margin" Value="0 -2 0 0" />
         <Setter Property="BorderBrush" Value="#0055a1" />
+        <Setter Property="BorderThickness" Value="0 0 0 2" />
+        <Setter Property="Padding" Value="9 1 9 0" />
+        <Setter Property="Margin" Value="0 -2 0 0" />
         <Setter Property="Height" Value="40" />
         <Setter Property="FontSize" Value="24" />
         <Setter Property="Template" Value="{StaticResource QueryBoxTemplate}" />
     </Style>
     <Style x:Key="WindowBorderStyle" BasedOn="{StaticResource BaseWindowBorderStyle}" TargetType="{x:Type Border}">
         <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="BorderBrush" Value="#0063b1" />
+        <Setter Property="BorderBrush" Value="#a7a3a2" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Background" Value="#ecf6f9" />
     </Style>
     <Style x:Key="WindowStyle" TargetType="{x:Type Window}" BasedOn="{StaticResource BaseWindowStyle}">
         <Setter Property="Background" Value="Transparent" />
     </Style>
-    <Style x:Key="PendingLineStyle" BasedOn="{StaticResource BasePendingLineStyle}" TargetType="{x:Type Line}" />
+    <Style x:Key="PendingLineStyle" BasedOn="{StaticResource BasePendingLineStyle}" TargetType="{x:Type Line}">
+        <Setter Property="Stroke" Value="#dee8ea" />
+        <Setter Property="Height" Value="2" />
+        <Setter Property="Margin" Value="0 -1 0 0" />
+    </Style>
 
     <!-- Item Style -->
     <Style x:Key="ItemTitleStyle" BasedOn="{StaticResource BaseItemTitleStyle}" TargetType="{x:Type TextBlock}">
