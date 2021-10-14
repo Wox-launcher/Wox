@@ -56,7 +56,7 @@
         <Setter Property="Background" Value="Transparent" />
     </Style>
     <Style x:Key="PendingLineStyle" BasedOn="{StaticResource BasePendingLineStyle}" TargetType="{x:Type Line}">
-        <Setter Property="Stroke" Value="#26add4" />
+        <Setter Property="Stroke" Value="#dee8ea" />
         <Setter Property="Height" Value="2" />
         <Setter Property="Margin" Value="0 -1 0 0" />
     </Style>
