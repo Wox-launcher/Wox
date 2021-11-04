@@ -115,7 +115,7 @@ namespace Wox
                 // load plugin before change language, because plugin language also needs be changed
                 InternationalizationManager.Instance.Settings = Settings.Instance;
                 InternationalizationManager.Instance.ChangeLanguage(Settings.Instance.Language);
-                // main windows needs initialized before theme change because of blur settigns
+                // main windows needs initialized before theme change because of blur settings
                 ThemeManager.Instance.ChangeTheme(Settings.Instance.Theme);
 
                 Http.Proxy = Settings.Instance.Proxy;
