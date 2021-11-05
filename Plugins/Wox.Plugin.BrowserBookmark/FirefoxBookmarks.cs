@@ -44,7 +44,7 @@ namespace Wox.Plugin.BrowserBookmark
                     while (reader.Read())
                     {
                         string url = reader.GetString(0) ?? string.Empty;
-                        string title = reader.GetString(1) ?? string.Empty;
+                        string title = !reader.IsDBNull(1) ? (reader.GetString(1) ?? string.Empty) : string.Empty;
                         Logger.WoxTrace($"Firefox bookmark: <{title}> <{url}>");
                         bookmarList.Add(new Bookmark()
                         {
