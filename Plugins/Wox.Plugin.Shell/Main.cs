@@ -14,6 +14,7 @@ using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.Storage;
 using Wox.Infrastructure;
 using Application = System.Windows.Application;
+using Clipboard = System.Windows.Forms.Clipboard;
 using Control = System.Windows.Controls.Control;
 using Keys = System.Windows.Forms.Keys;
 
@@ -364,6 +365,16 @@ namespace Wox.Plugin.Shell
                         return true;
                     },
                     IcoPath = Image
+                },
+                new Result
+                {
+                    Title = _context.API.GetTranslation("wox_plugin_cmd_copy"),
+                    Action = c =>
+                    {
+                        Clipboard.SetText(selectedResult.Title);
+                        return true;
+                    },
+                    IcoPath = "Images/copy.png"
                 }
             };
 
