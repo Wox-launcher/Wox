@@ -364,7 +364,17 @@ namespace Wox.Plugin.Shell
                         Execute(Process.Start, PrepareProcessStartInfo(selectedResult.Title, true));
                         return true;
                     },
-                    IcoPath = Image
+                    IcoPath = "Images/shell.png"
+                },
+                new Result
+                {
+                    Title = _context.API.GetTranslation("wox_plugin_cmd_copy"),
+                    Action = c =>
+                    {
+                        Clipboard.SetText(selectedResult.Title);
+                        return true;
+                    },
+                    IcoPath = "Images/copy.png"
                 },
                 new Result
                 {
