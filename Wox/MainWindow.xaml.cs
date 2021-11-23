@@ -38,6 +38,10 @@ namespace Wox
             DataContext = mainVM;
             _viewModel = mainVM;
             _settings = Settings.Instance;
+            _viewModel.ShowUpWoxRequested += (o, e) =>
+            {
+                ShowUpWox();
+            };
             InitializeComponent();
         }
         public MainWindow()
@@ -69,23 +73,6 @@ namespace Wox
 
             _viewModel.PropertyChanged += (o, e) =>
             {
-                if (e.PropertyName == nameof(MainViewModel.MainWindowVisibility))
-                {
-                    if (Visibility == Visibility.Visible)
-                    {
-                        Activate();
-                        QueryTextBox.Focus();
-                        UpdatePosition();
-                        _settings.ActivateTimes++;
-                        if (!_viewModel.LastQuerySelected)
-                        {
-                            QueryTextBox.SelectAll();
-                            _viewModel.LastQuerySelected = true;
-                        }
-                    }
-                    return;
-                }
-
                 if (e.PropertyName == nameof(MainViewModel.ProgressBarVisibility))
                 {
                     if (_viewModel.ProgressBarVisibility == Visibility.Visible)
@@ -98,6 +85,7 @@ namespace Wox
                     }
                 }
             };
+
             _settings.PropertyChanged += (o, e) =>
             {
                 if (e.PropertyName == nameof(Settings.HideNotifyIcon))
@@ -128,7 +116,7 @@ namespace Wox
             var items = menu.Items;
 
             var open = items.Add(InternationalizationManager.Instance.GetTranslation("iconTrayOpen"));
-            open.Click += (o, e) => Visibility = Visibility.Visible;
+            open.Click += (o, e) => ShowUpWox();
             var setting = items.Add(InternationalizationManager.Instance.GetTranslation("iconTraySettings"));
             setting.Click += (o, e) => App.API.OpenSettingDialog();
             var exit = items.Add(InternationalizationManager.Instance.GetTranslation("iconTrayExit"));
@@ -237,6 +225,22 @@ namespace Wox
             if (_settings.HideWhenDeactive)
             {
                 Hide();
+            }
+        }
+
+        public void ShowUpWox()
+        {
+            Logger.WoxDebug("ShowUpWox");
+            Visibility = Visibility.Visible;
+
+            Activate();
+            QueryTextBox.Focus();
+            UpdatePosition();
+            _settings.ActivateTimes++;
+            if (!_viewModel.LastQuerySelected)
+            {
+                QueryTextBox.SelectAll();
+                _viewModel.LastQuerySelected = true;
             }
         }
 

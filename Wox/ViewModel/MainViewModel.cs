@@ -23,6 +23,7 @@ using Wox.Infrastructure.Storage;
 using Wox.Infrastructure.UserSettings;
 using Wox.Plugin;
 using Wox.Storage;
+using Wox.Infrastructure.UI;
 
 namespace Wox.ViewModel
 {
@@ -173,7 +174,7 @@ namespace Wox.ViewModel
                 }
                 else
                 {
-                    MainWindowVisibility = Visibility.Hidden;
+                    HideWox();
                 }
             });
 
@@ -225,7 +226,7 @@ namespace Wox.ViewModel
 
                     if (hideWindow)
                     {
-                        MainWindowVisibility = Visibility.Hidden;
+                        HideWox();
                     }
 
                     if (SelectedIsFromQueryResults())
@@ -268,7 +269,7 @@ namespace Wox.ViewModel
 
         #endregion
 
-        #region ViewModel Properties
+        #region ViewModel Properties and Event(s)
 
         public ResultsViewModel Results { get; private set; }
         public ResultsViewModel ContextMenu { get; private set; }
@@ -284,6 +285,8 @@ namespace Wox.ViewModel
                 Query();
             }
         }
+
+        public event EventHandler ShowUpWoxRequested;
 
         /// <summary>
         /// we need move cursor to end when we manually changed query
@@ -692,7 +695,7 @@ namespace Wox.ViewModel
                 SetHotkey(hotkey.Hotkey, (s, e) =>
                 {
                     if (ShouldIgnoreHotkeys()) return;
-                    MainWindowVisibility = Visibility.Visible;
+                    RequestShowUpWox();
                     ChangeQueryText(hotkey.ActionKeyword);
                 });
             }
@@ -727,13 +730,13 @@ namespace Wox.ViewModel
 
         private void ToggleWox()
         {
-            if (MainWindowVisibility != Visibility.Visible)
+            if (MainWindowVisibility != Visibility.Visible || !Application.Current.MainWindow.IsActive)
             {
-                MainWindowVisibility = Visibility.Visible;
+                RequestShowUpWox();
             }
             else
             {
-                MainWindowVisibility = Visibility.Hidden;
+                HideWox();
             }
         }
 
@@ -812,6 +815,16 @@ namespace Wox.ViewModel
             {
                 Results.Visbility = Visibility.Visible;
             }
+        }
+
+        public void RequestShowUpWox()
+        {
+            ShowUpWoxRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void HideWox()
+        {
+            MainWindowVisibility = Visibility.Hidden;
         }
 
         #endregion

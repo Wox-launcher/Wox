@@ -17,6 +17,7 @@ using Wox.Core;
 using Wox.Core.Plugin;
 using Wox.Core.Resource;
 using Wox.Infrastructure.Hotkey;
+using Wox.Infrastructure.UI;
 using Wox.Infrastructure.UserSettings;
 using Wox.Plugin;
 using Wox.ViewModel;
@@ -126,13 +127,13 @@ namespace Wox
             {
                 SetHotkey(HotkeyControl.CurrentHotkey, (o, args) =>
                 {
-                    if (!Application.Current.MainWindow.IsVisible)
+                    if (!Application.Current.MainWindow.IsVisible || !Application.Current.MainWindow.IsActive)
                     {
-                        Application.Current.MainWindow.Visibility = Visibility.Visible;
+                        ShowUpWoxHelper.ShowUpWox();
                     }
                     else
                     {
-                        Application.Current.MainWindow.Visibility = Visibility.Hidden;
+                        ShowUpWoxHelper.HideWox();
                     }
                 });
                 RemoveHotkey(_settings.Hotkey);

@@ -16,6 +16,7 @@ using Wox.Infrastructure;
 using Application = System.Windows.Application;
 using Control = System.Windows.Controls.Control;
 using Keys = System.Windows.Forms.Keys;
+using Wox.Infrastructure.UI;
 
 namespace Wox.Plugin.Shell
 {
@@ -323,7 +324,7 @@ namespace Wox.Plugin.Shell
         private void OnWinRPressed()
         {
             _context.API.ChangeQuery($"{_context.CurrentPluginMetadata.ActionKeywords[0]}{Plugin.Query.TermSeperater}");
-            Application.Current.MainWindow.Visibility = Visibility.Visible;
+            ShowUpWoxHelper.ShowUpWox();
         }
 
         public Control CreateSettingPanel()

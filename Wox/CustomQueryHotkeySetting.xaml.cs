@@ -7,6 +7,7 @@ using NHotkey;
 using NHotkey.Wpf;
 using Wox.Core.Resource;
 using Wox.Infrastructure.Hotkey;
+using Wox.Infrastructure.UI;
 using Wox.Infrastructure.UserSettings;
 
 namespace Wox
@@ -55,7 +56,7 @@ namespace Wox
                 SetHotkey(ctlHotkey.CurrentHotkey, delegate
                 {
                     App.API.ChangeQuery(pluginHotkey.ActionKeyword);
-                    Application.Current.MainWindow.Visibility = Visibility.Visible;
+                    ShowUpWoxHelper.ShowUpWox();
                 });
                 MessageBox.Show(InternationalizationManager.Instance.GetTranslation("success"));
             }
@@ -74,7 +75,7 @@ namespace Wox
                 SetHotkey(new HotkeyModel(updateCustomHotkey.Hotkey), delegate
                 {
                     App.API.ChangeQuery(updateCustomHotkey.ActionKeyword);
-                    Application.Current.MainWindow.Visibility = Visibility.Visible;
+                    ShowUpWoxHelper.ShowUpWox();
                 });
                 MessageBox.Show(InternationalizationManager.Instance.GetTranslation("success"));
             }
@@ -101,7 +102,7 @@ namespace Wox
         private void BtnTestActionKeyword_OnClick(object sender, RoutedEventArgs e)
         {
             App.API.ChangeQuery(tbAction.Text);
-            Application.Current.MainWindow.Visibility = Visibility.Visible;
+            ShowUpWoxHelper.ShowUpWox();
         }
 
         private void RemoveHotkey(string hotkeyStr)

@@ -55,7 +55,7 @@ namespace Wox
 
         public void RestarApp()
         {
-            _mainVM.MainWindowVisibility = Visibility.Hidden;
+            _mainVM.HideWox();
 
             // we must manually save
             // UpdateManager.RestartApp() will call Environment.Exit(0)
@@ -85,13 +85,13 @@ namespace Wox
         [Obsolete]
         public void HideApp()
         {
-            _mainVM.MainWindowVisibility = Visibility.Hidden;
+            _mainVM.HideWox();
         }
 
         [Obsolete]
         public void ShowApp()
         {
-            _mainVM.MainWindowVisibility = Visibility.Visible;
+            _mainVM.RequestShowUpWox();
         }
 
         public void ShowMsg(string title, string subTitle = "", string iconPath = "")

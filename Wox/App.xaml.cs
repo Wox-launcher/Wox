@@ -23,6 +23,7 @@ using Wox.ViewModel;
 using Stopwatch = Wox.Infrastructure.Stopwatch;
 using Wox.Infrastructure.Exception;
 using Sentry;
+using Wox.Infrastructure.UI;
 
 namespace Wox
 {
@@ -125,7 +126,14 @@ namespace Wox
                 AutoStartup();
 
                 ParseCommandLineArgs(SingleInstance<App>.CommandLineArgs);
-                _mainVM.MainWindowVisibility = Settings.Instance.HideOnStartup ? Visibility.Hidden : Visibility.Visible;
+                if (Settings.Instance.HideOnStartup)
+                {
+                    _mainVM.HideWox();
+                } else
+                {
+                    _mainVM.MainWindowVisibility = Visibility.Visible;
+                    _mainVM.RequestShowUpWox();
+                }
                 _mainVM.Topmost = Settings.Instance.ShouldBeTopmost;
 
                 Logger.WoxInfo($"SDK Info: {ExceptionFormatter.SDKInfo()}");
@@ -201,7 +209,7 @@ namespace Wox
         public void OnSecondAppStarted(IList<string> args)
         {
             ParseCommandLineArgs(args);
-            Current.MainWindow.Visibility = Visibility.Visible;
+            ShowUpWoxHelper.ShowUpWox();
         }
     }
 }
