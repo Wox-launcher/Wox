@@ -18,7 +18,7 @@ namespace Wox.Infrastructure
 
         public static string ProgramDirectory = Directory.GetParent(ExecutablePath).ToString();
         public static string ApplicationDirectory = Directory.GetParent(ProgramDirectory).ToString();
-        public static string RootDirectory = Directory.GetParent(ApplicationDirectory).ToString();
+        public static string RootDirectory = Directory.GetParent(ApplicationDirectory)?.ToString() ?? ApplicationDirectory;
 
         public static string PreinstalledDirectory = Path.Combine(ProgramDirectory, Plugins);
         public const string Issue = "https://github.com/Wox-launcher/Wox/issues/new";
