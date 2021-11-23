@@ -7,6 +7,7 @@ using System.Runtime.Caching;
 using Wox.Infrastructure.Logger;
 using static Wox.Infrastructure.StringMatcher;
 using System.Threading;
+using System.Globalization;
 
 namespace Wox.Infrastructure
 {
@@ -50,14 +51,14 @@ namespace Wox.Infrastructure
         {
             query = query.Trim();
             if (string.IsNullOrEmpty(stringToCompare) || string.IsNullOrEmpty(query)) return new MatchResult(false, UserSettingSearchPrecision);
-            var queryWithoutCase = query.ToLower();
+            var queryWithoutCase = query.ToLower(CultureInfo.InvariantCulture);
             string translated = _alphabet.Translate(stringToCompare);
 
             string key = $"{queryWithoutCase}|{translated}";
             MatchResult match = _cache[key] as MatchResult;
             if (match == null)
             {
-                match = FuzzyMatchRecurrsive(
+                match = DoFuzzyMatch(
                     queryWithoutCase, translated, 0, 0, new List<int>()
                 );
                 CacheItemPolicy policy = new CacheItemPolicy();
@@ -68,10 +69,11 @@ namespace Wox.Infrastructure
             return match;
         }
 
-        public MatchResult FuzzyMatchRecurrsive(
+        public MatchResult DoFuzzyMatch(
             string query, string stringToCompare, int queryCurrentIndex, int stringCurrentIndex, List<int> sourceMatchData
         )
         {
+            // TODO
             if (_token?.IsCancellationRequested ?? false) { return new MatchResult(false, UserSettingSearchPrecision); }
             if (queryCurrentIndex == query.Length || stringCurrentIndex == stringToCompare.Length)
             {
@@ -98,7 +100,7 @@ namespace Wox.Infrastructure
                 char stringToCompareLower = char.ToLower(stringToCompare[stringCurrentIndex]);
                 if (queryLower == stringToCompareLower)
                 {
-                    MatchResult match = FuzzyMatchRecurrsive(
+                    MatchResult match = DoFuzzyMatch(
                         query, stringToCompare, queryCurrentIndex, stringCurrentIndex + 1, matchs
                     );
 
