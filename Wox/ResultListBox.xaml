@@ -9,7 +9,7 @@
          d:DataContext="{d:DesignInstance vm:ResultsViewModel}"
          MaxHeight="{Binding MaxHeight}"
          SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
-         SelectedItem="{Binding SelectedItem, Mode=OneWayToSource}"
+         SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
          HorizontalContentAlignment="Stretch" ItemsSource="{Binding Results}"
          Margin="{Binding Margin}"
          Visibility="{Binding Visbility}"

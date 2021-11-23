@@ -26,25 +26,29 @@ namespace Wox.ViewModel
         private readonly Settings _settings;
         private int MaxResults => _settings?.MaxResultsToShow ?? 6;
         private readonly object _collectionLock = new object();
-        public volatile bool CollectionJustChanged = false;
-        public volatile bool UserChangedIndex = false;
-        public object _selectedIndexLock = new object();
 
         public ResultsViewModel()
         {
             Results = new ResultCollection();
             BindingOperations.EnableCollectionSynchronization(Results, _collectionLock);
-            Results.CollectionChangedPrioritized += (token) =>
-            {
-                // Mark collection as changed, so that the selected item should be updated to the first item in ResultListBox.
-                // When ResultListBox finished its update, CollectionJustChanged is checked. If it is true, set it to false, then update SelectedIndex to -1 (and then to 0).
-                CollectionJustChanged = true;
+            // We don't need to deselect ? Selecting the first item after list changed seems to be enough
+            //Results.CollectionChangedPre += (token) =>
+            //{
+            //    Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            //    {
+            //        // Deselect currently selected item
+            //        // So that ListBox's Selector won't change currently selected index, after we reset the list
 
-                // Try Changing SelectedIndex, so that "SelectedIndex's TargetUpdated" aka SelectedIndex.set will always be invoked.
-                Task.Delay(0).ContinueWith(___ =>
+            //        // SelectedItem = null;
+            //    }));
+            //};
+            Results.CollectionChangedPost += (token) =>
+            {
+                // Select the first item, after list changed
+                Application.Current.Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    SelectedIndex = -1;
-                });                
+                    SelectedIndex = 0;
+                }));
             };
         }
 
@@ -71,42 +75,7 @@ namespace Wox.ViewModel
         private int _selectedIndex;
         public int SelectedIndex {
             get { return _selectedIndex; }
-            set
-            {
-                lock (_selectedIndexLock)
-                {
-                    _selectedIndex = value;
-
-                    if (CollectionJustChanged)
-                    {
-                        if (!UserChangedIndex)
-                        {
-                            Task.Delay(1).ContinueWith(___ =>
-                            {
-                                CollectionJustChanged = false;
-                                SelectedIndex = 0;
-                            });
-                            Task.Delay(50).ContinueWith(___ =>
-                            {
-                                CollectionJustChanged = false; // Delay setting CollectionJustChanged = false, because SelectedIndex could change multiple times (but to the same value) after collection changed
-                                SelectedIndex = 0;
-                            });
-                        }
-                    }
-                    else
-                    {
-                        if (_selectedIndex < 0)
-                        {
-                            SelectedIndex = 0;
-                        }
-
-                        if (value != -1 && value != 0)
-                        {
-                            UserChangedIndex = true;
-                        }
-                    }
-                }
-            }
+            set { _selectedIndex = value; }
         }
 
         public ResultViewModel SelectedItem { get; set; }
@@ -302,11 +271,13 @@ namespace Wox.ViewModel
         }
         #endregion
 
-        public delegate void NotifyCollectionChangedPrioritizedEventHandler(CancellationToken token);
+        public delegate void NotifyCollectionChangedPreEventHandler(CancellationToken token);
+        public delegate void NotifyCollectionChangedPostEventHandler(CancellationToken token);
         public class ResultCollection : Collection<ResultViewModel>, INotifyCollectionChanged
         {
-            public event NotifyCollectionChangedPrioritizedEventHandler CollectionChangedPrioritized;
+            public event NotifyCollectionChangedPreEventHandler CollectionChangedPre;
             public event NotifyCollectionChangedEventHandler CollectionChanged;
+            public event NotifyCollectionChangedPostEventHandler CollectionChangedPost;
 
             public void RemoveAll()
             {
@@ -327,14 +298,26 @@ namespace Wox.ViewModel
                     if (token.IsCancellationRequested) { break; }
                     this.Add(i);
                 }
-                if (CollectionChangedPrioritized != null)
+                if (CollectionChangedPre != null)
                 {
-                    CollectionChangedPrioritized.Invoke(token);
+                    CollectionChangedPre.Invoke(token);
                 }
                 if (CollectionChanged != null)
                 {
                     // wpf use directx / double buffered already, so just reset all won't cause ui flickering
-                    CollectionChanged.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+                    Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        CollectionChanged.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+                        if (CollectionChangedPost != null)
+                        {
+                            // Dispatch again: to make sure CollectionChangedPost is
+                            // invoked _after_ CollectionChanged (and its consequences)
+                            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                            {
+                                CollectionChangedPost.Invoke(token);
+                            }));
+                        }
+                    }));
                 }
             }
         }

@@ -464,13 +464,12 @@ namespace Wox.ViewModel
                 token = source.Token;
             }
 
-            Results.UserChangedIndex = false;
-
             ProgressBarVisibility = Visibility.Hidden;
 
             var queryText = QueryText.Trim();
             Task.Run(() =>
             {
+                Thread.Sleep(20);
                 if (!string.IsNullOrEmpty(queryText))
                 {
                     if (token.IsCancellationRequested) { return; }
@@ -487,13 +486,17 @@ namespace Wox.ViewModel
                         Task.Delay(200, progressBarLinkedSource.Token).ContinueWith(_ =>
                         {
                             Logger.WoxTrace($"progressbar visible 1 {token.GetHashCode()} {token.IsCancellationRequested}  {Thread.CurrentThread.ManagedThreadId}  {query} {ProgressBarVisibility}");
-                            // start the progress bar if query takes more than 200 ms
-                            if (!progressBarLinkedSource.Token.IsCancellationRequested)
+
+                            lock (progressBarSource)
                             {
-                                Application.Current.Dispatcher.Invoke(() =>
+                                // start the progress bar if query takes more than 200 ms
+                                if (!progressBarLinkedSource.Token.IsCancellationRequested)
                                 {
-                                    ProgressBarVisibility = Visibility.Visible;
-                                });
+                                    Application.Current.Dispatcher.Invoke(() =>
+                                    {
+                                        ProgressBarVisibility = Visibility.Visible;
+                                    });
+                                }
                             }
                         }, token);
 
@@ -541,11 +544,16 @@ namespace Wox.ViewModel
                             { }
                             finally
                             {
-                                // used to cancel previous progress bar visible task
-                                progressBarSource.Cancel();
-                                progressBarSource.Dispose();
-                                // update to hidden if this is still the current query
-                                ProgressBarVisibility = Visibility.Hidden;
+                                Logger.WoxDebug($"cancel progressbar token & visibility {query} {ProgressBarVisibility}");
+
+                                lock (progressBarSource)
+                                {
+                                    // used to cancel previous progress bar visible task
+                                    progressBarSource.Cancel();
+                                    progressBarSource.Dispose();
+                                    // update to hidden if this is still the current query
+                                    ProgressBarVisibility = Visibility.Hidden;
+                                }
                             }
                         });
                     }
