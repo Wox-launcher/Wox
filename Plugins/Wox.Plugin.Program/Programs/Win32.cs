@@ -147,6 +147,7 @@ namespace Wox.Plugin.Program.Programs
             if (!Directory.Exists(directory))
                 return new string[] { };
             var paths = new List<string>();
+            suffixes = suffixes.Select(s => s.ToLower()).ToArray();
             try
             {
                 IEnumerable<string> files = Directory.EnumerateFiles(directory, "*", searchOption);
@@ -155,7 +156,7 @@ namespace Wox.Plugin.Program.Programs
                     var extension = Path.GetExtension(path);
                     if (extension.Length > 1)
                     {
-                        if (suffixes.Contains(extension.Substring(1)))
+                        if (suffixes.Contains(extension.Substring(1).ToLower()))
                         {
                             paths.Add(path);
                         }
