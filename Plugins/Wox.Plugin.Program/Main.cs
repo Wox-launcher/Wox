@@ -13,6 +13,8 @@ using Wox.Infrastructure.Storage;
 using Wox.Plugin.Program.Programs;
 using Wox.Plugin.Program.Views;
 using System.Threading;
+using System.Windows.Threading;
+using System.Windows;
 
 namespace Wox.Plugin.Program
 {
@@ -159,9 +161,26 @@ namespace Wox.Plugin.Program
 
             Task.Delay(2000).ContinueWith(_ =>
             {
+                Logger.WoxInfo("Program: IndexPrograms()");
                 IndexPrograms();
                 Save();
+                Logger.WoxInfo("Program: IndexPrograms() Done");
             });
+
+            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+            {
+                DispatcherTimer dispatcherTimer = new DispatcherTimer();
+                dispatcherTimer.Interval = TimeSpan.FromMinutes(10);
+                dispatcherTimer.Tick += (__, ___) =>
+                {
+                    Logger.WoxInfo("Program: IndexPrograms() in interval loop");
+                    IndexPrograms();
+                    Save();
+                    Logger.WoxInfo("Program: IndexPrograms() in interval loop Done");
+                };
+                dispatcherTimer.Start();
+            }));
+            
         }
 
         public void InitSync(PluginInitContext context)
