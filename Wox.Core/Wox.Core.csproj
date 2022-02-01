@@ -112,7 +112,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="SharpZipLib">
-      <Version>1.2.0</Version>
+      <Version>1.3.3</Version>
     </PackageReference>
     <PackageReference Include="squirrel.windows">
       <Version>1.9.1</Version>
