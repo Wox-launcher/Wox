@@ -81,11 +81,11 @@
                      Visibility="Visible">
                     <TextBox.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Command="ApplicationCommands.Cut"/>
-                            <MenuItem Command="ApplicationCommands.Copy"/>
-                            <MenuItem Command="ApplicationCommands.Paste"/>
+                            <MenuItem Command="ApplicationCommands.Cut"  Header="{DynamicResource queryTextBoxMenuItemCut}"/>
+                            <MenuItem Command="ApplicationCommands.Copy" Header="{DynamicResource queryTextBoxMenuItemCopy}"/>
+                            <MenuItem Command="ApplicationCommands.Paste" Header="{DynamicResource queryTextBoxMenuItemPaste}"/>
                             <Separator />
-                            <MenuItem Header="Settings" Click="OnContextMenusForSettingsClick" />
+                            <MenuItem Header="{DynamicResource queryTextBoxMenuItemSettings}" Click="OnContextMenusForSettingsClick" />
                         </ContextMenu>
                     </TextBox.ContextMenu>
                 </TextBox>

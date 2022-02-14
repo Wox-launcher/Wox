@@ -13,6 +13,10 @@
     <system:String x:Key="iconTraySettings">Settings</system:String>
     <system:String x:Key="iconTrayAbout">About</system:String>
     <system:String x:Key="iconTrayExit">Exit</system:String>
+    <system:String x:Key="queryTextBoxMenuItemCut">Cut</system:String>
+    <system:String x:Key="queryTextBoxMenuItemCopy">Copy</system:String>
+    <system:String x:Key="queryTextBoxMenuItemPaste">Paste</system:String>
+    <system:String x:Key="queryTextBoxMenuItemSettings">Settings</system:String>
 
     <!--Setting General-->
     <system:String x:Key="wox_settings">Wox Settings</system:String>
