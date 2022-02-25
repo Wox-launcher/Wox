@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -74,7 +75,7 @@ namespace Wox.Plugin.Color
         {
             // todo: rgb, names
             var length = query.Length - 1; // minus `#` sign
-            return query.StartsWith("#") && (length == 3 || length == 6);
+            return query.StartsWith("#") && (length == 3 || length == 6 || length == 8);
         }
 
         public FileInfo[] Find(string name)
@@ -88,13 +89,31 @@ namespace Wox.Plugin.Color
             using (var bitmap = new Bitmap(IMG_SIZE, IMG_SIZE))
             using (var graphics = Graphics.FromImage(bitmap))
             {
-                var color = ColorTranslator.FromHtml(name);
+                var color = GetColor(name);
                 graphics.Clear(color);
 
                 var path = CreateFileName(name);
                 bitmap.Save(path, ImageFormat.Png);
                 return path;
             }
+        }
+
+        private static System.Drawing.Color GetColor(string raw)
+        {
+            var name = raw.TrimStart('#');
+            if (name.Length == 3 || name.Length == 6)
+            {
+                return ColorTranslator.FromHtml(raw);
+            }
+            if (name.Length == 8)
+            {
+                int alpha = int.Parse(name.Substring(6, 2), NumberStyles.HexNumber);
+                int red = int.Parse(name.Substring(0, 2), NumberStyles.HexNumber);
+                int green = int.Parse(name.Substring(2, 2), NumberStyles.HexNumber);
+                int blue = int.Parse(name.Substring(4, 2), NumberStyles.HexNumber);
+                return System.Drawing.Color.FromArgb(alpha, red, green, blue);
+            }
+            return System.Drawing.Color.Transparent;
         }
 
         private string CreateFileName(string name)
@@ -106,7 +125,6 @@ namespace Wox.Plugin.Color
         {
             this.context = context;
         }
-
 
         public string GetTranslatedPluginTitle()
         {
