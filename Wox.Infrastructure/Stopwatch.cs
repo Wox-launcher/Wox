@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using NLog;
 using Wox.Infrastructure.Logger;
 
 namespace Wox.Infrastructure
@@ -47,9 +46,9 @@ namespace Wox.Infrastructure
             var milliseconds = stopWatch.ElapsedMilliseconds;
             lock (Locker)
             {
-                if (Count.ContainsKey(name))
+                if (Count.TryGetValue(name, out var value))
                 {
-                    Count[name] += milliseconds;
+                    Count[name] = value + milliseconds;
                 }
                 else
                 {
@@ -60,9 +59,9 @@ namespace Wox.Infrastructure
 
         public static void EndCount()
         {
-            foreach (var key in Count.Keys)
+            foreach (var item in Count)
             {
-                string info = $"{key} already cost {Count[key]}ms";
+                var info = $"{item.Key} already cost {item.Value}ms";
                 //Logger.WoxDebug(info);
             }
         }

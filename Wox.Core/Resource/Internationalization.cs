@@ -160,9 +160,9 @@ namespace Wox.Core.Resource
         public string GetTranslation(string key)
         {
             var translation = Application.Current.TryFindResource(key);
-            if (translation is string)
+            if (translation is string str)
             {
-                return translation.ToString();
+                return str;
             }
             else
             {
@@ -175,8 +175,7 @@ namespace Wox.Core.Resource
         {
             foreach (var p in PluginManager.GetPluginsForInterface<IPluginI18n>())
             {
-                var pluginI18N = p.Plugin as IPluginI18n;
-                if (pluginI18N == null) return;
+                if (!(p.Plugin is IPluginI18n pluginI18N)) return;
                 try
                 {
                     p.Metadata.Name = pluginI18N.GetTranslatedPluginTitle();

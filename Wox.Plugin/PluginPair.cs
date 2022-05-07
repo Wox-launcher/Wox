@@ -5,7 +5,7 @@
         public IPlugin Plugin { get; internal set; }
         public PluginMetadata Metadata { get; internal set; }
 
-        
+
 
         public override string ToString()
         {
@@ -14,8 +14,7 @@
 
         public override bool Equals(object obj)
         {
-            PluginPair r = obj as PluginPair;
-            if (r != null)
+            if (obj is PluginPair r)
             {
                 return string.Equals(r.Metadata.ID, Metadata.ID);
             }

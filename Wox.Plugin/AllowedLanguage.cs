@@ -19,9 +19,10 @@
 
         public static bool IsAllowed(string language)
         {
-            return language.ToUpper() == Python.ToUpper() 
-                || language.ToUpper() == CSharp.ToUpper()
-                || language.ToUpper() == Executable.ToUpper();
+            var upper = language.ToUpper();
+            return upper == Python.ToUpper()
+                || upper == CSharp.ToUpper()
+                || upper == Executable.ToUpper();
         }
     }
 }

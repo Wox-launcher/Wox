@@ -31,7 +31,6 @@ namespace Wox.Infrastructure.Logger
             {
                 FileName = CurrentLogDirectory.Replace(@"\", "/") + "/${shortdate}.txt",
             };
-            var consoleTarget = new NLog.Targets.ConsoleTarget();
 #if DEBUG
             configuration.AddRule(LogLevel.Debug, LogLevel.Fatal, fileTarget);
 #else
@@ -106,7 +105,7 @@ namespace Wox.Infrastructure.Logger
             if (exception.Data.Contains(pluginDiretoryKey))
             {
                 string pluginDirectory = exception.Data[pluginDiretoryKey] as string;
-                bool debug = pluginDirectory.Contains(@"\Output\Release") || pluginDirectory.Contains(@"\Output\Release");
+                bool debug = pluginDirectory.Contains(@"\Output\Release");
                 bool thirdParty = !pluginDirectory.Contains(Constant.ProgramDirectory);
                 if (debug || thirdParty)
                 {

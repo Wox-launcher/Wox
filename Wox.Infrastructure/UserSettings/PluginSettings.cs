@@ -12,9 +12,8 @@ namespace Wox.Infrastructure.UserSettings
         {
             foreach (var metadata in metadatas)
             {
-                if (Plugins.ContainsKey(metadata.ID))
+                if (Plugins.TryGetValue(metadata.ID, out var settings))
                 {
-                    var settings = Plugins[metadata.ID];
                     if (settings.ActionKeywords?.Count > 0)
                     {
                         metadata.ActionKeywords = settings.ActionKeywords;

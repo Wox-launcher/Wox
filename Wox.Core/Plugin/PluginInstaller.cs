@@ -109,34 +109,30 @@ namespace Wox.Core.Plugin
             catch (Exception)
             {
                 string error = $"Parse plugin config {configPath} failed: json format is not valid";
-#if (DEBUG)
-                {
-                    throw new Exception(error);
-                }
-#endif
+#if DEBUG
+                throw new Exception(error);
+#else
                 return null;
+#endif
             }
-
 
             if (!AllowedLanguage.IsAllowed(metadata.Language))
             {
                 string error = $"Parse plugin config {configPath} failed: invalid language {metadata.Language}";
-#if (DEBUG)
-                {
-                    throw new Exception(error);
-                }
+#if DEBUG
+                throw new Exception(error);
+#else
+                    return null;
 #endif
-                return null;
             }
             if (!File.Exists(metadata.ExecuteFilePath))
             {
                 string error = $"Parse plugin config {configPath} failed: ExecuteFile {metadata.ExecuteFilePath} didn't exist";
-#if (DEBUG)
-                {
-                    throw new Exception(error);
-                }
-#endif
+#if DEBUG
+                throw new Exception(error);
+#else
                 return null;
+#endif
             }
 
             return metadata;
@@ -153,7 +149,7 @@ namespace Wox.Core.Plugin
             if (strDirectory == "")
                 strDirectory = Directory.GetCurrentDirectory();
             if (!strDirectory.EndsWith("\\"))
-                strDirectory = strDirectory + "\\";
+                strDirectory += "\\";
 
             using (ZipInputStream s = new ZipInputStream(File.OpenRead(zipedFile)))
             {
@@ -174,9 +170,10 @@ namespace Wox.Core.Plugin
 
                     if (fileName != "")
                     {
-                        if ((File.Exists(strDirectory + directoryName + fileName) && overWrite) || (!File.Exists(strDirectory + directoryName + fileName)))
+                        var filePath = strDirectory + directoryName + fileName;
+                        if (overWrite || (!File.Exists(filePath)))
                         {
-                            using (FileStream streamWriter = File.Create(strDirectory + directoryName + fileName))
+                            using (FileStream streamWriter = File.Create(filePath))
                             {
                                 byte[] data = new byte[2048];
                                 while (true)

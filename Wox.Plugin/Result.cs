@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Windows.Media;
 
 namespace Wox.Plugin
@@ -8,8 +7,6 @@ namespace Wox.Plugin
 
     public class Result : BaseModel
     {
-        private string _icoPath;
-
         public string Title { get; set; }
 
         public string SubTitle { get; set; }

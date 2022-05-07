@@ -1,8 +1,7 @@
-﻿using NLog;
-using System;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using NLog;
 using Wox.Infrastructure.Logger;
 
 namespace Wox.Infrastructure
@@ -54,7 +53,6 @@ namespace Wox.Infrastructure
                 MessageBox.Show(message);
                 RemoveFolderIfExists(targetPath);
             }
-
         }
 
         public static bool VerifyBothFolderFilesEqual(this string fromPath, string toPath)
@@ -79,7 +77,6 @@ namespace Wox.Infrastructure
                 MessageBox.Show(message);
                 return false;
             }
-
         }
 
         public static void RemoveFolderIfExists(this string path)
@@ -91,7 +88,7 @@ namespace Wox.Infrastructure
             }
             catch (System.Exception e)
             {
-                string message = $"Not able to delete folder { (object)path}, please go to the location and manually delete it";
+                string message = $"Not able to delete folder {path}, please go to the location and manually delete it";
                 Logger.WoxError(message, e);
                 MessageBox.Show(message);
             }
@@ -116,7 +113,7 @@ namespace Wox.Infrastructure
             }
             catch (System.Exception e)
             {
-                string message = $"Unable to open location { (object)location}, please check if it exists";
+                string message = $"Unable to open location {location}, please check if it exists";
                 Logger.WoxError(message, e);
                 MessageBox.Show(message);
             }

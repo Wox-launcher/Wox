@@ -57,7 +57,7 @@ namespace Wox.Core.Resource
                 return Math.Abs(o.Stretch.ToOpenTypeStretch() - FontStretches.Normal.ToOpenTypeStretch()) * 100 +
                     Math.Abs(o.Weight.ToOpenTypeWeight() - FontWeights.Normal.ToOpenTypeWeight()) +
                     (o.Style == FontStyles.Normal ? 0 : o.Style == FontStyles.Oblique ? 1 : 2) * 1000;
-            }).FirstOrDefault() ?? family.FamilyTypefaces.FirstOrDefault();
+            }).FirstOrDefault();
         }
 
         public static FamilyTypeface ConvertFromInvariantStringsOrNormal(this FontFamily family, string style, string weight, string stretch)

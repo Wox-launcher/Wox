@@ -1,23 +1,17 @@
-using NLog;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
-using System.Linq;
 using System.Runtime.Caching;
-using Wox.Infrastructure.Logger;
 using static Wox.Infrastructure.StringMatcher;
 
 namespace Wox.Infrastructure
 {
     public class StringMatcher
     {
-
         public SearchPrecisionScore UserSettingSearchPrecision { get; set; }
 
         private readonly Alphabet _alphabet;
         private MemoryCache _cache;
-
-        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
 
         public StringMatcher()
         {
@@ -73,14 +67,7 @@ namespace Wox.Infrastructure
             List<int> bestRecursiveMatchData = new List<int>();
             int bestRecursiveScore = 0;
 
-            List<int> matchs = new List<int>();
-            if (sourceMatchData.Count > 0)
-            {
-                foreach (var data in sourceMatchData)
-                {
-                    matchs.Add(data);
-                }
-            }
+            List<int> matchs = new List<int>(sourceMatchData);
 
             while (queryCurrentIndex < query.Length && stringCurrentIndex < stringToCompare.Length)
             {
@@ -96,11 +83,7 @@ namespace Wox.Infrastructure
                     {
                         if (!recursiveMatch || match.RawScore > bestRecursiveScore)
                         {
-                            bestRecursiveMatchData = new List<int>();
-                            foreach (int data in match.MatchData)
-                            {
-                                bestRecursiveMatchData.Add(data);
-                            }
+                            bestRecursiveMatchData = new List<int>(match.MatchData);
                             bestRecursiveScore = match.Score;
                         }
                         recursiveMatch = true;
@@ -134,7 +117,8 @@ namespace Wox.Infrastructure
                         {
                             consecutiveMatch += 1;
                             outScore += 10 * consecutiveMatch;
-                        } else
+                        }
+                        else
                         {
                             consecutiveMatch = 0;
                         }
@@ -177,11 +161,7 @@ namespace Wox.Infrastructure
 
             if (recursiveMatch && (!matched || bestRecursiveScore > outScore))
             {
-                matchs = new List<int>();
-                foreach (int data in bestRecursiveMatchData)
-                {
-                    matchs.Add(data);
-                }
+                matchs = new List<int>(bestRecursiveMatchData);
                 outScore = bestRecursiveScore;
                 return new MatchResult(true, UserSettingSearchPrecision, matchs, outScore);
             }
@@ -263,5 +243,4 @@ namespace Wox.Infrastructure
             return IsSearchPrecisionScoreMet(rawScore) ? rawScore : 0;
         }
     }
-
 }

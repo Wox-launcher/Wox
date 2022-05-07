@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using NLog;
 using Wox.Infrastructure;
@@ -311,19 +310,18 @@ namespace Wox.Core.Plugin
         public static void RemoveActionKeyword(string id, string oldActionkeyword)
         {
             var plugin = GetPluginForId(id);
-            if (oldActionkeyword == Query.GlobalPluginWildcardSign
-                && // Plugins may have multiple ActionKeywords that are global, eg. WebSearch
-                plugin.Metadata.ActionKeywords
-                                    .Where(x => x == Query.GlobalPluginWildcardSign)
-                                    .ToList()
-                                    .Count == 1)
+            if (oldActionkeyword == Query.GlobalPluginWildcardSign)
             {
-                GlobalPlugins.Remove(plugin);
+                if (plugin.Metadata.ActionKeywords.Any(x => x == Query.GlobalPluginWildcardSign))
+                {
+                    // Plugins may have multiple ActionKeywords that are global, eg. WebSearch
+                    GlobalPlugins.Remove(plugin);
+                }
             }
-
-            if (oldActionkeyword != Query.GlobalPluginWildcardSign)
+            else
+            {
                 NonGlobalPlugins.Remove(oldActionkeyword);
-
+            }
 
             plugin.Metadata.ActionKeywords.Remove(oldActionkeyword);
         }

@@ -96,13 +96,9 @@ namespace Wox.Infrastructure.Hotkey
                 }
                 else
                 {
-                    try
+                    if (Enum.TryParse<Key>(charKey, out var key))
                     {
-                        CharKey = (Key) Enum.Parse(typeof (Key), charKey);
-                    }
-                    catch (ArgumentException)
-                    {
-
+                        CharKey = key;
                     }
                 }
             }

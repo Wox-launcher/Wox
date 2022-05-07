@@ -83,14 +83,8 @@ namespace Wox.Plugin
 
         private string SplitSearch(int index)
         {
-            try
-            {
-                return string.IsNullOrEmpty(ActionKeyword) ? Terms[index] : Terms[index + 1];
-            }
-            catch (IndexOutOfRangeException)
-            {
-                return string.Empty;
-            }
+            if (!string.IsNullOrEmpty(ActionKeyword)) index++;
+            return Terms.Length > index ? Terms[index] : string.Empty;
         }
 
         public override string ToString() => RawQuery;

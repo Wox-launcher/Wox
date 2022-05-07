@@ -77,13 +77,14 @@ namespace Wox.Infrastructure.Hotkey
 
             if (nCode >= 0)
             {
-                if (wParam.ToUInt32() == (int)KeyEvent.WM_KEYDOWN ||
-                    wParam.ToUInt32() == (int)KeyEvent.WM_KEYUP ||
-                    wParam.ToUInt32() == (int)KeyEvent.WM_SYSKEYDOWN ||
-                    wParam.ToUInt32() == (int)KeyEvent.WM_SYSKEYUP)
+                var wParamUint = wParam.ToUInt32();
+                if (wParamUint == (int)KeyEvent.WM_KEYDOWN ||
+                    wParamUint == (int)KeyEvent.WM_KEYUP ||
+                    wParamUint == (int)KeyEvent.WM_SYSKEYDOWN ||
+                    wParamUint == (int)KeyEvent.WM_SYSKEYUP)
                 {
                     if (hookedKeyboardCallback != null)
-                        continues = hookedKeyboardCallback((KeyEvent)wParam.ToUInt32(), Marshal.ReadInt32(lParam), CheckModifiers());
+                        continues = hookedKeyboardCallback((KeyEvent)wParamUint, Marshal.ReadInt32(lParam), CheckModifiers());
                 }
             }
 
