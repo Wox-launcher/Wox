@@ -100,6 +100,11 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Languages\zh-cn.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Page Include="Views\SettingsControl.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>

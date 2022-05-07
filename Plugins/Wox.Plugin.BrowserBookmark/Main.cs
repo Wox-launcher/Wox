@@ -123,7 +123,7 @@ namespace Wox.Plugin.BrowserBookmark
 
         public Control CreateSettingPanel()
         {
-            return new SettingsControl(_settings);
+            return new SettingsControl(context.API, _settings);
         }
 
         public void Save()

@@ -444,7 +444,7 @@
                         <Run Text="{Binding Github, Mode=OneWay}" />
                     </Hyperlink>
                 </TextBlock>
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="Version" />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="{DynamicResource version}" />
                 <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Version}" />
                 <TextBlock Grid.Row="3" Grid.Column="0" Text="{DynamicResource releaseNotes}" />
                 <TextBlock Grid.Row="3" Grid.Column="1">

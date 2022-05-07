@@ -10,11 +10,13 @@ namespace Wox.Plugin.BrowserBookmark.Views
     /// </summary>
     public partial class SettingsControl : UserControl
     {
+        private IPublicAPI _woxAPI;
         private readonly Settings _settings;
 
-        public SettingsControl(Settings settings)
+        public SettingsControl(IPublicAPI woxAPI,Settings settings)
         {
             InitializeComponent();
+            _woxAPI = woxAPI;
             _settings = settings;
             browserPathBox.Text = _settings.BrowserPath;
             NewWindowBrowser.IsChecked = _settings.OpenInNewBrowserWindow;
@@ -34,7 +36,7 @@ namespace Wox.Plugin.BrowserBookmark.Views
         private void OnChooseClick(object sender, RoutedEventArgs e)
         {
             var fileBrowserDialog = new OpenFileDialog();
-            fileBrowserDialog.Filter = "Application(*.exe)|*.exe|All files|*.*";
+            fileBrowserDialog.Filter = _woxAPI.GetTranslation("wox_plugin_browserbookmark_plugin_filter");
             fileBrowserDialog.CheckFileExists = true;
             fileBrowserDialog.CheckPathExists = true;
             if (fileBrowserDialog.ShowDialog() == true)
