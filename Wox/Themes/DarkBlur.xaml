@@ -7,6 +7,8 @@
 	<ResourceDictionary.MergedDictionaries>
 		<ResourceDictionary Source="Base.xaml"/>
 	</ResourceDictionary.MergedDictionaries>
+	
+	<system:Boolean x:Key="ThemeBlurEnabled">True</system:Boolean>
 
 	<Style x:Key="QueryBoxStyle" BasedOn="{StaticResource BaseQueryBoxStyle}" TargetType="{x:Type TextBox}">
 		<Setter Property="Background">
@@ -21,7 +23,7 @@
 	<Style x:Key="WindowBorderStyle" BasedOn="{StaticResource BaseWindowBorderStyle}" TargetType="{x:Type Border}">
 		<Setter Property="Background">
 			<Setter.Value>
-				<SolidColorBrush Color="Black" Opacity="0.65"/>
+				<SolidColorBrush Color="Black" Opacity="0.6"/>
 			</Setter.Value>
 		</Setter>
 		<Setter Property="BorderBrush" Value="#1c1c1c" />
@@ -33,7 +35,7 @@
 				<DropShadowEffect Color="#000000"
                             ShadowDepth="0"
                             BlurRadius="15"
-                            Opacity="0.65"/>
+                            Opacity="0.6"/>
 			</Setter.Value>
 		</Setter>
 	</Style>
