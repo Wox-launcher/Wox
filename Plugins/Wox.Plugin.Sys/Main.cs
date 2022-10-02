@@ -233,7 +233,7 @@ namespace Wox.Plugin.Sys
                 {
                     PluginDirectory = context.CurrentPluginMetadata.PluginDirectory,
                     Title = "Check For Update",
-                    SubTitle = "Check for new Wox update",
+                    SubTitle = context.API.GetTranslation("wox_plugin_sys_check_update"),
                     IcoPath = "Images\\update.png",
                     Action = c =>
                     {

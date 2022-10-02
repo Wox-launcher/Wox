@@ -12,10 +12,19 @@
     <system:String x:Key="wox_plugin_sys_exit">退出Wox</system:String>
     <system:String x:Key="wox_plugin_sys_restart">重启Wox</system:String>
     <system:String x:Key="wox_plugin_sys_setting">设置</system:String>
-    <system:String x:Key="wox_plugin_sys_sleep">休眠这台电脑</system:String>
+    <system:String x:Key="wox_plugin_sys_sleep">使电脑睡眠</system:String>
     <system:String x:Key="wox_plugin_sys_emptyrecyclebin">清空回收站</system:String>
+    <system:String x:Key="wox_plugin_sys_hibernate">使电脑休眠</system:String>
+    <system:String x:Key="wox_plugin_sys_save_all_settings">保存所有 Wox 设置</system:String>
+    <system:String x:Key="wox_plugin_sys_reload_plugin_data">在 Wox 启动后用新的插件数据重新加载插件，插件需要提前支持此功能</system:String>
 
+    <!--Dialogs-->
+    <system:String x:Key="wox_plugin_sys_dlgtitle_success">成功</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_all_settings_saved">所有 Wox 设置已保存</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_all_applicableplugins_reloaded">重新加载所有适用的插件数据</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_shutdown_computer">确定要关闭计算机？</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_restart_computer">确实要重启计算机</system:String>
     <system:String x:Key="wox_plugin_sys_plugin_name">系统命令</system:String>
     <system:String x:Key="wox_plugin_sys_plugin_description">系统系统相关的命令。例如，关机，锁定，设置等</system:String>
-
+    <system:String x:Key="wox_plugin_sys_check_update">检查 Wox 更新</system:String>
 </ResourceDictionary>

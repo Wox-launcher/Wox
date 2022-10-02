@@ -5,5 +5,9 @@
 	<!--Plugin Info-->
 	<system:String x:Key="wox_plugin_browserbookmark_plugin_name">Browser Bookmarks</system:String>
 	<system:String x:Key="wox_plugin_browserbookmark_plugin_description">Search your browser bookmarks</system:String>
-
+	<system:String x:Key="wox_plugin_browserbookmark_plugin_set_browser_from_path">Set browser from path:</system:String>
+	<system:String x:Key="wox_plugin_browserbookmark_plugin_open_bookmark_in">Open bookmark in:</system:String>
+	<system:String x:Key="wox_plugin_browserbookmark_plugin_new_window">New window</system:String>
+	<system:String x:Key="wox_plugin_browserbookmark_plugin_new_tab">New tab</system:String>
+	<system:String x:Key="wox_plugin_browserbookmark_plugin_choose">Choose</system:String>
 </ResourceDictionary>
