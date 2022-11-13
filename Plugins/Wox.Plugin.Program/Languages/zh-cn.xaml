@@ -3,7 +3,7 @@
                     xmlns:system="clr-namespace:System;assembly=mscorlib">
 
     <!--Program setting-->
-    <system:String x:Key="wox_plugin_program_sources">Program Sources</system:String>
+    <system:String x:Key="wox_plugin_program_sources">程序来源</system:String>
     <system:String x:Key="wox_plugin_program_delete">删除</system:String>
     <system:String x:Key="wox_plugin_program_edit">编辑</system:String>
     <system:String x:Key="wox_plugin_program_add">增加</system:String>
@@ -36,10 +36,10 @@
     <system:String x:Key="wox_plugin_program_plugin_description">在Wox中搜索程序</system:String>
 
     <system:String x:Key="wox_plugin_program_invalid_path">无效路径</system:String>
-    <system:String x:Key="wox_plugin_program_ignored_sequences">Ignored sequences</system:String>
-    <system:String x:Key="wox_plugin_program_sequence">Sequence</system:String>
-    <system:String x:Key="wox_plugin_program_pls_select_ignored">Please select an ignored sequence</system:String>
-    <system:String x:Key="wox_plugin_program_delete_ignored">Are you sure you want to delete {0}?</system:String>
-    <system:String x:Key="wox_plugin_program_use_regex">Use regular expressions?</system:String>
+    <system:String x:Key="wox_plugin_program_ignored_sequences">忽略序列</system:String>
+    <system:String x:Key="wox_plugin_program_sequence">序列</system:String>
+    <system:String x:Key="wox_plugin_program_pls_select_ignored">请选择一个忽略序列</system:String>
+    <system:String x:Key="wox_plugin_program_delete_ignored">确定要删除 {0} ？</system:String>
+    <system:String x:Key="wox_plugin_program_use_regex">使用正则表达式？</system:String>
 
 </ResourceDictionary>

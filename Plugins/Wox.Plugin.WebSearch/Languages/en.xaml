@@ -25,6 +25,11 @@
     <system:String x:Key="wox_plugin_websearch_input_url">Please enter a URL</system:String>
     <system:String x:Key="wox_plugin_websearch_action_keyword_exist">Action keyword already exists, please enter a different one</system:String>
     <system:String x:Key="wox_plugin_websearch_succeed">Success</system:String>
+    <system:String x:Key="wox_plugin_websearch_open_search_in">Open search in:</system:String>
+    <system:String x:Key="wox_plugin_websearch_new_window">New window</system:String>
+    <system:String x:Key="wox_plugin_websearch_new_tab">New tab</system:String>
+    <system:String x:Key="wox_plugin_websearch_choose">choose</system:String>
+    <system:String x:Key="wox_plugin_websearch_set_browser_from_path">Set browser from path:</system:String>
 
     <system:String x:Key="wox_plugin_websearch_plugin_name">Web Searches</system:String>
     <system:String x:Key="wox_plugin_websearch_plugin_description">Allows to perform web searches</system:String>

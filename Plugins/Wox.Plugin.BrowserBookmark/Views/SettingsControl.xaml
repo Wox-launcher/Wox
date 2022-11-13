@@ -12,14 +12,14 @@
             <RowDefinition />
         </Grid.RowDefinitions>
         <StackPanel Orientation="Horizontal" Grid.Row="0">
-            <Label Content="Open bookmark in:" Margin="40 3 0 8"/>
-            <RadioButton Name="NewWindowBrowser" GroupName="OpenSearchBehaviour" Content="New window" Click="OnNewBrowserWindowClick" Margin="10" />
-            <RadioButton Name="NewTabInBrowser" GroupName="OpenSearchBehaviour" Content="New tab" Click="OnNewTabClick" Margin="10" />
+            <Label Content="{DynamicResource wox_plugin_browserbookmark_plugin_open_bookmark_in}" Margin="40 3 0 8"/>
+            <RadioButton Name="NewWindowBrowser" GroupName="OpenSearchBehaviour" Content="{DynamicResource wox_plugin_browserbookmark_plugin_new_window}" Click="OnNewBrowserWindowClick" Margin="10" />
+            <RadioButton Name="NewTabInBrowser" GroupName="OpenSearchBehaviour" Content="{DynamicResource wox_plugin_browserbookmark_plugin_new_tab}" Click="OnNewTabClick" Margin="10" />
         </StackPanel>
         <StackPanel VerticalAlignment="Top" Grid.Row="1" Height="106" Margin="41,13,0,0">
-            <Label Content="Set browser from path:" Height="28" Margin="0,0,155,0" HorizontalAlignment="Left" Width="290"/>
+            <Label Content="{DynamicResource wox_plugin_browserbookmark_plugin_set_browser_from_path}" Height="28" Margin="0,0,155,0" HorizontalAlignment="Left" Width="290"/>
             <TextBox x:Name="browserPathBox" HorizontalAlignment="Left" Height="34" Margin="5,0,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="311" RenderTransformOrigin="0.502,-1.668"/>
-            <Button x:Name="viewButton" HorizontalAlignment="Left" Margin="340,-33,-1,0" Width="100" Height="28" Click="OnChooseClick" FontSize="10" Content="Choose" />
+            <Button x:Name="viewButton" HorizontalAlignment="Left" Margin="340,-33,-1,0" Width="100" Height="28" Click="OnChooseClick" FontSize="10" Content="{DynamicResource wox_plugin_browserbookmark_plugin_choose}" />
         </StackPanel>
     </Grid>
 </UserControl>

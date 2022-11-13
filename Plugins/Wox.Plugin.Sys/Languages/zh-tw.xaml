@@ -14,8 +14,17 @@
     <system:String x:Key="wox_plugin_sys_setting">設定</system:String>
     <system:String x:Key="wox_plugin_sys_sleep">睡眠</system:String>
     <system:String x:Key="wox_plugin_sys_emptyrecyclebin">清空資源回收桶</system:String>
+    <system:String x:Key="wox_plugin_sys_hibernate">休眠計算機</system:String>
+    <system:String x:Key="wox_plugin_sys_save_all_settings">保存所有 Wox 設置</system:String>
+    <system:String x:Key="wox_plugin_sys_reload_plugin_data">在 Wox 啟動後用新的插件數據重新加載插件，插件需要提前支持此功能。</system:String>
 
+    <!--Dialogs-->
+    <system:String x:Key="wox_plugin_sys_dlgtitle_success">成功</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_all_settings_saved">所有 Wox 設置已保存</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_all_applicableplugins_reloaded">重新加載所有適用的插件數據</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_shutdown_computer">確定要關閉計算機？</system:String>
+    <system:String x:Key="wox_plugin_sys_dlgtext_restart_computer">確實要重啟計算機</system:String>
     <system:String x:Key="wox_plugin_sys_plugin_name">系統命令</system:String>
     <system:String x:Key="wox_plugin_sys_plugin_description">系統相關的命令。例如，關機，鎖定，設定等</system:String>
-
+    <system:String x:Key="wox_plugin_sys_check_update">檢查 Wox 更新</system:String>
 </ResourceDictionary>

@@ -7,6 +7,9 @@
 
     <system:String x:Key="wox_plugin_url_plugin_name">URL</system:String>
     <system:String x:Key="wox_plugin_url_plugin_description">Open the typed URL from Wox</system:String>
+    <system:String x:Key="wox_plugin_url_plugin_open_search_in">Open search in:</system:String>
+    <system:String x:Key="wox_plugin_url_plugin_new_window">New window</system:String>
+    <system:String x:Key="wox_plugin_url_plugin_new_tab">New tab</system:String>
 
     <system:String x:Key="wox_plugin_url_plugin_set_tip">Please set your browser path:</system:String>
     <system:String x:Key="wox_plugin_url_plugin_choose">Choose</system:String>
