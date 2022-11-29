@@ -139,6 +139,13 @@
       "IconPath": "Images\\qwant.png",
       "URL": "https://www.qwant.com/?q={q}",
       "Enabled": true
+    },
+    {
+      "Title": "Yandex",
+      "ActionKeyword": "ya",
+      "IconPath": "Images\\yandex.png",
+      "URL": "https://yandex.com/search/?text={q}",
+      "Enabled": true
     }
   ],
   "EnableWebSearchSuggestion": false,
