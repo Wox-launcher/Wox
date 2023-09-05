@@ -1,14 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
     <PropertyGroup>
         <TargetFramework>net7.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <DebugType>embedded</DebugType>
     </PropertyGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\Wox.Plugin\Wox.Plugin.csproj"/>
     </ItemGroup>
-
 
 </Project>

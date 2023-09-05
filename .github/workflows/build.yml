@@ -10,11 +10,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - uses: extractions/setup-just@v1
       - name: Setup .NET Core SDK
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: '7.x'
-      - name: Install dependencies
-        run: dotnet restore
       - name: Build
-        run: dotnet build --configuration Release --no-restore
+        run: just build all
+      - name: Upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: Wox
+          path: publish/
