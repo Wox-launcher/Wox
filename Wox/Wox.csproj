@@ -23,4 +23,10 @@
         <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="Avalonia.Diagnostics" Version="11.0.2"/>
         <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.2"/>
     </ItemGroup>
+
+
+    <ItemGroup>
+        <ProjectReference Include="..\Wox.Core\Wox.Core.csproj"/>
+        <ProjectReference Include="..\Wox.Plugin\Wox.Plugin.csproj"/>
+    </ItemGroup>
 </Project>

@@ -2,6 +2,17 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Wox", "Wox\Wox.csproj", "{356667F0-7000-41B2-8C43-B7BAA2928CBF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Wox.Plugin", "Wox.Plugin\Wox.Plugin.csproj", "{84443075-CCE1-4EE1-BA88-2A69F6F348E3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Wox.Core", "Wox.Core\Wox.Core.csproj", "{5F9BEC99-2EF5-4729-80B2-4FEE30B01531}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{711682B8-A519-42A1-BAAC-323864EFCD62}"
+	ProjectSection(SolutionItems) = preProject
+		README.md = README.md
+		LICENSE = LICENSE
+		.gitignore = .gitignore
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -12,5 +23,13 @@ Global
 		{356667F0-7000-41B2-8C43-B7BAA2928CBF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{356667F0-7000-41B2-8C43-B7BAA2928CBF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{356667F0-7000-41B2-8C43-B7BAA2928CBF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{84443075-CCE1-4EE1-BA88-2A69F6F348E3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{84443075-CCE1-4EE1-BA88-2A69F6F348E3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{84443075-CCE1-4EE1-BA88-2A69F6F348E3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{84443075-CCE1-4EE1-BA88-2A69F6F348E3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5F9BEC99-2EF5-4729-80B2-4FEE30B01531}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5F9BEC99-2EF5-4729-80B2-4FEE30B01531}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5F9BEC99-2EF5-4729-80B2-4FEE30B01531}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5F9BEC99-2EF5-4729-80B2-4FEE30B01531}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
