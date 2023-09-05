@@ -1,29 +1,25 @@
 Wox
 ===
 
-![Build status](https://github.com/Wox-launcher/Wox/actions/workflows/build.yml/badge.svg?branch=v2)
+[![Build status](https://github.com/Wox-launcher/Wox/actions/workflows/build.yml/badge.svg?branch=v2)](https://github.com/Wox-launcher/Wox/actions)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Wox-launcher/wox?include_prereleases)](https://github.com/Wox-launcher/Wox/releases)
 [![Github All Releases](https://img.shields.io/github/downloads/Wox-launcher/Wox/total.svg)](https://github.com/Wox-launcher/Wox/releases)
 
 
-**Wox** is a cross-platform launcher that simply works. It's an alternative to [Alfred](https://www.alfredapp.com/) and [Launchy](http://www.launchy.net/).
+**Wox** is a cross-platform launcher that simply works. It's an alternative to [Alfred](https://www.alfredapp.com/) and [Launchy](http://www.launchy.net/)
 
 Features
 --------
 
-- Search for everything—applications, **UWP**, folders, files and more.
+- Search for applications, folders, files and more.
 - Use *pinyin* to search for programs / 支持用 **拼音** 搜索程序
-    - wyy / wangyiyun → 网易云音乐
 - Keyword plugin search `g search_term`
 - Search youtube, google, twitter and many more
 - Build custom themes at http://www.wox.one/theme/builder
 - Install plugins from http://www.wox.one/plugin
-- Portable mode
-- Auto-complete text suggestion
-- Highlighting of how results are matched during query search
+- Single executable file, no installation required
 
-
-Installation
+Run
 ------------
 
 Download from [releases](https://github.com/Wox-launcher/Wox/releases) and run the single executable file
@@ -31,8 +27,7 @@ Download from [releases](https://github.com/Wox-launcher/Wox/releases) and run t
 Usage
 -----
 
-- Launch: <kbd>Alt</kbd>+<kbd>Space</kbd>
-- Context Menu: <kbd>Ctrl</kbd>+<kbd>O</kbd>
+- Launch: <kbd>Alt</kbd>/<kbd>Command</kbd>+<kbd>Space</kbd>
 - Cancel/Return: <kbd>Esc</kbd>
 - Install/Uninstall plugin: type `wpm install/uninstall`
 
@@ -53,11 +48,11 @@ Build
 Documentation
 -------------
 - [Wiki](https://github.com/Wox-launcher/Wox/wiki)
-- Outdated doc: [Wox doc](http://doc.wox.one).
-- Just ask questions in [issues](https://github.com/Wox-launcher/Wox/issues) for now.
+- Outdated doc: [Wox doc](http://doc.wox.one)
+- Just ask questions in [issues](https://github.com/Wox-launcher/Wox/issues) for now
 
 Thanks
 ------
 
-- [Raygun](https://raygun.com/) for their free crash reporting account.
-- JetBrains for Open Source licence.
+- [Raygun](https://raygun.com/) for their free crash reporting account
+- JetBrains for Open Source licence
