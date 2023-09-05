@@ -301,3 +301,5 @@ migrateToAutomaticPackageRestore.ps1
 *.diagsession
 Output-Performance.txt
 *.diff
+.idea
+.DS_Store
