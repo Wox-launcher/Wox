@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Wox.Core;
 using Wox.Core.Plugin;
 using Wox.ViewModels;
 using Wox.Views;
@@ -24,6 +25,14 @@ public class App : Application
 
         base.OnFrameworkInitializationCompleted();
 
+        Bootstrap();
+    }
+
+    /// <summary>
+    /// </summary>
+    private void Bootstrap()
+    {
+        DataLocation.EnsureDirectoryExist();
         PluginManager.LoadPlugins();
     }
 }
