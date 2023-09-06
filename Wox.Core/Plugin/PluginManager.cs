@@ -10,5 +10,6 @@ public static class PluginManager
     /// </summary>
     public static void LoadPlugins()
     {
+        PluginsLoader.LoadPlugins();
     }
 }

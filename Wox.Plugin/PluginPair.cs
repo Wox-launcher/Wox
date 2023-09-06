@@ -2,8 +2,8 @@ namespace Wox.Plugin;
 
 public class PluginPair
 {
-    public IPlugin Plugin { get; internal set; }
-    public PluginMetadata Metadata { get; internal set; }
+    public IPlugin Plugin { get; set; }
+    public PluginMetadata Metadata { get; set; }
 
     public override string ToString()
     {

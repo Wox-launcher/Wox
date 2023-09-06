@@ -13,6 +13,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		build.yml = .github/workflows/build.yml
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Plugins", "Plugins", "{418A8BB1-B605-4811-8593-263BF4131969}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Wox.Plugin.Calculator", "Plugins\Wox.Plugin.Calculator\Wox.Plugin.Calculator.csproj", "{E185ECA7-6C0F-41D9-8A60-38CBF32DAA40}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -31,5 +35,12 @@ Global
 		{5F9BEC99-2EF5-4729-80B2-4FEE30B01531}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5F9BEC99-2EF5-4729-80B2-4FEE30B01531}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5F9BEC99-2EF5-4729-80B2-4FEE30B01531}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E185ECA7-6C0F-41D9-8A60-38CBF32DAA40}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E185ECA7-6C0F-41D9-8A60-38CBF32DAA40}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E185ECA7-6C0F-41D9-8A60-38CBF32DAA40}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E185ECA7-6C0F-41D9-8A60-38CBF32DAA40}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{E185ECA7-6C0F-41D9-8A60-38CBF32DAA40} = {418A8BB1-B605-4811-8593-263BF4131969}
 	EndGlobalSection
 EndGlobal

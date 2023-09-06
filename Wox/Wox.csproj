@@ -8,21 +8,13 @@
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
         <DebugType>embedded</DebugType>
         <Version>2.0.0</Version>
-        
-        <!-- self contained config-->
-        <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-        <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
-        <PublishSingleFile>true</PublishSingleFile>
-        <SelfContained>true</SelfContained>
-        <PublishTrimmed>true</PublishTrimmed>
-        <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     </PropertyGroup>
 
     <ItemGroup>
         <Folder Include="Models\"/>
         <AvaloniaResource Include="Assets\**"/>
     </ItemGroup>
-
 
     <ItemGroup>
         <PackageReference Include="Avalonia" Version="11.0.2"/>
@@ -39,4 +31,11 @@
         <ProjectReference Include="..\Wox.Core\Wox.Core.csproj"/>
         <ProjectReference Include="..\Wox.Plugin\Wox.Plugin.csproj"/>
     </ItemGroup>
+
+    <ItemGroup>
+        <None Update="plugins\**\*.*">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
 </Project>
