@@ -1,5 +1,5 @@
 {
-  "ID": "CEA0FDFC6D3B4085823D60DC76F28855",
+  "Id": "CEA0FDFC6D3B4085823D60DC76F28855",
   "TriggerKeywords": [
     "*"
   ],
@@ -12,8 +12,8 @@
   "ExecuteFileName": "Wox.Plugin.Calculator.dll",
   "IcoPath": "Images\\calculator.png",
   "SupportedOS": [
-    "windows",
-    "linux",
-    "macos"
+    "WINDOWS",
+    "LINUX",
+    "MACOS"
   ]
 }

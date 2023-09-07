@@ -2,7 +2,7 @@ using NUnit.Framework;
 using Wox.Core.Plugin;
 using Wox.Plugin;
 
-namespace Wox.Test;
+namespace Wox.Test.Plugin;
 
 public class PluginLoaderTest
 {
@@ -14,6 +14,6 @@ public class PluginLoaderTest
 
         Assert.That(pluginMetadata, Is.Not.Null);
         Assert.That(pluginMetadata!.Name, Is.EqualTo("Calculator"));
-        Assert.That(pluginMetadata.Language, Is.EqualTo(AllowedLanguage.CSharp));
+        Assert.That(pluginMetadata.Language.ToUpper(), Is.EqualTo(AllowedLanguage.CSharp));
     }
 }

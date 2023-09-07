@@ -5,34 +5,26 @@ namespace Wox.Plugin;
 /// </summary>
 public class Query
 {
-    public Query(string rawQuery, string triggerKeyword, string command, string search)
-    {
-        RawQuery = rawQuery;
-        TriggerKeyword = triggerKeyword;
-        Command = command;
-        Search = search;
-    }
-
     /// <summary>
     ///     Raw query, this includes trigger keyword if it has
     ///     We didn't recommend use this property directly. You should always use Search property.
     /// </summary>
-    public string RawQuery { get; }
+    public required string RawQuery { get; init; }
 
     /// <summary>
     ///     Trigger keyword of a query. It can be empty if user is using global trigger keyword.
     /// </summary>
-    public string TriggerKeyword { get; }
+    public string? TriggerKeyword { get; init; }
 
     /// <summary>
     ///     Command part of a query.
     /// </summary>
-    public string Command { get; }
+    public string? Command { get; init; }
 
     /// <summary>
     ///     Search part of a query.
     /// </summary>
-    public string Search { get; }
+    public required string Search { get; init; }
 
     public override string ToString()
     {

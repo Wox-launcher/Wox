@@ -6,17 +6,17 @@ using TriggerKeyword = String;
 
 public static class QueryBuilder
 {
-    private const string TermSeperater = " ";
+    private const string TermSeparator = " ";
 
     public static Query? Build(string text, Dictionary<TriggerKeyword, PluginMetadata> plugins)
     {
         // replace multiple white spaces with one white space
-        var terms = text.Split(new[] { TermSeperater }, StringSplitOptions.RemoveEmptyEntries);
+        var terms = text.Split(new[] { TermSeparator }, StringSplitOptions.RemoveEmptyEntries);
         if (terms.Length == 0)
             // nothing was typed
             return null;
 
-        var rawQuery = string.Join(TermSeperater, terms);
+        var rawQuery = string.Join(TermSeparator, terms);
         string triggerKeyword, command, search;
         var possibleTriggerKeyword = terms[0];
 
@@ -37,13 +37,13 @@ public static class QueryBuilder
             {
                 // command and search
                 command = possibleCommand;
-                search = string.Join(TermSeperater, terms.Skip(2));
+                search = string.Join(TermSeparator, terms.Skip(2));
             }
             else
             {
                 // no command, only search
                 command = string.Empty;
-                search = string.Join(TermSeperater, terms.Skip(1));
+                search = string.Join(TermSeparator, terms.Skip(1));
             }
         }
         else
@@ -54,6 +54,12 @@ public static class QueryBuilder
             search = rawQuery;
         }
 
-        return new Query(text, triggerKeyword, command, search);
+        return new Query
+        {
+            RawQuery = text,
+            TriggerKeyword = triggerKeyword,
+            Command = command,
+            Search = search
+        };
     }
 }

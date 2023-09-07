@@ -27,12 +27,12 @@ public static class PluginLoader
 
             IPlugin? plugin = null;
             PluginAssemblyLoadContext? assemblyLoadContext = null;
-            var startLoadPluginTime = DateTime.Now;
+            // var startLoadPluginTime = DateTime.Now;
             if (metadata.Language.ToUpper() == AllowedLanguage.CSharp) (plugin, assemblyLoadContext) = LoadCSharpPlugin(metadata);
 
             if (plugin == null) continue;
 
-            metadata.InitTime = DateTime.Now.Subtract(startLoadPluginTime).Milliseconds;
+            // metadata.InitTime = DateTime.Now.Subtract(startLoadPluginTime).Milliseconds;
             pluginInstances.Add(new PluginInstance(plugin, metadata, assemblyLoadContext));
         }
 
@@ -69,7 +69,10 @@ public static class PluginLoader
         PluginMetadata? metadata;
         try
         {
-            metadata = JsonSerializer.Deserialize<PluginMetadata>(pluginJson);
+            metadata = JsonSerializer.Deserialize<PluginMetadata>(pluginJson, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
             if (metadata == null)
             {
                 Logger.Error($"Invalid json for plugin config {pluginJson}");
@@ -78,7 +81,7 @@ public static class PluginLoader
         }
         catch (Exception e)
         {
-            Logger.Error($"Invalid json for plugin config {pluginJson}", e);
+            Logger.Error($"Deserialize plugin config failed {pluginJson}", e);
             return null;
         }
 

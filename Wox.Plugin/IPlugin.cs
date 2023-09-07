@@ -1,5 +1,8 @@
 ﻿namespace Wox.Plugin;
 
+/// <summary>
+///     Every CSharp plugin should implement this interface
+/// </summary>
 public interface IPlugin
 {
     /// <summary>

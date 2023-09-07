@@ -6,13 +6,44 @@ namespace Wox.Test;
 
 public class QueryBuilderTest
 {
+    private Dictionary<string, PluginMetadata> GeneratePlugins(List<string> triggerKeywords, List<string> commands)
+    {
+        return new Dictionary<string, PluginMetadata>
+        {
+            {
+                triggerKeywords[0], new PluginMetadata
+                {
+                    TriggerKeywords = triggerKeywords,
+                    Commands = commands,
+                    Id = Guid.NewGuid().ToString(),
+                    Name = Guid.NewGuid().ToString(),
+                    Author = Guid.NewGuid().ToString(),
+                    Version = Guid.NewGuid().ToString(),
+                    Language = AllowedLanguage.CSharp,
+                    Description = Guid.NewGuid().ToString(),
+                    Website = Guid.NewGuid().ToString(),
+                    Disabled = false,
+                    ExecuteFileName = Guid.NewGuid().ToString(),
+                    IcoPath = Guid.NewGuid().ToString(),
+                    KeepResultRawScore = false,
+                    SupportedOS = new List<PluginSupportedOS> { PluginSupportedOS.Macos }
+                }
+            }
+        };
+    }
+
     [Test]
     public void NormalQueryTest()
     {
-        var plugins = new Dictionary<string, PluginMetadata>
-        {
-            { "wpm", new PluginMetadata { TriggerKeywords = new List<string> { "wpm", "p" }, Commands = new List<string> { "install" } } }
-        };
+        var plugins = GeneratePlugins(new List<string>
+            {
+                "wpm",
+                "p"
+            },
+            new List<string>
+            {
+                "install"
+            });
 
         var q = QueryBuilder.Build("wpm install calculator", plugins);
 
@@ -25,10 +56,15 @@ public class QueryBuilderTest
     [Test]
     public void NoCommandQueryTest()
     {
-        var plugins = new Dictionary<string, PluginMetadata>
-        {
-            { "wpm", new PluginMetadata { TriggerKeywords = new List<string> { "wpm", "p" }, Commands = new List<string> { "install" } } }
-        };
+        var plugins = GeneratePlugins(new List<string>
+            {
+                "wpm",
+                "p"
+            },
+            new List<string>
+            {
+                "install"
+            });
 
         var q = QueryBuilder.Build("wpm   file.txt    file2 file3", plugins);
 
@@ -40,10 +76,11 @@ public class QueryBuilderTest
     [Test]
     public void GlobalTriggerKeywordTest()
     {
-        var plugins = new Dictionary<string, PluginMetadata>
-        {
-            { "*", new PluginMetadata { TriggerKeywords = new List<string> { "*" } } }
-        };
+        var plugins = GeneratePlugins(new List<string>
+            {
+                "*"
+            },
+            new List<string>());
 
         var q = QueryBuilder.Build("wpm file.txt    file2 file3", plugins);
 
