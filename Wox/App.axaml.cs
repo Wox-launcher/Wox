@@ -28,6 +28,7 @@ public class App : Application
         Bootstrap();
     }
 
+
     /// <summary>
     /// </summary>
     private void Bootstrap()

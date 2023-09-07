@@ -3,18 +3,59 @@
         xmlns:vm="using:Wox.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="77"
         x:Class="Wox.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
+        x:Name="WoxMainWindow"
+        Width="800"
+        Height="77"
         Icon="/Assets/avalonia-logo.ico"
-        Title="Wox">
+        Title="Wox"
+        >
 
     <Design.DataContext>
         <!-- This only sets the DataContext for the previewer in an IDE,
              to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
         <vm:MainWindowViewModel/>
     </Design.DataContext>
-
-    <TextBlock Text="{Binding Greeting}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-
+    
+    <Window.Styles>
+        <Style Selector="Window">
+            <Setter Property="ExtendClientAreaToDecorationsHint" Value="True"></Setter>
+            <Setter Property="ExtendClientAreaChromeHints" Value="NoChrome"></Setter>
+            <Setter Property="ExtendClientAreaTitleBarHeightHint" Value="-1"></Setter>
+            <Setter Property="TransparencyLevelHint" Value="AcrylicBlur"></Setter>
+            <Setter Property="CanResize" Value="False"></Setter>
+            <Setter Property="Background" Value="Transparent"></Setter>
+            <Setter Property="BorderBrush" Value="Transparent"></Setter>
+            <Setter Property="BorderThickness" Value="0"></Setter>
+            <Setter Property="CornerRadius" Value="15"></Setter>
+            <Setter Property="ClipToBounds" Value="True"></Setter>
+        </Style>
+    </Window.Styles>
+    
+    <Window.KeyBindings>
+        <KeyBinding Gesture="Escape" Command="{Binding EscTrigger}" ></KeyBinding>
+    </Window.KeyBindings>
+    
+    
+    <Grid>
+        <ExperimentalAcrylicBorder IsHitTestVisible="False">
+            <ExperimentalAcrylicBorder.Material>
+                <ExperimentalAcrylicMaterial
+                    BackgroundSource="Digger"
+                    TintColor="Black"
+                    TintOpacity="1"
+                    MaterialOpacity="0.5" />
+            </ExperimentalAcrylicBorder.Material>
+        </ExperimentalAcrylicBorder>
+        
+        <TextBox Background="Black"   FontSize="36" Margin="10 0 0 0" Opacity="0.9" Width="700" Height="58" LineHeight="48" VerticalContentAlignment="Center" VerticalAlignment="Center" HorizontalAlignment="Left" BorderBrush="Transparent">
+        </TextBox>
+    </Grid>
+    
+   
+      
+    
+    
 </Window>
