@@ -1,40 +1,28 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Wox.Plugin;
 
-[JsonObject(MemberSerialization.OptOut)]
 public class PluginMetadata
 {
-    private string _pluginDirectory;
-    public string ID { get; set; }
-    public string Name { get; set; }
-    public string Author { get; set; }
-    public string Version { get; set; }
-    public string Language { get; set; }
-    public string Description { get; set; }
-    public string Website { get; set; }
-    public bool Disabled { get; set; }
-    public string ExecuteFilePath { get; private set; }
+    public required string Id { get; set; }
+    public required string Name { get; set; }
+    public required string Author { get; set; }
+    public required string Version { get; set; }
+    public required string Language { get; set; }
+    public required string Description { get; set; }
+    public required string Website { get; set; }
+    public required bool Disabled { get; set; }
 
-    public string ExecuteFileName { get; set; }
+    public required string ExecuteFileName { get; set; }
 
-    public string PluginDirectory
-    {
-        get => _pluginDirectory;
-        set
-        {
-            _pluginDirectory = value;
-            ExecuteFilePath = Path.Combine(value, ExecuteFileName);
-            IcoPath = Path.Combine(value, IcoPath);
-        }
-    }
+    public required List<string> TriggerKeywords { get; set; }
 
-    public List<string> ActionKeywords { get; set; }
+    public required List<string> Commands { get; set; }
 
-    public string IcoPath { get; set; }
+    public required string IcoPath { get; set; }
 
     // keep plugin raw score by not multiply selected counts
-    public bool KeepResultRawScore { get; set; }
+    public required bool KeepResultRawScore { get; set; }
 
     /// <summary>
     ///     Init time (ms) include both plugin load time and init time
@@ -45,6 +33,8 @@ public class PluginMetadata
     [JsonIgnore] public long AvgQueryTime { get; set; }
 
     [JsonIgnore] public int QueryCount { get; set; }
+
+    [JsonIgnore] public string ExecuteFilePath { get; set; }
 
     public override string? ToString()
     {

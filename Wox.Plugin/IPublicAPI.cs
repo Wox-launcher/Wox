@@ -1,105 +1,101 @@
-using System;
-using System.Collections.Generic;
+namespace Wox.Plugin;
 
-namespace Wox.Plugin
+/// <summary>
+///     Public APIs that plugin can use
+/// </summary>
+public interface IPublicAPI
 {
     /// <summary>
-    /// Public APIs that plugin can use
+    ///     Push result to query box
     /// </summary>
-    public interface IPublicAPI
-    {
-        /// <summary>
-        /// Push result to query box
-        /// </summary>
-        /// <param name="query"></param>
-        /// <param name="plugin"></param>
-        /// <param name="results"></param>
-        [Obsolete("This method will be removed in Wox 1.4")]
-        void PushResults(Query query, PluginMetadata plugin, List<Result> results);
+    /// <param name="query"></param>
+    /// <param name="plugin"></param>
+    /// <param name="results"></param>
+    [Obsolete("This method will be removed in Wox 1.4")]
+    void PushResults(Query query, PluginMetadata plugin, List<Result> results);
 
-        /// <summary>
-        /// Change Wox query
-        /// </summary>
-        /// <param name="query">query text</param>
-        /// <param name="requery">
-        /// force requery By default, Wox will not fire query if your query is same with existing one. 
-        /// Set this to true to force Wox requerying
-        /// </param>
-        void ChangeQuery(string query, bool requery = false);
+    /// <summary>
+    ///     Change Wox query
+    /// </summary>
+    /// <param name="query">query text</param>
+    /// <param name="requery">
+    ///     force requery By default, Wox will not fire query if your query is same with existing one.
+    ///     Set this to true to force Wox requerying
+    /// </param>
+    void ChangeQuery(string query, bool requery = false);
 
-        /// <summary>
-        /// Restart Wox
-        /// </summary>
-        void RestarApp();
+    /// <summary>
+    ///     Restart Wox
+    /// </summary>
+    void RestarApp();
 
-        /// <summary>
-        /// Hide Wox
-        /// </summary>
-        void HideApp();
+    /// <summary>
+    ///     Hide Wox
+    /// </summary>
+    void HideApp();
 
-        /// <summary>
-        /// Show Wox
-        /// </summary>
-        void ShowApp();
+    /// <summary>
+    ///     Show Wox
+    /// </summary>
+    void ShowApp();
 
-        /// <summary>
-        /// Save all Wox settings
-        /// </summary>
-        void SaveAppAllSettings();
+    /// <summary>
+    ///     Save all Wox settings
+    /// </summary>
+    void SaveAppAllSettings();
 
-        /// <summary>
-        /// Reloads any Plugins that have the 
-        /// IReloadable implemented. It refeshes
-        /// Plugin's in memory data with new content
-        /// added by user.
-        /// </summary>
-        void ReloadAllPluginData();
+    /// <summary>
+    ///     Reloads any Plugins that have the
+    ///     IReloadable implemented. It refeshes
+    ///     Plugin's in memory data with new content
+    ///     added by user.
+    /// </summary>
+    void ReloadAllPluginData();
 
-        /// <summary>
-        /// Check for new Wox update
-        /// </summary>
-        void CheckForNewUpdate();
+    /// <summary>
+    ///     Check for new Wox update
+    /// </summary>
+    void CheckForNewUpdate();
 
-        /// <summary>
-        /// Show message box
-        /// </summary>
-        /// <param name="title">Message title</param>
-        /// <param name="subTitle">Message subtitle</param>
-        /// <param name="iconPath">Message icon path (relative path to your plugin folder)</param>
-        void ShowMsg(string title, string subTitle = "", string iconPath = "");
+    /// <summary>
+    ///     Show message box
+    /// </summary>
+    /// <param name="title">Message title</param>
+    /// <param name="subTitle">Message subtitle</param>
+    /// <param name="iconPath">Message icon path (relative path to your plugin folder)</param>
+    void ShowMsg(string title, string subTitle = "", string iconPath = "");
 
-        /// <summary>
-        /// Show message box
-        /// </summary>
-        /// <param name="title">Message title</param>
-        /// <param name="subTitle">Message subtitle</param>
-        /// <param name="iconPath">Message icon path (relative path to your plugin folder)</param>
-        /// <param name="useMainWindowAsOwner">when true will use main windows as the owner</param>
-        void ShowMsg(string title, string subTitle, string iconPath, bool useMainWindowAsOwner = true);
+    /// <summary>
+    ///     Show message box
+    /// </summary>
+    /// <param name="title">Message title</param>
+    /// <param name="subTitle">Message subtitle</param>
+    /// <param name="iconPath">Message icon path (relative path to your plugin folder)</param>
+    /// <param name="useMainWindowAsOwner">when true will use main windows as the owner</param>
+    void ShowMsg(string title, string subTitle, string iconPath, bool useMainWindowAsOwner = true);
 
-        /// <summary>
-        /// Open setting dialog
-        /// </summary>
-        void OpenSettingDialog();
+    /// <summary>
+    ///     Open setting dialog
+    /// </summary>
+    void OpenSettingDialog();
 
-        /// <summary>
-        /// Install Wox plugin
-        /// </summary>
-        /// <param name="path">Plugin path (ends with .wox)</param>
-        void InstallPlugin(string path);
+    /// <summary>
+    ///     Install Wox plugin
+    /// </summary>
+    /// <param name="path">Plugin path (ends with .wox)</param>
+    void InstallPlugin(string path);
 
-        /// <summary>
-        /// Get translation of current language
-        /// You need to implement IPluginI18n if you want to support multiple languages for your plugin
-        /// </summary>
-        /// <param name="key"></param>
-        /// <returns></returns>
-        string GetTranslation(string key);
+    /// <summary>
+    ///     Get translation of current language
+    ///     You need to implement IPluginI18n if you want to support multiple languages for your plugin
+    /// </summary>
+    /// <param name="key"></param>
+    /// <returns></returns>
+    string GetTranslation(string key);
 
-        /// <summary>
-        /// Get all loaded plugins 
-        /// </summary>
-        /// <returns></returns>
-        List<PluginPair> GetAllPlugins();
-    }
+    /// <summary>
+    ///     Get all loaded plugins
+    /// </summary>
+    /// <returns></returns>
+    List<PluginMetadata> GetAllPlugins();
 }

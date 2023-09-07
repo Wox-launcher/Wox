@@ -1,14 +1,20 @@
-using System;
+namespace Wox.Plugin;
 
-namespace Wox.Plugin
+public class PluginInitContext
 {
-    public class PluginInitContext
+    public PluginInitContext(PluginMetadata pluginMetadata, IPublicAPI api)
     {
-        public PluginMetadata CurrentPluginMetadata { get; internal set; }
-
-        /// <summary>
-        /// Public APIs for plugin invocation
-        /// </summary>
-        public IPublicAPI API { get; set; }
+        PluginMetadata = pluginMetadata;
+        API = api;
     }
+
+    /// <summary>
+    ///     Plugin metadata
+    /// </summary>
+    public PluginMetadata PluginMetadata { get; }
+
+    /// <summary>
+    ///     Public APIs for plugin invocation
+    /// </summary>
+    public IPublicAPI API { get; }
 }

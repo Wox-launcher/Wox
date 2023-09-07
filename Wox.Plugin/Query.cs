@@ -1,88 +1,41 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
+namespace Wox.Plugin;
 
-namespace Wox.Plugin
+/// <summary>
+///     Query from Wox. See <see href="Doc/Query.md" /> for details.
+/// </summary>
+public class Query
 {
-    public class Query
+    public Query(string rawQuery, string triggerKeyword, string command, string search)
     {
-        internal Query() { }
+        RawQuery = rawQuery;
+        TriggerKeyword = triggerKeyword;
+        Command = command;
+        Search = search;
+    }
 
-        /// <summary>
-        /// Raw query, this includes action keyword if it has
-        /// We didn't recommend use this property directly. You should always use Search property.
-        /// </summary>
-        public string RawQuery { get; internal set; }
+    /// <summary>
+    ///     Raw query, this includes trigger keyword if it has
+    ///     We didn't recommend use this property directly. You should always use Search property.
+    /// </summary>
+    public string RawQuery { get; }
 
-        /// <summary>
-        /// Search part of a query.
-        /// This will not include action keyword if exclusive plugin gets it, otherwise it should be same as RawQuery.
-        /// Since we allow user to switch a exclusive plugin to generic plugin, 
-        /// so this property will always give you the "real" query part of the query
-        /// </summary>
-        public string Search { get; internal set; }
+    /// <summary>
+    ///     Trigger keyword of a query. It can be empty if user is using global trigger keyword.
+    /// </summary>
+    public string TriggerKeyword { get; }
 
-        /// <summary>
-        /// The raw query splited into a string array.
-        /// </summary>
-        public string[] Terms { get; set; }
+    /// <summary>
+    ///     Command part of a query.
+    /// </summary>
+    public string Command { get; }
 
-        /// <summary>
-        /// Query can be splited into multiple terms by whitespace
-        /// </summary>
-        public const string TermSeperater = " ";
-        
-        /// <summary>
-        /// User can set multiple action keywords seperated by ';'
-        /// </summary>
-        public const string ActionKeywordSeperater = ";";
+    /// <summary>
+    ///     Search part of a query.
+    /// </summary>
+    public string Search { get; }
 
-        /// <summary>
-        /// '*' is used for System Plugin
-        /// </summary>
-        public const string GlobalPluginWildcardSign = "*";
-
-        public string ActionKeyword { get; set; }
-
-        /// <summary>
-        /// Return first search split by space if it has
-        /// </summary>
-        public string FirstSearch => SplitSearch(0);
-
-        /// <summary>
-        /// strings from second search (including) to last search
-        /// </summary>
-        public string SecondToEndSearch
-        {
-            get
-            {
-                var index = string.IsNullOrEmpty(ActionKeyword) ? 1 : 2;
-                return string.Join(TermSeperater, Terms.Skip(index).ToArray());
-            }
-        }
-
-        /// <summary>
-        /// Return second search split by space if it has
-        /// </summary>
-        public string SecondSearch => SplitSearch(1);
-
-        /// <summary>
-        /// Return third search split by space if it has
-        /// </summary>
-        public string ThirdSearch => SplitSearch(2);
-
-        private string SplitSearch(int index)
-        {
-            try
-            {
-                return string.IsNullOrEmpty(ActionKeyword) ? Terms[index] : Terms[index + 1];
-            }
-            catch (IndexOutOfRangeException)
-            {
-                return string.Empty;
-            }
-        }
-
-        public override string ToString() => RawQuery;
+    public override string ToString()
+    {
+        return RawQuery;
     }
 }

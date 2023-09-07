@@ -8,6 +8,9 @@ default:
     rm -rf Wox.Core/bin
     rm -rf Wox.Plugin/bin
 
+@test:
+    dotnet test --no-restore
+
 # build for different platforms, target can be: win-x64, linux-x64, osx-x64, osx-arm64, or all for all platforms
 @build target:
     if [ "{{target}}" = "all" ]; then \

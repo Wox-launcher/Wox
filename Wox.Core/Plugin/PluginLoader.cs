@@ -1,0 +1,119 @@
+﻿using System.Reflection;
+using System.Text.Json;
+using Wox.Core.Utils;
+using Wox.Plugin;
+
+namespace Wox.Core.Plugin;
+
+public static class PluginLoader
+{
+    public static List<PluginInstance> LoadPlugins()
+    {
+        Logger.Debug("Start to load plugins");
+        var pluginInstances = new List<PluginInstance>();
+
+        var pluginDirectories = DataLocation.PluginDirectories.SelectMany(Directory.GetDirectories);
+        foreach (var pluginDirectory in pluginDirectories)
+        {
+            var configPath = Path.Combine(pluginDirectory, "plugin.json");
+            if (!File.Exists(configPath))
+            {
+                Logger.Error($"Didn't find plugin config file {configPath}");
+                continue;
+            }
+
+            var metadata = ParsePluginMetadataFromDirectory(pluginDirectory);
+            if (metadata == null) continue;
+
+            IPlugin? plugin = null;
+            PluginAssemblyLoadContext? assemblyLoadContext = null;
+            var startLoadPluginTime = DateTime.Now;
+            if (metadata.Language.ToUpper() == AllowedLanguage.CSharp) (plugin, assemblyLoadContext) = LoadCSharpPlugin(metadata);
+
+            if (plugin == null) continue;
+
+            metadata.InitTime = DateTime.Now.Subtract(startLoadPluginTime).Milliseconds;
+            pluginInstances.Add(new PluginInstance(plugin, metadata, assemblyLoadContext));
+        }
+
+        return pluginInstances;
+    }
+
+    /// <summary>
+    ///     Parse plugin metadata in giving directory
+    /// </summary>
+    private static PluginMetadata? ParsePluginMetadataFromDirectory(string pluginDirectory)
+    {
+        Logger.Debug($"Start to parse plugin in {pluginDirectory}");
+        var configPath = Path.Combine(pluginDirectory, "plugin.json");
+        if (!File.Exists(configPath))
+        {
+            Logger.Error($"Didn't find plugin config file {configPath}");
+            return null;
+        }
+
+        try
+        {
+            var pluginJson = File.ReadAllText(configPath);
+            return ParsePluginMetadata(pluginJson);
+        }
+        catch (Exception e)
+        {
+            Logger.Error($"Read plugin.json failed {configPath}", e);
+            return null;
+        }
+    }
+
+    public static PluginMetadata? ParsePluginMetadata(string pluginJson)
+    {
+        PluginMetadata? metadata;
+        try
+        {
+            metadata = JsonSerializer.Deserialize<PluginMetadata>(pluginJson);
+            if (metadata == null)
+            {
+                Logger.Error($"Invalid json for plugin config {pluginJson}");
+                return null;
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.Error($"Invalid json for plugin config {pluginJson}", e);
+            return null;
+        }
+
+        if (metadata.TriggerKeywords.Count == 0)
+        {
+            Logger.Error($"Plugin {metadata.Name} didn't register any trigger keyword");
+            return null;
+        }
+
+        if (!AllowedLanguage.IsAllowed(metadata.Language))
+        {
+            Logger.Error($"Invalid language {metadata.Language} for plugin config");
+            return null;
+        }
+
+        return metadata;
+    }
+
+    private static (IPlugin?, PluginAssemblyLoadContext?) LoadCSharpPlugin(PluginMetadata metadata)
+    {
+        Logger.Debug($"Start to load csharp plugin {metadata.Name}");
+        try
+        {
+            var pluginLoadContext = new PluginAssemblyLoadContext(metadata.ExecuteFilePath);
+            var assembly = pluginLoadContext.LoadFromAssemblyName(new AssemblyName(Path.GetFileNameWithoutExtension(metadata.ExecuteFilePath)));
+            var type = assembly.GetTypes().FirstOrDefault(o => typeof(IPlugin).IsAssignableFrom(o));
+            if (type == null) return (null, null);
+            return (Activator.CreateInstance(type) as IPlugin, pluginLoadContext);
+        }
+        catch (Exception e)
+        {
+            Logger.Error($"Couldn't load assembly for csharp plugin {metadata.Name}", e);
+#if DEBUG
+            throw;
+#endif
+        }
+    }
+}

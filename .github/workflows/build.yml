@@ -15,6 +15,8 @@ jobs:
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: '7.x'
+      - name: Test
+        run: just test
       - name: Build
         run: just build all
       - name: Upload linux-x64 artifact
@@ -31,7 +33,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: wox-osx-x64.app
-          path: publish/wox-osx-x64.app/   
+          path: publish/wox-osx-x64.app/
       - name: Upload osx-arm64 artifact
         uses: actions/upload-artifact@v3
         with:

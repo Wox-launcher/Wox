@@ -6,6 +6,7 @@ public static class Logger
 {
     private static readonly ILogger SeriLogger = new LoggerConfiguration()
         .WriteTo.File(Path.Combine(DataLocation.LogDirectory, "log.txt"), rollOnFileSizeLimit: true, retainedFileCountLimit: 3, fileSizeLimitBytes: 1024 * 1024 * 100 /*100M*/)
+        .MinimumLevel.Debug()
         .CreateLogger();
 
     public static void Debug(string message)

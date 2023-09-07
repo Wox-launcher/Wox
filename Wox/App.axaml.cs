@@ -33,6 +33,6 @@ public class App : Application
     private void Bootstrap()
     {
         DataLocation.EnsureDirectoryExist();
-        PluginManager.LoadPlugins();
+        PluginManager.LoadPlugins(new PublicAPIInstance());
     }
 }
