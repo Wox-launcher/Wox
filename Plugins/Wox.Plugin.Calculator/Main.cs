@@ -26,7 +26,7 @@ public class Main : IPlugin
         MagesEngine = new Engine();
     }
 
-    private PluginInitContext Context { get; set; }
+    private PluginInitContext Context { get; set; } = null!;
 
     public void Init(PluginInitContext context)
     {
@@ -60,8 +60,8 @@ public class Main : IPlugin
                         Title = newResult,
                         IcoPath = "Images/calculator.png",
                         Score = 300,
-                        SubTitle = Context.API.GetTranslation("wox_plugin_calculator_copy_number_to_clipboard"),
-                        Action = c =>
+                        Description = Context.API.GetTranslation("wox_plugin_calculator_copy_number_to_clipboard"),
+                        Action = () =>
                         {
                             try
                             {

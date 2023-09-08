@@ -1,4 +1,5 @@
-﻿using Wox.Plugin;
+﻿using Wox.Core.Plugin;
+using Wox.Plugin;
 
 namespace Wox.Core;
 
@@ -8,7 +9,7 @@ public static class QueryBuilder
 {
     private const string TermSeparator = " ";
 
-    public static Query? Build(string text, Dictionary<TriggerKeyword, PluginMetadata> plugins)
+    public static Query? Build(string text, Dictionary<TriggerKeyword, PluginInstance> plugins)
     {
         // replace multiple white spaces with one white space
         var terms = text.Split(new[] { TermSeparator }, StringSplitOptions.RemoveEmptyEntries);
@@ -20,7 +21,7 @@ public static class QueryBuilder
         string triggerKeyword, command, search;
         var possibleTriggerKeyword = terms[0];
 
-        if (plugins.TryGetValue(possibleTriggerKeyword, out var pluginMetadata) && !pluginMetadata.Disabled)
+        if (plugins.TryGetValue(possibleTriggerKeyword, out var pluginInstance) && !pluginInstance.Disabled)
         {
             // non global trigger keyword
             triggerKeyword = possibleTriggerKeyword;
@@ -33,7 +34,7 @@ public static class QueryBuilder
             }
 
             var possibleCommand = terms[1];
-            if (pluginMetadata.Commands.Contains(possibleCommand))
+            if (pluginInstance.Metadata.Commands.Contains(possibleCommand))
             {
                 // command and search
                 command = possibleCommand;

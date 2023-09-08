@@ -10,7 +10,7 @@ public class Result
 
     public string? Description { get; init; }
 
-    public int? Score { get; init; }
+    public int Score { get; init; }
 
     public Func<HideAppAfterSelect>? Action { get; init; }
 }

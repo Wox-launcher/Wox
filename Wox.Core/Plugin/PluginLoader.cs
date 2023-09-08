@@ -25,15 +25,22 @@ public static class PluginLoader
             var metadata = ParsePluginMetadataFromDirectory(pluginDirectory);
             if (metadata == null) continue;
 
+
             IPlugin? plugin = null;
             PluginAssemblyLoadContext? assemblyLoadContext = null;
             // var startLoadPluginTime = DateTime.Now;
-            if (metadata.Language.ToUpper() == AllowedLanguage.CSharp) (plugin, assemblyLoadContext) = LoadCSharpPlugin(metadata);
+            if (metadata.Language.ToUpper() == AllowedLanguage.CSharp) (plugin, assemblyLoadContext) = LoadCSharpPlugin(metadata, pluginDirectory);
 
             if (plugin == null) continue;
 
             // metadata.InitTime = DateTime.Now.Subtract(startLoadPluginTime).Milliseconds;
-            pluginInstances.Add(new PluginInstance(plugin, metadata, assemblyLoadContext));
+            pluginInstances.Add(new PluginInstance
+            {
+                Metadata = metadata,
+                Plugin = plugin,
+                AssemblyLoadContext = assemblyLoadContext,
+                PluginDirectory = pluginDirectory
+            });
         }
 
         return pluginInstances;
@@ -100,13 +107,14 @@ public static class PluginLoader
         return metadata;
     }
 
-    private static (IPlugin?, PluginAssemblyLoadContext?) LoadCSharpPlugin(PluginMetadata metadata)
+    private static (IPlugin?, PluginAssemblyLoadContext?) LoadCSharpPlugin(PluginMetadata metadata, string pluginDirectory)
     {
         Logger.Debug($"Start to load csharp plugin {metadata.Name}");
         try
         {
-            var pluginLoadContext = new PluginAssemblyLoadContext(metadata.ExecuteFilePath);
-            var assembly = pluginLoadContext.LoadFromAssemblyName(new AssemblyName(Path.GetFileNameWithoutExtension(metadata.ExecuteFilePath)));
+            var executeFilePath = Path.Combine(pluginDirectory, metadata.ExecuteFileName);
+            var pluginLoadContext = new PluginAssemblyLoadContext(executeFilePath);
+            var assembly = pluginLoadContext.LoadFromAssemblyName(new AssemblyName(Path.GetFileNameWithoutExtension(executeFilePath)));
             var type = assembly.GetTypes().FirstOrDefault(o => typeof(IPlugin).IsAssignableFrom(o));
             if (type == null) return (null, null);
             return (Activator.CreateInstance(type) as IPlugin, pluginLoadContext);

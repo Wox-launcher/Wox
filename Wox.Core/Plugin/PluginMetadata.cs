@@ -1,24 +1,24 @@
 using System.Text.Json.Serialization;
+using Wox.Plugin;
 
-namespace Wox.Plugin;
+namespace Wox.Core.Plugin;
 
 public class PluginMetadata
 {
-    public required string Id { get; set; }
-    public required string Name { get; set; }
-    public required string Author { get; set; }
-    public required string Version { get; set; }
-    public required string Language { get; set; }
-    public required string Description { get; set; }
-    public required string IcoPath { get; set; }
-    public string Website { get; set; } = "";
-    public bool Disabled { get; set; }
-    public required string ExecuteFileName { get; set; }
-    public required List<string> TriggerKeywords { get; set; }
-    public List<string> Commands { get; set; } = new();
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public required string Author { get; init; }
+    public required string Version { get; init; }
+    public required string Language { get; init; }
+    public required string Description { get; init; }
+    public required string IcoPath { get; init; }
+    public string Website { get; init; } = "";
+    public required string ExecuteFileName { get; init; }
+    public required List<string> TriggerKeywords { get; init; }
+    public List<string> Commands { get; init; } = new();
 
     [JsonConverter(typeof(JsonPluginSupportedOSConverter))]
-    public required List<PluginSupportedOS> SupportedOS { get; set; }
+    public required List<PluginSupportedOS> SupportedOS { get; init; }
 
     public override string? ToString()
     {

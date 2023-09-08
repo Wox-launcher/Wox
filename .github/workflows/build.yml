@@ -1,9 +1,9 @@
 name: build
 
-#on:
-#  push:
-#    branches:
-#      - v2
+on:
+  push:
+    branches:
+      - v2
 
 jobs:
   build:

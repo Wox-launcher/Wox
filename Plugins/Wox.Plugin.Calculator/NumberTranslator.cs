@@ -30,7 +30,7 @@ public class NumberTranslator
     /// <param name="sourceCulture">source culture</param>
     /// <param name="targetCulture">target culture</param>
     /// <returns></returns>
-    public static NumberTranslator Create(CultureInfo sourceCulture, CultureInfo targetCulture)
+    public static NumberTranslator? Create(CultureInfo sourceCulture, CultureInfo targetCulture)
     {
         var conversionRequired = sourceCulture.NumberFormat.NumberDecimalSeparator != targetCulture.NumberFormat.NumberDecimalSeparator
                                  || sourceCulture.NumberFormat.PercentGroupSeparator != targetCulture.NumberFormat.PercentGroupSeparator

@@ -1,32 +1,40 @@
 ﻿using NUnit.Framework;
 using Wox.Core;
+using Wox.Core.Plugin;
 using Wox.Plugin;
 
 namespace Wox.Test;
 
 public class QueryBuilderTest
 {
-    private Dictionary<string, PluginMetadata> GeneratePlugins(List<string> triggerKeywords, List<string> commands)
+    private Dictionary<string, PluginInstance> GeneratePlugins(List<string> triggerKeywords, List<string> commands)
     {
-        return new Dictionary<string, PluginMetadata>
+        return new Dictionary<string, PluginInstance>
         {
             {
-                triggerKeywords[0], new PluginMetadata
+                triggerKeywords[0], new PluginInstance
                 {
-                    TriggerKeywords = triggerKeywords,
-                    Commands = commands,
-                    Id = Guid.NewGuid().ToString(),
-                    Name = Guid.NewGuid().ToString(),
-                    Author = Guid.NewGuid().ToString(),
-                    Version = Guid.NewGuid().ToString(),
-                    Language = AllowedLanguage.CSharp,
-                    Description = Guid.NewGuid().ToString(),
-                    Website = Guid.NewGuid().ToString(),
+                    Metadata = new PluginMetadata
+                    {
+                        TriggerKeywords = triggerKeywords,
+                        Commands = commands,
+                        Id = Guid.NewGuid().ToString(),
+                        Name = Guid.NewGuid().ToString(),
+                        Author = Guid.NewGuid().ToString(),
+                        Version = Guid.NewGuid().ToString(),
+                        Language = AllowedLanguage.CSharp,
+                        Description = Guid.NewGuid().ToString(),
+                        Website = Guid.NewGuid().ToString(),
+                        ExecuteFileName = Guid.NewGuid().ToString(),
+                        IcoPath = Guid.NewGuid().ToString(),
+                        SupportedOS = new List<PluginSupportedOS>
+                        {
+                            PluginSupportedOS.Macos
+                        }
+                    },
                     Disabled = false,
-                    ExecuteFileName = Guid.NewGuid().ToString(),
-                    IcoPath = Guid.NewGuid().ToString(),
-                    KeepResultRawScore = false,
-                    SupportedOS = new List<PluginSupportedOS> { PluginSupportedOS.Macos }
+                    Plugin = null,
+                    PluginDirectory = ""
                 }
             }
         };
