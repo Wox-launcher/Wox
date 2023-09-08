@@ -29,7 +29,7 @@ public static class PluginLoader
             IPlugin? plugin = null;
             PluginAssemblyLoadContext? assemblyLoadContext = null;
             // var startLoadPluginTime = DateTime.Now;
-            if (metadata.Language.ToUpper() == AllowedLanguage.CSharp) (plugin, assemblyLoadContext) = LoadCSharpPlugin(metadata, pluginDirectory);
+            if (metadata.Runtime.ToUpper() == PluginRuntime.Dotnet) (plugin, assemblyLoadContext) = LoadCSharpPlugin(metadata, pluginDirectory);
 
             if (plugin == null) continue;
 
@@ -98,9 +98,9 @@ public static class PluginLoader
             return null;
         }
 
-        if (!AllowedLanguage.IsAllowed(metadata.Language))
+        if (!PluginRuntime.IsAllowed(metadata.Runtime))
         {
-            Logger.Error($"Invalid language {metadata.Language} for plugin config");
+            Logger.Error($"Invalid language {metadata.Runtime} for plugin config");
             return null;
         }
 
@@ -112,7 +112,7 @@ public static class PluginLoader
         Logger.Debug($"Start to load csharp plugin {metadata.Name}");
         try
         {
-            var executeFilePath = Path.Combine(pluginDirectory, metadata.ExecuteFileName);
+            var executeFilePath = Path.Combine(pluginDirectory, metadata.EntryFile);
             var pluginLoadContext = new PluginAssemblyLoadContext(executeFilePath);
             var assembly = pluginLoadContext.LoadFromAssemblyName(new AssemblyName(Path.GetFileNameWithoutExtension(executeFilePath)));
             var type = assembly.GetTypes().FirstOrDefault(o => typeof(IPlugin).IsAssignableFrom(o));

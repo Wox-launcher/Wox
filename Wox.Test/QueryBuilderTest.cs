@@ -1,7 +1,6 @@
 ﻿using NUnit.Framework;
 using Wox.Core;
 using Wox.Core.Plugin;
-using Wox.Plugin;
 
 namespace Wox.Test;
 
@@ -22,18 +21,17 @@ public class QueryBuilderTest
                         Name = Guid.NewGuid().ToString(),
                         Author = Guid.NewGuid().ToString(),
                         Version = Guid.NewGuid().ToString(),
-                        Language = AllowedLanguage.CSharp,
+                        Runtime = PluginRuntime.Dotnet,
                         Description = Guid.NewGuid().ToString(),
                         Website = Guid.NewGuid().ToString(),
-                        ExecuteFileName = Guid.NewGuid().ToString(),
-                        IcoPath = Guid.NewGuid().ToString(),
-                        SupportedOS = new List<PluginSupportedOS>
+                        EntryFile = Guid.NewGuid().ToString(),
+                        Icon = Guid.NewGuid().ToString(),
+                        SupportedOS = new List<string>
                         {
                             PluginSupportedOS.Macos
                         }
                     },
-                    Disabled = false,
-                    Plugin = null,
+                    Plugin = null!,
                     PluginDirectory = ""
                 }
             }

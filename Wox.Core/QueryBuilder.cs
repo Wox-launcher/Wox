@@ -21,7 +21,7 @@ public static class QueryBuilder
         string triggerKeyword, command, search;
         var possibleTriggerKeyword = terms[0];
 
-        if (plugins.TryGetValue(possibleTriggerKeyword, out var pluginInstance) && !pluginInstance.Disabled)
+        if (plugins.TryGetValue(possibleTriggerKeyword, out var pluginInstance) && !pluginInstance.CommonSetting.Disabled)
         {
             // non global trigger keyword
             triggerKeyword = possibleTriggerKeyword;

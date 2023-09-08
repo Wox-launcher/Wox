@@ -54,10 +54,10 @@ public static class PluginManager
 
     public static List<PluginQueryResult> QueryForPlugin(PluginInstance plugin, Query query)
     {
-        if (plugin.Disabled) return new List<PluginQueryResult>();
+        if (plugin.CommonSetting.Disabled) return new List<PluginQueryResult>();
 
         var validGlobalQuery = string.IsNullOrEmpty(query.TriggerKeyword);
-        var validNonGlobalQuery = plugin.Metadata.TriggerKeywords.Contains(query.TriggerKeyword);
+        var validNonGlobalQuery = plugin.Metadata.TriggerKeywords.Contains(query.TriggerKeyword ?? string.Empty);
         if (!validGlobalQuery && !validNonGlobalQuery) return new List<PluginQueryResult>();
 
         try
