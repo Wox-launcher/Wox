@@ -124,6 +124,8 @@ public static class PluginLoader
             Logger.Error($"Couldn't load assembly for csharp plugin {metadata.Name}", e);
 #if DEBUG
             throw;
+#else
+            return (null, null);
 #endif
         }
     }
