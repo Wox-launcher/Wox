@@ -13,6 +13,6 @@ public class PluginLoaderTest
 
         Assert.That(pluginMetadata, Is.Not.Null);
         Assert.That(pluginMetadata!.Name, Is.EqualTo("Calculator"));
-        Assert.That(pluginMetadata.Runtime.ToUpper(), Is.EqualTo(PluginRuntime.Dotnet));
+        Assert.That(pluginMetadata.Runtime.ToUpper(), Is.EqualTo(PluginRuntime.Dotnet.ToUpper()));
     }
 }

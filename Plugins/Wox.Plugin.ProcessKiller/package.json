@@ -1,0 +1,29 @@
+{
+  "name": "Wox Process Killer",
+  "version": "1.0.0",
+  "description": "A Wox plugin to kill processes",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Wox-launcher/Wox.git"
+  },
+  "scripts": {
+    "build": "pnpm clean && ncc build src/index.ts -o dist",
+    "clean": "node -e \"var { rmdirSync, existsSync } = require('fs'), path = require('path'); ['./dist'].forEach(fPath => {if (existsSync(path.join(__dirname, fPath))) rmdirSync(path.join(__dirname, fPath), { recursive: true })}); process.exit(0);\"",
+    "clean:all": "npm run clean && (rm -r ./node_modules || true)",
+    "lint": "eslint --ext .ts --fix src/**/*.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.4.1",
+    "@types/ws": "^8.5.5",
+    "@typescript-eslint/eslint-plugin": "^6.6.0",
+    "@typescript-eslint/parser": "^6.6.0",
+    "@vercel/ncc": "^0.38.0",
+    "browserify": "^17.0.0",
+    "eslint": "^8.49.0",
+    "eslint-config-prettier": "9.0.0",
+    "prettier": "3.0.2",
+    "typescript": "^5.2.2"
+  },
+  "dependencies": {
+  }
+}

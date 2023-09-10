@@ -3,7 +3,6 @@
         xmlns:vm="using:Wox.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:views="clr-namespace:Wox.Views"
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="77"
         x:Class="Wox.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -11,35 +10,34 @@
         Width="800"
         Height="77"
         Icon="/Assets/avalonia-logo.ico"
-        Title="Wox"
-        >
+        Title="Wox">
 
     <Design.DataContext>
         <!-- This only sets the DataContext for the previewer in an IDE,
              to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
-        <vm:MainWindowViewModel/>
+        <vm:MainWindowViewModel />
     </Design.DataContext>
-    
+
     <Window.Styles>
         <Style Selector="Window">
-            <Setter Property="ExtendClientAreaToDecorationsHint" Value="True"></Setter>
-            <Setter Property="ExtendClientAreaChromeHints" Value="NoChrome"></Setter>
-            <Setter Property="ExtendClientAreaTitleBarHeightHint" Value="-1"></Setter>
-            <Setter Property="TransparencyLevelHint" Value="AcrylicBlur"></Setter>
-            <Setter Property="CanResize" Value="False"></Setter>
-            <Setter Property="Background" Value="Transparent"></Setter>
-            <Setter Property="BorderBrush" Value="Transparent"></Setter>
-            <Setter Property="BorderThickness" Value="0"></Setter>
-            <Setter Property="CornerRadius" Value="15"></Setter>
-            <Setter Property="ClipToBounds" Value="True"></Setter>
+            <Setter Property="ExtendClientAreaToDecorationsHint" Value="True" />
+            <Setter Property="ExtendClientAreaChromeHints" Value="NoChrome" />
+            <Setter Property="ExtendClientAreaTitleBarHeightHint" Value="-1" />
+            <Setter Property="TransparencyLevelHint" Value="AcrylicBlur" />
+            <Setter Property="CanResize" Value="False" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="15" />
+            <Setter Property="ClipToBounds" Value="True" />
         </Style>
     </Window.Styles>
-    
+
     <Window.KeyBindings>
-        <KeyBinding Gesture="Escape" Command="{Binding EscTrigger}" ></KeyBinding>
+        <KeyBinding Gesture="Escape" Command="{Binding EscTrigger}" />
     </Window.KeyBindings>
-    
-    
+
+
     <Grid>
         <ExperimentalAcrylicBorder IsHitTestVisible="False">
             <ExperimentalAcrylicBorder.Material>
@@ -50,15 +48,12 @@
                     MaterialOpacity="0.5" />
             </ExperimentalAcrylicBorder.Material>
         </ExperimentalAcrylicBorder>
-        
-        <TextBox Background="Black"   FontSize="36" Margin="10 0 0 0" Opacity="0.9" Width="700" Height="58" LineHeight="48" VerticalContentAlignment="Center" VerticalAlignment="Center" HorizontalAlignment="Left" BorderBrush="Transparent">
-        </TextBox>
-        
+
+        <TextBox Background="Black" FontSize="36" Margin="10 0 0 0" Opacity="0.9" Width="700" Height="58" LineHeight="48" VerticalContentAlignment="Center"
+                 VerticalAlignment="Center" HorizontalAlignment="Left" BorderBrush="Transparent" />
+
         <!-- <views:ResultListBox /> -->
     </Grid>
-    
-   
-      
-    
-    
+
+
 </Window>

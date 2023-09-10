@@ -1,8 +1,7 @@
 ﻿using Avalonia;
-using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Wox.Core;
-using Wox.Views;
+using Wox.Core.Plugin;
 
 namespace Wox.ViewModels;
 
@@ -17,9 +16,9 @@ public class MainWindowViewModel : ViewModelBase
             var woxMainWindow = ((IClassicDesktopStyleApplicationLifetime)Application.Current.ApplicationLifetime)
                 .MainWindow;
             if (woxMainWindow != null)
-            {
-                woxMainWindow.Close();
-            }
+                //woxMainWindow.Close();
+                foreach (var pluginInstance in PluginManager.GetAllPlugins())
+                    PluginManager.QueryForPlugin(pluginInstance, QueryBuilder.Build("wpm install x")!);
         }
     }
 }

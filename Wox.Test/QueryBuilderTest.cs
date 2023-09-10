@@ -6,34 +6,41 @@ namespace Wox.Test;
 
 public class QueryBuilderTest
 {
-    private Dictionary<string, PluginInstance> GeneratePlugins(List<string> triggerKeywords, List<string> commands)
+    private List<PluginInstance> GeneratePlugins(List<string> triggerKeywords, List<string> commands)
     {
-        return new Dictionary<string, PluginInstance>
+        return new List<PluginInstance>
         {
+            new()
             {
-                triggerKeywords[0], new PluginInstance
+                Metadata = new PluginMetadata
                 {
-                    Metadata = new PluginMetadata
+                    TriggerKeywords = triggerKeywords,
+                    Commands = commands,
+                    Id = Guid.NewGuid()
+                        .ToString(),
+                    Name = Guid.NewGuid()
+                        .ToString(),
+                    Author = Guid.NewGuid()
+                        .ToString(),
+                    Version = Guid.NewGuid()
+                        .ToString(),
+                    Runtime = PluginRuntime.Dotnet,
+                    Description = Guid.NewGuid()
+                        .ToString(),
+                    Website = Guid.NewGuid()
+                        .ToString(),
+                    Entry = Guid.NewGuid()
+                        .ToString(),
+                    Icon = Guid.NewGuid()
+                        .ToString(),
+                    SupportedOS = new List<string>
                     {
-                        TriggerKeywords = triggerKeywords,
-                        Commands = commands,
-                        Id = Guid.NewGuid().ToString(),
-                        Name = Guid.NewGuid().ToString(),
-                        Author = Guid.NewGuid().ToString(),
-                        Version = Guid.NewGuid().ToString(),
-                        Runtime = PluginRuntime.Dotnet,
-                        Description = Guid.NewGuid().ToString(),
-                        Website = Guid.NewGuid().ToString(),
-                        EntryFile = Guid.NewGuid().ToString(),
-                        Icon = Guid.NewGuid().ToString(),
-                        SupportedOS = new List<string>
-                        {
-                            PluginSupportedOS.Macos
-                        }
-                    },
-                    Plugin = null!,
-                    PluginDirectory = ""
-                }
+                        PluginSupportedOS.Macos
+                    }
+                },
+                Plugin = null!,
+                PluginDirectory = "",
+                PluginHost = null!
             }
         };
     }
@@ -51,7 +58,7 @@ public class QueryBuilderTest
                 "install"
             });
 
-        var q = QueryBuilder.Build("wpm install calculator", plugins);
+        var q = QueryBuilder.BuildByPlugins("wpm install calculator", plugins);
 
         Assert.That(q, Is.Not.Null);
         Assert.That(q!.TriggerKeyword, Is.EqualTo("wpm"));
@@ -72,7 +79,7 @@ public class QueryBuilderTest
                 "install"
             });
 
-        var q = QueryBuilder.Build("wpm   file.txt    file2 file3", plugins);
+        var q = QueryBuilder.BuildByPlugins("wpm   file.txt    file2 file3", plugins);
 
         Assert.That(q, Is.Not.Null);
         Assert.That(q!.Search, Is.EqualTo("file.txt file2 file3"));
@@ -88,7 +95,7 @@ public class QueryBuilderTest
             },
             new List<string>());
 
-        var q = QueryBuilder.Build("wpm file.txt    file2 file3", plugins);
+        var q = QueryBuilder.BuildByPlugins("wpm file.txt    file2 file3", plugins);
 
         Assert.That(q, Is.Not.Null);
         Assert.That(q!.TriggerKeyword, Is.Empty);

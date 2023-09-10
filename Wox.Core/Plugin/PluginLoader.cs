@@ -1,17 +1,23 @@
-﻿using System.Reflection;
-using System.Text.Json;
+﻿using System.Text.Json;
+using Wox.Core.Plugin.Host;
 using Wox.Core.Utils;
-using Wox.Plugin;
 
 namespace Wox.Core.Plugin;
 
 public static class PluginLoader
 {
-    public static List<PluginInstance> LoadPlugins()
+    private static List<PluginHostBase> PluginHosts { get; } = new()
+    {
+        new DotnetHost(),
+        new NodejsHost()
+    };
+
+    public static async Task<List<PluginInstance>> LoadPlugins()
     {
         Logger.Debug("Start to load plugins");
         var pluginInstances = new List<PluginInstance>();
 
+        Dictionary<string, List<(PluginMetadata, string)>> pluginMetadata = new();
         var pluginDirectories = DataLocation.PluginDirectories.SelectMany(Directory.GetDirectories);
         foreach (var pluginDirectory in pluginDirectories)
         {
@@ -25,22 +31,48 @@ public static class PluginLoader
             var metadata = ParsePluginMetadataFromDirectory(pluginDirectory);
             if (metadata == null) continue;
 
+            if (!pluginMetadata.ContainsKey(metadata.Runtime.ToUpper())) pluginMetadata[metadata.Runtime.ToUpper()] = new List<(PluginMetadata, string)>();
+            pluginMetadata[metadata.Runtime.ToUpper()].Add((metadata, pluginDirectory));
+        }
 
-            IPlugin? plugin = null;
-            PluginAssemblyLoadContext? assemblyLoadContext = null;
-            // var startLoadPluginTime = DateTime.Now;
-            if (metadata.Runtime.ToUpper() == PluginRuntime.Dotnet) (plugin, assemblyLoadContext) = LoadCSharpPlugin(metadata, pluginDirectory);
-
-            if (plugin == null) continue;
-
-            // metadata.InitTime = DateTime.Now.Subtract(startLoadPluginTime).Milliseconds;
-            pluginInstances.Add(new PluginInstance
+        foreach (var pluginRuntime in PluginRuntime.All)
+        {
+            Logger.Debug($"Start to load {pluginRuntime} plugins");
+            var pluginHost = PluginHosts.FirstOrDefault(o => o.PluginRuntime.ToUpper() == pluginRuntime.ToUpper());
+            if (pluginHost == null)
             {
-                Metadata = metadata,
-                Plugin = plugin,
-                AssemblyLoadContext = assemblyLoadContext,
-                PluginDirectory = pluginDirectory
-            });
+                Logger.Error($"There is no host for {pluginRuntime}");
+                continue;
+            }
+
+            try
+            {
+                Logger.Debug($"Start to start {pluginHost.PluginRuntime} plugin host");
+                await pluginHost.Start();
+            }
+            catch (Exception e)
+            {
+                Logger.Error($"Failed to start {pluginHost.PluginRuntime} plugin host", e);
+            }
+
+            pluginMetadata.TryGetValue(pluginRuntime.ToUpper(), out var metadataInfos);
+            if (metadataInfos == null) continue;
+
+            foreach (var (metadata, pluginDirectory) in metadataInfos)
+            {
+                Logger.Debug($"Start to load {metadata.Runtime} plugin: {metadata.Name}");
+                var plugin = pluginHost.LoadPlugin(metadata, pluginDirectory);
+                if (plugin == null) continue;
+
+                var pluginInstance = new PluginInstance
+                {
+                    Metadata = metadata,
+                    Plugin = plugin,
+                    PluginDirectory = pluginDirectory,
+                    PluginHost = pluginHost
+                };
+                pluginInstances.Add(pluginInstance);
+            }
         }
 
         return pluginInstances;
@@ -51,7 +83,7 @@ public static class PluginLoader
     /// </summary>
     private static PluginMetadata? ParsePluginMetadataFromDirectory(string pluginDirectory)
     {
-        Logger.Debug($"Start to parse plugin in {pluginDirectory}");
+        Logger.Debug($"Start to parse plugin metadata in {pluginDirectory}");
         var configPath = Path.Combine(pluginDirectory, "plugin.json");
         if (!File.Exists(configPath))
         {
@@ -100,33 +132,10 @@ public static class PluginLoader
 
         if (!PluginRuntime.IsAllowed(metadata.Runtime))
         {
-            Logger.Error($"Invalid language {metadata.Runtime} for plugin config");
+            Logger.Error($"Invalid runtime {metadata.Runtime} for plugin config");
             return null;
         }
 
         return metadata;
-    }
-
-    private static (IPlugin?, PluginAssemblyLoadContext?) LoadCSharpPlugin(PluginMetadata metadata, string pluginDirectory)
-    {
-        Logger.Debug($"Start to load csharp plugin {metadata.Name}");
-        try
-        {
-            var executeFilePath = Path.Combine(pluginDirectory, metadata.EntryFile);
-            var pluginLoadContext = new PluginAssemblyLoadContext(executeFilePath);
-            var assembly = pluginLoadContext.LoadFromAssemblyName(new AssemblyName(Path.GetFileNameWithoutExtension(executeFilePath)));
-            var type = assembly.GetTypes().FirstOrDefault(o => typeof(IPlugin).IsAssignableFrom(o));
-            if (type == null) return (null, null);
-            return (Activator.CreateInstance(type) as IPlugin, pluginLoadContext);
-        }
-        catch (Exception e)
-        {
-            Logger.Error($"Couldn't load assembly for csharp plugin {metadata.Name}", e);
-#if DEBUG
-            throw;
-#else
-            return (null, null);
-#endif
-        }
     }
 }

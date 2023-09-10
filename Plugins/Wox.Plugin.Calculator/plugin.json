@@ -7,10 +7,10 @@
   "Description": "Provide mathematical calculations.(Try 5*3-2 in Wox)",
   "Author": "cxfksword",
   "Version": "1.0.0",
-  "Language": "csharp",
+  "Runtime": "dotnet",
   "Website": "https://github.com/Wox-launcher/Wox",
-  "ExecuteFileName": "Wox.Plugin.Calculator.dll",
-  "IcoPath": "Images\\calculator.png",
+  "Entry": "Wox.Plugin.Calculator.dll",
+  "Icon": "relative:Images\\calculator.png",
   "SupportedOS": [
     "WINDOWS",
     "LINUX",

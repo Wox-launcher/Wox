@@ -9,7 +9,12 @@ public static class QueryBuilder
 {
     private const string TermSeparator = " ";
 
-    public static Query? Build(string text, Dictionary<TriggerKeyword, PluginInstance> plugins)
+    public static Query? Build(string text)
+    {
+        return BuildByPlugins(text, PluginManager.GetAllPlugins());
+    }
+
+    public static Query? BuildByPlugins(string text, List<PluginInstance> pluginInstances)
     {
         // replace multiple white spaces with one white space
         var terms = text.Split(new[] { TermSeparator }, StringSplitOptions.RemoveEmptyEntries);
@@ -21,7 +26,8 @@ public static class QueryBuilder
         string triggerKeyword, command, search;
         var possibleTriggerKeyword = terms[0];
 
-        if (plugins.TryGetValue(possibleTriggerKeyword, out var pluginInstance) && !pluginInstance.CommonSetting.Disabled)
+        var pluginInstance = pluginInstances.FirstOrDefault(o => o.TriggerKeywords.Contains(possibleTriggerKeyword) && !o.CommonSetting.Disabled);
+        if (pluginInstance != null)
         {
             // non global trigger keyword
             triggerKeyword = possibleTriggerKeyword;

@@ -1,8 +1,10 @@
+using System;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Wox.Core;
 using Wox.Core.Plugin;
+using Wox.Core.Utils;
 using Wox.ViewModels;
 using Wox.Views;
 
@@ -34,6 +36,17 @@ public class App : Application
     private void Bootstrap()
     {
         DataLocation.EnsureDirectoryExist();
-        PluginManager.LoadPlugins(new PublicAPIInstance());
+        Logger.Info("---------------------------");
+        Logger.Info("Bootstrap Wox");
+        Logger.Info($"CLR version: {Environment.Version}");
+#if DEBUG
+        Logger.Info("Run Mode: Debug");
+#else
+        Logger.Info("Run Mode: Release");
+#endif
+
+        PluginManager.LoadPlugins(new PublicAPIInstance()).Wait();
+
+        Logger.Info("Finish bootstrap");
     }
 }

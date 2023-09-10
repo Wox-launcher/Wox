@@ -3,6 +3,7 @@ namespace Wox.Core;
 public static class DataLocation
 {
     public static readonly string LogDirectory = Path.Combine(DataDirectory, "logs");
+    private static readonly string PluginHostDirectory = Path.Combine(DataDirectory, "hosts");
     private static readonly string UserInstalledPluginsDirectory = Path.Combine(DataDirectory, "plugins");
     private static readonly string SystemBundledPluginsDirectory = Path.Combine(AppContext.BaseDirectory, "plugins");
 
@@ -16,6 +17,21 @@ public static class DataLocation
         UserInstalledPluginsDirectory,
         SystemBundledPluginsDirectory
     };
+
+    /// <summary>
+    ///     Entry file path for nodejs host
+    /// </summary>
+    public static string NodejsHostEntry
+    {
+        get
+        {
+#if DEBUG
+            return Path.Combine(AppContext.BaseDirectory, "../../../Wox.Plugin.Host.Nodejs", "dist", "index.js");
+#else
+            return Path.Combine(PluginHostDirectory, "node.js");
+#endif
+        }
+    }
 
     /// <summary>
     ///     Places for storing plugins, configs and etc
@@ -40,5 +56,6 @@ public static class DataLocation
         if (!Directory.Exists(DataDirectory)) Directory.CreateDirectory(DataDirectory);
         if (!Directory.Exists(UserInstalledPluginsDirectory)) Directory.CreateDirectory(UserInstalledPluginsDirectory);
         if (!Directory.Exists(LogDirectory)) Directory.CreateDirectory(LogDirectory);
+        if (!Directory.Exists(PluginHostDirectory)) Directory.CreateDirectory(PluginHostDirectory);
     }
 }

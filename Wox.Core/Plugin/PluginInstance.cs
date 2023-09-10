@@ -1,3 +1,4 @@
+using Wox.Core.Plugin.Host;
 using Wox.Plugin;
 
 namespace Wox.Core.Plugin;
@@ -40,10 +41,9 @@ public class PluginInstance
     public Dictionary<string, string>? PluginSpecificSetting { get; set; } = null;
 
     /// <summary>
-    ///     For dotnet plugins, we load them in a separate AssemblyLoadContext, so we need hold a reference to unload it later
+    ///     Plugin host to run this plugin
     /// </summary>
-    public PluginAssemblyLoadContext? AssemblyLoadContext { get; init; }
-
+    public required IPluginHost PluginHost { get; init; }
 
     public override string ToString()
     {

@@ -15,17 +15,17 @@ public static class PluginManager
         return _pluginInstances;
     }
 
-
-    public static void LoadPlugins(IPublicAPI api)
+    public static async Task LoadPlugins(IPublicAPI api)
     {
-        _pluginInstances = PluginLoader.LoadPlugins();
+        _pluginInstances = await PluginLoader.LoadPlugins();
         InitPlugins(api);
     }
 
     private static void UnloadPlugin(PluginInstance plugin, string reason)
     {
-        Logger.Info($"Plugin {plugin.Metadata.Name} was unloaded because {reason}");
+        plugin.PluginHost.UnloadPlugin(plugin.Metadata);
         _pluginInstances.Remove(plugin);
+        Logger.Info($"Plugin {plugin.Metadata.Name} was unloaded because {reason}");
     }
 
     private static void InitPlugins(IPublicAPI api)
@@ -54,6 +54,7 @@ public static class PluginManager
 
     public static List<PluginQueryResult> QueryForPlugin(PluginInstance plugin, Query query)
     {
+        Logger.Debug($"Query for plugin {plugin.Metadata.Name} with query: {query}");
         if (plugin.CommonSetting.Disabled) return new List<PluginQueryResult>();
 
         var validGlobalQuery = string.IsNullOrEmpty(query.TriggerKeyword);

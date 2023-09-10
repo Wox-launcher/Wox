@@ -15,13 +15,13 @@ public class PluginMetadata
 
     public required string Icon { get; init; }
     public string Website { get; init; } = "";
-    public required string EntryFile { get; init; }
+    public required string Entry { get; init; }
 
     /// <summary>
     ///     User can add/update/delete trigger keywords
     ///     So don't use this property directly, use <see cref="PluginInstance.TriggerKeywords" /> instead
     /// </summary>
-    public required List<string> TriggerKeywords { internal get; init; }
+    public required List<string> TriggerKeywords { get; init; }
 
     public List<string> Commands { get; init; } = new();
 

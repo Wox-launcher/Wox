@@ -11,10 +11,10 @@ public static class PluginRuntime
 
     public static string Nodejs => "Nodejs";
 
+    public static List<string> All => new() { Python, Dotnet, Nodejs };
+
     public static bool IsAllowed(string runtime)
     {
-        return runtime.ToUpper() == Python.ToUpper()
-               || runtime.ToUpper() == Dotnet.ToUpper()
-               || runtime.ToUpper() == Nodejs.ToUpper();
+        return All.Select(o => o.ToUpper()).Contains(runtime.ToUpper());
     }
 }
