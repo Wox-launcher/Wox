@@ -5,19 +5,15 @@ Wox
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Wox-launcher/wox?include_prereleases)](https://github.com/Wox-launcher/Wox/releases)
 [![Github All Releases](https://img.shields.io/github/downloads/Wox-launcher/Wox/total.svg)](https://github.com/Wox-launcher/Wox/releases)
 
-
 **Wox** is a cross-platform launcher that simply works. It's an alternative to [Alfred](https://www.alfredapp.com/) and [Launchy](http://www.launchy.net/)
 
 Features
 --------
 
-- Search for applications, folders, files and more.
-- Use *pinyin* to search for programs / 支持用 **拼音** 搜索程序
-- Keyword plugin search `g search_term`
-- Search youtube, google, twitter and many more
-- Build custom themes at http://www.wox.one/theme/builder
-- Install plugins from http://www.wox.one/plugin
+- Search for applications, folders, files and more
+- Plenty of [Plugins]() and [Themes]()
 - Single executable file, no installation required
+- Develop plugins with Javascript, Python, C#
 
 Run
 ------------
@@ -45,8 +41,14 @@ Build
 - Install [just](https://github.com/casey/just)
 - Run `just build all`
 
+Development
+-----------
+
+- Run `just dev` to build dependencies and start Wox in development mode
+
 Documentation
 -------------
+
 - [Wiki](https://github.com/Wox-launcher/Wox/wiki)
 - Outdated doc: [Wox doc](http://doc.wox.one)
 - Just ask questions in [issues](https://github.com/Wox-launcher/Wox/issues) for now

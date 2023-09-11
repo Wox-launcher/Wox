@@ -1,33 +1,31 @@
 {
-  "name": "wox-plugin-host-nodejs",
-  "version": "1.0.0",
-  "description": "Wox nodejs host",
+  "name": "@wox-launcher/wox-plugin",
+  "version": "0.0.9",
+  "description": "All nodejs plugin for Wox should use types in this package",
   "repository": {
     "type": "git",
     "url": "https://github.com/Wox-launcher/Wox.git"
   },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "pnpm clean && ncc build src/index.ts -o dist",
+    "build": "pnpm clean && tsc",
     "clean": "node -e \"var { rmdirSync, existsSync } = require('fs'), path = require('path'); ['./dist'].forEach(fPath => {if (existsSync(path.join(__dirname, fPath))) rmdirSync(path.join(__dirname, fPath), { recursive: true })}); process.exit(0);\"",
     "clean:all": "npm run clean && (rm -r ./node_modules || true)",
-    "lint": "eslint --ext .ts --fix src/**/*.ts"
+    "lint": "eslint --ext .ts --fix src/**/*.ts",
+    "pub": "pnpm build && pnpm version patch && pnpm publish --no-git-checks --access public"
   },
   "devDependencies": {
-    "@types/node": "^20.4.1",
-    "@types/ws": "^8.5.5",
     "@typescript-eslint/eslint-plugin": "^6.6.0",
     "@typescript-eslint/parser": "^6.6.0",
-    "@vercel/ncc": "^0.38.0",
-    "browserify": "^17.0.0",
     "eslint": "^8.49.0",
     "eslint-config-prettier": "9.0.0",
     "prettier": "3.0.2",
     "typescript": "^5.2.2"
   },
-  "dependencies": {
-    "winston": "^3.10.0",
-    "winston-daily-rotate-file": "^4.7.1",
-    "ws": "^8.14.1",
-    "@wox-launcher/wox-plugin": "latest"
-  }
+  "dependencies": {}
 }

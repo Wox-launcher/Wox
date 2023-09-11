@@ -11,6 +11,9 @@ default:
 @test:
     dotnet test --no-restore
 
+@dev:
+    just _build_dev
+
 # build for different platforms, target can be: win-x64, linux-x64, osx-x64, osx-arm64, or all for all platforms, dev for development dependencies
 @build target:
     if [ "{{target}}" = "all" ]; then \

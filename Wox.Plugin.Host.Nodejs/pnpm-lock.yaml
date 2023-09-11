@@ -5,6 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 dependencies:
+  '@wox-launcher/wox-plugin':
+    specifier: latest
+    version: 0.0.9
   winston:
     specifier: ^3.10.0
     version: 3.10.0
@@ -302,6 +305,10 @@ packages:
     resolution: {integrity: sha512-B4YKZMm/EqMptKSFyAq4q2SlgJe+VCmEH6Y8gf/E1pTlWbsUJpuH1ymik2Ex3aYO5mCWwV1kaSYHSQOT8+4vHA==}
     hasBin: true
     dev: true
+
+  /@wox-launcher/wox-plugin@0.0.9:
+    resolution: {integrity: sha512-bKlTcjjNp8RAhv35HWUbcwo0291h889Zs/0WO+5NQkG+iceu5T0j6TGxgdboxtEBTFo+jbUbme209t43wJJO7Q==}
+    dev: false
 
   /JSONStream@1.3.5:
     resolution: {integrity: sha512-E+iruNOY8VV9s4JEbe1aNEm6MiszPRr/UfcHMz0TQh1BXSxHK+ASV1R6W4HpjBhSeS+54PIsAMCBmwD06LLsqQ==}

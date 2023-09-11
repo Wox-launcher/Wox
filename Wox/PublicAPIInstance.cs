@@ -25,6 +25,11 @@ public class PublicAPIInstance : IPublicAPI
         throw new NotImplementedException();
     }
 
+    public void Log(string msg)
+    {
+        throw new NotImplementedException();
+    }
+
     public string GetTranslation(string key)
     {
         throw new NotImplementedException();

@@ -1,0 +1,1 @@
+Nodejs Type Definition for Wox Plugin

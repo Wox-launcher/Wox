@@ -30,6 +30,11 @@ public interface IPublicAPI
     void ShowMsg(string title, string description = "", string iconPath = "");
 
     /// <summary>
+    ///     Write log
+    /// </summary>
+    void Log(string msg);
+
+    /// <summary>
     ///     Get translation of current language
     ///     You need to implement IPluginI18n if you want to support multiple languages for your plugin
     /// </summary>
