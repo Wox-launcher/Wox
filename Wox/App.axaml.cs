@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
@@ -27,13 +28,13 @@ public class App : Application
 
         base.OnFrameworkInitializationCompleted();
 
-        Bootstrap();
+        Task.Run(async () => { await Bootstrap().ConfigureAwait(false); });
     }
 
 
     /// <summary>
     /// </summary>
-    private void Bootstrap()
+    private async Task Bootstrap()
     {
         DataLocation.EnsureDirectoryExist();
         Logger.Info("---------------------------");
@@ -45,7 +46,7 @@ public class App : Application
         Logger.Info("Run Mode: Release");
 #endif
 
-        PluginManager.LoadPlugins(new PublicAPIInstance()).Wait();
+        await PluginManager.LoadPlugins(new PublicAPIInstance());
 
         Logger.Info("Finish bootstrap");
     }

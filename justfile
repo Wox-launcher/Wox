@@ -64,7 +64,7 @@ default:
 @_build_dotnet_plugin pluginName target:
     rm -rf Wox/plugins/{{pluginName}}
     # we need to put plugins into Wox/plugins folder, when Wox build single file, it will include all files in Wox/plugins folder
-    dotnet publish Plugins/{{pluginName}}/{{pluginName}}.csproj --configuration Release --output Wox/plugins/{{pluginName}} --runtime {{target}}
+    dotnet publish Plugins/{{pluginName}}/{{pluginName}}.csproj --configuration Release --output Wox/plugins/{{pluginName}} --runtime {{target}}    
     
 @_build_nodejs_plugin pluginName directory:
     rm -rf {{directory}}/{{pluginName}}
@@ -81,9 +81,14 @@ default:
     
 # build all dependencies for development in DEBUG mode    
 @_build_dev:
+    just _build_dev_dotnet_plugin Wox.Plugin.Calculator
     just _build_dev_nodejs_host
     just _build_nodejs_plugin Wox.Plugin.ProcessKiller Wox/bin/Debug/plugins
 
 @_build_dev_nodejs_host:
     cd Wox.Plugin.Host.Nodejs && pnpm install && pnpm run build && cd ..
     
+@_build_dev_dotnet_plugin pluginName:
+    rm -rf Wox/bin/Debug/plugins/{{pluginName}}
+    dotnet publish Plugins/{{pluginName}}/{{pluginName}}.csproj --configuration Release --output Wox/bin/Debug/plugins/{{pluginName}}
+        

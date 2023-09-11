@@ -1,23 +1,42 @@
-﻿using Avalonia;
+﻿using System;
+using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.ReactiveUI;
-using System;
+using Wox.Core.Utils;
 
 namespace Wox;
 
-class Program
+internal class Program
 {
     // Initialization code. Don't use any Avalonia, third-party APIs or any
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
     [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
+    public static void Main(string[] args)
+    {
+        try
+        {
+            TaskScheduler.UnobservedTaskException += (sender, e) =>
+            {
+                Logger.Error("Caught UnobservedTaskException", e.Exception);
+                e.SetObserved();
+            };
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+        catch (Exception e)
+        {
+            // here we can work with the exception, for example add it to our log file
+            Logger.Error("Failed to start Wox", e);
+            throw;
+        }
+    }
 
-    // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()
-        => AppBuilder.Configure<App>()
+    {
+        return AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace()
             .UseReactiveUI();
+    }
 }

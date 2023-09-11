@@ -10,8 +10,7 @@ namespace Wox.Core.Plugin.Host;
 public abstract class PluginHostBase : IPluginHost
 {
     private readonly CancellationTokenSource _cts = new();
-    private readonly TaskCompletionSource _tcs = new();
-    private WebsocketClient websocket = null!;
+    private WebsocketClient _websocket = null!;
 
     /// <summary>
     ///     Is this host started successfully
@@ -64,49 +63,56 @@ public abstract class PluginHostBase : IPluginHost
             throw new Exception($"Failed to start {fileName} plugin host, process is null");
         if (process.HasExited)
             throw new Exception($"Failed to start {fileName} plugin host, process has exited");
-
         _cts.Token.Register(() => process.Kill());
+
+        //wait a moment for plugin host to start websocket server
+        //if the websocket server didn't start within 500ms, then websocket client may failed to connect and will hence wait another 3 seconds to reconnect
+        await Task.Delay(500, _cts.Token);
 
         Logger.Debug($"Nodejs plugin host started, pid: {process.Id}, port: {websocketServerPort}");
 
-        StartWebsocketServerAsync(websocketServerPort.Value);
+        await StartWebsocketServerAsync(websocketServerPort.Value);
 
         Logger.Debug("Nodejs plugin host connected");
     }
 
-    private void StartWebsocketServerAsync(int websocketServerPort)
+    private async Task StartWebsocketServerAsync(int websocketServerPort)
     {
         Logger.Debug($"Start websocket server on port {websocketServerPort}");
 
-        var exitEvent = new ManualResetEvent(false);
-        websocket = new WebsocketClient(new Uri($"ws://localhost:{websocketServerPort}"));
-        websocket.ReconnectTimeout = TimeSpan.FromSeconds(30);
-        websocket.ReconnectionHappened.Subscribe(info =>
+        _websocket = new WebsocketClient(new Uri($"ws://localhost:{websocketServerPort}"));
+        var reconnectTimeout = TimeSpan.FromSeconds(3);
+        _websocket.ReconnectTimeout = reconnectTimeout;
+        _websocket.ErrorReconnectTimeout = reconnectTimeout;
+        _websocket.LostReconnectTimeout = reconnectTimeout;
+        _websocket.ReconnectionHappened.Subscribe(info =>
         {
-            if (info.Type == ReconnectionType.Initial) exitEvent.Set();
             Logger.Debug($"Reconnection happened, type: {info.Type}");
 
             //ping-pong 
             Task.Run(async () =>
             {
-                while (!_cts.IsCancellationRequested && websocket.IsRunning)
+                while (!_cts.IsCancellationRequested && _websocket.IsRunning)
                 {
-                    await Task.Delay(3000, _cts.Token);
-                    websocket.Send("ping");
+                    await Task.Delay(1000, _cts.Token);
+                    _websocket.Send("ping");
                 }
             });
         });
-        websocket.MessageReceived.Subscribe(msg => Logger.Debug($"Message received: {msg}"));
-        websocket.Start();
-        exitEvent.WaitOne();
+        _websocket.MessageReceived.Subscribe(msg => Logger.Debug($"Message received: {msg}"));
+
+        //try to connect, if websocket server is not ready, it will try to reconnect until success
+        //TOOD: what if websocket server is not started at all for some reason? add a timeout?
+        await _websocket.Start();
     }
 
     public async Task InvokeMethod(PluginMetadata metadata, string method, Dictionary<string, string?>? parameters = default)
     {
         parameters ??= new Dictionary<string, string?>();
         parameters["PluginId"] = metadata.Id;
+        parameters["PluginName"] = metadata.Id;
         Logger.Debug($"Invoke method {method} for plugin {metadata.Name}");
-        await websocket.SendInstant(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        await _websocket.SendInstant(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {
             method,
             parameters
