@@ -7,6 +7,7 @@
         x:Class="Wox.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         x:Name="WoxMainWindow"
+        Deactivated="WoxMainWindow_OnDeactivated"
         Width="800"
         Height="77"
         Icon="/Assets/avalonia-logo.ico"
@@ -34,7 +35,7 @@
     </Window.Styles>
 
     <Window.KeyBindings>
-        <KeyBinding Gesture="Escape" Command="{Binding EscTrigger}" />
+        <KeyBinding Gesture="Escape" Command="{Binding OnDeactivated}" />
     </Window.KeyBindings>
 
 
