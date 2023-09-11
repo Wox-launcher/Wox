@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Wox.Core;
@@ -49,5 +50,21 @@ public class App : Application
         await PluginManager.LoadPlugins(new PublicAPIInstance());
 
         Logger.Info("Finish bootstrap");
+    }
+
+    private void ToggleWindowState()
+    {
+        if (Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            if (desktop.MainWindow is MainWindow mainWindow)
+            {
+                mainWindow.Show();
+            }
+        }
+    }
+
+    private void TrayIcon_OnClicked(object? sender, EventArgs e)
+    {
+        ToggleWindowState();
     }
 }

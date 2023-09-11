@@ -18,8 +18,8 @@ public class MainWindowViewModel : ViewModelBase
             if (woxMainWindow != null)
             {
                 woxMainWindow.Hide();
-                foreach (var pluginInstance in PluginManager.GetAllPlugins())
-                    PluginManager.QueryForPlugin(pluginInstance, QueryBuilder.Build("wpm install x")!); 
+                // foreach (var pluginInstance in PluginManager.GetAllPlugins())
+                //     PluginManager.QueryForPlugin(pluginInstance, QueryBuilder.Build("wpm install x")!); 
             }
                 
         }

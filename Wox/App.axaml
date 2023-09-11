@@ -3,13 +3,28 @@
              x:Class="Wox.App"
              xmlns:local="using:Wox"
              RequestedThemeVariant="Default">
-             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+    <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
 
     <Application.DataTemplates>
-        <local:ViewLocator/>
+        <local:ViewLocator />
     </Application.DataTemplates>
-  
+
     <Application.Styles>
         <FluentTheme />
     </Application.Styles>
+
+    <TrayIcon.Icons>
+        <TrayIcons>
+            <TrayIcon Icon="/Assets/avalonia-logo.ico" ToolTipText="Wox">
+                <NativeMenu.Menu>
+                    <NativeMenu>
+                        <NativeMenuItem Header="Toggle Wox" Click="TrayIcon_OnClicked"/>
+                        <NativeMenuItemSeparator />
+                        <NativeMenuItem Header="Setting" />
+                        <NativeMenuItemSeparator />
+                    </NativeMenu>
+                </NativeMenu.Menu>
+            </TrayIcon>
+        </TrayIcons>
+    </TrayIcon.Icons>
 </Application>
