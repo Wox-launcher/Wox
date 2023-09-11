@@ -110,7 +110,7 @@ public abstract class PluginHostBase : IPluginHost
     {
         parameters ??= new Dictionary<string, string?>();
         parameters["PluginId"] = metadata.Id;
-        parameters["PluginName"] = metadata.Id;
+        parameters["PluginName"] = metadata.Name;
         Logger.Debug($"Invoke method {method} for plugin {metadata.Name}");
         await _websocket.SendInstant(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {

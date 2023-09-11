@@ -28,6 +28,6 @@ wss.on("connection", function connection(ws) {
       return
     }
 
-    handleMessage(JSON.parse(`${data}`) as JsonRPCMessage)
+    handleMessage(JSON.parse(`${data}`) as JsonRPCMessage).then(() => {})
   })
 })
