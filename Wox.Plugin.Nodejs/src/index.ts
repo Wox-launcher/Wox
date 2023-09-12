@@ -24,7 +24,7 @@ export interface Query {
 }
 
 export interface Result {
-  Id: string
+  Id?: string
   Title: string
   Description?: string
   IcoPath: string

@@ -1,7 +1,6 @@
 ﻿using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Wox.Core;
-using Wox.Core.Utils;
 
 namespace Wox.ViewModels;
 
@@ -15,11 +14,7 @@ public class MainWindowViewModel : ViewModelBase
         {
             var woxMainWindow = ((IClassicDesktopStyleApplicationLifetime)Application.Current.ApplicationLifetime)
                 .MainWindow;
-            if (woxMainWindow != null)
-            {
-                woxMainWindow.Hide();
-                Logger.Debug("deactivated");
-            }
+            if (woxMainWindow != null) woxMainWindow.Hide();
         }
     }
 }

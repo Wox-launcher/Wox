@@ -18,28 +18,37 @@ logger.info(`port: ${port}`)
 
 let lastHeartbeat = Date.now()
 setInterval(() => {
-  if (Date.now() - lastHeartbeat > 1000 * 60) {
-    logger.error("${hostId} heartbeat timeout, exit")
+  if (Date.now() - lastHeartbeat > 1000 * 60 * 3) {
+    logger.error(`${hostId} heartbeat timeout, exit`)
     process.exit(1)
   }
 }, 1000)
 
 const wss = new WebSocketServer({ port: Number.parseInt(port) })
 wss.on("connection", function connection(ws) {
-  ws.on("error", logger.info)
+  ws.on("error", function (error) {
+    logger.error(`[${hostId}] connection error: ${error.message}`)
+  })
+
+  ws.on("close", function close(code, reason) {
+    logger.info(`[${hostId}] connection closed, code: ${code}, reason: ${reason}`)
+  })
 
   ws.on("message", function message(data) {
-    lastHeartbeat = Date.now()
-    const msg = `${data}`
-    // logger.info(`receive message: ${msg}`)
+    try {
+      lastHeartbeat = Date.now()
+      const msg = `${data}`
+      logger.info(`receive message: ${msg}`)
 
-    if (msg.indexOf(PluginJsonRpcTypeResponse) >= 0) {
-      handleResponse(msg)
-    } else if (msg.indexOf(PluginJsonRpcTypeRequest) >= 0) {
-      handleRequest(msg)
-    } else {
-      logger.error(`unknown message type: ${msg}`)
-      return
+      if (msg.indexOf(PluginJsonRpcTypeResponse) >= 0) {
+        handleResponse(msg)
+      } else if (msg.indexOf(PluginJsonRpcTypeRequest) >= 0) {
+        handleRequest(msg)
+      } else {
+        logger.error(`unknown message type: ${msg}`)
+      }
+    } catch (e) {
+      logger.error(`receive and handle msg error: ${data}, err: ${e}`)
     }
   })
 
@@ -58,12 +67,18 @@ wss.on("connection", function connection(ws) {
     }
 
     if (jsonRpcRequest.Method === "ping") {
+      logger.error(`sending pong...`)
       ws.send(
         JSON.stringify({
           Id: jsonRpcRequest.Id,
           Method: jsonRpcRequest.Method,
           Type: PluginJsonRpcTypeResponse
-        } as PluginJsonRpcResponse)
+        } as PluginJsonRpcResponse),
+        (error?: Error) => {
+          if (error) {
+            logger.error(`[${jsonRpcRequest.PluginName}] send response failed: ${error.message}`)
+          }
+        }
       )
       return
     }
@@ -78,7 +93,12 @@ wss.on("connection", function connection(ws) {
           Type: PluginJsonRpcTypeResponse,
           Result: result
         }
-        ws.send(JSON.stringify(response))
+        logger.info(`[${jsonRpcRequest.PluginName}] handle request successfully: ${JSON.stringify(response)}, ${ws.readyState}`)
+        ws.send(JSON.stringify(response), (error?: Error) => {
+          if (error) {
+            logger.error(`[${jsonRpcRequest.PluginName}] send response failed: ${error.message}`)
+          }
+        })
       })
       .catch((error: Error) => {
         const response: PluginJsonRpcResponse = {
@@ -87,7 +107,12 @@ wss.on("connection", function connection(ws) {
           Type: PluginJsonRpcTypeResponse,
           Error: error.message
         }
-        ws.send(JSON.stringify(response))
+        logger.error(`[${jsonRpcRequest.PluginName}] handle request failed: ${error.message}`)
+        ws.send(JSON.stringify(response), (error?: Error) => {
+          if (error) {
+            logger.error(`[${jsonRpcRequest.PluginName}] send response failed: ${error.message}`)
+          }
+        })
       })
   }
 

@@ -1,9 +1,10 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using Websocket.Client;
+using WebSocketSharp;
 using Wox.Core.Utils;
 using Wox.Plugin;
+using Logger = Wox.Core.Utils.Logger;
 
 namespace Wox.Core.Plugin.Host;
 
@@ -11,7 +12,7 @@ public abstract class PluginHostBase : IPluginHost
 {
     private readonly CancellationTokenSource _cts = new();
     private readonly Dictionary<string, TaskCompletionSource<PluginJsonRpcResponse>> _invokeMethodTaskCompletes = new();
-    private WebsocketClient _websocket = null!;
+    private WebSocket _ws = null!;
 
     /// <summary>
     ///     Is this host started successfully
@@ -67,61 +68,44 @@ public abstract class PluginHostBase : IPluginHost
         _cts.Token.Register(() => process.Kill());
 
         //wait a moment for plugin host to start websocket server
-        //if the websocket server didn't start within 500ms, then websocket client may failed to connect and will hence wait another 3 seconds to reconnect
-        await Task.Delay(500, _cts.Token);
+        await Task.Delay(1000, _cts.Token);
 
         Logger.Debug($"Nodejs plugin host started, pid: {process.Id}, port: {websocketServerPort}");
 
-        await StartWebsocketServerAsync(websocketServerPort.Value);
+        StartWebsocketServerAsync(websocketServerPort.Value);
 
         Logger.Debug("Nodejs plugin host connected");
     }
 
-    private async Task StartWebsocketServerAsync(int websocketServerPort)
+    private void StartWebsocketServerAsync(int websocketServerPort)
     {
         Logger.Debug($"Start websocket server on port {websocketServerPort}");
 
-        _websocket = new WebsocketClient(new Uri($"ws://localhost:{websocketServerPort}"));
-        var reconnectTimeout = TimeSpan.FromSeconds(5);
-        var pingInterval = TimeSpan.FromSeconds(3);
-        _websocket.ReconnectTimeout = reconnectTimeout;
-        _websocket.ErrorReconnectTimeout = reconnectTimeout;
-        _websocket.LostReconnectTimeout = reconnectTimeout;
-        _websocket.ReconnectionHappened.Subscribe(info =>
+        _ws = new WebSocket($"ws://localhost:{websocketServerPort}");
+        _ws.Log.Output = (data, s) => { Logger.Debug($"[{PluginRuntime}] Websocket server log: {data}"); };
+        _ws.OnError += (sender, e) => { Logger.Error($"[{PluginRuntime}] Websocket server error: {e.Message}"); };
+        _ws.OnClose += (sender, e) => { Logger.Debug($"[{PluginRuntime}] Websocket server closed"); };
+        _ws.OnOpen += (sender, e) => { Logger.Debug($"[{PluginRuntime}] Websocket server connected"); };
+        _ws.OnMessage += (sender, e) => { Task.Run(() => { OnReceiveWebsocketMessage(e.Data); }); };
+        _ws.Connect();
+    }
+
+    private void OnReceiveWebsocketMessage(string msgStr)
+    {
+        try
         {
-            Logger.Debug($"Reconnection happened, type: {info.Type}");
-
-            //ping-pong 
-            Task.Run(async () =>
-            {
-                while (!_cts.IsCancellationRequested && _websocket.IsRunning)
-                {
-                    await Task.Delay(pingInterval, _cts.Token);
-                    await _websocket.SendInstant(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new PluginJsonRpcRequest
-                    {
-                        Method = "ping",
-                        PluginId = "",
-                        PluginName = "",
-                        Type = PluginJsonRpcType.Request
-                    })));
-                }
-            });
-        });
-        _websocket.MessageReceived.Subscribe(msg =>
-            {
-                var msgStr = msg.ToString();
-                if (msgStr.Contains(PluginJsonRpcType.Request))
-                    HandleRequestFromPlugin(msgStr);
-                else if (msgStr.Contains(PluginJsonRpcType.Response))
-                    HandleInvokeMethodResponse(msgStr);
-                else
-                    Logger.Error($"Invalid json rpc message type: {msgStr}");
-            }
-        );
-
-        //try to connect, if websocket server is not ready, it will try to reconnect until success
-        //TOOD: what if websocket server is not started at all for some reason? add a timeout?
-        await _websocket.Start();
+            Logger.Debug($"Received message: {msgStr}");
+            if (msgStr.Contains(PluginJsonRpcType.Request))
+                HandleRequestFromPlugin(msgStr);
+            else if (msgStr.Contains(PluginJsonRpcType.Response))
+                HandleInvokeMethodResponse(msgStr);
+            else
+                Logger.Error($"Invalid json rpc message type: {msgStr}");
+        }
+        catch (Exception exc)
+        {
+            Logger.Error($"Failed to handle websocket message {msgStr}", exc);
+        }
     }
 
     private void HandleInvokeMethodResponse(string msg)
@@ -183,10 +167,10 @@ public abstract class PluginHostBase : IPluginHost
         switch (request.Method)
         {
             case "HideApp":
-                Logger.Info($"[{request.PluginName}] plugin request to ${request.Method}");
+                Logger.Info($"[{request.PluginName}] plugin request to {request.Method}");
                 break;
             case "ShowApp":
-                Logger.Info($"[{request.PluginName}] plugin request to ${request.Method}");
+                Logger.Info($"[{request.PluginName}] plugin request to {request.Method}");
                 break;
             default:
                 Logger.Error($"Invalid json rpc request method {request.Method}");
@@ -194,7 +178,7 @@ public abstract class PluginHostBase : IPluginHost
         }
     }
 
-    public async Task InvokeMethod(PluginMetadata metadata, string method, Dictionary<string, string?>? parameters = default)
+    public async Task<JsonElement?> InvokeMethod(PluginMetadata metadata, string method, Dictionary<string, string?>? parameters = default)
     {
         var request = new PluginJsonRpcRequest
         {
@@ -211,10 +195,15 @@ public abstract class PluginHostBase : IPluginHost
         var tcs = new TaskCompletionSource<PluginJsonRpcResponse>();
         _invokeMethodTaskCompletes.Add(request.Id, tcs);
 
-        await _websocket.SendInstant(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request)));
+        _ws.Send(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request)));
         var result = await tcs.Task;
 
         sw.Stop();
         Logger.Debug($"[{request.PluginName}] invoke jsonrpc method {method} finished, request id: {request.Id}, time elapsed: {sw.ElapsedMilliseconds}ms");
+
+        if (result.Error != null)
+            throw new Exception($"[{request.PluginName}] invoke jsonrpc method {method} failed, error: {result.Error}");
+
+        return result.Result;
     }
 }

@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Wox.Core.Plugin.Host;
 
 public static class PluginJsonRpcType
@@ -30,5 +32,5 @@ public class PluginJsonRpcResponse
 
     public string? Error { get; set; }
 
-    public dynamic? Result { get; set; }
+    public JsonElement? Result { get; set; }
 }

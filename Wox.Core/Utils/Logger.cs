@@ -5,7 +5,12 @@ namespace Wox.Core.Utils;
 public static class Logger
 {
     private static readonly ILogger SeriLogger = new LoggerConfiguration()
-        .WriteTo.File(Path.Combine(DataLocation.LogDirectory, "log.txt"), rollOnFileSizeLimit: true, retainedFileCountLimit: 3, fileSizeLimitBytes: 1024 * 1024 * 100 /*100M*/)
+        .WriteTo.File(
+            Path.Combine(DataLocation.LogDirectory, "log.txt"),
+            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}",
+            rollOnFileSizeLimit: true,
+            retainedFileCountLimit: 3,
+            fileSizeLimitBytes: 1024 * 1024 * 100 /*100M*/)
         .MinimumLevel.Debug()
         .CreateLogger();
 

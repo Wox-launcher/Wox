@@ -31,7 +31,13 @@ public class DotnetHost : PluginHostBase
             var type = assembly.GetTypes().FirstOrDefault(o => typeof(IPlugin).IsAssignableFrom(o));
             if (type == null) return null;
             _pluginLoadContexts[metadata.Id] = pluginLoadContext;
-            return await Task.Run(() => Activator.CreateInstance(type) as IPlugin);
+            var rawIPlugin = Activator.CreateInstance(type) as IPlugin;
+            if (rawIPlugin == null) return null;
+
+            return await Task.Run(() => new DotnetPlugin
+            {
+                RawPlugin = rawIPlugin
+            });
         }
         catch (Exception e)
         {

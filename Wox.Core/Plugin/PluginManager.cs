@@ -25,7 +25,7 @@ public static class PluginManager
     {
         plugin.PluginHost.UnloadPlugin(plugin.Metadata);
         _pluginInstances.Remove(plugin);
-        Logger.Info($"Plugin {plugin.Metadata.Name} was unloaded because {reason}");
+        Logger.Info($"{plugin.Metadata.Name} plugin was unloaded because {reason}");
     }
 
     private static void InitPlugins(IPublicAPI api)
@@ -34,7 +34,7 @@ public static class PluginManager
         {
             try
             {
-                Logger.Debug($"Start to init plugin {pluginInstance.Metadata.Name}");
+                Logger.Debug($"[{pluginInstance.Metadata.Name}] Start to init plugin ");
                 var startTime = DateTime.Now;
                 pluginInstance.Plugin.Init(new PluginInitContext(api));
                 // pluginInstance.Metadata.InitTime += DateTime.Now.Subtract(startTime).Milliseconds;
@@ -45,7 +45,7 @@ public static class PluginManager
                 e.Data.Add(nameof(pluginInstance.Metadata.Id), pluginInstance.Metadata.Id);
                 e.Data.Add(nameof(pluginInstance.Metadata.Name), pluginInstance.Metadata.Name);
                 e.Data.Add(nameof(pluginInstance.Metadata.Website), pluginInstance.Metadata.Website);
-                Logger.Error($"Fail to init plugin: {pluginInstance.Metadata.Name}", e);
+                Logger.Error($"{pluginInstance.Metadata.Name} Fail to init plugin", e);
                 UnloadPlugin(pluginInstance, "failed to init");
                 //TODO: need someway to nicely tell user this plugin failed to load
             }
@@ -54,7 +54,7 @@ public static class PluginManager
 
     public static async Task<List<PluginQueryResult>> QueryForPlugin(PluginInstance plugin, Query query)
     {
-        Logger.Debug($"Query for plugin {plugin.Metadata.Name} with query: {query}");
+        Logger.Debug($"[{plugin.Metadata.Name}] start query: {query}");
         if (plugin.CommonSetting.Disabled) return new List<PluginQueryResult>();
 
         var validGlobalQuery = string.IsNullOrEmpty(query.TriggerKeyword);

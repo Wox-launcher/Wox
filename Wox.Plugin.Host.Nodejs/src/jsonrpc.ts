@@ -3,12 +3,18 @@ import path from "path"
 import { PluginAPI } from "./pluginAPI"
 import { Plugin, PluginInitContext, Query, Result } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
+import * as crypto from "crypto"
 
-const pluginMap = new Map<string, unknown>()
+const pluginMap = new Map<string, Plugin>()
 const actionCacheByPlugin = new Map<PluginJsonRpcRequest["PluginId"], Map<Result["Id"], Result["Action"]>>()
 
 export const PluginJsonRpcTypeRequest: string = "WOX_JSONRPC_REQUEST"
 export const PluginJsonRpcTypeResponse: string = "WOX_JSONRPC_RESPONSE"
+
+export interface WrappedResult {
+  Id: string
+  Result: Result
+}
 
 export interface PluginJsonRpcRequest {
   Id: string
@@ -54,26 +60,23 @@ async function loadPlugin(request: PluginJsonRpcRequest) {
   const entry = request.Params.Entry
   const modulePath = path.join(pluginDirectory, entry)
 
-  logger.info(`start to load plugin: ${modulePath}`)
-
   const module = await import(modulePath)
-  if (module["plugin"] === undefined) {
-    logger.error(`plugin doesn't export plugin object`)
+  if (module["plugin"] === undefined || module["plugin"] === null) {
+    logger.error(`[${request.PluginName}] plugin doesn't export plugin object`)
     return
   }
 
-  pluginMap.set(request.PluginId, module["plugin"])
+  logger.info(`[${request.PluginName}] load plugin successfully`)
+  pluginMap.set(request.PluginId, module["plugin"] as Plugin)
 }
 
 function getMethod<M extends keyof Plugin>(request: PluginJsonRpcRequest, methodName: M): Plugin[M] {
   const plugin = pluginMap.get(request.PluginId)
-  if (plugin === undefined) {
+  if (plugin === undefined || plugin === null) {
     logger.error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
     throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
   const method = plugin[methodName]
   if (method === undefined) {
     logger.info(`plugin method not found: ${request.PluginName}`)
@@ -85,7 +88,7 @@ function getMethod<M extends keyof Plugin>(request: PluginJsonRpcRequest, method
 
 async function initPlugin(request: PluginJsonRpcRequest, ws: WebSocket) {
   const init = getMethod(request, "init")
-  await init({ API: new PluginAPI(ws, request.PluginId, request.PluginName) } as PluginInitContext)
+  return init({ API: new PluginAPI(ws, request.PluginId, request.PluginName) } as PluginInitContext)
 }
 
 async function query(request: PluginJsonRpcRequest) {
@@ -102,23 +105,26 @@ async function query(request: PluginJsonRpcRequest) {
     Search: request.Params.Search
   } as Query)
 
-  // save result action for later use
   results.forEach(result => {
+    if (result.Id === undefined || result.Id === null) {
+      result.Id = crypto.randomUUID()
+    }
     actionCache.set(result.Id, result.Action)
   })
+
   return results
 }
 
 async function action(request: PluginJsonRpcRequest) {
   const pluginActionCache = actionCacheByPlugin.get(request.PluginId)
   if (pluginActionCache === undefined || pluginActionCache === null) {
-    logger.error(`plugin action cache not found: ${request.PluginName}`)
+    logger.error(`[${request.PluginName}] plugin action cache not found: ${request.PluginName}`)
     return
   }
 
   const pluginAction = pluginActionCache.get(request.Params.ActionId)
   if (pluginAction === undefined || pluginAction === null) {
-    logger.error(`plugin action not found: ${request.PluginName}`)
+    logger.error(`[${request.PluginName}] plugin action not found: ${request.PluginName}`)
     return
   }
 

@@ -6,8 +6,11 @@ settings:
 
 dependencies:
   '@wox-launcher/wox-plugin':
-    specifier: ^0.0.12
-    version: 0.0.12
+    specifier: ^0.0.14
+    version: 0.0.14
+  dayjs:
+    specifier: ^1.11.9
+    version: 1.11.9
   winston:
     specifier: ^3.10.0
     version: 3.10.0
@@ -313,8 +316,8 @@ packages:
     hasBin: true
     dev: true
 
-  /@wox-launcher/wox-plugin@0.0.12:
-    resolution: {integrity: sha512-aaq+Wp6ZKv9svGfQrlgXFQym1b5dTiSEm/mQtFYb9EH51A4KnwC241w4YWM2ztp6BDxBSp6TK/cz24oOOVv+tw==}
+  /@wox-launcher/wox-plugin@0.0.14:
+    resolution: {integrity: sha512-YB1Cq8Ny8XmvsA58B9B90ASc8cW2Dkdqog1RN0cbwMdVLDtmLbjKsEgIX8b9fkTxKhydFQ987BmcXSdpuQJS2A==}
     dev: false
 
   /JSONStream@1.3.5:
@@ -761,6 +764,10 @@ packages:
   /dash-ast@1.0.0:
     resolution: {integrity: sha512-Vy4dx7gquTeMcQR/hDkYLGUnwVil6vk4FOOct+djUnHOUWt+zJPJAaRIXaAFkPXtJjvlY7o3rfRu0/3hpnwoUA==}
     dev: true
+
+  /dayjs@1.11.9:
+    resolution: {integrity: sha512-QvzAURSbQ0pKdIye2txOzNaHmxtUBXerpY0FJsFXUMKbIZeFm5ht1LS/jFsrncjnmtv8HsG0W2g6c0zUjZWmpA==}
+    dev: false
 
   /debug@4.3.4:
     resolution: {integrity: sha512-PRWFHuSU3eDtQJPvnNY7Jcket1j0t5OuOsFzPPzsekD52Zl8qUfFIPEiswXqIvHWGVHOgX+7G/vCNNhehwxfkQ==}

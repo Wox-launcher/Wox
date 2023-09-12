@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Wox.Core.Utils;
 using Wox.Plugin;
 
 namespace Wox.Core.Plugin.Host;
@@ -14,7 +16,7 @@ public class NonDotnetPlugin : IPlugin
 
     public async Task<List<Result>> Query(Query query)
     {
-        await PluginHost.InvokeMethod(Metadata, "query", new Dictionary<string, string?>
+        var rawResults = await PluginHost.InvokeMethod(Metadata, "query", new Dictionary<string, string?>
         {
             { "RawQuery", query.RawQuery },
             { "TriggerKeyword", query.TriggerKeyword },
@@ -22,6 +24,29 @@ public class NonDotnetPlugin : IPlugin
             { "Search", query.Search }
         });
 
-        return new List<Result>();
+        if (!rawResults.HasValue)
+            return new List<Result>();
+
+        var results = rawResults.Value.Deserialize<List<Result>>();
+        if (results == null)
+        {
+            Logger.Error($"[{Metadata.Name}] Fail to deserialize query result");
+            return new List<Result>();
+        }
+
+        foreach (var result in results)
+            result.Action = () =>
+            {
+                var actionRawResult = PluginHost.InvokeMethod(Metadata, "action", new Dictionary<string, string?>
+                {
+                    { "ActionId", result.Id }
+                }).Result;
+                if (!actionRawResult.HasValue)
+                    return false;
+
+                return true;
+            };
+
+        return results;
     }
 }
