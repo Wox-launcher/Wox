@@ -6,6 +6,7 @@ export const plugin: Plugin = {
   init: (context: PluginInitContext) => {
     api = context.API
     api.Log("process killer initialized")
+    api.ShowApp()
   },
 
   query: (query: Query): Result[] => {

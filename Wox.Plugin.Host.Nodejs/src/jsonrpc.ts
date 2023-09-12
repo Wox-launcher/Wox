@@ -2,42 +2,53 @@ import { logger } from "./logger"
 import path from "path"
 import { PluginAPI } from "./pluginAPI"
 import { PluginInitContext, Query } from "@wox-launcher/wox-plugin"
+import { WebSocket } from "ws"
 
-const publicAPI = new PluginAPI()
 const pluginMap = new Map<string, unknown>()
 
-export interface JsonRPCMessage {
-  pluginID: string
-  pluginName: string
-  method: string
-  parameters: {
+export const PluginJsonRpcTypeRequest: string = "WOX_JSONRPC_REQUEST"
+export const PluginJsonRpcTypeResponse: string = "WOX_JSONRPC_RESPONSE"
+
+export interface PluginJsonRpcRequest {
+  Id: string
+  PluginId: string
+  PluginName: string
+  Type: string
+  Method: string
+  Params: {
     [key: string]: string
   }
 }
 
-export async function handleMessage(msg: JsonRPCMessage) {
-  const pluginName = msg.parameters.PluginName
+export interface PluginJsonRpcResponse {
+  Id: string
+  Method: string
+  Type: string
+  Error?: string
+  Result?: unknown
+}
 
-  logger.info(`[${pluginName}] invoke method: ${msg.method}, parameters: ${JSON.stringify(msg.parameters)}`)
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+export async function handleRequestMessage(request: PluginJsonRpcRequest, ws: WebSocket): unknown {
+  logger.info(`[${request.PluginName}] invoke method: ${request.Method}, parameters: ${JSON.stringify(request.Params)}`)
 
-  switch (msg.method) {
+  switch (request.Method) {
     case "loadPlugin":
-      await loadPlugin(msg)
-      break
+      return await loadPlugin(request)
     case "init":
-      initPlugin(msg)
-      break
+      return initPlugin(request, ws)
     case "query":
-      queryPlugin(msg)
-      break
+      return query(request)
     default:
-      logger.info(`unknown method handler: ${msg.method}`)
+      logger.info(`unknown method handler: ${request.Method}`)
+      throw new Error(`unknown method handler: ${request.Method}`)
   }
 }
 
-async function loadPlugin(msg: JsonRPCMessage) {
-  const pluginDirectory = msg.parameters.PluginDirectory
-  const entry = msg.parameters.Entry
+async function loadPlugin(request: PluginJsonRpcRequest) {
+  const pluginDirectory = request.Params.PluginDirectory
+  const entry = request.Params.Entry
   const modulePath = path.join(pluginDirectory, entry)
 
   logger.info(`start to load plugin: ${modulePath}`)
@@ -48,52 +59,38 @@ async function loadPlugin(msg: JsonRPCMessage) {
     return
   }
 
-  pluginMap.set(msg.pluginID, module["plugin"])
+  pluginMap.set(request.PluginId, module["plugin"])
 }
 
-function initPlugin(msg: JsonRPCMessage) {
-  const plugin = pluginMap.get(msg.parameters.pluginId)
+function getMethod(request: PluginJsonRpcRequest, methodName: string) {
+  const plugin = pluginMap.get(request.PluginId)
   if (plugin === undefined) {
-    logger.error(`plugin not found: ${msg.parameters.pluginName}, forget to load plugin?`)
-    return
+    logger.error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
   }
 
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
-  const init = plugin["init"]
-  if (init === undefined) {
-    logger.info(`plugin init method not found: ${msg.pluginID}`)
-    return
+  const method = plugin[methodName]
+  if (method === undefined) {
+    logger.info(`plugin method not found: ${request.PluginName}`)
+    throw new Error(`plugin method not found: ${request.PluginName}`)
   }
 
-  try {
-    init({ API: publicAPI } as PluginInitContext)
-  } catch (e) {
-    logger.error(`plugin init method error: ${e}`)
-  }
+  return method
 }
 
-function queryPlugin(msg: JsonRPCMessage) {
-  const plugin = pluginMap.get(msg.parameters.pluginId)
-  if (plugin === undefined) {
-    logger.error(`plugin not found: ${msg.parameters.pluginName}, forget to load plugin?`)
-    return
-  }
+async function initPlugin(request: PluginJsonRpcRequest, ws: WebSocket) {
+  const init = getMethod(request, "init")
+  init({ API: new PluginAPI(ws, request.PluginId, request.PluginName) } as PluginInitContext)
+}
 
-  // @ts-ignore
-  const query = plugin["query"]
-  if (query === undefined) {
-    logger.info(`plugin query method not found: ${msg.pluginID}`)
-    return
-  }
-
-  try {
-    query({
-      RawQuery: msg.parameters.RawQuery,
-      TriggerKeyword: msg.parameters.TriggerKeyword,
-      Command: msg.parameters.Command,
-      Search: msg.parameters.Search
-    } as Query)
-  } catch (e) {
-    logger.error(`plugin init method error: ${e}`)
-  }
+async function query(request: PluginJsonRpcRequest) {
+  const query = getMethod(request, "query")
+  query({
+    RawQuery: request.Params.RawQuery,
+    TriggerKeyword: request.Params.TriggerKeyword,
+    Command: request.Params.Command,
+    Search: request.Params.Search
+  } as Query)
 }

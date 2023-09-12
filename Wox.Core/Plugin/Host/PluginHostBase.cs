@@ -10,6 +10,7 @@ namespace Wox.Core.Plugin.Host;
 public abstract class PluginHostBase : IPluginHost
 {
     private readonly CancellationTokenSource _cts = new();
+    private readonly Dictionary<string, TaskCompletionSource<PluginJsonRpcResponse>> _invokeMethodTaskCompletes = new();
     private WebsocketClient _websocket = null!;
 
     /// <summary>
@@ -81,7 +82,8 @@ public abstract class PluginHostBase : IPluginHost
         Logger.Debug($"Start websocket server on port {websocketServerPort}");
 
         _websocket = new WebsocketClient(new Uri($"ws://localhost:{websocketServerPort}"));
-        var reconnectTimeout = TimeSpan.FromSeconds(3);
+        var reconnectTimeout = TimeSpan.FromSeconds(5);
+        var pingInterval = TimeSpan.FromSeconds(3);
         _websocket.ReconnectTimeout = reconnectTimeout;
         _websocket.ErrorReconnectTimeout = reconnectTimeout;
         _websocket.LostReconnectTimeout = reconnectTimeout;
@@ -94,29 +96,125 @@ public abstract class PluginHostBase : IPluginHost
             {
                 while (!_cts.IsCancellationRequested && _websocket.IsRunning)
                 {
-                    await Task.Delay(1000, _cts.Token);
-                    _websocket.Send("ping");
+                    await Task.Delay(pingInterval, _cts.Token);
+                    await _websocket.SendInstant(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new PluginJsonRpcRequest
+                    {
+                        Method = "ping",
+                        PluginId = "",
+                        PluginName = "",
+                        Type = PluginJsonRpcType.Request
+                    })));
                 }
             });
         });
-        _websocket.MessageReceived.Subscribe(msg => Logger.Debug($"Message received: {msg}"));
+        _websocket.MessageReceived.Subscribe(msg =>
+            {
+                var msgStr = msg.ToString();
+                if (msgStr.Contains(PluginJsonRpcType.Request))
+                    HandleRequestFromPlugin(msgStr);
+                else if (msgStr.Contains(PluginJsonRpcType.Response))
+                    HandleInvokeMethodResponse(msgStr);
+                else
+                    Logger.Error($"Invalid json rpc message type: {msgStr}");
+            }
+        );
 
         //try to connect, if websocket server is not ready, it will try to reconnect until success
         //TOOD: what if websocket server is not started at all for some reason? add a timeout?
         await _websocket.Start();
     }
 
+    private void HandleInvokeMethodResponse(string msg)
+    {
+        PluginJsonRpcResponse? response;
+        try
+        {
+            response = JsonSerializer.Deserialize<PluginJsonRpcResponse>(msg, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+            if (response == null)
+            {
+                Logger.Error($"Failed to deserialize json rpc response message {msg}");
+                return;
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.Error($"Failed to deserialize json rpc response message {msg}", e);
+            return;
+        }
+
+        if (response.Method == "ping")
+            return;
+
+        if (_invokeMethodTaskCompletes.TryGetValue(response.Id, out var tcs))
+        {
+            tcs.SetResult(response);
+            _invokeMethodTaskCompletes.Remove(response.Id);
+        }
+        else
+        {
+            Logger.Error($"Failed to find task completion source for json rpc response {msg}");
+        }
+    }
+
+    private void HandleRequestFromPlugin(string msg)
+    {
+        PluginJsonRpcRequest? request;
+        try
+        {
+            request = JsonSerializer.Deserialize<PluginJsonRpcRequest>(msg, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+            if (request == null)
+            {
+                Logger.Error($"Failed to deserialize json rpc request message {msg}");
+                return;
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.Error($"Failed to deserialize json rpc request message {msg}", e);
+            return;
+        }
+
+        switch (request.Method)
+        {
+            case "HideApp":
+                Logger.Info($"[{request.PluginName}] plugin request to ${request.Method}");
+                break;
+            case "ShowApp":
+                Logger.Info($"[{request.PluginName}] plugin request to ${request.Method}");
+                break;
+            default:
+                Logger.Error($"Invalid json rpc request method {request.Method}");
+                break;
+        }
+    }
+
     public async Task InvokeMethod(PluginMetadata metadata, string method, Dictionary<string, string?>? parameters = default)
     {
-        parameters ??= new Dictionary<string, string?>();
-        parameters["PluginId"] = metadata.Id;
-        parameters["PluginName"] = metadata.Name;
-        Logger.Debug($"Invoke method {method} for plugin {metadata.Name}");
-        await _websocket.SendInstant(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        var request = new PluginJsonRpcRequest
         {
-            method,
-            parameters
-        })));
-        Logger.Debug($"Invoke method {method} finished for plugin {metadata.Name}");
+            Method = method,
+            PluginId = metadata.Id,
+            Type = PluginJsonRpcType.Request,
+            PluginName = metadata.Name,
+            Params = parameters ?? new Dictionary<string, string?>()
+        };
+        Logger.Debug($"[{request.PluginName}] invoke jsonrpc method {method}, request id: {request.Id}");
+
+        Stopwatch sw = new();
+        sw.Start();
+        var tcs = new TaskCompletionSource<PluginJsonRpcResponse>();
+        _invokeMethodTaskCompletes.Add(request.Id, tcs);
+
+        await _websocket.SendInstant(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request)));
+        var result = await tcs.Task;
+
+        sw.Stop();
+        Logger.Debug($"[{request.PluginName}] invoke jsonrpc method {method} finished, request id: {request.Id}, time elapsed: {sw.ElapsedMilliseconds}ms");
     }
 }

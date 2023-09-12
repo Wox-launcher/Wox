@@ -9,23 +9,29 @@ public static class Logger
         .MinimumLevel.Debug()
         .CreateLogger();
 
+    private static string GetMessage(string message)
+    {
+        var currentThreadId = Environment.CurrentManagedThreadId.ToString().PadLeft(4, '0');
+        return $"[{currentThreadId}] {message}";
+    }
+
     public static void Debug(string message)
     {
-        SeriLogger.Debug(message);
+        SeriLogger.Debug(GetMessage(message));
     }
 
     public static void Info(string message)
     {
-        SeriLogger.Information(message);
+        SeriLogger.Information(GetMessage(message));
     }
 
     public static void Error(string message)
     {
-        SeriLogger.Error(message);
+        SeriLogger.Error(GetMessage(message));
     }
 
     public static void Error(string message, Exception e)
     {
-        SeriLogger.Error(e, message);
+        SeriLogger.Error(e, GetMessage(message));
     }
 }
