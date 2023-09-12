@@ -33,7 +33,7 @@ public class Main : IPlugin
         Context = context;
     }
 
-    public List<Result> Query(Query query)
+    public async Task<List<Result>> Query(Query query)
     {
         if (!CanCalculate(query)) return new List<Result>();
 
@@ -53,7 +53,7 @@ public class Main : IPlugin
                 var roundedResult = Math.Round(Convert.ToDecimal(result), 10, MidpointRounding.AwayFromZero);
                 var newResult = ChangeDecimalSeparator(roundedResult, GetDecimalSeparator());
 
-                return new List<Result>
+                return await Task.Run(() => new List<Result>
                 {
                     new()
                     {
@@ -75,7 +75,7 @@ public class Main : IPlugin
                             }
                         }
                     }
-                };
+                });
             }
         }
         catch

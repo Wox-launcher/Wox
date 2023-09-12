@@ -52,7 +52,7 @@ public static class PluginManager
         });
     }
 
-    public static List<PluginQueryResult> QueryForPlugin(PluginInstance plugin, Query query)
+    public static async Task<List<PluginQueryResult>> QueryForPlugin(PluginInstance plugin, Query query)
     {
         Logger.Debug($"Query for plugin {plugin.Metadata.Name} with query: {query}");
         if (plugin.CommonSetting.Disabled) return new List<PluginQueryResult>();
@@ -63,7 +63,7 @@ public static class PluginManager
 
         try
         {
-            var results = plugin.Plugin.Query(query);
+            var results = await plugin.Plugin.Query(query);
             return results.Select(r => new PluginQueryResult
             {
                 Result = r,

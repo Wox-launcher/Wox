@@ -26,7 +26,7 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@wox-launcher/wox-plugin": "latest",
+    "@wox-launcher/wox-plugin": "^0.0.12",
     "winston": "^3.10.0",
     "winston-daily-rotate-file": "^4.7.1",
     "ws": "^8.14.1"

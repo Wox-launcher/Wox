@@ -15,8 +15,8 @@
   "devDependencies": {
     "@types/node": "^20.6.0",
     "@types/ws": "^8.5.5",
-    "@typescript-eslint/eslint-plugin": "^6.6.0",
-    "@typescript-eslint/parser": "^6.6.0",
+    "@typescript-eslint/eslint-plugin": "^6.7.0",
+    "@typescript-eslint/parser": "^6.7.0",
     "@vercel/ncc": "^0.38.0",
     "browserify": "^17.0.0",
     "eslint": "^8.49.0",
@@ -25,6 +25,6 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@wox-launcher/wox-plugin": "latest"
+    "@wox-launcher/wox-plugin": "^0.0.12"
   }
 }

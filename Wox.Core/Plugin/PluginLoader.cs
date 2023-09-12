@@ -61,7 +61,7 @@ public static class PluginLoader
             foreach (var (metadata, pluginDirectory) in metadataInfos)
             {
                 Logger.Debug($"Start to load {metadata.Runtime} plugin: {metadata.Name}");
-                var plugin = pluginHost.LoadPlugin(metadata, pluginDirectory);
+                var plugin = await pluginHost.LoadPlugin(metadata, pluginDirectory);
                 if (plugin == null) continue;
 
                 var pluginInstance = new PluginInstance

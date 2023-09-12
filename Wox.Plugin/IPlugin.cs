@@ -13,5 +13,5 @@ public interface IPlugin
     /// <summary>
     ///     This method will be called when query changed
     /// </summary>
-    List<Result> Query(Query query);
+    Task<List<Result>> Query(Query query);
 }

@@ -12,7 +12,7 @@ public interface IPluginHost
 
     public void Stop();
 
-    public IPlugin? LoadPlugin(PluginMetadata metadata, string pluginDirectory);
+    public Task<IPlugin?> LoadPlugin(PluginMetadata metadata, string pluginDirectory);
 
     public void UnloadPlugin(PluginMetadata metadata);
 }

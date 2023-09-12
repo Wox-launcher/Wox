@@ -32,9 +32,9 @@ public abstract class PluginHostBase : IPluginHost
 
     public abstract void UnloadPlugin(PluginMetadata metadata);
 
-    public virtual IPlugin? LoadPlugin(PluginMetadata metadata, string pluginDirectory)
+    public virtual async Task<IPlugin?> LoadPlugin(PluginMetadata metadata, string pluginDirectory)
     {
-        InvokeMethod(metadata, "loadPlugin", new Dictionary<string, string?>
+        await InvokeMethod(metadata, "loadPlugin", new Dictionary<string, string?>
         {
             { "PluginId", metadata.Id },
             { "PluginDirectory", pluginDirectory },

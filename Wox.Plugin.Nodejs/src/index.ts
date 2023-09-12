@@ -1,6 +1,6 @@
 export interface Plugin {
-  init: (context: PluginInitContext) => void
-  query: (query: Query) => Result[]
+  init: (context: PluginInitContext) => Promise<void>
+  query: (query: Query) => Promise<Result[]>
 }
 
 export interface Query {
@@ -24,6 +24,7 @@ export interface Query {
 }
 
 export interface Result {
+  Id: string
   Title: string
   Description?: string
   IcoPath: string

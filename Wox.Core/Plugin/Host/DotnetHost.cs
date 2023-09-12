@@ -21,7 +21,7 @@ public class DotnetHost : PluginHostBase
         // do nothing
     }
 
-    public override IPlugin? LoadPlugin(PluginMetadata metadata, string pluginDirectory)
+    public override async Task<IPlugin?> LoadPlugin(PluginMetadata metadata, string pluginDirectory)
     {
         try
         {
@@ -31,7 +31,7 @@ public class DotnetHost : PluginHostBase
             var type = assembly.GetTypes().FirstOrDefault(o => typeof(IPlugin).IsAssignableFrom(o));
             if (type == null) return null;
             _pluginLoadContexts[metadata.Id] = pluginLoadContext;
-            return Activator.CreateInstance(type) as IPlugin;
+            return await Task.Run(() => Activator.CreateInstance(type) as IPlugin);
         }
         catch (Exception e)
         {

@@ -12,9 +12,9 @@ public class NonDotnetPlugin : IPlugin
         PluginHost.InvokeMethod(Metadata, "init").Wait();
     }
 
-    public List<Result> Query(Query query)
+    public async Task<List<Result>> Query(Query query)
     {
-        PluginHost.InvokeMethod(Metadata, "query", new Dictionary<string, string?>
+        await PluginHost.InvokeMethod(Metadata, "query", new Dictionary<string, string?>
         {
             { "RawQuery", query.RawQuery },
             { "TriggerKeyword", query.TriggerKeyword },
