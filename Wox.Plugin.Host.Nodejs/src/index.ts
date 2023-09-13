@@ -34,11 +34,16 @@ wss.on("connection", function connection(ws) {
     logger.info(`[${hostId}] connection closed, code: ${code}, reason: ${reason}`)
   })
 
+  ws.on("ping", function ping() {
+    lastHeartbeat = Date.now()
+    ws.pong()
+  })
+
   ws.on("message", function message(data) {
     try {
       lastHeartbeat = Date.now()
       const msg = `${data}`
-      logger.info(`receive message: ${msg}`)
+      //logger.info(`receive message: ${msg}`)
 
       if (msg.indexOf(PluginJsonRpcTypeResponse) >= 0) {
         handleResponse(msg)
@@ -93,7 +98,7 @@ wss.on("connection", function connection(ws) {
           Type: PluginJsonRpcTypeResponse,
           Result: result
         }
-        logger.info(`[${jsonRpcRequest.PluginName}] handle request successfully: ${JSON.stringify(response)}, ${ws.readyState}`)
+        //logger.info(`[${jsonRpcRequest.PluginName}] handle request successfully: ${JSON.stringify(response)}, ${ws.readyState}`)
         ws.send(JSON.stringify(response), (error?: Error) => {
           if (error) {
             logger.error(`[${jsonRpcRequest.PluginName}] send response failed: ${error.message}`)

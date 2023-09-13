@@ -33,7 +33,8 @@ public partial class MainWindow : Window
                 foreach (var result in results)
                 {
                     Logger.Info($"Plugin {pluginInstance.Metadata.Name} returned result {result.Result.Title}");
-                    result.Result.Action();
+                    var actionResult = result.Result.Action != null && result.Result.Action();
+                    Logger.Info($"Plugin {pluginInstance.Metadata.Name} returned action result {actionResult}");
                 }
             });
     }

@@ -70,31 +70,87 @@ public abstract class PluginHostBase : IPluginHost
         //wait a moment for plugin host to start websocket server
         await Task.Delay(1000, _cts.Token);
 
-        Logger.Debug($"Nodejs plugin host started, pid: {process.Id}, port: {websocketServerPort}");
+        Logger.Debug($"[{PluginRuntime} host] host process started, pid: {process.Id}, websocket port: {websocketServerPort}");
 
-        StartWebsocketServerAsync(websocketServerPort.Value);
+        await StartWebsocketServerAsync(websocketServerPort.Value);
 
-        Logger.Debug("Nodejs plugin host connected");
+        Logger.Debug($"[{PluginRuntime} host] host connected");
     }
 
-    private void StartWebsocketServerAsync(int websocketServerPort)
+    private async Task StartWebsocketServerAsync(int websocketServerPort)
     {
-        Logger.Debug($"Start websocket server on port {websocketServerPort}");
+        var tcs = new TaskCompletionSource<bool>();
 
         _ws = new WebSocket($"ws://localhost:{websocketServerPort}");
-        _ws.Log.Output = (data, s) => { Logger.Debug($"[{PluginRuntime}] Websocket server log: {data}"); };
-        _ws.OnError += (sender, e) => { Logger.Error($"[{PluginRuntime}] Websocket server error: {e.Message}"); };
-        _ws.OnClose += (sender, e) => { Logger.Debug($"[{PluginRuntime}] Websocket server closed"); };
-        _ws.OnOpen += (sender, e) => { Logger.Debug($"[{PluginRuntime}] Websocket server connected"); };
+        _ws.Log.Output = (data, s) => { Logger.Debug($"[{PluginRuntime} host] websocket server log: {data}"); };
+        _ws.OnError += (sender, e) => { Logger.Error($"[{PluginRuntime} host] websocket server error: {e.Message}"); };
+        var retryDelay = 500;
+        var retryCts = new CancellationTokenSource();
+        _ws.OnClose += (sender, e) =>
+        {
+            Logger.Debug($"[{PluginRuntime} host] websocket connection closed");
+
+            //try to reconnect
+            if (!_cts.IsCancellationRequested && !retryCts.IsCancellationRequested)
+                Task.Run(async () =>
+                {
+                    retryDelay *= 2;
+                    Logger.Debug($"[{PluginRuntime} host] websocket reconnecting in {retryDelay / 1000} second");
+                    await Task.Delay(retryDelay);
+                    Logger.Debug($"[{PluginRuntime} host] websocket reconnecting");
+                    // ReSharper disable once MethodHasAsyncOverload
+                    _ws.Connect();
+                }, retryCts.Token);
+            else
+                Logger.Debug($"[{PluginRuntime} host] websocket reconnecting cancelled");
+        };
+        _ws.OnOpen += (sender, e) =>
+        {
+            Logger.Debug($"[{PluginRuntime} host] websocket connected");
+            tcs.SetResult(true);
+
+            //send ping every seconds
+            Task.Run(async () =>
+            {
+                while (!_cts.IsCancellationRequested && !retryCts.IsCancellationRequested)
+                {
+                    await Task.Delay(3000, _cts.Token);
+                    _ws.Ping();
+                }
+            }, _cts.Token);
+        };
         _ws.OnMessage += (sender, e) => { Task.Run(() => { OnReceiveWebsocketMessage(e.Data); }); };
+        _ws.EmitOnPing = true;
+        // ReSharper disable once MethodHasAsyncOverload
         _ws.Connect();
+
+        //wait to connect success
+        var timeout = Task.Delay(3000);
+        var result = await Task.WhenAny(tcs.Task, timeout);
+        if (result == timeout)
+        {
+            Logger.Warn($"[{PluginRuntime} host] failed to connect to websocket server, try to reconnect");
+            // ReSharper disable once MethodHasAsyncOverload
+            // first timeout, maybe host is starting, try to connect again
+            _ws.Connect();
+
+            var timeoutAgain = Task.Delay(3000);
+            var resultAgain = await Task.WhenAny(tcs.Task, timeoutAgain);
+            if (resultAgain == timeoutAgain)
+            {
+                // still timeout, throw exception
+                retryCts.Cancel();
+                Logger.Warn($"[{PluginRuntime} host] still failed to connect to websocket server, cancel retry");
+                throw new Exception($"[{PluginRuntime} host] failed to connect to websocket server");
+            }
+        }
     }
 
     private void OnReceiveWebsocketMessage(string msgStr)
     {
         try
         {
-            Logger.Debug($"Received message: {msgStr}");
+            // Logger.Debug($"Received message: {msgStr}");
             if (msgStr.Contains(PluginJsonRpcType.Request))
                 HandleRequestFromPlugin(msgStr);
             else if (msgStr.Contains(PluginJsonRpcType.Response))

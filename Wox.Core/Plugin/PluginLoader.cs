@@ -17,7 +17,27 @@ public static class PluginLoader
         Logger.Debug("Start to load plugins");
         var pluginInstances = new List<PluginInstance>();
 
-        Dictionary<string, List<(PluginMetadata, string)>> pluginMetadata = new();
+
+        foreach (var pluginRuntime in PluginRuntime.All)
+            try
+            {
+                var instances = await LoadPluginsByRuntime(pluginRuntime);
+                if (instances == null) continue;
+                pluginInstances.AddRange(instances);
+            }
+            catch (Exception e)
+            {
+                Logger.Error($"[{pluginRuntime} host] load host plugin failed", e);
+            }
+
+        return pluginInstances;
+    }
+
+    private static async Task<List<PluginInstance>?> LoadPluginsByRuntime(string pluginRuntime)
+    {
+        var pluginInstances = new List<PluginInstance>();
+
+        List<(PluginMetadata, string)> pluginMetas = new();
         var pluginDirectories = DataLocation.PluginDirectories.SelectMany(Directory.GetDirectories);
         foreach (var pluginDirectory in pluginDirectories)
         {
@@ -31,48 +51,31 @@ public static class PluginLoader
             var metadata = ParsePluginMetadataFromDirectory(pluginDirectory);
             if (metadata == null) continue;
 
-            if (!pluginMetadata.ContainsKey(metadata.Runtime.ToUpper())) pluginMetadata[metadata.Runtime.ToUpper()] = new List<(PluginMetadata, string)>();
-            pluginMetadata[metadata.Runtime.ToUpper()].Add((metadata, pluginDirectory));
+            if (metadata.Runtime.ToUpper() != pluginRuntime.ToUpper()) continue;
+
+            pluginMetas.Add((metadata, pluginDirectory));
         }
 
-        foreach (var pluginRuntime in PluginRuntime.All)
+        Logger.Debug($"[{pluginRuntime} host] start to load plugins");
+        var pluginHost = PluginHosts.FirstOrDefault(o => o.PluginRuntime.ToUpper() == pluginRuntime.ToUpper());
+        if (pluginHost == null) throw new Exception($"[{pluginRuntime}] there is no host for {pluginRuntime}");
+
+        Logger.Debug($"[{pluginHost.PluginRuntime} host] starting plugin host");
+        await pluginHost.Start();
+        foreach (var (metadata, pluginDirectory) in pluginMetas)
         {
-            Logger.Debug($"Start to load {pluginRuntime} plugins");
-            var pluginHost = PluginHosts.FirstOrDefault(o => o.PluginRuntime.ToUpper() == pluginRuntime.ToUpper());
-            if (pluginHost == null)
-            {
-                Logger.Error($"There is no host for {pluginRuntime}");
-                continue;
-            }
+            Logger.Debug($"[{metadata.Runtime} host] start to load plugin: {metadata.Name}");
+            var plugin = await pluginHost.LoadPlugin(metadata, pluginDirectory);
+            if (plugin == null) continue;
 
-            try
+            var pluginInstance = new PluginInstance
             {
-                Logger.Debug($"Start to start {pluginHost.PluginRuntime} plugin host");
-                await pluginHost.Start();
-            }
-            catch (Exception e)
-            {
-                Logger.Error($"Failed to start {pluginHost.PluginRuntime} plugin host", e);
-            }
-
-            pluginMetadata.TryGetValue(pluginRuntime.ToUpper(), out var metadataInfos);
-            if (metadataInfos == null) continue;
-
-            foreach (var (metadata, pluginDirectory) in metadataInfos)
-            {
-                Logger.Debug($"Start to load {metadata.Runtime} plugin: {metadata.Name}");
-                var plugin = await pluginHost.LoadPlugin(metadata, pluginDirectory);
-                if (plugin == null) continue;
-
-                var pluginInstance = new PluginInstance
-                {
-                    Metadata = metadata,
-                    Plugin = plugin,
-                    PluginDirectory = pluginDirectory,
-                    PluginHost = pluginHost
-                };
-                pluginInstances.Add(pluginInstance);
-            }
+                Metadata = metadata,
+                Plugin = plugin,
+                PluginDirectory = pluginDirectory,
+                PluginHost = pluginHost
+            };
+            pluginInstances.Add(pluginInstance);
         }
 
         return pluginInstances;

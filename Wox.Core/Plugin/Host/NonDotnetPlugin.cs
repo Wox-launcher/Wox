@@ -41,10 +41,9 @@ public class NonDotnetPlugin : IPlugin
                 {
                     { "ActionId", result.Id }
                 }).Result;
-                if (!actionRawResult.HasValue)
-                    return false;
+                if (!actionRawResult.HasValue) return true;
 
-                return true;
+                return actionRawResult.Value.Deserialize<bool>();
             };
 
         return results;

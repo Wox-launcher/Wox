@@ -35,6 +35,11 @@ public static class Logger
         SeriLogger.Error(GetMessage(message));
     }
 
+    public static void Warn(string message)
+    {
+        SeriLogger.Warning(GetMessage(message));
+    }
+
     public static void Error(string message, Exception e)
     {
         SeriLogger.Error(e, GetMessage(message));
