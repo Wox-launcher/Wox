@@ -7,31 +7,28 @@ public class PublicAPIInstance : IPublicAPI
 {
     public void ChangeQuery(string query)
     {
-        throw new NotImplementedException();
     }
 
     public void HideApp()
     {
-        throw new NotImplementedException();
     }
 
     public void ShowApp()
     {
-        throw new NotImplementedException();
     }
 
     public void ShowMsg(string title, string description = "", string iconPath = "")
     {
-        throw new NotImplementedException();
     }
 
     public void Log(string msg)
     {
+        // should be directly used in PluginHostBase
         throw new NotImplementedException();
     }
 
     public string GetTranslation(string key)
     {
-        throw new NotImplementedException();
+        return key + "- to be implemented";
     }
 }

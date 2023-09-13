@@ -29,7 +29,7 @@ export interface Result {
   Description?: string
   IcoPath: string
   Score?: number
-  Action: () => boolean
+  Action: () => Promise<boolean>
 }
 
 export interface PluginInitContext {
@@ -40,30 +40,30 @@ export interface PublicAPI {
   /**
    * Change Wox query
    */
-  ChangeQuery: (query: string) => void
+  ChangeQuery: (query: string) => Promise<void>
 
   /**
    * Hide Wox
    */
-  HideApp: () => void
+  HideApp: () => Promise<void>
 
   /**
    * Show Wox
    */
-  ShowApp: () => void
+  ShowApp: () => Promise<void>
 
   /**
    * Show message box
    */
-  ShowMsg: (title: string, description?: string, iconPath?: string) => void
+  ShowMsg: (title: string, description?: string, iconPath?: string) => Promise<void>
 
   /**
    * Write log
    */
-  Log: (msg: string) => void
+  Log: (msg: string) => Promise<void>
 
   /**
    * Get translation of current language
    */
-   GetTranslation: ( key: string)=> string;
+   GetTranslation: ( key: string)=> Promise<string>;
 }

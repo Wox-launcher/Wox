@@ -1,8 +1,9 @@
 import "winston-daily-rotate-file"
 import { WebSocketServer } from "ws"
-import { handleRequestMessage, PluginJsonRpcRequest, PluginJsonRpcResponse, PluginJsonRpcTypeRequest, PluginJsonRpcTypeResponse } from "./jsonrpc"
+import { handleRequestFromWox, PluginJsonRpcRequest, PluginJsonRpcResponse, PluginJsonRpcTypeRequest, PluginJsonRpcTypeResponse } from "./jsonrpc"
 import { logger } from "./logger"
 import * as crypto from "crypto"
+import Deferred from "promise-deferred"
 
 if (process.argv.length < 4) {
   console.error("Usage: node node.js <port> <logDirectory>")
@@ -23,6 +24,10 @@ setInterval(() => {
     process.exit(1)
   }
 }, 1000)
+
+export const waitingForResponse: {
+  [key: string]: Deferred.Deferred<unknown>
+} = {}
 
 const wss = new WebSocketServer({ port: Number.parseInt(port) })
 wss.on("connection", function connection(ws) {
@@ -46,7 +51,7 @@ wss.on("connection", function connection(ws) {
       //logger.info(`receive message: ${msg}`)
 
       if (msg.indexOf(PluginJsonRpcTypeResponse) >= 0) {
-        handleResponse(msg)
+        handleResponseFromWox(msg)
       } else if (msg.indexOf(PluginJsonRpcTypeRequest) >= 0) {
         handleRequest(msg)
       } else {
@@ -90,7 +95,7 @@ wss.on("connection", function connection(ws) {
 
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
-    handleRequestMessage(jsonRpcRequest, ws)
+    handleRequestFromWox(jsonRpcRequest, ws)
       .then((result: unknown) => {
         const response: PluginJsonRpcResponse = {
           Id: jsonRpcRequest.Id,
@@ -121,7 +126,7 @@ wss.on("connection", function connection(ws) {
       })
   }
 
-  function handleResponse(msg: string) {
+  function handleResponseFromWox(msg: string) {
     let pluginJsonRpcResponse: PluginJsonRpcResponse
     try {
       pluginJsonRpcResponse = JSON.parse(msg) as PluginJsonRpcResponse
@@ -134,5 +139,18 @@ wss.on("connection", function connection(ws) {
       logger.error(`pluginJsonRpcResponse is undefined`)
       return
     }
+
+    if (pluginJsonRpcResponse.Id === undefined) {
+      logger.error(`pluginJsonRpcResponse.Id is undefined`)
+      return
+    }
+
+    const promiseInstance = waitingForResponse[pluginJsonRpcResponse.Id]
+    if (promiseInstance === undefined) {
+      logger.error(`waitingForResponse[${pluginJsonRpcResponse.Id}] is undefined`)
+      return
+    }
+
+    promiseInstance.resolve(pluginJsonRpcResponse.Result)
   }
 })

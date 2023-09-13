@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.4.1",
+    "@types/promise-deferred": "^2.0.2",
     "@types/uuid": "^9.0.3",
     "@types/ws": "^8.5.5",
     "@typescript-eslint/eslint-plugin": "^6.6.0",
@@ -26,8 +27,9 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@wox-launcher/wox-plugin": "^0.0.14",
+    "@wox-launcher/wox-plugin": "^0.0.16",
     "dayjs": "^1.11.9",
+    "promise-deferred": "^2.0.4",
     "winston": "^3.10.0",
     "winston-daily-rotate-file": "^4.7.1",
     "ws": "^8.14.1"

@@ -10,7 +10,7 @@ public static class PluginJsonRpcType
 
 public class PluginJsonRpcRequest
 {
-    public string Id { get; } = Guid.NewGuid().ToString();
+    public required string Id { get; set; }
 
     public required string PluginId { get; set; }
 

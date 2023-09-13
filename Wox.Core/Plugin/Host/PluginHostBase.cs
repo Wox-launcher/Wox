@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using Serilog;
 using WebSocketSharp;
 using Wox.Core.Utils;
 using Wox.Plugin;
@@ -12,6 +13,7 @@ public abstract class PluginHostBase : IPluginHost
 {
     private readonly CancellationTokenSource _cts = new();
     private readonly Dictionary<string, TaskCompletionSource<PluginJsonRpcResponse>> _invokeMethodTaskCompletes = new();
+    private readonly Dictionary<string, ILogger> _pluginLoggerInstance = new();
     private WebSocket _ws = null!;
 
     /// <summary>
@@ -150,11 +152,11 @@ public abstract class PluginHostBase : IPluginHost
     {
         try
         {
-            // Logger.Debug($"Received message: {msgStr}");
+            //Logger.Debug($"Received message: {msgStr}");
             if (msgStr.Contains(PluginJsonRpcType.Request))
                 HandleRequestFromPlugin(msgStr);
             else if (msgStr.Contains(PluginJsonRpcType.Response))
-                HandleInvokeMethodResponse(msgStr);
+                HandleResponseFromPlugin(msgStr);
             else
                 Logger.Error($"Invalid json rpc message type: {msgStr}");
         }
@@ -164,7 +166,7 @@ public abstract class PluginHostBase : IPluginHost
         }
     }
 
-    private void HandleInvokeMethodResponse(string msg)
+    private void HandleResponseFromPlugin(string msg)
     {
         PluginJsonRpcResponse? response;
         try
@@ -220,16 +222,134 @@ public abstract class PluginHostBase : IPluginHost
             return;
         }
 
+        Logger.Debug($"[{request.PluginName}] plugin request to {request.Method}");
         switch (request.Method)
         {
             case "HideApp":
-                Logger.Info($"[{request.PluginName}] plugin request to {request.Method}");
+                PluginManager.API.HideApp();
+                _ws.Send(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new PluginJsonRpcResponse
+                {
+                    Id = request.Id,
+                    Method = request.Method,
+                    Type = PluginJsonRpcType.Response
+                })));
                 break;
             case "ShowApp":
-                Logger.Info($"[{request.PluginName}] plugin request to {request.Method}");
+                PluginManager.API.ShowApp();
+                _ws.Send(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new PluginJsonRpcResponse
+                {
+                    Id = request.Id,
+                    Method = request.Method,
+                    Type = PluginJsonRpcType.Response
+                })));
                 break;
-            default:
-                Logger.Error($"Invalid json rpc request method {request.Method}");
+            case "ChangeQuery":
+                if (request.Params == null)
+                {
+                    Logger.Error($"[{request.PluginName}] ChangeQuery method must have a parameter");
+                    return;
+                }
+
+                request.Params.TryGetValue("query", out var query);
+                if (query == null)
+                {
+                    Logger.Error($"[{request.PluginName}] ChangeQuery method must have a query parameter");
+                    return;
+                }
+
+                PluginManager.API.ChangeQuery(query);
+                _ws.Send(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new PluginJsonRpcResponse
+                {
+                    Id = request.Id,
+                    Method = request.Method,
+                    Type = PluginJsonRpcType.Response
+                })));
+                break;
+            case "ShowMsg":
+                if (request.Params == null)
+                {
+                    Logger.Error($"[{request.PluginName}] ShowMsg method must have a parameter");
+                    return;
+                }
+
+                request.Params.TryGetValue("title", out var title);
+                if (title == null)
+                {
+                    Logger.Error($"[{request.PluginName}] ShowMsg method must have a title parameter");
+                    return;
+                }
+
+                request.Params.TryGetValue("description", out var description);
+                request.Params.TryGetValue("iconPath", out var iconPath);
+                PluginManager.API.ShowMsg(title, description ?? "", iconPath ?? "");
+                _ws.Send(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new PluginJsonRpcResponse
+                {
+                    Id = request.Id,
+                    Method = request.Method,
+                    Type = PluginJsonRpcType.Response
+                })));
+                break;
+            case "Log":
+                if (request.Params == null)
+                {
+                    Logger.Error($"[{request.PluginName}] Log method must have a parameter");
+                    return;
+                }
+
+                request.Params.TryGetValue("msg", out var msgStr);
+                if (msgStr == null)
+                {
+                    Logger.Error($"[{request.PluginName}] Log method must have a msg parameter");
+                    return;
+                }
+
+                _pluginLoggerInstance.TryGetValue(request.PluginId, out var pluginLogger);
+                if (pluginLogger == null)
+                {
+                    pluginLogger = new LoggerConfiguration()
+                        .WriteTo.File(
+                            Path.Combine(DataLocation.LogDirectory, "plugins", request.PluginName, "log.txt"),
+                            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}",
+                            rollOnFileSizeLimit: true,
+                            retainedFileCountLimit: 3,
+                            fileSizeLimitBytes: 1024 * 1024 * 100 /*100M*/)
+                        .MinimumLevel.Debug()
+                        .CreateLogger();
+                    _pluginLoggerInstance.Add(request.PluginId, pluginLogger);
+                }
+
+                pluginLogger.Information(msgStr);
+
+                _ws.Send(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new PluginJsonRpcResponse
+                {
+                    Id = request.Id,
+                    Method = request.Method,
+                    Type = PluginJsonRpcType.Response
+                })));
+                break;
+            case "GetTranslation":
+                if (request.Params == null)
+                {
+                    Logger.Error($"[{request.PluginName}] Log method must have a parameter");
+                    return;
+                }
+
+                request.Params.TryGetValue("key", out var key);
+                if (key == null)
+                {
+                    Logger.Error($"[{request.PluginName}] Log method must have a key parameter");
+                    return;
+                }
+
+                var translation = PluginManager.API.GetTranslation(key);
+                var response = new PluginJsonRpcResponse
+                {
+                    Id = request.Id,
+                    Method = request.Method,
+                    Type = PluginJsonRpcType.Response,
+                    Result = JsonSerializer.SerializeToElement(translation)
+                };
+                _ws.Send(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(response)));
                 break;
         }
     }
@@ -238,6 +358,7 @@ public abstract class PluginHostBase : IPluginHost
     {
         var request = new PluginJsonRpcRequest
         {
+            Id = Guid.NewGuid().ToString(),
             Method = method,
             PluginId = metadata.Id,
             Type = PluginJsonRpcType.Request,
@@ -251,6 +372,7 @@ public abstract class PluginHostBase : IPluginHost
         var tcs = new TaskCompletionSource<PluginJsonRpcResponse>();
         _invokeMethodTaskCompletes.Add(request.Id, tcs);
 
+        //TODO: what if server not response? add timeout
         _ws.Send(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request)));
         var result = await tcs.Task;
 

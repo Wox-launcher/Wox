@@ -6,11 +6,14 @@ settings:
 
 dependencies:
   '@wox-launcher/wox-plugin':
-    specifier: ^0.0.14
-    version: 0.0.14
+    specifier: ^0.0.16
+    version: 0.0.16
   dayjs:
     specifier: ^1.11.9
     version: 1.11.9
+  promise-deferred:
+    specifier: ^2.0.4
+    version: 2.0.4
   winston:
     specifier: ^3.10.0
     version: 3.10.0
@@ -25,6 +28,9 @@ devDependencies:
   '@types/node':
     specifier: ^20.4.1
     version: 20.4.1
+  '@types/promise-deferred':
+    specifier: ^2.0.2
+    version: 2.0.2
   '@types/uuid':
     specifier: ^9.0.3
     version: 9.0.3
@@ -160,6 +166,10 @@ packages:
 
   /@types/node@20.4.1:
     resolution: {integrity: sha512-JIzsAvJeA/5iY6Y/OxZbv1lUcc8dNSE77lb2gnBH+/PJ3lFR1Ccvgwl5JWnHAkNHcRsT0TbpVOsiMKZ1F/yyJg==}
+    dev: true
+
+  /@types/promise-deferred@2.0.2:
+    resolution: {integrity: sha512-EUgy8kWRv+WeDTjZG2UfcFmm6EPadanSx4oEBaAfcXw4ruHe6VHa8RlCv8yCzyXd3+VfU4UZFF19I9VI80x//Q==}
     dev: true
 
   /@types/semver@7.5.1:
@@ -316,8 +326,8 @@ packages:
     hasBin: true
     dev: true
 
-  /@wox-launcher/wox-plugin@0.0.14:
-    resolution: {integrity: sha512-YB1Cq8Ny8XmvsA58B9B90ASc8cW2Dkdqog1RN0cbwMdVLDtmLbjKsEgIX8b9fkTxKhydFQ987BmcXSdpuQJS2A==}
+  /@wox-launcher/wox-plugin@0.0.16:
+    resolution: {integrity: sha512-Co6CrBQfFB01jkwvE+I+zD3RG/GGo4B9MtzWyXbL/nE4963RzAo566GRp6onYJLHR8l4W7WiNI5q3PT+irkUIw==}
     dev: false
 
   /JSONStream@1.3.5:
@@ -390,6 +400,10 @@ packages:
     resolution: {integrity: sha512-HGyxoOTYUyCM6stUe6EJgnd4EoewAI7zMdfqO+kGjnlZmBDz/cR5pf8r/cR4Wq60sL/p0IkcjUEEPwS3GFrIyw==}
     engines: {node: '>=8'}
     dev: true
+
+  /asap@2.0.6:
+    resolution: {integrity: sha512-BSHWgDSAiKs50o2Re8ppvp3seVHXSRM44cdSsT9FfNEUUZLOGWVCsiWaRPWM1Znn+mqZ1OfVZ3z3DWEzSp7hRA==}
+    dev: false
 
   /asn1.js@5.4.1:
     resolution: {integrity: sha512-+I//4cYPccV8LdmBLiX8CYvf9Sp3vQsrqu2QNXRcrbiWvcx/UdlFiqUJJzxRQxgsZmvhXhn4cSKeSmoFjVdupA==}
@@ -1688,6 +1702,19 @@ packages:
     resolution: {integrity: sha512-cdGef/drWFoydD1JsMzuFf8100nZl+GT+yacc2bEced5f9Rjk4z+WtFUTBu9PhOi9j/jfmBPu0mMEY4wIdAF8A==}
     engines: {node: '>= 0.6.0'}
     dev: true
+
+  /promise-deferred@2.0.4:
+    resolution: {integrity: sha512-clITUrRNue0lRawJPyHwCtgcPryJBtGXN6map89kM268+bKgSfh/1ZXOD51+VfDsihzF66m2PBmNOIHETfko4Q==}
+    engines: {node: '>= 0.4'}
+    dependencies:
+      promise: 8.3.0
+    dev: false
+
+  /promise@8.3.0:
+    resolution: {integrity: sha512-rZPNPKTOYVNEEKFaq1HqTgOwZD+4/YHS5ukLzQCypkj+OkYx7iv0mA91lJlpPPZ8vMau3IIGj5Qlwrx+8iiSmg==}
+    dependencies:
+      asap: 2.0.6
+    dev: false
 
   /public-encrypt@4.0.3:
     resolution: {integrity: sha512-zVpa8oKZSz5bTMTFClc1fQOnyyEzpl5ozpi1B5YcvBrdohMjH2rfsBtyXcuNuwjsDIXmBYlF2N5FlJYhR29t8Q==}

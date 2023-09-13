@@ -5,18 +5,19 @@ let api: PublicAPI
 export const plugin: Plugin = {
   init: async (context: PluginInitContext) => {
     api = context.API
-    api.Log("process killer initialized")
-    api.ShowApp()
+    await api.Log("process killer initialized")
+    await api.ShowApp()
   },
 
   query: async (query: Query) => {
-    api.Log("process killer got query: " + query.Search)
+    await api.Log("process killer got query: " + query.Search)
     return [
       {
         Title: "Kill process 0%",
         IcoPath: "Images/app.png",
-        Action: () => {
-          api.Log("process killer do the action")
+        Action: async () => {
+          const translationResult = await api.GetTranslation("processKillerKilling")
+          await api.Log(translationResult)
           return false
         }
       }
