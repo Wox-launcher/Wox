@@ -60,7 +60,7 @@ public static class PluginManager
         Logger.Debug($"[{plugin.Metadata.Name}] start query: {query}");
         if (plugin.CommonSetting.Disabled) return new List<PluginQueryResult>();
 
-        var validGlobalQuery = string.IsNullOrEmpty(query.TriggerKeyword);
+        var validGlobalQuery = plugin.TriggerKeywords.Contains("*") && string.IsNullOrEmpty(query.TriggerKeyword);
         var validNonGlobalQuery = plugin.Metadata.TriggerKeywords.Contains(query.TriggerKeyword ?? string.Empty);
         if (!validGlobalQuery && !validNonGlobalQuery) return new List<PluginQueryResult>();
 

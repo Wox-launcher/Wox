@@ -13,7 +13,7 @@ export const plugin: Plugin = {
     await api.Log("process killer got query: " + query.Search)
     return [
       {
-        Title: "Kill process 0%",
+        Title: `Kill process ${query.RawQuery}`,
         IcoPath: "Images/app.png",
         Action: async () => {
           const translationResult = await api.GetTranslation("processKillerKilling")

@@ -60,7 +60,6 @@ public class QueryBuilderTest
 
         var q = QueryBuilder.BuildByPlugins("wpm install calculator", plugins);
 
-        Assert.That(q, Is.Not.Null);
         Assert.That(q!.TriggerKeyword, Is.EqualTo("wpm"));
         Assert.That(q.Command, Is.EqualTo("install"));
         Assert.That(q.Search, Is.EqualTo("calculator"));
@@ -81,9 +80,47 @@ public class QueryBuilderTest
 
         var q = QueryBuilder.BuildByPlugins("wpm   file.txt    file2 file3", plugins);
 
-        Assert.That(q, Is.Not.Null);
         Assert.That(q!.Search, Is.EqualTo("file.txt file2 file3"));
         Assert.That(q.TriggerKeyword, Is.EqualTo("wpm"));
+    }
+
+    [Test]
+    public void OnlyTriggerTest()
+    {
+        var plugins = GeneratePlugins(new List<string>
+            {
+                "wpm",
+                "p"
+            },
+            new List<string>
+            {
+                "install"
+            });
+
+        var q = QueryBuilder.BuildByPlugins("wpm ", plugins);
+
+        Assert.That(q.Command, Is.Empty);
+        Assert.That(q.TriggerKeyword, Is.EqualTo("wpm"));
+        Assert.That(q.Search, Is.Empty);
+    }
+
+    [Test]
+    public void OnlyTriggerWithoutSpaceTest()
+    {
+        var plugins = GeneratePlugins(new List<string>
+            {
+                "wpm",
+                "p"
+            },
+            new List<string>
+            {
+                "install"
+            });
+
+        var q = QueryBuilder.BuildByPlugins("wpm", plugins);
+        Assert.That(q.TriggerKeyword, Is.Empty);
+        Assert.That(q.Search, Is.EqualTo("wpm"));
+        Assert.That(q.Command, Is.Empty);
     }
 
     [Test]
@@ -97,7 +134,6 @@ public class QueryBuilderTest
 
         var q = QueryBuilder.BuildByPlugins("wpm file.txt    file2 file3", plugins);
 
-        Assert.That(q, Is.Not.Null);
         Assert.That(q!.TriggerKeyword, Is.Empty);
         Assert.That(q.Command, Is.Empty);
         Assert.That(q.Search, Is.EqualTo("wpm file.txt file2 file3"));

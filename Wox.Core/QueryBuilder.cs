@@ -9,25 +9,31 @@ public static class QueryBuilder
 {
     private const string TermSeparator = " ";
 
-    public static Query? Build(string text)
+    public static Query Build(string text)
     {
         return BuildByPlugins(text, PluginManager.GetAllPlugins());
     }
 
-    public static Query? BuildByPlugins(string text, List<PluginInstance> pluginInstances)
+    public static Query BuildByPlugins(string text, List<PluginInstance> pluginInstances)
     {
         // replace multiple white spaces with one white space
         var terms = text.Split(new[] { TermSeparator }, StringSplitOptions.RemoveEmptyEntries);
         if (terms.Length == 0)
-            // nothing was typed
-            return null;
+            return new Query
+            {
+                RawQuery = text,
+                TriggerKeyword = string.Empty,
+                Command = string.Empty,
+                Search = string.Empty
+            };
 
         var rawQuery = string.Join(TermSeparator, terms);
         string triggerKeyword, command, search;
         var possibleTriggerKeyword = terms[0];
+        var mustContainTermSeparator = text.Contains(TermSeparator);
 
         var pluginInstance = pluginInstances.FirstOrDefault(o => o.TriggerKeywords.Contains(possibleTriggerKeyword) && !o.CommonSetting.Disabled);
-        if (pluginInstance != null)
+        if (pluginInstance != null && mustContainTermSeparator)
         {
             // non global trigger keyword
             triggerKeyword = possibleTriggerKeyword;
@@ -38,19 +44,21 @@ public static class QueryBuilder
                 command = string.Empty;
                 search = string.Empty;
             }
-
-            var possibleCommand = terms[1];
-            if (pluginInstance.Metadata.Commands.Contains(possibleCommand))
-            {
-                // command and search
-                command = possibleCommand;
-                search = string.Join(TermSeparator, terms.Skip(2));
-            }
             else
             {
-                // no command, only search
-                command = string.Empty;
-                search = string.Join(TermSeparator, terms.Skip(1));
+                var possibleCommand = terms[1];
+                if (pluginInstance.Metadata.Commands.Contains(possibleCommand))
+                {
+                    // command and search
+                    command = possibleCommand;
+                    search = string.Join(TermSeparator, terms.Skip(2));
+                }
+                else
+                {
+                    // no command, only search
+                    command = string.Empty;
+                    search = string.Join(TermSeparator, terms.Skip(1));
+                }
             }
         }
         else
