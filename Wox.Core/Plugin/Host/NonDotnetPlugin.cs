@@ -24,7 +24,7 @@ public class NonDotnetPlugin : IPlugin
             { "Search", query.Search }
         });
 
-        if (!rawResults.HasValue)
+        if (rawResults == null)
             return new List<Result>();
 
         var results = rawResults.Value.Deserialize<List<Result>>();
@@ -41,7 +41,7 @@ public class NonDotnetPlugin : IPlugin
                 {
                     { "ActionId", result.Id }
                 }).Result;
-                if (!actionRawResult.HasValue) return true;
+                if (actionRawResult == null) return true;
 
                 return actionRawResult.Value.Deserialize<bool>();
             };

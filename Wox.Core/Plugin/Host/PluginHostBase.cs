@@ -67,7 +67,8 @@ public abstract class PluginHostBase : IPluginHost
         {
             FileName = fileName,
             Arguments = $"{entry} {websocketServerPort} \"{DataLocation.LogDirectory}\"",
-            UseShellExecute = true
+            UseShellExecute = true,
+            CreateNoWindow = true
         });
         if (process == null)
             throw new Exception($"Failed to start {fileName} plugin host, process is null");
@@ -128,7 +129,6 @@ public abstract class PluginHostBase : IPluginHost
             }, _cts.Token);
         };
         _ws.OnMessage += (sender, e) => { Task.Run(() => { OnReceiveWebsocketMessage(e.Data); }); };
-        _ws.EmitOnPing = true;
         // ReSharper disable once MethodHasAsyncOverload
         _ws.Connect();
 
@@ -192,9 +192,6 @@ public abstract class PluginHostBase : IPluginHost
             Logger.Error($"Failed to deserialize json rpc response message {msg}", e);
             return;
         }
-
-        if (response.Method == "ping")
-            return;
 
         if (_invokeMethodTaskCompletes.TryGetValue(response.Id, out var tcs))
         {

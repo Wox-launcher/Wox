@@ -15,7 +15,6 @@
     <ItemGroup>
         <PackageReference Include="Serilog" Version="3.0.1"/>
         <PackageReference Include="Serilog.Sinks.File" Version="5.0.0"/>
-        <PackageReference Include="Websocket.Client" Version="5.0.0"/>
         <PackageReference Include="WebSocketSharp" Version="1.0.3-rc11"/>
     </ItemGroup>
 

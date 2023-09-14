@@ -38,9 +38,10 @@ default:
 
     # build hosts
     just _build_nodejs_host Wox/hosts
+    just _build_python_host Wox/hosts
         
     # build Wox
-    dotnet publish Wox/Wox.csproj --configuration Release --output ./publish --runtime {{target}} --self-contained true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:EnableCompressionInSingleFile=true
+    dotnet publish Wox/Wox.csproj --configuration Release --output ./publish --runtime {{target}} --self-contained true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
     
     # remove some redundant files
     rm -rf publish/plugins
@@ -67,7 +68,8 @@ default:
 @_build_dotnet_plugin pluginName target:
     rm -rf Wox/plugins/{{pluginName}}
     # we need to put plugins into Wox/plugins folder, when Wox build single file, it will include all files in Wox/plugins folder
-    dotnet publish Plugins/{{pluginName}}/{{pluginName}}.csproj --configuration Release --output Wox/plugins/{{pluginName}} --runtime {{target}}    
+    dotnet publish Plugins/{{pluginName}}/{{pluginName}}.csproj --configuration Release --output Wox/plugins/{{pluginName}} --runtime {{target}}
+    rm -rf Wox/plugins/{{pluginName}}/Wox.Plugin.dll
     
 @_build_nodejs_plugin pluginName directory:
     rm -rf {{directory}}/{{pluginName}}
@@ -80,16 +82,32 @@ default:
 @_build_nodejs_host directory:
     just _build_dev_nodejs_host
     mkdir -p {{directory}}
-    cp Wox.Plugin.Host.Nodejs/dist/index.js {{directory}}/node.js
+    cp Wox.Plugin.Host.Nodejs/dist/index.js {{directory}}/node-host.js
     
+@_build_python_host directory:
+    just _build_dev_python_host
+    mkdir -p {{directory}}
+    cp Wox.Plugin.Host.Python/python-host.pyz {{directory}}/python-host.pyz
+        
 # build all dependencies for development in DEBUG mode    
 @_build_dev:
     just _build_dev_dotnet_plugin Wox.Plugin.Calculator
     just _build_dev_nodejs_host
     just _build_nodejs_plugin Wox.Plugin.ProcessKiller Wox/bin/Debug/plugins
+    just _build_dev_python_host
 
 @_build_dev_nodejs_host:
     cd Wox.Plugin.Host.Nodejs && pnpm install && pnpm run build && cd ..
+
+@_build_dev_python_host:
+    cd Wox.Plugin.Host.Python && \
+    rm -rf python-host && \
+    rm -rf python-host.pyz && \
+    python -m pip install -r requirements.txt --target python-host && \
+    cp *.py python-host && \
+    python -m zipapp -p "interpreter" python-host && \
+    rm -rf python-host && \
+    cd ..
     
 @_build_dev_dotnet_plugin pluginName:
     rm -rf Wox/bin/Debug/plugins/{{pluginName}}

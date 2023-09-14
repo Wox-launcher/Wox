@@ -28,7 +28,7 @@ public static class DataLocation
 #if DEBUG
             return Path.Combine(AppContext.BaseDirectory, "../../../Wox.Plugin.Host.Nodejs", "dist", "index.js");
 #else
-            return Path.Combine(PluginHostDirectory, "node.js");
+            return Path.Combine(PluginHostDirectory, "node-host.js");
 #endif
         }
     }
@@ -41,7 +41,7 @@ public static class DataLocation
         get
         {
 #if DEBUG
-            return Path.Combine(AppContext.BaseDirectory, "../../../Wox.Plugin.Host.Python", "main.py");
+            return Path.Combine(AppContext.BaseDirectory, "../../../Wox.Plugin.Host.Python", "python-host.pyz");
 #else
             return Path.Combine(PluginHostDirectory, "node.js");
 #endif

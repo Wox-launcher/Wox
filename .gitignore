@@ -306,3 +306,7 @@ Output-Performance.txt
 publish
 Wox/plugins/
 Wox/hosts/
+Wox.Plugin.Host.Python/python-host/
+Wox.Plugin.Host.Python/python-host.pyz
+Wox.Plugin.Host.Python/venv/
+*.pyz
