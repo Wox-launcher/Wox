@@ -33,7 +33,13 @@ public abstract class PluginHostBase : IPluginHost
         Status = PluginHostStatus.Stopped;
     }
 
-    public abstract void UnloadPlugin(PluginMetadata metadata);
+    public virtual async Task UnloadPlugin(PluginMetadata metadata)
+    {
+        await InvokeMethod(metadata, "unloadPlugin", new Dictionary<string, string?>
+        {
+            { "PluginId", metadata.Id }
+        });
+    }
 
     public virtual async Task<IPlugin?> LoadPlugin(PluginMetadata metadata, string pluginDirectory)
     {

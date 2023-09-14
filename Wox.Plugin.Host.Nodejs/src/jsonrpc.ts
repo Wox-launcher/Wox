@@ -49,6 +49,8 @@ export async function handleRequestFromWox(request: PluginJsonRpcRequest, ws: We
       return query(request)
     case "action":
       return action(request)
+    case "unloadPlugin":
+      return unloadPlugin(request)
     default:
       logger.info(`unknown method handler: ${request.Method}`)
       throw new Error(`unknown method handler: ${request.Method}`)
@@ -68,6 +70,12 @@ async function loadPlugin(request: PluginJsonRpcRequest) {
 
   logger.info(`[${request.PluginName}] load plugin successfully`)
   pluginMap.set(request.PluginId, module["plugin"] as Plugin)
+}
+
+function unloadPlugin(request: PluginJsonRpcRequest) {
+  pluginMap.delete(request.PluginId)
+  actionCacheByPlugin.delete(request.PluginId)
+  logger.info(`[${request.PluginName}] unload plugin successfully`)
 }
 
 function getMethod<M extends keyof Plugin>(request: PluginJsonRpcRequest, methodName: M): Plugin[M] {

@@ -8,8 +8,4 @@ public class NodejsHost : PluginHostBase
     {
         await StartHost("node", DataLocation.NodejsHostEntry);
     }
-
-    public override void UnloadPlugin(PluginMetadata metadata)
-    {
-    }
 }

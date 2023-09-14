@@ -50,12 +50,14 @@ public class DotnetHost : PluginHostBase
         }
     }
 
-    public override void UnloadPlugin(PluginMetadata metadata)
+    public override Task UnloadPlugin(PluginMetadata metadata)
     {
         if (_pluginLoadContexts.TryGetValue(metadata.Id, out var pluginLoadContext))
         {
             pluginLoadContext.Unload();
             _pluginLoadContexts.Remove(metadata.Id);
         }
+
+        return Task.CompletedTask;
     }
 }

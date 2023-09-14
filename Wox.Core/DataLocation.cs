@@ -34,6 +34,21 @@ public static class DataLocation
     }
 
     /// <summary>
+    ///     Entry file path for python host
+    /// </summary>
+    public static string PythonHostEntry
+    {
+        get
+        {
+#if DEBUG
+            return Path.Combine(AppContext.BaseDirectory, "../../../Wox.Plugin.Host.Python", "main.py");
+#else
+            return Path.Combine(PluginHostDirectory, "node.js");
+#endif
+        }
+    }
+
+    /// <summary>
     ///     Places for storing plugins, configs and etc
     ///     We allow user to customize the data directory, so we need to store this customized location in a fixed-location file and read the real data directory from it
     /// </summary>

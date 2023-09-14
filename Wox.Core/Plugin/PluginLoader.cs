@@ -9,7 +9,8 @@ public static class PluginLoader
     private static List<PluginHostBase> PluginHosts { get; } = new()
     {
         new DotnetHost(),
-        new NodejsHost()
+        new NodejsHost(),
+        new PythonHost()
     };
 
     public static async Task<List<PluginInstance>> LoadPlugins()

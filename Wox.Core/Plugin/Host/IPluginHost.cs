@@ -14,5 +14,5 @@ public interface IPluginHost
 
     public Task<IPlugin?> LoadPlugin(PluginMetadata metadata, string pluginDirectory);
 
-    public void UnloadPlugin(PluginMetadata metadata);
+    public Task UnloadPlugin(PluginMetadata metadata);
 }

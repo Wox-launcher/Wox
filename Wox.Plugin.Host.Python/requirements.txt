@@ -1,0 +1,2 @@
+loguru==0.7.2
+websockets==11.0.3
