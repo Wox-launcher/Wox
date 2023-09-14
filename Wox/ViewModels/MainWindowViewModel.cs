@@ -6,7 +6,8 @@ namespace Wox.ViewModels;
 
 public class MainWindowViewModel : ViewModelBase
 {
-    public string Greeting => DataLocation.PluginDirectories[0];
+    
+    public CoreQueryViewModel CoreQueryViewModel { get; } = new CoreQueryViewModel();
 
     public void OnDeactivated()
     {

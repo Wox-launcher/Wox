@@ -3,13 +3,14 @@
         xmlns:vm="using:Wox.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:views="clr-namespace:Wox.Views"
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="77"
         x:Class="Wox.Views.MainWindow"
+        x:CompileBindings="True"
         x:DataType="vm:MainWindowViewModel"
-        x:Name="WoxMainWindow"
         Deactivated="WoxMainWindow_OnDeactivated"
         Width="800"
-        Height="77"
+        SizeToContent="Height"
         Icon="/Assets/avalonia-logo.ico"
         Title="Wox">
 
@@ -50,10 +51,8 @@
             </ExperimentalAcrylicBorder.Material>
         </ExperimentalAcrylicBorder>
 
-        <TextBox Background="Black" FontSize="36" Margin="10 0 0 0" Opacity="0.9" Width="700" Height="58" LineHeight="48" VerticalContentAlignment="Center"
-                 VerticalAlignment="Center" HorizontalAlignment="Left" BorderBrush="Transparent" />
-
-        <!-- <views:ResultListBox /> -->
+        
+        <views:CoreQueryView DataContext="{Binding CoreQueryViewModel}"/>
     </Grid>
 
 

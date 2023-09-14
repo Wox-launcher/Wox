@@ -1,0 +1,32 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+         xmlns:vm="using:Wox.ViewModels"
+         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+         mc:Ignorable="d" d:DesignWidth="800"
+         x:Class="Wox.Views.CoreQueryView"
+         x:DataType="vm:CoreQueryViewModel">
+
+    <Design.DataContext>
+        <!-- This only sets the DataContext for the previewer in an IDE,
+             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
+        <vm:CoreQueryViewModel />
+    </Design.DataContext>
+
+    <StackPanel >
+        <TextBox Background="Black" FontSize="36" Margin="10 10 0 10" Opacity="0.9" Width="700" Height="58" LineHeight="48" VerticalContentAlignment="Center"
+                 VerticalAlignment="Center" HorizontalAlignment="Left" BorderBrush="Transparent" Text="{Binding Query}" />
+        
+        <ListBox ItemsSource="{Binding  QueryResult, Mode=OneWay}">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding Result.Id }" />
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </StackPanel>
+    
+    
+    
+
+</UserControl>

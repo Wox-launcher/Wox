@@ -3,9 +3,9 @@ using Avalonia.Controls;
 
 namespace Wox.Views;
 
-public partial class ResultListBox :Control
+public partial class CoreQueryView :UserControl
 {
-    public ResultListBox()
+    public CoreQueryView()
     {
         InitializeComponent();
     }
