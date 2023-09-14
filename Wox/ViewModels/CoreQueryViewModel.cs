@@ -11,6 +11,7 @@ public class CoreQueryViewModel : ViewModelBase
 {
     private readonly List<PluginQueryResult> _results = new();
     private string? _query;
+    private PluginQueryResult? _selectedResult;
 
     public CoreQueryViewModel()
     {
@@ -27,7 +28,19 @@ public class CoreQueryViewModel : ViewModelBase
             this.RaiseAndSetIfChanged(ref _query, value);
     }
 
+    public PluginQueryResult? SelectedQueryResult
+    {
+        get => _selectedResult;
+        set => this.RaiseAndSetIfChanged(ref _selectedResult, value);
+    }
+
     public ObservableCollection<PluginQueryResult> QueryResult => new(_results);
+
+    public void OpenResultCommand()
+    {
+        var action = _selectedResult!.Result.Action!();
+        Console.Write(action);
+    }
 
     private async void OnQuery(string? text)
     {
