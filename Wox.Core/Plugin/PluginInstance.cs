@@ -11,6 +11,11 @@ public class PluginInstance
     public required IPlugin Plugin { get; init; }
 
     /// <summary>
+    ///     APIs exposed to plugin
+    /// </summary>
+    public required IPublicAPI API { get; init; }
+
+    /// <summary>
     ///     Immutable metadata parsed from plugin.json
     /// </summary>
     public required PluginMetadata Metadata { get; init; }
@@ -43,7 +48,7 @@ public class PluginInstance
     /// <summary>
     ///     Plugin host to run this plugin
     /// </summary>
-    public required IPluginHost PluginHost { get; init; }
+    public required IPluginHost Host { get; init; }
 
     public override string ToString()
     {

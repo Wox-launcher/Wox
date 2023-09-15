@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using Serilog;
 using WebSocketSharp;
 using Wox.Core.Utils;
 using Wox.Plugin;
@@ -13,7 +12,6 @@ public abstract class PluginHostBase : IPluginHost
 {
     private readonly CancellationTokenSource _cts = new();
     private readonly Dictionary<string, TaskCompletionSource<PluginJsonRpcResponse>> _invokeMethodTaskCompletes = new();
-    private readonly Dictionary<string, ILogger> _pluginLoggerInstance = new();
     private WebSocket _ws = null!;
 
     /// <summary>
@@ -62,19 +60,42 @@ public abstract class PluginHostBase : IPluginHost
         var websocketServerPort = Network.GetAvailableTcpPort();
         if (websocketServerPort == null)
             throw new Exception($"Failed to start {fileName} plugin host, failed to get random tcp port");
+        if (!File.Exists(entry))
+            throw new Exception($"Failed to start {fileName} plugin host, entry file {entry} doesn't exist");
 
-        var process = Process.Start(new ProcessStartInfo
+        var startInfo = new ProcessStartInfo
         {
             FileName = fileName,
             Arguments = $"{entry} {websocketServerPort} \"{DataLocation.LogDirectory}\"",
-            UseShellExecute = true,
-            CreateNoWindow = true
-        });
-        if (process == null)
-            throw new Exception($"Failed to start {fileName} plugin host, process is null");
+            CreateNoWindow = true,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        var process = new Process();
+        process.OutputDataReceived += (sender, e) =>
+        {
+            if (e.Data != null)
+                Logger.Debug($"[{PluginRuntime} host] console output => {e.Data}");
+        };
+        process.ErrorDataReceived += (sender, e) =>
+        {
+            if (e.Data != null)
+                Logger.Error($"[{PluginRuntime} host] console error => {e.Data}");
+        };
+        process.StartInfo = startInfo;
+        var started = process.Start();
+        process.BeginOutputReadLine();
+        if (!started)
+            throw new Exception($"Failed to start {fileName} plugin host, not started");
         if (process.HasExited)
             throw new Exception($"Failed to start {fileName} plugin host, process has exited");
-        _cts.Token.Register(() => process.Kill());
+
+        _cts.Token.Register(() =>
+        {
+            Logger.Debug($"[{PluginRuntime} host] host process killed by user");
+            process.Kill();
+        });
 
         //wait a moment for plugin host to start websocket server
         await Task.Delay(1000, _cts.Token);
@@ -116,7 +137,7 @@ public abstract class PluginHostBase : IPluginHost
         _ws.OnOpen += (sender, e) =>
         {
             Logger.Debug($"[{PluginRuntime} host] websocket connected");
-            tcs.SetResult(true);
+            tcs.TrySetResult(true);
 
             //send ping every seconds
             Task.Run(async () =>
@@ -225,11 +246,18 @@ public abstract class PluginHostBase : IPluginHost
             return;
         }
 
+        var pluginInstance = PluginManager.GetAllPlugins().FirstOrDefault(o => o.Metadata.Id == request.PluginId);
+        if (pluginInstance == null)
+        {
+            Logger.Error($"[{request.PluginName}] Failed to find plugin instance for request {msg}");
+            return;
+        }
+
         Logger.Debug($"[{request.PluginName}] plugin request to {request.Method}");
         switch (request.Method)
         {
             case "HideApp":
-                PluginManager.API.HideApp();
+                pluginInstance.API.HideApp();
                 _ws.Send(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new PluginJsonRpcResponse
                 {
                     Id = request.Id,
@@ -238,7 +266,7 @@ public abstract class PluginHostBase : IPluginHost
                 })));
                 break;
             case "ShowApp":
-                PluginManager.API.ShowApp();
+                pluginInstance.API.ShowApp();
                 _ws.Send(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new PluginJsonRpcResponse
                 {
                     Id = request.Id,
@@ -260,7 +288,7 @@ public abstract class PluginHostBase : IPluginHost
                     return;
                 }
 
-                PluginManager.API.ChangeQuery(query);
+                pluginInstance.API.ChangeQuery(query);
                 _ws.Send(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new PluginJsonRpcResponse
                 {
                     Id = request.Id,
@@ -284,7 +312,7 @@ public abstract class PluginHostBase : IPluginHost
 
                 request.Params.TryGetValue("description", out var description);
                 request.Params.TryGetValue("iconPath", out var iconPath);
-                PluginManager.API.ShowMsg(title, description ?? "", iconPath ?? "");
+                pluginInstance.API.ShowMsg(title, description ?? "", iconPath ?? "");
                 _ws.Send(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new PluginJsonRpcResponse
                 {
                     Id = request.Id,
@@ -306,22 +334,7 @@ public abstract class PluginHostBase : IPluginHost
                     return;
                 }
 
-                _pluginLoggerInstance.TryGetValue(request.PluginId, out var pluginLogger);
-                if (pluginLogger == null)
-                {
-                    pluginLogger = new LoggerConfiguration()
-                        .WriteTo.File(
-                            Path.Combine(DataLocation.LogDirectory, "plugins", request.PluginName, "log.txt"),
-                            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}",
-                            rollOnFileSizeLimit: true,
-                            retainedFileCountLimit: 3,
-                            fileSizeLimitBytes: 1024 * 1024 * 100 /*100M*/)
-                        .MinimumLevel.Debug()
-                        .CreateLogger();
-                    _pluginLoggerInstance.Add(request.PluginId, pluginLogger);
-                }
-
-                pluginLogger.Information(msgStr);
+                pluginInstance.API.Log(msgStr);
 
                 _ws.Send(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new PluginJsonRpcResponse
                 {
@@ -344,7 +357,7 @@ public abstract class PluginHostBase : IPluginHost
                     return;
                 }
 
-                var translation = PluginManager.API.GetTranslation(key);
+                var translation = pluginInstance.API.GetTranslation(key);
                 var response = new PluginJsonRpcResponse
                 {
                     Id = request.Id,

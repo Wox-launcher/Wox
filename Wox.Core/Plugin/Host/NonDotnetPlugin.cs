@@ -11,7 +11,7 @@ public class NonDotnetPlugin : IPlugin
 
     public void Init(PluginInitContext context)
     {
-        PluginHost.InvokeMethod(Metadata, "init").Wait();
+        _ = PluginHost.InvokeMethod(Metadata, "init");
     }
 
     public async Task<List<Result>> Query(Query query)

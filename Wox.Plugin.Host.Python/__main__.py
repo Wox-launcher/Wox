@@ -1,3 +1,4 @@
+import asyncio
 import sys
 import uuid
 
@@ -19,4 +20,4 @@ logger.info("----------------------------------------")
 logger.info(f"Start python host: {uuid.uuid4()}")
 logger.info(f"port: {port}")
 
-start_websocket(port)
+asyncio.run(start_websocket(port))

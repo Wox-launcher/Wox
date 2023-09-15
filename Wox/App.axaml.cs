@@ -1,7 +1,6 @@
 using System;
 using System.Threading.Tasks;
 using Avalonia;
-using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Wox.Core;
@@ -29,7 +28,7 @@ public class App : Application
 
         base.OnFrameworkInitializationCompleted();
 
-        Task.Run(async () => { await Bootstrap().ConfigureAwait(false); });
+        Task.Run(async () => { await Bootstrap(); });
     }
 
 
@@ -41,13 +40,21 @@ public class App : Application
         Logger.Info("---------------------------");
         Logger.Info("Bootstrap Wox");
         Logger.Info($"CLR version: {Environment.Version}");
+        Logger.Info("Data location: ");
+        Logger.Info($"  - Log: {DataLocation.LogDirectory}");
+        Logger.Info("  - Hosts:");
+        Logger.Info($"    - Node: {DataLocation.NodejsHostEntry}");
+        Logger.Info($"    - Python: {DataLocation.PythonHostEntry}");
+        Logger.Info("  - Plugins: ");
+        foreach (var pluginDirectory in DataLocation.PluginDirectories) Logger.Info($"    - {pluginDirectory}");
+
 #if DEBUG
         Logger.Info("Run Mode: Debug");
 #else
         Logger.Info("Run Mode: Release");
 #endif
 
-        await PluginManager.LoadPlugins(new PublicAPIInstance());
+        await PluginManager.LoadPlugins();
 
         Logger.Info("Finish bootstrap");
     }
@@ -55,12 +62,8 @@ public class App : Application
     private void ToggleWindowState()
     {
         if (Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-        {
             if (desktop.MainWindow is MainWindow mainWindow)
-            {
                 mainWindow.Show();
-            }
-        }
     }
 
     private void TrayIcon_OnClicked(object? sender, EventArgs e)

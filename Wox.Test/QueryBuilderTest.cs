@@ -40,7 +40,8 @@ public class QueryBuilderTest
                 },
                 Plugin = null!,
                 PluginDirectory = "",
-                PluginHost = null!
+                Host = null!,
+                API = null!
             }
         };
     }

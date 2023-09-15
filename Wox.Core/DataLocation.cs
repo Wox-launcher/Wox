@@ -3,7 +3,7 @@ namespace Wox.Core;
 public static class DataLocation
 {
     public static readonly string LogDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "wox-log");
-    private static readonly string PluginHostDirectory = Path.Combine(DataDirectory, "hosts");
+    private static readonly string PluginHostDirectory = Path.Combine(AppContext.BaseDirectory, "hosts");
     private static readonly string UserInstalledPluginsDirectory = Path.Combine(DataDirectory, "plugins");
     private static readonly string SystemBundledPluginsDirectory = Path.Combine(AppContext.BaseDirectory, "plugins");
 
@@ -43,7 +43,7 @@ public static class DataLocation
 #if DEBUG
             return Path.Combine(AppContext.BaseDirectory, "../../../Wox.Plugin.Host.Python", "python-host.pyz");
 #else
-            return Path.Combine(PluginHostDirectory, "node.js");
+            return Path.Combine(PluginHostDirectory, "python-host.pyz");
 #endif
         }
     }

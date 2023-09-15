@@ -6,6 +6,6 @@ public class NodejsHost : PluginHostBase
 
     public override async Task Start()
     {
-        await StartHost("node", DataLocation.NodejsHostEntry);
+        await StartHost("/opt/homebrew/bin/node", DataLocation.NodejsHostEntry);
     }
 }

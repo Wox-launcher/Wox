@@ -10,23 +10,20 @@ public static class PluginManager
 {
     private static List<PluginInstance> _pluginInstances = new();
 
-    public static IPublicAPI API { get; private set; } = null!;
-
     public static List<PluginInstance> GetAllPlugins()
     {
         return _pluginInstances;
     }
 
-    public static async Task LoadPlugins(IPublicAPI api)
+    public static async Task LoadPlugins()
     {
-        API = api;
         _pluginInstances = await PluginLoader.LoadPlugins();
         InitPlugins();
     }
 
     private static void UnloadPlugin(PluginInstance plugin, string reason)
     {
-        plugin.PluginHost.UnloadPlugin(plugin.Metadata);
+        plugin.Host.UnloadPlugin(plugin.Metadata);
         _pluginInstances.Remove(plugin);
         Logger.Info($"{plugin.Metadata.Name} plugin was unloaded because {reason}");
     }
@@ -39,7 +36,7 @@ public static class PluginManager
             {
                 Logger.Debug($"[{pluginInstance.Metadata.Name}] Start to init plugin ");
                 var startTime = DateTime.Now;
-                pluginInstance.Plugin.Init(new PluginInitContext(API));
+                pluginInstance.Plugin.Init(new PluginInitContext(pluginInstance.API));
                 // pluginInstance.Metadata.InitTime += DateTime.Now.Subtract(startTime).Milliseconds;
                 // Logger.Info($"init plugin {pluginInstance.Metadata.Name} success, total init cost is {pluginInstance.Metadata.InitTime}ms");
             }

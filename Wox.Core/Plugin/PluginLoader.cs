@@ -9,8 +9,8 @@ public static class PluginLoader
     private static List<PluginHostBase> PluginHosts { get; } = new()
     {
         new DotnetHost(),
-        new NodejsHost()
-        // new PythonHost()
+        new NodejsHost(),
+        new PythonHost()
     };
 
     public static async Task<List<PluginInstance>> LoadPlugins()
@@ -23,7 +23,6 @@ public static class PluginLoader
             try
             {
                 var instances = await LoadPluginsByRuntime(pluginRuntime);
-                if (instances == null) continue;
                 pluginInstances.AddRange(instances);
             }
             catch (Exception e)
@@ -34,8 +33,11 @@ public static class PluginLoader
         return pluginInstances;
     }
 
-    private static async Task<List<PluginInstance>?> LoadPluginsByRuntime(string pluginRuntime)
+    private static async Task<List<PluginInstance>> LoadPluginsByRuntime(string pluginRuntime)
     {
+        if (pluginRuntime.ToUpper() == PluginRuntime.Python.ToUpper())
+            throw new Exception("Python plugin runtime is not supported yet");
+
         var pluginInstances = new List<PluginInstance>();
 
         List<(PluginMetadata, string)> pluginMetas = new();
@@ -73,8 +75,9 @@ public static class PluginLoader
             {
                 Metadata = metadata,
                 Plugin = plugin,
+                API = new PluginPublicAPI(metadata),
                 PluginDirectory = pluginDirectory,
-                PluginHost = pluginHost
+                Host = pluginHost
             };
             pluginInstances.Add(pluginInstance);
         }

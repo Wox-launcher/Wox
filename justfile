@@ -33,6 +33,7 @@ default:
     rm -rf publish/wox-{{target}}
     
     # build plugins first
+    just _build_dotnet_plugin Wox.Plugin.App {{target}}
     just _build_dotnet_plugin Wox.Plugin.Calculator {{target}}
     just _build_nodejs_plugin Wox.Plugin.ProcessKiller Wox/plugins
 
@@ -92,6 +93,7 @@ default:
 # build all dependencies for development in DEBUG mode    
 @_build_dev:
     just _build_dev_dotnet_plugin Wox.Plugin.Calculator
+    just _build_dev_dotnet_plugin Wox.Plugin.App
     just _build_dev_nodejs_host
     just _build_nodejs_plugin Wox.Plugin.ProcessKiller Wox/bin/Debug/plugins
     just _build_dev_python_host
