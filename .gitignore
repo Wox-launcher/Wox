@@ -280,7 +280,6 @@ paket-files/
 # Executables
 *.exe
 *.out
-*.app
 
 # New to Visual Studio
 *.VC.db

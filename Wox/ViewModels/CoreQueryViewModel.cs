@@ -55,7 +55,7 @@ public class CoreQueryViewModel : ViewModelBase
             var result = await PluginManager.QueryForPlugin(plugin, query);
             foreach (var pluginQueryResult in result)
                 if (pluginQueryResult.AssociatedQuery.RawQuery == Query)
-                    _results.AddRange(result);
+                    _results.Add(pluginQueryResult);
             this.RaisePropertyChanged(nameof(QueryResult));
         }
     }

@@ -15,15 +15,4 @@ public class PluginQueryResult
     ///     Plugin that generated this result.
     /// </summary>
     public required PluginInstance Plugin { get; init; }
-
-    public string IconPath
-    {
-        get
-        {
-            if (!string.IsNullOrEmpty(Plugin.PluginDirectory) && !string.IsNullOrEmpty(Result.IcoPath) && !Path.IsPathRooted(Result.IcoPath))
-                return Path.Combine(Plugin.PluginDirectory, Result.IcoPath);
-
-            return "";
-        }
-    }
 }

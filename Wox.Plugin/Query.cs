@@ -35,4 +35,16 @@ public class Query
     {
         return RawQuery;
     }
+
+    public override bool Equals(object? obj)
+    {
+        if (obj is Query query) return RawQuery == query.RawQuery;
+
+        return false;
+    }
+
+    public override int GetHashCode()
+    {
+        return RawQuery.GetHashCode();
+    }
 }

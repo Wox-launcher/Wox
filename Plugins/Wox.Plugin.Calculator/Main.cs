@@ -58,9 +58,9 @@ public class Main : IPlugin
                     new()
                     {
                         Title = newResult,
-                        IcoPath = "Images/calculator.png",
+                        SubTitle = Context.API.GetTranslation("wox_plugin_calculator_copy_number_to_clipboard"),
+                        Icon = WoxImage.FromRelativeToPluginPath("Images/calculator.png"),
                         Score = 300,
-                        Description = Context.API.GetTranslation("wox_plugin_calculator_copy_number_to_clipboard"),
                         Action = () =>
                         {
                             try

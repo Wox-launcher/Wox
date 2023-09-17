@@ -11,9 +11,9 @@ public class Result
 
     public required string Title { get; init; }
 
-    public required string IcoPath { get; init; }
+    public string? SubTitle { get; init; }
 
-    public string? Description { get; init; }
+    public required WoxImage Icon { get; init; }
 
     public int Score { get; init; }
 

@@ -1,0 +1,18 @@
+{
+  "Id": "5529d5f170884086960514065d606d55",
+  "TriggerKeywords": [
+    "*"
+  ],
+  "Name": "App",
+  "Description": "Search installed apps in your computer",
+  "Author": "qianlifeng",
+  "Version": "0.0.1",
+  "Runtime": "dotnet",
+  "Website": "https://github.com/Wox-launcher/Wox",
+  "Entry": "Wox.Plugin.App.dll",
+  "Icon": "relative:Images\\calculator.png",
+  "SupportedOS": [
+    "WINDOWS",
+    "MACOS"
+  ]
+}
