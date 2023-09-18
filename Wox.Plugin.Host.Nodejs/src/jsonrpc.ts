@@ -42,7 +42,7 @@ export async function handleRequestFromWox(request: PluginJsonRpcRequest, ws: We
 
   switch (request.Method) {
     case "loadPlugin":
-      return await loadPlugin(request)
+      return loadPlugin(request)
     case "init":
       return initPlugin(request, ws)
     case "query":

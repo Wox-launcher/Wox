@@ -28,9 +28,10 @@ public class Main : IPlugin
 
     private PluginInitContext Context { get; set; } = null!;
 
-    public void Init(PluginInitContext context)
+    public Task Init(PluginInitContext context)
     {
         Context = context;
+        return Task.CompletedTask;
     }
 
     public async Task<List<Result>> Query(Query query)
@@ -59,7 +60,7 @@ public class Main : IPlugin
                     {
                         Title = newResult,
                         SubTitle = Context.API.GetTranslation("wox_plugin_calculator_copy_number_to_clipboard"),
-                        Icon = WoxImage.FromRelativeToPluginPath("Images/calculator.png"),
+                        Icon = new WoxImage { ImageType = WoxImageType.RelativeToPluginPath, ImageData = "Images/calculator.png" },
                         Score = 300,
                         Action = () =>
                         {

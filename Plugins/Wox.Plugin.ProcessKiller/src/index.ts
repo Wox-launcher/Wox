@@ -1,4 +1,4 @@
-import { PluginInitContext, PublicAPI, Query, Result, Plugin } from "@wox-launcher/wox-plugin"
+import type { PluginInitContext, PublicAPI, Query, Result, Plugin, WoxImage } from "@wox-launcher/wox-plugin"
 
 let api: PublicAPI
 
@@ -14,7 +14,7 @@ export const plugin: Plugin = {
     return [
       {
         Title: `Kill process ${query.RawQuery}`,
-        IcoPath: "Images/app.png",
+        Icon: { ImageType: "RelativeToPluginPath", ImageData: "images/app.png" } as WoxImage,
         Action: async () => {
           const translationResult = await api.GetTranslation("processKillerKilling")
           await api.Log(translationResult)

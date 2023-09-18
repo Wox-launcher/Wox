@@ -1,4 +1,5 @@
-﻿using Wox.Core.Utils;
+﻿using System.Diagnostics;
+using Wox.Core.Utils;
 using Wox.Plugin;
 
 namespace Wox.Core.Plugin;
@@ -28,17 +29,16 @@ public static class PluginManager
         Logger.Info($"{plugin.Metadata.Name} plugin was unloaded because {reason}");
     }
 
-    private static void InitPlugins()
+    private static async Task InitPlugins()
     {
-        Parallel.ForEach(_pluginInstances, pluginInstance =>
+        await Parallel.ForEachAsync(_pluginInstances, new ParallelOptions { MaxDegreeOfParallelism = 5 }, async (pluginInstance, token) =>
         {
             try
             {
                 Logger.Debug($"[{pluginInstance.Metadata.Name}] Start to init plugin ");
-                var startTime = DateTime.Now;
-                pluginInstance.Plugin.Init(new PluginInitContext(pluginInstance.API));
-                // pluginInstance.Metadata.InitTime += DateTime.Now.Subtract(startTime).Milliseconds;
-                // Logger.Info($"init plugin {pluginInstance.Metadata.Name} success, total init cost is {pluginInstance.Metadata.InitTime}ms");
+                var startTimestamp = Stopwatch.GetTimestamp();
+                await pluginInstance.Plugin.Init(new PluginInitContext(pluginInstance.API));
+                Logger.Info($"[{pluginInstance.Metadata.Name}] Plugin init cost {Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds} ms");
             }
             catch (Exception e)
             {

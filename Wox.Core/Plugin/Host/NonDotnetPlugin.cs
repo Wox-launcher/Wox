@@ -9,9 +9,9 @@ public class NonDotnetPlugin : IPlugin
     public required PluginMetadata Metadata { get; init; }
     public required PluginHostBase PluginHost { get; init; }
 
-    public void Init(PluginInitContext context)
+    public Task Init(PluginInitContext context)
     {
-        _ = PluginHost.InvokeMethod(Metadata, "init");
+        return PluginHost.InvokeMethod(Metadata, "init");
     }
 
     public async Task<List<Result>> Query(Query query)

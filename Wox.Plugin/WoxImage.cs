@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Wox.Plugin;
 
 public enum WoxImageType
@@ -30,37 +32,8 @@ public enum WoxImageType
 
 public class WoxImage
 {
-    private WoxImage(WoxImageType woxImageType, string imageData)
-    {
-        ImageType = woxImageType;
-        ImageData = imageData;
-    }
+    public string ImageData { get; init; } = "";
 
-    public string ImageData { get; }
-    public WoxImageType ImageType { get; }
-
-    public static WoxImage FromAbsolutePath(string path)
-    {
-        return new WoxImage(WoxImageType.AbsolutePath, path);
-    }
-
-    public static WoxImage FromRelativeToPluginPath(string path)
-    {
-        return new WoxImage(WoxImageType.RelativeToPluginPath, path);
-    }
-
-    public static WoxImage FromSvg(string svg)
-    {
-        return new WoxImage(WoxImageType.Svg, svg);
-    }
-
-    public static WoxImage FromBase64(string base64)
-    {
-        return new WoxImage(WoxImageType.Base64, base64);
-    }
-
-    public static WoxImage FromRemote(string url)
-    {
-        return new WoxImage(WoxImageType.Remote, url);
-    }
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public WoxImageType ImageType { get; init; }
 }

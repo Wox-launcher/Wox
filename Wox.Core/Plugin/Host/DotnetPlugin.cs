@@ -6,9 +6,9 @@ public class DotnetPlugin : IPlugin
 {
     public required IPlugin RawPlugin { get; init; }
 
-    public void Init(PluginInitContext context)
+    public Task Init(PluginInitContext context)
     {
-        RawPlugin.Init(context);
+        return RawPlugin.Init(context);
     }
 
     public async Task<List<Result>> Query(Query query)

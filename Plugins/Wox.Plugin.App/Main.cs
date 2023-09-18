@@ -9,13 +9,13 @@ public class Main : IPlugin
     private IAppLoader? _appLoader;
     private List<AppInfo>? _apps;
 
-    public void Init(PluginInitContext context)
+    public async Task Init(PluginInitContext context)
     {
         _api = context.API;
         var isMacos = OperatingSystem.IsMacOS();
         if (isMacos) _appLoader = new MacAppLoader();
 
-        if (_appLoader != null) Task.Run(async () => _apps = await _appLoader.GetAllApps(_api));
+        if (_appLoader != null) _apps = await _appLoader.GetAllApps(_api);
     }
 
     public Task<List<Result>> Query(Query query)
@@ -29,19 +29,24 @@ public class Main : IPlugin
                 {
                     Title = app.Name,
                     SubTitle = app.Path,
-                    Icon = WoxImage.FromAbsolutePath(app.IconPath),
+                    Icon = new WoxImage { ImageType = WoxImageType.AbsolutePath, ImageData = app.IconPath },
                     Action = () =>
                     {
                         try
                         {
-                            Process.Start(app.Path);
+                            Process.Start(new ProcessStartInfo
+                            {
+                                FileName = "open",
+                                Arguments = app.Path,
+                                UseShellExecute = true
+                            });
                         }
                         catch (Exception e)
                         {
                             _api.Log(e.Message);
                         }
 
-                        return false;
+                        return true;
                     }
                 });
 

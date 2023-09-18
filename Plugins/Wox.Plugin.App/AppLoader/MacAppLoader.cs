@@ -29,7 +29,7 @@ public class MacAppLoader : IAppLoader
             var appInfo = await GetAppInfo(appDirectory);
             if (appInfo != null)
             {
-                api.Log($"Get app=> {appInfo.Name}");
+                api.Log($"Get app=> {appInfo.IconPath}");
                 apps.Add(appInfo);
             }
         });

@@ -105,9 +105,9 @@ default:
     cd Wox.Plugin.Host.Python && \
     rm -rf python-host && \
     rm -rf python-host.pyz && \
-    python -m pip install -r requirements.txt --target python-host && \
+    python3 -m pip install -r requirements.txt --target python-host && \
     cp *.py python-host && \
-    python -m zipapp -p "interpreter" python-host && \
+    python3 -m zipapp -p "interpreter" python-host && \
     rm -rf python-host && \
     cd ..
     
