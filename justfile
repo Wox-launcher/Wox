@@ -80,6 +80,11 @@ default:
     cp Plugins/{{pluginName}}/dist/index.js {{directory}}/{{pluginName}}/index.js
     cp Plugins/{{pluginName}}/plugin.json {{directory}}/{{pluginName}}/plugin.json
     
+    if [ "{{pluginName}}" = "Wox.Plugin.Clipboard" ]; then \
+        cp -r Plugins/{{pluginName}}/platform {{directory}}/{{pluginName}}/; \
+    fi
+    
+    
 @_build_nodejs_host directory:
     just _build_dev_nodejs_host
     mkdir -p {{directory}}

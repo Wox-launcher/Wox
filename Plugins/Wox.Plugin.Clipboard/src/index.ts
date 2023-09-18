@@ -1,35 +1,35 @@
-import type { PluginInitContext, PublicAPI, Query, Result, Plugin, WoxImage } from "@wox-launcher/wox-plugin"
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+import type { Plugin, PluginInitContext, PublicAPI, Query, Result, WoxImage } from "@wox-launcher/wox-plugin" // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-import clipboardListener from "clipboard-event"
+import clipboardListener from "clipboard-event" // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import ncp from "copy-paste"
 
 let api: PublicAPI
+const histories: string[] = []
 
 export const plugin: Plugin = {
   init: async (context: PluginInitContext) => {
     api = context.API
-    await api.Log("process killer initialized")
-
     clipboardListener.startListening()
     clipboardListener.on("change", () => {
-      api.Log("Clipboard changed")
+      const content = ncp.paste()
+      api.Log("Clipboard changed: " + content)
+      histories.push(content)
     })
-
-    await api.Log("process killer initialize finished")
   },
 
   query: async (query: Query) => {
-    await api.Log("process killer got query: " + query.Search)
-    return [
-      {
-        Title: `Kill process ${query.RawQuery}`,
-        Icon: { ImageType: "RelativeToPluginPath", ImageData: "images/app.png" } as WoxImage,
-        Action: async () => {
-          const translationResult = await api.GetTranslation("processKillerKilling")
-          await api.Log(translationResult)
-          return false
-        }
-      }
-    ] as Result[]
+    return histories
+      .filter(history => history.includes(query.Search))
+      .map(history => {
+        return {
+          Title: history,
+          Icon: { ImageType: "RelativeToPluginPath", ImageData: "images/app.png" } as WoxImage,
+          Action: async () => {
+            ncp.copy(history)
+            return false
+          }
+        } as Result
+      })
   }
 }

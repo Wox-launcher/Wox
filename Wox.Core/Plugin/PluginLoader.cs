@@ -1,5 +1,7 @@
-﻿using System.Text.Json;
+﻿using System.Reflection;
+using System.Text.Json;
 using Wox.Core.Plugin.Host;
+using Wox.Core.Plugin.System;
 using Wox.Core.Utils;
 
 namespace Wox.Core.Plugin;
@@ -19,6 +21,11 @@ public static class PluginLoader
         var pluginInstances = new List<PluginInstance>();
 
 
+        // load system plugin first
+        var systemPluginInstances = LoadSystemPlugins();
+        if (systemPluginInstances != null) pluginInstances.AddRange(systemPluginInstances);
+
+        // load other plugins
         foreach (var pluginRuntime in PluginRuntime.All)
             try
             {
@@ -31,6 +38,43 @@ public static class PluginLoader
             }
 
         return pluginInstances;
+    }
+
+    private static List<PluginInstance>? LoadSystemPlugins()
+    {
+        var pluginInstances = new List<PluginInstance>();
+
+        try
+        {
+            var systemTypes = Assembly.GetExecutingAssembly().GetTypes().Where(o => typeof(ISystemPlugin).IsAssignableFrom(o) && o.IsClass);
+            foreach (var type in systemTypes)
+            {
+                var rawIPlugin = Activator.CreateInstance(type) as ISystemPlugin;
+                if (rawIPlugin == null) return null;
+                var pluginInstance = new PluginInstance
+                {
+                    Metadata = rawIPlugin.GetMetadata(),
+                    Plugin = rawIPlugin,
+                    API = new PluginPublicAPI(rawIPlugin.GetMetadata()),
+                    PluginDirectory = "",
+                    Host = new DotnetHost(),
+                    IsSystemPlugin = true
+                };
+                Logger.Debug($"Start to load system plugin: {pluginInstance.Metadata.Name}");
+                pluginInstances.Add(pluginInstance);
+            }
+
+            return pluginInstances;
+        }
+        catch (Exception e)
+        {
+            Logger.Error("Couldn't load system plugins", e);
+#if DEBUG
+            throw;
+#else
+            return null;
+#endif
+        }
     }
 
     private static async Task<List<PluginInstance>> LoadPluginsByRuntime(string pluginRuntime)

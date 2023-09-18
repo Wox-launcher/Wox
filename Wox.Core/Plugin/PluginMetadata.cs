@@ -25,6 +25,9 @@ public class PluginMetadata
 
     public List<string> Commands { get; init; } = new();
 
+    /// <summary>
+    ///     See <see cref="PluginSupportedOS" />
+    /// </summary>
     public required List<string> SupportedOS { get; init; }
 
     public override string? ToString()

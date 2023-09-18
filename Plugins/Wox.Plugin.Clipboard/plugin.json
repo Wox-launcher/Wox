@@ -1,10 +1,10 @@
 {
   "Id": "8364084026ff479fa7dbaf91f65cdd0e",
   "TriggerKeywords": [
-    "kill"
+    "cp"
   ],
-  "Name": "Process killer",
-  "Description": "A Wox plugin to kill processes",
+  "Name": "Clipboard History",
+  "Description": "A Wox plugin to get clipboard history",
   "Author": "qianlifeng",
   "Version": "1.0.0",
   "Runtime": "nodejs",

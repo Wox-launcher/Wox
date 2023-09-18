@@ -19,7 +19,7 @@ public static class PluginManager
     public static async Task LoadPlugins()
     {
         _pluginInstances = await PluginLoader.LoadPlugins();
-        InitPlugins();
+        await InitPlugins();
     }
 
     private static void UnloadPlugin(PluginInstance plugin, string reason)
