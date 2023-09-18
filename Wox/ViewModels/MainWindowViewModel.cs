@@ -14,7 +14,7 @@ public class MainWindowViewModel : ViewModelBase
     private Boolean isGlobalRegisterred = false;
     public CoreQueryViewModel CoreQueryViewModel { get; } = new CoreQueryViewModel();
 
-    private Dictionary<KeyCode,Boolean> pressedKeyMap = new Dictionary<KeyCode,Boolean>();
+    private Dictionary<KeyCode, Boolean> pressedKeyMap = new Dictionary<KeyCode, Boolean>();
 
     public void OnDeactivated()
     {
@@ -25,17 +25,17 @@ public class MainWindowViewModel : ViewModelBase
             if (woxMainWindow != null) woxMainWindow.Hide();
         }
     }
-    
+
     public void ToggleWindowVisible()
     {
         if (Application.Current != null && Application.Current.ApplicationLifetime != null)
         {
             var woxMainWindow = ((IClassicDesktopStyleApplicationLifetime)Application.Current.ApplicationLifetime)
                 .MainWindow;
-            if (woxMainWindow != null) woxMainWindow.IsVisible=!woxMainWindow.IsVisible;
+            if (woxMainWindow != null) woxMainWindow.IsVisible = !woxMainWindow.IsVisible;
         }
     }
-    
+
     public void StartMonitorGlobalKey()
     {
         if (!isGlobalRegisterred)
@@ -44,22 +44,22 @@ public class MainWindowViewModel : ViewModelBase
             isGlobalRegisterred = true;
         }
     }
-    
+
     private async Task RunGlobalKeyHook()
     {
         var hook = new SimpleGlobalHook();
-        hook.KeyPressed+= (((sender, args) =>
+        hook.KeyPressed += (((sender, args) =>
         {
             pressedKeyMap[args.Data.KeyCode] = true;
             pressedKeyMap.TryGetValue(KeyCode.VcLeftAlt, out var isLeftAltPressed);
             pressedKeyMap.TryGetValue(KeyCode.VcLeftMeta, out var isLeftMetaPressed);
             pressedKeyMap.TryGetValue(KeyCode.VcSpace, out var isSpacePressed);
-            if (isLeftAltPressed && isLeftMetaPressed && isSpacePressed) 
+            if (isLeftAltPressed && isLeftMetaPressed && isSpacePressed)
             {
                 Dispatcher.UIThread.InvokeAsync(ToggleWindowVisible);
             }
         }));
-        hook.KeyReleased+=((sender,args) =>
+        hook.KeyReleased += ((sender, args) =>
         {
             pressedKeyMap[args.Data.KeyCode] = false;
         });

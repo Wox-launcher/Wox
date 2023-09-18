@@ -13,7 +13,7 @@ public class MacAppLoader : IAppLoader
         "/System/Library/PreferencePanes"
     };
 
-    private IPublicAPI _api;
+    private IPublicAPI _api = null!;
 
     public async Task<List<AppInfo>> GetAllApps(IPublicAPI api)
     {
@@ -80,6 +80,7 @@ public class MacAppLoader : IAppLoader
             if (rootDict.TryGetValue("CFBundleIconFile", out var iconName))
             {
                 var imageName = iconName.ToString();
+                if (imageName == null) return null;
                 if (!imageName.EndsWith(".icns")) imageName = $"{iconName}.icns";
 
                 return IcnsParser.Load(Path.Combine(path, "Contents/Resources", imageName));

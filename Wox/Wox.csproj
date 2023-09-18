@@ -1,48 +1,45 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-    <PropertyGroup>
-        <OutputType>WinExe</OutputType>
-        <TargetFramework>net7.0</TargetFramework>
-        <Nullable>enable</Nullable>
-        <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
-        <ApplicationManifest>app.manifest</ApplicationManifest>
-        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-        <DebugType>embedded</DebugType>
-        <Version>2.0.0</Version>
-        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    </PropertyGroup>
-
-    <ItemGroup>
-        <Folder Include="bin\Debug\plugins\"/>
-        <Folder Include="Models\"/>
-        <AvaloniaResource Include="Assets\**"/>
-    </ItemGroup>
-
-    <ItemGroup>
-        <PackageReference Include="Avalonia" Version="11.0.2"/>
-        <PackageReference Include="Avalonia.Desktop" Version="11.0.2"/>
-        <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.2"/>
-        <PackageReference Include="Avalonia.Fonts.Inter" Version="11.0.2"/>
-        <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
-        <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="Avalonia.Diagnostics" Version="11.0.2"/>
-        <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.2"/>
-        <PackageReference Include="SharpHook" Version="5.0.0"/>
-        <PackageReference Include="SharpHook.Reactive" Version="5.0.0"/>
-    </ItemGroup>
-
-
-    <ItemGroup>
-        <ProjectReference Include="..\Wox.Core\Wox.Core.csproj"/>
-        <ProjectReference Include="..\Wox.Plugin\Wox.Plugin.csproj"/>
-    </ItemGroup>
-
-    <ItemGroup>
-        <None Update="plugins\**\*.*">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </None>
-        <None Update="hosts\**\*.*">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </None>
-    </ItemGroup>
-
-
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net7.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <DebugType>embedded</DebugType>
+    <Version>2.0.0</Version>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Folder Include="bin\Debug\plugins\" />
+    <Folder Include="Models\" />
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.0.2" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.0.2" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.2" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.0.2" />
+    <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
+    <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="Avalonia.Diagnostics" Version="11.0.2" />
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.2" />
+    <PackageReference Include="SharpHook" Version="5.0.0" />
+    <PackageReference Include="SharpHook.Reactive" Version="5.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Wox.Core\Wox.Core.csproj" />
+    <ProjectReference Include="..\Wox.Plugin\Wox.Plugin.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="plugins\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="hosts\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <Target Name="Husky" BeforeTargets="Restore;CollectPackageReferences" Condition="'$(HUSKY)' != 0">
+    <Exec Command="dotnet tool restore" StandardOutputImportance="Low" StandardErrorImportance="High" />
+    <Exec Command="dotnet husky install" StandardOutputImportance="Low" StandardErrorImportance="High" WorkingDirectory=".." />
+  </Target>
 </Project>

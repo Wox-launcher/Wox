@@ -19,4 +19,4 @@
 ## or put your custom commands -------------------
 #echo 'Husky.Net is awesome!'
 
-echo 'Husky.Net is awesome!'
+dotnet husky run --group pre-commit

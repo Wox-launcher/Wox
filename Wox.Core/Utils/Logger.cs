@@ -1,4 +1,6 @@
+using Microsoft.Extensions.Logging;
 using Serilog;
+using ILogger = Serilog.ILogger;
 
 namespace Wox.Core.Utils;
 
@@ -43,5 +45,10 @@ public static class Logger
     public static void Error(string message, Exception e)
     {
         SeriLogger.Error(e, GetMessage(message));
+    }
+
+    public static Microsoft.Extensions.Logging.ILogger GetMicrosoftILogger()
+    {
+        return new LoggerFactory().AddSerilog(SeriLogger).CreateLogger("Logger");
     }
 }

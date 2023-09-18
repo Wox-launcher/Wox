@@ -18,7 +18,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         PointerPressed += MainWindow_PointerPressed;
-       
+
     }
 
     private void MainWindow_PointerPressed(object? sender, PointerPressedEventArgs e)

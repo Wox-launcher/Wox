@@ -1,10 +1,9 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using WebSocketSharp;
+using WebSocketSharper;
 using Wox.Core.Utils;
 using Wox.Plugin;
-using Logger = Wox.Core.Utils.Logger;
 
 namespace Wox.Core.Plugin.Host;
 
@@ -111,28 +110,27 @@ public abstract class PluginHostBase : IPluginHost
     {
         var tcs = new TaskCompletionSource<bool>();
 
-        _ws = new WebSocket($"ws://localhost:{websocketServerPort}");
-        _ws.Log.Output = (data, s) => { Logger.Debug($"[{PluginRuntime} host] websocket server log: {data}"); };
+        _ws = new WebSocket(Logger.GetMicrosoftILogger(), $"ws://localhost:{websocketServerPort}", true);
         _ws.OnError += (sender, e) => { Logger.Error($"[{PluginRuntime} host] websocket server error: {e.Message}"); };
-        var retryDelay = 500;
+        // var retryDelay = 500;
         var retryCts = new CancellationTokenSource();
         _ws.OnClose += (sender, e) =>
         {
             Logger.Debug($"[{PluginRuntime} host] websocket connection closed");
-
-            //try to reconnect
-            if (!_cts.IsCancellationRequested && !retryCts.IsCancellationRequested)
-                Task.Run(async () =>
-                {
-                    retryDelay *= 2;
-                    Logger.Debug($"[{PluginRuntime} host] websocket reconnecting in {retryDelay / 1000} second");
-                    await Task.Delay(retryDelay);
-                    Logger.Debug($"[{PluginRuntime} host] websocket reconnecting");
-                    // ReSharper disable once MethodHasAsyncOverload
-                    _ws.Connect();
-                }, retryCts.Token);
-            else
-                Logger.Debug($"[{PluginRuntime} host] websocket reconnecting cancelled");
+            //
+            // //try to reconnect
+            // if (!_cts.IsCancellationRequested && !retryCts.IsCancellationRequested)
+            //     Task.Run(async () =>
+            //     {
+            //         retryDelay *= 2;
+            //         Logger.Debug($"[{PluginRuntime} host] websocket reconnecting in {retryDelay / 1000} second");
+            //         await Task.Delay(retryDelay);
+            //         Logger.Debug($"[{PluginRuntime} host] websocket reconnecting");
+            //         // ReSharper disable once MethodHasAsyncOverload
+            //         _ws.Connect();
+            //     }, retryCts.Token);
+            // else
+            //     Logger.Debug($"[{PluginRuntime} host] websocket reconnecting cancelled");
         };
         _ws.OnOpen += (sender, e) =>
         {
