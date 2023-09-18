@@ -35,7 +35,7 @@ default:
     # build plugins first
     just _build_dotnet_plugin Wox.Plugin.App {{target}}
     just _build_dotnet_plugin Wox.Plugin.Calculator {{target}}
-    just _build_nodejs_plugin Wox.Plugin.ProcessKiller Wox/plugins
+    just _build_nodejs_plugin Wox.Plugin.Clipboard Wox/plugins
 
     # build hosts
     just _build_nodejs_host Wox/hosts
@@ -95,7 +95,7 @@ default:
     just _build_dev_dotnet_plugin Wox.Plugin.Calculator
     just _build_dev_dotnet_plugin Wox.Plugin.App
     just _build_dev_nodejs_host
-    just _build_nodejs_plugin Wox.Plugin.ProcessKiller Wox/bin/Debug/plugins
+    just _build_nodejs_plugin Wox.Plugin.Clipboard Wox/bin/Debug/plugins
     just _build_dev_python_host
 
 @_build_dev_nodejs_host:

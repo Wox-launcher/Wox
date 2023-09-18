@@ -1,4 +1,7 @@
 import type { PluginInitContext, PublicAPI, Query, Result, Plugin, WoxImage } from "@wox-launcher/wox-plugin"
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import clipboardListener from "clipboard-event"
 
 let api: PublicAPI
 
@@ -6,7 +9,13 @@ export const plugin: Plugin = {
   init: async (context: PluginInitContext) => {
     api = context.API
     await api.Log("process killer initialized")
-    await api.ShowApp()
+
+    clipboardListener.startListening()
+    clipboardListener.on("change", () => {
+      api.Log("Clipboard changed")
+    })
+
+    await api.Log("process killer initialize finished")
   },
 
   query: async (query: Query) => {

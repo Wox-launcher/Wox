@@ -8,6 +8,9 @@ dependencies:
   '@wox-launcher/wox-plugin':
     specifier: ^0.0.31
     version: 0.0.31
+  clipboard-event:
+    specifier: ^1.6.0
+    version: 1.6.0
 
 devDependencies:
   '@types/node':
@@ -587,6 +590,10 @@ packages:
       inherits: 2.0.4
       safe-buffer: 5.2.1
     dev: true
+
+  /clipboard-event@1.6.0:
+    resolution: {integrity: sha512-a69QYimd43xM+5hcHkucs0V/QoiZz1fqEFRTnewOITVQOtypRLbCx76Q91Djn6h7O24817dQw44sFUxRYWIuYA==}
+    dev: false
 
   /color-convert@2.0.1:
     resolution: {integrity: sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==}

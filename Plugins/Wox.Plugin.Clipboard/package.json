@@ -1,7 +1,7 @@
 {
-  "name": "wox-plugin-process-killer",
+  "name": "wox-plugin-clipboard",
   "version": "1.0.0",
-  "description": "A Wox plugin to kill processes",
+  "description": "A Wox plugin to get clipboard history",
   "repository": {
     "type": "git",
     "url": "https://github.com/Wox-launcher/Wox.git"
@@ -25,6 +25,7 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@wox-launcher/wox-plugin": "^0.0.31"
+    "@wox-launcher/wox-plugin": "^0.0.31",
+    "clipboard-event": "^1.6.0"
   }
 }

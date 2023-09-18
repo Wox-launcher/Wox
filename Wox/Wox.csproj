@@ -12,6 +12,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <Folder Include="bin\Debug\plugins\"/>
         <Folder Include="Models\"/>
         <AvaloniaResource Include="Assets\**"/>
     </ItemGroup>
