@@ -63,7 +63,7 @@ public class App : Application
     {
         if (Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             if (desktop.MainWindow is MainWindow mainWindow)
-                mainWindow.Show();
+                mainWindow.IsVisible = !mainWindow.IsVisible;
     }
 
     private void TrayIcon_OnClicked(object? sender, EventArgs e)

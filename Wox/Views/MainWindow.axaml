@@ -9,6 +9,7 @@
         x:CompileBindings="True"
         x:DataType="vm:MainWindowViewModel"
         Deactivated="WoxMainWindow_OnDeactivated"
+        Activated="WindowBase_OnActivated"
         Width="800"
         SizeToContent="Height"
         Icon="/Assets/avalonia-logo.ico"
