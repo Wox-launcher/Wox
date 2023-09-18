@@ -69,7 +69,7 @@ default:
 @_build_dotnet_plugin pluginName target:
     rm -rf Wox/plugins/{{pluginName}}
     # we need to put plugins into Wox/plugins folder, when Wox build single file, it will include all files in Wox/plugins folder
-    dotnet publish Plugins/{{pluginName}}/{{pluginName}}.csproj --configuration Release --output Wox/plugins/{{pluginName}} --runtime {{target}}
+    dotnet publish Plugins/{{pluginName}}/{{pluginName}}.csproj --configuration Release --output Wox/plugins/{{pluginName}} --runtime {{target}} --no-self-contained
     rm -rf Wox/plugins/{{pluginName}}/Wox.Plugin.dll
     
 @_build_nodejs_plugin pluginName directory:
