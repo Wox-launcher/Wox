@@ -1,0 +1,13 @@
+{
+   "tasks": [
+      {
+         "name": "welcome-message-example",
+         "command": "bash",
+         "args": [ "-c", "echo Husky.Net is awesome!" ],
+         "windows": {
+            "command": "cmd",
+            "args": ["/c", "echo Husky.Net is awesome!" ]
+         }
+      }
+   ]
+}
