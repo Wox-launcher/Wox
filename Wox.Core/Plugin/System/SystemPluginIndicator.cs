@@ -29,7 +29,7 @@ public class SystemPluginIndicator : ISystemPlugin
                     Action = () =>
                     {
                         _api.ChangeQuery($"{triggerKeyword} ");
-                        return false;
+                        return Task.FromResult(false);
                     }
                 };
                 results.Add(result);

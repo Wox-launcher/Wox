@@ -66,7 +66,7 @@ public abstract class PluginHostBase : IPluginHost
         var startInfo = new ProcessStartInfo
         {
             FileName = fileName,
-            Arguments = $"{entry} {websocketServerPort} \"{DataLocation.LogDirectory}\"",
+            Arguments = $"{entry} {websocketServerPort} \"{DataLocation.LogHostsDirectory}\"",
             CreateNoWindow = true,
             UseShellExecute = false,
             RedirectStandardOutput = true,

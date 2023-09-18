@@ -3,6 +3,7 @@ namespace Wox.Core;
 public static class DataLocation
 {
     public static readonly string LogDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "wox-log");
+    public static readonly string LogHostsDirectory = Path.Combine(LogDirectory, "hosts");
     private static readonly string PluginHostDirectory = Path.Combine(AppContext.BaseDirectory, "hosts");
     private static readonly string UserInstalledPluginsDirectory = Path.Combine(DataDirectory, "plugins");
     private static readonly string SystemBundledPluginsDirectory = Path.Combine(AppContext.BaseDirectory, "plugins");
@@ -71,6 +72,7 @@ public static class DataLocation
         if (!Directory.Exists(DataDirectory)) Directory.CreateDirectory(DataDirectory);
         if (!Directory.Exists(UserInstalledPluginsDirectory)) Directory.CreateDirectory(UserInstalledPluginsDirectory);
         if (!Directory.Exists(LogDirectory)) Directory.CreateDirectory(LogDirectory);
+        if (!Directory.Exists(LogHostsDirectory)) Directory.CreateDirectory(LogHostsDirectory);
         if (!Directory.Exists(PluginHostDirectory)) Directory.CreateDirectory(PluginHostDirectory);
     }
 }

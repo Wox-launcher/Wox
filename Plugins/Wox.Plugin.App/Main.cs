@@ -46,7 +46,7 @@ public class Main : IPlugin
                             _api.Log(e.Message);
                         }
 
-                        return true;
+                        return Task.FromResult(true);
                     }
                 });
 

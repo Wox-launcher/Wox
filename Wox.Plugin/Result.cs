@@ -17,5 +17,5 @@ public class Result
 
     public int Score { get; init; }
 
-    public Func<HideAppAfterSelect>? Action { get; set; }
+    public Func<Task<HideAppAfterSelect>>? Action { get; set; }
 }

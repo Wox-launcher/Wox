@@ -35,14 +35,13 @@ public class NonDotnetPlugin : IPlugin
         }
 
         foreach (var result in results)
-            result.Action = () =>
+            result.Action = async () =>
             {
-                var actionRawResult = PluginHost.InvokeMethod(Metadata, "action", new Dictionary<string, string?>
+                var actionRawResult = await PluginHost.InvokeMethod(Metadata, "action", new Dictionary<string, string?>
                 {
                     { "ActionId", result.Id }
-                }).Result;
+                });
                 if (actionRawResult == null) return true;
-
                 return actionRawResult.Value.Deserialize<bool>();
             };
 

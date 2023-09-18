@@ -62,11 +62,11 @@ public class Main : IPlugin
                         SubTitle = Context.API.GetTranslation("wox_plugin_calculator_copy_number_to_clipboard"),
                         Icon = new WoxImage { ImageType = WoxImageType.RelativeToPluginPath, ImageData = "Images/calculator.png" },
                         Score = 300,
-                        Action = () =>
+                        Action = async () =>
                         {
                             try
                             {
-                                ClipboardService.SetText(newResult);
+                                await ClipboardService.SetTextAsync(newResult);
                                 return true;
                             }
                             catch (ExternalException)
