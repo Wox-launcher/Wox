@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Wox.Core.Plugin.Host;
 using Wox.Plugin;
 
@@ -49,6 +50,30 @@ public class PluginInstance
     ///     Plugin host to run this plugin
     /// </summary>
     public required IPluginHost Host { get; init; }
+
+    /// <summary>
+    ///     Timestamp when plugin start load
+    /// </summary>
+    public long LoadStartTimestamp { get; set; }
+
+    /// <summary>
+    ///     Timestamp when plugin load finished
+    /// </summary>
+    public long LoadFinishedTimestamp { get; set; }
+
+    /// <summary>
+    ///     Timestamp when plugin start init
+    /// </summary>
+    public long InitStartTimestamp { get; set; }
+
+    /// <summary>
+    ///     Timestamp when plugin init finished
+    /// </summary>
+    public long InitFinishedTimestamp { get; set; }
+
+    public long LoadTime => Stopwatch.GetElapsedTime(LoadStartTimestamp, LoadFinishedTimestamp).Milliseconds;
+
+    public long InitTime => Stopwatch.GetElapsedTime(InitStartTimestamp, InitFinishedTimestamp).Milliseconds;
 
     public override string ToString()
     {

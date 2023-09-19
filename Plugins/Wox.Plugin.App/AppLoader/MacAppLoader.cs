@@ -19,7 +19,6 @@ public class MacAppLoader : IAppLoader
     {
         _api = api;
         var startTimestamp = Stopwatch.GetTimestamp();
-        api.Log("Start to get all mac apps");
         var apps = new List<AppInfo>();
         var appDirectories = _appDirectories.SelectMany(Directory.GetDirectories).Where(d => d.EndsWith(".app") || d.EndsWith(".prefPane"));
 
@@ -29,12 +28,9 @@ public class MacAppLoader : IAppLoader
             var appInfo = await GetAppInfo(appDirectory);
             if (appInfo != null)
             {
-                api.Log($"Get app=> {appInfo.IconPath}");
                 apps.Add(appInfo);
             }
         });
-
-        api.Log($"Get all mac apps cost {Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds} ms");
 
         return apps;
     }

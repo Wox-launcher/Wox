@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Diagnostics;
+using System.Reflection;
 using System.Text.Json;
 using Wox.Core.Plugin.Host;
 using Wox.Core.Plugin.System;
@@ -8,6 +9,8 @@ namespace Wox.Core.Plugin;
 
 public static class PluginLoader
 {
+    public static event Action<PluginInstance>? PluginLoaded;
+
     private static List<PluginHostBase> PluginHosts { get; } = new()
     {
         new DotnetHost(),
@@ -15,42 +18,35 @@ public static class PluginLoader
         new PythonHost()
     };
 
-    public static async Task<List<PluginInstance>> LoadPlugins()
+    public static async Task LoadPlugins()
     {
         Logger.Debug("Start to load plugins");
-        var pluginInstances = new List<PluginInstance>();
-
 
         // load system plugin first
-        var systemPluginInstances = LoadSystemPlugins();
-        if (systemPluginInstances != null) pluginInstances.AddRange(systemPluginInstances);
+        LoadSystemPlugins();
 
         // load other plugins
         foreach (var pluginRuntime in PluginRuntime.All)
             try
             {
-                var instances = await LoadPluginsByRuntime(pluginRuntime);
-                pluginInstances.AddRange(instances);
+                await LoadPluginsByRuntime(pluginRuntime);
             }
             catch (Exception e)
             {
                 Logger.Error($"[{pluginRuntime} host] load host plugin failed", e);
             }
-
-        return pluginInstances;
     }
 
-    private static List<PluginInstance>? LoadSystemPlugins()
+    private static void LoadSystemPlugins()
     {
-        var pluginInstances = new List<PluginInstance>();
-
         try
         {
+            var loadStartTimestamp = Stopwatch.GetTimestamp();
             var systemTypes = Assembly.GetExecutingAssembly().GetTypes().Where(o => typeof(ISystemPlugin).IsAssignableFrom(o) && o.IsClass);
             foreach (var type in systemTypes)
             {
                 var rawIPlugin = Activator.CreateInstance(type) as ISystemPlugin;
-                if (rawIPlugin == null) return null;
+                if (rawIPlugin == null) return;
                 var pluginInstance = new PluginInstance
                 {
                     Metadata = rawIPlugin.GetMetadata(),
@@ -58,13 +54,13 @@ public static class PluginLoader
                     API = new PluginPublicAPI(rawIPlugin.GetMetadata()),
                     PluginDirectory = "",
                     Host = new DotnetHost(),
-                    IsSystemPlugin = true
+                    IsSystemPlugin = true,
+                    LoadStartTimestamp = loadStartTimestamp,
+                    LoadFinishedTimestamp = Stopwatch.GetTimestamp()
                 };
+                PluginLoaded?.Invoke(pluginInstance);
                 Logger.Debug($"Start to load system plugin: {pluginInstance.Metadata.Name}");
-                pluginInstances.Add(pluginInstance);
             }
-
-            return pluginInstances;
         }
         catch (Exception e)
         {
@@ -77,10 +73,8 @@ public static class PluginLoader
         }
     }
 
-    private static async Task<List<PluginInstance>> LoadPluginsByRuntime(string pluginRuntime)
+    private static async Task LoadPluginsByRuntime(string pluginRuntime)
     {
-        var pluginInstances = new List<PluginInstance>();
-
         List<(PluginMetadata, string)> pluginMetas = new();
         var pluginDirectories = DataLocation.PluginDirectories.SelectMany(Directory.GetDirectories);
         foreach (var pluginDirectory in pluginDirectories)
@@ -109,7 +103,9 @@ public static class PluginLoader
         foreach (var (metadata, pluginDirectory) in pluginMetas)
         {
             Logger.Debug($"[{metadata.Runtime} host] start to load plugin: {metadata.Name}");
+            var loadStartTimestamp = Stopwatch.GetTimestamp();
             var plugin = await pluginHost.LoadPlugin(metadata, pluginDirectory);
+            var loadFinishedTimestamp = Stopwatch.GetTimestamp();
             if (plugin == null) continue;
 
             var pluginInstance = new PluginInstance
@@ -118,12 +114,12 @@ public static class PluginLoader
                 Plugin = plugin,
                 API = new PluginPublicAPI(metadata),
                 PluginDirectory = pluginDirectory,
-                Host = pluginHost
+                Host = pluginHost,
+                LoadStartTimestamp = loadStartTimestamp,
+                LoadFinishedTimestamp = loadFinishedTimestamp
             };
-            pluginInstances.Add(pluginInstance);
+            PluginLoaded?.Invoke(pluginInstance);
         }
-
-        return pluginInstances;
     }
 
     /// <summary>

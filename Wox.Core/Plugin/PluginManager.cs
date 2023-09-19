@@ -9,47 +9,56 @@ namespace Wox.Core.Plugin;
 /// </summary>
 public static class PluginManager
 {
-    private static List<PluginInstance> _pluginInstances = new();
+    private static readonly List<PluginInstance> PluginInstances = new();
 
     public static List<PluginInstance> GetAllPlugins()
     {
-        return _pluginInstances;
+        return PluginInstances;
+    }
+
+    static PluginManager()
+    {
+        PluginLoader.PluginLoaded += (pluginInstance =>
+        {
+            Task.Run(async () => { await OnPluginLoaded(pluginInstance); });
+        });
+    }
+
+    private static async Task OnPluginLoaded(PluginInstance pluginInstance)
+    {
+        try
+        {
+
+            Logger.Debug($"[{pluginInstance.Metadata.Name}] Start to init plugin ");
+            pluginInstance.InitStartTimestamp = Stopwatch.GetTimestamp();
+            await pluginInstance.Plugin.Init(new PluginInitContext(pluginInstance.API));
+            pluginInstance.InitFinishedTimestamp = Stopwatch.GetTimestamp();
+
+            PluginInstances.Add(pluginInstance);
+
+            Logger.Info($"[{pluginInstance.Metadata.Name}] Plugin load cost {pluginInstance.LoadTime} ms,  init cost {pluginInstance.InitTime} ms");
+        }
+        catch (Exception e)
+        {
+            e.Data.Add(nameof(pluginInstance.Metadata.Id), pluginInstance.Metadata.Id);
+            e.Data.Add(nameof(pluginInstance.Metadata.Name), pluginInstance.Metadata.Name);
+            e.Data.Add(nameof(pluginInstance.Metadata.Website), pluginInstance.Metadata.Website);
+            Logger.Error($"{pluginInstance.Metadata.Name} Fail to init plugin", e);
+            UnloadPlugin(pluginInstance, "failed to init");
+            //TODO: need someway to nicely tell user this plugin failed to load
+        }
     }
 
     public static async Task LoadPlugins()
     {
-        _pluginInstances = await PluginLoader.LoadPlugins();
-        await InitPlugins();
+        await PluginLoader.LoadPlugins();
     }
 
     private static void UnloadPlugin(PluginInstance plugin, string reason)
     {
         plugin.Host.UnloadPlugin(plugin.Metadata);
-        _pluginInstances.Remove(plugin);
+        PluginInstances.Remove(plugin);
         Logger.Info($"{plugin.Metadata.Name} plugin was unloaded because {reason}");
-    }
-
-    private static async Task InitPlugins()
-    {
-        await Parallel.ForEachAsync(_pluginInstances, new ParallelOptions { MaxDegreeOfParallelism = 5 }, async (pluginInstance, token) =>
-        {
-            try
-            {
-                Logger.Debug($"[{pluginInstance.Metadata.Name}] Start to init plugin ");
-                var startTimestamp = Stopwatch.GetTimestamp();
-                await pluginInstance.Plugin.Init(new PluginInitContext(pluginInstance.API));
-                Logger.Info($"[{pluginInstance.Metadata.Name}] Plugin init cost {Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds} ms");
-            }
-            catch (Exception e)
-            {
-                e.Data.Add(nameof(pluginInstance.Metadata.Id), pluginInstance.Metadata.Id);
-                e.Data.Add(nameof(pluginInstance.Metadata.Name), pluginInstance.Metadata.Name);
-                e.Data.Add(nameof(pluginInstance.Metadata.Website), pluginInstance.Metadata.Website);
-                Logger.Error($"{pluginInstance.Metadata.Name} Fail to init plugin", e);
-                UnloadPlugin(pluginInstance, "failed to init");
-                //TODO: need someway to nicely tell user this plugin failed to load
-            }
-        });
     }
 
     public static async Task<List<PluginQueryResult>> QueryForPlugin(PluginInstance plugin, Query query)
