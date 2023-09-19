@@ -1,0 +1,7 @@
+@build:
+    rm -rf process_killer
+    rm -rf process_killer.pyz
+    python3 -m pip install -r requirements.txt --target process_killer
+    cp *.py process_killer
+    python3 -m zipapp -p "interpreter" process_killer
+    rm -rf process_killer

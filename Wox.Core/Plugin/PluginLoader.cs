@@ -79,9 +79,6 @@ public static class PluginLoader
 
     private static async Task<List<PluginInstance>> LoadPluginsByRuntime(string pluginRuntime)
     {
-        if (pluginRuntime.ToUpper() == PluginRuntime.Python.ToUpper())
-            throw new Exception("Python plugin runtime is not supported yet");
-
         var pluginInstances = new List<PluginInstance>();
 
         List<(PluginMetadata, string)> pluginMetas = new();
