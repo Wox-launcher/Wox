@@ -39,6 +39,8 @@ Build
 
 - Install latest [Dotnet SDK](https://dotnet.microsoft.com/en-us/download)
 - Install [just](https://github.com/casey/just)
+- Install latest [Nodejs](https://nodejs.org) and [pnpm](https://pnpm.io/)
+- Install latest [Python](https://python.org/downloads)
 - Run `just build all`
 
 Development

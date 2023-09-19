@@ -42,7 +42,7 @@ default:
     just _build_python_host Wox/hosts
         
     # build Wox
-    dotnet publish Wox/Wox.csproj --configuration Release --output ./publish --runtime {{target}} --self-contained true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+    dotnet publish Wox/Wox.csproj --configuration Release --output ./publish --runtime {{target}} --self-contained true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:PublishReadyToRun=true
     
     # remove some redundant files
     rm -rf publish/plugins
@@ -110,9 +110,9 @@ default:
     cd Wox.Plugin.Host.Python && \
     rm -rf python-host && \
     rm -rf python-host.pyz && \
-    python3 -m pip install -r requirements.txt --target python-host && \
+    python -m pip install -r requirements.txt --target python-host && \
     cp *.py python-host && \
-    python3 -m zipapp -p "interpreter" python-host && \
+    python -m zipapp -p "interpreter" python-host && \
     rm -rf python-host && \
     cd ..
     
