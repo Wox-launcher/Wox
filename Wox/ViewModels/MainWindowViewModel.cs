@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -11,10 +10,9 @@ namespace Wox.ViewModels;
 
 public class MainWindowViewModel : ViewModelBase
 {
-    private Boolean isGlobalRegisterred = false;
-    public CoreQueryViewModel CoreQueryViewModel { get; } = new CoreQueryViewModel();
-
-    private Dictionary<KeyCode, Boolean> pressedKeyMap = new Dictionary<KeyCode, Boolean>();
+    private readonly Dictionary<KeyCode, bool> _pressedKeyMap = new();
+    private bool _isGlobalRegisterred;
+    public CoreQueryViewModel CoreQueryViewModel { get; } = new();
 
     public void OnDeactivated()
     {
@@ -26,7 +24,7 @@ public class MainWindowViewModel : ViewModelBase
         }
     }
 
-    public void ToggleWindowVisible()
+    private void ToggleWindowVisible()
     {
         if (Application.Current != null && Application.Current.ApplicationLifetime != null)
         {
@@ -38,31 +36,35 @@ public class MainWindowViewModel : ViewModelBase
 
     public void StartMonitorGlobalKey()
     {
-        if (!isGlobalRegisterred)
+        if (!_isGlobalRegisterred)
         {
             Task.Run(async () => { await RunGlobalKeyHook(); });
-            isGlobalRegisterred = true;
+            _isGlobalRegisterred = true;
         }
     }
 
     private async Task RunGlobalKeyHook()
     {
         var hook = new SimpleGlobalHook();
-        hook.KeyPressed += (((sender, args) =>
+        hook.KeyPressed += (sender, args) =>
         {
-            pressedKeyMap[args.Data.KeyCode] = true;
-            pressedKeyMap.TryGetValue(KeyCode.VcLeftAlt, out var isLeftAltPressed);
-            pressedKeyMap.TryGetValue(KeyCode.VcLeftMeta, out var isLeftMetaPressed);
-            pressedKeyMap.TryGetValue(KeyCode.VcSpace, out var isSpacePressed);
-            if (isLeftAltPressed && isLeftMetaPressed && isSpacePressed)
-            {
-                Dispatcher.UIThread.InvokeAsync(ToggleWindowVisible);
-            }
-        }));
-        hook.KeyReleased += ((sender, args) =>
-        {
-            pressedKeyMap[args.Data.KeyCode] = false;
-        });
+            _pressedKeyMap[args.Data.KeyCode] = true;
+            _pressedKeyMap.TryGetValue(KeyCode.VcLeftAlt, out var isLeftAltPressed);
+            _pressedKeyMap.TryGetValue(KeyCode.VcLeftMeta, out var isLeftMetaPressed);
+            _pressedKeyMap.TryGetValue(KeyCode.VcSpace, out var isSpacePressed);
+            if (isLeftAltPressed && isLeftMetaPressed && isSpacePressed) Dispatcher.UIThread.InvokeAsync(ToggleWindowVisible);
+        };
+        hook.KeyReleased += (sender, args) => { _pressedKeyMap[args.Data.KeyCode] = false; };
         await hook.RunAsync();
+    }
+
+    public void InputKeyUp()
+    {
+        CoreQueryViewModel.ResultListBoxKeyUp();
+    }
+
+    public void InputKeyDown()
+    {
+        CoreQueryViewModel.ResultListBoxKeyDown();
     }
 }

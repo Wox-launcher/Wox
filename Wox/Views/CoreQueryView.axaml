@@ -18,7 +18,7 @@
                  VerticalAlignment="Center" HorizontalAlignment="Left" BorderBrush="Transparent" Text="{Binding Query}" />
 
         <ListBox ItemsSource="{Binding  QueryResult, Mode=OneWay}" SelectedItem="{Binding SelectedQueryResult}"
-                 SelectionMode="Single">
+                 SelectedIndex="{Binding SelectedIndex}" SelectionMode="Single" KeyUp="ListBoxKeyUp" KeyDown="ListBoxKeyDown">
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <TextBlock Text="{Binding Result.Title }" />

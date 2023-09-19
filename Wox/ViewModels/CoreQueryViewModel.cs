@@ -11,6 +11,7 @@ public class CoreQueryViewModel : ViewModelBase
 {
     private readonly List<PluginQueryResult> _results = new();
     private string? _query;
+    private int? _selectedIndex = 0;
     private PluginQueryResult? _selectedResult;
 
     public CoreQueryViewModel()
@@ -34,7 +35,25 @@ public class CoreQueryViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _selectedResult, value);
     }
 
+    public int? SelectedIndex
+    {
+        get => _selectedIndex;
+        set => this.RaiseAndSetIfChanged(ref _selectedIndex, value);
+    }
+
     public ObservableCollection<PluginQueryResult> QueryResult => new(_results);
+
+    public void ResultListBoxKeyUp()
+    {
+        _selectedResult = _results[(int)(_selectedIndex > 0 ? _selectedIndex - 1 : 0)];
+        this.RaisePropertyChanged(nameof(SelectedQueryResult));
+    }
+
+    public void ResultListBoxKeyDown()
+    {
+        _selectedResult = _results[(int)(_selectedIndex >= _results.Count - 1 ? _results.Count - 1 : _selectedIndex + 1)!];
+        this.RaisePropertyChanged(nameof(SelectedQueryResult));
+    }
 
     public void OpenResultCommand()
     {
@@ -56,7 +75,15 @@ public class CoreQueryViewModel : ViewModelBase
             foreach (var pluginQueryResult in result)
                 if (pluginQueryResult.AssociatedQuery.RawQuery == Query)
                     _results.Add(pluginQueryResult);
-            this.RaisePropertyChanged(nameof(QueryResult));
+            if (_results.Count > 0)
+            {
+                _selectedResult = _results[0];
+                _selectedIndex = 0;
+            }
         }
+
+        this.RaisePropertyChanged(nameof(QueryResult));
+        this.RaisePropertyChanged(nameof(SelectedQueryResult));
+        this.RaisePropertyChanged(nameof(SelectedIndex));
     }
 }
