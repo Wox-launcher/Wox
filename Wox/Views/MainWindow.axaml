@@ -41,6 +41,7 @@
         <KeyBinding Gesture="Escape" Command="{Binding OnDeactivated}" />
         <KeyBinding Gesture="Up" Command="{Binding InputKeyUp}" />
         <KeyBinding Gesture="Down" Command="{Binding InputKeyDown}" />
+        <KeyBinding Gesture="Enter" Command="{Binding InputKeyEnter}" />
     </Window.KeyBindings>
 
 

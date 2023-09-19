@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using ReactiveUI;
 using Wox.Core;
 using Wox.Core.Plugin;
+using Wox.Uitls;
 
 namespace Wox.ViewModels;
 
@@ -12,7 +13,6 @@ public class CoreQueryViewModel : ViewModelBase
     private readonly List<PluginQueryResult> _results = new();
     private string? _query;
     private int? _selectedIndex = 0;
-    private PluginQueryResult? _selectedResult;
 
     public CoreQueryViewModel()
     {
@@ -29,12 +29,6 @@ public class CoreQueryViewModel : ViewModelBase
             this.RaiseAndSetIfChanged(ref _query, value);
     }
 
-    public PluginQueryResult? SelectedQueryResult
-    {
-        get => _selectedResult;
-        set => this.RaiseAndSetIfChanged(ref _selectedResult, value);
-    }
-
     public int? SelectedIndex
     {
         get => _selectedIndex;
@@ -45,27 +39,39 @@ public class CoreQueryViewModel : ViewModelBase
 
     public void ResultListBoxKeyUp()
     {
-        _selectedResult = _results[(int)(_selectedIndex > 0 ? _selectedIndex - 1 : 0)];
-        this.RaisePropertyChanged(nameof(SelectedQueryResult));
+        _selectedIndex = _selectedIndex > 0 ? _selectedIndex - 1 : 0;
+        this.RaisePropertyChanged(nameof(SelectedIndex));
     }
 
     public void ResultListBoxKeyDown()
     {
-        _selectedResult = _results[(int)(_selectedIndex >= _results.Count - 1 ? _results.Count - 1 : _selectedIndex + 1)!];
-        this.RaisePropertyChanged(nameof(SelectedQueryResult));
+        _selectedIndex = _selectedIndex >= _results.Count - 1 ? _results.Count - 1 : _selectedIndex + 1;
+        this.RaisePropertyChanged(nameof(SelectedIndex));
+    }
+
+    public async void ResultListBoxKeyEnter()
+    {
+        var _hideApp = await _results[(int)_selectedIndex!].Result.Action!();
+        if (_hideApp)
+            UIHelper.ToggleWindowVisible();
     }
 
     public void OpenResultCommand()
     {
-        var action = _selectedResult!.Result.Action!();
-        Console.Write(action);
+        _results[(int)_selectedIndex!].Result.Action!();
     }
 
     private async void OnQuery(string? text)
     {
         if (text == null) return;
         var query = QueryBuilder.Build(text);
-        if (query.IsEmpty) return;
+        if (query.IsEmpty)
+        {
+            _results.Clear();
+            this.RaisePropertyChanged(nameof(QueryResult));
+            return;
+        }
+
 
         _results.Clear();
 
@@ -75,15 +81,11 @@ public class CoreQueryViewModel : ViewModelBase
             foreach (var pluginQueryResult in result)
                 if (pluginQueryResult.AssociatedQuery.RawQuery == Query)
                     _results.Add(pluginQueryResult);
-            if (_results.Count > 0)
-            {
-                _selectedResult = _results[0];
-                _selectedIndex = 0;
-            }
         }
 
+
         this.RaisePropertyChanged(nameof(QueryResult));
-        this.RaisePropertyChanged(nameof(SelectedQueryResult));
+        _selectedIndex = 0;
         this.RaisePropertyChanged(nameof(SelectedIndex));
     }
 }

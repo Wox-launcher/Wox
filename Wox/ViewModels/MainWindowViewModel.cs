@@ -1,10 +1,9 @@
 ﻿using System.Collections.Generic;
 using System.Threading.Tasks;
-using Avalonia;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using SharpHook;
 using SharpHook.Native;
+using Wox.Uitls;
 
 namespace Wox.ViewModels;
 
@@ -16,22 +15,7 @@ public class MainWindowViewModel : ViewModelBase
 
     public void OnDeactivated()
     {
-        if (Application.Current != null && Application.Current.ApplicationLifetime != null)
-        {
-            var woxMainWindow = ((IClassicDesktopStyleApplicationLifetime)Application.Current.ApplicationLifetime)
-                .MainWindow;
-            if (woxMainWindow != null) woxMainWindow.Hide();
-        }
-    }
-
-    private void ToggleWindowVisible()
-    {
-        if (Application.Current != null && Application.Current.ApplicationLifetime != null)
-        {
-            var woxMainWindow = ((IClassicDesktopStyleApplicationLifetime)Application.Current.ApplicationLifetime)
-                .MainWindow;
-            if (woxMainWindow != null) woxMainWindow.IsVisible = !woxMainWindow.IsVisible;
-        }
+        UIHelper.HideWindow();
     }
 
     public void StartMonitorGlobalKey()
@@ -52,7 +36,7 @@ public class MainWindowViewModel : ViewModelBase
             _pressedKeyMap.TryGetValue(KeyCode.VcLeftAlt, out var isLeftAltPressed);
             _pressedKeyMap.TryGetValue(KeyCode.VcLeftMeta, out var isLeftMetaPressed);
             _pressedKeyMap.TryGetValue(KeyCode.VcSpace, out var isSpacePressed);
-            if (isLeftAltPressed && isLeftMetaPressed && isSpacePressed) Dispatcher.UIThread.InvokeAsync(ToggleWindowVisible);
+            if (isLeftAltPressed && isLeftMetaPressed && isSpacePressed) Dispatcher.UIThread.InvokeAsync(UIHelper.ToggleWindowVisible);
         };
         hook.KeyReleased += (sender, args) => { _pressedKeyMap[args.Data.KeyCode] = false; };
         await hook.RunAsync();
@@ -66,5 +50,10 @@ public class MainWindowViewModel : ViewModelBase
     public void InputKeyDown()
     {
         CoreQueryViewModel.ResultListBoxKeyDown();
+    }
+
+    public void InputKeyEnter()
+    {
+        CoreQueryViewModel.ResultListBoxKeyEnter();
     }
 }
