@@ -4,6 +4,7 @@ Wox
 [![Build status](https://github.com/Wox-launcher/Wox/actions/workflows/build.yml/badge.svg?branch=v2)](https://github.com/Wox-launcher/Wox/actions)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Wox-launcher/wox?include_prereleases)](https://github.com/Wox-launcher/Wox/releases)
 [![Github All Releases](https://img.shields.io/github/downloads/Wox-launcher/Wox/total.svg)](https://github.com/Wox-launcher/Wox/releases)
+[![Crowdin](https://badges.crowdin.net/woxlauncher/localized.svg)](https://crowdin.com/project/woxlauncher)
 
 **Wox** is a cross-platform launcher that simply works. It's an alternative to [Alfred](https://www.alfredapp.com/) and [Launchy](http://www.launchy.net/)
 
