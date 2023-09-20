@@ -25,7 +25,7 @@
                 </DataTemplate>
             </ListBox.ItemTemplate>
             <ListBox.KeyBindings>
-                <KeyBinding Command="{Binding OpenResultCommand}"
+                <KeyBinding Command="{Binding AsyncOpenResultAction}"
                             Gesture="Enter" />
             </ListBox.KeyBindings>
         </ListBox>

@@ -16,7 +16,6 @@ public class CoreQueryViewModel : ViewModelBase
 
     public CoreQueryViewModel()
     {
-        // We can listen to any property changes with "WhenAnyValue" and do whatever we want in "Subscribe".
         this.WhenAnyValue(o => o.Query)!
             .Subscribe(OnQuery);
     }
@@ -25,7 +24,6 @@ public class CoreQueryViewModel : ViewModelBase
     {
         get => _query;
         set =>
-            // use "RaiseAndSetIfChanged" to check if the value changed and automatically notify the UI
             this.RaiseAndSetIfChanged(ref _query, value);
     }
 
@@ -36,30 +34,6 @@ public class CoreQueryViewModel : ViewModelBase
     }
 
     public ObservableCollection<PluginQueryResult> QueryResult => new(_results);
-
-    public void ResultListBoxKeyUp()
-    {
-        _selectedIndex = _selectedIndex > 0 ? _selectedIndex - 1 : 0;
-        this.RaisePropertyChanged(nameof(SelectedIndex));
-    }
-
-    public void ResultListBoxKeyDown()
-    {
-        _selectedIndex = _selectedIndex >= _results.Count - 1 ? _results.Count - 1 : _selectedIndex + 1;
-        this.RaisePropertyChanged(nameof(SelectedIndex));
-    }
-
-    public async void ResultListBoxKeyEnter()
-    {
-        var _hideApp = await _results[(int)_selectedIndex!].Result.Action!();
-        if (_hideApp)
-            UIHelper.ToggleWindowVisible();
-    }
-
-    public void OpenResultCommand()
-    {
-        _results[(int)_selectedIndex!].Result.Action!();
-    }
 
     private async void OnQuery(string? text)
     {
@@ -72,7 +46,6 @@ public class CoreQueryViewModel : ViewModelBase
             return;
         }
 
-
         _results.Clear();
 
         foreach (var plugin in PluginManager.GetAllPlugins())
@@ -83,9 +56,27 @@ public class CoreQueryViewModel : ViewModelBase
                     _results.Add(pluginQueryResult);
         }
 
-
         this.RaisePropertyChanged(nameof(QueryResult));
         _selectedIndex = 0;
         this.RaisePropertyChanged(nameof(SelectedIndex));
+    }
+
+    public void MoveUpListBoxSelectedIndex()
+    {
+        _selectedIndex = _selectedIndex > 0 ? _selectedIndex - 1 : 0;
+        this.RaisePropertyChanged(nameof(SelectedIndex));
+    }
+
+    public void MoveDownListBoxSelectedIndex()
+    {
+        _selectedIndex = _selectedIndex >= _results.Count - 1 ? _results.Count - 1 : _selectedIndex + 1;
+        this.RaisePropertyChanged(nameof(SelectedIndex));
+    }
+
+    public async void AsyncOpenResultAction()
+    {
+        var hideApp = await _results[(int)_selectedIndex!].Result.Action!();
+        if (hideApp)
+            UIHelper.ToggleWindowVisible();
     }
 }

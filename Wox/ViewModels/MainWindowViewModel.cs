@@ -4,7 +4,6 @@ using Avalonia.Threading;
 using SharpHook;
 using SharpHook.Native;
 using Wox.Uitls;
-using Wox.Views;
 
 namespace Wox.ViewModels;
 
@@ -43,18 +42,18 @@ public class MainWindowViewModel : ViewModelBase
         await hook.RunAsync();
     }
 
-    public void InputKeyUp()
+    public void KeyUp()
     {
-        CoreQueryViewModel.ResultListBoxKeyUp();
+        CoreQueryViewModel.MoveUpListBoxSelectedIndex();
     }
 
-    public void InputKeyDown()
+    public void KeyDown()
     {
-        CoreQueryViewModel.ResultListBoxKeyDown();
+        CoreQueryViewModel.MoveDownListBoxSelectedIndex();
     }
 
-    public void InputKeyEnter()
+    public void KeyEnter()
     {
-        CoreQueryViewModel.ResultListBoxKeyEnter();
+        CoreQueryViewModel.AsyncOpenResultAction();
     }
 }
