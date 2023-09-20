@@ -18,9 +18,6 @@ jobs:
           upload_sources: true
           upload_translations: true
           download_translations: true
-          skip_untranslated_strings: true
-          skip_untranslated_files: true
-          
           localization_branch_name: crowdin_i18n
           create_pull_request: true
           pull_request_title: 'New Crowdin translations'
