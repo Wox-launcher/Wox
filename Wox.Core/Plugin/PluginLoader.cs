@@ -68,7 +68,7 @@ public static class PluginLoader
 #if DEBUG
             throw;
 #else
-            return null;
+            return;
 #endif
         }
     }
