@@ -7,7 +7,7 @@ on:
 
 jobs:
   crowdin:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
 
@@ -25,7 +25,7 @@ jobs:
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
           
   build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
       - uses: extractions/setup-just@v1
@@ -45,23 +45,23 @@ jobs:
         run: just test
       - name: Build
         run: just build all
-      - name: Upload linux-x64 artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: wox-linux-x64
-          path: publish/wox-linux-x64
-      - name: Upload win-x64 artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: wox-win-x64.exe
-          path: publish/wox-win-x64.exe
-      - name: Upload osx-x64 artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: wox-osx-x64.app
-          path: publish/wox-osx-x64.app/
-      - name: Upload osx-arm64 artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: wox-osx-arm64.app
-          path: publish/wox-osx-arm64.app/               
+#      - name: Upload linux-x64 artifact
+#        uses: actions/upload-artifact@v3
+#        with:
+#          name: wox-linux-x64
+#          path: publish/wox-linux-x64
+#      - name: Upload win-x64 artifact
+#        uses: actions/upload-artifact@v3
+#        with:
+#          name: wox-win-x64.exe
+#          path: publish/wox-win-x64.exe
+#      - name: Upload osx-x64 artifact
+#        uses: actions/upload-artifact@v3
+#        with:
+#          name: wox-osx-x64.app
+#          path: publish/wox-osx-x64.app/
+#      - name: Upload osx-arm64 artifact
+#        uses: actions/upload-artifact@v3
+#        with:
+#          name: wox-osx-arm64.app
+#          path: publish/wox-osx-arm64.app/               
