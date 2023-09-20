@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using SharpHook;
 using SharpHook.Native;
 using Wox.Uitls;
+using Wox.Views;
 
 namespace Wox.ViewModels;
 

@@ -1,13 +1,6 @@
 using System;
-using System.Reactive.Linq;
-using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Threading;
-using SharpHook;
-using SharpHook.Native;
-using SharpHook.Reactive;
-using Wox.Core.Utils;
 using Wox.ViewModels;
 
 namespace Wox.Views;
@@ -34,6 +27,9 @@ public partial class MainWindow : Window
 
     private void WindowBase_OnActivated(object? sender, EventArgs e)
     {
+        //Focus on QueryTextBox and select all text
+        CoreQueryView.QueryTextBox.Focus();
+        CoreQueryView.QueryTextBox.SelectAll();
         ((MainWindowViewModel)DataContext!).StartMonitorGlobalKey();
     }
 }

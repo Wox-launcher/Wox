@@ -57,7 +57,7 @@
         </ExperimentalAcrylicBorder>
 
 
-        <views:CoreQueryView DataContext="{Binding CoreQueryViewModel}" />
+        <views:CoreQueryView Name="CoreQueryView" DataContext="{Binding CoreQueryViewModel}" />
     </Grid>
 
 

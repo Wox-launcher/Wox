@@ -14,7 +14,7 @@
     </Design.DataContext>
 
     <StackPanel>
-        <TextBox Background="Black" FontSize="36" Margin="10 10 0 10" Opacity="0.9" Width="700" Height="58" LineHeight="48" VerticalContentAlignment="Center"
+        <TextBox Name="QueryTextBox" Background="Black" FontSize="36" Margin="10 10 0 10" Opacity="0.9" Width="700" Height="58" LineHeight="48" VerticalContentAlignment="Center"
                  VerticalAlignment="Center" HorizontalAlignment="Left" BorderBrush="Transparent" Text="{Binding Query}" />
 
         <ListBox ItemsSource="{Binding  QueryResult, Mode=OneWay}"
