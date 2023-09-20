@@ -4,7 +4,7 @@ using System.Collections.ObjectModel;
 using ReactiveUI;
 using Wox.Core;
 using Wox.Core.Plugin;
-using Wox.Uitls;
+using Wox.Utils;
 
 namespace Wox.ViewModels;
 
@@ -77,6 +77,6 @@ public class CoreQueryViewModel : ViewModelBase
     {
         var hideApp = await _results[(int)_selectedIndex!].Result.Action!();
         if (hideApp)
-            UIHelper.ToggleWindowVisible();
+            UiHelper.HideWindow();
     }
 }

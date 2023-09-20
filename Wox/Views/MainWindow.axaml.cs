@@ -26,9 +26,10 @@ public partial class MainWindow : Window
 
     private void WindowBase_OnActivated(object? sender, EventArgs e)
     {
-        ((MainWindowViewModel)DataContext!).StartMonitorGlobalKey();
         //Focus on QueryTextBox and select all text
         CoreQueryView.QueryTextBox.Focus();
         CoreQueryView.QueryTextBox.SelectAll();
+        ((MainWindowViewModel)DataContext!).StartMonitorGlobalKey(Screens);
     }
+
 }
