@@ -2,4 +2,4 @@ project_id_env: CROWDIN_PROJECT_ID
 api_token_env: CROWDIN_PERSONAL_TOKEN
 files:
   - source: '/Wox/I18n/en.json'
-    translation: '/%original_file_name%/%two_letters_code%.json'
+    translation: '%original_path%/%two_letters_code%.json'
