@@ -29,11 +29,17 @@ public class Main : IPlugin
             return;
         }
 
-        var cache = await File.ReadAllTextAsync(_cachePath);
-        _apps = JsonSerializer.Deserialize<List<AppInfo>>(cache);
-        _api.Log($"App cache loaded, count: {_apps?.Count}");
+        try
+        {
+            var cache = await File.ReadAllTextAsync(_cachePath);
+            _apps = JsonSerializer.Deserialize<List<AppInfo>>(cache);
+            _api.Log($"App cache loaded, count: {_apps?.Count}");
+        }
+        catch (Exception e)
+        {
+            _api.Log($"Can't load app cache, {e.Message}");
+        }
     }
-
 
     private async Task IndexApps()
     {
