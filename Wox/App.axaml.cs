@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Wox.Core;
+using Wox.Core.I18n;
 using Wox.Core.Plugin;
 using Wox.Core.Utils;
 using Wox.ViewModels;
@@ -54,7 +55,8 @@ public class App : Application
         Logger.Info("Run Mode: Release");
 #endif
 
-        await PluginManager.LoadPlugins();
+        await PluginManager.Load();
+        await I18NManager.Load();
 
         Logger.Info("Finish bootstrap");
     }

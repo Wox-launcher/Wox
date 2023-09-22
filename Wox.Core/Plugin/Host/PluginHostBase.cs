@@ -110,27 +110,11 @@ public abstract class PluginHostBase : IPluginHost
     {
         var tcs = new TaskCompletionSource<bool>();
 
-        _ws = new WebSocket(Logger.GetMicrosoftILogger(), $"ws://localhost:{websocketServerPort}", true);
+        _ws = new WebSocket(Logger.GetILogger(), $"ws://localhost:{websocketServerPort}", true);
         _ws.OnError += (sender, e) => { Logger.Error($"[{PluginRuntime} host] websocket server error: {e.Message}"); };
-        // var retryDelay = 500;
-        var retryCts = new CancellationTokenSource();
         _ws.OnClose += (sender, e) =>
         {
             Logger.Debug($"[{PluginRuntime} host] websocket connection closed");
-            //
-            // //try to reconnect
-            // if (!_cts.IsCancellationRequested && !retryCts.IsCancellationRequested)
-            //     Task.Run(async () =>
-            //     {
-            //         retryDelay *= 2;
-            //         Logger.Debug($"[{PluginRuntime} host] websocket reconnecting in {retryDelay / 1000} second");
-            //         await Task.Delay(retryDelay);
-            //         Logger.Debug($"[{PluginRuntime} host] websocket reconnecting");
-            //         // ReSharper disable once MethodHasAsyncOverload
-            //         _ws.Connect();
-            //     }, retryCts.Token);
-            // else
-            //     Logger.Debug($"[{PluginRuntime} host] websocket reconnecting cancelled");
         };
         _ws.OnOpen += (sender, e) =>
         {
@@ -140,7 +124,7 @@ public abstract class PluginHostBase : IPluginHost
             //send ping every seconds
             Task.Run(async () =>
             {
-                while (!_cts.IsCancellationRequested && !retryCts.IsCancellationRequested)
+                while (_ws.ReadyState == WebSocketState.Open)
                 {
                     await Task.Delay(3000, _cts.Token);
                     _ws.Ping();
@@ -166,7 +150,8 @@ public abstract class PluginHostBase : IPluginHost
             if (resultAgain == timeoutAgain)
             {
                 // still timeout, throw exception
-                retryCts.Cancel();
+                // resharper disable once MethodHasAsyncOverload
+                _ws.Close();
                 Logger.Warn($"[{PluginRuntime} host] still failed to connect to websocket server, cancel retry");
                 throw new Exception($"[{PluginRuntime} host] failed to connect to websocket server");
             }

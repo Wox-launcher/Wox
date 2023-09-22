@@ -17,14 +17,6 @@ logger.info("----------------------------------------")
 logger.info(`Start nodejs host: ${hostId}`)
 logger.info(`port: ${port}`)
 
-let lastHeartbeat = Date.now()
-setInterval(() => {
-  if (Date.now() - lastHeartbeat > 1000 * 60 * 3) {
-    logger.error(`${hostId} heartbeat timeout, exit`)
-    process.exit(1)
-  }
-}, 1000)
-
 export const waitingForResponse: {
   [key: string]: Deferred.Deferred<unknown>
 } = {}
@@ -40,13 +32,11 @@ wss.on("connection", function connection(ws) {
   })
 
   ws.on("ping", function ping() {
-    lastHeartbeat = Date.now()
     ws.pong()
   })
 
   ws.on("message", function message(data) {
     try {
-      lastHeartbeat = Date.now()
       const msg = `${data}`
       //logger.info(`receive message: ${msg}`)
 

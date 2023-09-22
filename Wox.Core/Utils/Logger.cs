@@ -47,7 +47,7 @@ public static class Logger
         SeriLogger.Error(e, GetMessage(message));
     }
 
-    public static Microsoft.Extensions.Logging.ILogger GetMicrosoftILogger()
+    public static Microsoft.Extensions.Logging.ILogger GetILogger()
     {
         return new LoggerFactory().AddSerilog(SeriLogger).CreateLogger("Logger");
     }

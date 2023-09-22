@@ -49,7 +49,7 @@ public static class PluginManager
         }
     }
 
-    public static async Task LoadPlugins()
+    public static async Task Load()
     {
         await PluginLoader.LoadPlugins();
     }

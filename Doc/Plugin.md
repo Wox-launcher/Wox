@@ -14,3 +14,11 @@ Pre-installed plugins will bundle with Wox, and will be placed in the plugins fo
 
 #### User installed plugins
 User installed plugins should be placed in `{DataLocation}\plugins`, where `{DataLocation}` can be customized by user
+
+## Plugin internationalization
+
+Wox support plugin internationalization, which means you can translate your plugin to any language Wox supported.
+
+There are two ways to translate your plugin:
+1. Use `GetTranslation` method in `PluginInitContext.API`, which you can get from `Init` method in your plugin
+2. 

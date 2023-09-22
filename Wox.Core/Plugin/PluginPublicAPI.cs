@@ -1,15 +1,18 @@
 ﻿using Serilog;
 using Serilog.Core;
+using Wox.Core.I18n;
 using Wox.Plugin;
 
 namespace Wox.Core.Plugin;
 
 public class PluginPublicAPI : IPublicAPI
 {
+    private readonly PluginMetadata _metadata;
     private readonly Logger _pluginLogger;
 
     public PluginPublicAPI(PluginMetadata metadata)
     {
+        _metadata = metadata;
         _pluginLogger = new LoggerConfiguration()
             .WriteTo.File(
                 Path.Combine(DataLocation.LogDirectory, "plugins", metadata.Name, "log.txt"),
@@ -44,6 +47,6 @@ public class PluginPublicAPI : IPublicAPI
 
     public string GetTranslation(string key)
     {
-        return key + "- to be implemented";
+        return I18NManager.GetPluginTranslation(_metadata.Id, key);
     }
 }

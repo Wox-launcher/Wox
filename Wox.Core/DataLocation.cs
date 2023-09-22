@@ -5,6 +5,7 @@ public static class DataLocation
     public static readonly string LogDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "wox-log");
     public static readonly string LogHostsDirectory = Path.Combine(LogDirectory, "hosts");
     private static readonly string PluginHostDirectory = Path.Combine(AppContext.BaseDirectory, "hosts");
+    public static readonly string I18nDirectory = Path.Combine(AppContext.BaseDirectory, "I18n");
     private static readonly string UserInstalledPluginsDirectory = Path.Combine(DataDirectory, "plugins");
     private static readonly string SystemBundledPluginsDirectory = Path.Combine(AppContext.BaseDirectory, "plugins");
 
