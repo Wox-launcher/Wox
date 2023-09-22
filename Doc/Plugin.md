@@ -21,4 +21,4 @@ Wox support plugin internationalization, which means you can translate your plug
 
 There are two ways to translate your plugin:
 1. Use `GetTranslation` method in `PluginInitContext.API`, which you can get from `Init` method in your plugin
-2. 
+2. Use `[i18n:your_key]`syntax in your plugin.json

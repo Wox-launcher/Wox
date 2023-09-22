@@ -22,7 +22,12 @@ public static class I18NManager
         await LoadLanguages(FakeWoxPluginId, DataLocation.I18nDirectory);
 
         // load plugin translations
-        foreach (var pluginInstance in PluginManager.GetAllPlugins()) await LoadLanguages(pluginInstance.Metadata.Id, pluginInstance.PluginDirectory);
+        foreach (var pluginInstance in PluginManager.GetAllPlugins())
+        {
+            var i18NDirectory = Path.Combine(pluginInstance.PluginDirectory, "i18n");
+            if (!Directory.Exists(i18NDirectory)) continue;
+            await LoadLanguages(pluginInstance.Metadata.Id, i18NDirectory);
+        }
     }
 
     private static async Task LoadLanguages(string pluginId, string pluginDirectory)
