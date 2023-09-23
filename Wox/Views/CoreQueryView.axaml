@@ -21,12 +21,14 @@
                  SelectedIndex="{Binding SelectedIndex}" SelectionMode="Single">
             <ListBox.ItemTemplate>
                 <DataTemplate>
-                    <TextBlock Text="{Binding Result.Title }" />
+                    <StackPanel>
+                        <TextBlock Text="{Binding Result.Title }" />
+                        <TextBlock Text="{Binding Result.SubTitle }" />
+                    </StackPanel>
                 </DataTemplate>
             </ListBox.ItemTemplate>
             <ListBox.KeyBindings>
-                <KeyBinding Command="{Binding AsyncOpenResultAction}"
-                            Gesture="Enter" />
+                <KeyBinding Command="{Binding AsyncOpenResultAction}" Gesture="Enter" />
             </ListBox.KeyBindings>
         </ListBox>
     </StackPanel>

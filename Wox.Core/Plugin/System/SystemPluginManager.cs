@@ -40,6 +40,29 @@ public class SystemPluginManager : ISystemPlugin
                 }
             }
 
+        if (query.Command == "uninstall")
+        {
+            var filteredPlugins = PluginManager.GetAllPlugins().Where(o => !o.IsSystemPlugin);
+            if (query.Search != "") filteredPlugins = filteredPlugins.Where(o => o.Metadata.Name.Contains(query.Search, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            foreach (var pluginInstance in filteredPlugins)
+            {
+                var result = new Result
+                {
+                    Title = pluginInstance.Metadata.Name,
+                    SubTitle = pluginInstance.Metadata.Description,
+                    Icon = new WoxImage(),
+                    Action = async () =>
+                    {
+                        await PluginStoreManager.Uninstall(pluginInstance);
+                        return false;
+                    }
+                };
+                results.Add(result);
+            }
+        }
+
+
         return Task.FromResult(results);
     }
 

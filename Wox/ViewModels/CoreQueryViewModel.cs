@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using Avalonia.Threading;
 using ReactiveUI;
 using Wox.Core;
 using Wox.Core.Plugin;
@@ -46,8 +47,19 @@ public class CoreQueryViewModel : ViewModelBase
 
     private void OnChangeQuery(string query)
     {
-        Query = query;
-        CaretIndex = query.Length;
+        Dispatcher.UIThread.InvokeAsync(() => { Query = query; });
+        MoveCaretToEnd(query.Length);
+    }
+
+    private void MoveCaretToEnd(int index)
+    {
+        //here we need to first set to zero, then set to the correct index
+        //this is a bug of avalonia, see: https://github.com/AvaloniaUI/Avalonia/issues/12238
+        Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            CaretIndex = 0;
+            CaretIndex = index;
+        });
     }
 
     private async void OnQuery(string? text)
