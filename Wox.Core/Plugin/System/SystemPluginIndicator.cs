@@ -47,12 +47,21 @@ public class SystemPluginIndicator : ISystemPlugin
             Name = "System Plugin Indicator",
             Author = "Wox Launcher",
             Version = "1.0.0",
+            MinWoxVersion = "2.0.0",
             Runtime = "Dotnet",
             Description = "Indicator for plugin trigger keywords",
             Icon = "",
             Entry = "",
-            TriggerKeywords = new List<string> { "*" },
-            SupportedOS = new List<string> { PluginSupportedOS.Windows, PluginSupportedOS.Linux, PluginSupportedOS.Macos }
+            TriggerKeywords = new List<string>
+            {
+                "*"
+            },
+            SupportedOS = new List<string>
+            {
+                PluginSupportedOS.Windows,
+                PluginSupportedOS.Linux,
+                PluginSupportedOS.Macos
+            }
         };
     }
 }

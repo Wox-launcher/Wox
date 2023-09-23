@@ -26,12 +26,14 @@ public static class PluginManager
     {
         try
         {
+            //we need to add instance first, so plugin can invoke api method in init method
+            //otherwise it will throw "Failed to find plugin instance for request" exception
+            PluginInstances.Add(pluginInstance);
+
             Logger.Debug($"[{pluginInstance.Metadata.Name}] Start to init plugin ");
             pluginInstance.InitStartTimestamp = Stopwatch.GetTimestamp();
             await pluginInstance.Plugin.Init(new PluginInitContext(pluginInstance.API));
             pluginInstance.InitFinishedTimestamp = Stopwatch.GetTimestamp();
-
-            PluginInstances.Add(pluginInstance);
 
             Logger.Info($"[{pluginInstance.Metadata.Name}] Plugin load cost {pluginInstance.LoadTime} ms,  init cost {pluginInstance.InitTime} ms");
         }

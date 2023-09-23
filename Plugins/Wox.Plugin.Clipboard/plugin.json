@@ -7,6 +7,7 @@
   "Description": "A Wox plugin to get clipboard history",
   "Author": "qianlifeng",
   "Version": "1.0.0",
+  "MinWoxVersion": "2.0.0.",
   "Runtime": "nodejs",
   "Website": "https://github.com/Wox-launcher/Wox",
   "Entry": "index.js",

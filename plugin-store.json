@@ -1,0 +1,19 @@
+[
+  {
+    "Id": "dfe6dbf196104528aae02553e61a2780",
+    "Name": "Obsidian",
+    "Author": "qianlifeng",
+    "Version": "0.0.1",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "dotnet",
+    "Description": "Wox plugin to manage obsidian vault notes",
+    "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Obsidian/main/images/app.png",
+    "Website": "https://github.com/qianlifeng/Wox.Plugin.Obsidian",
+    "DownloadUrl": "https://github.com/qianlifeng/Wox.Plugin.Obsidian/releases/latest/download/wox.plugin.obsidian.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Obsidian/main/images/app.png"
+    ],
+    "DateCreated": "2021-08-29T00:00:00Z",
+    "DateUpdated": "2021-08-29T00:00:00Z"
+  }
+]

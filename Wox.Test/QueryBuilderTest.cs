@@ -36,7 +36,8 @@ public class QueryBuilderTest
                     SupportedOS = new List<string>
                     {
                         PluginSupportedOS.Macos
-                    }
+                    },
+                    MinWoxVersion = "2.0.0"
                 },
                 Plugin = null!,
                 PluginDirectory = "",

@@ -7,6 +7,7 @@
 | Description     | true     | Plugin description                                           | string     | "Provide mathematical calculations.(Try 5*3-2 in Wox)" |
 | Author          | true     | Author of plugin                                             | string     | "cxfksword"                                            |
 | Version         | true     | [Semantic Versioning](https://semver.org/) of plugin         | string     | "1.0.0"                                                |
+| MinWoxVersion   | true     | The minimum required Wox version for your plugin.            | string     | "2.0.0"                                                |
 | Website         | false    | Website of plugin                                            | string     | "https://github.com/Wox-launcher/Wox"                  |
 | Runtime         | true     | Plugin runtime, currently support `Dotnet`,`Python`,`Nodejs` | string     | "Dotnet"                                               |
 | Icon            | true     | Icon path, relative to the root of plugin folder             | string     | "Images\\calculator.png"                               |

@@ -13,7 +13,7 @@ public static class PluginStoreManager
         new PluginStore
         {
             Name = "Wox",
-            Url = "https://raw.githubusercontent.com/Wox-launcher/plugin/master/plugin.json"
+            Url = "https://raw.githubusercontent.com/Wox-launcher/Wox/v2/plugin-store.json"
         }
     };
 

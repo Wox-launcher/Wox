@@ -7,6 +7,7 @@
   "Description": "Provide mathematical calculations.(Try 5*3-2 in Wox)",
   "Author": "cxfksword",
   "Version": "1.0.0",
+  "MinWoxVersion": "2.0.0.",
   "Runtime": "dotnet",
   "Website": "https://github.com/Wox-launcher/Wox",
   "Entry": "Wox.Plugin.Calculator.dll",

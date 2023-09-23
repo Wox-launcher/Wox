@@ -10,6 +10,8 @@ public class PluginMetadata
     public required string Name { get; init; }
     public required string Author { get; init; }
     public required string Version { get; init; }
+
+    public required string MinWoxVersion { get; init; }
     public required string Runtime { get; init; }
     public required string Description { get; init; }
 
