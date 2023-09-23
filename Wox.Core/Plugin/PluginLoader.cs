@@ -9,8 +9,6 @@ namespace Wox.Core.Plugin;
 
 public static class PluginLoader
 {
-    public static event Action<PluginInstance>? PluginLoaded;
-
     private static List<PluginHostBase> PluginHosts { get; } = new()
     {
         new DotnetHost(),
@@ -18,7 +16,9 @@ public static class PluginLoader
         new PythonHost()
     };
 
-    public static async Task LoadPlugins()
+    public static event Action<PluginInstance>? PluginLoaded;
+
+    public static async Task Load()
     {
         Logger.Debug("Start to load plugins");
 

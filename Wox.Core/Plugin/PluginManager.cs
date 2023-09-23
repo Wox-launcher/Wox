@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using Wox.Core.Plugin.Store;
 using Wox.Core.Utils;
 using Wox.Plugin;
 
@@ -11,24 +12,20 @@ public static class PluginManager
 {
     private static readonly List<PluginInstance> PluginInstances = new();
 
+    static PluginManager()
+    {
+        PluginLoader.PluginLoaded += pluginInstance => { Task.Run(async () => { await OnPluginLoaded(pluginInstance); }); };
+    }
+
     public static List<PluginInstance> GetAllPlugins()
     {
         return PluginInstances;
-    }
-
-    static PluginManager()
-    {
-        PluginLoader.PluginLoaded += (pluginInstance =>
-        {
-            Task.Run(async () => { await OnPluginLoaded(pluginInstance); });
-        });
     }
 
     private static async Task OnPluginLoaded(PluginInstance pluginInstance)
     {
         try
         {
-
             Logger.Debug($"[{pluginInstance.Metadata.Name}] Start to init plugin ");
             pluginInstance.InitStartTimestamp = Stopwatch.GetTimestamp();
             await pluginInstance.Plugin.Init(new PluginInitContext(pluginInstance.API));
@@ -51,7 +48,8 @@ public static class PluginManager
 
     public static async Task Load()
     {
-        await PluginLoader.LoadPlugins();
+        await PluginLoader.Load();
+        await PluginStoreManager.Load();
     }
 
     private static void UnloadPlugin(PluginInstance plugin, string reason)
