@@ -11,6 +11,7 @@ namespace Wox.ViewModels;
 public class CoreQueryViewModel : ViewModelBase
 {
     private readonly List<PluginQueryResult> _results = new();
+    private int _caretIndex;
     private string? _query;
     private int? _selectedIndex = 0;
 
@@ -18,6 +19,7 @@ public class CoreQueryViewModel : ViewModelBase
     {
         this.WhenAnyValue(o => o.Query)!
             .Subscribe(OnQuery);
+        PluginPublicAPI.ChangeQueryEvent += OnChangeQuery;
     }
 
     public string? Query
@@ -27,6 +29,13 @@ public class CoreQueryViewModel : ViewModelBase
             this.RaiseAndSetIfChanged(ref _query, value);
     }
 
+    public int CaretIndex
+    {
+        get => _caretIndex;
+        set =>
+            this.RaiseAndSetIfChanged(ref _caretIndex, value);
+    }
+
     public int? SelectedIndex
     {
         get => _selectedIndex;
@@ -34,6 +43,12 @@ public class CoreQueryViewModel : ViewModelBase
     }
 
     public ObservableCollection<PluginQueryResult> QueryResult => new(_results);
+
+    private void OnChangeQuery(string query)
+    {
+        Query = query;
+        CaretIndex = query.Length;
+    }
 
     private async void OnQuery(string? text)
     {

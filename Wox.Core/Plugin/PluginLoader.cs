@@ -122,6 +122,30 @@ public static class PluginLoader
         }
     }
 
+    public static async Task LoadPlugin(string pluginDirectory)
+    {
+        var metadata = ParsePluginMetadataFromDirectory(pluginDirectory);
+        if (metadata == null) return;
+
+        var pluginHost = PluginHosts.FirstOrDefault(o => o.PluginRuntime.ToUpper() == metadata.Runtime.ToUpper());
+        if (pluginHost == null) throw new Exception($"[{metadata.Runtime}] there is no host for {metadata.Runtime}");
+
+        var plugin = await pluginHost.LoadPlugin(metadata, pluginDirectory);
+        if (plugin == null) return;
+
+        var pluginInstance = new PluginInstance
+        {
+            Metadata = metadata,
+            Plugin = plugin,
+            API = new PluginPublicAPI(metadata),
+            PluginDirectory = pluginDirectory,
+            Host = pluginHost,
+            LoadStartTimestamp = Stopwatch.GetTimestamp(),
+            LoadFinishedTimestamp = Stopwatch.GetTimestamp()
+        };
+        PluginLoaded?.Invoke(pluginInstance);
+    }
+
     /// <summary>
     ///     Parse plugin metadata in giving directory
     /// </summary>

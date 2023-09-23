@@ -26,6 +26,7 @@ public class PluginPublicAPI : IPublicAPI
 
     public void ChangeQuery(string query)
     {
+        ChangeQueryEvent?.Invoke(query);
     }
 
     public void HideApp()
@@ -49,4 +50,8 @@ public class PluginPublicAPI : IPublicAPI
     {
         return I18NManager.GetPluginTranslation(_metadata.Id, key);
     }
+
+    public static event ChangeQueryEventHandler? ChangeQueryEvent;
 }
+
+public delegate void ChangeQueryEventHandler(string query);

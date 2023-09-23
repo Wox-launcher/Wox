@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json;
 using Semver;
 using Wox.Core.Utils;
@@ -40,8 +41,56 @@ public static class PluginStoreManager
         });
     }
 
-    public static Task Install(PluginManifest manifest)
+    public static List<PluginManifest> Search(string keyword)
     {
+        return Manifests.Where(o => o.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    public static async Task Install(PluginManifest manifest)
+    {
+        // check if installed newer version
+        var installedPlugin = PluginManager.GetAllPlugins().FirstOrDefault(o => o.Metadata.Id == manifest.Id);
+        if (installedPlugin != null)
+        {
+            var installedVersion = SemVersion.Parse(installedPlugin.Metadata.Version, SemVersionStyles.Strict);
+            var currentVersion = SemVersion.Parse(manifest.Version, SemVersionStyles.Strict);
+            if (installedVersion.CompareSortOrderTo(currentVersion) >= 0)
+            {
+                Logger.Info($"You have installed same or newer version of {manifest.Name}");
+                return;
+            }
+
+            // uninstall older version
+            await Uninstall(installedPlugin);
+        }
+
+        // download plugin
+        Logger.Info($"downloading plugin {manifest.Name}...");
+        var pluginDirectory = Path.Combine(DataLocation.UserInstalledPluginsDirectory, manifest.Name);
+        Directory.CreateDirectory(pluginDirectory);
+        var pluginZipPath = Path.Combine(pluginDirectory, "plugin.zip");
+        var httpResult = await new HttpClient().GetAsync(manifest.DownloadUrl);
+        var resultStream = await httpResult.Content.ReadAsStreamAsync();
+        var fileStream = File.Create(pluginZipPath);
+        await resultStream.CopyToAsync(fileStream);
+        fileStream.Close();
+        resultStream.Close();
+
+        // unzip plugin
+        Logger.Info($"unzipping plugin {manifest.Name}...");
+        ZipFile.ExtractToDirectory(pluginZipPath, pluginDirectory);
+
+        // load plugin
+        await PluginLoader.LoadPlugin(pluginDirectory);
+
+        // delete zip file
+        File.Delete(pluginZipPath);
+    }
+
+    public static Task Uninstall(PluginInstance instance)
+    {
+        PluginManager.UnloadPlugin(instance, "uninstall plugin");
+        Directory.Delete(instance.PluginDirectory);
         return Task.CompletedTask;
     }
 

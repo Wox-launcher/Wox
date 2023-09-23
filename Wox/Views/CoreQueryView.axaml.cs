@@ -1,6 +1,4 @@
-using System;
 using Avalonia.Controls;
-using Avalonia.Threading;
 
 namespace Wox.Views;
 

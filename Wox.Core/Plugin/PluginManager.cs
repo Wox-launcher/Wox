@@ -54,11 +54,18 @@ public static class PluginManager
         await PluginStoreManager.Load();
     }
 
-    private static void UnloadPlugin(PluginInstance plugin, string reason)
+    public static void UnloadPlugin(PluginInstance plugin, string reason)
     {
-        plugin.Host.UnloadPlugin(plugin.Metadata);
-        PluginInstances.Remove(plugin);
-        Logger.Info($"{plugin.Metadata.Name} plugin was unloaded because {reason}");
+        try
+        {
+            plugin.Host.UnloadPlugin(plugin.Metadata);
+            PluginInstances.Remove(plugin);
+            Logger.Info($"{plugin.Metadata.Name} plugin was unloaded because {reason}");
+        }
+        catch (Exception e)
+        {
+            Logger.Error($"Couldn't unload plugin {plugin.Metadata.Name}", e);
+        }
     }
 
     public static async Task<List<PluginQueryResult>> QueryForPlugin(PluginInstance plugin, Query query)

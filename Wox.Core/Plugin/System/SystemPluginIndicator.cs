@@ -22,9 +22,8 @@ public class SystemPluginIndicator : ISystemPlugin
             {
                 var result = new Result
                 {
-                    Title = pluginInstance.Metadata.Name,
+                    Title = triggerKeyword,
                     SubTitle = $"Activate {pluginInstance.Metadata.Name} plugin",
-                    Score = 100,
                     Icon = new WoxImage(),
                     Action = () =>
                     {
