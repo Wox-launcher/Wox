@@ -20,7 +20,7 @@ public class SystemPluginIndicator : ISystemPlugin
             var triggerKeyword = pluginInstance.TriggerKeywords.Find(o => o != "*" && o.Contains(query.Search));
             if (triggerKeyword != null)
             {
-                var result = new Result
+                results.Add(new Result
                 {
                     Title = triggerKeyword,
                     SubTitle = $"Activate {pluginInstance.Metadata.Name} plugin",
@@ -30,8 +30,19 @@ public class SystemPluginIndicator : ISystemPlugin
                         _api.ChangeQuery($"{triggerKeyword} ");
                         return Task.FromResult(false);
                     }
-                };
-                results.Add(result);
+                });
+                foreach (var metadataCommand in pluginInstance.Metadata.Commands)
+                    results.Add(new Result
+                    {
+                        Title = $"{triggerKeyword} {metadataCommand.Command}",
+                        SubTitle = $"{metadataCommand.Description}",
+                        Icon = new WoxImage(),
+                        Action = () =>
+                        {
+                            _api.ChangeQuery($"{triggerKeyword} {metadataCommand.Command} ");
+                            return Task.FromResult(false);
+                        }
+                    });
             }
         }
 

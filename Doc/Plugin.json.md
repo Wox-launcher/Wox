@@ -1,21 +1,21 @@
 # Plugin.json specification
 
-| Key             | Required | Description                                                  | Value Type | Value Example                                          |
-|-----------------|----------|--------------------------------------------------------------|------------|--------------------------------------------------------|
-| Id              | true     | Identity for plugin                                          | string     | "CEA0FDFC6D3B4085823D60DC76F28855"                     |
-| Name            | true     | Plugin name                                                  | string     | "Calculator"                                           |
-| Description     | true     | Plugin description                                           | string     | "Provide mathematical calculations.(Try 5*3-2 in Wox)" |
-| Author          | true     | Author of plugin                                             | string     | "cxfksword"                                            |
-| Version         | true     | [Semantic Versioning](https://semver.org/) of plugin         | string     | "1.0.0"                                                |
-| MinWoxVersion   | true     | The minimum required Wox version for your plugin.            | string     | "2.0.0"                                                |
-| Website         | false    | Website of plugin                                            | string     | "https://github.com/Wox-launcher/Wox"                  |
-| Runtime         | true     | Plugin runtime, currently support `Dotnet`,`Python`,`Nodejs` | string     | "Dotnet"                                               |
-| Icon            | true     | Icon path, relative to the root of plugin folder             | string     | "Images\\calculator.png"                               |
-| EntryFile       | true     | Entry file name, relative to the root of plugin folder       | string     | "Wox.Plugin.Calculator.dll"                            |
-| SupportedOS     | true     | Supported OS, currently support `Windows`,`Linux`,`Macos`    | string[]   | ["Windows","Linux","Macos"]                            |
-| TriggerKeywords | true     | Refer [Trigger keyword](Query.md) section                    | string[]   | ["pm","wpm"]                                           |
-| Commands        | false    | Refer [Command](Query.md) section                            | string[]   | ["install","uninstall"]                                |
-| Settings        | false    | Refer `Setting specification` section                        | Setting[]  | [{"Type":"head", "Value":{}}]                          |
+| Key             | Required | Description                                                  | Value Type | Value Example                                              |
+|-----------------|----------|--------------------------------------------------------------|------------|------------------------------------------------------------|
+| Id              | true     | Identity for plugin                                          | string     | "CEA0FDFC6D3B4085823D60DC76F28855"                         |
+| Name            | true     | Plugin name                                                  | string     | "Calculator"                                               |
+| Description     | true     | Plugin description                                           | string     | "Provide mathematical calculations.(Try 5*3-2 in Wox)"     |
+| Author          | true     | Author of plugin                                             | string     | "cxfksword"                                                |
+| Version         | true     | [Semantic Versioning](https://semver.org/) of plugin         | string     | "1.0.0"                                                    |
+| MinWoxVersion   | true     | The minimum required Wox version for your plugin.            | string     | "2.0.0"                                                    |
+| Website         | false    | Website of plugin                                            | string     | "https://github.com/Wox-launcher/Wox"                      |
+| Runtime         | true     | Plugin runtime, currently support `Dotnet`,`Python`,`Nodejs` | string     | "Dotnet"                                                   |
+| Icon            | true     | Icon path, relative to the root of plugin folder             | string     | "Images\\calculator.png"                                   |
+| EntryFile       | true     | Entry file name, relative to the root of plugin folder       | string     | "Wox.Plugin.Calculator.dll"                                |
+| SupportedOS     | true     | Supported OS, currently support `Windows`,`Linux`,`Macos`    | string[]   | ["Windows","Linux","Macos"]                                |
+| TriggerKeywords | true     | Refer [Trigger keyword](Query.md) section                    | string[]   | ["pm","wpm"]                                               |
+| Commands        | false    | Refer [Command](Query.md) section                            | Command[]  | [{"Command":"install","Description:"Install Wox Plugins"}] |
+| Settings        | false    | Refer `Setting specification` section                        | Setting[]  | [{"Type":"head", "Value":{}}]                              |
 
 ## Setting specification
 

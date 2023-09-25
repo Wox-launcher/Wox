@@ -47,7 +47,7 @@ public static class QueryBuilder
             else
             {
                 var possibleCommand = terms[1];
-                if (pluginInstance.Metadata.Commands.Contains(possibleCommand))
+                if (pluginInstance.Metadata.Commands.Any(o => o.Command.Contains(possibleCommand)))
                 {
                     // command and search
                     command = possibleCommand;

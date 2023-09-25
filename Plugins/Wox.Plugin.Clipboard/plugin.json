@@ -1,7 +1,7 @@
 {
   "Id": "8364084026ff479fa7dbaf91f65cdd0e",
   "TriggerKeywords": [
-    "cp"
+    "cb"
   ],
   "Name": "Clipboard History",
   "Description": "A Wox plugin to get clipboard history",

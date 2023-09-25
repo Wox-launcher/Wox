@@ -25,7 +25,7 @@ public class PluginMetadata
     /// </summary>
     public required List<string> TriggerKeywords { get; init; }
 
-    public List<string> Commands { get; init; } = new();
+    public List<PluginMetadataCommand> Commands { get; init; } = new();
 
     /// <summary>
     ///     See <see cref="PluginSupportedOS" />
@@ -36,4 +36,15 @@ public class PluginMetadata
     {
         return Name;
     }
+
+    public bool IsSupportedInCurrentOS()
+    {
+        return SupportedOS.Any(o => o.ToUpper() == PluginSupportedOS.GetCurrentOS().ToUpper());
+    }
+}
+
+public class PluginMetadataCommand
+{
+    public string Command { get; init; } = "";
+    public string Description { get; init; } = "";
 }

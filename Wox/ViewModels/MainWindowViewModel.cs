@@ -5,7 +5,6 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using SharpHook;
 using SharpHook.Native;
-using Wox.Core.Utils;
 using Wox.Utils;
 
 namespace Wox.ViewModels;
@@ -35,27 +34,20 @@ public class MainWindowViewModel : ViewModelBase
 
     private async Task RunGlobalKeyHook()
     {
-        Logger.Info("run hook");
         var hook = new SimpleGlobalHook();
         //Monitor Key Event
         hook.KeyPressed += (sender, args) =>
         {
-            Logger.Info($"{args.Data.KeyCode} pressed");
             _pressedKeyMap[args.Data.KeyCode] = true;
             _pressedKeyMap.TryGetValue(KeyCode.VcLeftMeta, out var isLeftMetaPressed);
             _pressedKeyMap.TryGetValue(KeyCode.VcSpace, out var isSpacePressed);
             if (isLeftMetaPressed && isSpacePressed)
             {
-                Logger.Info("pressed");
                 var currentScreen = _screens?.ScreenFromPoint(_currentPixelPoint);
                 Dispatcher.UIThread.InvokeAsync(() => { UiHelper.ToggleWindowVisible(currentScreen); });
             }
         };
-        hook.KeyReleased += (sender, args) =>
-        {
-            Logger.Info($"{args.Data.KeyCode} released");
-            _pressedKeyMap[args.Data.KeyCode] = false;
-        };
+        hook.KeyReleased += (sender, args) => { _pressedKeyMap[args.Data.KeyCode] = false; };
         //Monitor Mouse Event
         hook.MouseMoved += (sender, args) => { _currentPixelPoint = new PixelPoint(args.Data.X, args.Data.Y); };
         await hook.RunAsync();

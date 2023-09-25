@@ -29,6 +29,7 @@ public class App : Application
 
         base.OnFrameworkInitializationCompleted();
 
+        Logger.Info("I'm in UI Thread");
         Task.Run(async () => { await Bootstrap(); });
     }
 

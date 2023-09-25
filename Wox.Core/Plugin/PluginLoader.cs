@@ -103,6 +103,12 @@ public static class PluginLoader
         foreach (var (metadata, pluginDirectory) in pluginMetas)
         {
             Logger.Debug($"[{metadata.Runtime} host] start to load plugin: {metadata.Name}");
+            if (!metadata.IsSupportedInCurrentOS())
+            {
+                Logger.Info($"[{metadata.Name}] plugin is not supported in current OS");
+                continue;
+            }
+
             var loadStartTimestamp = Stopwatch.GetTimestamp();
             var plugin = await pluginHost.LoadPlugin(metadata, pluginDirectory);
             var loadFinishedTimestamp = Stopwatch.GetTimestamp();
@@ -126,6 +132,7 @@ public static class PluginLoader
     {
         var metadata = ParsePluginMetadataFromDirectory(pluginDirectory);
         if (metadata == null) return;
+        if (!metadata.IsSupportedInCurrentOS()) return;
 
         var pluginHost = PluginHosts.FirstOrDefault(o => o.PluginRuntime.ToUpper() == metadata.Runtime.ToUpper());
         if (pluginHost == null) throw new Exception($"[{metadata.Runtime}] there is no host for {metadata.Runtime}");
@@ -144,6 +151,12 @@ public static class PluginLoader
             LoadFinishedTimestamp = Stopwatch.GetTimestamp()
         };
         PluginLoaded?.Invoke(pluginInstance);
+    }
+
+    public static bool IsPluginSupportedOS(PluginMetadata metadata)
+    {
+        if (metadata.SupportedOS.Count == 0) return true;
+        return metadata.SupportedOS.Any(o => o.ToUpper() == Environment.OSVersion.Platform.ToString().ToUpper());
     }
 
     /// <summary>

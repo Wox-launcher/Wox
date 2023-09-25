@@ -15,7 +15,7 @@ public class QueryBuilderTest
                 Metadata = new PluginMetadata
                 {
                     TriggerKeywords = triggerKeywords,
-                    Commands = commands,
+                    Commands = commands.Select(o => new PluginMetadataCommand { Command = o, Description = "" }).ToList(),
                     Id = Guid.NewGuid()
                         .ToString(),
                     Name = Guid.NewGuid()

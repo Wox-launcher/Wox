@@ -83,10 +83,10 @@ public class SystemPluginManager : ISystemPlugin
             {
                 "wpm"
             },
-            Commands = new List<string>
+            Commands = new List<PluginMetadataCommand>
             {
-                "install",
-                "uninstall"
+                new() { Command = "install", Description = "Install Wox plugins" },
+                new() { Command = "uninstall", Description = "Uninstall Wox plugins" }
             },
             SupportedOS = new List<string>
             {

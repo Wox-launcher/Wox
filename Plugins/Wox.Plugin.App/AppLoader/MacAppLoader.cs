@@ -26,10 +26,7 @@ public class MacAppLoader : IAppLoader
         {
             api.Log($"Start to get app info from {appDirectory}");
             var appInfo = await GetAppInfo(appDirectory);
-            if (appInfo != null)
-            {
-                apps.Add(appInfo);
-            }
+            if (appInfo != null) apps.Add(appInfo);
         });
 
         return apps;

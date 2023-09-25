@@ -14,4 +14,16 @@ public static class PluginSupportedOS
                || os.ToUpper() == Windows.ToUpper()
                || os.ToUpper() == Linux.ToUpper();
     }
+
+    public static string GetCurrentOS()
+    {
+        if (OperatingSystem.IsMacOS())
+            return "Macos";
+        if (OperatingSystem.IsWindows())
+            return "Windows";
+        if (OperatingSystem.IsLinux())
+            return "Linux";
+
+        return "Unknown";
+    }
 }

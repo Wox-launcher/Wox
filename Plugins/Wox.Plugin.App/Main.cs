@@ -6,10 +6,10 @@ namespace Wox.Plugin.App;
 
 public class Main : IPlugin
 {
+    private readonly string _cachePath = Path.Combine(Path.GetTempPath(), "Wox.Plugin.App", "app.cache");
     private IPublicAPI _api = null!;
     private IAppLoader? _appLoader;
     private List<AppInfo>? _apps;
-    private readonly string _cachePath = Path.Combine(Path.GetTempPath(), "Wox.Plugin.App", "app.cache");
 
     public async Task Init(PluginInitContext context)
     {
@@ -17,49 +17,7 @@ public class Main : IPlugin
 
         await LoadAppCache();
 
-        _ = Task.Delay(2000).ContinueWith(async _ => { await IndexApps(); });
-    }
-
-    private async Task LoadAppCache()
-    {
-        if (!File.Exists(_cachePath))
-        {
-            _api.Log("App cache not found");
-            Directory.CreateDirectory(Path.GetDirectoryName(_cachePath) ?? string.Empty);
-            return;
-        }
-
-        try
-        {
-            var cache = await File.ReadAllTextAsync(_cachePath);
-            _apps = JsonSerializer.Deserialize<List<AppInfo>>(cache);
-            _api.Log($"App cache loaded, count: {_apps?.Count}");
-        }
-        catch (Exception e)
-        {
-            _api.Log($"Can't load app cache, {e.Message}");
-        }
-    }
-
-    private async Task IndexApps()
-    {
-        _api.Log($"Start to index apps");
-        var startTimestamp = Stopwatch.GetTimestamp();
-
-        var isMacos = OperatingSystem.IsMacOS();
-        if (isMacos) _appLoader = new MacAppLoader();
-
-        if (_appLoader != null) _apps = await _appLoader.GetAllApps(_api);
-
-        //save app to cache
-        if (_apps != null)
-        {
-            var cache = JsonSerializer.Serialize(_apps);
-            await File.WriteAllTextAsync(_cachePath, cache);
-            _api.Log($"App cache saved, count: {_apps.Count}, path: {_cachePath}");
-        }
-
-        _api.Log($"Index apps cost {Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds} ms");
+        _ = Task.Run(IndexApps);
     }
 
     public Task<List<Result>> Query(Query query)
@@ -95,5 +53,47 @@ public class Main : IPlugin
                 });
 
         return Task.FromResult(results);
+    }
+
+    private async Task LoadAppCache()
+    {
+        if (!File.Exists(_cachePath))
+        {
+            _api.Log("App cache not found");
+            Directory.CreateDirectory(Path.GetDirectoryName(_cachePath) ?? string.Empty);
+            return;
+        }
+
+        try
+        {
+            var cache = await File.ReadAllTextAsync(_cachePath);
+            _apps = JsonSerializer.Deserialize<List<AppInfo>>(cache);
+            _api.Log($"App cache loaded, count: {_apps?.Count}");
+        }
+        catch (Exception e)
+        {
+            _api.Log($"Can't load app cache, {e.Message}");
+        }
+    }
+
+    private async Task IndexApps()
+    {
+        _api.Log("Start to index apps");
+        var startTimestamp = Stopwatch.GetTimestamp();
+
+        var isMacos = OperatingSystem.IsMacOS();
+        if (isMacos) _appLoader = new MacAppLoader();
+
+        if (_appLoader != null) _apps = await _appLoader.GetAllApps(_api);
+
+        //save app to cache
+        if (_apps != null)
+        {
+            var cache = JsonSerializer.Serialize(_apps);
+            await File.WriteAllTextAsync(_cachePath, cache);
+            _api.Log($"App cache saved, count: {_apps.Count}, path: {_cachePath}");
+        }
+
+        _api.Log($"Index apps cost {Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds} ms");
     }
 }

@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using ReactiveUI;
 using Wox.Core;
 using Wox.Core.Plugin;
+using Wox.Core.Utils;
 using Wox.Utils;
 
 namespace Wox.ViewModels;
@@ -64,6 +65,7 @@ public class CoreQueryViewModel : ViewModelBase
 
     private async void OnQuery(string? text)
     {
+        Logger.Info($"On Query invoke: {text}");
         if (text == null) return;
         var query = QueryBuilder.Build(text);
         if (query.IsEmpty)

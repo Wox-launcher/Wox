@@ -43,7 +43,7 @@ public class PluginPublicAPI : IPublicAPI
 
     public void Log(string msg)
     {
-        _pluginLogger.Information(msg);
+        _pluginLogger.Information(Utils.Logger.FormatLog(msg));
     }
 
     public string GetTranslation(string key)

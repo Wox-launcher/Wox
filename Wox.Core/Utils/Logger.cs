@@ -16,7 +16,7 @@ public static class Logger
         .MinimumLevel.Debug()
         .CreateLogger();
 
-    private static string GetMessage(string message)
+    public static string FormatLog(string message)
     {
         var currentThreadId = Environment.CurrentManagedThreadId.ToString().PadLeft(4, '0');
         return $"[{currentThreadId}] {message}";
@@ -24,27 +24,27 @@ public static class Logger
 
     public static void Debug(string message)
     {
-        SeriLogger.Debug(GetMessage(message));
+        SeriLogger.Debug(FormatLog(message));
     }
 
     public static void Info(string message)
     {
-        SeriLogger.Information(GetMessage(message));
+        SeriLogger.Information(FormatLog(message));
     }
 
     public static void Error(string message)
     {
-        SeriLogger.Error(GetMessage(message));
+        SeriLogger.Error(FormatLog(message));
     }
 
     public static void Warn(string message)
     {
-        SeriLogger.Warning(GetMessage(message));
+        SeriLogger.Warning(FormatLog(message));
     }
 
     public static void Error(string message, Exception e)
     {
-        SeriLogger.Error(e, GetMessage(message));
+        SeriLogger.Error(e, FormatLog(message));
     }
 
     public static Microsoft.Extensions.Logging.ILogger GetILogger()
