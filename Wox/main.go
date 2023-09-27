@@ -1,28 +1,37 @@
 package main
 
-import webview "github.com/qianlifeng/webview_go"
+import (
+	webview "github.com/webview/webview_go"
+	"runtime"
+	"wox/glfw"
+)
+
+func init() {
+	// This is needed to arrange that main() runs on main thread.
+	// See documentation for functions that are only allowed to be called from the main thread.
+	runtime.LockOSThread()
+}
 
 func main() {
-	w := webview.New(true)
-	defer w.Destroy()
-	w.SetSize(800, 400, webview.HintFixed)
-	w.SetTitle("Hello")
-	w.SetHtml(`<!doctype html>
-		<html>
-			<body>111hello22333e2</body>
-			<script>
-				window.onload = function() {
-					document.body.innerText = ` + "`hello, ${navigator.userAgent}`" + `;
-					noop().then(function(res) {
-						console.log('noop res', res);
-						add(1, 2).then(function(res) {
-							console.log('add res', res);
-							quit();
-						});
-					});
-				};
-			</script>
-		</html>
-	)`)
-	w.Run()
+	err := glfw.Init()
+	if err != nil {
+		panic(err)
+	}
+	defer glfw.Terminate()
+
+	window, err := glfw.CreateWindow(640, 580, "Testing", nil, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	wb := webview.NewWindow(false, window.GetCocoaWindow())
+	wb.Navigate("http://www.sina.com.cn")
+
+	window.MakeContextCurrent()
+
+	for !window.ShouldClose() {
+		// Do OpenGL stuff.
+		window.SwapBuffers()
+		glfw.PollEvents()
+	}
 }
