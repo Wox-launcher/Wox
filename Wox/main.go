@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	webview "github.com/webview/webview_go"
 	"math"
 	"runtime"
@@ -9,10 +8,10 @@ import (
 )
 
 var isLeftPressed = false
-var startPressWindowX = 0
-var startPressWindowY = 0
-var startPressMouseX = 0
-var startPressMouseY = 0
+var lastWindowX = 0
+var lastWindowY = 0
+var lastCursorX float64 = 0
+var lastCursorY float64 = 0
 
 func init() {
 	// This is needed to arrange that main() runs on main thread.
@@ -28,7 +27,6 @@ func main() {
 	defer glfw.Terminate()
 
 	glfw.WindowHint(glfw.Decorated, glfw.False)
-	glfw.WindowHint(glfw.Resizable, glfw.True) // Optional: Prevent resizing if desired
 	window, err := glfw.CreateWindow(640, 680, "Testing", nil, nil)
 	if err != nil {
 		panic(err)
@@ -49,35 +47,28 @@ func main() {
 	wb := webview.NewWindow(false, window.GetCocoaWindow())
 	wb.Navigate("https://1609052.playcode.io/")
 	wb.Bind("MousePos", func(x, y int) {
-		cursorX, cursorY := window.GetCursorPos()
-		println(fmt.Sprintf("Mouse move: %f, %f", cursorX, cursorY))
+		currentCursorX, currentCursorY := window.GetCursorPos()
+		currentWindowX, currentWindowY := window.GetPos()
 
 		if isLeftPressed {
-			x1, y1 := window.GetCursorPos()
-			println("cursor position:", int(x1), int(y1))
-
-			x2 := int(math.Floor(x1)) - startPressMouseX + startPressWindowX
-			y2 := int(math.Floor(y1)) - startPressMouseY + startPressWindowY
-
-			println("new position:", x2, y2)
-
-			window.SetPos(x2, y2)
+			newWindowX := int(math.Round((currentCursorX-lastCursorX)*0.97)) + currentWindowX
+			newWindowY := int(math.Round((currentCursorY-lastCursorY)*0.97)) + currentWindowY
+			window.SetPos(newWindowX, newWindowY)
 		}
+
+		lastWindowX, lastWindowY = window.GetPos()
+		lastCursorX, lastCursorY = window.GetCursorPos()
 	})
 	wb.Bind("OnMouseDown", func() {
 		isLeftPressed = true
-		startPressWindowX, startPressWindowY = window.GetPos()
-		cursorX, cursorY := window.GetCursorPos()
-		startPressMouseX, startPressMouseY = int(cursorX), int(cursorY)
-		println("Mouse down:", startPressWindowX, startPressWindowY, startPressMouseX, startPressMouseY)
+		lastWindowX, lastWindowY = window.GetPos()
+		lastCursorX, lastCursorY = window.GetCursorPos()
 	})
 	wb.Bind("OnMouseUp", func() {
 		isLeftPressed = false
-		println("Mouse up:")
 	})
 	wb.Bind("OnMouseLeave", func() {
 		isLeftPressed = false
-		println("Mouse leave:")
 	})
 	window.MakeContextCurrent()
 
