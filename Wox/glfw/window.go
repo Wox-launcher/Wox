@@ -346,6 +346,7 @@ func CreateWindow(width, height int, title string, monitor *Monitor, share *Wind
 
 	w := C.glfwCreateWindow(C.int(width), C.int(height), t, m, s)
 	if w == nil {
+		//test12
 		return nil, acceptError(APIUnavailable, VersionUnavailable)
 	}
 

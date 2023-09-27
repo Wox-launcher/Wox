@@ -7,7 +7,6 @@ import "C"
 
 func glfwbool(b C.int) bool {
 	return b == C.int(True)
-
 }
 
 func bytes(origin []byte) (pointer *uint8, free func()) {

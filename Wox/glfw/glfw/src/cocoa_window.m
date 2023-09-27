@@ -817,6 +817,16 @@ static GLFWbool createNativeWindow(_GLFWwindow* window,
         return GLFW_FALSE;
     }
 
+    //set app activate policy to NSApplicationActivationPolicyAccessory
+    int NSApplicationActivationPolicyAccessory = 1;
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
+
+    // always set level to be on top
+    [window->ns.object setLevel:NSMainMenuWindowLevel + 1];
+
+    // set setCollectionBehavior to join all fullscreen spaces
+    [window->ns.object setCollectionBehavior:  1 << 0];
+
     if (window->monitor)
         [window->ns.object setLevel:NSMainMenuWindowLevel + 1];
     else
