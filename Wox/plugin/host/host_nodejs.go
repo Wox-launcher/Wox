@@ -2,17 +2,21 @@ package host
 
 import (
 	"context"
+	"path"
 	"wox/plugin"
+	"wox/util"
 )
 
 func init() {
 	host := &NodejsHost{}
-	host.WebsocketHost.this = host
+	host.websocketHost = &WebsocketHost{
+		host: host,
+	}
 	plugin.AllHosts = append(plugin.AllHosts, host)
 }
 
 type NodejsHost struct {
-	WebsocketHost
+	websocketHost *WebsocketHost
 }
 
 func (n *NodejsHost) GetRuntime(ctx context.Context) plugin.Runtime {
@@ -20,7 +24,7 @@ func (n *NodejsHost) GetRuntime(ctx context.Context) plugin.Runtime {
 }
 
 func (n *NodejsHost) Start(ctx context.Context) error {
-	return n.StartHost(ctx, "/opt/homebrew/bin/node", "/Users/s/.wox/Plugins/nodejs/wox.js")
+	return n.websocketHost.StartHost(ctx, "/opt/homebrew/bin/node", path.Join(util.GetLocation().GetHostDirectory(), "node-host.js"))
 }
 
 func (n *NodejsHost) Stop(ctx context.Context) {
@@ -28,9 +32,9 @@ func (n *NodejsHost) Stop(ctx context.Context) {
 }
 
 func (n *NodejsHost) LoadPlugin(ctx context.Context, metadata plugin.Metadata, pluginDirectory string) (plugin.Plugin, error) {
-	return nil, nil
+	return n.websocketHost.LoadPlugin(ctx, metadata, pluginDirectory)
 }
 
 func (n *NodejsHost) UnloadPlugin(ctx context.Context, metadata plugin.Metadata) {
-
+	n.websocketHost.UnloadPlugin(ctx, metadata)
 }

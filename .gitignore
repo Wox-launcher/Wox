@@ -303,8 +303,7 @@ Output-Performance.txt
 .idea
 .DS_Store
 publish
-Wox/plugins/
-Wox/hosts/
+Wox/resource/hosts/
 Wox.Plugin.Host.Python/python-host/
 Wox.Plugin.Host.Python/python-host.pyz
 Wox.Plugin.Host.Python/venv/

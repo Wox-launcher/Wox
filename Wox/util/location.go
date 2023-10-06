@@ -45,7 +45,7 @@ func (l *Location) Init() error {
 		defer file.Close()
 
 		// write data directory path to file
-		_, writeErr := file.WriteString(l.GetDefaultUserDataDirectory())
+		_, writeErr := file.WriteString(path.Join(l.woxDataDirectory, "wox-user"))
 		if writeErr != nil {
 			return fmt.Errorf("failed to write user data directory path to shortcut file: %w", writeErr)
 		}
@@ -71,7 +71,13 @@ func (l *Location) Init() error {
 	if directoryErr := l.ensureDirectoryExist(l.GetLogDirectory()); directoryErr != nil {
 		return directoryErr
 	}
+	if directoryErr := l.ensureDirectoryExist(l.GetLogHostsDirectory()); directoryErr != nil {
+		return directoryErr
+	}
 	if directoryErr := l.ensureDirectoryExist(l.GetPluginDirectory()); directoryErr != nil {
+		return directoryErr
+	}
+	if directoryErr := l.ensureDirectoryExist(l.GetHostDirectory()); directoryErr != nil {
 		return directoryErr
 	}
 
@@ -93,10 +99,14 @@ func (l *Location) GetLogDirectory() string {
 	return path.Join(l.woxDataDirectory, "log")
 }
 
-func (l *Location) GetDefaultUserDataDirectory() string {
-	return path.Join(l.woxDataDirectory, "wox")
+func (l *Location) GetLogHostsDirectory() string {
+	return path.Join(l.GetLogDirectory(), "hosts")
 }
 
 func (l *Location) GetPluginDirectory() string {
 	return path.Join(l.userDataDirectory, "plugins")
+}
+
+func (l *Location) GetHostDirectory() string {
+	return path.Join(l.woxDataDirectory, "hosts")
 }

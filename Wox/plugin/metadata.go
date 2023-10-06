@@ -22,3 +22,8 @@ type MetadataCommand struct {
 	Command     string
 	Description string
 }
+
+type MetadataWithDirectory struct {
+	Metadata  Metadata
+	Directory string
+}

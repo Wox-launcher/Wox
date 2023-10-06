@@ -2,9 +2,11 @@ package util
 
 import (
 	"context"
+	"fmt"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"io"
+	"log"
 	"os"
 	"path"
 	"strconv"
@@ -17,22 +19,24 @@ var logOnce sync.Once
 
 type Log struct {
 	logger *zap.Logger
-	syncer zapcore.WriteSyncer
+	writer io.Writer
 }
 
 func GetLogger() *Log {
 	logOnce.Do(func() {
 		logInstance = &Log{}
-		logInstance.logger, logInstance.syncer = createLogger()
+		logInstance.logger, logInstance.writer = createLogger()
+		log.SetFlags(0) // remove default timestamp
+		log.SetOutput(logInstance.writer)
 	})
 	return logInstance
 }
 
 func (l *Log) GetWriter() io.Writer {
-	return logInstance.syncer
+	return logInstance.writer
 }
 
-func (l *Log) formatMsg(context context.Context, msg string) string {
+func formatMsg(context context.Context, msg string) string {
 	var builder strings.Builder
 	builder.Grow(256)
 	builder.WriteString(FormatTimestampWithMs(GetSystemTimestamp()))
@@ -41,24 +45,25 @@ func (l *Log) formatMsg(context context.Context, msg string) string {
 	builder.WriteString(" ")
 	if traceId, ok := context.Value("trace").(string); ok {
 		builder.WriteString(traceId)
+		builder.WriteString(" ")
 	}
 	builder.WriteString(msg)
 	return builder.String()
 }
 
 func (l *Log) Debug(context context.Context, msg string) {
-	l.logger.Debug(l.formatMsg(context, msg))
+	l.logger.Debug(formatMsg(context, msg))
 }
 
 func (l *Log) Info(context context.Context, msg string) {
-	l.logger.Info(l.formatMsg(context, msg))
+	l.logger.Info(formatMsg(context, msg))
 }
 
 func (l *Log) Error(context context.Context, msg string) {
-	l.logger.Error(l.formatMsg(context, msg))
+	l.logger.Error(formatMsg(context, msg))
 }
 
-func createLogger() (*zap.Logger, zapcore.WriteSyncer) {
+func createLogger() (*zap.Logger, io.Writer) {
 	logFolder := GetLocation().GetLogDirectory()
 	if _, err := os.Stat(logFolder); os.IsNotExist(err) {
 		os.MkdirAll(logFolder, os.ModePerm)
@@ -80,5 +85,23 @@ func createLogger() (*zap.Logger, zapcore.WriteSyncer) {
 		writeSyncer,
 		zap.DebugLevel,
 	))
-	return zapLogger, writeSyncer
+
+	reader, writer := io.Pipe()
+	Go(NewTraceContext(), "log reader", func() {
+		defer reader.Close()
+		defer writer.Close()
+		buf := make([]byte, 2048)
+		for {
+			n, err := reader.Read(buf)
+			if err != nil {
+				break
+			}
+			msg := string(buf[:n])
+			//remove newline in msg
+			msg = strings.TrimRight(msg, "\n")
+			zapLogger.Info(formatMsg(NewTraceContext(), fmt.Sprintf("[SYS LOG] %s", msg)))
+		}
+	})
+
+	return zapLogger, writer
 }
