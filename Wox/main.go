@@ -34,7 +34,12 @@ func main() {
 
 		plugin.GetPluginManager().Start(ctx)
 
-		registerMainHotkeyErr := mainHotkey.Register(ctx, "command+space", toggleWindow)
+		// macos use command+space, other os use alt+space as default hotkey
+		combineKey := "alt+space"
+		if runtime.GOOS == "darwin" {
+			combineKey = "command+space"
+		}
+		registerMainHotkeyErr := mainHotkey.Register(ctx, combineKey, toggleWindow)
 		if registerMainHotkeyErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to register main hotkey: %s", registerMainHotkeyErr.Error()))
 		}

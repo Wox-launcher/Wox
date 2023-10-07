@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/jinzhu/now"
-	"github.com/shopspring/decimal"
 	"strconv"
 	"time"
 )
@@ -154,16 +153,6 @@ func ConvertTimestampFromTime(t time.Time) (timestamp int64) {
 // a-b的秒差距
 func DiffTimeInSeconds(a, b time.Time) float64 {
 	return a.Sub(b).Seconds()
-}
-
-// a-b的分钟差距
-func DiffTimeInMinutes(a, b time.Time) decimal.Decimal {
-	return decimal.NewFromFloat(a.Sub(b).Minutes())
-}
-
-// a-b的小时差距
-func DiffTimeInHours(a, b time.Time) decimal.Decimal {
-	return decimal.NewFromFloat(a.Sub(b).Hours())
 }
 
 func AddHours(a time.Time, hours int) time.Time {

@@ -141,13 +141,35 @@ func handleRegisterMainHotkey(ctx context.Context, request websocketRequest) {
 		return
 	}
 
-	mainHotkey.Register(ctx, hotkey, toggleWindow)
+	registerErr := mainHotkey.Register(ctx, hotkey, toggleWindow)
+	if registerErr != nil {
+		ResponseUI(ctx, websocketResponse{
+			Id:     request.Id,
+			Method: request.Method,
+			Data:   registerErr.Error(),
+		})
+	} else {
+		ResponseUI(ctx, websocketResponse{
+			Id:     request.Id,
+			Method: request.Method,
+			Data:   "success",
+		})
+	}
 }
 
 func RequestUI(ctx context.Context, request websocketRequest) {
 	marshalData, marshalErr := json.Marshal(request)
 	if marshalErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to marshal websocket request: %s", marshalErr.Error()))
+		return
+	}
+	m.Broadcast(marshalData)
+}
+
+func ResponseUI(ctx context.Context, response websocketResponse) {
+	marshalData, marshalErr := json.Marshal(response)
+	if marshalErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
 		return
 	}
 	m.Broadcast(marshalData)
