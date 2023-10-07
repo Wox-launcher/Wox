@@ -2,76 +2,133 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
+	"github.com/olahol/melody"
 	"net/http"
 	"time"
 	"wox/plugin"
 	"wox/util"
 )
 
-type ApiResponse struct {
-	Status  int
-	Data    any
-	Message string
+var m *melody.Melody
+
+type websocketRequest struct {
+	Id     string
+	Method string
+	Params map[string]string
 }
 
-func NewApiResponseSuccessWithoutData() ApiResponse {
-	return ApiResponse{
-		Status:  http.StatusOK,
-		Data:    nil,
-		Message: "",
-	}
-}
-
-func NewApiResponseSuccess(data any) ApiResponse {
-	return ApiResponse{
-		Status:  http.StatusOK,
-		Data:    data,
-		Message: "",
-	}
-}
-
-func NewApiResponseError(msg string) ApiResponse {
-	return ApiResponse{
-		Status:  http.StatusInternalServerError,
-		Data:    nil,
-		Message: msg,
-	}
+type websocketResponse struct {
+	Id     string
+	Method string
+	Data   any
 }
 
 func ServeAndWait(ctx context.Context, port int) {
-	gin.SetMode(gin.ReleaseMode)
-	router := gin.New()
-	router.MaxMultipartMemory = 100 << 20
-	router.Use(gin.RecoveryWithWriter(util.GetLogger().GetWriter()))
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{},
-		AllowMethods:     []string{"PUT", "PATCH", "POST", "GET"},
-		AllowHeaders:     []string{"Origin", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		AllowOriginFunc: func(origin string) bool {
-			return true
-		},
-		MaxAge: 12 * time.Hour,
-	}))
+	m = melody.New()
 
-	router.GET("/query", func(c *gin.Context) {
-		token := c.Query("token")
-		if token == "" {
-			c.JSON(http.StatusOK, NewApiResponseError("token parameter is required"))
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Wox"))
+	})
+
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		m.HandleRequest(w, r)
+	})
+
+	m.HandleMessage(func(s *melody.Session, msg []byte) {
+		ctxNew := util.NewTraceContext()
+		util.GetLogger().Error(ctxNew, fmt.Sprintf("got request from ui: %s", string(msg)))
+
+		var request websocketRequest
+		unmarshalErr := json.Unmarshal(msg, &request)
+		if unmarshalErr != nil {
+			util.GetLogger().Error(ctxNew, fmt.Sprintf("failed to unmarshal websocket request: %s", unmarshalErr.Error()))
 			return
 		}
 
-		results := plugin.GetPluginManager().Query(util.NewTraceContext(), plugin.NewQuery(token))
-		c.JSON(http.StatusOK, NewApiResponseSuccess(results))
+		switch request.Method {
+		case "query":
+			util.Go(ctxNew, "handle ui query", func() {
+				handleQuery(ctxNew, request)
+			})
+		case "action":
+			util.Go(ctxNew, "handle ui action", func() {
+				handleAction(ctxNew, request)
+			})
+		}
 	})
 
-	util.GetLogger().Info(ctx, fmt.Sprintf("rest ServeAndWait at：http://localhost:%d", port))
-	err := router.Run(fmt.Sprintf("localhost:%d", port))
+	util.GetLogger().Info(ctx, fmt.Sprintf("websocket server start at：ws://localhost:%d", port))
+	err := http.ListenAndServe(fmt.Sprintf("localhost:%d", port), nil)
 	if err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to start rest ServeAndWait: %s", err.Error()))
 	}
+}
+
+func handleQuery(ctx context.Context, request websocketRequest) {
+	query, ok := request.Params["query"]
+	if !ok {
+		util.GetLogger().Error(ctx, "query not found")
+		return
+	}
+
+	resultChan, doneChan := plugin.GetPluginManager().Query(ctx, plugin.NewQuery(query))
+	for {
+		select {
+		case results := <-resultChan:
+			util.GetLogger().Info(ctx, fmt.Sprintf("query result count: %d", len(results)))
+			if len(results) == 0 {
+				continue
+			}
+
+			response := websocketResponse{
+				Id:     request.Id,
+				Method: request.Method,
+				Data:   plugin.NewQueryResultForUIs(results),
+			}
+
+			marshalData, marshalErr := json.Marshal(response)
+			if marshalErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
+				continue
+			}
+
+			m.Broadcast(marshalData)
+		case <-doneChan:
+			util.GetLogger().Info(ctx, "query done")
+			return
+		case <-time.After(time.Second * 30):
+			util.GetLogger().Info(ctx, "query timeout")
+			return
+		}
+	}
+}
+
+func handleAction(ctx context.Context, request websocketRequest) {
+	resultId, ok := request.Params["id"]
+	if !ok {
+		util.GetLogger().Error(ctx, "id not found")
+		return
+	}
+
+	action := plugin.GetActionForResult(resultId)
+	if action == nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("action not found for result id: %s", resultId))
+		return
+	}
+
+	hideWox := action()
+
+	response := websocketResponse{
+		Id:     request.Id,
+		Method: request.Method,
+		Data:   hideWox,
+	}
+	marshalData, marshalErr := json.Marshal(response)
+	if marshalErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
+		return
+	}
+	m.Broadcast(marshalData)
 }

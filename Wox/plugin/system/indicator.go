@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"strings"
 	"wox/plugin"
@@ -24,14 +25,15 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 	var results []plugin.QueryResult
 
 	for _, pluginInstance := range plugin.GetPluginManager().GetPluginInstances() {
-		triggerKeyword, found := lo.Find(pluginInstance.TriggerKeywords, func(triggerKeyword string) bool {
+		triggerKeyword, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
 			return triggerKeyword != "*" && strings.Contains(triggerKeyword, query.Search)
 		})
 		if found {
 			results = append(results, plugin.QueryResult{
+				Id:       uuid.NewString(),
 				Title:    triggerKeyword,
 				SubTitle: fmt.Sprintf("Activate %s plugin", pluginInstance.Metadata.Name),
-				Icon:     "",
+				Icon:     plugin.WoxImage{},
 				Action: func() bool {
 					i.api.ChangeQuery(fmt.Sprintf("%s ", triggerKeyword))
 					return false
@@ -39,9 +41,10 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			})
 			for _, metadataCommand := range pluginInstance.Metadata.Commands {
 				results = append(results, plugin.QueryResult{
+					Id:       uuid.NewString(),
 					Title:    fmt.Sprintf("%s %s", triggerKeyword, metadataCommand.Command),
 					SubTitle: pluginInstance.Metadata.Description,
-					Icon:     "",
+					Icon:     plugin.WoxImage{},
 					Action: func() bool {
 						i.api.ChangeQuery(fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command))
 						return false

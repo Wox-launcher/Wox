@@ -37,7 +37,12 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 	}
 
 	var results []plugin.QueryResult
-	unmarshalErr := json.Unmarshal([]byte(rawResults), &results)
+	marshalData, marshalErr := json.Marshal(rawResults)
+	if marshalErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query results: %s", w.metadata.Name, marshalErr.Error()))
+		return nil
+	}
+	unmarshalErr := json.Unmarshal(marshalData, &results)
 	if unmarshalErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal query results: %s", w.metadata.Name, unmarshalErr.Error()))
 		return []plugin.QueryResult{}

@@ -20,6 +20,6 @@ type JsonRpcResponse struct {
 	Id     string
 	Method string
 	Type   JsonRpcType
-	Result string
+	Result any
 	Error  string
 }

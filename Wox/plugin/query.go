@@ -3,7 +3,15 @@ package plugin
 import (
 	"github.com/samber/lo"
 	"strings"
+	"wox/util"
 )
+
+var actionsForUIMap util.HashMap[string, func() bool]
+
+type WoxImage struct {
+	ImageType string
+	ImageData string
+}
 
 // Query from Wox. See "Doc/Query.md" for details.
 type Query struct {
@@ -24,12 +32,13 @@ type Query struct {
 	Search string
 }
 
+// Query result return from plugin
 type QueryResult struct {
 	// Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
 	Id       string
 	Title    string
 	SubTitle string
-	Icon     string
+	Icon     WoxImage
 	Score    int
 	Action   func() bool
 }
@@ -38,6 +47,45 @@ type QueryResultEx struct {
 	QueryResult     QueryResult
 	PluginInstance  *Instance
 	AssociatedQuery Query
+}
+
+type QueryResultForUI struct {
+	Id              string
+	Title           string
+	SubTitle        string
+	Icon            WoxImage
+	Score           int
+	AssociatedQuery string
+}
+
+func NewQueryResultForUI(ex QueryResultEx) QueryResultForUI {
+	actionsForUIMap.Store(ex.QueryResult.Id, ex.QueryResult.Action)
+
+	return QueryResultForUI{
+		Id:              ex.QueryResult.Id,
+		Title:           ex.QueryResult.Title,
+		SubTitle:        ex.QueryResult.SubTitle,
+		Icon:            ex.QueryResult.Icon,
+		Score:           ex.QueryResult.Score,
+		AssociatedQuery: ex.AssociatedQuery.RawQuery,
+	}
+}
+
+func NewQueryResultForUIs(exs []QueryResultEx) []QueryResultForUI {
+	var results []QueryResultForUI
+	for _, ex := range exs {
+		results = append(results, NewQueryResultForUI(ex))
+	}
+	return results
+}
+
+func GetActionForResult(resultId string) func() bool {
+	action, found := actionsForUIMap.Load(resultId)
+	if found {
+		return action
+	}
+
+	return nil
 }
 
 func NewQuery(query string) Query {
@@ -54,7 +102,7 @@ func NewQuery(query string) Query {
 	var mustContainSpace = strings.Contains(query, " ")
 
 	pluginInstance, found := lo.Find(GetPluginManager().GetPluginInstances(), func(instance *Instance) bool {
-		return lo.Contains(instance.TriggerKeywords, possibleTriggerKeyword)
+		return lo.Contains(instance.GetTriggerKeywords(), possibleTriggerKeyword)
 	})
 	if found && mustContainSpace {
 		// non global trigger keyword

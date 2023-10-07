@@ -24,7 +24,7 @@ func (n *NodejsHost) GetRuntime(ctx context.Context) plugin.Runtime {
 }
 
 func (n *NodejsHost) Start(ctx context.Context) error {
-	return n.websocketHost.StartHost(ctx, "/opt/homebrew/bin/node", path.Join(util.GetLocation().GetHostDirectory(), "node-host.js"))
+	return n.websocketHost.StartHost(ctx, "node", path.Join(util.GetLocation().GetHostDirectory(), "node-host.js"))
 }
 
 func (n *NodejsHost) Stop(ctx context.Context) {

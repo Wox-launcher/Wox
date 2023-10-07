@@ -66,23 +66,6 @@ wss.on("connection", function connection(ws) {
       return
     }
 
-    if (jsonRpcRequest.Method === "ping") {
-      logger.error(`sending pong...`)
-      ws.send(
-        JSON.stringify({
-          Id: jsonRpcRequest.Id,
-          Method: jsonRpcRequest.Method,
-          Type: PluginJsonRpcTypeResponse
-        } as PluginJsonRpcResponse),
-        (error?: Error) => {
-          if (error) {
-            logger.error(`[${jsonRpcRequest.PluginName}] send response failed: ${error.message}`)
-          }
-        }
-      )
-      return
-    }
-
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     handleRequestFromWox(jsonRpcRequest, ws)

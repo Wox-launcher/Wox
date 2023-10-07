@@ -3,12 +3,13 @@ module wox
 go 1.20
 
 require (
-	github.com/gin-contrib/cors v1.4.0
-	github.com/gin-gonic/gin v1.9.1
+	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20221017161538-93cebf72946b
 	github.com/google/uuid v1.3.1
-	github.com/gorilla/websocket v1.4.2
+	github.com/gorilla/websocket v1.5.0
 	github.com/jinzhu/now v1.1.5
+	github.com/levigross/grequests v0.0.0-20221222020224-9eee758d18d5
+	github.com/olahol/melody v1.1.4
 	github.com/petermattis/goid v0.0.0-20230904192822-1876fd5063bc
 	github.com/samber/lo v1.38.1
 	github.com/shopspring/decimal v1.3.1
@@ -25,6 +26,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.14.0 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
+	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/leodido/go-urn v1.2.4 // indirect

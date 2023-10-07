@@ -9,6 +9,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"wox/util"
 )
 
@@ -33,6 +34,11 @@ func (m *Manager) Start(ctx context.Context) error {
 	if loadErr != nil {
 		return fmt.Errorf("failed to load plugins: %w", loadErr)
 	}
+
+	util.Go(ctx, "start store manager", func() {
+		GetStoreManager().Start(util.NewTraceContext())
+	})
+
 	return nil
 }
 
@@ -171,15 +177,18 @@ func (m *Manager) GetPluginInstances() []*Instance {
 	return m.instances
 }
 
-func (m *Manager) QueryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) []QueryResultEx {
-	logger.Info(ctx, fmt.Sprintf("[%s] start query: %s", pluginInstance.Metadata.Name, query.RawQuery))
-
-	var validGlobalQuery = lo.Contains(pluginInstance.TriggerKeywords, "*") && query.TriggerKeyword == ""
-	var validNonGlobalQuery = lo.Contains(pluginInstance.TriggerKeywords, query.TriggerKeyword)
+func (m *Manager) isQueryMatchPlugin(ctx context.Context, pluginInstance *Instance, query Query) bool {
+	var validGlobalQuery = lo.Contains(pluginInstance.GetTriggerKeywords(), "*") && query.TriggerKeyword == ""
+	var validNonGlobalQuery = lo.Contains(pluginInstance.GetTriggerKeywords(), query.TriggerKeyword)
 	if !validGlobalQuery && !validNonGlobalQuery {
-		return []QueryResultEx{}
+		return false
 	}
 
+	return true
+}
+
+func (m *Manager) QueryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) []QueryResultEx {
+	logger.Info(ctx, fmt.Sprintf("[%s] start query: %s", pluginInstance.Metadata.Name, query.RawQuery))
 	results := pluginInstance.Plugin.Query(ctx, query)
 	return lo.Map(results, func(result QueryResult, _ int) QueryResultEx {
 		return QueryResultEx{
@@ -190,10 +199,39 @@ func (m *Manager) QueryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	})
 }
 
-func (m *Manager) Query(ctx context.Context, query Query) []QueryResultEx {
-	var results []QueryResultEx
+func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryResultEx, done chan bool) {
+	results = make(chan []QueryResultEx, 100)
+	done = make(chan bool)
+
+	counter := atomic.Int32{}
+	counter.Store(int32(len(m.instances)))
+
 	for _, instance := range m.instances {
-		results = append(results, m.QueryForPlugin(ctx, instance, query)...)
+		pluginInstance := instance
+
+		if !m.isQueryMatchPlugin(ctx, pluginInstance, query) {
+			counter.Add(-1)
+			continue
+		}
+
+		util.Go(ctx, fmt.Sprintf("[%s] parallel query", instance.Metadata.Name), func() {
+			queryResults := m.QueryForPlugin(ctx, pluginInstance, query)
+			if len(queryResults) == 0 {
+				return
+			}
+
+			results <- queryResults
+			counter.Add(-1)
+			if counter.Load() == 0 {
+				done <- true
+			}
+		}, func() {
+			counter.Add(-1)
+			if counter.Load() == 0 {
+				done <- true
+			}
+		})
 	}
-	return results
+
+	return
 }

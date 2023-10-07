@@ -71,7 +71,7 @@ func (w *WebsocketHost) UnloadPlugin(ctx context.Context, metadata plugin.Metada
 	}
 }
 
-func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metadata, method string, params map[string]string) (result string, err error) {
+func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metadata, method string, params map[string]string) (result any, err error) {
 	request := JsonRpcRequest{
 		Id:         uuid.NewString(),
 		PluginId:   metadata.Id,
