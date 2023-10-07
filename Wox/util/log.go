@@ -36,7 +36,7 @@ func (l *Log) GetWriter() io.Writer {
 	return logInstance.writer
 }
 
-func formatMsg(context context.Context, msg string) string {
+func formatMsg(context context.Context, msg string, level string) string {
 	var builder strings.Builder
 	builder.Grow(256)
 	builder.WriteString(FormatTimestampWithMs(GetSystemTimestamp()))
@@ -47,20 +47,21 @@ func formatMsg(context context.Context, msg string) string {
 		builder.WriteString(traceId)
 		builder.WriteString(" ")
 	}
+	builder.WriteString(fmt.Sprintf("[%s] ", level))
 	builder.WriteString(msg)
 	return builder.String()
 }
 
 func (l *Log) Debug(context context.Context, msg string) {
-	l.logger.Debug(formatMsg(context, msg))
+	l.logger.Debug(formatMsg(context, msg, "DBG"))
 }
 
 func (l *Log) Info(context context.Context, msg string) {
-	l.logger.Info(formatMsg(context, msg))
+	l.logger.Info(formatMsg(context, msg, "INF"))
 }
 
 func (l *Log) Error(context context.Context, msg string) {
-	l.logger.Error(formatMsg(context, msg))
+	l.logger.Error(formatMsg(context, msg, "ERR"))
 }
 
 func createLogger() (*zap.Logger, io.Writer) {
@@ -99,7 +100,7 @@ func createLogger() (*zap.Logger, io.Writer) {
 			msg := string(buf[:n])
 			//remove newline in msg
 			msg = strings.TrimRight(msg, "\n")
-			zapLogger.Info(formatMsg(NewTraceContext(), fmt.Sprintf("[SYS LOG] %s", msg)))
+			zapLogger.Info(formatMsg(NewTraceContext(), fmt.Sprintf("[SYS LOG] %s", msg), "INF"))
 		}
 	})
 

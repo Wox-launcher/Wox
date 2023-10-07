@@ -12,6 +12,7 @@ import (
 )
 
 var m *melody.Melody
+var mainHotkey = util.Hotkey{}
 
 type websocketRequest struct {
 	Id     string
@@ -47,29 +48,29 @@ func ServeAndWait(ctx context.Context, port int) {
 			return
 		}
 
-		switch request.Method {
-		case "query":
-			util.Go(ctxNew, "handle ui query", func() {
+		util.Go(ctxNew, "handle ui query", func() {
+			switch request.Method {
+			case "query":
 				handleQuery(ctxNew, request)
-			})
-		case "action":
-			util.Go(ctxNew, "handle ui action", func() {
+			case "action":
 				handleAction(ctxNew, request)
-			})
-		}
+			case "registerMainHotkey":
+				handleRegisterMainHotkey(ctxNew, request)
+			}
+		})
 	})
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("websocket server start at：ws://localhost:%d", port))
 	err := http.ListenAndServe(fmt.Sprintf("localhost:%d", port), nil)
 	if err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to start rest ServeAndWait: %s", err.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to start server: %s", err.Error()))
 	}
 }
 
 func handleQuery(ctx context.Context, request websocketRequest) {
 	query, ok := request.Params["query"]
 	if !ok {
-		util.GetLogger().Error(ctx, "query not found")
+		util.GetLogger().Error(ctx, "query parameter not found")
 		return
 	}
 
@@ -108,7 +109,7 @@ func handleQuery(ctx context.Context, request websocketRequest) {
 func handleAction(ctx context.Context, request websocketRequest) {
 	resultId, ok := request.Params["id"]
 	if !ok {
-		util.GetLogger().Error(ctx, "id not found")
+		util.GetLogger().Error(ctx, "id parameter not found")
 		return
 	}
 
@@ -128,6 +129,25 @@ func handleAction(ctx context.Context, request websocketRequest) {
 	marshalData, marshalErr := json.Marshal(response)
 	if marshalErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
+		return
+	}
+	m.Broadcast(marshalData)
+}
+
+func handleRegisterMainHotkey(ctx context.Context, request websocketRequest) {
+	hotkey, ok := request.Params["hotkey"]
+	if !ok {
+		util.GetLogger().Error(ctx, "hotkey parameter not found")
+		return
+	}
+
+	mainHotkey.Register(ctx, hotkey, toggleWindow)
+}
+
+func RequestUI(ctx context.Context, request websocketRequest) {
+	marshalData, marshalErr := json.Marshal(request)
+	if marshalErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to marshal websocket request: %s", marshalErr.Error()))
 		return
 	}
 	m.Broadcast(marshalData)
