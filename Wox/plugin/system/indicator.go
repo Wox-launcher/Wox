@@ -35,7 +35,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 				SubTitle: fmt.Sprintf("Activate %s plugin", pluginInstance.Metadata.Name),
 				Icon:     plugin.WoxImage{},
 				Action: func() bool {
-					i.api.ChangeQuery(fmt.Sprintf("%s ", triggerKeyword))
+					i.api.ChangeQuery(ctx, fmt.Sprintf("%s ", triggerKeyword))
 					return false
 				},
 			})
@@ -46,7 +46,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 					SubTitle: pluginInstance.Metadata.Description,
 					Icon:     plugin.WoxImage{},
 					Action: func() bool {
-						i.api.ChangeQuery(fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command))
+						i.api.ChangeQuery(ctx, fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command))
 						return false
 					},
 				})

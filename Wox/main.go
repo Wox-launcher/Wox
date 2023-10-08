@@ -7,6 +7,7 @@ import (
 	"strings"
 	"wox/plugin"
 	"wox/resource"
+	"wox/ui"
 	"wox/util"
 )
 
@@ -32,18 +33,19 @@ func main() {
 			return
 		}
 
-		plugin.GetPluginManager().Start(ctx)
+		shareUI := ui.GetUIManager().GetUI(ctx)
+		plugin.GetPluginManager().Start(ctx, shareUI)
 
 		// macos use command+space, other os use alt+space as default hotkey
 		combineKey := "alt+space"
 		if runtime.GOOS == "darwin" {
 			combineKey = "command+space"
 		}
-		registerMainHotkeyErr := mainHotkey.Register(ctx, combineKey, toggleWindow)
+		registerMainHotkeyErr := ui.GetUIManager().RegisterMainHotkey(ctx, combineKey)
 		if registerMainHotkeyErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to register main hotkey: %s", registerMainHotkeyErr.Error()))
 		}
 
-		ServeAndWait(ctx, 34987)
+		ui.GetUIManager().StartWebsocketAndWait(ctx, 34987)
 	})
 }

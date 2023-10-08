@@ -172,10 +172,10 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, data string
 
 	switch request.Method {
 	case "HideApp":
-		pluginInstance.API.HideApp()
+		pluginInstance.API.HideApp(ctx)
 		w.sendResponse(ctx, request, "")
 	case "ShowApp":
-		pluginInstance.API.ShowApp()
+		pluginInstance.API.ShowApp(ctx)
 		w.sendResponse(ctx, request, "")
 	case "ChangeQuery":
 		query, exist := request.Params["query"]
@@ -183,7 +183,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, data string
 			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] ChangeQuery method must have a query parameter", request.PluginName))
 			return
 		}
-		pluginInstance.API.ChangeQuery(query)
+		pluginInstance.API.ChangeQuery(ctx, query)
 		w.sendResponse(ctx, request, "")
 	case "ShowMsg":
 		title, exist := request.Params["title"]
@@ -193,7 +193,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, data string
 		}
 		description := request.Params["description"]
 		iconPath := request.Params["iconPath"]
-		pluginInstance.API.ShowMsg(title, description, iconPath)
+		pluginInstance.API.ShowMsg(ctx, title, description, iconPath)
 		w.sendResponse(ctx, request, "")
 	case "Log":
 		msg, exist := request.Params["msg"]
@@ -201,7 +201,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, data string
 			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] Log method must have a msg parameter", request.PluginName))
 			return
 		}
-		pluginInstance.API.Log(msg)
+		pluginInstance.API.Log(ctx, msg)
 		w.sendResponse(ctx, request, "")
 	case "GetTranslation":
 		key, exist := request.Params["key"]
@@ -209,7 +209,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, data string
 			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] GetTranslation method must have a key parameter", request.PluginName))
 			return
 		}
-		result := pluginInstance.API.GetTranslation(key)
+		result := pluginInstance.API.GetTranslation(ctx, key)
 		w.sendResponse(ctx, request, result)
 	}
 }

@@ -1,4 +1,4 @@
-package main
+package ui
 
 import (
 	"context"
@@ -12,7 +12,6 @@ import (
 )
 
 var m *melody.Melody
-var mainHotkey = util.Hotkey{}
 
 type websocketRequest struct {
 	Id     string
@@ -26,7 +25,7 @@ type websocketResponse struct {
 	Data   any
 }
 
-func ServeAndWait(ctx context.Context, port int) {
+func serveAndWait(ctx context.Context, port int) {
 	m = melody.New()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -39,12 +38,12 @@ func ServeAndWait(ctx context.Context, port int) {
 
 	m.HandleMessage(func(s *melody.Session, msg []byte) {
 		ctxNew := util.NewTraceContext()
-		util.GetLogger().Error(ctxNew, fmt.Sprintf("got request from ui: %s", string(msg)))
+		logger.Error(ctxNew, fmt.Sprintf("got request from ui: %s", string(msg)))
 
 		var request websocketRequest
 		unmarshalErr := json.Unmarshal(msg, &request)
 		if unmarshalErr != nil {
-			util.GetLogger().Error(ctxNew, fmt.Sprintf("failed to unmarshal websocket request: %s", unmarshalErr.Error()))
+			logger.Error(ctxNew, fmt.Sprintf("failed to unmarshal websocket request: %s", unmarshalErr.Error()))
 			return
 		}
 
@@ -60,17 +59,17 @@ func ServeAndWait(ctx context.Context, port int) {
 		})
 	})
 
-	util.GetLogger().Info(ctx, fmt.Sprintf("websocket server start at：ws://localhost:%d", port))
+	logger.Info(ctx, fmt.Sprintf("websocket server start at：ws://localhost:%d", port))
 	err := http.ListenAndServe(fmt.Sprintf("localhost:%d", port), nil)
 	if err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to start server: %s", err.Error()))
+		logger.Error(ctx, fmt.Sprintf("failed to start server: %s", err.Error()))
 	}
 }
 
 func handleQuery(ctx context.Context, request websocketRequest) {
 	query, ok := request.Params["query"]
 	if !ok {
-		util.GetLogger().Error(ctx, "query parameter not found")
+		logger.Error(ctx, "query parameter not found")
 		return
 	}
 
@@ -78,7 +77,7 @@ func handleQuery(ctx context.Context, request websocketRequest) {
 	for {
 		select {
 		case results := <-resultChan:
-			util.GetLogger().Info(ctx, fmt.Sprintf("query result count: %d", len(results)))
+			logger.Info(ctx, fmt.Sprintf("query result count: %d", len(results)))
 			if len(results) == 0 {
 				continue
 			}
@@ -91,16 +90,16 @@ func handleQuery(ctx context.Context, request websocketRequest) {
 
 			marshalData, marshalErr := json.Marshal(response)
 			if marshalErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
+				logger.Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
 				continue
 			}
 
 			m.Broadcast(marshalData)
 		case <-doneChan:
-			util.GetLogger().Info(ctx, "query done")
+			logger.Info(ctx, "query done")
 			return
 		case <-time.After(time.Second * 30):
-			util.GetLogger().Info(ctx, "query timeout")
+			logger.Info(ctx, "query timeout")
 			return
 		}
 	}
@@ -109,13 +108,13 @@ func handleQuery(ctx context.Context, request websocketRequest) {
 func handleAction(ctx context.Context, request websocketRequest) {
 	resultId, ok := request.Params["id"]
 	if !ok {
-		util.GetLogger().Error(ctx, "id parameter not found")
+		logger.Error(ctx, "id parameter not found")
 		return
 	}
 
 	action := plugin.GetActionForResult(resultId)
 	if action == nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("action not found for result id: %s", resultId))
+		logger.Error(ctx, fmt.Sprintf("action not found for result id: %s", resultId))
 		return
 	}
 
@@ -128,7 +127,7 @@ func handleAction(ctx context.Context, request websocketRequest) {
 	}
 	marshalData, marshalErr := json.Marshal(response)
 	if marshalErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
 		return
 	}
 	m.Broadcast(marshalData)
@@ -137,19 +136,19 @@ func handleAction(ctx context.Context, request websocketRequest) {
 func handleRegisterMainHotkey(ctx context.Context, request websocketRequest) {
 	hotkey, ok := request.Params["hotkey"]
 	if !ok {
-		util.GetLogger().Error(ctx, "hotkey parameter not found")
+		logger.Error(ctx, "hotkey parameter not found")
 		return
 	}
 
-	registerErr := mainHotkey.Register(ctx, hotkey, toggleWindow)
+	registerErr := GetUIManager().RegisterMainHotkey(ctx, hotkey)
 	if registerErr != nil {
-		ResponseUI(ctx, websocketResponse{
+		responseUI(ctx, websocketResponse{
 			Id:     request.Id,
 			Method: request.Method,
 			Data:   registerErr.Error(),
 		})
 	} else {
-		ResponseUI(ctx, websocketResponse{
+		responseUI(ctx, websocketResponse{
 			Id:     request.Id,
 			Method: request.Method,
 			Data:   "success",
@@ -157,19 +156,19 @@ func handleRegisterMainHotkey(ctx context.Context, request websocketRequest) {
 	}
 }
 
-func RequestUI(ctx context.Context, request websocketRequest) {
+func requestUI(ctx context.Context, request websocketRequest) {
 	marshalData, marshalErr := json.Marshal(request)
 	if marshalErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to marshal websocket request: %s", marshalErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("failed to marshal websocket request: %s", marshalErr.Error()))
 		return
 	}
 	m.Broadcast(marshalData)
 }
 
-func ResponseUI(ctx context.Context, response websocketResponse) {
+func responseUI(ctx context.Context, response websocketResponse) {
 	marshalData, marshalErr := json.Marshal(response)
 	if marshalErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
 		return
 	}
 	m.Broadcast(marshalData)

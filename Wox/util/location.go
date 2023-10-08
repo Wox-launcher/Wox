@@ -74,6 +74,9 @@ func (l *Location) Init() error {
 	if directoryErr := l.ensureDirectoryExist(l.GetLogHostsDirectory()); directoryErr != nil {
 		return directoryErr
 	}
+	if directoryErr := l.ensureDirectoryExist(l.GetLogPluginDirectory()); directoryErr != nil {
+		return directoryErr
+	}
 	if directoryErr := l.ensureDirectoryExist(l.GetPluginDirectory()); directoryErr != nil {
 		return directoryErr
 	}
@@ -97,6 +100,10 @@ func (l *Location) ensureDirectoryExist(directory string) error {
 
 func (l *Location) GetLogDirectory() string {
 	return path.Join(l.woxDataDirectory, "log")
+}
+
+func (l *Location) GetLogPluginDirectory() string {
+	return path.Join(l.GetLogDirectory(), "plugins")
 }
 
 func (l *Location) GetLogHostsDirectory() string {

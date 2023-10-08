@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"wox/share"
 	"wox/util"
 )
 
@@ -19,6 +20,7 @@ var logger *util.Log
 
 type Manager struct {
 	instances []*Instance
+	ui        share.UI
 }
 
 func GetPluginManager() *Manager {
@@ -29,7 +31,7 @@ func GetPluginManager() *Manager {
 	return managerInstance
 }
 
-func (m *Manager) Start(ctx context.Context) error {
+func (m *Manager) Start(ctx context.Context, ui share.UI) error {
 	loadErr := m.loadPlugins(ctx)
 	if loadErr != nil {
 		return fmt.Errorf("failed to load plugins: %w", loadErr)
@@ -234,4 +236,8 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 	}
 
 	return
+}
+
+func (m *Manager) GetUI() share.UI {
+	return m.ui
 }

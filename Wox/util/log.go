@@ -24,12 +24,22 @@ type Log struct {
 
 func GetLogger() *Log {
 	logOnce.Do(func() {
-		logInstance = &Log{}
-		logInstance.logger, logInstance.writer = createLogger()
-		log.SetFlags(0) // remove default timestamp
-		log.SetOutput(logInstance.writer)
+		logFolder := GetLocation().GetLogDirectory()
+		logInstance = CreateLogger(logFolder)
 	})
 	return logInstance
+}
+
+func CreateLogger(logFolder string) *Log {
+	if _, err := os.Stat(logFolder); os.IsNotExist(err) {
+		os.MkdirAll(logFolder, os.ModePerm)
+	}
+
+	logImpl := &Log{}
+	logImpl.logger, logImpl.writer = createLogger(logFolder)
+	log.SetFlags(0) // remove default timestamp
+	log.SetOutput(logImpl.writer)
+	return logImpl
 }
 
 func (l *Log) GetWriter() io.Writer {
@@ -64,12 +74,7 @@ func (l *Log) Error(context context.Context, msg string) {
 	l.logger.Error(formatMsg(context, msg, "ERR"))
 }
 
-func createLogger() (*zap.Logger, io.Writer) {
-	logFolder := GetLocation().GetLogDirectory()
-	if _, err := os.Stat(logFolder); os.IsNotExist(err) {
-		os.MkdirAll(logFolder, os.ModePerm)
-	}
-
+func createLogger(logFolder string) (*zap.Logger, io.Writer) {
 	writeSyncer := zapcore.AddSync(&Lumberjack{
 		Filename:  path.Join(logFolder, "log"),
 		LocalTime: true,
