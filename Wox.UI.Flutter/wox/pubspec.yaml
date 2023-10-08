@@ -36,6 +36,8 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.2
   window_manager: ^0.3.6
+  web_socket_channel: ^2.4.0
+  flutter_acrylic: ^1.1.0
 
 dev_dependencies:
   flutter_test:
