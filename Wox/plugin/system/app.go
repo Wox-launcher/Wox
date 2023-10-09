@@ -2,7 +2,9 @@ package system
 
 import (
 	"context"
+	"crypto/md5"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"os"
@@ -74,6 +76,10 @@ func (i *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				SubTitle: info.Path,
 				Icon:     plugin.WoxImage{},
 				Action: func() {
+					runErr := exec.Command("open", info.Path).Run()
+					if runErr != nil {
+						i.api.Log(ctx, fmt.Sprintf("error openning app %s: %s", info.Path, runErr.Error()))
+					}
 				},
 			})
 		}
@@ -191,13 +197,65 @@ func (i *AppPlugin) getMacAppInfo(ctx context.Context, path string) (appInfo, er
 		Path: path,
 	}
 	icon, iconErr := i.getMacAppIcon(ctx, path)
-	if iconErr == nil {
-		info.Icon = icon.String()
+	if iconErr != nil {
+		i.api.Log(ctx, fmt.Sprintf("failed to get app icon: %s", iconErr.Error()))
 	}
+	info.Icon = icon.String()
 
 	return info, nil
 }
 
-func (i *AppPlugin) getMacAppIcon(ctx context.Context, path string) (plugin.WoxImage, error) {
-	return plugin.WoxImage{}, nil
+func (i *AppPlugin) getMacAppIcon(ctx context.Context, appPath string) (plugin.WoxImage, error) {
+	// md5 iconPath
+	iconPathMd5 := fmt.Sprintf("%x", md5.Sum([]byte(appPath)))
+	iconCachePath := path.Join(os.TempDir(), fmt.Sprintf("%s.png", iconPathMd5))
+	if _, err := os.Stat(iconCachePath); err == nil {
+		return plugin.WoxImage{
+			ImageType: plugin.WoxImageTypeAbsolutePath,
+			ImageData: iconCachePath,
+		}, nil
+	}
+
+	i.api.Log(ctx, fmt.Sprintf("start to get app icon: %s", appPath))
+	out, err := exec.Command("defaults", "read", fmt.Sprintf(`"%s"`, path.Join(appPath, "Contents", "Info.plist")), "CFBundleIconFile").Output()
+	if err != nil {
+		msg := fmt.Sprintf("failed to get app icon name from CFBundleIconFile(%s): %s", appPath, err.Error())
+		if out != nil {
+			msg = fmt.Sprintf("%s, output: %s", msg, string(out))
+		}
+		return plugin.WoxImage{}, errors.New(msg)
+	}
+
+	//TODO: some app may not have Info.plist file, instead they have a PkgInfo file
+
+	iconName := strings.TrimSpace(string(out))
+	if iconName == "" {
+		iconName = "AppIcon.icns"
+	}
+	if !strings.HasSuffix(iconName, ".icns") {
+		iconName = iconName + ".icns"
+	}
+
+	iconPath := path.Join(appPath, "Contents", "Resources", iconName)
+	if _, statErr := os.Stat(iconPath); os.IsNotExist(statErr) {
+		return plugin.WoxImage{}, fmt.Errorf("icon file %s not found", iconPath)
+	}
+
+	//use sips to convert icns to png
+	//sips -s format png /Applications/Calculator.app/Contents/Resources/AppIcon.icns --out /tmp/wox-app-icon.png
+	out, err = exec.Command("sips", "-s", "format", "png", iconPath, "--out", iconCachePath).Output()
+	if err != nil {
+		msg := fmt.Sprintf("failed to convert icns to png: %s", err.Error())
+		if out != nil {
+			msg = fmt.Sprintf("%s, output: %s", msg, string(out))
+		}
+		return plugin.WoxImage{}, errors.New(msg)
+	}
+
+	i.api.Log(ctx, fmt.Sprintf("app icon cache created: %s", iconCachePath))
+
+	return plugin.WoxImage{
+		ImageType: plugin.WoxImageTypeAbsolutePath,
+		ImageData: iconCachePath,
+	}, nil
 }
