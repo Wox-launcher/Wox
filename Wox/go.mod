@@ -2,6 +2,7 @@ module wox
 
 go 1.20
 
+
 require (
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/google/uuid v1.3.1
@@ -14,6 +15,7 @@ require (
 	go.uber.org/zap v1.26.0
 	golang.design/x/hotkey v0.4.1
 )
+
 
 require (
 	github.com/google/go-querystring v1.0.0 // indirect
