@@ -1,8 +1,10 @@
 import {Form, InputGroup, ListGroup} from "react-bootstrap";
 import {useRef} from "react";
-import WoxMessage = WEBSOCKET.WoxMessage;
+import {WoxMessageHelper} from "../utils/WoxMessageHelper.ts";
+import {WoxMessageMethodEnum} from "../enums/WoxMessageMethodEnum.ts";
 
-export default (props: { sendWoxMessage: (woxMessage: WoxMessage) => Promise<unknown> }) => {
+
+export default () => {
     const queryText = useRef<string>()
     return <>
         <InputGroup size={"lg"}>
@@ -11,7 +13,7 @@ export default (props: { sendWoxMessage: (woxMessage: WoxMessage) => Promise<unk
                 aria-label="Wox"
                 onChange={(e) => {
                     queryText.current = e.target.value
-
+                    WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.QUERY.code, {query: queryText.current})
                 }}
             />
             <InputGroup.Text id="inputGroup-sizing-lg" aria-describedby={"Wox"}>Wox</InputGroup.Text>

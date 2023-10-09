@@ -1,8 +1,16 @@
 declare namespace WEBSOCKET {
 
-    export type WoxMessage = {
+    export interface WoxMessageRequest {
         Id: string
         Method: string
-        Params: unknown
+        Params: { [key: string]: string }
+    }
+
+    export interface WoxMessageResponse {
+        Id: string
+        Method: string
+        Type: string
+        Error?: string
+        Result?: unknown
     }
 }
