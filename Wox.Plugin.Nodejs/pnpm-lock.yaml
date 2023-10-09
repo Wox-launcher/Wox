@@ -11,9 +11,6 @@ devDependencies:
   '@typescript-eslint/parser':
     specifier: ^6.6.0
     version: 6.6.0(eslint@8.49.0)(typescript@5.2.2)
-  '@vercel/ncc':
-    specifier: ^0.38.0
-    version: 0.38.0
   eslint:
     specifier: ^8.49.0
     version: 8.49.0
@@ -249,11 +246,6 @@ packages:
     dependencies:
       '@typescript-eslint/types': 6.6.0
       eslint-visitor-keys: 3.4.3
-    dev: true
-
-  /@vercel/ncc@0.38.0:
-    resolution: {integrity: sha512-B4YKZMm/EqMptKSFyAq4q2SlgJe+VCmEH6Y8gf/E1pTlWbsUJpuH1ymik2Ex3aYO5mCWwV1kaSYHSQOT8+4vHA==}
-    hasBin: true
     dev: true
 
   /acorn-jsx@5.3.2(acorn@8.10.0):

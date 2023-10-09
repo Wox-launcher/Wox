@@ -56,9 +56,8 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 				Title:    triggerKeyword,
 				SubTitle: fmt.Sprintf("Activate %s plugin", pluginInstance.Metadata.Name),
 				Icon:     plugin.WoxImage{},
-				Action: func() bool {
+				Action: func() {
 					i.api.ChangeQuery(ctx, fmt.Sprintf("%s ", triggerKeyword))
-					return false
 				},
 			})
 			for _, metadataCommand := range pluginInstance.Metadata.Commands {
@@ -67,9 +66,8 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 					Title:    fmt.Sprintf("%s %s", triggerKeyword, metadataCommand.Command),
 					SubTitle: pluginInstance.Metadata.Description,
 					Icon:     plugin.WoxImage{},
-					Action: func() bool {
+					Action: func() {
 						i.api.ChangeQuery(ctx, fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command))
-						return false
 					},
 				})
 			}

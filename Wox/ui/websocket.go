@@ -38,7 +38,7 @@ func serveAndWait(ctx context.Context, port int) {
 
 	m.HandleMessage(func(s *melody.Session, msg []byte) {
 		ctxNew := util.NewTraceContext()
-		logger.Error(ctxNew, fmt.Sprintf("got request from ui: %s", string(msg)))
+		logger.Info(ctxNew, fmt.Sprintf("got request from ui: %s", string(msg)))
 
 		var request websocketRequest
 		unmarshalErr := json.Unmarshal(msg, &request)
@@ -74,34 +74,30 @@ func handleQuery(ctx context.Context, request websocketRequest) {
 	}
 
 	resultChan, doneChan := plugin.GetPluginManager().Query(ctx, plugin.NewQuery(query))
-	for {
-		select {
-		case results := <-resultChan:
-			logger.Info(ctx, fmt.Sprintf("query result count: %d", len(results)))
-			if len(results) == 0 {
-				continue
-			}
-
-			response := websocketResponse{
-				Id:     request.Id,
-				Method: request.Method,
-				Data:   plugin.NewQueryResultForUIs(results),
-			}
-
-			marshalData, marshalErr := json.Marshal(response)
-			if marshalErr != nil {
-				logger.Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
-				continue
-			}
-
-			m.Broadcast(marshalData)
-		case <-doneChan:
-			logger.Info(ctx, "query done")
-			return
-		case <-time.After(time.Second * 30):
-			logger.Info(ctx, "query timeout")
+	select {
+	case results := <-resultChan:
+		logger.Info(ctx, fmt.Sprintf("query result count: %d", len(results)))
+		if len(results) == 0 {
 			return
 		}
+
+		response := websocketResponse{
+			Id:     request.Id,
+			Method: request.Method,
+			Data:   plugin.NewQueryResultForUIs(results),
+		}
+
+		marshalData, marshalErr := json.Marshal(response)
+		if marshalErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
+			return
+		}
+
+		m.Broadcast(marshalData)
+	case <-doneChan:
+		logger.Info(ctx, "query done")
+	case <-time.After(time.Second * 30):
+		logger.Info(ctx, fmt.Sprintf("query timeout, query: %s, request id: %s", query, request.Id))
 	}
 }
 
@@ -118,19 +114,7 @@ func handleAction(ctx context.Context, request websocketRequest) {
 		return
 	}
 
-	hideWox := action()
-
-	response := websocketResponse{
-		Id:     request.Id,
-		Method: request.Method,
-		Data:   hideWox,
-	}
-	marshalData, marshalErr := json.Marshal(response)
-	if marshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
-		return
-	}
-	m.Broadcast(marshalData)
+	action()
 }
 
 func handleRegisterMainHotkey(ctx context.Context, request websocketRequest) {

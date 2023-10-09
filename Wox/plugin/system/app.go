@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"wox/plugin"
+	"wox/util"
 )
 
 func init() {
@@ -51,11 +53,14 @@ func (i *AppPlugin) GetMetadata() plugin.Metadata {
 func (i *AppPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	i.api = initParams.API
 
-	if runtime.GOOS == "darwin" {
-		i.apps = i.getMacApps(ctx)
+	appCache, cacheErr := i.loadAppCache(ctx)
+	if cacheErr == nil {
+		i.apps = appCache
 	}
 
-	i.api.Log(ctx, fmt.Sprintf("found %d apps", len(i.apps)))
+	util.Go(ctx, "index apps", func() {
+		i.indexApps(util.NewTraceContext())
+	})
 }
 
 func (i *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -67,15 +72,71 @@ func (i *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				Title:    info.Name,
 				SubTitle: info.Path,
 				Icon:     plugin.WoxImage{},
-				Action: func() bool {
-					//plugin.GetStoreManager().Install(ctx, info)
-					return false
+				Action: func() {
 				},
 			})
 		}
 	}
 
 	return results
+}
+
+func (i *AppPlugin) indexApps(ctx context.Context) {
+	startTimestamp := util.GetSystemTimestamp()
+	var apps []appInfo
+	if runtime.GOOS == "darwin" {
+		apps = i.getMacApps(ctx)
+	}
+
+	if len(apps) > 0 {
+		i.api.Log(ctx, fmt.Sprintf("indexed %d apps", len(i.apps)))
+		i.apps = apps
+
+		var cachePath = i.getAppCachePath()
+		cacheContent, marshalErr := json.Marshal(apps)
+		if marshalErr != nil {
+			i.api.Log(ctx, fmt.Sprintf("error marshalling app cache: %s", marshalErr.Error()))
+			return
+		}
+		writeErr := os.WriteFile(cachePath, cacheContent, 0644)
+		if writeErr != nil {
+			i.api.Log(ctx, fmt.Sprintf("error writing app cache: %s", writeErr.Error()))
+			return
+		}
+		i.api.Log(ctx, fmt.Sprintf("wrote app cache to %s", cachePath))
+	}
+
+	i.api.Log(ctx, fmt.Sprintf("indexed %d apps, cost %d ms", len(i.apps), util.GetSystemTimestamp()-startTimestamp))
+}
+
+func (i *AppPlugin) getAppCachePath() string {
+	return path.Join(os.TempDir(), "wox-app-cache.json")
+}
+
+func (i *AppPlugin) loadAppCache(ctx context.Context) ([]appInfo, error) {
+	startTimestamp := util.GetSystemTimestamp()
+	i.api.Log(ctx, "start to load app cache")
+	var cachePath = i.getAppCachePath()
+	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
+		i.api.Log(ctx, "app cache file not found")
+		return nil, err
+	}
+
+	cacheContent, readErr := os.ReadFile(cachePath)
+	if readErr != nil {
+		i.api.Log(ctx, fmt.Sprintf("error reading app cache file: %s", readErr.Error()))
+		return nil, readErr
+	}
+
+	var apps []appInfo
+	unmarshalErr := json.Unmarshal(cacheContent, &apps)
+	if unmarshalErr != nil {
+		i.api.Log(ctx, fmt.Sprintf("error unmarshalling app cache file: %s", unmarshalErr.Error()))
+		return nil, unmarshalErr
+	}
+
+	i.api.Log(ctx, fmt.Sprintf("loaded %d apps from cache, cost %d ms", len(apps), util.GetSystemTimestamp()-startTimestamp))
+	return apps, nil
 }
 
 func (i *AppPlugin) getMacApps(ctx context.Context) []appInfo {

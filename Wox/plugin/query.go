@@ -6,7 +6,7 @@ import (
 	"wox/util"
 )
 
-var actionsForUIMap util.HashMap[string, func() bool]
+var actionsForUIMap util.HashMap[string, func()]
 
 type WoxImage struct {
 	ImageType string
@@ -35,12 +35,13 @@ type Query struct {
 // Query result return from plugin
 type QueryResult struct {
 	// Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
-	Id       string
-	Title    string
-	SubTitle string
-	Icon     WoxImage
-	Score    int
-	Action   func() bool
+	Id                     string
+	Title                  string
+	SubTitle               string
+	Icon                   WoxImage
+	Score                  int
+	PreventHideAfterAction bool // If true, Wox will not hide after user select this result
+	Action                 func()
 }
 
 type QueryResultEx struct {
@@ -79,7 +80,7 @@ func NewQueryResultForUIs(exs []QueryResultEx) []QueryResultForUI {
 	return results
 }
 
-func GetActionForResult(resultId string) func() bool {
+func GetActionForResult(resultId string) func() {
 	action, found := actionsForUIMap.Load(resultId)
 	if found {
 		return action
