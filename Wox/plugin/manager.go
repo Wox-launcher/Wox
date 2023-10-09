@@ -115,20 +115,14 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 	logger.Info(ctx, fmt.Sprintf("start loading system plugins, found %d system plugins", len(AllSystemPlugin)))
 
 	for _, plugin := range AllSystemPlugin {
-		loadStartTimestamp := util.GetSystemTimestamp()
-		plugin.Init(ctx, InitParams{
-			API: NewAPI(plugin.GetMetadata()),
-		})
-		loadFinishTimestamp := util.GetSystemTimestamp()
-
 		instance := &Instance{
 			Metadata:              plugin.GetMetadata(),
 			Plugin:                plugin,
 			Host:                  nil,
 			IsSystemPlugin:        true,
 			API:                   NewAPI(plugin.GetMetadata()),
-			LoadStartTimestamp:    loadStartTimestamp,
-			LoadFinishedTimestamp: loadFinishTimestamp,
+			LoadStartTimestamp:    util.GetSystemTimestamp(),
+			LoadFinishedTimestamp: util.GetSystemTimestamp(),
 		}
 		m.instances = append(m.instances, instance)
 

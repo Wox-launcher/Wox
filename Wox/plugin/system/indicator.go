@@ -17,6 +17,28 @@ type IndicatorPlugin struct {
 	api plugin.API
 }
 
+func (i *IndicatorPlugin) GetMetadata() plugin.Metadata {
+	return plugin.Metadata{
+		Id:            "39a4a6155f094ef89778188ae4a3ca03",
+		Name:          "System Plugin Indicator",
+		Author:        "Wox Launcher",
+		Version:       "1.0.0",
+		MinWoxVersion: "2.0.0",
+		Runtime:       "Nodejs",
+		Description:   "Indicator for plugin trigger keywords",
+		Icon:          "",
+		Entry:         "",
+		TriggerKeywords: []string{
+			"*",
+		},
+		SupportedOS: []string{
+			"Windows",
+			"Macos",
+			"Linux",
+		},
+	}
+}
+
 func (i *IndicatorPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	i.api = initParams.API
 }
@@ -55,26 +77,4 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 	}
 
 	return results
-}
-
-func (i *IndicatorPlugin) GetMetadata() plugin.Metadata {
-	return plugin.Metadata{
-		Id:            "39a4a6155f094ef89778188ae4a3ca03",
-		Name:          "System Plugin Indicator",
-		Author:        "Wox Launcher",
-		Version:       "1.0.0",
-		MinWoxVersion: "2.0.0",
-		Runtime:       "Nodejs",
-		Description:   "Indicator for plugin trigger keywords",
-		Icon:          "",
-		Entry:         "",
-		TriggerKeywords: []string{
-			"*",
-		},
-		SupportedOS: []string{
-			"Windows",
-			"Macos",
-			"Linux",
-		},
-	}
 }
