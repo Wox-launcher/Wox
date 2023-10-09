@@ -33,9 +33,9 @@ export class WoxMessageHelper {
         };
         this.ws.onmessage = (event) => {
             console.log(event.data);
-            let woxMessageResponse: WEBSOCKET.WoxMessageResponse
+            let woxMessageResponse: WOXMESSAGE.WoxMessageResponse
             try {
-                woxMessageResponse = JSON.parse(event.data) as WEBSOCKET.WoxMessageResponse
+                woxMessageResponse = JSON.parse(event.data) as WOXMESSAGE.WoxMessageResponse
             } catch (e) {
                 return
             }
@@ -51,11 +51,11 @@ export class WoxMessageHelper {
 
             const promiseInstance = this.woxMessageResponseMap[woxMessageResponse.Id]
             if (promiseInstance === undefined) {
-                console.error(`waitingForResponse[${woxMessageResponse.Id}] is undefined`)
+                console.error(`woxMessageResponseMap[${woxMessageResponse.Id}] is undefined`)
                 return
             }
 
-            promiseInstance.resolve(woxMessageResponse.Result)
+            promiseInstance.resolve(woxMessageResponse.Data)
 
         }
         this.initialized = true
@@ -114,7 +114,7 @@ export class WoxMessageHelper {
             Id: requestId,
             Method: method,
             Params: params
-        } as WEBSOCKET.WoxMessageRequest))
+        } as WOXMESSAGE.WoxMessageRequest))
         const deferred = new Deferred<unknown>()
         this.woxMessageResponseMap[requestId] = deferred
         return deferred.promise;
