@@ -77,7 +77,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
       var msg = jsonDecode(message);
       switch (msg["Method"]) {
-        case "query":
+        case "Query":
           setState(() {
             results = msg["Data"];
           });
@@ -91,7 +91,7 @@ class _MyHomePageState extends State<MyHomePage> {
             await windowManager.focus();
             _controller.selection = TextSelection(baseOffset: 0, extentOffset: _controller.text.length);
           }
-        case "result":
+        case "Result":
           print("result: ${msg["Params"]["result"]}");
           break;
         default:
@@ -120,7 +120,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 });
                 channel?.sink.add(jsonEncode({
                   "Id": "dfd",
-                  "Method": "query",
+                  "Method": "Query",
                   "Params": {
                     "query": value,
                   },

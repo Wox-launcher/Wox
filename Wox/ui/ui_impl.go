@@ -69,33 +69,42 @@ func handleQuery(ctx context.Context, request websocketRequest) {
 		logger.Error(ctx, "query parameter not found")
 		return
 	}
-
-	resultChan, doneChan := plugin.GetPluginManager().Query(ctx, plugin.NewQuery(query))
-	select {
-	case results := <-resultChan:
-		logger.Info(ctx, fmt.Sprintf("query result count: %d", len(results)))
-		if len(results) == 0 {
-			return
-		}
-
-		response := websocketResponse{
-			Id:     request.Id,
-			Method: request.Method,
-			Data:   plugin.NewQueryResultForUIs(results),
-		}
-
-		marshalData, marshalErr := json.Marshal(response)
-		if marshalErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
-			return
-		}
-
-		m.Broadcast(marshalData)
-	case <-doneChan:
-		logger.Info(ctx, "query done")
-	case <-time.After(time.Second * 30):
-		logger.Info(ctx, fmt.Sprintf("query timeout, query: %s, request id: %s", query, request.Id))
+	if query == "" {
+		return
 	}
+
+	var totalResultCount int
+	var startTimestamp = util.GetSystemTimestamp()
+	resultChan, doneChan := plugin.GetPluginManager().Query(ctx, plugin.NewQuery(query))
+	for {
+		select {
+		case results := <-resultChan:
+			if len(results) == 0 {
+				continue
+			}
+
+			totalResultCount += len(results)
+
+			marshalData, marshalErr := json.Marshal(websocketResponse{
+				Id:     request.Id,
+				Method: request.Method,
+				Data:   results,
+			})
+			if marshalErr != nil {
+				logger.Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
+				continue
+			}
+
+			m.Broadcast(marshalData)
+		case <-doneChan:
+			logger.Info(ctx, fmt.Sprintf("query done, total results: %d, cost %d ms", totalResultCount, util.GetSystemTimestamp()-startTimestamp))
+			return
+		case <-time.After(time.Second * 10):
+			logger.Info(ctx, fmt.Sprintf("query timeout, query: %s, request id: %s", query, request.Id))
+			return
+		}
+	}
+
 }
 
 func handleAction(ctx context.Context, request websocketRequest) {
@@ -105,7 +114,7 @@ func handleAction(ctx context.Context, request websocketRequest) {
 		return
 	}
 
-	action := plugin.GetActionForResult(resultId)
+	action := plugin.GetPluginManager().GetAction(resultId)
 	if action == nil {
 		logger.Error(ctx, fmt.Sprintf("action not found for result id: %s", resultId))
 		return

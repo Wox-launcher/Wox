@@ -28,7 +28,7 @@ func (n *NodejsHost) Start(ctx context.Context) error {
 }
 
 func (n *NodejsHost) Stop(ctx context.Context) {
-
+	n.websocketHost.StopHost(ctx)
 }
 
 func (n *NodejsHost) LoadPlugin(ctx context.Context, metadata plugin.Metadata, pluginDirectory string) (plugin.Plugin, error) {

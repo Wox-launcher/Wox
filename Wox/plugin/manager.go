@@ -21,6 +21,7 @@ var logger *util.Log
 type Manager struct {
 	instances []*Instance
 	ui        share.UI
+	actions   util.HashMap[string, func()]
 }
 
 func GetPluginManager() *Manager {
@@ -42,6 +43,12 @@ func (m *Manager) Start(ctx context.Context, ui share.UI) error {
 	})
 
 	return nil
+}
+
+func (m *Manager) Stop(ctx context.Context) {
+	for _, host := range AllHosts {
+		host.Stop(ctx)
+	}
 }
 
 func (m *Manager) loadPlugins(ctx context.Context) error {
@@ -183,20 +190,13 @@ func (m *Manager) isQueryMatchPlugin(ctx context.Context, pluginInstance *Instan
 	return true
 }
 
-func (m *Manager) QueryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) []QueryResultEx {
+func (m *Manager) QueryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) []QueryResult {
 	logger.Info(ctx, fmt.Sprintf("[%s] start query: %s", pluginInstance.Metadata.Name, query.RawQuery))
-	results := pluginInstance.Plugin.Query(ctx, query)
-	return lo.Map(results, func(result QueryResult, _ int) QueryResultEx {
-		return QueryResultEx{
-			QueryResult:     result,
-			PluginInstance:  pluginInstance,
-			AssociatedQuery: query,
-		}
-	})
+	return pluginInstance.Plugin.Query(ctx, query)
 }
 
-func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryResultEx, done chan bool) {
-	results = make(chan []QueryResultEx, 100)
+func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryResultUI, done chan bool) {
+	results = make(chan []QueryResultUI, 10)
 	done = make(chan bool)
 
 	counter := atomic.Int32{}
@@ -207,16 +207,31 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 
 		if !m.isQueryMatchPlugin(ctx, pluginInstance, query) {
 			counter.Add(-1)
+			if counter.Load() == 0 {
+				done <- true
+			}
 			continue
 		}
 
 		util.Go(ctx, fmt.Sprintf("[%s] parallel query", instance.Metadata.Name), func() {
 			queryResults := m.QueryForPlugin(ctx, pluginInstance, query)
-			if len(queryResults) == 0 {
-				return
+
+			// store actions for ui invoke later
+			for _, result := range queryResults {
+				m.actions.Store(result.Id, result.Action)
 			}
 
-			results <- queryResults
+			results <- lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
+				return QueryResultUI{
+					Id:              item.Id,
+					Title:           item.Title,
+					SubTitle:        item.SubTitle,
+					Icon:            item.Icon.String(),
+					Score:           item.Score,
+					AssociatedQuery: query.RawQuery,
+				}
+			})
+
 			counter.Add(-1)
 			if counter.Load() == 0 {
 				done <- true
@@ -234,4 +249,13 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 
 func (m *Manager) GetUI() share.UI {
 	return m.ui
+}
+
+func (m *Manager) GetAction(resultId string) func() {
+	action, found := m.actions.Load(resultId)
+	if found {
+		return action
+	}
+
+	return nil
 }

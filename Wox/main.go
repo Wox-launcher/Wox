@@ -33,6 +33,8 @@ func main() {
 			return
 		}
 
+		startTray(ctx)
+
 		shareUI := ui.GetUIManager().GetUI(ctx)
 		plugin.GetPluginManager().Start(ctx, shareUI)
 

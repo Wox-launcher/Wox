@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"net"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -14,9 +15,10 @@ import (
 )
 
 type WebsocketHost struct {
-	ws         *util.WebsocketClient
-	host       plugin.Host
-	requestMap util.HashMap[string, chan JsonRpcResponse]
+	ws          *util.WebsocketClient
+	host        plugin.Host
+	requestMap  util.HashMap[string, chan JsonRpcResponse]
+	hostProcess *os.Process
 }
 
 func (w *WebsocketHost) logIdentity(ctx context.Context) string {
@@ -45,7 +47,21 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 	time.Sleep(time.Second) // wait for host to start
 	w.startWebsocketServer(ctx, port)
 
+	w.hostProcess = cmd.Process
 	return nil
+}
+
+func (w *WebsocketHost) StopHost(ctx context.Context) {
+	util.GetLogger().Info(ctx, fmt.Sprintf("%s stopping host", w.logIdentity(ctx)))
+	if w.hostProcess != nil {
+		var pid = w.hostProcess.Pid
+		killErr := w.hostProcess.Kill()
+		if killErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("%s failed to kill host process(%d): %s", w.logIdentity(ctx), pid, killErr))
+		} else {
+			util.GetLogger().Info(ctx, fmt.Sprintf("%s killed host process(%d)", w.logIdentity(ctx), pid))
+		}
+	}
 }
 
 func (w *WebsocketHost) LoadPlugin(ctx context.Context, metadata plugin.Metadata, pluginDirectory string) (plugin.Plugin, error) {

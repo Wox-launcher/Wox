@@ -1,16 +1,47 @@
 package plugin
 
 import (
+	"fmt"
 	"github.com/samber/lo"
 	"strings"
-	"wox/util"
 )
 
-var actionsForUIMap util.HashMap[string, func()]
+type WoxImageType = string
+
+const (
+	WoxImageTypeAbsolutePath = "absolute"
+	WoxImageTypeRelativePath = "relative"
+	WoxImageTypeBase64       = "base64"
+	WoxImageTypeSvg          = "svg"
+	WoxImageTypeRemote       = "remote"
+)
 
 type WoxImage struct {
-	ImageType string
+	ImageType WoxImageType //see WoxImageType
 	ImageData string
+}
+
+func NewWoxImage(imageType string, imageData string) WoxImage {
+	return WoxImage{
+		ImageType: imageType,
+		ImageData: imageData,
+	}
+}
+
+func (w *WoxImage) String() string {
+	return fmt.Sprintf("%s:%s", w.ImageType, w.ImageData)
+}
+
+func ParseWoxImage(imageString string) (WoxImage, error) {
+	var terms = strings.SplitN(imageString, ":", 1)
+	if len(terms) != 2 {
+		return WoxImage{}, fmt.Errorf("invalid image string: %s", imageString)
+	}
+
+	var w WoxImage
+	w.ImageType = terms[0]
+	w.ImageData = terms[1]
+	return w, nil
 }
 
 // Query from Wox. See "Doc/Query.md" for details.
@@ -44,49 +75,13 @@ type QueryResult struct {
 	Action                 func()
 }
 
-type QueryResultEx struct {
-	QueryResult     QueryResult
-	PluginInstance  *Instance
-	AssociatedQuery Query
-}
-
-type QueryResultForUI struct {
+type QueryResultUI struct {
 	Id              string
 	Title           string
 	SubTitle        string
-	Icon            WoxImage
+	Icon            string
 	Score           int
 	AssociatedQuery string
-}
-
-func NewQueryResultForUI(ex QueryResultEx) QueryResultForUI {
-	actionsForUIMap.Store(ex.QueryResult.Id, ex.QueryResult.Action)
-
-	return QueryResultForUI{
-		Id:              ex.QueryResult.Id,
-		Title:           ex.QueryResult.Title,
-		SubTitle:        ex.QueryResult.SubTitle,
-		Icon:            ex.QueryResult.Icon,
-		Score:           ex.QueryResult.Score,
-		AssociatedQuery: ex.AssociatedQuery.RawQuery,
-	}
-}
-
-func NewQueryResultForUIs(exs []QueryResultEx) []QueryResultForUI {
-	var results []QueryResultForUI
-	for _, ex := range exs {
-		results = append(results, NewQueryResultForUI(ex))
-	}
-	return results
-}
-
-func GetActionForResult(resultId string) func() {
-	action, found := actionsForUIMap.Load(resultId)
-	if found {
-		return action
-	}
-
-	return nil
 }
 
 func NewQuery(query string) Query {

@@ -31,6 +31,10 @@ func (m *Manager) Send(ctx context.Context) error {
 	return nil
 }
 
+func (m *Manager) Stop(ctx context.Context) {
+	logger.Info(ctx, "start stopping ui client")
+}
+
 func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) error {
 	return m.mainHotkey.Register(ctx, combineKey, func() {
 		m.ui.ToggleApp(ctx)
