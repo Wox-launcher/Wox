@@ -7,17 +7,6 @@ default:
     # build plugins
     just _build_dev_nodejs_plugin Wox.Plugin.Clipboard ~/.wox/wox-user/plugins
 
-@_build_dev_nodejs_plugin pluginName directory:
-    rm -rf {{directory}}/{{pluginName}}
-    cd Plugins/{{pluginName}} && pnpm install && pnpm run build && cd ..
-    mkdir -p {{directory}}/{{pluginName}}
-    cp Plugins/{{pluginName}}/dist/index.js {{directory}}/{{pluginName}}/index.js
-    cp Plugins/{{pluginName}}/plugin.json {{directory}}/{{pluginName}}/plugin.json
-
-    if [ "{{pluginName}}" = "Wox.Plugin.Clipboard" ]; then \
-        cp -r Plugins/{{pluginName}}/platform {{directory}}/{{pluginName}}/; \
-    fi
-
 @release target:
     just _build_hosts
 
@@ -29,6 +18,20 @@ default:
     elif [ "{{target}}" = "darwin" ]; then \
       cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o ../Release/wox-mac-amd64 && cd ..; \
       cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -o ../Release/wox-mac-arm64 && cd ..; \
+    fi
+
+@test:
+    cd Wox && go test ./...
+
+@_build_dev_nodejs_plugin pluginName directory:
+    rm -rf {{directory}}/{{pluginName}}
+    cd Plugins/{{pluginName}} && pnpm install && pnpm run build && cd ..
+    mkdir -p {{directory}}/{{pluginName}}
+    cp Plugins/{{pluginName}}/dist/index.js {{directory}}/{{pluginName}}/index.js
+    cp Plugins/{{pluginName}}/plugin.json {{directory}}/{{pluginName}}/plugin.json
+
+    if [ "{{pluginName}}" = "Wox.Plugin.Clipboard" ]; then \
+        cp -r Plugins/{{pluginName}}/platform {{directory}}/{{pluginName}}/; \
     fi
 
 @_build_hosts:

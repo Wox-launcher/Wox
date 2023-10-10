@@ -8,7 +8,6 @@ import (
 	"github.com/samber/lo"
 	"os"
 	"path"
-	"strings"
 	"sync"
 	"time"
 	"wox/util"
@@ -123,19 +122,22 @@ func (s *Store) GetStorePluginManifest(ctx context.Context, store StoreManifest)
 
 func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifest {
 	return lo.Filter(s.pluginManifests, func(manifest StorePluginManifest, _ int) bool {
-		return strings.Contains(strings.ToLower(manifest.Name), strings.ToLower(keyword))
+		return util.StringContains(manifest.Name, keyword)
 	})
 }
 
 func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) {
+	logger.Info(ctx, fmt.Sprintf("start to install plugin %s(%s)", manifest.Name, manifest.Version))
+
 	// check if installed newer version
 	installedPlugin, exist := lo.Find(GetPluginManager().GetPluginInstances(), func(item *Instance) bool {
 		return item.Metadata.Id == manifest.Id
 	})
 	if exist {
+		logger.Info(ctx, fmt.Sprintf("found this plugin has installed %s(%s)", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version))
 		installedVersion, installedErr := semver.NewVersion(installedPlugin.Metadata.Version)
 		currentVersion, currentErr := semver.NewVersion(manifest.Version)
-		if installedErr != nil && currentErr != nil {
+		if installedErr == nil && currentErr == nil {
 			if installedVersion.GreaterThan(currentVersion) {
 				logger.Info(ctx, fmt.Sprintf("skip %s(%s) from %s store, because it's already installed(%s)", manifest.Name, manifest.Version, manifest.Name, installedPlugin.Metadata.Version))
 				return
@@ -150,7 +152,8 @@ func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) {
 	}
 
 	// download plugin
-	pluginDirectory := path.Join(util.GetLocation().GetPluginDirectory(), manifest.Name)
+	logger.Info(ctx, fmt.Sprintf("start to download plugin: %s", manifest.DownloadUrl))
+	pluginDirectory := path.Join(util.GetLocation().GetPluginDirectory(), fmt.Sprintf("%s_%s@%s", manifest.Id, manifest.Name, manifest.Version))
 	directoryErr := util.GetLocation().EnsureDirectoryExist(pluginDirectory)
 	if directoryErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to create plugin directory %s: %s", pluginDirectory, directoryErr.Error()))
@@ -168,6 +171,7 @@ func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) {
 	util.Unzip(pluginZipPath, pluginDirectory)
 
 	//load plugin
+	logger.Info(ctx, fmt.Sprintf("start to load plugin %s(%s)", manifest.Name, manifest.Version))
 	loadErr := GetPluginManager().LoadPlugin(ctx, pluginDirectory)
 	if loadErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to load plugin %s(%s): %s", manifest.Name, manifest.Version, loadErr.Error()))

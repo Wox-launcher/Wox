@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
-	"strings"
 	"wox/plugin"
+	"wox/util"
 )
 
 func init() {
@@ -44,11 +44,22 @@ func (i *IndicatorPlugin) Init(ctx context.Context, initParams plugin.InitParams
 }
 
 func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	var results []plugin.QueryResult
+	if query.TriggerKeyword == "" {
+		return i.queryForNonTriggerKeyword(ctx, query)
+	}
 
+	if query.Command == "" {
+		return i.queryForNonCommand(ctx, query)
+	}
+
+	return []plugin.QueryResult{}
+}
+
+func (i *IndicatorPlugin) queryForNonTriggerKeyword(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	var results []plugin.QueryResult
 	for _, pluginInstance := range plugin.GetPluginManager().GetPluginInstances() {
 		triggerKeyword, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
-			return triggerKeyword != "*" && strings.Contains(triggerKeyword, query.Search)
+			return triggerKeyword != "*" && util.StringContains(triggerKeyword, query.Search)
 		})
 		if found {
 			results = append(results, plugin.QueryResult{
@@ -63,7 +74,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			for _, metadataCommand := range pluginInstance.Metadata.Commands {
 				results = append(results, plugin.QueryResult{
 					Id:       uuid.NewString(),
-					Title:    fmt.Sprintf("%s %s", triggerKeyword, metadataCommand.Command),
+					Title:    fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command),
 					SubTitle: pluginInstance.Metadata.Description,
 					Icon:     plugin.WoxImage{},
 					Action: func() {
@@ -73,6 +84,31 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			}
 		}
 	}
+	return results
+}
 
+// query for trigger keyword exist but no command exist
+func (i *IndicatorPlugin) queryForNonCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	var results []plugin.QueryResult
+	for _, pluginInstance := range plugin.GetPluginManager().GetPluginInstances() {
+		_, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
+			return util.StringContains(triggerKeyword, query.TriggerKeyword)
+		})
+		if found {
+			for _, metadataCommand := range pluginInstance.Metadata.Commands {
+				if util.StringContains(metadataCommand.Command, query.Search) {
+					results = append(results, plugin.QueryResult{
+						Id:       uuid.NewString(),
+						Title:    fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command),
+						SubTitle: pluginInstance.Metadata.Description,
+						Icon:     plugin.WoxImage{},
+						Action: func() {
+							i.api.ChangeQuery(ctx, fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command))
+						},
+					})
+				}
+			}
+		}
+	}
 	return results
 }

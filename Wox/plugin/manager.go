@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Masterminds/semver/v3"
 	"github.com/samber/lo"
 	"os"
 	"path"
@@ -71,6 +72,31 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 			logger.Error(ctx, metadataErr.Error())
 			continue
 		}
+
+		//check if metadata already exist, only add newer version
+		existMetadata, exist := lo.Find(metaDataList, func(item MetadataWithDirectory) bool {
+			return item.Metadata.Id == metadata.Id
+		})
+		if exist {
+			existVersion, existVersionErr := semver.NewVersion(existMetadata.Metadata.Version)
+			currentVersion, currentVersionErr := semver.NewVersion(metadata.Version)
+			if existVersionErr == nil && currentVersionErr == nil {
+				if existVersion.GreaterThan(currentVersion) || existVersion.Equal(currentVersion) {
+					logger.Info(ctx, fmt.Sprintf("skip parse %s(%s) metadata, because it's already parsed(%s)", metadata.Name, metadata.Version, existMetadata.Metadata.Version))
+					continue
+				} else {
+					// remove older version
+					logger.Info(ctx, fmt.Sprintf("remove older metadata version %s(%s)", existMetadata.Metadata.Name, existMetadata.Metadata.Version))
+					var newMetaDataList []MetadataWithDirectory
+					for _, item := range metaDataList {
+						if item.Metadata.Id != existMetadata.Metadata.Id {
+							newMetaDataList = append(newMetaDataList, item)
+						}
+					}
+					metaDataList = newMetaDataList
+				}
+			}
+		}
 		metaDataList = append(metaDataList, MetadataWithDirectory{metadata, pluginDirectory})
 	}
 	logger.Info(ctx, fmt.Sprintf("start loading user plugins, found %d user plugins", len(metaDataList)))
@@ -113,6 +139,7 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 
 	instance := &Instance{
 		Metadata:              metadata.Metadata,
+		PluginDirectory:       metadata.Directory,
 		Plugin:                plugin,
 		Host:                  host,
 		API:                   NewAPI(metadata.Metadata),
@@ -135,7 +162,7 @@ func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error 
 	}
 
 	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
-		return item.GetRuntime(ctx) == Runtime(metadata.Runtime)
+		return strings.ToLower(string(item.GetRuntime(ctx))) == strings.ToLower(metadata.Runtime)
 	})
 	if !exist {
 		return fmt.Errorf("unsupported runtime: %s", metadata.Runtime)
@@ -215,7 +242,9 @@ func (m *Manager) parseMetadata(ctx context.Context, pluginDirectory string) (Me
 	if !IsSupportedRuntime(metadata.Runtime) {
 		return Metadata{}, fmt.Errorf("unsupported runtime in plugin.json file, runtime=%s", metadata.Runtime)
 	}
-	//TODO: is supported os
+	if !IsSupportedOSAny(metadata.SupportedOS) {
+		return Metadata{}, fmt.Errorf("unsupported os in plugin.json file, os=%s", metadata.SupportedOS)
+	}
 
 	return metadata, nil
 }
@@ -225,6 +254,11 @@ func (m *Manager) GetPluginInstances() []*Instance {
 }
 
 func (m *Manager) isQueryMatchPlugin(ctx context.Context, pluginInstance *Instance, query Query) bool {
+	// System Plugin Indicator is a special system plugin, it will be triggered even if query enter plugin mode, so that we can prompt plugin commands
+	if pluginInstance.Metadata.Id == "39a4a6155f094ef89778188ae4a3ca03" {
+		return true
+	}
+
 	var validGlobalQuery = lo.Contains(pluginInstance.GetTriggerKeywords(), "*") && query.TriggerKeyword == ""
 	var validNonGlobalQuery = lo.Contains(pluginInstance.GetTriggerKeywords(), query.TriggerKeyword)
 	if !validGlobalQuery && !validNonGlobalQuery {

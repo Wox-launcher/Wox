@@ -3,7 +3,9 @@ package system
 import (
 	"context"
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 	"wox/plugin"
+	"wox/util"
 )
 
 func init() {
@@ -71,6 +73,27 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				},
 			})
 		}
+	}
+
+	if query.Command == "uninstall" {
+		plugins := plugin.GetPluginManager().GetPluginInstances()
+		if query.Search != "" {
+			plugins = lo.Filter(plugins, func(pluginInstance *plugin.Instance, _ int) bool {
+				return util.StringContains(pluginInstance.Metadata.Name, query.Search)
+			})
+		}
+
+		results = lo.Map(plugins, func(pluginInstance *plugin.Instance, _ int) plugin.QueryResult {
+			return plugin.QueryResult{
+				Id:       uuid.NewString(),
+				Title:    pluginInstance.Metadata.Name,
+				SubTitle: pluginInstance.Metadata.Description,
+				Icon:     plugin.WoxImage{},
+				Action: func() {
+					plugin.GetStoreManager().Uninstall(ctx, pluginInstance)
+				},
+			}
+		})
 	}
 
 	return results

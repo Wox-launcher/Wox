@@ -18,9 +18,10 @@ type websocketRequest struct {
 }
 
 type websocketResponse struct {
-	Id     string
-	Method string
-	Data   any
+	Id      string
+	Method  string
+	Success bool
+	Data    any
 }
 
 func serveAndWait(ctx context.Context, port int) {
@@ -73,4 +74,26 @@ func responseUI(ctx context.Context, response websocketResponse) {
 		return
 	}
 	m.Broadcast(marshalData)
+}
+
+func responseUISuccessWithData(ctx context.Context, request websocketRequest, data any) {
+	responseUI(ctx, websocketResponse{
+		Id:      request.Id,
+		Method:  request.Method,
+		Success: true,
+		Data:    data,
+	})
+}
+
+func responseUISuccess(ctx context.Context, request websocketRequest) {
+	responseUISuccessWithData(ctx, request, nil)
+}
+
+func responseUIError(ctx context.Context, request websocketRequest, errMsg string) {
+	responseUI(ctx, websocketResponse{
+		Id:      request.Id,
+		Method:  request.Method,
+		Success: false,
+		Data:    errMsg,
+	})
 }

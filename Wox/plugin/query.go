@@ -13,7 +13,7 @@ const (
 	WoxImageTypeRelativePath = "relative"
 	WoxImageTypeBase64       = "base64"
 	WoxImageTypeSvg          = "svg"
-	WoxImageTypeRemote       = "remote"
+	WoxImageTypeUrl          = "url"
 )
 
 type WoxImage struct {
@@ -84,7 +84,7 @@ type QueryResultUI struct {
 	AssociatedQuery string
 }
 
-func NewQuery(query string) Query {
+func newQueryWithPlugins(query string, pluginInstances []*Instance) Query {
 	var terms = strings.Split(query, " ")
 	if len(terms) == 0 {
 		return Query{
@@ -97,7 +97,7 @@ func NewQuery(query string) Query {
 	var possibleTriggerKeyword = terms[0]
 	var mustContainSpace = strings.Contains(query, " ")
 
-	pluginInstance, found := lo.Find(GetPluginManager().GetPluginInstances(), func(instance *Instance) bool {
+	pluginInstance, found := lo.Find(pluginInstances, func(instance *Instance) bool {
 		return lo.Contains(instance.GetTriggerKeywords(), possibleTriggerKeyword)
 	})
 	if found && mustContainSpace {
@@ -109,17 +109,23 @@ func NewQuery(query string) Query {
 			command = ""
 			search = ""
 		} else {
-			var possibleCommand = terms[1]
-			if lo.ContainsBy(pluginInstance.Metadata.Commands, func(item MetadataCommand) bool {
-				return item.Command == possibleCommand
-			}) {
-				// command and search
-				command = possibleCommand
-				search = strings.Join(terms[2:], " ")
-			} else {
-				// no command, only search
+			if len(terms) == 2 {
+				// e.g "wpm install", we treat "install" as search, only "wpm install " will be treated as command
 				command = ""
-				search = strings.Join(terms[1:], " ")
+				search = terms[1]
+			} else {
+				var possibleCommand = terms[1]
+				if lo.ContainsBy(pluginInstance.Metadata.Commands, func(item MetadataCommand) bool {
+					return item.Command == possibleCommand
+				}) {
+					// command and search
+					command = possibleCommand
+					search = strings.Join(terms[2:], " ")
+				} else {
+					// no command, only search
+					command = ""
+					search = strings.Join(terms[1:], " ")
+				}
 			}
 		}
 	} else {
@@ -135,4 +141,8 @@ func NewQuery(query string) Query {
 		Command:        command,
 		Search:         search,
 	}
+}
+
+func NewQuery(query string) Query {
+	return newQueryWithPlugins(query, GetPluginManager().GetPluginInstances())
 }

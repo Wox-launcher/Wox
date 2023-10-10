@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
 	"time"
@@ -67,9 +66,11 @@ func handleQuery(ctx context.Context, request websocketRequest) {
 	query, ok := request.Params["query"]
 	if !ok {
 		logger.Error(ctx, "query parameter not found")
+		responseUIError(ctx, request, "query parameter not found")
 		return
 	}
 	if query == "" {
+		responseUISuccessWithData(ctx, request, []string{})
 		return
 	}
 
@@ -82,25 +83,15 @@ func handleQuery(ctx context.Context, request websocketRequest) {
 			if len(results) == 0 {
 				continue
 			}
-
 			totalResultCount += len(results)
-
-			marshalData, marshalErr := json.Marshal(websocketResponse{
-				Id:     request.Id,
-				Method: request.Method,
-				Data:   results,
-			})
-			if marshalErr != nil {
-				logger.Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
-				continue
-			}
-
-			m.Broadcast(marshalData)
+			responseUISuccessWithData(ctx, request, results)
 		case <-doneChan:
 			logger.Info(ctx, fmt.Sprintf("query done, total results: %d, cost %d ms", totalResultCount, util.GetSystemTimestamp()-startTimestamp))
+			responseUISuccessWithData(ctx, request, []string{})
 			return
 		case <-time.After(time.Second * 10):
 			logger.Info(ctx, fmt.Sprintf("query timeout, query: %s, request id: %s", query, request.Id))
+			responseUIError(ctx, request, fmt.Sprintf("query timeout, query: %s, request id: %s", query, request.Id))
 			return
 		}
 	}
@@ -111,37 +102,33 @@ func handleAction(ctx context.Context, request websocketRequest) {
 	resultId, ok := request.Params["id"]
 	if !ok {
 		logger.Error(ctx, "id parameter not found")
+		responseUIError(ctx, request, "id parameter not found")
 		return
 	}
 
 	action := plugin.GetPluginManager().GetAction(resultId)
 	if action == nil {
 		logger.Error(ctx, fmt.Sprintf("action not found for result id: %s", resultId))
+		responseUIError(ctx, request, fmt.Sprintf("action not found for result id: %s", resultId))
 		return
 	}
 
 	action()
+	responseUISuccess(ctx, request)
 }
 
 func handleRegisterMainHotkey(ctx context.Context, request websocketRequest) {
 	hotkey, ok := request.Params["hotkey"]
 	if !ok {
 		logger.Error(ctx, "hotkey parameter not found")
+		responseUIError(ctx, request, "hotkey parameter not found")
 		return
 	}
 
 	registerErr := GetUIManager().RegisterMainHotkey(ctx, hotkey)
 	if registerErr != nil {
-		responseUI(ctx, websocketResponse{
-			Id:     request.Id,
-			Method: request.Method,
-			Data:   registerErr.Error(),
-		})
+		responseUIError(ctx, request, registerErr.Error())
 	} else {
-		responseUI(ctx, websocketResponse{
-			Id:     request.Id,
-			Method: request.Method,
-			Data:   "success",
-		})
+		responseUISuccess(ctx, request)
 	}
 }

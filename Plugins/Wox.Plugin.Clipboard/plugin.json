@@ -13,8 +13,8 @@
   "Entry": "index.js",
   "Icon": "relative:calculator.png",
   "SupportedOS": [
-    "WINDOWS",
-    "LINUX",
-    "MACOS"
+    "windows",
+    "linux",
+    "darwin"
   ]
 }

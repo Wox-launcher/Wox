@@ -40,7 +40,7 @@ func main() {
 
 		// macos use command+space, other os use alt+space as default hotkey
 		combineKey := "alt+space"
-		if runtime.GOOS == "darwin" {
+		if strings.ToLower(runtime.GOOS) == "darwin" {
 			combineKey = "command+space"
 		}
 		registerMainHotkeyErr := ui.GetUIManager().RegisterMainHotkey(ctx, combineKey)

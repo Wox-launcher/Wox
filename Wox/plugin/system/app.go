@@ -69,7 +69,7 @@ func (i *AppPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 func (i *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	for _, info := range i.apps {
-		if strings.Contains(strings.ToLower(info.Name), strings.ToLower(query.Search)) {
+		if util.StringContains(info.Name, query.Search) {
 			results = append(results, plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    info.Name,
@@ -91,7 +91,7 @@ func (i *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 func (i *AppPlugin) indexApps(ctx context.Context) {
 	startTimestamp := util.GetSystemTimestamp()
 	var apps []appInfo
-	if runtime.GOOS == "darwin" {
+	if strings.ToLower(runtime.GOOS) == "darwin" {
 		apps = i.getMacApps(ctx)
 	}
 
