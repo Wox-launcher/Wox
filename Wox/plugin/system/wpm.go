@@ -67,6 +67,7 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				SubTitle: pluginManifest.Description,
 				Icon:     plugin.WoxImage{},
 				Action: func() {
+					plugin.GetStoreManager().Install(ctx, pluginManifest)
 				},
 			})
 		}

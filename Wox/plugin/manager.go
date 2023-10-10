@@ -90,32 +90,75 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 					continue
 				}
 
-				loadStartTimestamp := util.GetSystemTimestamp()
-				plugin, loadErr := host.LoadPlugin(newCtx, metadata.Metadata, metadata.Directory)
+				loadErr := m.loadHostPlugin(newCtx, host, metadata)
 				if loadErr != nil {
-					logger.Error(newCtx, fmt.Errorf("[%s HOST] failed to load plugin: %w", host.GetRuntime(newCtx), loadErr).Error())
+					logger.Error(newCtx, fmt.Errorf("[%s HOST] %w", host.GetRuntime(newCtx), loadErr).Error())
 					continue
 				}
-				loadFinishTimestamp := util.GetSystemTimestamp()
-
-				instance := &Instance{
-					Metadata:              metadata.Metadata,
-					Plugin:                plugin,
-					Host:                  host,
-					API:                   NewAPI(metadata.Metadata),
-					LoadStartTimestamp:    loadStartTimestamp,
-					LoadFinishedTimestamp: loadFinishTimestamp,
-				}
-				m.instances = append(m.instances, instance)
-
-				util.Go(newCtx, fmt.Sprintf("[%s] init plugin", metadata.Metadata.Name), func() {
-					m.initPlugin(util.NewTraceContext(), instance)
-				})
 			}
 		})
 	}
 
 	return nil
+}
+
+func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata MetadataWithDirectory) error {
+	loadStartTimestamp := util.GetSystemTimestamp()
+	plugin, loadErr := host.LoadPlugin(ctx, metadata.Metadata, metadata.Directory)
+	if loadErr != nil {
+		logger.Error(ctx, fmt.Errorf("[%s HOST] failed to load plugin: %w", host.GetRuntime(ctx), loadErr).Error())
+		return loadErr
+	}
+	loadFinishTimestamp := util.GetSystemTimestamp()
+
+	instance := &Instance{
+		Metadata:              metadata.Metadata,
+		Plugin:                plugin,
+		Host:                  host,
+		API:                   NewAPI(metadata.Metadata),
+		LoadStartTimestamp:    loadStartTimestamp,
+		LoadFinishedTimestamp: loadFinishTimestamp,
+	}
+	m.instances = append(m.instances, instance)
+
+	util.Go(ctx, fmt.Sprintf("[%s] init plugin", metadata.Metadata.Name), func() {
+		m.initPlugin(ctx, instance)
+	})
+
+	return nil
+}
+
+func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error {
+	metadata, parseErr := m.parseMetadata(ctx, pluginDirectory)
+	if parseErr != nil {
+		return parseErr
+	}
+
+	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
+		return item.GetRuntime(ctx) == Runtime(metadata.Runtime)
+	})
+	if !exist {
+		return fmt.Errorf("unsupported runtime: %s", metadata.Runtime)
+	}
+
+	loadErr := m.loadHostPlugin(ctx, pluginHost, MetadataWithDirectory{metadata, pluginDirectory})
+	if loadErr != nil {
+		return loadErr
+	}
+
+	return nil
+}
+
+func (m *Manager) UnloadPlugin(ctx context.Context, pluginInstance *Instance) {
+	pluginInstance.Host.UnloadPlugin(ctx, pluginInstance.Metadata)
+
+	var newInstances []*Instance
+	for _, instance := range m.instances {
+		if instance.Metadata.Id != pluginInstance.Metadata.Id {
+			newInstances = append(newInstances, instance)
+		}
+	}
+	m.instances = newInstances
 }
 
 func (m *Manager) loadSystemPlugins(ctx context.Context) {
@@ -172,6 +215,7 @@ func (m *Manager) parseMetadata(ctx context.Context, pluginDirectory string) (Me
 	if !IsSupportedRuntime(metadata.Runtime) {
 		return Metadata{}, fmt.Errorf("unsupported runtime in plugin.json file, runtime=%s", metadata.Runtime)
 	}
+	//TODO: is supported os
 
 	return metadata, nil
 }

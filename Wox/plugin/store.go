@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"github.com/Masterminds/semver/v3"
 	"github.com/samber/lo"
+	"os"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -105,7 +107,7 @@ func (s *Store) GetStorePluginManifests(ctx context.Context) []StorePluginManife
 func (s *Store) GetStorePluginManifest(ctx context.Context, store StoreManifest) ([]StorePluginManifest, error) {
 	logger.Info(ctx, fmt.Sprintf("start to get plugin manifest from %s(%s)", store.Name, store.Url))
 
-	response, getErr := util.Get(store.Url)
+	response, getErr := util.HttpGet(ctx, store.Url)
 	if getErr != nil {
 		return nil, getErr
 	}
@@ -123,4 +125,71 @@ func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifes
 	return lo.Filter(s.pluginManifests, func(manifest StorePluginManifest, _ int) bool {
 		return strings.Contains(strings.ToLower(manifest.Name), strings.ToLower(keyword))
 	})
+}
+
+func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) {
+	// check if installed newer version
+	installedPlugin, exist := lo.Find(GetPluginManager().GetPluginInstances(), func(item *Instance) bool {
+		return item.Metadata.Id == manifest.Id
+	})
+	if exist {
+		installedVersion, installedErr := semver.NewVersion(installedPlugin.Metadata.Version)
+		currentVersion, currentErr := semver.NewVersion(manifest.Version)
+		if installedErr != nil && currentErr != nil {
+			if installedVersion.GreaterThan(currentVersion) {
+				logger.Info(ctx, fmt.Sprintf("skip %s(%s) from %s store, because it's already installed(%s)", manifest.Name, manifest.Version, manifest.Name, installedPlugin.Metadata.Version))
+				return
+			}
+		}
+
+		uninstallErr := s.Uninstall(ctx, installedPlugin)
+		if uninstallErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version, uninstallErr.Error()))
+			return
+		}
+	}
+
+	// download plugin
+	pluginDirectory := path.Join(util.GetLocation().GetPluginDirectory(), manifest.Name)
+	directoryErr := util.GetLocation().EnsureDirectoryExist(pluginDirectory)
+	if directoryErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to create plugin directory %s: %s", pluginDirectory, directoryErr.Error()))
+		return
+	}
+	pluginZipPath := path.Join(pluginDirectory, "plugin.zip")
+	downloadErr := util.HttpDownload(ctx, manifest.DownloadUrl, pluginZipPath)
+	if downloadErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to download plugin %s(%s): %s", manifest.Name, manifest.Version, downloadErr.Error()))
+		return
+	}
+
+	//unzip plugin
+	logger.Info(ctx, fmt.Sprintf("start to unzip plugin %s(%s)", manifest.Name, manifest.Version))
+	util.Unzip(pluginZipPath, pluginDirectory)
+
+	//load plugin
+	loadErr := GetPluginManager().LoadPlugin(ctx, pluginDirectory)
+	if loadErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to load plugin %s(%s): %s", manifest.Name, manifest.Version, loadErr.Error()))
+		return
+	}
+
+	//remove plugin zip
+	removeErr := os.Remove(pluginZipPath)
+	if removeErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to remove plugin zip %s: %s", pluginZipPath, removeErr.Error()))
+		return
+	}
+}
+
+func (s *Store) Uninstall(ctx context.Context, plugin *Instance) error {
+	logger.Info(ctx, fmt.Sprintf("start to uninstall plugin %s(%s)", plugin.Metadata.Name, plugin.Metadata.Version))
+	GetPluginManager().UnloadPlugin(ctx, plugin)
+	removeErr := os.Remove(plugin.PluginDirectory)
+	if removeErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to remove plugin directory %s: %s", plugin.PluginDirectory, removeErr.Error()))
+		return removeErr
+	}
+
+	return nil
 }

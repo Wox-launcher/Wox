@@ -31,7 +31,7 @@ func (l *Location) Init() error {
 
 	// check if wox data directory exists, if not, create it
 	l.woxDataDirectory = path.Join(dirname, ".wox")
-	if directoryErr := l.ensureDirectoryExist(l.woxDataDirectory); directoryErr != nil {
+	if directoryErr := l.EnsureDirectoryExist(l.woxDataDirectory); directoryErr != nil {
 		return directoryErr
 	}
 
@@ -65,29 +65,29 @@ func (l *Location) Init() error {
 	}
 	l.userDataDirectory = string(readFile)
 
-	if directoryErr := l.ensureDirectoryExist(l.userDataDirectory); directoryErr != nil {
+	if directoryErr := l.EnsureDirectoryExist(l.userDataDirectory); directoryErr != nil {
 		return directoryErr
 	}
-	if directoryErr := l.ensureDirectoryExist(l.GetLogDirectory()); directoryErr != nil {
+	if directoryErr := l.EnsureDirectoryExist(l.GetLogDirectory()); directoryErr != nil {
 		return directoryErr
 	}
-	if directoryErr := l.ensureDirectoryExist(l.GetLogHostsDirectory()); directoryErr != nil {
+	if directoryErr := l.EnsureDirectoryExist(l.GetLogHostsDirectory()); directoryErr != nil {
 		return directoryErr
 	}
-	if directoryErr := l.ensureDirectoryExist(l.GetLogPluginDirectory()); directoryErr != nil {
+	if directoryErr := l.EnsureDirectoryExist(l.GetLogPluginDirectory()); directoryErr != nil {
 		return directoryErr
 	}
-	if directoryErr := l.ensureDirectoryExist(l.GetPluginDirectory()); directoryErr != nil {
+	if directoryErr := l.EnsureDirectoryExist(l.GetPluginDirectory()); directoryErr != nil {
 		return directoryErr
 	}
-	if directoryErr := l.ensureDirectoryExist(l.GetHostDirectory()); directoryErr != nil {
+	if directoryErr := l.EnsureDirectoryExist(l.GetHostDirectory()); directoryErr != nil {
 		return directoryErr
 	}
 
 	return nil
 }
 
-func (l *Location) ensureDirectoryExist(directory string) error {
+func (l *Location) EnsureDirectoryExist(directory string) error {
 	if _, statErr := os.Stat(directory); os.IsNotExist(statErr) {
 		mkdirErr := os.MkdirAll(directory, os.ModePerm)
 		if mkdirErr != nil {
