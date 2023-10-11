@@ -38,6 +38,10 @@ func (u *uiImpl) ShowMsg(ctx context.Context, title string, description string, 
 	})
 }
 
+func (u *uiImpl) GetServerPort(ctx context.Context) int {
+	return GetUIManager().serverPort
+}
+
 func (u *uiImpl) send(ctx context.Context, method string, params map[string]string) {
 	if params == nil {
 		params = make(map[string]string)

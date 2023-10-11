@@ -16,6 +16,7 @@ type Metadata struct {
 	TriggerKeywords []string //User can add/update/delete trigger keywords
 	Commands        []MetadataCommand
 	SupportedOS     []string
+	Features        []string // currently only support "preview"
 }
 
 type MetadataCommand struct {

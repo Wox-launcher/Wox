@@ -28,6 +28,7 @@ export interface Result {
   Title: string
   SubTitle?: string
   Icon: WoxImage
+  Preview?: WoxPreview
   Score?: number
   /**
    * If true, Wox will not hide after user select this result
@@ -72,9 +73,17 @@ export interface PublicAPI {
   GetTranslation: (key: string) => Promise<string>
 }
 
-export type WoxImageType = "AbsolutePath" | "RelativeToPluginPath" | "Svg" | "Base64" | "Remote"
+export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url"
 
 export interface WoxImage {
   ImageType: WoxImageType
   ImageData: string
+}
+
+export type WoxPreviewType = "markdown" | "text" | "image"
+
+export interface WoxPreview {
+  PreviewType: WoxPreviewType
+  PreviewData: string
+  PreviewProperties: Record<string, string>
 }

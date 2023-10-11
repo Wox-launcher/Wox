@@ -15,6 +15,7 @@ var logger *util.Log
 type Manager struct {
 	mainHotkey *util.Hotkey
 	ui         share.UI
+	serverPort int
 }
 
 func GetUIManager() *Manager {
@@ -42,6 +43,7 @@ func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) err
 }
 
 func (m *Manager) StartWebsocketAndWait(ctx context.Context, port int) {
+	m.serverPort = port
 	serveAndWait(ctx, port)
 }
 

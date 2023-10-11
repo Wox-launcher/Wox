@@ -25,7 +25,7 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@wox-launcher/wox-plugin": "^0.0.31",
+    "@wox-launcher/wox-plugin": "^0.0.37",
     "clipboard-event": "^1.6.0",
     "copy-paste": "^1.5.3"
   }

@@ -5,7 +5,13 @@ import clipboardListener from "clipboard-event" // eslint-disable-next-line @typ
 import ncp from "copy-paste"
 
 let api: PublicAPI
-const histories: string[] = []
+
+interface clipboardData {
+  Content: string
+  CreatedAt: string
+}
+
+const histories: clipboardData[] = []
 
 export const plugin: Plugin = {
   init: async (context: PluginInitContext) => {
@@ -14,20 +20,23 @@ export const plugin: Plugin = {
     clipboardListener.on("change", () => {
       const content = ncp.paste()
       api.Log("Clipboard changed: " + content)
-      histories.push(content)
+      histories.push({
+        Content: content,
+        CreatedAt: new Date().toISOString()
+      })
     })
   },
 
   query: async (query: Query) => {
     return histories
-      .filter(history => history.includes(query.Search))
+      .filter(history => history.Content.includes(query.Search))
       .map(history => {
         return {
-          Title: history,
-          Icon: { ImageType: "RelativeToPluginPath", ImageData: "images/app.png" } as WoxImage,
+          Title: history.Content,
+          Icon: { ImageType: "relative", ImageData: "images/app.png" } as WoxImage,
+          Preview: { PreviewType: "text", PreviewData: history.Content, PreviewProperties: { CreatedAt: history.CreatedAt } },
           Action: async () => {
             ncp.copy(history)
-            return false
           }
         } as Result
       })

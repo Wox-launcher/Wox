@@ -270,7 +270,11 @@ func (m *Manager) isQueryMatchPlugin(ctx context.Context, pluginInstance *Instan
 
 func (m *Manager) QueryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) []QueryResult {
 	logger.Info(ctx, fmt.Sprintf("[%s] start query: %s", pluginInstance.Metadata.Name, query.RawQuery))
-	return pluginInstance.Plugin.Query(ctx, query)
+	results := pluginInstance.Plugin.Query(ctx, query)
+	for i := range results {
+		results[i].Icon = convertLocalImageToUrl(ctx, results[i].Icon, pluginInstance)
+	}
+	return results
 }
 
 func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryResultUI, done chan bool) {
@@ -304,7 +308,8 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 					Id:              item.Id,
 					Title:           item.Title,
 					SubTitle:        item.SubTitle,
-					Icon:            item.Icon.String(),
+					Icon:            item.Icon,
+					Preview:         item.Preview,
 					Score:           item.Score,
 					AssociatedQuery: query.RawQuery,
 				}

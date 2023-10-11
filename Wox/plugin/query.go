@@ -1,48 +1,9 @@
 package plugin
 
 import (
-	"fmt"
 	"github.com/samber/lo"
 	"strings"
 )
-
-type WoxImageType = string
-
-const (
-	WoxImageTypeAbsolutePath = "absolute"
-	WoxImageTypeRelativePath = "relative"
-	WoxImageTypeBase64       = "base64"
-	WoxImageTypeSvg          = "svg"
-	WoxImageTypeUrl          = "url"
-)
-
-type WoxImage struct {
-	ImageType WoxImageType //see WoxImageType
-	ImageData string
-}
-
-func NewWoxImage(imageType string, imageData string) WoxImage {
-	return WoxImage{
-		ImageType: imageType,
-		ImageData: imageData,
-	}
-}
-
-func (w *WoxImage) String() string {
-	return fmt.Sprintf("%s:%s", w.ImageType, w.ImageData)
-}
-
-func ParseWoxImage(imageString string) (WoxImage, error) {
-	var terms = strings.SplitN(imageString, ":", 1)
-	if len(terms) != 2 {
-		return WoxImage{}, fmt.Errorf("invalid image string: %s", imageString)
-	}
-
-	var w WoxImage
-	w.ImageType = terms[0]
-	w.ImageData = terms[1]
-	return w, nil
-}
 
 // Query from Wox. See "Doc/Query.md" for details.
 type Query struct {
@@ -70,6 +31,7 @@ type QueryResult struct {
 	Title                  string
 	SubTitle               string
 	Icon                   WoxImage
+	Preview                WoxPreview
 	Score                  int
 	PreventHideAfterAction bool // If true, Wox will not hide after user select this result
 	Action                 func()
@@ -79,7 +41,8 @@ type QueryResultUI struct {
 	Id              string
 	Title           string
 	SubTitle        string
-	Icon            string
+	Icon            WoxImage
+	Preview         WoxPreview
 	Score           int
 	AssociatedQuery string
 }

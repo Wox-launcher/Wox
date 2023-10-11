@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/olahol/melody"
 	"net/http"
+	"wox/plugin"
 	"wox/util"
 )
 
@@ -29,6 +30,22 @@ func serveAndWait(ctx context.Context, port int) {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Wox"))
+	})
+
+	http.HandleFunc("/image", func(w http.ResponseWriter, r *http.Request) {
+		id := r.URL.Query().Get("id")
+		if id == "" {
+			w.Write([]byte("no id"))
+			return
+		}
+
+		imagePath, ok := plugin.GetLocalImageMap(id)
+		if !ok {
+			w.Write([]byte("no image"))
+			return
+		}
+
+		http.ServeFile(w, r, imagePath)
 	})
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {

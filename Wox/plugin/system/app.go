@@ -28,7 +28,7 @@ type AppPlugin struct {
 type appInfo struct {
 	Name string
 	Path string
-	Icon string
+	Icon plugin.WoxImage
 }
 
 func (i *AppPlugin) GetMetadata() plugin.Metadata {
@@ -200,7 +200,7 @@ func (i *AppPlugin) getMacAppInfo(ctx context.Context, path string) (appInfo, er
 	if iconErr != nil {
 		i.api.Log(ctx, fmt.Sprintf("failed to get app icon: %s", iconErr.Error()))
 	}
-	info.Icon = icon.String()
+	info.Icon = icon
 
 	return info, nil
 }

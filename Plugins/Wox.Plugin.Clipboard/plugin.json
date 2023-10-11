@@ -16,5 +16,8 @@
     "windows",
     "linux",
     "darwin"
+  ],
+  "Features": [
+    "preview"
   ]
 }

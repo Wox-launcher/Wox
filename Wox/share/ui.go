@@ -8,4 +8,5 @@ type UI interface {
 	ShowApp(ctx context.Context)
 	ToggleApp(ctx context.Context)
 	ShowMsg(ctx context.Context, title string, description string, icon string)
+	GetServerPort(ctx context.Context) int
 }
