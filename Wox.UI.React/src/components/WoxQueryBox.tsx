@@ -69,7 +69,7 @@ export default () => {
                     setResultList([])
                     currentResultList.current = []
                     queryText.current = e.target.value
-                    WoxMessageHelper.getInstance().sendQueryMessage({query: queryText.current}, handleQueryCallback)
+                    WoxMessageHelper.getInstance().sendQueryMessage({query: queryText.current, type: "text"}, handleQueryCallback)
                 }}
             />
             <InputGroup.Text id="inputGroup-sizing-lg" aria-describedby={"Wox"}>Wox</InputGroup.Text>

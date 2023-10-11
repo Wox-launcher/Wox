@@ -9,6 +9,7 @@ require (
 	github.com/google/uuid v1.3.1
 	github.com/gorilla/websocket v1.5.0
 	github.com/jinzhu/now v1.1.5
+	github.com/mitchellh/go-homedir v1.1.0
 	github.com/olahol/melody v1.1.4
 	github.com/petermattis/goid v0.0.0-20230904192822-1876fd5063bc
 	github.com/samber/lo v1.38.1
@@ -16,6 +17,7 @@ require (
 	go.uber.org/zap v1.26.0
 	golang.design/x/clipboard v0.7.0
 	golang.design/x/hotkey v0.4.1
+	howett.net/plist v1.0.0
 )
 
 require (

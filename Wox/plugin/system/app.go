@@ -7,6 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/mitchellh/go-homedir"
+	"howett.net/plist"
+	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -31,7 +34,7 @@ type appInfo struct {
 	Icon plugin.WoxImage
 }
 
-func (i *AppPlugin) GetMetadata() plugin.Metadata {
+func (a *AppPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "ea2b6859-14bc-4c89-9c88-627da7379141",
 		Name:          "App",
@@ -53,22 +56,22 @@ func (i *AppPlugin) GetMetadata() plugin.Metadata {
 	}
 }
 
-func (i *AppPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
-	i.api = initParams.API
+func (a *AppPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
+	a.api = initParams.API
 
-	appCache, cacheErr := i.loadAppCache(ctx)
+	appCache, cacheErr := a.loadAppCache(ctx)
 	if cacheErr == nil {
-		i.apps = appCache
+		a.apps = appCache
 	}
 
 	util.Go(ctx, "index apps", func() {
-		i.indexApps(util.NewTraceContext())
+		a.indexApps(util.NewTraceContext())
 	})
 }
 
-func (i *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (a *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
-	for _, info := range i.apps {
+	for _, info := range a.apps {
 		if util.StringContains(info.Name, query.Search) {
 			results = append(results, plugin.QueryResult{
 				Id:       uuid.NewString(),
@@ -78,7 +81,7 @@ func (i *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				Action: func() {
 					runErr := exec.Command("open", info.Path).Run()
 					if runErr != nil {
-						i.api.Log(ctx, fmt.Sprintf("error openning app %s: %s", info.Path, runErr.Error()))
+						a.api.Log(ctx, fmt.Sprintf("error openning app %s: %s", info.Path, runErr.Error()))
 					}
 				},
 			})
@@ -88,68 +91,70 @@ func (i *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 	return results
 }
 
-func (i *AppPlugin) indexApps(ctx context.Context) {
+func (a *AppPlugin) indexApps(ctx context.Context) {
 	startTimestamp := util.GetSystemTimestamp()
 	var apps []appInfo
 	if strings.ToLower(runtime.GOOS) == "darwin" {
-		apps = i.getMacApps(ctx)
+		apps = a.getMacApps(ctx)
 	}
 
 	if len(apps) > 0 {
-		i.api.Log(ctx, fmt.Sprintf("indexed %d apps", len(i.apps)))
-		i.apps = apps
+		a.api.Log(ctx, fmt.Sprintf("indexed %d apps", len(a.apps)))
+		a.apps = apps
 
-		var cachePath = i.getAppCachePath()
+		var cachePath = a.getAppCachePath()
 		cacheContent, marshalErr := json.Marshal(apps)
 		if marshalErr != nil {
-			i.api.Log(ctx, fmt.Sprintf("error marshalling app cache: %s", marshalErr.Error()))
+			a.api.Log(ctx, fmt.Sprintf("error marshalling app cache: %s", marshalErr.Error()))
 			return
 		}
 		writeErr := os.WriteFile(cachePath, cacheContent, 0644)
 		if writeErr != nil {
-			i.api.Log(ctx, fmt.Sprintf("error writing app cache: %s", writeErr.Error()))
+			a.api.Log(ctx, fmt.Sprintf("error writing app cache: %s", writeErr.Error()))
 			return
 		}
-		i.api.Log(ctx, fmt.Sprintf("wrote app cache to %s", cachePath))
+		a.api.Log(ctx, fmt.Sprintf("wrote app cache to %s", cachePath))
 	}
 
-	i.api.Log(ctx, fmt.Sprintf("indexed %d apps, cost %d ms", len(i.apps), util.GetSystemTimestamp()-startTimestamp))
+	a.api.Log(ctx, fmt.Sprintf("indexed %d apps, cost %d ms", len(a.apps), util.GetSystemTimestamp()-startTimestamp))
 }
 
-func (i *AppPlugin) getAppCachePath() string {
+func (a *AppPlugin) getAppCachePath() string {
 	return path.Join(os.TempDir(), "wox-app-cache.json")
 }
 
-func (i *AppPlugin) loadAppCache(ctx context.Context) ([]appInfo, error) {
+func (a *AppPlugin) loadAppCache(ctx context.Context) ([]appInfo, error) {
 	startTimestamp := util.GetSystemTimestamp()
-	i.api.Log(ctx, "start to load app cache")
-	var cachePath = i.getAppCachePath()
+	a.api.Log(ctx, "start to load app cache")
+	var cachePath = a.getAppCachePath()
 	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
-		i.api.Log(ctx, "app cache file not found")
+		a.api.Log(ctx, "app cache file not found")
 		return nil, err
 	}
 
 	cacheContent, readErr := os.ReadFile(cachePath)
 	if readErr != nil {
-		i.api.Log(ctx, fmt.Sprintf("error reading app cache file: %s", readErr.Error()))
+		a.api.Log(ctx, fmt.Sprintf("error reading app cache file: %s", readErr.Error()))
 		return nil, readErr
 	}
 
 	var apps []appInfo
 	unmarshalErr := json.Unmarshal(cacheContent, &apps)
 	if unmarshalErr != nil {
-		i.api.Log(ctx, fmt.Sprintf("error unmarshalling app cache file: %s", unmarshalErr.Error()))
+		a.api.Log(ctx, fmt.Sprintf("error unmarshalling app cache file: %s", unmarshalErr.Error()))
 		return nil, unmarshalErr
 	}
 
-	i.api.Log(ctx, fmt.Sprintf("loaded %d apps from cache, cost %d ms", len(apps), util.GetSystemTimestamp()-startTimestamp))
+	a.api.Log(ctx, fmt.Sprintf("loaded %d apps from cache, cost %d ms", len(apps), util.GetSystemTimestamp()-startTimestamp))
 	return apps, nil
 }
 
-func (i *AppPlugin) getMacApps(ctx context.Context) []appInfo {
-	i.api.Log(ctx, "start to get mac apps")
+func (a *AppPlugin) getMacApps(ctx context.Context) []appInfo {
+	a.api.Log(ctx, "start to get mac apps")
 
+	userHomeApps, _ := homedir.Expand("~/Applications")
 	var appDirectories = []string{
+		userHomeApps,
 		"/Applications",
 		"/Applications/Utilities",
 		"/System/Applications",
@@ -161,12 +166,12 @@ func (i *AppPlugin) getMacApps(ctx context.Context) []appInfo {
 		// get all .app directories in appDirectory
 		appDir, readErr := os.ReadDir(appDirectory)
 		if readErr != nil {
-			i.api.Log(ctx, fmt.Sprintf("error reading directory %s: %s", appDirectory, readErr.Error()))
+			a.api.Log(ctx, fmt.Sprintf("error reading directory %s: %s", appDirectory, readErr.Error()))
 			continue
 		}
 
 		for _, entry := range appDir {
-			if strings.HasSuffix(entry.Name(), ".app") || strings.HasSuffix(entry.Name(), ".prefPane") {
+			if strings.HasSuffix(entry.Name(), ".app") {
 				appDirectoryPaths = append(appDirectoryPaths, path.Join(appDirectory, entry.Name()))
 			}
 		}
@@ -174,9 +179,9 @@ func (i *AppPlugin) getMacApps(ctx context.Context) []appInfo {
 
 	var appInfos []appInfo
 	for _, directoryPath := range appDirectoryPaths {
-		info, getErr := i.getMacAppInfo(ctx, directoryPath)
+		info, getErr := a.getMacAppInfo(ctx, directoryPath)
 		if getErr != nil {
-			i.api.Log(ctx, fmt.Sprintf("error getting app info for %s: %s", directoryPath, getErr.Error()))
+			a.api.Log(ctx, fmt.Sprintf("error getting app info for %s: %s", directoryPath, getErr.Error()))
 			continue
 		}
 
@@ -186,26 +191,31 @@ func (i *AppPlugin) getMacApps(ctx context.Context) []appInfo {
 	return appInfos
 }
 
-func (i *AppPlugin) getMacAppInfo(ctx context.Context, path string) (appInfo, error) {
+func (a *AppPlugin) getMacAppInfo(ctx context.Context, path string) (appInfo, error) {
 	out, err := exec.Command("mdls", "-name", "kMDItemDisplayName", "-raw", path).Output()
 	if err != nil {
-		return appInfo{}, fmt.Errorf("failed to get app name: %w", err)
+		msg := fmt.Sprintf("failed to get app name from mdls(%s): %s", path, err.Error())
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) {
+			msg = fmt.Sprintf("failed to get app name from mdls(%s): %s", path, exitError.Stderr)
+		}
+		return appInfo{}, errors.New(msg)
 	}
 
 	info := appInfo{
 		Name: strings.TrimSpace(string(out)),
 		Path: path,
 	}
-	icon, iconErr := i.getMacAppIcon(ctx, path)
+	icon, iconErr := a.getMacAppIcon(ctx, path)
 	if iconErr != nil {
-		i.api.Log(ctx, fmt.Sprintf("failed to get app icon: %s", iconErr.Error()))
+		a.api.Log(ctx, iconErr.Error())
 	}
 	info.Icon = icon
 
 	return info, nil
 }
 
-func (i *AppPlugin) getMacAppIcon(ctx context.Context, appPath string) (plugin.WoxImage, error) {
+func (a *AppPlugin) getMacAppIcon(ctx context.Context, appPath string) (plugin.WoxImage, error) {
 	// md5 iconPath
 	iconPathMd5 := fmt.Sprintf("%x", md5.Sum([]byte(appPath)))
 	iconCachePath := path.Join(os.TempDir(), fmt.Sprintf("%s.png", iconPathMd5))
@@ -216,46 +226,88 @@ func (i *AppPlugin) getMacAppIcon(ctx context.Context, appPath string) (plugin.W
 		}, nil
 	}
 
-	i.api.Log(ctx, fmt.Sprintf("start to get app icon: %s", appPath))
-	out, err := exec.Command("defaults", "read", fmt.Sprintf(`"%s"`, path.Join(appPath, "Contents", "Info.plist")), "CFBundleIconFile").Output()
-	if err != nil {
-		msg := fmt.Sprintf("failed to get app icon name from CFBundleIconFile(%s): %s", appPath, err.Error())
-		if out != nil {
-			msg = fmt.Sprintf("%s, output: %s", msg, string(out))
+	rawImagePath, iconErr := a.getMacAppIconImagePath(ctx, appPath)
+	if iconErr != nil {
+		return plugin.WoxImage{}, iconErr
+	}
+
+	if strings.HasSuffix(rawImagePath, ".icns") {
+		//use sips to convert icns to png
+		//sips -s format png /Applications/Calculator.app/Contents/Resources/AppIcon.icns --out /tmp/wox-app-icon.png
+		out, openErr := exec.Command("sips", "-s", "format", "png", rawImagePath, "--out", iconCachePath).Output()
+		if openErr != nil {
+			msg := fmt.Sprintf("failed to convert icns to png: %s", openErr.Error())
+			if out != nil {
+				msg = fmt.Sprintf("%s, output: %s", msg, string(out))
+			}
+			return plugin.WoxImage{}, errors.New(msg)
 		}
-		return plugin.WoxImage{}, errors.New(msg)
-	}
-
-	//TODO: some app may not have Info.plist file, instead they have a PkgInfo file
-
-	iconName := strings.TrimSpace(string(out))
-	if iconName == "" {
-		iconName = "AppIcon.icns"
-	}
-	if !strings.HasSuffix(iconName, ".icns") {
-		iconName = iconName + ".icns"
-	}
-
-	iconPath := path.Join(appPath, "Contents", "Resources", iconName)
-	if _, statErr := os.Stat(iconPath); os.IsNotExist(statErr) {
-		return plugin.WoxImage{}, fmt.Errorf("icon file %s not found", iconPath)
-	}
-
-	//use sips to convert icns to png
-	//sips -s format png /Applications/Calculator.app/Contents/Resources/AppIcon.icns --out /tmp/wox-app-icon.png
-	out, err = exec.Command("sips", "-s", "format", "png", iconPath, "--out", iconCachePath).Output()
-	if err != nil {
-		msg := fmt.Sprintf("failed to convert icns to png: %s", err.Error())
-		if out != nil {
-			msg = fmt.Sprintf("%s, output: %s", msg, string(out))
+	} else {
+		//copy image to cache
+		destF, destErr := os.Create(iconCachePath)
+		if destErr != nil {
+			return plugin.WoxImage{}, fmt.Errorf("can't create cache file: %s", destErr.Error())
 		}
-		return plugin.WoxImage{}, errors.New(msg)
+		defer destF.Close()
+
+		originF, originErr := os.Open(rawImagePath)
+		if originErr != nil {
+			return plugin.WoxImage{}, fmt.Errorf("can't open origin image file: %s", originErr.Error())
+		}
+
+		if _, err := io.Copy(destF, originF); err != nil {
+			return plugin.WoxImage{}, fmt.Errorf("can't copy image to cache: %s", err.Error())
+		}
 	}
 
-	i.api.Log(ctx, fmt.Sprintf("app icon cache created: %s", iconCachePath))
-
+	a.api.Log(ctx, fmt.Sprintf("app icon cache created: %s", iconCachePath))
 	return plugin.WoxImage{
 		ImageType: plugin.WoxImageTypeAbsolutePath,
 		ImageData: iconCachePath,
 	}, nil
+}
+
+func (a *AppPlugin) getMacAppIconImagePath(ctx context.Context, appPath string) (string, error) {
+	iconPath, infoPlistErr := a.parseMacAppIconFromInfoPlist(ctx, appPath)
+	if infoPlistErr == nil {
+		return iconPath, nil
+	}
+	a.api.Log(ctx, fmt.Sprintf("get icon from info.plist fail: %s", infoPlistErr.Error()))
+	//a.api.Log(ctx, fmt.Sprintf("try parsing AssetCar in %s", appPath))
+
+	return "", fmt.Errorf("can't find icon for this app")
+}
+
+func (a *AppPlugin) parseMacAppIconFromInfoPlist(ctx context.Context, appPath string) (string, error) {
+	plistPath := path.Join(appPath, "Contents", "Info.plist")
+	plistFile, openErr := os.Open(plistPath)
+	if openErr != nil {
+		plistPath = path.Join(appPath, "WrappedBundle", "Info.plist")
+		plistFile, openErr = os.Open(plistPath)
+		if openErr != nil {
+			return "", fmt.Errorf("can't find Info.plist in this app: %s", openErr.Error())
+		}
+	}
+	defer plistFile.Close()
+
+	decoder := plist.NewDecoder(plistFile)
+	var plistData map[string]any
+	decodeErr := decoder.Decode(&plistData)
+	if decodeErr != nil {
+		return "", fmt.Errorf("failed to decode Info.plist: %s", decodeErr.Error())
+	}
+	iconName, exist := plistData["CFBundleIconFile"].(string)
+	if exist {
+		if !strings.HasSuffix(iconName, ".icns") {
+			iconName = iconName + ".icns"
+		}
+		iconPath := path.Join(appPath, "Contents", "Resources", iconName)
+		if _, statErr := os.Stat(iconPath); os.IsNotExist(statErr) {
+			return "", fmt.Errorf("icon file not found: %s", iconPath)
+		}
+
+		return iconPath, nil
+	} else {
+		return "", fmt.Errorf("info plist doesnt have CFBundleIconFile property")
+	}
 }
