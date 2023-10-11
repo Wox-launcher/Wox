@@ -67,12 +67,19 @@ func onUIRequest(ctx context.Context, request websocketRequest) {
 }
 
 func handleQuery(ctx context.Context, request websocketRequest) {
-	query, ok := request.Params["query"]
-	if !ok {
+	query, queryExist := request.Params["query"]
+	queryType, queryTypeExist := request.Params["type"]
+	if !queryExist {
 		logger.Error(ctx, "query parameter not found")
 		responseUIError(ctx, request, "query parameter not found")
 		return
 	}
+	if !queryTypeExist {
+		logger.Error(ctx, "type parameter not found")
+		responseUIError(ctx, request, "type parameter not found")
+		return
+	}
+
 	if query == "" {
 		responseUISuccessWithData(ctx, request, []string{})
 		return
@@ -80,7 +87,7 @@ func handleQuery(ctx context.Context, request websocketRequest) {
 
 	var totalResultCount int
 	var startTimestamp = util.GetSystemTimestamp()
-	resultChan, doneChan := plugin.GetPluginManager().Query(ctx, plugin.NewQuery(query))
+	resultChan, doneChan := plugin.GetPluginManager().Query(ctx, plugin.NewQuery(query, queryType))
 	for {
 		select {
 		case results := <-resultChan:

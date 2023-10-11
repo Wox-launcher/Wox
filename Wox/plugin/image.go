@@ -25,21 +25,23 @@ type WoxImage struct {
 	ImageData string
 }
 
-func convertLocalImageToUrl(ctx context.Context, image WoxImage, pluginInstance *Instance) WoxImage {
+func convertLocalImageToUrl(ctx context.Context, image WoxImage, pluginInstance *Instance) (newImage WoxImage) {
+	newImage = image
+
 	if image.ImageType == WoxImageTypeAbsolutePath {
 		id := uuid.NewString()
-		image.ImageType = WoxImageTypeUrl
-		image.ImageData = fmt.Sprintf("http://localhost:%d/image?id=%s", GetPluginManager().GetUI().GetServerPort(ctx), id)
+		newImage.ImageType = WoxImageTypeUrl
+		newImage.ImageData = fmt.Sprintf("http://localhost:%d/image?id=%s", GetPluginManager().GetUI().GetServerPort(ctx), id)
 		localImageMap.Store(id, image.ImageData)
 	}
 	if image.ImageType == WoxImageTypeRelativePath {
 		id := uuid.NewString()
-		image.ImageType = WoxImageTypeUrl
-		image.ImageData = fmt.Sprintf("http://localhost:%d/image?id=%s", GetPluginManager().GetUI().GetServerPort(ctx), id)
+		newImage.ImageType = WoxImageTypeUrl
+		newImage.ImageData = fmt.Sprintf("http://localhost:%d/image?id=%s", GetPluginManager().GetUI().GetServerPort(ctx), id)
 		localImageMap.Store(id, path.Join(pluginInstance.PluginDirectory, image.ImageData))
 	}
 
-	return image
+	return newImage
 }
 
 func GetLocalImageMap(id string) (string, bool) {

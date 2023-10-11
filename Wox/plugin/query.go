@@ -5,8 +5,19 @@ import (
 	"strings"
 )
 
+type QueryType = string
+
+const (
+	QueryTypeText QueryType = "text"
+	QueryTypeFile QueryType = "file"
+)
+
 // Query from Wox. See "Doc/Query.md" for details.
 type Query struct {
+	// Query type, can be "text" or "file"
+	// if query type is "file", search property will be a absolute file path. note: you need to add features "queryFile" in plugin.json to support query type of file
+	Type QueryType
+
 	// Raw query, this includes trigger keyword if it has.
 	// We didn't recommend use this property directly. You should always use Search property.
 	RawQuery string
@@ -47,10 +58,19 @@ type QueryResultUI struct {
 	AssociatedQuery string
 }
 
-func newQueryWithPlugins(query string, pluginInstances []*Instance) Query {
+func newQueryWithPlugins(query string, queryType QueryType, pluginInstances []*Instance) Query {
+	if queryType == QueryTypeFile {
+		return Query{
+			Type:     QueryTypeFile,
+			RawQuery: query,
+			Search:   query,
+		}
+	}
+
 	var terms = strings.Split(query, " ")
 	if len(terms) == 0 {
 		return Query{
+			Type:     QueryTypeText,
 			RawQuery: query,
 		}
 	}
@@ -99,6 +119,7 @@ func newQueryWithPlugins(query string, pluginInstances []*Instance) Query {
 	}
 
 	return Query{
+		Type:           QueryTypeText,
 		RawQuery:       query,
 		TriggerKeyword: triggerKeyword,
 		Command:        command,
@@ -106,6 +127,6 @@ func newQueryWithPlugins(query string, pluginInstances []*Instance) Query {
 	}
 }
 
-func NewQuery(query string) Query {
-	return newQueryWithPlugins(query, GetPluginManager().GetPluginInstances())
+func NewQuery(query string, queryType QueryType) Query {
+	return newQueryWithPlugins(query, queryType, GetPluginManager().GetPluginInstances())
 }

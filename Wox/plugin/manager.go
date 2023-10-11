@@ -34,6 +34,8 @@ func GetPluginManager() *Manager {
 }
 
 func (m *Manager) Start(ctx context.Context, ui share.UI) error {
+	m.ui = ui
+
 	loadErr := m.loadPlugins(ctx)
 	if loadErr != nil {
 		return fmt.Errorf("failed to load plugins: %w", loadErr)

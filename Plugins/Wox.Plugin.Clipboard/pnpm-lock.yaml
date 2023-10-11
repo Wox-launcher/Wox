@@ -6,8 +6,8 @@ settings:
 
 dependencies:
   '@wox-launcher/wox-plugin':
-    specifier: ^0.0.37
-    version: 0.0.37
+    specifier: ^0.0.38
+    version: 0.0.38
   clipboard-event:
     specifier: ^1.6.0
     version: 1.6.0
@@ -286,8 +286,8 @@ packages:
     hasBin: true
     dev: true
 
-  /@wox-launcher/wox-plugin@0.0.37:
-    resolution: {integrity: sha512-rlI7bcrZEFQDjYb/Ganfc8ddjFxhxAgbSxxOvSlPcbTdCxLDjXeBZqCqb3CoIswjnKdJLZiwyspY1x+o92knIQ==}
+  /@wox-launcher/wox-plugin@0.0.38:
+    resolution: {integrity: sha512-mT6kY+Cv8X3RzqN9gU8vJCcxYAJjexhPdOQu+moLeAdGdddzD9tfdRrVOa1LVs8AAPkw7Szgu06920+Fh+bQdg==}
     dev: false
 
   /JSONStream@1.3.5:

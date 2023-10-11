@@ -5,6 +5,10 @@ export interface Plugin {
 
 export interface Query {
   /**
+   * Type of a query.
+   */
+  Type: "text" | "file"
+  /**
    * Raw query, this includes trigger keyword if it has
    * We didn't recommend use this property directly. You should always use Search property.
    */

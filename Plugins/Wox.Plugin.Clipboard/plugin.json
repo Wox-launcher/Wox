@@ -18,6 +18,8 @@
     "darwin"
   ],
   "Features": [
-    "preview"
+    {
+      "Name": "preview"
+    }
   ]
 }

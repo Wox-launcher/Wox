@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/olahol/melody"
 	"net/http"
+	"os"
 	"wox/plugin"
 	"wox/util"
 )
@@ -42,6 +43,11 @@ func serveAndWait(ctx context.Context, port int) {
 		imagePath, ok := plugin.GetLocalImageMap(id)
 		if !ok {
 			w.Write([]byte("no image"))
+			return
+		}
+
+		if _, statErr := os.Stat(imagePath); os.IsNotExist(statErr) {
+			w.Write([]byte("image not exist"))
 			return
 		}
 

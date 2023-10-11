@@ -26,22 +26,22 @@ func getFakePluginInstances() []*Instance {
 }
 
 func Test_NewQuery(t *testing.T) {
-	q := newQueryWithPlugins("wpm", getFakePluginInstances())
+	q := newQueryWithPlugins("wpm", QueryTypeText, getFakePluginInstances())
 	assert.Equal(t, q.TriggerKeyword, "")
 	assert.Equal(t, q.Command, "")
 	assert.Equal(t, q.Search, "wpm")
 
-	q = newQueryWithPlugins("wpm install", getFakePluginInstances())
+	q = newQueryWithPlugins("wpm install", QueryTypeText, getFakePluginInstances())
 	assert.Equal(t, q.TriggerKeyword, "wpm")
 	assert.Equal(t, q.Command, "")
 	assert.Equal(t, q.Search, "install")
 
-	q = newQueryWithPlugins("wpm install ", getFakePluginInstances())
+	q = newQueryWithPlugins("wpm install ", QueryTypeText, getFakePluginInstances())
 	assert.Equal(t, q.TriggerKeyword, "wpm")
 	assert.Equal(t, q.Command, "install")
 	assert.Equal(t, q.Search, "")
 
-	q = newQueryWithPlugins("wpm install q q1", getFakePluginInstances())
+	q = newQueryWithPlugins("wpm install q q1", QueryTypeText, getFakePluginInstances())
 	assert.Equal(t, q.TriggerKeyword, "wpm")
 	assert.Equal(t, q.Command, "install")
 	assert.Equal(t, q.Search, "q q1")

@@ -29,6 +29,7 @@ default:
     mkdir -p {{directory}}/{{pluginName}}
     cp Plugins/{{pluginName}}/dist/index.js {{directory}}/{{pluginName}}/index.js
     cp Plugins/{{pluginName}}/plugin.json {{directory}}/{{pluginName}}/plugin.json
+    cp -r Plugins/{{pluginName}}/images {{directory}}/{{pluginName}}/images
 
     if [ "{{pluginName}}" = "Wox.Plugin.Clipboard" ]; then \
         cp -r Plugins/{{pluginName}}/platform {{directory}}/{{pluginName}}/; \
