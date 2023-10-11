@@ -1,5 +1,6 @@
 import {v4 as uuidv4} from 'uuid';
 import Deferred from "promise-deferred"
+import {WoxMessageMethodEnum} from "../enums/WoxMessageMethodEnum.ts";
 
 export class WoxMessageHelper {
     private initialized: boolean = false;
@@ -9,6 +10,7 @@ export class WoxMessageHelper {
     private woxMessageResponseMap: {
         [key: string]: Deferred.Deferred<unknown>
     } = {}
+    private woxQueryCallback: ((data: WOXMESSAGE.WoxMessageResponseResult[]) => void | undefined) | undefined
     private interval: NodeJS.Timeout | undefined;
 
     private shouldReconnect() {
@@ -55,6 +57,10 @@ export class WoxMessageHelper {
                 return
             }
 
+            if (woxMessageResponse.Method === WoxMessageMethodEnum.QUERY.code && this.woxQueryCallback) {
+                this.woxQueryCallback(woxMessageResponse.Data as WOXMESSAGE.WoxMessageResponseResult[])
+            }
+
             promiseInstance.resolve(woxMessageResponse.Data)
 
         }
@@ -77,19 +83,6 @@ export class WoxMessageHelper {
     }
 
     /*
-        Initialize the WoxMessageHelper
-        Port: the port to connect to Wox Server
-     */
-    public initialize(port: string) {
-        if (this.initialized) {
-            return
-        }
-        this.port = port
-        this.reconnect();
-        this.checkConnection();
-    }
-
-    /*
         singleton: can only be created by getInstance()
      */
     private constructor() {
@@ -100,6 +93,19 @@ export class WoxMessageHelper {
             WoxMessageHelper.instance = new WoxMessageHelper();
         }
         return WoxMessageHelper.instance;
+    }
+
+    /*
+        Initialize the WoxMessageHelper
+        Port: the port to connect to Wox Server
+     */
+    public initialize(port: string) {
+        if (this.initialized) {
+            return
+        }
+        this.port = port
+        this.reconnect();
+        this.checkConnection();
     }
 
     /*
@@ -118,6 +124,17 @@ export class WoxMessageHelper {
         const deferred = new Deferred<unknown>()
         this.woxMessageResponseMap[requestId] = deferred
         return deferred.promise;
+    }
+
+
+    /*
+        Send query message to Wox Server
+     */
+    public sendQueryMessage(params: {
+        [key: string]: string
+    }, callback: (data: WOXMESSAGE.WoxMessageResponseResult[]) => void) {
+        this.woxQueryCallback = callback
+        this.sendMessage(WoxMessageMethodEnum.QUERY.code, params)
     }
 
     /*
