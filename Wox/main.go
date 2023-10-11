@@ -48,6 +48,16 @@ func main() {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to register main hotkey: %s", registerMainHotkeyErr.Error()))
 		}
 
+		t := util.Hotkey{}
+		t.Register(ctx, "command+m", func() {
+			data, selectedErr := ui.GetSelected()
+			if selectedErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("failed to get selected text: %s", selectedErr.Error()))
+			} else {
+				util.GetLogger().Info(ctx, fmt.Sprintf("selected text: %s", data.Data))
+			}
+		})
+
 		ui.GetUIManager().StartWebsocketAndWait(ctx, 34987)
 	})
 }
