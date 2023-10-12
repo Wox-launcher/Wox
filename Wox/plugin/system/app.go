@@ -78,11 +78,16 @@ func (a *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				Title:    info.Name,
 				SubTitle: info.Path,
 				Icon:     plugin.WoxImage{},
-				Action: func() {
-					runErr := exec.Command("open", info.Path).Run()
-					if runErr != nil {
-						a.api.Log(ctx, fmt.Sprintf("error openning app %s: %s", info.Path, runErr.Error()))
-					}
+				Actions: []plugin.QueryResultAction{
+					{
+						Name: "Open",
+						Action: func() {
+							runErr := exec.Command("open", info.Path).Run()
+							if runErr != nil {
+								a.api.Log(ctx, fmt.Sprintf("error openning app %s: %s", info.Path, runErr.Error()))
+							}
+						},
+					},
 				},
 			})
 		}
@@ -272,10 +277,10 @@ func (a *AppPlugin) getMacAppIconImagePath(ctx context.Context, appPath string) 
 	if infoPlistErr == nil {
 		return iconPath, nil
 	}
-	a.api.Log(ctx, fmt.Sprintf("get icon from info.plist fail: %s", infoPlistErr.Error()))
-	//a.api.Log(ctx, fmt.Sprintf("try parsing AssetCar in %s", appPath))
+	a.api.Log(ctx, fmt.Sprintf("get icon from info.plist fail, path=%s, err=%s", appPath, infoPlistErr.Error()))
 
-	return "", fmt.Errorf("can't find icon for this app")
+	//return default icon
+	return "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns", nil
 }
 
 func (a *AppPlugin) parseMacAppIconFromInfoPlist(ctx context.Context, appPath string) (string, error) {

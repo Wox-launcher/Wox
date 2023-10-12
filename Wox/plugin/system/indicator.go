@@ -67,8 +67,13 @@ func (i *IndicatorPlugin) queryForNonTriggerKeyword(ctx context.Context, query p
 				Title:    triggerKeyword,
 				SubTitle: fmt.Sprintf("Activate %s plugin", pluginInstance.Metadata.Name),
 				Icon:     plugin.WoxImage{},
-				Action: func() {
-					i.api.ChangeQuery(ctx, fmt.Sprintf("%s ", triggerKeyword))
+				Actions: []plugin.QueryResultAction{
+					{
+						Name: "activate",
+						Action: func() {
+							i.api.ChangeQuery(ctx, fmt.Sprintf("%s ", triggerKeyword))
+						},
+					},
 				},
 			})
 			for _, metadataCommand := range pluginInstance.Metadata.Commands {
@@ -77,8 +82,13 @@ func (i *IndicatorPlugin) queryForNonTriggerKeyword(ctx context.Context, query p
 					Title:    fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command),
 					SubTitle: pluginInstance.Metadata.Description,
 					Icon:     plugin.WoxImage{},
-					Action: func() {
-						i.api.ChangeQuery(ctx, fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command))
+					Actions: []plugin.QueryResultAction{
+						{
+							Name: "activate",
+							Action: func() {
+								i.api.ChangeQuery(ctx, fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command))
+							},
+						},
 					},
 				})
 			}
@@ -102,8 +112,13 @@ func (i *IndicatorPlugin) queryForNonCommand(ctx context.Context, query plugin.Q
 						Title:    fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command),
 						SubTitle: pluginInstance.Metadata.Description,
 						Icon:     plugin.WoxImage{},
-						Action: func() {
-							i.api.ChangeQuery(ctx, fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command))
+						Actions: []plugin.QueryResultAction{
+							{
+								Name: "activate",
+								Action: func() {
+									i.api.ChangeQuery(ctx, fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command))
+								},
+							},
 						},
 					})
 				}

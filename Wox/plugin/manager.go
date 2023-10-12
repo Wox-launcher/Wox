@@ -302,7 +302,9 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 
 			// store actions for ui invoke later
 			for _, result := range queryResults {
-				m.actions.Store(result.Id, result.Action)
+				for _, action := range result.Actions {
+					m.actions.Store(action.Id, action.Action)
+				}
 			}
 
 			results <- lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {

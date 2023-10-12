@@ -1,12 +1,12 @@
 import { logger } from "./logger"
 import path from "path"
 import { PluginAPI } from "./pluginAPI"
-import { Plugin, PluginInitContext, Query, Result } from "@wox-launcher/wox-plugin"
+import { Plugin, PluginInitContext, Query, Result, ResultAction } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 
 const pluginMap = new Map<string, Plugin>()
-const actionCacheByPlugin = new Map<PluginJsonRpcRequest["PluginId"], Map<Result["Id"], Result["Action"]>>()
+const actionCacheByPlugin = new Map<PluginJsonRpcRequest["PluginId"], Map<Result["Id"], ResultAction["Action"]>>()
 
 export const PluginJsonRpcTypeRequest: string = "WOX_JSONRPC_REQUEST"
 export const PluginJsonRpcTypeResponse: string = "WOX_JSONRPC_RESPONSE"
@@ -103,7 +103,7 @@ async function query(request: PluginJsonRpcRequest) {
   const query = getMethod(request, "query")
 
   //clean action cache for current plugin
-  actionCacheByPlugin.set(request.PluginId, new Map<Result["Id"], Result["Action"]>())
+  actionCacheByPlugin.set(request.PluginId, new Map<Result["Id"], ResultAction["Action"]>())
   const actionCache = actionCacheByPlugin.get(request.PluginId)!
 
   const results = await query({
@@ -117,7 +117,12 @@ async function query(request: PluginJsonRpcRequest) {
     if (result.Id === undefined || result.Id === null) {
       result.Id = crypto.randomUUID()
     }
-    actionCache.set(result.Id, result.Action)
+    result.Actions.forEach(action => {
+      if (action.Id === undefined || action.Id === null) {
+        action.Id = crypto.randomUUID()
+      }
+      actionCache.set(action.Id, action.Action)
+    })
   })
 
   return results

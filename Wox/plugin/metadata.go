@@ -8,7 +8,13 @@ import (
 type MetadataFeatureName = string
 
 const (
-	MetadataFeatureNamePreview   MetadataFeatureName = "preview"
+	// enable preview panel besides result list
+	// plugin need to set QueryResult.Preview in query result
+	MetadataFeatureNamePreview MetadataFeatureName = "preview"
+
+	// enable query file feature
+	// user may drag multiple files into Wox, and Wox will pass these files to plugin
+	// plugin need to handle Query.Type == "file" in query
 	MetadataFeatureNameQueryFile MetadataFeatureName = "queryFile"
 )
 

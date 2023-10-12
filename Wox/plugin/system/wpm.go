@@ -68,10 +68,14 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				Title:    pluginManifest.Name,
 				SubTitle: pluginManifest.Description,
 				Icon:     plugin.WoxImage{},
-				Action: func() {
-					plugin.GetStoreManager().Install(ctx, pluginManifest)
-				},
-			})
+				Actions: []plugin.QueryResultAction{
+					{
+						Name: "install",
+						Action: func() {
+							plugin.GetStoreManager().Install(ctx, pluginManifest)
+						},
+					},
+				}})
 		}
 	}
 
@@ -89,8 +93,13 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				Title:    pluginInstance.Metadata.Name,
 				SubTitle: pluginInstance.Metadata.Description,
 				Icon:     plugin.WoxImage{},
-				Action: func() {
-					plugin.GetStoreManager().Uninstall(ctx, pluginInstance)
+				Actions: []plugin.QueryResultAction{
+					{
+						Name: "uninstall",
+						Action: func() {
+							plugin.GetStoreManager().Uninstall(ctx, pluginInstance)
+						},
+					},
 				},
 			}
 		})

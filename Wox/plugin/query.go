@@ -15,7 +15,8 @@ const (
 // Query from Wox. See "Doc/Query.md" for details.
 type Query struct {
 	// Query type, can be "text" or "file"
-	// if query type is "file", search property will be a absolute file path. note: you need to add features "queryFile" in plugin.json to support query type of file
+	// if query type is "file", search property will be a absolute file path(split by , if have multiple files).
+	// note: you need to add features "queryFile" in plugin.json to support query type of file
 	Type QueryType
 
 	// Raw query, this includes trigger keyword if it has.
@@ -38,13 +39,24 @@ type Query struct {
 // Query result return from plugin
 type QueryResult struct {
 	// Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
-	Id                     string
-	Title                  string
-	SubTitle               string
-	Icon                   WoxImage
-	Preview                WoxPreview
-	Score                  int
-	PreventHideAfterAction bool // If true, Wox will not hide after user select this result
+	Id       string
+	Title    string
+	SubTitle string
+	Icon     WoxImage
+	Preview  WoxPreview
+	Score    int
+	Actions  []QueryResultAction
+}
+
+type QueryResultAction struct {
+	// Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
+	Id   string
+	Name string
+	// If true, Wox will use this action as default action. There can be only one default action in results
+	// This can be omitted, if you don't set it, Wox will use the first action as default action
+	IsDefault bool
+	// If true, Wox will not hide after user select this result
+	PreventHideAfterAction bool
 	Action                 func()
 }
 

@@ -49,12 +49,14 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 	}
 
 	for _, result := range results {
-		result.Action = func() {
-			_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "action", map[string]string{
-				"ActionId": result.Id,
-			})
-			if actionErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", w.metadata.Name, actionErr.Error()))
+		for _, action := range result.Actions {
+			action.Action = func() {
+				_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "action", map[string]string{
+					"ActionId": action.Id,
+				})
+				if actionErr != nil {
+					util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", w.metadata.Name, actionErr.Error()))
+				}
 			}
 		}
 	}

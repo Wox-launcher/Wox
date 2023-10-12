@@ -34,6 +34,20 @@ export interface Result {
   Icon: WoxImage
   Preview?: WoxPreview
   Score?: number
+  Actions: ResultAction[]
+}
+
+export interface ResultAction {
+  /**
+   * Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
+   */
+  Id?: string
+  Name: string
+  /**
+   * If true, Wox will use this action as default action. There can be only one default action in results
+   * This can be omitted, if you don't set it, Wox will use the first action as default action
+   */
+  IsDefault?: boolean
   /**
    * If true, Wox will not hide after user select this result
    */
