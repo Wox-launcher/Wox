@@ -514,7 +514,9 @@ namespace Wox.ViewModel
                             catch (OperationCanceledException)
                             {
                                 // todo: why we need hidden here and why progress bar is not working
-                                ProgressBarVisibility = Visibility.Hidden;
+                                Application.Current.Dispatcher.Invoke(() => {
+                                    ProgressBarVisibility = Visibility.Hidden;
+                                });
                                 return;
                             }
                             if (!token.IsCancellationRequested)
@@ -523,17 +525,20 @@ namespace Wox.ViewModel
                                 source.Cancel();
                                 source.Dispose();
                                 // update to hidden if this is still the current query
-                                ProgressBarVisibility = Visibility.Hidden;
+                                Application.Current.Dispatcher.Invoke(() => {
+                                    ProgressBarVisibility = Visibility.Hidden;
+                                });
                             }
                         });
 
 
                     }
                 }
-                else
-                {
-                    Results.Clear();
-                    Results.Visbility = Visibility.Collapsed;
+                else {
+                    Application.Current.Dispatcher.Invoke(() => {
+                        Results.Clear();
+                        Results.Visbility = Visibility.Collapsed;
+                    });
                 }
             }, token).ContinueWith(ErrorReporting.UnhandledExceptionHandleTask, TaskContinuationOptions.OnlyOnFaulted);
 
