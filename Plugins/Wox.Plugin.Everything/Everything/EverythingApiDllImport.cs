@@ -1,100 +1,108 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using static Wox.Plugin.Everything.Everything.EverythingApi;
 
 namespace Wox.Plugin.Everything.Everything
 {
     public sealed class EverythingApiDllImport
     {
         [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
-        internal static extern int Everything_SetSearchW(string lpSearchString);
+        public static extern int Everything_SetSearchW(string lpSearchString);
 
         [DllImport(Main.DLL)]
-        internal static extern void Everything_SetMatchPath(bool bEnable);
+        public static extern void Everything_SetMatchPath(bool bEnable);
 
         [DllImport(Main.DLL)]
-        internal static extern void Everything_SetMatchCase(bool bEnable);
+        public static extern void Everything_SetMatchCase(bool bEnable);
 
         [DllImport(Main.DLL)]
-        internal static extern void Everything_SetMatchWholeWord(bool bEnable);
+        public static extern void Everything_SetMatchWholeWord(bool bEnable);
 
         [DllImport(Main.DLL)]
-        internal static extern void Everything_SetRegex(bool bEnable);
+        public static extern void Everything_SetRegex(bool bEnable);
 
         [DllImport(Main.DLL)]
-        internal static extern void Everything_SetMax(int dwMax);
+        public static extern void Everything_SetMax(int dwMax);
 
         [DllImport(Main.DLL)]
-        internal static extern void Everything_SetOffset(int dwOffset);
+        public static extern void Everything_SetOffset(int dwOffset);
+        [DllImport(Main.DLL)]
+        public static extern void Everything_SetReplyWindow(IntPtr hWnd);
+        [DllImport(Main.DLL)]
+        public static extern void Everything_SetReplyID(int nId);
 
         [DllImport(Main.DLL)]
-        internal static extern bool Everything_GetMatchPath();
+        public static extern bool Everything_GetMatchPath();
 
         [DllImport(Main.DLL)]
-        internal static extern bool Everything_GetMatchCase();
+        public static extern bool Everything_GetMatchCase();
 
         [DllImport(Main.DLL)]
-        internal static extern bool Everything_GetMatchWholeWord();
+        public static extern bool Everything_GetMatchWholeWord();
 
         [DllImport(Main.DLL)]
-        internal static extern bool Everything_GetRegex();
+        public static extern bool Everything_GetRegex();
 
         [DllImport(Main.DLL)]
-        internal static extern uint Everything_GetMax();
+        public static extern uint Everything_GetMax();
 
         [DllImport(Main.DLL)]
-        internal static extern uint Everything_GetOffset();
+        public static extern uint Everything_GetOffset();
 
         [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
-        internal static extern string Everything_GetSearchW();
+        public static extern IntPtr Everything_GetSearchW();
 
         [DllImport(Main.DLL)]
-        internal static extern EverythingApi.StateCode Everything_GetLastError();
+        public static extern EverythingApi.StateCode Everything_GetLastError();
+        [DllImport(Main.DLL)]
+        public static extern IntPtr Everything_GetReplyWindow();
+        [DllImport(Main.DLL)]
+        public static extern int Everything_GetReplyID();
 
         [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
-        internal static extern bool Everything_QueryW(bool bWait);
+        public static extern bool Everything_QueryW(bool bWait);
 
         [DllImport(Main.DLL)]
-        internal static extern void Everything_SortResultsByPath();
+        public static extern bool Everything_IsQueryReply(int message, IntPtr wParam, IntPtr lParam, uint nId);
+
 
         [DllImport(Main.DLL)]
-        internal static extern int Everything_GetNumFileResults();
+        public static extern void Everything_SortResultsByPath();
 
         [DllImport(Main.DLL)]
-        internal static extern int Everything_GetNumFolderResults();
+        public static extern int Everything_GetNumFileResults();
 
         [DllImport(Main.DLL)]
-        internal static extern int Everything_GetNumResults();
+        public static extern int Everything_GetNumFolderResults();
 
         [DllImport(Main.DLL)]
-        internal static extern int Everything_GetTotFileResults();
+        public static extern int Everything_GetNumResults();
 
         [DllImport(Main.DLL)]
-        internal static extern int Everything_GetTotFolderResults();
+        public static extern int Everything_GetTotFileResults();
 
         [DllImport(Main.DLL)]
-        internal static extern int Everything_GetTotResults();
+        public static extern int Everything_GetTotFolderResults();
 
         [DllImport(Main.DLL)]
-        internal static extern bool Everything_IsVolumeResult(int nIndex);
+        public static extern int Everything_GetTotResults();
 
         [DllImport(Main.DLL)]
-        internal static extern bool Everything_IsFolderResult(int nIndex);
+        public static extern bool Everything_IsVolumeResult(int nIndex);
 
         [DllImport(Main.DLL)]
-        internal static extern bool Everything_IsFileResult(int nIndex);
+        public static extern bool Everything_IsFolderResult(int nIndex);
+
+        [DllImport(Main.DLL)]
+        public static extern bool Everything_IsFileResult(int nIndex);
 
         [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
-        internal static extern void Everything_GetResultFullPathNameW(int nIndex, StringBuilder lpString, int nMaxCount);
-        // https://www.voidtools.com/forum/viewtopic.php?t=8169
-        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
-        public static extern IntPtr Everything_GetResultFileNameW(int nIndex);
-        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
-        public static extern IntPtr Everything_GetResultHighlightedPathW(int nIndex);
-        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
-        public static extern IntPtr Everything_GetResultHighlightedFileNameW(int nIndex);
-        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
-        public static extern IntPtr Everything_GetResultHighlightedFullPathAndFileNameW(int nIndex);
+        public static extern void Everything_GetResultFullPathNameW(int nIndex, StringBuilder lpString, int nMaxCount);
+        [DllImport(Main.DLL)]
+        public static extern void Everything_Reset();
+        [DllImport(Main.DLL)]
+        public static extern void Everything_CleanUp();
         [DllImport(Main.DLL)]
         public static extern int Everything_GetMajorVersion();
         [DllImport(Main.DLL)]
@@ -102,9 +110,75 @@ namespace Wox.Plugin.Everything.Everything
         [DllImport(Main.DLL)]
         public static extern int Everything_GetRevision();
         [DllImport(Main.DLL)]
-        public static extern void Everything_SetRequestFlags(EverythingApi.RequestFlag flag);
-
+        public static extern uint Everything_GetBuildNumber();
         [DllImport(Main.DLL)]
-        internal static extern void Everything_Reset();
+        public static extern bool Everything_Exit();
+        [DllImport(Main.DLL)]
+        public static extern bool Everything_IsDBLoaded();
+        [DllImport(Main.DLL)]
+        public static extern bool Everything_IsAdmin();
+        [DllImport(Main.DLL)]
+        public static extern bool Everything_IsAppData();
+        [DllImport(Main.DLL)]
+        public static extern bool Everything_RebuildDB();
+        [DllImport(Main.DLL)]
+        public static extern bool Everything_UpdateAllFolderIndexes();
+        [DllImport(Main.DLL)]
+        public static extern bool Everything_SaveDB();
+        [DllImport(Main.DLL)]
+        public static extern bool Everything_SaveRunHistory();
+        [DllImport(Main.DLL)]
+        public static extern bool Everything_DeleteRunHistory();
+        [DllImport(Main.DLL)]
+        public static extern uint Everything_GetTargetMachine();
+        // https://www.voidtools.com/forum/viewtopic.php?t=8169
+        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
+        public static extern IntPtr Everything_GetResultFileNameW(int nIndex);
+
+        // Everything 1.4
+        [DllImport(Main.DLL)]
+        public static extern void Everything_SetSort(uint dwSortType);
+        [DllImport(Main.DLL)]
+        public static extern uint Everything_GetSort();
+        [DllImport(Main.DLL)]
+        public static extern uint Everything_GetResultListSort();
+        [DllImport(Main.DLL)]
+        public static extern void Everything_SetRequestFlags(RequestFlag flag);
+        [DllImport(Main.DLL)]
+        public static extern RequestFlag Everything_GetRequestFlags();
+        [DllImport(Main.DLL)]
+        public static extern uint Everything_GetResultListRequestFlags();
+        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
+        public static extern IntPtr Everything_GetResultExtensionW(uint nIndex);
+        [DllImport(Main.DLL)]
+        public static extern bool Everything_GetResultSize(uint nIndex, out long lpFileSize);
+        [DllImport(Main.DLL)]
+        public static extern bool Everything_GetResultDateCreated(uint nIndex, out long lpFileTime);
+        [DllImport(Main.DLL)]
+        public static extern bool Everything_GetResultDateModified(uint nIndex, out long lpFileTime);
+        [DllImport(Main.DLL)]
+        public static extern bool Everything_GetResultDateAccessed(uint nIndex, out long lpFileTime);
+        [DllImport(Main.DLL)]
+        public static extern uint Everything_GetResultAttributes(uint nIndex);
+        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
+        public static extern IntPtr Everything_GetResultFileListFileNameW(uint nIndex);
+        [DllImport(Main.DLL)]
+        public static extern uint Everything_GetResultRunCount(uint nIndex);
+        [DllImport(Main.DLL)]
+        public static extern bool Everything_GetResultDateRun(uint nIndex, out long lpFileTime);
+        [DllImport(Main.DLL)]
+        public static extern bool Everything_GetResultDateRecentlyChanged(uint nIndex, out long lpFileTime);
+        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
+        public static extern IntPtr Everything_GetResultHighlightedFileNameW(int nIndex);
+        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
+        public static extern IntPtr Everything_GetResultHighlightedPathW(int nIndex);
+        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
+        public static extern IntPtr Everything_GetResultHighlightedFullPathAndFileNameW(int nIndex);
+        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
+        public static extern uint Everything_GetRunCountFromFileNameW(string lpFileName);
+        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
+        public static extern bool Everything_SetRunCountFromFileNameW(string lpFileName, uint dwRunCount);
+        [DllImport(Main.DLL, CharSet = CharSet.Unicode)]
+        public static extern uint Everything_IncRunCountFromFileNameW(string lpFileName);
     }
 }

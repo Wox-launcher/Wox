@@ -106,7 +106,7 @@ namespace Wox.Core.Plugin
         {
             API = api;
             var failedPlugins = new ConcurrentQueue<PluginPair>();
-            Parallel.ForEach(AllPlugins, pair =>
+            foreach(var pair in AllPlugins)
             {
                 try
                 {
@@ -131,7 +131,7 @@ namespace Wox.Core.Plugin
                     pair.Metadata.Disabled = true;
                     failedPlugins.Enqueue(pair);
                 }
-            });
+            }
 
             _contextMenuPlugins = GetPluginsForInterface<IContextMenu>();
             foreach (var plugin in AllPlugins)

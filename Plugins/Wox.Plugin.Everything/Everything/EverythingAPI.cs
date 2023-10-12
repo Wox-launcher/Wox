@@ -51,13 +51,16 @@ namespace Wox.Plugin.Everything.Everything
         /// <value><c>true</c> if [match path]; otherwise, <c>false</c>.</value>
         public bool MatchPath
         {
-            get
-            {
-                return EverythingApiDllImport.Everything_GetMatchPath();
+            get {
+                if (EverythingExists()) {
+                    return EverythingApiDllImport.Everything_GetMatchPath();
+                }
+                return false;
             }
-            set
-            {
-                EverythingApiDllImport.Everything_SetMatchPath(value);
+            set {
+                if (EverythingExists()) {
+                    EverythingApiDllImport.Everything_SetMatchPath(value);
+                }
             }
         }
 
@@ -67,13 +70,16 @@ namespace Wox.Plugin.Everything.Everything
         /// <value><c>true</c> if [match case]; otherwise, <c>false</c>.</value>
         public bool MatchCase
         {
-            get
-            {
-                return EverythingApiDllImport.Everything_GetMatchCase();
+            get {
+                if (EverythingExists()) {
+                    return EverythingApiDllImport.Everything_GetMatchCase();
+                }
+                return false;
             }
-            set
-            {
-                EverythingApiDllImport.Everything_SetMatchCase(value);
+            set {
+                if (EverythingExists()) {
+                    EverythingApiDllImport.Everything_SetMatchCase(value);
+                }
             }
         }
 
@@ -83,13 +89,16 @@ namespace Wox.Plugin.Everything.Everything
         /// <value><c>true</c> if [match whole word]; otherwise, <c>false</c>.</value>
         public bool MatchWholeWord
         {
-            get
-            {
-                return EverythingApiDllImport.Everything_GetMatchWholeWord();
+            get {
+                if (EverythingExists()) {
+                    return EverythingApiDllImport.Everything_GetMatchWholeWord();
+                }
+                return false;
             }
-            set
-            {
-                EverythingApiDllImport.Everything_SetMatchWholeWord(value);
+            set {
+                if (EverythingExists()) {
+                    EverythingApiDllImport.Everything_SetMatchWholeWord(value);
+                }
             }
         }
 
@@ -99,13 +108,16 @@ namespace Wox.Plugin.Everything.Everything
         /// <value><c>true</c> if [enable regex]; otherwise, <c>false</c>.</value>
         public bool EnableRegex
         {
-            get
-            {
-                return EverythingApiDllImport.Everything_GetRegex();
+            get {
+                if (EverythingExists()) {
+                    return EverythingApiDllImport.Everything_GetRegex();
+                }
+                return false;
             }
-            set
-            {
-                EverythingApiDllImport.Everything_SetRegex(value);
+            set {
+                if (EverythingExists()) {
+                    EverythingApiDllImport.Everything_SetRegex(value);
+                }
             }
         }
 
@@ -121,76 +133,69 @@ namespace Wox.Plugin.Everything.Everything
         {
             var results = new List<SearchResult>();
 
-            if (string.IsNullOrEmpty(keyWord))
-                throw new ArgumentNullException(nameof(keyWord));
-            if (maxCount < 0)
-                throw new ArgumentOutOfRangeException(nameof(maxCount));
+            if (EverythingExists()) {
+                if (string.IsNullOrEmpty(keyWord))
+                    throw new ArgumentNullException(nameof(keyWord));
+                if (maxCount < 0)
+                    throw new ArgumentOutOfRangeException(nameof(maxCount));
 
-            if (token.IsCancellationRequested) { return results; }
-            if (keyWord.StartsWith("@"))
-            {
-                EverythingApiDllImport.Everything_SetRegex(true);
-                keyWord = keyWord.Substring(1);
-            }
-            else
-            {
-                EverythingApiDllImport.Everything_SetRegex(false);
-            }
-
-            if (token.IsCancellationRequested) { return results; }
-            EverythingApiDllImport.Everything_SetRequestFlags(RequestFlag.HighlightedFileName | RequestFlag.HighlightedFullPathAndFileName);
-            if (token.IsCancellationRequested) { return results; }
-            EverythingApiDllImport.Everything_SetOffset(0);
-            if (token.IsCancellationRequested) { return results; }
-            EverythingApiDllImport.Everything_SetMax(maxCount);
-            if (token.IsCancellationRequested) { return results; }
-            EverythingApiDllImport.Everything_SetSearchW(keyWord);
-
-            if (token.IsCancellationRequested) { return results; }
-            if (!EverythingApiDllImport.Everything_QueryW(true))
-            {
-                CheckAndThrowExceptionOnError();
-                return results;
-            }
-
-            if (token.IsCancellationRequested) { return results; }
-            int count = EverythingApiDllImport.Everything_GetNumResults();
-            for (int idx = 0; idx < count; ++idx)
-            {
                 if (token.IsCancellationRequested) { return results; }
-                // https://www.voidtools.com/forum/viewtopic.php?t=8169
-                string fileNameHighted = Marshal.PtrToStringUni(EverythingApiDllImport.Everything_GetResultHighlightedFileNameW(idx));
-                string fullPathHighted = Marshal.PtrToStringUni(EverythingApiDllImport.Everything_GetResultHighlightedFullPathAndFileNameW(idx));
-                if (fileNameHighted == null | fullPathHighted == null)
-                {
+                if (keyWord.StartsWith("@")) {
+                    EverythingApiDllImport.Everything_SetRegex(true);
+                    keyWord = keyWord.Substring(1);
+                }
+                else {
+                    EverythingApiDllImport.Everything_SetRegex(false);
+                }
+
+                if (token.IsCancellationRequested) { return results; }
+                EverythingApiDllImport.Everything_SetRequestFlags(RequestFlag.HighlightedFileName | RequestFlag.HighlightedFullPathAndFileName);
+                if (token.IsCancellationRequested) { return results; }
+                EverythingApiDllImport.Everything_SetOffset(0);
+                if (token.IsCancellationRequested) { return results; }
+                EverythingApiDllImport.Everything_SetMax(maxCount);
+                if (token.IsCancellationRequested) { return results; }
+                EverythingApiDllImport.Everything_SetSearchW(keyWord);
+
+                if (token.IsCancellationRequested) { return results; }
+                if (!EverythingApiDllImport.Everything_QueryW(true)) {
                     CheckAndThrowExceptionOnError();
-                }
-                if (token.IsCancellationRequested) { return results; }
-                ConvertHightlightFormat(fileNameHighted, out List<int> fileNameHightlightData, out string fileName);
-                if (token.IsCancellationRequested) { return results; }
-                ConvertHightlightFormat(fullPathHighted, out List<int> fullPathHightlightData, out string fullPath);
-
-                var result = new SearchResult
-                {
-                    FileName = fileName,
-                    FileNameHightData = fileNameHightlightData,
-                    FullPath = fullPath,
-                    FullPathHightData = fullPathHightlightData,
-                };
-
-                if (token.IsCancellationRequested) { return results; }
-                if (EverythingApiDllImport.Everything_IsFolderResult(idx))
-                {
-                    result.Type = ResultType.Folder;
-                }
-                else
-                {
-                    result.Type = ResultType.File;
+                    return results;
                 }
 
-                results.Add(result);
+                if (token.IsCancellationRequested) { return results; }
+                int count = EverythingApiDllImport.Everything_GetNumResults();
+                for (int idx = 0; idx < count; ++idx) {
+                    if (token.IsCancellationRequested) { return results; }
+                    // https://www.voidtools.com/forum/viewtopic.php?t=8169
+                    string fileNameHighted = Marshal.PtrToStringUni(EverythingApiDllImport.Everything_GetResultHighlightedFileNameW(idx));
+                    string fullPathHighted = Marshal.PtrToStringUni(EverythingApiDllImport.Everything_GetResultHighlightedFullPathAndFileNameW(idx));
+                    if (fileNameHighted == null | fullPathHighted == null) {
+                        CheckAndThrowExceptionOnError();
+                    }
+                    if (token.IsCancellationRequested) { return results; }
+                    ConvertHightlightFormat(fileNameHighted, out List<int> fileNameHightlightData, out string fileName);
+                    if (token.IsCancellationRequested) { return results; }
+                    ConvertHightlightFormat(fullPathHighted, out List<int> fullPathHightlightData, out string fullPath);
+
+                    var result = new SearchResult {
+                        FileName = fileName,
+                        FileNameHightData = fileNameHightlightData,
+                        FullPath = fullPath,
+                        FullPathHightData = fullPathHightlightData,
+                    };
+
+                    if (token.IsCancellationRequested) { return results; }
+                    if (EverythingApiDllImport.Everything_IsFolderResult(idx)) {
+                        result.Type = ResultType.Folder;
+                    }
+                    else {
+                        result.Type = ResultType.File;
+                    }
+
+                    results.Add(result);
+                }
             }
-
             return results;
         }
 
@@ -229,24 +234,35 @@ namespace Wox.Plugin.Everything.Everything
             LoadLibrary(sdkPath);
         }
 
+        public static bool EverythingExists()
+        {
+            var hwnd = FindWindowW(EVERYTHING_IPC_WNDCLASS, null);
+            return hwnd != IntPtr.Zero;
+        }
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr FindWindowW(string lpClassName, string lpWindowName);
+        private const string EVERYTHING_IPC_WNDCLASS = "EVERYTHING_TASKBAR_NOTIFICATION";
+
         private static void CheckAndThrowExceptionOnError()
         {
-            switch (EverythingApiDllImport.Everything_GetLastError())
-            {
-                case StateCode.CreateThreadError:
-                    throw new CreateThreadException();
-                case StateCode.CreateWindowError:
-                    throw new CreateWindowException();
-                case StateCode.InvalidCallError:
-                    throw new InvalidCallException();
-                case StateCode.InvalidIndexError:
-                    throw new InvalidIndexException();
-                case StateCode.IPCError:
-                    throw new IPCErrorException();
-                case StateCode.MemoryError:
-                    throw new MemoryErrorException();
-                case StateCode.RegisterClassExError:
-                    throw new RegisterClassExException();
+            if (EverythingExists()) {
+                switch (EverythingApiDllImport.Everything_GetLastError()) {
+                    case StateCode.CreateThreadError:
+                        throw new CreateThreadException();
+                    case StateCode.CreateWindowError:
+                        throw new CreateWindowException();
+                    case StateCode.InvalidCallError:
+                        throw new InvalidCallException();
+                    case StateCode.InvalidIndexError:
+                        throw new InvalidIndexException();
+                    case StateCode.IPCError:
+                        throw new IPCErrorException();
+                    case StateCode.MemoryError:
+                        throw new MemoryErrorException();
+                    case StateCode.RegisterClassExError:
+                        throw new RegisterClassExException();
+                }
             }
         }
     }
