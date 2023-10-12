@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using NLog;
@@ -106,32 +107,18 @@ namespace Wox.Core.Plugin
         {
             API = api;
             var failedPlugins = new ConcurrentQueue<PluginPair>();
-            foreach(var pair in AllPlugins)
-            {
-                try
-                {
-                    var milliseconds = Logger.StopWatchDebug($"Init method time cost for <{pair.Metadata.Name}>", () =>
-                    {
-                        pair.Plugin.Init(new PluginInitContext
-                        {
-                            CurrentPluginMetadata = pair.Metadata,
-                            API = API
-                        });
-                    });
-                    pair.Metadata.InitTime += milliseconds;
-                    Logger.WoxInfo($"Total init cost for <{pair.Metadata.Name}> is <{pair.Metadata.InitTime}ms>");
+            var parallelInits = new List<PluginPair>();
+
+            foreach (var pair in AllPlugins) {
+                if (pair.Metadata.InitInMainThread) {
+                    InitPlugin(pair, failedPlugins);
                 }
-                catch (Exception e)
-                {
-                    e.Data.Add(nameof(pair.Metadata.ID), pair.Metadata.ID);
-                    e.Data.Add(nameof(pair.Metadata.Name), pair.Metadata.Name);
-                    e.Data.Add(nameof(pair.Metadata.PluginDirectory), pair.Metadata.PluginDirectory);
-                    e.Data.Add(nameof(pair.Metadata.Website), pair.Metadata.Website);
-                    Logger.WoxError($"Fail to Init plugin: {pair.Metadata.Name}", e);
-                    pair.Metadata.Disabled = true;
-                    failedPlugins.Enqueue(pair);
+                else {
+                    parallelInits.Add(pair);
                 }
             }
+
+            Parallel.ForEach(parallelInits, pair => InitPlugin(pair, failedPlugins));
 
             _contextMenuPlugins = GetPluginsForInterface<IContextMenu>();
             foreach (var plugin in AllPlugins)
@@ -149,6 +136,29 @@ namespace Wox.Core.Plugin
             {
                 var failed = string.Join(",", failedPlugins.Select(x => x.Metadata.Name));
                 API.ShowMsg($"Fail to Init Plugins", $"Plugins: {failed} - fail to load and would be disabled, please contact plugin creator for help", "", false);
+            }
+        }
+
+        private static void InitPlugin(PluginPair pair, ConcurrentQueue<PluginPair> failedPlugins)
+        {
+            try {
+                var milliseconds = Logger.StopWatchDebug($"Init method time cost for <{pair.Metadata.Name}>", () => {
+                    pair.Plugin.Init(new PluginInitContext {
+                        CurrentPluginMetadata = pair.Metadata,
+                        API = API
+                    });
+                });
+                pair.Metadata.InitTime += milliseconds;
+                Logger.WoxInfo($"Total init cost for <{pair.Metadata.Name}> is <{pair.Metadata.InitTime}ms>");
+            }
+            catch (Exception e) {
+                e.Data.Add(nameof(pair.Metadata.ID), pair.Metadata.ID);
+                e.Data.Add(nameof(pair.Metadata.Name), pair.Metadata.Name);
+                e.Data.Add(nameof(pair.Metadata.PluginDirectory), pair.Metadata.PluginDirectory);
+                e.Data.Add(nameof(pair.Metadata.Website), pair.Metadata.Website);
+                Logger.WoxError($"Fail to Init plugin: {pair.Metadata.Name}", e);
+                pair.Metadata.Disabled = true;
+                failedPlugins.Enqueue(pair);
             }
         }
 

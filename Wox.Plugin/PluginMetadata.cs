@@ -40,6 +40,8 @@ namespace Wox.Plugin
 
         // keep plugin raw score by not multiply selected counts
         public bool KeepResultRawScore { get; set; }
+        // init plugin in main thread
+        public bool InitInMainThread { get; set; }
 
         public override string ToString()
         {
