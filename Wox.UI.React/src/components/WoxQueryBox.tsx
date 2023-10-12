@@ -14,7 +14,9 @@ export default () => {
 
 
     const handleQueryCallback = (results: WOXMESSAGE.WoxMessageResponseResult[]) => {
-        currentResultList.current = currentResultList.current.concat(results.filter((result) => result.AssociatedQuery === queryText.current))
+        currentResultList.current = currentResultList.current.concat(results.filter((result) => result.AssociatedQuery === queryText.current).map((result, index) => {
+            return Object.assign({...result, Index: index})
+        }))
         setShownResultList()
     }
 
@@ -69,16 +71,27 @@ export default () => {
                     setResultList([])
                     currentResultList.current = []
                     queryText.current = e.target.value
-                    WoxMessageHelper.getInstance().sendQueryMessage({query: queryText.current, type: "text"}, handleQueryCallback)
+                    WoxMessageHelper.getInstance().sendQueryMessage({
+                        query: queryText.current,
+                        type: "text"
+                    }, handleQueryCallback)
                 }}
             />
             <InputGroup.Text id="inputGroup-sizing-lg" aria-describedby={"Wox"}>Wox</InputGroup.Text>
         </InputGroup>
         <ListGroup className={"wox-query-result-list"} onMouseOver={(event) => {
-            console.log(event)
+            const target = event.target as HTMLLIElement
+            if (target.id.startsWith("result-")) {
+                const splitArray = target.id.split("-")
+                const currentItemIndex = parseInt(splitArray[2])
+                const activeItemIndex = parseInt(splitArray[1])
+                currentIndex.current = currentItemIndex
+                setActiveIndex(activeItemIndex)
+            }
         }}>
             {resultList?.map((result, index) => {
-                return <ListGroup.Item action eventKey={`wox-query-result-event-key-${index}`}
+                return <ListGroup.Item id={`result-${index}-${result.Index}`} action
+                                       eventKey={`wox-query-result-event-key-${index}`}
                                        key={`wox-query-result-key-${index}`}
                                        active={index === activeIndex}>{result.Title}</ListGroup.Item>
             })}

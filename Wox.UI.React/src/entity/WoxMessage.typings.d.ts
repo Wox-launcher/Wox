@@ -19,5 +19,6 @@ declare namespace WOXMESSAGE {
         Icon: string
         Score: number
         AssociatedQuery: string
+        Index?: number
     }
 }
