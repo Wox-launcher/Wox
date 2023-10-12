@@ -465,7 +465,9 @@ namespace Wox.ViewModel
                             // start the progress bar if query takes more than 200 ms
                             if (!token.IsCancellationRequested)
                             {
-                                ProgressBarVisibility = Visibility.Visible;
+                                Application.Current.Dispatcher.Invoke(() => {
+                                    ProgressBarVisibility = Visibility.Visible;
+                                });
                             }
                         }, token);
 
