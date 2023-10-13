@@ -12,6 +12,13 @@ export default () => {
     const fixedShownItemCount = 10
 
 
+    const resetResultList = () => {
+        setResultList([])
+        setActiveIndex(0)
+        currentIndex.current = 0
+        currentResultList.current = []
+    }
+
     /**
      * Because the query callback will be called multiple times, so we need to filter the result by query text
      * @param results
@@ -88,8 +95,7 @@ export default () => {
                 id="Wox"
                 aria-label="Wox"
                 onChange={(e) => {
-                    setResultList([])
-                    currentResultList.current = []
+                    resetResultList()
                     queryText.current = e.target.value
                     WoxMessageHelper.getInstance().sendQueryMessage({
                         query: queryText.current,
@@ -99,27 +105,17 @@ export default () => {
             />
             <InputGroup.Text id="inputGroup-sizing-lg" aria-describedby={"Wox"}>Wox</InputGroup.Text>
         </InputGroup>
-        <ListGroup className={"wox-query-result-list"} onMouseOver={async (event) => {
-            console.log(event)
-            const target = event.target as HTMLLIElement
-            if (target.id.startsWith("result-")) {
-
-                const splitArray = target.id.split("-")
-                const currentItemIndex = parseInt(splitArray[2])
-                const activeItemIndex = parseInt(splitArray[1])
-
-                console.log(`active-${activeItemIndex}`)
-                console.log(`active-${currentItemIndex}`)
-                console.log(`${target.id}`)
-                currentIndex.current = currentItemIndex
-                setActiveIndex(activeItemIndex)
-            }
-        }}>
+        <ListGroup className={"wox-query-result-list"}>
             {resultList?.map((result, index) => {
-                return <ListGroup.Item id={`result-${index}-${result.Index}`} action
+                return <ListGroup.Item id={`result-${index}`} action
                                        eventKey={`wox-query-result-event-key-${index}`}
                                        key={`wox-query-result-key-${index}`}
-                                       active={index === activeIndex}>
+                                       active={index === activeIndex} onMouseOver={() => {
+                    if (result.Index !== undefined) {
+                        currentIndex.current = result.Index
+                        setActiveIndex(index)
+                    }
+                }}>
                     <div className={"ms-2 me-auto"}>
                         <div className={"fw-bold"}>{result.Title}</div>
                         <div className={"fw-lighter"}>{result.SubTitle}</div>
