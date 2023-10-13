@@ -9,7 +9,9 @@ require (
 	github.com/google/uuid v1.3.1
 	github.com/gorilla/websocket v1.5.0
 	github.com/jinzhu/now v1.1.5
+	github.com/lithammer/fuzzysearch v1.1.8
 	github.com/mitchellh/go-homedir v1.1.0
+	github.com/mnogu/go-calculator v0.0.1
 	github.com/mozillazg/go-pinyin v0.20.0
 	github.com/olahol/melody v1.1.4
 	github.com/petermattis/goid v0.0.0-20230904192822-1876fd5063bc
@@ -30,7 +32,6 @@ require (
 	github.com/getlantern/hidden v0.0.0-20190325191715-f02dbb02be55 // indirect
 	github.com/getlantern/ops v0.0.0-20190325191751-d70cb0d6f85f // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
-	github.com/lithammer/fuzzysearch v1.1.8 // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

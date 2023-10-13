@@ -8,7 +8,10 @@ Trigger keyword can be used to trigger a plugin. A plugin must have at least one
 
 ```json
 {
-  "TriggerKeywords": ["wpm", "p"]
+  "TriggerKeywords": [
+    "wpm",
+    "p"
+  ]
 }
 ```
 
@@ -16,14 +19,11 @@ There is one special trigger keyword `*`, which means the plugin will be trigger
 
 ```json
 {
-  "TriggerKeywords": ["*"]
+  "TriggerKeywords": [
+    "*"
+  ]
 }
 ```
-
-**Global trigger keyword** has following restrictions:
-
-* if you defined a global trigger keyword, you shouldn't define any other trigger keywords.
-* if you defined a global trigger keyword, you shouldn't define any command.
 
 ### Command
 
@@ -41,6 +41,12 @@ Command can be used to tell user what functionality the plugin provides. A plugi
       "Description": "Remove plugin"
     }
   ]
+}
+```
+
+```json
+{
+  "Commands": []
 }
 ```
 

@@ -5,7 +5,7 @@ default:
     just _build_hosts
 
     # build plugins
-    just _build_dev_nodejs_plugin Wox.Plugin.Clipboard ~/.wox/wox-user/plugins
+    # just _build_dev_nodejs_plugin Wox.Plugin.Clipboard ~/.wox/wox-user/plugins
 
 @release target:
     just _build_hosts

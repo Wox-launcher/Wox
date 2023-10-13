@@ -33,6 +33,12 @@ func main() {
 			return
 		}
 
+		clipboardErr := util.ClipboardInit()
+		if clipboardErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize clipboard: %s", clipboardErr.Error()))
+			return
+		}
+
 		startTray(ctx)
 
 		shareUI := ui.GetUIManager().GetUI(ctx)
@@ -50,7 +56,7 @@ func main() {
 
 		t := util.Hotkey{}
 		t.Register(ctx, "command+m", func() {
-			data, selectedErr := ui.GetSelected()
+			data, selectedErr := ui.GetSelectedText()
 			if selectedErr != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("failed to get selected text: %s", selectedErr.Error()))
 			} else {

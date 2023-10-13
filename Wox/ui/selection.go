@@ -1,10 +1,11 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
-	"golang.design/x/clipboard"
 	"runtime"
 	"strings"
+	"wox/util"
 	"wox/util/keybd_event"
 )
 
@@ -19,7 +20,7 @@ type Selection struct {
 	Data string
 }
 
-func GetSelected() (Selection, error) {
+func GetSelectedText() (Selection, error) {
 	kb, err := keybd_event.NewKeyBonding()
 	if err != nil {
 		return Selection{}, err
@@ -37,14 +38,17 @@ func GetSelected() (Selection, error) {
 		return Selection{}, fmt.Errorf("error send copy command: %w", err)
 	}
 
-	clipboardErr := clipboard.Init()
-	if clipboardErr != nil {
-		return Selection{}, fmt.Errorf("error init clipboard: %w", clipboardErr)
+	data, readErr := util.ClipboardRead()
+	if readErr != nil {
+		return Selection{}, fmt.Errorf("error read clipboard: %w", readErr)
 	}
-	data := clipboard.Read(clipboard.FmtText)
 
-	return Selection{
-		Type: SelectTypeText,
-		Data: string(data),
-	}, nil
+	if data.Type == util.ClipboardTypeText {
+		return Selection{
+			Type: SelectTypeText,
+			Data: string(data.Data),
+		}, nil
+	}
+
+	return Selection{}, errors.New("no data in clipboard")
 }

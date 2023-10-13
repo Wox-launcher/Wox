@@ -25,6 +25,13 @@ type WoxImage struct {
 	ImageData string
 }
 
+func NewWoxImageSvg(svg string) WoxImage {
+	return WoxImage{
+		ImageType: WoxImageTypeSvg,
+		ImageData: svg,
+	}
+}
+
 func convertLocalImageToUrl(ctx context.Context, image WoxImage, pluginInstance *Instance) (newImage WoxImage) {
 	newImage = image
 

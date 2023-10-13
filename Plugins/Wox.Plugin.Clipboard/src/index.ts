@@ -35,9 +35,14 @@ export const plugin: Plugin = {
           Title: history.Content,
           Icon: { ImageType: "relative", ImageData: "images/app.png" } as WoxImage,
           Preview: { PreviewType: "text", PreviewData: history.Content, PreviewProperties: { CreatedAt: history.CreatedAt } },
-          Action: async () => {
-            ncp.copy(history)
-          }
+          Actions: [
+            {
+              Name: "Copy to clipboard",
+              Action: async () => {
+                ncp.copy(history)
+              }
+            }
+          ]
         } as Result
       })
   }

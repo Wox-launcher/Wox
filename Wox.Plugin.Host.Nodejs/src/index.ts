@@ -90,10 +90,10 @@ wss.on("connection", function connection(ws) {
           Type: PluginJsonRpcTypeResponse,
           Error: error.message
         }
-        logger.error(`[${jsonRpcRequest.PluginName}] handle request failed: ${error.message}`)
+        logger.error(`[${jsonRpcRequest.PluginName}] handle request failed: ${error.message}, stack: ${error.stack}`)
         ws.send(JSON.stringify(response), (error?: Error) => {
           if (error) {
-            logger.error(`[${jsonRpcRequest.PluginName}] send response failed: ${error.message}`)
+            logger.error(`[${jsonRpcRequest.PluginName}] send response failed: ${error.message}, stack: ${error.stack}`)
           }
         })
       })

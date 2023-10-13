@@ -9,7 +9,7 @@ func getFakePluginInstances() []*Instance {
 	return []*Instance{
 		{
 			Metadata: Metadata{
-				TriggerKeywords: []string{"wpm"},
+				TriggerKeywords: []string{"wpm", "*"},
 				Commands: []MetadataCommand{
 					{
 						Command:     "install",
@@ -45,4 +45,9 @@ func Test_NewQuery(t *testing.T) {
 	assert.Equal(t, q.TriggerKeyword, "wpm")
 	assert.Equal(t, q.Command, "install")
 	assert.Equal(t, q.Search, "q q1")
+
+	q = newQueryWithPlugins("other install q q1", QueryTypeText, getFakePluginInstances())
+	assert.Equal(t, q.TriggerKeyword, "")
+	assert.Equal(t, q.Command, "")
+	assert.Equal(t, q.Search, "other install q q1")
 }
