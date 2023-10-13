@@ -1,3 +1,5 @@
+import {WoxPreviewType} from "../enums/WoxPreviewTypeEnum.ts";
+
 declare namespace WOXMESSAGE {
 
     export interface WoxMessageRequest {
@@ -20,5 +22,12 @@ declare namespace WOXMESSAGE {
         Score: number
         AssociatedQuery: string
         Index?: number
+        Preview: WoxPreview
+    }
+
+    export interface WoxPreview {
+        PreviewType: WoxPreviewType
+        PreviewData: string
+        PreviewProperties: { [key: string]: string }
     }
 }

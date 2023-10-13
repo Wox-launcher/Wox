@@ -2,6 +2,7 @@ import {Form, InputGroup, ListGroup} from "react-bootstrap";
 import {useRef, useState} from "react";
 import {WoxMessageHelper} from "../utils/WoxMessageHelper.ts";
 import styled from "styled-components";
+import {WOXMESSAGE} from "../entity/WoxMessage.typings";
 
 export default () => {
     const queryText = useRef<string>()
@@ -11,7 +12,9 @@ export default () => {
     const currentIndex = useRef(0)
     const fixedShownItemCount = 10
 
-
+    /*
+        Reset the result list
+     */
     const resetResultList = () => {
         setResultList([])
         setActiveIndex(0)
@@ -19,20 +22,18 @@ export default () => {
         currentResultList.current = []
     }
 
-    /**
-     * Because the query callback will be called multiple times, so we need to filter the result by query text
-     * @param results
+    /*
+        Because the query callback will be called multiple times, so we need to filter the result by query text
      */
     const handleQueryCallback = (results: WOXMESSAGE.WoxMessageResponseResult[]) => {
         currentResultList.current = currentResultList.current.concat(results.filter((result) => result.AssociatedQuery === queryText.current)).map((result, index) => {
-            console.log(index)
             return Object.assign({...result, Index: index})
         })
         setShownResultList()
     }
 
-    /**
-     * Set the result list to be shown
+    /*
+        Set the result list to be shown
      */
     const setShownResultList = () => {
         if (currentIndex.current >= fixedShownItemCount) {
@@ -42,9 +43,8 @@ export default () => {
         }
     }
 
-    /**
-     * Deal with the active index
-     * @param isUp if true, the active index will be decreased, otherwise, it will be increased
+    /*
+        Deal with the active index
      */
     const dealActiveIndex = (isUp: boolean) => {
         if (isUp) {
