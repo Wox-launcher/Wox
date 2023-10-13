@@ -302,6 +302,9 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 	results = make(chan []QueryResultUI, 10)
 	done = make(chan bool)
 
+	// clear old actions
+	m.actions.Clear()
+
 	counter := atomic.Int32{}
 	counter.Store(int32(len(m.instances)))
 

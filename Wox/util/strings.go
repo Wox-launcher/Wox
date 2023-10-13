@@ -1,6 +1,7 @@
 package util
 
 import (
+	"github.com/mozillazg/go-pinyin"
 	"strings"
 )
 
@@ -17,4 +18,15 @@ func StringContains(term string, subTerm string) bool {
 	term = strings.ToLower(term)
 	subTerm = strings.ToLower(subTerm)
 	return strings.Contains(term, subTerm)
+}
+
+func StringContainsPinYin(term string, subTerm string) bool {
+	termPinyins := pinyin.LazyPinyin(term, pinyin.NewArgs())
+	for _, termPinyin := range termPinyins {
+		if strings.Contains(termPinyin, subTerm) {
+			return true
+		}
+	}
+
+	return false
 }

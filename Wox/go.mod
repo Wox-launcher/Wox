@@ -10,6 +10,7 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/jinzhu/now v1.1.5
 	github.com/mitchellh/go-homedir v1.1.0
+	github.com/mozillazg/go-pinyin v0.20.0
 	github.com/olahol/melody v1.1.4
 	github.com/petermattis/goid v0.0.0-20230904192822-1876fd5063bc
 	github.com/samber/lo v1.38.1

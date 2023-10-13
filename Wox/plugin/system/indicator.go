@@ -76,7 +76,9 @@ func (i *IndicatorPlugin) queryForNonTriggerKeyword(ctx context.Context, query p
 					},
 				},
 			})
-			for _, metadataCommand := range pluginInstance.Metadata.Commands {
+			for _, metadataCommandShadow := range pluginInstance.Metadata.Commands {
+				// action will be executed in another go routine, so we need to copy the variable
+				metadataCommand := metadataCommandShadow
 				results = append(results, plugin.QueryResult{
 					Id:       uuid.NewString(),
 					Title:    fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command),
@@ -105,7 +107,9 @@ func (i *IndicatorPlugin) queryForNonCommand(ctx context.Context, query plugin.Q
 			return util.StringContains(triggerKeyword, query.TriggerKeyword)
 		})
 		if found {
-			for _, metadataCommand := range pluginInstance.Metadata.Commands {
+			for _, metadataCommandShadow := range pluginInstance.Metadata.Commands {
+				// action will be executed in another go routine, so we need to copy the variable
+				metadataCommand := metadataCommandShadow
 				if util.StringContains(metadataCommand.Command, query.Search) {
 					results = append(results, plugin.QueryResult{
 						Id:       uuid.NewString(),

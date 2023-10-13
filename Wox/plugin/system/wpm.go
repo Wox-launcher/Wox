@@ -62,7 +62,9 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 		}
 
 		pluginManifests := plugin.GetStoreManager().Search(ctx, query.Search)
-		for _, pluginManifest := range pluginManifests {
+		for _, pluginManifestShadow := range pluginManifests {
+			// action will be executed in another go routine, so we need to copy the variable
+			pluginManifest := pluginManifestShadow
 			results = append(results, plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    pluginManifest.Name,
@@ -87,7 +89,9 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 			})
 		}
 
-		results = lo.Map(plugins, func(pluginInstance *plugin.Instance, _ int) plugin.QueryResult {
+		results = lo.Map(plugins, func(pluginInstanceShadow *plugin.Instance, _ int) plugin.QueryResult {
+			// action will be executed in another go routine, so we need to copy the variable
+			pluginInstance := pluginInstanceShadow
 			return plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    pluginInstance.Metadata.Name,

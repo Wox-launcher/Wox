@@ -71,13 +71,22 @@ func (a *AppPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 
 func (a *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
-	for _, info := range a.apps {
+	for _, infoShadow := range a.apps {
+		// action will be executed in another go routine, so we need to copy the variable
+		info := infoShadow
 		if util.StringContains(info.Name, query.Search) {
 			results = append(results, plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    info.Name,
 				SubTitle: info.Path,
 				Icon:     info.Icon,
+				Preview: plugin.WoxPreview{
+					PreviewType: plugin.WoxPreviewTypeText,
+					PreviewData: info.Path,
+					PreviewProperties: map[string]string{
+						"Path": info.Path,
+					},
+				},
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "Open",
