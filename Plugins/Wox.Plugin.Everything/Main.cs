@@ -56,14 +56,15 @@ namespace Wox.Plugin.Everything
                 try
                 {
                     if (token.IsCancellationRequested) { return results; }
-                    var searchList = _api.Search(keyword, token, _settings.MaxSearchCount);
-                    if (token.IsCancellationRequested) { return results; }
-                    for (int i = 0; i < searchList.Count; i++)
-                    {
+                    if (_api.CheckEverything(_context)) {
+                        var searchList = _api.Search(keyword, token, _settings.MaxSearchCount);
                         if (token.IsCancellationRequested) { return results; }
-                        SearchResult searchResult = searchList[i];
-                        var r = CreateResult(keyword, searchResult, i);
-                        results.Add(r);
+                        for (int i = 0; i < searchList.Count; i++) {
+                            if (token.IsCancellationRequested) { return results; }
+                            SearchResult searchResult = searchList[i];
+                            var r = CreateResult(keyword, searchResult, i);
+                            results.Add(r);
+                        }
                     }
                 }
                 catch (IPCErrorException)
