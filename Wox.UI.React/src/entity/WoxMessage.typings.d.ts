@@ -1,4 +1,5 @@
 import {WoxPreviewType} from "../enums/WoxPreviewTypeEnum.ts";
+import {WoxImageType} from "../enums/WoxImageTypeEnum.ts";
 
 declare namespace WOXMESSAGE {
 
@@ -14,20 +15,33 @@ declare namespace WOXMESSAGE {
         Data: WoxMessageResponseData[]
     }
 
-    export interface WoxMessageResponseResult {
-        Id: string
-        Title: string
-        SubTitle: string
-        Icon: string
-        Score: number
-        AssociatedQuery: string
-        Index?: number
-        Preview: WoxPreview
-    }
-
     export interface WoxPreview {
         PreviewType: WoxPreviewType
         PreviewData: string
         PreviewProperties: { [key: string]: string }
+    }
+
+    export interface WoxResultAction {
+        Id: string
+        Name: string
+        IsDefault: boolean
+        PreventHideAfterAction: boolean
+    }
+
+    export interface WoxImage {
+        ImageType: WoxImageType
+        ImageData: string
+    }
+
+    export interface WoxMessageResponseResult {
+        Id: string
+        Title: string
+        SubTitle: string
+        Icon: WoxImage
+        Score: number
+        AssociatedQuery: string
+        Index?: number
+        Preview: WoxPreview
+        Actions: WoxResultAction[]
     }
 }

@@ -30,7 +30,7 @@
 
     .list-group {
         .list-group-item {
-            padding: 0 !important;
+            padding: 0 10px !important;
         }
 
         .list-group-item:nth-of-type(1) {
