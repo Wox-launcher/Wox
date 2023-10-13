@@ -1,9 +1,10 @@
-import {Form, Image, InputGroup, ListGroup} from "react-bootstrap";
+import {Col, Form, Image, InputGroup, ListGroup, Row} from "react-bootstrap";
 import {useRef, useState} from "react";
 import {WoxMessageHelper} from "../utils/WoxMessageHelper.ts";
 import styled from "styled-components";
 import {WOXMESSAGE} from "../entity/WoxMessage.typings";
 import {WoxMessageMethodEnum} from "../enums/WoxMessageMethodEnum.ts";
+import {WoxImageTypeEnum} from "../enums/WoxImageTypeEnum.ts";
 
 export default () => {
     const queryText = useRef<string>()
@@ -13,7 +14,7 @@ export default () => {
     const currentIndex = useRef(0)
     const fixedShownItemCount = 10
     const requestTimeoutId = useRef<number>()
-    const hasLatestQueryResult = useRef<boolean>(false)
+    const hasLatestQueryResult = useRef<boolean>(true)
     const [hasPreview, setHasPreview] = useState<boolean>(false)
 
     /*
@@ -32,6 +33,11 @@ export default () => {
         currentResultList.current = currentResultList.current.concat(results.filter((result) => {
             if (result.AssociatedQuery === queryText.current) {
                 hasLatestQueryResult.current = true
+            }
+            if (result.Preview.PreviewType) {
+                setHasPreview(true)
+            } else {
+                setHasPreview(false)
             }
             return result.AssociatedQuery === queryText.current
         })).map((result, index) => {
@@ -71,6 +77,27 @@ export default () => {
         }
     }
 
+    const dealWithAction = () => {
+        const result = currentResultList.current.find((result) => result.Index === currentIndex.current)
+        if (result) {
+            result.Actions.forEach((action) => {
+                if (action.IsDefault) {
+                    WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ACTION.code, {
+                        id: action.Id,
+                    })
+                }
+            })
+        }
+    }
+
+    const getCurrentPreviewData = () => {
+        const result = currentResultList.current.find((result) => result.Index === currentIndex.current)
+        if (result) {
+            return result.Preview
+        }
+        return {PreviewType: "", PreviewData: "", PreviewProperties: {}} as WOXMESSAGE.WoxPreview
+    }
+
     return <Style onKeyDown={(event) => {
         if (event.key === "ArrowUp") {
             dealActiveIndex(true)
@@ -83,16 +110,7 @@ export default () => {
             event.stopPropagation()
         }
         if (event.key === "Enter") {
-            const result = currentResultList.current.find((result) => result.Index === currentIndex.current)
-            if (result) {
-                result.Actions.forEach((action) => {
-                    if (action.IsDefault) {
-                        WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ACTION.code, {
-                            id: action.Id,
-                        })
-                    }
-                })
-            }
+            dealWithAction()
             event.preventDefault()
             event.stopPropagation()
         }
@@ -126,28 +144,44 @@ export default () => {
             />
             <InputGroup.Text id="inputGroup-sizing-lg" aria-describedby={"Wox"}>Wox</InputGroup.Text>
         </InputGroup>
+        <div className={"wox-query-result-container"}>
+            <Row>
+                <Col><ListGroup className={"wox-query-result-list"}>
+                    {resultList?.map((result, index) => {
+                        return <ListGroup.Item
+                            key={`wox-query-result-key-${index}`}
+                            active={index === activeIndex}
+                            onMouseOver={() => {
+                                if (result.Index !== undefined) {
+                                    currentIndex.current = result.Index
+                                    setActiveIndex(index)
+                                }
+                            }}
+                            onClick={() => {
+                                dealWithAction()
+                            }}>
+                            <div className={"wox-query-result-item"}>
+                                {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeSvg.code &&
+                                    <div className={"wox-query-result-image"}
+                                         dangerouslySetInnerHTML={{__html: result.Icon.ImageData}}></div>}
+                                {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeUrl.code &&
+                                    <Image src={result.Icon.ImageData} className={"wox-query-result-image"}/>}
+                                <div className={"ms-2 me-auto"}>
+                                    <div className={"fw-bold"}>{result.Title}</div>
+                                    <div className={"fw-lighter"}>{result.SubTitle}</div>
+                                </div>
+                            </div>
+                        </ListGroup.Item>
+                    })}
+                </ListGroup></Col>
+                {hasPreview && <Col>
+                    <div
+                        className={"wox-query-result-preview"}>{getCurrentPreviewData().PreviewType}</div>
+                </Col>}
+            </Row>
 
-        <ListGroup className={"wox-query-result-list"}>
-            {resultList?.map((result, index) => {
-                return <ListGroup.Item
-                    key={`wox-query-result-key-${index}`}
-                    active={index === activeIndex} onMouseOver={() => {
-                    if (result.Index !== undefined) {
-                        currentIndex.current = result.Index
-                        setActiveIndex(index)
-                    }
-                }}>
-                    <div className={"wox-query-result-item"}>
-                        <Image src={result.Icon.ImageData} className={"wox-query-result-image"}/>
-                        <div className={"ms-2 me-auto"}>
-                            <div className={"fw-bold"}>{result.Title}</div>
-                            <div className={"fw-lighter"}>{result.SubTitle}</div>
-                        </div>
-                    </div>
-                </ListGroup.Item>
-            })}
-        </ListGroup>
 
+        </div>
     </Style>
 }
 
@@ -163,6 +197,16 @@ const Style = styled.div`
     .wox-query-result-image {
         width: 36px;
         height: 36px;
+        svg {
+            width: 36px !important;
+            height: 36px !important;
+        }
+    }
+    .wox-query-result-container  {
+        .row, .col {
+            padding: 0 !important;
+            margin: 0 !important;
+        }
     }
 `
 

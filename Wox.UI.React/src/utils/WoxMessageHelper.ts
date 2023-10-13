@@ -1,6 +1,7 @@
-import {v4 as uuidv4} from 'uuid';
+import {v4 as UUID} from 'uuid';
 import Deferred from "promise-deferred"
 import {WoxMessageMethodEnum} from "../enums/WoxMessageMethodEnum.ts";
+import {WOXMESSAGE} from "../entity/WoxMessage.typings";
 
 export class WoxMessageHelper {
     private initialized: boolean = false;
@@ -11,7 +12,7 @@ export class WoxMessageHelper {
         [key: string]: Deferred.Deferred<unknown>
     } = {}
     private woxQueryCallback: ((data: WOXMESSAGE.WoxMessageResponseResult[]) => void | undefined) | undefined
-    private interval: NodeJS.Timeout | undefined;
+    private interval: number | undefined;
 
     private shouldReconnect() {
         // Check if the WebSocket is in a closed or closing state
@@ -72,7 +73,7 @@ export class WoxMessageHelper {
         Check if the connection is still alive
      */
     private checkConnection() {
-        if (this.interval) {
+        if (this.interval !== undefined) {
             clearInterval(this.interval)
         }
         this.interval = setInterval(() => {
@@ -115,7 +116,7 @@ export class WoxMessageHelper {
         if (!this.initialized) {
             return Promise.reject("WoxMessageHelper is not initialized");
         }
-        const requestId = `wox-react-${uuidv4()}`;
+        const requestId = `wox-react-${UUID()}`;
         this.ws?.send(JSON.stringify({
             Id: requestId,
             Method: method,
