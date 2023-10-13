@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Masterminds/semver/v3"
+	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"os"
 	"path"
@@ -275,6 +276,24 @@ func (m *Manager) QueryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	results := pluginInstance.Plugin.Query(ctx, query)
 	for i := range results {
 		results[i].Icon = convertLocalImageToUrl(ctx, results[i].Icon, pluginInstance)
+
+		// set default id
+		if results[i].Id == "" {
+			results[i].Id = uuid.NewString()
+		}
+		for actionIndex := range results[i].Actions {
+			if results[i].Actions[actionIndex].Id == "" {
+				results[i].Actions[actionIndex].Id = uuid.NewString()
+			}
+		}
+
+		// set first action as default if no default action is set
+		defaultActionCount := lo.CountBy(results[i].Actions, func(item QueryResultAction) bool {
+			return item.IsDefault
+		})
+		if defaultActionCount == 0 && len(results[i].Actions) > 0 {
+			results[i].Actions[0].IsDefault = true
+		}
 	}
 	return results
 }
@@ -316,6 +335,14 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 					Preview:         item.Preview,
 					Score:           item.Score,
 					AssociatedQuery: query.RawQuery,
+					Actions: lo.Map(item.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
+						return QueryResultActionUI{
+							Id:                     action.Id,
+							Name:                   action.Name,
+							IsDefault:              action.IsDefault,
+							PreventHideAfterAction: action.PreventHideAfterAction,
+						}
+					}),
 				}
 			})
 

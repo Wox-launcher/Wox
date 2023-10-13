@@ -68,6 +68,14 @@ type QueryResultUI struct {
 	Preview         WoxPreview
 	Score           int
 	AssociatedQuery string
+	Actions         []QueryResultActionUI
+}
+
+type QueryResultActionUI struct {
+	Id                     string
+	Name                   string
+	IsDefault              bool
+	PreventHideAfterAction bool
 }
 
 func newQueryWithPlugins(query string, queryType QueryType, pluginInstances []*Instance) Query {

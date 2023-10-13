@@ -77,7 +77,7 @@ func (a *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				Id:       uuid.NewString(),
 				Title:    info.Name,
 				SubTitle: info.Path,
-				Icon:     plugin.WoxImage{},
+				Icon:     info.Icon,
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "Open",
