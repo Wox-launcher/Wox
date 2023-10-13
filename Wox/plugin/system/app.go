@@ -74,7 +74,7 @@ func (a *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 	for _, infoShadow := range a.apps {
 		// action will be executed in another go routine, so we need to copy the variable
 		info := infoShadow
-		if util.StringContains(info.Name, query.Search) {
+		if util.StringMatch(info.Name, query.Search, true) {
 			results = append(results, plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    info.Name,
@@ -216,8 +216,13 @@ func (a *AppPlugin) getMacAppInfo(ctx context.Context, path string) (appInfo, er
 		return appInfo{}, errors.New(msg)
 	}
 
+	appName := strings.TrimSpace(string(out))
+	if strings.HasSuffix(appName, ".app") {
+		appName = appName[:len(appName)-4]
+	}
+
 	info := appInfo{
-		Name: strings.TrimSpace(string(out)),
+		Name: appName,
 		Path: path,
 	}
 	icon, iconErr := a.getMacAppIcon(ctx, path)

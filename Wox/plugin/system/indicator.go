@@ -59,7 +59,7 @@ func (i *IndicatorPlugin) queryForNonTriggerKeyword(ctx context.Context, query p
 	var results []plugin.QueryResult
 	for _, pluginInstance := range plugin.GetPluginManager().GetPluginInstances() {
 		triggerKeyword, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
-			return triggerKeyword != "*" && util.StringContains(triggerKeyword, query.Search)
+			return triggerKeyword != "*" && util.StringMatch(triggerKeyword, query.Search, false)
 		})
 		if found {
 			results = append(results, plugin.QueryResult{
@@ -104,13 +104,13 @@ func (i *IndicatorPlugin) queryForNonCommand(ctx context.Context, query plugin.Q
 	var results []plugin.QueryResult
 	for _, pluginInstance := range plugin.GetPluginManager().GetPluginInstances() {
 		_, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
-			return util.StringContains(triggerKeyword, query.TriggerKeyword)
+			return util.StringMatch(triggerKeyword, query.TriggerKeyword, false)
 		})
 		if found {
 			for _, metadataCommandShadow := range pluginInstance.Metadata.Commands {
 				// action will be executed in another go routine, so we need to copy the variable
 				metadataCommand := metadataCommandShadow
-				if util.StringContains(metadataCommand.Command, query.Search) {
+				if util.StringMatch(metadataCommand.Command, query.Search, false) {
 					results = append(results, plugin.QueryResult{
 						Id:       uuid.NewString(),
 						Title:    fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command),
@@ -130,4 +130,11 @@ func (i *IndicatorPlugin) queryForNonCommand(ctx context.Context, query plugin.Q
 		}
 	}
 	return results
+}
+
+func (i *IndicatorPlugin) getIcon() plugin.WoxImage {
+	return plugin.WoxImage{
+		ImageType: plugin.WoxImageTypeSvg,
+		ImageData: `<svg t="1697178225584" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="16738" width="200" height="200"><path d="M842.99 884.364H181.01c-22.85 0-41.374-18.756-41.374-41.892V181.528c0-23.136 18.524-41.892 41.374-41.892h661.98c22.85 0 41.374 18.756 41.374 41.892v660.944c0 23.136-18.524 41.892-41.374 41.892z" fill="#9C34FE" p-id="16739" data-spm-anchor-id="a313x.search_index.0.i6.1f873a81xqBP8f"></path><path d="M387.88 307.2h-82.748v83.78c0 115.68 92.618 209.456 206.868 209.456s206.868-93.776 206.868-209.454V307.2h-82.746v83.78c0 69.408-55.572 125.674-124.122 125.674s-124.12-56.266-124.12-125.672V307.2z" fill="#FFFFFF" p-id="16740"></path></svg>`,
+	}
 }
