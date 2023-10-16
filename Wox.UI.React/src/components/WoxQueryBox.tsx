@@ -5,6 +5,8 @@ import styled from "styled-components";
 import {WOXMESSAGE} from "../entity/WoxMessage.typings";
 import {WoxMessageMethodEnum} from "../enums/WoxMessageMethodEnum.ts";
 import {WoxImageTypeEnum} from "../enums/WoxImageTypeEnum.ts";
+import {WoxPreviewTypeEnum} from "../enums/WoxPreviewTypeEnum.ts";
+import Markdown from 'react-markdown'
 
 export default () => {
     const queryText = useRef<string>()
@@ -30,17 +32,18 @@ export default () => {
         Because the query callback will be called multiple times, so we need to filter the result by query text
      */
     const handleQueryCallback = (results: WOXMESSAGE.WoxMessageResponseResult[]) => {
+        setHasPreview(false)
         currentResultList.current = currentResultList.current.concat(results.filter((result) => {
             if (result.AssociatedQuery === queryText.current) {
                 hasLatestQueryResult.current = true
             }
+            return result.AssociatedQuery === queryText.current
+        })).map((result, index) => {
             if (result.Preview.PreviewType) {
                 setHasPreview(true)
             } else {
                 setHasPreview(false)
             }
-            return result.AssociatedQuery === queryText.current
-        })).map((result, index) => {
             return Object.assign({...result, Index: index})
         })
         resetResultList()
@@ -127,8 +130,8 @@ export default () => {
                 id="Wox"
                 aria-label="Wox"
                 onChange={(e) => {
-                    currentResultList.current = []
                     queryText.current = e.target.value
+                    currentResultList.current = []
                     clearTimeout(requestTimeoutId.current)
                     hasLatestQueryResult.current = false
                     WoxMessageHelper.getInstance().sendQueryMessage({
@@ -144,7 +147,7 @@ export default () => {
             />
             <InputGroup.Text id="inputGroup-sizing-lg" aria-describedby={"Wox"}>Wox</InputGroup.Text>
         </InputGroup>
-        <div className={"wox-query-result-container"}>
+        {resultList?.length > 0 && <div className={"wox-query-result-container"}>
             <Row>
                 <Col><ListGroup className={"wox-query-result-list"}>
                     {resultList?.map((result, index) => {
@@ -175,19 +178,40 @@ export default () => {
                     })}
                 </ListGroup></Col>
                 {hasPreview && <Col>
-                    <div
-                        className={"wox-query-result-preview"}>{getCurrentPreviewData().PreviewType}</div>
+                    {getCurrentPreviewData().PreviewProperties && Object.keys(getCurrentPreviewData().PreviewProperties)?.length > 0 &&
+                        <div
+                            className={"wox-query-result-preview"}>
+                            <div className={"wox-query-result-preview-content"}>
+                                {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeText.code && getCurrentPreviewData().PreviewData}
+                                {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
+                                    <Image src={getCurrentPreviewData().PreviewData}
+                                           className={"wox-query-result-preview-image"}/>}
+                                {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
+                                    <Markdown>{getCurrentPreviewData().PreviewData}</Markdown>}
+                            </div>
+
+                            <div className={"wox-query-result-preview-properties"}>
+                                {Object.keys(getCurrentPreviewData().PreviewProperties)?.map((key) => {
+                                    return <div key={`key-${key}`}
+                                                className={"wox-query-result-preview-property"}>
+                                        <div
+                                            className={"wox-query-result-preview-property-key"}>{key}</div>
+                                        <div
+                                            className={"wox-query-result-preview-property-value"}>{getCurrentPreviewData().PreviewProperties[key]}</div>
+                                    </div>
+                                })}
+                            </div>
+                        </div>}
+
                 </Col>}
             </Row>
-
-
-        </div>
+        </div>}
     </Style>
 }
 
 const Style = styled.div`
     .wox-query-result-list {
-        max-height: 500px;
+        max-height: 490px;
         overflow-y: hidden;
     }
     .wox-query-result-item {
@@ -206,6 +230,40 @@ const Style = styled.div`
         .row, .col {
             padding: 0 !important;
             margin: 0 !important;
+        }
+        border-bottom: 1px solid #dee2e6;
+    }
+    .wox-query-result-preview {
+        position: relative;
+        min-height: 490px;
+        border: 1px solid #dee2e6;
+        border-top: 0;
+        border-bottom: 0;
+        padding: 10px;
+        .wox-query-result-preview-content {
+            max-height: 400px;
+            .wox-query-result-preview-image {
+                width: 100%;
+                max-height: 400px;
+            }
+        }
+        .wox-query-result-preview-properties {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            max-height: 90px;
+            overflow-y: auto;
+            .wox-query-result-preview-property {
+                display: flex;
+                width: 100%;
+                border-top: 1px solid #dee2e6;
+                padding: 2px 10px;
+                .wox-query-result-preview-property-key,.wox-query-result-preview-property-value {
+                    flex: 1;
+                }
+            }
+            
         }
     }
 `

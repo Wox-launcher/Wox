@@ -31,10 +31,15 @@
     .list-group {
         .list-group-item {
             padding: 0 10px !important;
+            border-right: 0 !important;
         }
 
         .list-group-item:nth-of-type(1) {
             border-top: 0 !important;
+        }
+
+        .list-group-item:nth-of-type(10) {
+            border-bottom: 0 !important;
         }
     }
 }
