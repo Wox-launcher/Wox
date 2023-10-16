@@ -24,35 +24,36 @@ We unified the setting specification for all plugins on any plugin runtime, so t
 Here is an example of settings section:
 ```json
 {
-  "Settings":[
+  "Settings": [
     {
-      "Type":"head",
-      "Value":"Index Section"
+      "Type": "head",
+      "Value": "Index Section"
     },
     {
-      "Type":"textbox",
-      "Value":{
-        "Key":"IndexDirectories",
-        "Label":"Index Directories: ",
-        "Suffix":" (separate by ';')"
+      "Type": "textbox",
+      "Value": {
+        "Key": "IndexDirectories",
+        "DefaultValue": "",
+        "Label": "Index Directories: ",
+        "Suffix": " (separate by ';')"
       }
     },
     {
-      "Type":"checkbox",
-      "Value":{
-        "Key":"OnlyIndexTxt",
-        "Label":", Only Index Txt"
+      "Type": "checkbox",
+      "Value": {
+        "Key": "OnlyIndexTxt",
+        "Label": ", Only Index Txt"
       }
     },
     {
-      "Type":"newline"
+      "Type": "newline"
     },
     {
-      "Type":"textbox",
-      "Value":{
-        "Key":"IndexPrograms",
-        "Label":"Index Programs: ",
-        "Suffix":" (separate by ';')"
+      "Type": "textbox",
+      "Value": {
+        "Key": "IndexPrograms",
+        "Label": "Index Programs: ",
+        "Suffix": " (separate by ';')"
       }
     }
   ]
@@ -76,7 +77,9 @@ Value is the text to be displayed.
 ```json
 {
   "Type": "head",
-  "Value": "Index Section"
+  "Value": {
+    "Content": "Index Section"
+  }
 }
 ```
 

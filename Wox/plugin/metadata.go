@@ -3,6 +3,7 @@ package plugin
 import (
 	"errors"
 	"strings"
+	"wox/setting"
 )
 
 type MetadataFeatureName = string
@@ -35,6 +36,7 @@ type Metadata struct {
 	Commands        []MetadataCommand
 	SupportedOS     []string
 	Features        []MetadataFeature
+	Settings        setting.CustomizedPluginSettings
 }
 
 func (m *Metadata) IsSupportFeature(f MetadataFeatureName) bool {

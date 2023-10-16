@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"wox/setting"
 	"wox/share"
 	"wox/util"
 )
@@ -140,15 +141,21 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 	}
 	loadFinishTimestamp := util.GetSystemTimestamp()
 
+	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Metadata.Id, metadata.Metadata.Settings)
+	if settingErr != nil {
+		return settingErr
+	}
+
 	instance := &Instance{
 		Metadata:              metadata.Metadata,
 		PluginDirectory:       metadata.Directory,
 		Plugin:                plugin,
 		Host:                  host,
-		API:                   NewAPI(metadata.Metadata),
+		Setting:               pluginSetting,
 		LoadStartTimestamp:    loadStartTimestamp,
 		LoadFinishedTimestamp: loadFinishTimestamp,
 	}
+	instance.API = NewAPI(instance)
 	m.instances = append(m.instances, instance)
 
 	util.Go(ctx, fmt.Sprintf("[%s] init plugin", metadata.Metadata.Name), func() {
@@ -195,15 +202,23 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 	logger.Info(ctx, fmt.Sprintf("start loading system plugins, found %d system plugins", len(AllSystemPlugin)))
 
 	for _, plugin := range AllSystemPlugin {
+		metadata := plugin.GetMetadata()
+		pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.Settings)
+		if settingErr != nil {
+			logger.Error(ctx, fmt.Errorf("failed to load system plugin[%s] setting: %w", metadata.Name, settingErr).Error())
+			continue
+		}
+
 		instance := &Instance{
 			Metadata:              plugin.GetMetadata(),
 			Plugin:                plugin,
 			Host:                  nil,
+			Setting:               pluginSetting,
 			IsSystemPlugin:        true,
-			API:                   NewAPI(plugin.GetMetadata()),
 			LoadStartTimestamp:    util.GetSystemTimestamp(),
 			LoadFinishedTimestamp: util.GetSystemTimestamp(),
 		}
+		instance.API = NewAPI(instance)
 		m.instances = append(m.instances, instance)
 
 		util.Go(ctx, fmt.Sprintf("[%s] init system plugin", plugin.GetMetadata().Name), func() {

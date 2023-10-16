@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strings"
 	"wox/plugin"
+	"wox/setting"
 	"wox/util"
 )
 
@@ -52,6 +53,16 @@ func (a *AppPlugin) GetMetadata() plugin.Metadata {
 			"Windows",
 			"Macos",
 			"Linux",
+		},
+		Settings: []setting.PluginSettingItem{
+			{
+				Type: setting.PluginSettingTypeCheckBox,
+				Value: setting.PluginSettingValueCheckBox{
+					Key:   "UsePinYin",
+					Label: "Use pinyin to search",
+					Value: "false",
+				},
+			},
 		},
 	}
 }

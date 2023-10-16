@@ -7,6 +7,7 @@ import (
 	"strings"
 	"wox/plugin"
 	"wox/resource"
+	"wox/setting"
 	"wox/ui"
 	"wox/util"
 )
@@ -39,17 +40,19 @@ func main() {
 			return
 		}
 
+		settingErr := setting.GetSettingManager().Init(ctx)
+		if settingErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize settings: %s", settingErr.Error()))
+			return
+		}
+
 		startTray(ctx)
 
 		shareUI := ui.GetUIManager().GetUI(ctx)
 		plugin.GetPluginManager().Start(ctx, shareUI)
 
-		// macos use command+space, other os use alt+space as default hotkey
-		combineKey := "alt+space"
-		if strings.ToLower(runtime.GOOS) == "darwin" {
-			combineKey = "command+space"
-		}
-		registerMainHotkeyErr := ui.GetUIManager().RegisterMainHotkey(ctx, combineKey)
+		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+		registerMainHotkeyErr := ui.GetUIManager().RegisterMainHotkey(ctx, woxSetting.MainHotkey)
 		if registerMainHotkeyErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to register main hotkey: %s", registerMainHotkeyErr.Error()))
 		}

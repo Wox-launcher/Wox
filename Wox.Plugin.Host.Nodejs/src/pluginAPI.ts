@@ -10,11 +10,13 @@ export class PluginAPI implements PublicAPI {
   ws: WebSocket
   pluginId: string
   pluginName: string
+  settingChangeCallbacks: ((key: string, value: string) => void)[]
 
   constructor(ws: WebSocket, pluginId: string, pluginName: string) {
     this.ws = ws
     this.pluginId = pluginId
     this.pluginName = pluginName
+    this.settingChangeCallbacks = []
   }
 
   async invokeMethod(method: string, params: { [key: string]: string }): Promise<unknown> {
@@ -68,5 +70,17 @@ export class PluginAPI implements PublicAPI {
 
   async GetTranslation(key: string): Promise<string> {
     return (await this.invokeMethod("GetTranslation", { key })) as string
+  }
+
+  async GetSetting(key: string): Promise<string> {
+    return (await this.invokeMethod("GetSetting", { key })) as string
+  }
+
+  async SaveSetting(key: string, value: string): Promise<void> {
+    await this.invokeMethod("SaveSetting", { key, value })
+  }
+
+  async OnSettingChanged(callback: (key: string, value: string) => void): Promise<void> {
+    this.settingChangeCallbacks.push(callback)
   }
 }

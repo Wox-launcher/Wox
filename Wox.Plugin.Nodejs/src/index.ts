@@ -89,6 +89,21 @@ export interface PublicAPI {
    * Get translation of current language
    */
   GetTranslation: (key: string) => Promise<string>
+
+  /**
+   * Get customized setting
+   */
+  GetSetting: (key: string) => Promise<string>
+
+  /**
+   * Save customized setting
+   */
+  SaveSetting: (key: string, value: string) => Promise<void>
+
+  /**
+   * Register setting changed callback
+   */
+  OnSettingChanged: (callback: (key: string, value: string) => void) => Promise<void>
 }
 
 export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url"

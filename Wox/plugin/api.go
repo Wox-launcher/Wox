@@ -13,11 +13,15 @@ type API interface {
 	ShowMsg(ctx context.Context, title string, description string, icon string)
 	Log(ctx context.Context, msg string)
 	GetTranslation(ctx context.Context, key string) string
+	GetSetting(ctx context.Context, key string) string
+	SaveSetting(ctx context.Context, key string, value string)
+	OnSettingChanged(ctx context.Context, callback func(key string, value string))
 }
 
 type APIImpl struct {
-	metadata Metadata
-	logger   *util.Log
+	pluginInstance         *Instance
+	logger                 *util.Log
+	settingChangeCallbacks []func(key string, value string)
 }
 
 func (a *APIImpl) ChangeQuery(ctx context.Context, query string) {
@@ -44,9 +48,29 @@ func (a *APIImpl) GetTranslation(ctx context.Context, key string) string {
 	return ""
 }
 
-func NewAPI(metadata Metadata) API {
-	apiImpl := &APIImpl{metadata: metadata}
-	logFolder := path.Join(util.GetLocation().GetLogPluginDirectory(), metadata.Name)
+func (a *APIImpl) GetSetting(ctx context.Context, key string) string {
+	v, exist := a.pluginInstance.Setting.GetCustomizedSetting(key)
+	if exist {
+		return v
+	}
+	return ""
+}
+
+func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string) {
+	a.pluginInstance.Setting.CustomizedSettings.Store(key, value)
+	a.pluginInstance.SaveSetting(ctx)
+	for _, callback := range a.settingChangeCallbacks {
+		callback(key, value)
+	}
+}
+
+func (a *APIImpl) OnSettingChanged(ctx context.Context, callback func(key string, value string)) {
+	a.settingChangeCallbacks = append(a.settingChangeCallbacks, callback)
+}
+
+func NewAPI(instance *Instance) API {
+	apiImpl := &APIImpl{pluginInstance: instance}
+	logFolder := path.Join(util.GetLocation().GetLogPluginDirectory(), instance.Metadata.Name)
 	apiImpl.logger = util.CreateLogger(logFolder)
 	return apiImpl
 }
