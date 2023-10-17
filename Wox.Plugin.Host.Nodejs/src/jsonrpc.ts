@@ -7,6 +7,7 @@ import * as crypto from "crypto"
 
 const pluginMap = new Map<string, Plugin>()
 const actionCacheByPlugin = new Map<PluginJsonRpcRequest["PluginId"], Map<Result["Id"], ResultAction["Action"]>>()
+const pluginApiMap = new Map<PluginJsonRpcRequest["PluginId"], PluginAPI>()
 
 export const PluginJsonRpcTypeRequest: string = "WOX_JSONRPC_REQUEST"
 export const PluginJsonRpcTypeResponse: string = "WOX_JSONRPC_RESPONSE"
@@ -51,6 +52,8 @@ export async function handleRequestFromWox(request: PluginJsonRpcRequest, ws: We
       return action(request)
     case "unloadPlugin":
       return unloadPlugin(request)
+    case "onPluginSettingChange":
+      return onPluginSettingChange(request)
     default:
       logger.info(`unknown method handler: ${request.Method}`)
       throw new Error(`unknown method handler: ${request.Method}`)
@@ -96,7 +99,16 @@ function getMethod<M extends keyof Plugin>(request: PluginJsonRpcRequest, method
 
 async function initPlugin(request: PluginJsonRpcRequest, ws: WebSocket) {
   const init = getMethod(request, "init")
-  return init({ API: new PluginAPI(ws, request.PluginId, request.PluginName) } as PluginInitContext)
+  const pluginApi = new PluginAPI(ws, request.PluginId, request.PluginName)
+  pluginApiMap.set(request.PluginId, pluginApi)
+  return init({ API: pluginApi } as PluginInitContext)
+}
+
+async function onPluginSettingChange(request: PluginJsonRpcRequest) {
+  const settingKey = request.Params.Key
+  const settingValue = request.Params.Value
+  const callbackId = request.Params.CallbackId
+  pluginApiMap.get(request.PluginId)?.settingChangeCallbacks.get(callbackId)?.(settingKey, settingValue)
 }
 
 async function query(request: PluginJsonRpcRequest) {

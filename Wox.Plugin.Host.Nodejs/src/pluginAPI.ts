@@ -10,13 +10,13 @@ export class PluginAPI implements PublicAPI {
   ws: WebSocket
   pluginId: string
   pluginName: string
-  settingChangeCallbacks: ((key: string, value: string) => void)[]
+  settingChangeCallbacks: Map<string, (key: string, value: string) => void>
 
   constructor(ws: WebSocket, pluginId: string, pluginName: string) {
     this.ws = ws
     this.pluginId = pluginId
     this.pluginName = pluginName
-    this.settingChangeCallbacks = []
+    this.settingChangeCallbacks = new Map<string, (key: string, value: string) => void>()
   }
 
   async invokeMethod(method: string, params: { [key: string]: string }): Promise<unknown> {
@@ -81,6 +81,8 @@ export class PluginAPI implements PublicAPI {
   }
 
   async OnSettingChanged(callback: (key: string, value: string) => void): Promise<void> {
-    this.settingChangeCallbacks.push(callback)
+    const callbackId = crypto.randomUUID()
+    this.settingChangeCallbacks.set(callbackId, callback)
+    await this.invokeMethod("OnPluginSettingChanged", { callbackId })
   }
 }

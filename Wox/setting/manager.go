@@ -94,14 +94,12 @@ func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, defaul
 		return pluginSetting, nil
 	}
 
-	pluginSettingFile, openErr := os.Open(pluginSettingPath)
-	if openErr != nil {
-		return PluginSetting{}, openErr
+	fileContent, readErr := os.ReadFile(pluginSettingPath)
+	if readErr != nil {
+		return PluginSetting{}, readErr
 	}
-	defer pluginSettingFile.Close()
 
-	pluginSetting = PluginSetting{}
-	decodeErr := json.NewDecoder(pluginSettingFile).Decode(&pluginSetting)
+	decodeErr := json.Unmarshal(fileContent, &pluginSetting)
 	if decodeErr != nil {
 		return PluginSetting{}, decodeErr
 	}

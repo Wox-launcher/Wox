@@ -227,6 +227,44 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, data string
 		}
 		result := pluginInstance.API.GetTranslation(ctx, key)
 		w.sendResponse(ctx, request, result)
+	case "GetSetting":
+		key, exist := request.Params["key"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] GetSetting method must have a key parameter", request.PluginName))
+			return
+		}
+
+		result := pluginInstance.API.GetSetting(ctx, key)
+		w.sendResponse(ctx, request, result)
+	case "SaveSetting":
+		key, exist := request.Params["key"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] SaveSetting method must have a key parameter", request.PluginName))
+			return
+		}
+		value, valExist := request.Params["value"]
+		if !valExist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] SaveSetting method must have a value parameter", request.PluginName))
+			return
+		}
+
+		pluginInstance.API.SaveSetting(ctx, key, value)
+		w.sendResponse(ctx, request, "")
+	case "OnPluginSettingChanged":
+		callbackId, exist := request.Params["callbackId"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] OnSettingChanged method must have a callbackId parameter", request.PluginName))
+			return
+		}
+		metadata := pluginInstance.Metadata
+		pluginInstance.API.OnSettingChanged(ctx, func(key string, value string) {
+			w.invokeMethod(ctx, metadata, "onPluginSettingChange", map[string]string{
+				"CallbackId": callbackId,
+				"Key":        key,
+				"Value":      value,
+			})
+		})
+		w.sendResponse(ctx, request, "")
 	}
 }
 

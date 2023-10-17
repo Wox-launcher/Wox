@@ -1,17 +1,17 @@
 {
   "Id": "8364084026ff479fa7dbaf91f65cdd0e",
   "TriggerKeywords": [
-    "cb"
+    "kill"
   ],
-  "Name": "Clipboard History",
-  "Description": "A Wox plugin to get clipboard history",
+  "Name": "Process Killer",
+  "Description": "A Wox plugin for killing process",
   "Author": "qianlifeng",
   "Version": "1.0.0",
   "MinWoxVersion": "2.0.0.",
   "Runtime": "nodejs",
   "Website": "https://github.com/Wox-launcher/Wox",
   "Entry": "index.js",
-  "Icon": "relative:calculator.png",
+  "Icon": "relative:app.png",
   "SupportedOS": [
     "windows",
     "linux",

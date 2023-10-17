@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"wox/util"
 )
 
-type metadataForTest struct {
-	Settings CustomizedPluginSettings
-}
+func TestUnMarshalPluginSettingItem(t *testing.T) {
+	type metadataForTest struct {
+		Settings CustomizedPluginSettings
+	}
 
-func TestUnMarshalPluginSetting(t *testing.T) {
 	jsonStr := `
 {
     "Settings":[
@@ -86,4 +87,26 @@ func TestUnMarshalPluginSetting(t *testing.T) {
 	marshalData, marshalErr := json.Marshal(metadata)
 	assert.Nil(t, marshalErr)
 	t.Log(string(marshalData))
+}
+
+func TestMarshalPluginSetting(t *testing.T) {
+	var h util.HashMap[string, string]
+	h.Store("test", "test")
+	h.Store("test1", "test")
+
+	ps := PluginSetting{
+		Disabled:           true,
+		TriggerKeywords:    nil,
+		CustomizedSettings: &h,
+	}
+
+	marshalData, marshalErr := json.Marshal(ps)
+	assert.Nil(t, marshalErr)
+	t.Log(string(marshalData))
+
+	var ps1 PluginSetting
+	err := json.Unmarshal(marshalData, &ps1)
+	assert.Nil(t, err)
+	assert.Equal(t, ps.Disabled, ps1.Disabled)
+	assert.Equal(t, ps1.CustomizedSettings.Len(), int64(2))
 }

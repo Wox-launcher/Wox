@@ -1,12 +1,26 @@
 package util
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/tidwall/gjson"
 	"sync"
 )
 
 type HashMap[K comparable, V any] struct {
 	inner sync.Map
+}
+
+func (h *HashMap[K, V]) UnmarshalJSON(b []byte) error {
+	gjson.ParseBytes(b).ForEach(func(key, value gjson.Result) bool {
+		h.Store(key.Value().(K), value.Value().(V))
+		return true
+	})
+	return nil
+}
+
+func (h *HashMap[K, V]) MarshalJSON() ([]byte, error) {
+	return json.Marshal(h.ToMap())
 }
 
 func (h *HashMap[K, V]) Store(k K, v V) {

@@ -7,12 +7,16 @@
     "url": "https://github.com/Wox-launcher/Wox.git"
   },
   "scripts": {
-    "build": "pnpm clean && ncc build src/index.ts -o dist",
+    "build": "pnpm clean && ncc build src/index.ts -o dist && babel dist --out-dir dist",
     "clean": "node -e \"var { rmdirSync, existsSync } = require('fs'), path = require('path'); ['./dist'].forEach(fPath => {if (existsSync(path.join(__dirname, fPath))) rmdirSync(path.join(__dirname, fPath), { recursive: true })}); process.exit(0);\"",
     "clean:all": "npm run clean && (rm -r ./node_modules || true)",
     "lint": "eslint --ext .ts --fix src/**/*.ts"
   },
   "devDependencies": {
+    "@babel/cli": "^7.22.15",
+    "@babel/core": "^7.22.20",
+    "@babel/preset-env": "^7.22.20",
+    "babel-plugin-transform-import-meta": "^2.2.1",
     "@types/node": "^20.6.0",
     "@types/ws": "^8.5.5",
     "@typescript-eslint/eslint-plugin": "^6.7.0",
@@ -25,8 +29,7 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@wox-launcher/wox-plugin": "^0.0.40",
-    "clipboard-event": "^1.6.0",
-    "copy-paste": "^1.5.3"
+    "@wox-launcher/wox-plugin": "^0.0.41",
+    "ps-list": "^8.1.1"
   }
 }

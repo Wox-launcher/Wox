@@ -7,12 +7,16 @@
     "url": "https://github.com/Wox-launcher/Wox.git"
   },
   "scripts": {
-    "build": "pnpm clean && ncc build src/index.ts -o dist",
+    "build": "pnpm clean && ncc build src/index.ts -o dist && babel dist --out-dir dist",
     "clean": "node -e \"var { rmdirSync, existsSync } = require('fs'), path = require('path'); ['./dist'].forEach(fPath => {if (existsSync(path.join(__dirname, fPath))) rmdirSync(path.join(__dirname, fPath), { recursive: true })}); process.exit(0);\"",
     "clean:all": "npm run clean && (rm -r ./node_modules || true)",
     "lint": "eslint --ext .ts --fix src/**/*.ts"
   },
   "devDependencies": {
+    "@babel/cli": "^7.22.15",
+    "@babel/core": "^7.22.20",
+    "@babel/preset-env": "^7.22.20",
+    "babel-plugin-transform-import-meta": "^2.2.1",
     "@types/node": "^20.4.1",
     "@types/promise-deferred": "^2.0.2",
     "@types/uuid": "^9.0.3",

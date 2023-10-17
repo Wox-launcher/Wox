@@ -57,10 +57,14 @@ func (a *APIImpl) GetSetting(ctx context.Context, key string) string {
 }
 
 func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string) {
+	existValue, exist := a.pluginInstance.Setting.CustomizedSettings.Load(key)
 	a.pluginInstance.Setting.CustomizedSettings.Store(key, value)
 	a.pluginInstance.SaveSetting(ctx)
-	for _, callback := range a.settingChangeCallbacks {
-		callback(key, value)
+
+	if !exist || (exist && existValue != value) {
+		for _, callback := range a.settingChangeCallbacks {
+			callback(key, value)
+		}
 	}
 }
 
