@@ -5,7 +5,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"wox/plugin"
-	"wox/util"
 )
 
 func init() {
@@ -85,7 +84,7 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 		plugins := plugin.GetPluginManager().GetPluginInstances()
 		if query.Search != "" {
 			plugins = lo.Filter(plugins, func(pluginInstance *plugin.Instance, _ int) bool {
-				return util.StringMatch(pluginInstance.Metadata.Name, query.Search, false)
+				return plugin.GetPluginManager().StringMatchNoPinYin(ctx, pluginInstance.Metadata.Name, query.Search)
 			})
 		}
 

@@ -19,7 +19,7 @@ export const plugin: Plugin = {
       .map(p => {
         return {
           Title: p.name,
-          SubTitle: `PID: ${p.pid}`,
+          SubTitle: `PID: ${p.pid} CPU: ${p.cpu} Memory: ${p.memory}`,
           Icon: {
             ImageType: "relative",
             ImageData: path.join("images", "app.png")

@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"wox/plugin"
-	"wox/util"
 )
 
 func init() {
@@ -59,7 +58,7 @@ func (i *IndicatorPlugin) queryForNonTriggerKeyword(ctx context.Context, query p
 	var results []plugin.QueryResult
 	for _, pluginInstance := range plugin.GetPluginManager().GetPluginInstances() {
 		triggerKeyword, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
-			return triggerKeyword != "*" && util.StringMatch(triggerKeyword, query.Search, false)
+			return triggerKeyword != "*" && plugin.GetPluginManager().StringMatchNoPinYin(ctx, triggerKeyword, query.Search)
 		})
 		if found {
 			results = append(results, plugin.QueryResult{
@@ -104,13 +103,13 @@ func (i *IndicatorPlugin) queryForNonCommand(ctx context.Context, query plugin.Q
 	var results []plugin.QueryResult
 	for _, pluginInstance := range plugin.GetPluginManager().GetPluginInstances() {
 		_, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
-			return util.StringMatch(triggerKeyword, query.TriggerKeyword, false)
+			return plugin.GetPluginManager().StringMatchNoPinYin(ctx, triggerKeyword, query.TriggerKeyword)
 		})
 		if found {
 			for _, metadataCommandShadow := range pluginInstance.Metadata.Commands {
 				// action will be executed in another go routine, so we need to copy the variable
 				metadataCommand := metadataCommandShadow
-				if util.StringMatch(metadataCommand.Command, query.Search, false) {
+				if plugin.GetPluginManager().StringMatchNoPinYin(ctx, metadataCommand.Command, query.Search) {
 					results = append(results, plugin.QueryResult{
 						Id:       uuid.NewString(),
 						Title:    fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command),

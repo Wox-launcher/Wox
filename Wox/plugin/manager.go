@@ -391,3 +391,12 @@ func (m *Manager) GetAction(resultId string) func() {
 
 	return nil
 }
+
+func (m *Manager) StringMatch(ctx context.Context, term string, subTerm string) bool {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	return util.StringMatch(term, subTerm, woxSetting.UsePinYin)
+}
+
+func (m *Manager) StringMatchNoPinYin(ctx context.Context, term string, subTerm string) bool {
+	return util.StringMatch(term, subTerm, false)
+}
