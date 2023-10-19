@@ -31,7 +31,6 @@ func TestMultiplyTerms(t *testing.T) {
 }
 
 func TestGetPinYin(t *testing.T) {
-	assert.Equal(t, []string{"QQyinle", "QQyinyue", "QQyl", "QQyy"}, getPinYin("QQ音乐"))
+	assert.Equal(t, []string{"Q Q yin le", "Q Q yin yue", "Q Q y l", "Q Q y y"}, getPinYin("QQ音乐"))
 	assert.Equal(t, []string{"Microsoft Remote Desktop"}, getPinYin("Microsoft Remote Desktop"))
-
 }

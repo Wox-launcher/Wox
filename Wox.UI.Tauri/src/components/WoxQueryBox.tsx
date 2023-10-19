@@ -178,6 +178,8 @@ export default () => {
                                          dangerouslySetInnerHTML={{__html: result.Icon.ImageData}}></div>}
                                 {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeUrl.code &&
                                     <Image src={result.Icon.ImageData} className={"wox-query-result-image"}/>}
+                                {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeBase64.code &&
+                                    <Image src={result.Icon.ImageData} className={"wox-query-result-image"}/>}
                                 <div className={"ms-2 me-auto"}>
                                     <div className={"fw-bold"}>{result.Title}</div>
                                     <div className={"fw-lighter"}>{result.Score} - {result.SubTitle}</div>

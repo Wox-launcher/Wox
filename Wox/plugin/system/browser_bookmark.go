@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/mitchellh/go-homedir"
 	"os"
-	"os/exec"
 	"runtime"
 	"strings"
 	"wox/plugin"
@@ -59,7 +58,8 @@ func (c *BrowserBookmarkPlugin) Init(ctx context.Context, initParams plugin.Init
 }
 
 func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
-	for _, bookmark := range c.bookmarks {
+	for _, b := range c.bookmarks {
+		var bookmark = b
 		var isMatch bool
 		var matchScore int
 
@@ -68,10 +68,13 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 			isMatch = true
 			matchScore = nameScore
 		} else {
-			isUrlMatch, urlScore := IsStringMatchScoreNoPinYin(ctx, bookmark.Url, query.Search)
-			if isUrlMatch {
-				isMatch = true
-				matchScore = urlScore
+			//url match must be exact part match
+			if strings.Contains(bookmark.Url, query.Search) {
+				isUrlMatch, urlScore := IsStringMatchScoreNoPinYin(ctx, bookmark.Url, query.Search)
+				if isUrlMatch {
+					isMatch = true
+					matchScore = urlScore
+				}
 			}
 		}
 
@@ -80,12 +83,12 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 				Title:    bookmark.Name,
 				SubTitle: bookmark.Url,
 				Score:    matchScore,
-				Icon:     plugin.NewWoxImageSvg(`<svg t="1697640255303" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4021" width="200" height="200"><path d="M512.104171 176.04883h207.925127c8.750356 0 16.042319 7.291963 16.042319 16.04232v640.026042c0 8.750356-11.667141 23.542625-16.042319 16.04232L512.520855 487.936521l-0.208342 0.208342-0.208342 0.416683v-312.512716z" fill="#0288D1" p-id="4022"></path><path d="M303.970702 176.04883h207.925127v312.721058L303.970702 847.95117c-4.375178 7.708647-16.042319-7.291963-16.042319-16.04232V192.09115c0-8.958698 7.291963-16.042319 16.042319-16.04232z" fill="#039BE5" p-id="4023"></path></svg>`),
+				Icon:     plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAC9UlEQVR4nO1bTW8SURSdahfWdf0l6u9whfoPdNtNo2Ye07jRtNbE2LU1UZgHiZLUiJpIqXVhWw2ygkZMdGNTrMaApYChHHOnSJpWyswwH8z03uQkBN5M7j1z77sfvFEUFhYWlj6iaTihSlxWdbxUJcpCAk5h5skv4PMVW6Br99+ro9uLqI5LCjCiOCHXkzij6lhy0mi3CDiArBbD+EDGaws4LXR8cMt4lwkgvJ9IYsw2AULippvGe0AAhYVm7+lnMarq+Bl0AoSOH2SLnad/3m3jPSFAAjfiOGedAB0XwkIA2WKZgKhEJCwEkC1MgFWJsgeAQ0DwHgDeBAVnAXAaFFwH4BAJt1JtbHyvo1mrmUJ9u4aVYjM8hdCDTMu08f9QqexYIqBamDQwlARoCeD1xz/IlxqmkPvUwKOl1qH7TB8goF26ilLuHvRXOUwlWgboM31Hv+1fOx2GUjiaaONrfgaVwjUsv03hbmqr51r6jdZUi5P4kp81rg08AcILkpkAuOMBc+ldxJdbphB70zIyR2g8YC69i8a2tSywUa4fbwK+hYkAYSMEbj8NUQiIAIEJkOwBEVdK4UzefClsFVQ6P+6UzrPP2lhbb/53HelAungeAvM2miG7zRN1kUeto8bMn3a4bL4dtgpqn98V9tpn8oRqdadnau2XXXgPkLwJRhwPAREgsAdIn2eCvyu17jRotdg0NjinNkvSoV+XORQzwZXOQJRSm9MZw5c0qFmYCa6uN3FnYe8pkSdQkeNUwUQ6+FIIiQCBCZDsARHfByLxI/BwsdWNY9rRaXhi9lrSITAjseYRoM2M7mvl7zYC6dCPhGARULZOwH0/CBDHPQREgMAESPaAyNAelRVewM5RWeHRYWlPkMRZywRoWYzSUXPflR8QqsRWJImTlgkgETqm/DbAAaiKXZlIYoxeOwns09exps3jlDKIaDGMqzoW/TbGBjIDvzTVFWBETeCiKpEWEptDYFwvbAodz42879RrcywsLEqY5S+u/BSNeloCCQAAAABJRU5ErkJggg==`),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "Open in browser",
 						Action: func() {
-							c.open(ctx, bookmark.Url)
+							util.ShellOpen(bookmark.Url)
 						},
 					},
 				},
@@ -114,13 +117,4 @@ func (c *BrowserBookmarkPlugin) loadChromeBookmarkInMacos(ctx context.Context) (
 	}
 
 	return results
-}
-
-func (c *BrowserBookmarkPlugin) open(ctx context.Context, path string) {
-	if strings.ToLower(runtime.GOOS) == "darwin" {
-		exec.Command("open", path).Start()
-	}
-	if strings.ToLower(runtime.GOOS) == "windows" {
-		exec.Command("cmd", "/C", "start", path).Start()
-	}
 }

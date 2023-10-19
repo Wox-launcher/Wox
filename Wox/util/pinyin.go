@@ -16,7 +16,6 @@ func init() {
 	}
 }
 
-// "QQ音乐" => ["qqyinle", "qqyinyue","qqyl","qqyy"]
 func getPinYin(term string) []string {
 	if !hasChinese(term) {
 		return []string{term}
@@ -59,10 +58,10 @@ func getPinYin(term string) []string {
 
 	var terms []string
 	for _, newTerm := range heteronymTerms {
-		terms = append(terms, strings.Join(newTerm, ""))
+		terms = append(terms, strings.Join(newTerm, " "))
 	}
 	for _, firstLetterTerm := range firstLetterTerms {
-		terms = append(terms, strings.Join(firstLetterTerm, ""))
+		terms = append(terms, strings.Join(firstLetterTerm, " "))
 	}
 
 	return terms

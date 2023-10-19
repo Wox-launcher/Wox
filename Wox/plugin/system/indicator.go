@@ -65,7 +65,7 @@ func (i *IndicatorPlugin) queryForNonTriggerKeyword(ctx context.Context, query p
 				Id:       uuid.NewString(),
 				Title:    triggerKeyword,
 				SubTitle: fmt.Sprintf("Activate %s plugin", pluginInstance.Metadata.Name),
-				Icon:     plugin.WoxImage{},
+				Icon:     plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><circle cx="22" cy="9" r="2" fill="#c767e5"></circle><circle cx="12" cy="9" r="2" fill="#c767e5"></circle><path fill="#c767e5" d="M34,9c0-1.1-0.9-2-2-2H22l-2,2c0,3,3,3,3,7c0,0.702-0.127,1.374-0.349,2H34V9z"></path><path fill="#c767e5" d="M11,16c0-4,3-4,3-7l-2-2H2C0.9,7,0,7.9,0,9v9h11.349C11.127,17.374,11,16.702,11,16z"></path><path fill="#a238c2" d="M34,39v-9H0v9c0,1.1,0.9,2,2,2h30C33.1,41,34,40.1,34,39z"></path><path fill="#ba54d9" d="M34,29.806c0-1.854,2.204-2.772,3.558-1.507C38.513,29.19,39.75,30,42,30	c3.675,0,6.578-3.303,5.902-7.102c-0.572-3.218-3.665-5.24-6.909-4.838c-1.663,0.206-2.671,0.92-3.479,1.684	C36.185,20.998,34,20.028,34,18.2V18H22.651c-0.825,2.329-3.04,4-5.651,4s-4.827-1.671-5.651-4H0v12h34V29.806z"></path></svg>`),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "activate",
@@ -82,7 +82,7 @@ func (i *IndicatorPlugin) queryForNonTriggerKeyword(ctx context.Context, query p
 					Id:       uuid.NewString(),
 					Title:    fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command),
 					SubTitle: pluginInstance.Metadata.Description,
-					Icon:     plugin.WoxImage{},
+					Icon:     plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><circle cx="22" cy="9" r="2" fill="#c767e5"></circle><circle cx="12" cy="9" r="2" fill="#c767e5"></circle><path fill="#c767e5" d="M34,9c0-1.1-0.9-2-2-2H22l-2,2c0,3,3,3,3,7c0,0.702-0.127,1.374-0.349,2H34V9z"></path><path fill="#c767e5" d="M11,16c0-4,3-4,3-7l-2-2H2C0.9,7,0,7.9,0,9v9h11.349C11.127,17.374,11,16.702,11,16z"></path><path fill="#a238c2" d="M34,39v-9H0v9c0,1.1,0.9,2,2,2h30C33.1,41,34,40.1,34,39z"></path><path fill="#ba54d9" d="M34,29.806c0-1.854,2.204-2.772,3.558-1.507C38.513,29.19,39.75,30,42,30	c3.675,0,6.578-3.303,5.902-7.102c-0.572-3.218-3.665-5.24-6.909-4.838c-1.663,0.206-2.671,0.92-3.479,1.684	C36.185,20.998,34,20.028,34,18.2V18H22.651c-0.825,2.329-3.04,4-5.651,4s-4.827-1.671-5.651-4H0v12h34V29.806z"></path></svg>`),
 					Actions: []plugin.QueryResultAction{
 						{
 							Name: "activate",
@@ -114,7 +114,8 @@ func (i *IndicatorPlugin) queryForNonCommand(ctx context.Context, query plugin.Q
 						Id:       uuid.NewString(),
 						Title:    fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command),
 						SubTitle: pluginInstance.Metadata.Description,
-						Icon:     plugin.WoxImage{},
+						Score:    100,
+						Icon:     plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><circle cx="22" cy="9" r="2" fill="#c767e5"></circle><circle cx="12" cy="9" r="2" fill="#c767e5"></circle><path fill="#c767e5" d="M34,9c0-1.1-0.9-2-2-2H22l-2,2c0,3,3,3,3,7c0,0.702-0.127,1.374-0.349,2H34V9z"></path><path fill="#c767e5" d="M11,16c0-4,3-4,3-7l-2-2H2C0.9,7,0,7.9,0,9v9h11.349C11.127,17.374,11,16.702,11,16z"></path><path fill="#a238c2" d="M34,39v-9H0v9c0,1.1,0.9,2,2,2h30C33.1,41,34,40.1,34,39z"></path><path fill="#ba54d9" d="M34,29.806c0-1.854,2.204-2.772,3.558-1.507C38.513,29.19,39.75,30,42,30	c3.675,0,6.578-3.303,5.902-7.102c-0.572-3.218-3.665-5.24-6.909-4.838c-1.663,0.206-2.671,0.92-3.479,1.684	C36.185,20.998,34,20.028,34,18.2V18H22.651c-0.825,2.329-3.04,4-5.651,4s-4.827-1.671-5.651-4H0v12h34V29.806z"></path></svg>`),
 						Actions: []plugin.QueryResultAction{
 							{
 								Name: "activate",
@@ -129,11 +130,4 @@ func (i *IndicatorPlugin) queryForNonCommand(ctx context.Context, query plugin.Q
 		}
 	}
 	return results
-}
-
-func (i *IndicatorPlugin) getIcon() plugin.WoxImage {
-	return plugin.WoxImage{
-		ImageType: plugin.WoxImageTypeSvg,
-		ImageData: `<svg t="1697178225584" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="16738" width="200" height="200"><path d="M842.99 884.364H181.01c-22.85 0-41.374-18.756-41.374-41.892V181.528c0-23.136 18.524-41.892 41.374-41.892h661.98c22.85 0 41.374 18.756 41.374 41.892v660.944c0 23.136-18.524 41.892-41.374 41.892z" fill="#9C34FE" p-id="16739" data-spm-anchor-id="a313x.search_index.0.i6.1f873a81xqBP8f"></path><path d="M387.88 307.2h-82.748v83.78c0 115.68 92.618 209.456 206.868 209.456s206.868-93.776 206.868-209.454V307.2h-82.746v83.78c0 69.408-55.572 125.674-124.122 125.674s-124.12-56.266-124.12-125.672V307.2z" fill="#FFFFFF" p-id="16740"></path></svg>`,
-	}
 }
