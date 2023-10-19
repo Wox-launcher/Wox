@@ -46,6 +46,12 @@ export default () => {
             }
             return Object.assign({...result, Index: index})
         })
+
+        //sort currentResultList order by score desc
+        currentResultList.current.sort((a, b) => {
+            return b.Score - a.Score
+        })
+
         resetResultList()
         setShownResultList()
     }
@@ -129,6 +135,9 @@ export default () => {
             <Form.Control
                 id="Wox"
                 aria-label="Wox"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
                 onChange={(e) => {
                     queryText.current = e.target.value
                     currentResultList.current = []
@@ -171,7 +180,7 @@ export default () => {
                                     <Image src={result.Icon.ImageData} className={"wox-query-result-image"}/>}
                                 <div className={"ms-2 me-auto"}>
                                     <div className={"fw-bold"}>{result.Title}</div>
-                                    <div className={"fw-lighter"}>{result.SubTitle}</div>
+                                    <div className={"fw-lighter"}>{result.Score} - {result.SubTitle}</div>
                                 </div>
                             </div>
                         </ListGroup.Item>

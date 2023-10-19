@@ -122,7 +122,7 @@ func (s *Store) GetStorePluginManifest(ctx context.Context, store StoreManifest)
 
 func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifest {
 	return lo.Filter(s.pluginManifests, func(manifest StorePluginManifest, _ int) bool {
-		return GetPluginManager().StringMatchNoPinYin(ctx, manifest.Name, keyword)
+		return util.IsStringMatch(manifest.Name, keyword, false)
 	})
 }
 

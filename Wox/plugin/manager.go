@@ -288,7 +288,9 @@ func (m *Manager) isQueryMatchPlugin(ctx context.Context, pluginInstance *Instan
 
 func (m *Manager) QueryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) []QueryResult {
 	logger.Info(ctx, fmt.Sprintf("[%s] start query: %s", pluginInstance.Metadata.Name, query.RawQuery))
+	start := util.GetSystemTimestamp()
 	results := pluginInstance.Plugin.Query(ctx, query)
+	logger.Debug(ctx, fmt.Sprintf("[%s] finish query, result count: %d, cost: %dms", pluginInstance.Metadata.Name, len(results), util.GetSystemTimestamp()-start))
 	for i := range results {
 		results[i].Icon = convertLocalImageToUrl(ctx, results[i].Icon, pluginInstance)
 
@@ -390,13 +392,4 @@ func (m *Manager) GetAction(resultId string) func() {
 	}
 
 	return nil
-}
-
-func (m *Manager) StringMatch(ctx context.Context, term string, subTerm string) bool {
-	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	return util.StringMatch(term, subTerm, woxSetting.UsePinYin)
-}
-
-func (m *Manager) StringMatchNoPinYin(ctx context.Context, term string, subTerm string) bool {
-	return util.StringMatch(term, subTerm, false)
 }

@@ -85,12 +85,13 @@ func (a *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 	for _, infoShadow := range a.apps {
 		// action will be executed in another go routine, so we need to copy the variable
 		info := infoShadow
-		if plugin.GetPluginManager().StringMatch(ctx, info.Name, query.Search) {
+		if isMatch, score := IsStringMatchScore(ctx, info.Name, query.Search); isMatch {
 			results = append(results, plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    info.Name,
 				SubTitle: info.Path,
 				Icon:     info.Icon,
+				Score:    score,
 				Preview: plugin.WoxPreview{
 					PreviewType: plugin.WoxPreviewTypeText,
 					PreviewData: info.Path,

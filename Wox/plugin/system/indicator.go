@@ -58,7 +58,7 @@ func (i *IndicatorPlugin) queryForNonTriggerKeyword(ctx context.Context, query p
 	var results []plugin.QueryResult
 	for _, pluginInstance := range plugin.GetPluginManager().GetPluginInstances() {
 		triggerKeyword, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
-			return triggerKeyword != "*" && plugin.GetPluginManager().StringMatchNoPinYin(ctx, triggerKeyword, query.Search)
+			return triggerKeyword != "*" && IsStringMatchNoPinYin(ctx, triggerKeyword, query.Search)
 		})
 		if found {
 			results = append(results, plugin.QueryResult{
@@ -103,13 +103,13 @@ func (i *IndicatorPlugin) queryForNonCommand(ctx context.Context, query plugin.Q
 	var results []plugin.QueryResult
 	for _, pluginInstance := range plugin.GetPluginManager().GetPluginInstances() {
 		_, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
-			return plugin.GetPluginManager().StringMatchNoPinYin(ctx, triggerKeyword, query.TriggerKeyword)
+			return IsStringMatchNoPinYin(ctx, triggerKeyword, query.TriggerKeyword)
 		})
 		if found {
 			for _, metadataCommandShadow := range pluginInstance.Metadata.Commands {
 				// action will be executed in another go routine, so we need to copy the variable
 				metadataCommand := metadataCommandShadow
-				if plugin.GetPluginManager().StringMatchNoPinYin(ctx, metadataCommand.Command, query.Search) {
+				if IsStringMatchNoPinYin(ctx, metadataCommand.Command, query.Search) {
 					results = append(results, plugin.QueryResult{
 						Id:       uuid.NewString(),
 						Title:    fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command),

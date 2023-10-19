@@ -84,7 +84,7 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 		plugins := plugin.GetPluginManager().GetPluginInstances()
 		if query.Search != "" {
 			plugins = lo.Filter(plugins, func(pluginInstance *plugin.Instance, _ int) bool {
-				return plugin.GetPluginManager().StringMatchNoPinYin(ctx, pluginInstance.Metadata.Name, query.Search)
+				return IsStringMatchNoPinYin(ctx, pluginInstance.Metadata.Name, query.Search)
 			})
 		}
 

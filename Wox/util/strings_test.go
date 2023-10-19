@@ -6,11 +6,11 @@ import (
 )
 
 func TestStringMatcherPinyin(t *testing.T) {
-	assert.True(t, StringMatch("有道词典", "yd", true))
-	assert.True(t, StringMatch("网易云音乐", "yyy", true))
-	assert.True(t, StringMatch("腾讯qq", "tx", true))
-	assert.True(t, StringMatch("QQ音乐.app", "yinyue", true))
-	assert.True(t, StringMatch("Cursor", "cursor", true))
+	assert.True(t, IsStringMatch("有道词典", "yd", true))
+	assert.True(t, IsStringMatch("网易云音乐", "yyy", true))
+	assert.True(t, IsStringMatch("腾讯qq", "tx", true))
+	assert.True(t, IsStringMatch("QQ音乐.app", "yinyue", true))
+	assert.True(t, IsStringMatch("Microsoft Remote Desktop", "test", true))
 }
 
 func TestStringMatcher(t *testing.T) {
@@ -20,7 +20,7 @@ func TestStringMatcher(t *testing.T) {
 }
 
 func testcase(t *testing.T, term string, search string, expected bool) {
-	assert.Equal(t, StringMatch(term, search, false), expected)
+	assert.Equal(t, IsStringMatch(term, search, false), expected)
 }
 
 func TestMultiplyTerms(t *testing.T) {
@@ -31,5 +31,7 @@ func TestMultiplyTerms(t *testing.T) {
 }
 
 func TestGetPinYin(t *testing.T) {
-	assert.Equal(t, []string{"qqyinle", "qqyinyue", "qqyl", "qqyy"}, getPinYin("QQ音乐"))
+	assert.Equal(t, []string{"QQyinle", "QQyinyue", "QQyl", "QQyy"}, getPinYin("QQ音乐"))
+	assert.Equal(t, []string{"Microsoft Remote Desktop"}, getPinYin("Microsoft Remote Desktop"))
+
 }
