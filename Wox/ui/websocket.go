@@ -7,20 +7,23 @@ import (
 	"github.com/olahol/melody"
 	"net/http"
 	"os"
+	"strings"
 	"wox/plugin"
 	"wox/util"
 )
 
 var m *melody.Melody
 
-type websocketRequest struct {
-	Id     string
-	Method string
-	Params map[string]string
-}
+type websocketMsgType string
 
-type websocketResponse struct {
+const (
+	WebsocketMsgTypeRequest  websocketMsgType = "WebsocketMsgTypeRequest"
+	WebsocketMsgTypeResponse websocketMsgType = "WebsocketMsgTypeResponse"
+)
+
+type WebsocketMsg struct {
 	Id      string
+	Type    websocketMsgType
 	Method  string
 	Success bool
 	Data    any
@@ -62,16 +65,17 @@ func serveAndWait(ctx context.Context, port int) {
 		ctxNew := util.NewTraceContext()
 		logger.Info(ctxNew, fmt.Sprintf("got request from ui: %s", string(msg)))
 
-		var request websocketRequest
-		unmarshalErr := json.Unmarshal(msg, &request)
-		if unmarshalErr != nil {
-			logger.Error(ctxNew, fmt.Sprintf("failed to unmarshal websocket request: %s", unmarshalErr.Error()))
-			return
+		if strings.Contains(string(msg), string(WebsocketMsgTypeRequest)) {
+			var request WebsocketMsg
+			unmarshalErr := json.Unmarshal(msg, &request)
+			if unmarshalErr != nil {
+				logger.Error(ctxNew, fmt.Sprintf("failed to unmarshal websocket request: %s", unmarshalErr.Error()))
+				return
+			}
+			util.Go(ctxNew, "handle ui query", func() {
+				onUIRequest(ctxNew, request)
+			})
 		}
-
-		util.Go(ctxNew, "handle ui query", func() {
-			onUIRequest(ctxNew, request)
-		})
 	})
 
 	logger.Info(ctx, fmt.Sprintf("websocket server start at：ws://localhost:%d", port))
@@ -81,7 +85,8 @@ func serveAndWait(ctx context.Context, port int) {
 	}
 }
 
-func requestUI(ctx context.Context, request websocketRequest) {
+func requestUI(ctx context.Context, request WebsocketMsg) {
+	request.Type = WebsocketMsgTypeRequest
 	marshalData, marshalErr := json.Marshal(request)
 	if marshalErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to marshal websocket request: %s", marshalErr.Error()))
@@ -90,7 +95,8 @@ func requestUI(ctx context.Context, request websocketRequest) {
 	m.Broadcast(marshalData)
 }
 
-func responseUI(ctx context.Context, response websocketResponse) {
+func responseUI(ctx context.Context, response WebsocketMsg) {
+	response.Type = WebsocketMsgTypeResponse
 	marshalData, marshalErr := json.Marshal(response)
 	if marshalErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to marshal websocket response: %s", marshalErr.Error()))
@@ -99,22 +105,24 @@ func responseUI(ctx context.Context, response websocketResponse) {
 	m.Broadcast(marshalData)
 }
 
-func responseUISuccessWithData(ctx context.Context, request websocketRequest, data any) {
-	responseUI(ctx, websocketResponse{
+func responseUISuccessWithData(ctx context.Context, request WebsocketMsg, data any) {
+	responseUI(ctx, WebsocketMsg{
 		Id:      request.Id,
+		Type:    WebsocketMsgTypeResponse,
 		Method:  request.Method,
 		Success: true,
 		Data:    data,
 	})
 }
 
-func responseUISuccess(ctx context.Context, request websocketRequest) {
+func responseUISuccess(ctx context.Context, request WebsocketMsg) {
 	responseUISuccessWithData(ctx, request, nil)
 }
 
-func responseUIError(ctx context.Context, request websocketRequest, errMsg string) {
-	responseUI(ctx, websocketResponse{
+func responseUIError(ctx context.Context, request WebsocketMsg, errMsg string) {
+	responseUI(ctx, WebsocketMsg{
 		Id:      request.Id,
+		Type:    WebsocketMsgTypeResponse,
 		Method:  request.Method,
 		Success: false,
 		Data:    errMsg,

@@ -50,10 +50,9 @@ func (m *Manager) StartWebsocketAndWait(ctx context.Context, port int) {
 func (m *Manager) ToggleWindow() {
 	ctx := util.NewTraceContext()
 	logger.Info(ctx, "[UI] toggle window")
-	requestUI(ctx, websocketRequest{
+	requestUI(ctx, WebsocketMsg{
 		Id:     uuid.NewString(),
 		Method: "toggleWindow",
-		Params: make(map[string]string),
 	})
 }
 

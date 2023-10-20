@@ -2,8 +2,11 @@ package ui
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 	"time"
 	"wox/plugin"
 	"wox/util"
@@ -48,14 +51,14 @@ func (u *uiImpl) send(ctx context.Context, method string, params map[string]stri
 	}
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("[UI] %s", method))
-	requestUI(ctx, websocketRequest{
+	requestUI(ctx, WebsocketMsg{
 		Id:     uuid.NewString(),
 		Method: method,
-		Params: params,
+		Data:   params,
 	})
 }
 
-func onUIRequest(ctx context.Context, request websocketRequest) {
+func onUIRequest(ctx context.Context, request WebsocketMsg) {
 	switch request.Method {
 	case "Query":
 		handleQuery(ctx, request)
@@ -66,17 +69,17 @@ func onUIRequest(ctx context.Context, request websocketRequest) {
 	}
 }
 
-func handleQuery(ctx context.Context, request websocketRequest) {
-	query, queryExist := request.Params["query"]
-	queryType, queryTypeExist := request.Params["type"]
-	if !queryExist {
-		logger.Error(ctx, "query parameter not found")
-		responseUIError(ctx, request, "query parameter not found")
+func handleQuery(ctx context.Context, request WebsocketMsg) {
+	query, queryErr := getWebsocketMsgParameter(ctx, request, "query")
+	if queryErr != nil {
+		logger.Error(ctx, queryErr.Error())
+		responseUIError(ctx, request, queryErr.Error())
 		return
 	}
-	if !queryTypeExist {
-		logger.Error(ctx, "type parameter not found")
-		responseUIError(ctx, request, "type parameter not found")
+	queryType, queryTypeErr := getWebsocketMsgParameter(ctx, request, "type")
+	if queryTypeErr != nil {
+		logger.Error(ctx, queryTypeErr.Error())
+		responseUIError(ctx, request, queryTypeErr.Error())
 		return
 	}
 
@@ -109,11 +112,11 @@ func handleQuery(ctx context.Context, request websocketRequest) {
 
 }
 
-func handleAction(ctx context.Context, request websocketRequest) {
-	resultId, ok := request.Params["id"]
-	if !ok {
-		logger.Error(ctx, "id parameter not found")
-		responseUIError(ctx, request, "id parameter not found")
+func handleAction(ctx context.Context, request WebsocketMsg) {
+	resultId, idErr := getWebsocketMsgParameter(ctx, request, "id")
+	if idErr != nil {
+		logger.Error(ctx, idErr.Error())
+		responseUIError(ctx, request, idErr.Error())
 		return
 	}
 
@@ -128,11 +131,11 @@ func handleAction(ctx context.Context, request websocketRequest) {
 	responseUISuccess(ctx, request)
 }
 
-func handleRegisterMainHotkey(ctx context.Context, request websocketRequest) {
-	hotkey, ok := request.Params["hotkey"]
-	if !ok {
-		logger.Error(ctx, "hotkey parameter not found")
-		responseUIError(ctx, request, "hotkey parameter not found")
+func handleRegisterMainHotkey(ctx context.Context, request WebsocketMsg) {
+	hotkey, hotkeyErr := getWebsocketMsgParameter(ctx, request, "hotkey")
+	if hotkeyErr != nil {
+		logger.Error(ctx, hotkeyErr.Error())
+		responseUIError(ctx, request, hotkeyErr.Error())
 		return
 	}
 
@@ -142,4 +145,18 @@ func handleRegisterMainHotkey(ctx context.Context, request websocketRequest) {
 	} else {
 		responseUISuccess(ctx, request)
 	}
+}
+
+func getWebsocketMsgParameter(ctx context.Context, msg WebsocketMsg, key string) (string, error) {
+	jsonData, marshalErr := json.Marshal(msg.Data)
+	if marshalErr != nil {
+		return "", marshalErr
+	}
+
+	paramterData := gjson.GetBytes(jsonData, key)
+	if !paramterData.Exists() {
+		return "", errors.New(fmt.Sprintf("%s parameter not found", key))
+	}
+
+	return paramterData.String(), nil
 }
