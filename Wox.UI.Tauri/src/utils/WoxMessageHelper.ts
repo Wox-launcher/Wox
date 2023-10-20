@@ -2,6 +2,7 @@ import {v4 as UUID} from 'uuid';
 import Deferred from "promise-deferred"
 import {WoxMessageMethodEnum} from "../enums/WoxMessageMethodEnum.ts";
 import {WOXMESSAGE} from "../entity/WoxMessage.typings";
+import {WoxMessageTypeEnum} from "../enums/WoxMessageTypeEnum.ts";
 
 export class WoxMessageHelper {
     private initialized: boolean = false;
@@ -36,9 +37,9 @@ export class WoxMessageHelper {
         };
         this.ws.onmessage = (event) => {
             console.log(event.data);
-            let woxMessageResponse: WOXMESSAGE.WoxMessageResponse
+            let woxMessageResponse: WOXMESSAGE.WoxMessage
             try {
-                woxMessageResponse = JSON.parse(event.data) as WOXMESSAGE.WoxMessageResponse
+                woxMessageResponse = JSON.parse(event.data) as WOXMESSAGE.WoxMessage
             } catch (e) {
                 return
             }
@@ -58,10 +59,13 @@ export class WoxMessageHelper {
                 return
             }
 
-            if (woxMessageResponse.Method === WoxMessageMethodEnum.QUERY.code && this.woxQueryCallback) {
-                this.woxQueryCallback(woxMessageResponse.Data as WOXMESSAGE.WoxMessageResponseResult[])
-            }
+            if (woxMessageResponse.Type === WoxMessageTypeEnum.RESPONSE.code) {
+                if (woxMessageResponse.Method === WoxMessageMethodEnum.QUERY.code && this.woxQueryCallback) {
+                    this.woxQueryCallback(woxMessageResponse.Data as WOXMESSAGE.WoxMessageResponseResult[])
+                }
+            } else {
 
+            }
             promiseInstance.resolve(woxMessageResponse.Data)
 
         }
@@ -120,8 +124,9 @@ export class WoxMessageHelper {
         this.ws?.send(JSON.stringify({
             Id: requestId,
             Method: method,
-            Params: params
-        } as WOXMESSAGE.WoxMessageRequest))
+            Type: WoxMessageTypeEnum.REQUEST.code,
+            Data: params
+        } as WOXMESSAGE.WoxMessage))
         const deferred = new Deferred<unknown>()
         this.woxMessageResponseMap[requestId] = deferred
         return deferred.promise;

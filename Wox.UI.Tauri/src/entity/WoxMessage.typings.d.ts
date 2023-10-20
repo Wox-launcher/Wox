@@ -1,18 +1,15 @@
 import {WoxPreviewType} from "../enums/WoxPreviewTypeEnum.ts";
 import {WoxImageType} from "../enums/WoxImageTypeEnum.ts";
+import {WoxMessageType} from "../enums/WoxMessageTypeEnum.ts";
 
 declare namespace WOXMESSAGE {
 
-    export interface WoxMessageRequest {
+    export interface WoxMessage {
         Id: string
         Method: string
-        Params: { [key: string]: string }
-    }
-
-    export interface WoxMessageResponse {
-        Id: string
-        Method: string
-        Data: WoxMessageResponseData[]
+        Type: WoxMessageType
+        Success?: bool
+        Data: unknown
     }
 
     export interface WoxPreview {

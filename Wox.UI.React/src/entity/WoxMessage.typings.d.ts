@@ -12,7 +12,7 @@ declare namespace WOXMESSAGE {
     export interface WoxMessageResponse {
         Id: string
         Method: string
-        Data: WoxMessageResponseData[]
+        Data: unknown
     }
 
     export interface WoxPreview {
