@@ -52,8 +52,11 @@ func (c *BrowserBookmarkPlugin) Init(ctx context.Context, initParams plugin.Init
 	c.api = initParams.API
 
 	if strings.ToLower(runtime.GOOS) == "darwin" {
-		chromeBookmarks := c.loadChromeBookmarkInMacos(ctx)
-		c.bookmarks = append(c.bookmarks, chromeBookmarks...)
+		profiles := []string{"Default", "Profile 1", "Profile 2", "Profile 3"}
+		for _, profile := range profiles {
+			chromeBookmarks := c.loadChromeBookmarkInMacos(ctx, profile)
+			c.bookmarks = append(c.bookmarks, chromeBookmarks...)
+		}
 	}
 }
 
@@ -99,8 +102,8 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 	return
 }
 
-func (c *BrowserBookmarkPlugin) loadChromeBookmarkInMacos(ctx context.Context) (results []Bookmark) {
-	bookmarkLocation, _ := homedir.Expand("~/Library/Application Support/Google/Chrome/Default/Bookmarks")
+func (c *BrowserBookmarkPlugin) loadChromeBookmarkInMacos(ctx context.Context, profile string) (results []Bookmark) {
+	bookmarkLocation, _ := homedir.Expand(fmt.Sprintf("~/Library/Application Support/Google/Chrome/%s/Bookmarks", profile))
 	file, readErr := os.ReadFile(bookmarkLocation)
 	if readErr != nil {
 		c.api.Log(ctx, fmt.Sprintf("error reading chrome bookmark file: %s", readErr.Error()))
