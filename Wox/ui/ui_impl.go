@@ -26,11 +26,19 @@ func (u *uiImpl) HideApp(ctx context.Context) {
 }
 
 func (u *uiImpl) ShowApp(ctx context.Context) {
-	u.send(ctx, "ShowApp", nil)
+	x, y := getWindowShowLocation()
+	u.send(ctx, "ShowApp", map[string]string{
+		"X": fmt.Sprintf("%d", x),
+		"Y": fmt.Sprintf("%d", y),
+	})
 }
 
 func (u *uiImpl) ToggleApp(ctx context.Context) {
-	u.send(ctx, "ToggleApp", nil)
+	x, y := getWindowShowLocation()
+	u.send(ctx, "ToggleApp", map[string]string{
+		"X": fmt.Sprintf("%d", x),
+		"Y": fmt.Sprintf("%d", y),
+	})
 }
 
 func (u *uiImpl) ShowMsg(ctx context.Context, title string, description string, icon string) {
@@ -159,4 +167,8 @@ func getWebsocketMsgParameter(ctx context.Context, msg WebsocketMsg, key string)
 	}
 
 	return paramterData.String(), nil
+}
+
+func getWindowShowLocation() (int, int) {
+	return util.GetWindowShowLocation(800)
 }

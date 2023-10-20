@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/disintegration/imaging"
 	"image/png"
+	"os"
+	"path"
 	"strings"
 	"wox/plugin"
 	"wox/util"
@@ -16,6 +19,7 @@ func init() {
 
 type ClipboardHistory struct {
 	Data    util.ClipboardData
+	Icon    plugin.WoxImage
 	AddDate string
 }
 
@@ -27,12 +31,12 @@ type ClipboardPlugin struct {
 func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "5f815d98-27f5-488d-a756-c317ea39935b",
-		Name:          "Clipboard Manager",
+		Name:          "Clipboard History",
 		Author:        "Wox Launcher",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",
-		Description:   "Clipboard manager for Wox",
+		Description:   "Clipboard history for Wox",
 		Icon:          "",
 		Entry:         "",
 		TriggerKeywords: []string{
@@ -51,9 +55,17 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	c.api = initParams.API
 	util.ClipboardWatch(func(data util.ClipboardData) {
 		c.api.Log(ctx, fmt.Sprintf("clipboard data changed, type=%s", data.Type))
+
+		icon := plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><path fill="#90CAF9" d="M40 45L8 45 8 3 30 3 40 13z"></path><path fill="#E1F5FE" d="M38.5 14L29 14 29 4.5z"></path><path fill="#1976D2" d="M16 21H33V23H16zM16 25H29V27H16zM16 29H33V31H16zM16 33H29V35H16z"></path></svg>`)
+		iconFilePath, iconErr := c.getActiveWindowIconFilePath(ctx)
+		if iconErr == nil {
+			icon = plugin.NewWoxImageAbsolutePath(iconFilePath)
+		}
+
 		c.history = append(c.history, ClipboardHistory{
 			Data:    data,
 			AddDate: util.FormatTimestamp(util.GetSystemTimestamp()),
+			Icon:    icon,
 		})
 	})
 }
@@ -91,7 +103,7 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 	if history.Data.Type == util.ClipboardTypeText {
 		return plugin.QueryResult{
 			Title: string(history.Data.Data),
-			Icon:  plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><path fill="#90CAF9" d="M40 45L8 45 8 3 30 3 40 13z"></path><path fill="#E1F5FE" d="M38.5 14L29 14 29 4.5z"></path><path fill="#1976D2" d="M16 21H33V23H16zM16 25H29V27H16zM16 29H33V31H16zM16 33H29V35H16z"></path></svg>`),
+			Icon:  history.Icon,
 			Preview: plugin.WoxPreview{
 				PreviewType: plugin.WoxPreviewTypeText,
 				PreviewData: string(history.Data.Data),
@@ -143,4 +155,25 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 	return plugin.QueryResult{
 		Title: "ERR: Unknown history data type",
 	}
+}
+
+func (c *ClipboardPlugin) getActiveWindowIconFilePath(ctx context.Context) (string, error) {
+	activeWindowHash := util.GetActiveWindowHash()
+	iconCachePath := path.Join(os.TempDir(), fmt.Sprintf("%s.png", activeWindowHash))
+	if _, err := os.Stat(iconCachePath); err == nil {
+		c.api.Log(ctx, fmt.Sprintf("get active window icon from cache: %s", iconCachePath))
+		return iconCachePath, nil
+	}
+
+	icon, err := util.GetActiveWindowIcon()
+	if err != nil {
+		return "", err
+	}
+
+	saveErr := imaging.Save(icon, iconCachePath)
+	if saveErr != nil {
+		return "", saveErr
+	}
+
+	return iconCachePath, nil
 }

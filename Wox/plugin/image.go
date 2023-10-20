@@ -32,6 +32,13 @@ func NewWoxImageSvg(svg string) WoxImage {
 	}
 }
 
+func NewWoxImageAbsolutePath(path string) WoxImage {
+	return WoxImage{
+		ImageType: WoxImageTypeAbsolutePath,
+		ImageData: path,
+	}
+}
+
 func NewWoxImageBase64(data string) WoxImage {
 	return WoxImage{
 		ImageType: WoxImageTypeBase64,
