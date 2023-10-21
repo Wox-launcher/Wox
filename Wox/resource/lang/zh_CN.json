@@ -1,0 +1,8 @@
+{
+  "show_wox_preferences": "显示 Wox 设置",
+  "plugin_app_open": "Open",
+  "plugin_browser_bookmark_open_in_browser": "Open in browser",
+  "plugin_clipboard_copy_date": "Copy date",
+  "plugin_clipboard_copy_characters": "Copy characters",
+  "plugin_indicator_activate_plugin": "Activate %s plugin"
+}
