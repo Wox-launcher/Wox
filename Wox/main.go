@@ -45,15 +45,17 @@ func main() {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize settings: %s", settingErr.Error()))
 			return
 		}
+		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+		woxSetting.UsePinYin = true
+		woxSetting.ShowTray = true
+		setting.GetSettingManager().SaveWoxSetting(ctx, woxSetting)
 
-		startTray(ctx)
+		if woxSetting.ShowTray {
+			startTray(ctx)
+		}
 
 		shareUI := ui.GetUIManager().GetUI(ctx)
 		plugin.GetPluginManager().Start(ctx, shareUI)
-
-		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-		woxSetting.UsePinYin = true
-		setting.GetSettingManager().SaveWoxSetting(ctx, woxSetting)
 
 		registerMainHotkeyErr := ui.GetUIManager().RegisterMainHotkey(ctx, woxSetting.MainHotkey)
 		if registerMainHotkeyErr != nil {
