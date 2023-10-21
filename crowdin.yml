@@ -1,5 +1,5 @@
 project_id_env: CROWDIN_PROJECT_ID
 api_token_env: CROWDIN_PERSONAL_TOKEN
 files:
-  - source: '/Wox/I18n/en_US.json'
-    translation: '/Wox/I18n/%locale_with_underscore%.json'
+  - source: '/Wox/resource/lang/en_US.json'
+    translation: '/Wox/resource/lang/%locale_with_underscore%.json'
