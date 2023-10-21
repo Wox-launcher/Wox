@@ -108,8 +108,8 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 				PreviewType: plugin.WoxPreviewTypeText,
 				PreviewData: string(history.Data.Data),
 				PreviewProperties: map[string]string{
-					"Copied Date":       history.AddDate,
-					"Copied Characters": fmt.Sprintf("%d", len(history.Data.Data)),
+					"i18n:plugin_clipboard_copy_date":       history.AddDate,
+					"i18n:plugin_clipboard_copy_characters": fmt.Sprintf("%d", len(history.Data.Data)),
 				},
 			},
 			Score: 0,

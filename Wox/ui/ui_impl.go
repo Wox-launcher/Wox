@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 	"time"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/util"
 )
@@ -74,6 +75,10 @@ func onUIRequest(ctx context.Context, request WebsocketMsg) {
 		handleAction(ctx, request)
 	case "RegisterMainHotkey":
 		handleRegisterMainHotkey(ctx, request)
+	case "ChangeLanguage":
+		handleChangeLanguage(ctx, request)
+	case "GetLanguageJson":
+		handleGetLanguageJson(ctx, request)
 	}
 }
 
@@ -137,6 +142,52 @@ func handleAction(ctx context.Context, request WebsocketMsg) {
 
 	action()
 	responseUISuccess(ctx, request)
+}
+
+func handleChangeLanguage(ctx context.Context, request WebsocketMsg) {
+	langCode, langCodeErr := getWebsocketMsgParameter(ctx, request, "langCode")
+	if langCodeErr != nil {
+		logger.Error(ctx, langCodeErr.Error())
+		responseUIError(ctx, request, langCodeErr.Error())
+		return
+	}
+	if !i18n.IsSupportedLangCode(langCode) {
+		logger.Error(ctx, fmt.Sprintf("unsupported lang code: %s", langCode))
+		responseUIError(ctx, request, fmt.Sprintf("unsupported lang code: %s", langCode))
+		return
+	}
+
+	langErr := i18n.GetI18nManager().UpdateLang(ctx, i18n.LangCode(langCode))
+	if langErr != nil {
+		logger.Error(ctx, langErr.Error())
+		responseUIError(ctx, request, langErr.Error())
+		return
+	}
+
+	responseUISuccess(ctx, request)
+}
+
+func handleGetLanguageJson(ctx context.Context, request WebsocketMsg) {
+	langCode, langCodeErr := getWebsocketMsgParameter(ctx, request, "langCode")
+	if langCodeErr != nil {
+		logger.Error(ctx, langCodeErr.Error())
+		responseUIError(ctx, request, langCodeErr.Error())
+		return
+	}
+	if !i18n.IsSupportedLangCode(langCode) {
+		logger.Error(ctx, fmt.Sprintf("unsupported lang code: %s", langCode))
+		responseUIError(ctx, request, fmt.Sprintf("unsupported lang code: %s", langCode))
+		return
+	}
+
+	langJson, err := i18n.GetI18nManager().GetLangJson(ctx, i18n.LangCode(langCode))
+	if err != nil {
+		logger.Error(ctx, err.Error())
+		responseUIError(ctx, request, err.Error())
+		return
+	}
+
+	responseUISuccessWithData(ctx, request, langJson)
 }
 
 func handleRegisterMainHotkey(ctx context.Context, request WebsocketMsg) {

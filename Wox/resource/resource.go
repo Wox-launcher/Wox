@@ -12,6 +12,9 @@ import (
 //go:embed hosts
 var HostFS embed.FS
 
+//go:embed lang
+var LangFS embed.FS
+
 func ExtractHosts(ctx context.Context) error {
 	dir, err := HostFS.ReadDir("hosts")
 	if err != nil {
@@ -36,4 +39,9 @@ func ExtractHosts(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func GetLangJson(ctx context.Context, langCode string) ([]byte, error) {
+	var langJsonPath = path.Join("lang", fmt.Sprintf("%s.json", langCode))
+	return LangFS.ReadFile(langJsonPath)
 }

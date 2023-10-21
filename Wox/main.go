@@ -5,6 +5,7 @@ import (
 	"golang.design/x/hotkey/mainthread"
 	"runtime"
 	"strings"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/resource"
 	"wox/setting"
@@ -46,9 +47,12 @@ func main() {
 			return
 		}
 		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-		woxSetting.UsePinYin = true
-		woxSetting.ShowTray = true
-		setting.GetSettingManager().SaveWoxSetting(ctx, woxSetting)
+
+		langErr := i18n.GetI18nManager().UpdateLang(ctx, woxSetting.LangCode)
+		if langErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize lang(%s): %s", woxSetting.LangCode, langErr.Error()))
+			return
+		}
 
 		if woxSetting.ShowTray {
 			startTray(ctx)

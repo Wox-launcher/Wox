@@ -39,8 +39,10 @@ type Query struct {
 // Query result return from plugin
 type QueryResult struct {
 	// Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
-	Id       string
-	Title    string
+	Id string
+	// Title support i18n
+	Title string
+	// SubTitle support i18n
 	SubTitle string
 	Icon     WoxImage
 	Preview  WoxPreview
@@ -50,7 +52,8 @@ type QueryResult struct {
 
 type QueryResultAction struct {
 	// Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
-	Id   string
+	Id string
+	// Name support i18n
 	Name string
 	// If true, Wox will use this action as default action. There can be only one default action in results
 	// This can be omitted, if you don't set it, Wox will use the first action as default action

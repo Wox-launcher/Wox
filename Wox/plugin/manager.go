@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"wox/i18n"
 	"wox/setting"
 	"wox/share"
 	"wox/util"
@@ -292,8 +293,6 @@ func (m *Manager) QueryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	results := pluginInstance.Plugin.Query(ctx, query)
 	logger.Debug(ctx, fmt.Sprintf("[%s] finish query, result count: %d, cost: %dms", pluginInstance.Metadata.Name, len(results), util.GetSystemTimestamp()-start))
 	for i := range results {
-		results[i].Icon = convertLocalImageToUrl(ctx, results[i].Icon, pluginInstance)
-
 		// set default id
 		if results[i].Id == "" {
 			results[i].Id = uuid.NewString()
@@ -302,6 +301,27 @@ func (m *Manager) QueryForPlugin(ctx context.Context, pluginInstance *Instance, 
 			if results[i].Actions[actionIndex].Id == "" {
 				results[i].Actions[actionIndex].Id = uuid.NewString()
 			}
+		}
+
+		// convert icon
+		results[i].Icon = convertLocalImageToUrl(ctx, results[i].Icon, pluginInstance)
+
+		// translate title
+		results[i].Title = m.translatePlugin(ctx, pluginInstance, results[i].Title)
+		// translate subtitle
+		results[i].SubTitle = m.translatePlugin(ctx, pluginInstance, results[i].SubTitle)
+
+		// translate preview properties
+		var previewProperties = make(map[string]string)
+		for key, value := range results[i].Preview.PreviewProperties {
+			translatedKey := m.translatePlugin(ctx, pluginInstance, key)
+			previewProperties[translatedKey] = value
+		}
+		results[i].Preview.PreviewProperties = previewProperties
+
+		// translate action names
+		for actionIndex := range results[i].Actions {
+			results[i].Actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, results[i].Actions[actionIndex].Name)
 		}
 
 		// set first action as default if no default action is set
@@ -379,6 +399,18 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 	}
 
 	return
+}
+
+func (m *Manager) translatePlugin(ctx context.Context, pluginInstance *Instance, key string) string {
+	if !strings.HasPrefix(key, "i18n:") {
+		return key
+	}
+
+	if pluginInstance.IsSystemPlugin {
+		return i18n.GetI18nManager().TranslateWox(ctx, key)
+	} else {
+		return i18n.GetI18nManager().TranslatePlugin(ctx, key, pluginInstance.PluginDirectory)
+	}
 }
 
 func (m *Manager) GetUI() share.UI {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
+	"wox/i18n"
 	"wox/plugin"
 )
 
@@ -64,7 +65,7 @@ func (i *IndicatorPlugin) queryForNonTriggerKeyword(ctx context.Context, query p
 			results = append(results, plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    triggerKeyword,
-				SubTitle: fmt.Sprintf("Activate %s plugin", pluginInstance.Metadata.Name),
+				SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), pluginInstance.Metadata.Name),
 				Icon:     plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><circle cx="22" cy="9" r="2" fill="#c767e5"></circle><circle cx="12" cy="9" r="2" fill="#c767e5"></circle><path fill="#c767e5" d="M34,9c0-1.1-0.9-2-2-2H22l-2,2c0,3,3,3,3,7c0,0.702-0.127,1.374-0.349,2H34V9z"></path><path fill="#c767e5" d="M11,16c0-4,3-4,3-7l-2-2H2C0.9,7,0,7.9,0,9v9h11.349C11.127,17.374,11,16.702,11,16z"></path><path fill="#a238c2" d="M34,39v-9H0v9c0,1.1,0.9,2,2,2h30C33.1,41,34,40.1,34,39z"></path><path fill="#ba54d9" d="M34,29.806c0-1.854,2.204-2.772,3.558-1.507C38.513,29.19,39.75,30,42,30	c3.675,0,6.578-3.303,5.902-7.102c-0.572-3.218-3.665-5.24-6.909-4.838c-1.663,0.206-2.671,0.92-3.479,1.684	C36.185,20.998,34,20.028,34,18.2V18H22.651c-0.825,2.329-3.04,4-5.651,4s-4.827-1.671-5.651-4H0v12h34V29.806z"></path></svg>`),
 				Actions: []plugin.QueryResultAction{
 					{

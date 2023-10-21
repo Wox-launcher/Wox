@@ -45,6 +45,7 @@ func (a *APIImpl) Log(ctx context.Context, msg string) {
 }
 
 func (a *APIImpl) GetTranslation(ctx context.Context, key string) string {
+
 	return ""
 }
 

@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"runtime"
-	"strings"
 	"sync"
 	"wox/util"
 )
@@ -29,16 +27,16 @@ func GetSettingManager() *Manager {
 }
 
 func (m *Manager) Init(ctx context.Context) error {
+	defaultWoxSetting := GetDefaultWoxSetting(ctx)
+
 	woxSettingPath := util.GetLocation().GetWoxSettingPath()
 	if _, statErr := os.Stat(woxSettingPath); os.IsNotExist(statErr) {
-		settingJson, marshalErr := json.Marshal(WoxSetting{
-			MainHotkey: m.getDefaultMainHotkey(ctx),
-		})
+		defaultWoxSettingJson, marshalErr := json.Marshal(defaultWoxSetting)
 		if marshalErr != nil {
 			return marshalErr
 		}
 
-		writeErr := os.WriteFile(woxSettingPath, settingJson, 0644)
+		writeErr := os.WriteFile(woxSettingPath, defaultWoxSettingJson, 0644)
 		if writeErr != nil {
 			return writeErr
 		}
@@ -54,6 +52,9 @@ func (m *Manager) Init(ctx context.Context) error {
 	decodeErr := json.NewDecoder(woxSettingFile).Decode(&woxSetting)
 	if decodeErr != nil {
 		return decodeErr
+	}
+	if woxSetting.LangCode == "" {
+		woxSetting.LangCode = defaultWoxSetting.LangCode
 	}
 
 	m.woxSetting = woxSetting
@@ -123,12 +124,4 @@ func (m *Manager) SavePluginSetting(ctx context.Context, pluginId string, plugin
 
 	logger.Info(ctx, fmt.Sprintf("plugin setting saved: %s", pluginId))
 	return nil
-}
-
-func (m *Manager) getDefaultMainHotkey(ctx context.Context) string {
-	combineKey := "alt+space"
-	if strings.ToLower(runtime.GOOS) == "darwin" {
-		combineKey = "command+space"
-	}
-	return combineKey
 }

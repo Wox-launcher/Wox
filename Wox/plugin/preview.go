@@ -11,5 +11,5 @@ const (
 type WoxPreview struct {
 	PreviewType       WoxPreviewType
 	PreviewData       string
-	PreviewProperties map[string]string
+	PreviewProperties map[string]string // key support i18n
 }
