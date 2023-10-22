@@ -1,0 +1,8 @@
+{
+  "show_wox_preferences": "显示 Wox 设置",
+  "plugin_app_open": "打开",
+  "plugin_browser_bookmark_open_in_browser": "在浏览器中打开",
+  "plugin_clipboard_copy_date": "复制日期",
+  "plugin_clipboard_copy_characters": "复制字符",
+  "plugin_indicator_activate_plugin": "激活%s插件"
+}
