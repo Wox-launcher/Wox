@@ -66,15 +66,16 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 		var isMatch bool
 		var matchScore int
 
+		var minMatchScore = 10 // bookmark plugin has strict match score to avoid too many unrelated results
 		isNameMatch, nameScore := IsStringMatchScore(ctx, bookmark.Name, query.Search)
-		if isNameMatch {
+		if isNameMatch && nameScore >= minMatchScore {
 			isMatch = true
 			matchScore = nameScore
 		} else {
 			//url match must be exact part match
 			if strings.Contains(bookmark.Url, query.Search) {
 				isUrlMatch, urlScore := IsStringMatchScoreNoPinYin(ctx, bookmark.Url, query.Search)
-				if isUrlMatch {
+				if isUrlMatch && urlScore >= minMatchScore {
 					isMatch = true
 					matchScore = urlScore
 				}

@@ -10,10 +10,16 @@ import (
 )
 
 type WoxSetting struct {
-	MainHotkey string
-	UsePinYin  bool
-	ShowTray   bool
-	LangCode   i18n.LangCode
+	MainHotkey   string
+	UsePinYin    bool
+	ShowTray     bool
+	LangCode     i18n.LangCode
+	QueryHotkeys []QueryHotkey
+}
+
+type QueryHotkey struct {
+	Hotkey string
+	Query  string
 }
 
 func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
