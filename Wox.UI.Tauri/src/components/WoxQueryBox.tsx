@@ -33,6 +33,15 @@ export default () => {
         if (message.Method === WoxMessageRequestMethodEnum.ShowApp.code) {
             show()
         }
+        if (message.Method === WoxMessageRequestMethodEnum.ToggleApp.code) {
+            appWindow.isVisible().then(visible => {
+                if (visible) {
+                    hide()
+                } else {
+                    show()
+                }
+            });
+        }
     }
 
     /*
