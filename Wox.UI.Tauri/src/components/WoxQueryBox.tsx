@@ -99,7 +99,7 @@ export default () => {
      */
     const setShownResultList = () => {
         const rsList = currentIndex.current >= fixedShownItemCount ? currentResultList.current.slice(currentIndex.current - fixedShownItemCount + 1, currentIndex.current + 1) : currentResultList.current.slice(0, fixedShownItemCount)
-        appWindow.setSize(new LogicalSize(800, 48 + 49 * rsList.length)).then(_ => {
+        appWindow.setSize(new LogicalSize(800, 48 + 49 * rsList.length + 2)).then(_ => {
             setResultList(rsList)
         })
     }
@@ -232,7 +232,7 @@ export default () => {
                                 {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeBase64.code &&
                                     <Image src={result.Icon.ImageData} className={"wox-query-result-image"}/>}
                                 <div className={"ms-2 me-auto wox-query-result-item-intro"}>
-                                    <div className={"fw-bold"}>{result.Title}</div>
+                                    <div className={"fw-bold result-item-title"}>{result.Title}</div>
                                     <div
                                         className={"fw-lighter result-item-sub-title"}>{result.Score} - {result.SubTitle}</div>
                                 </div>
@@ -285,7 +285,7 @@ const Style = styled.div`
         width: 0;
         flex: 1;
     }
-    .result-item-sub-title {
+    .result-item-title, .result-item-sub-title {
         overflow: hidden !important;
         white-space: nowrap !important;
         text-overflow: ellipsis !important;
