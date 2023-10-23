@@ -38,40 +38,38 @@ export class WoxMessageHelper {
         };
         this.ws.onmessage = (event) => {
             console.log(event.data);
-            let woxMessageResponse: WOXMESSAGE.WoxMessage
+            let woxMessage: WOXMESSAGE.WoxMessage
             try {
-                woxMessageResponse = JSON.parse(event.data) as WOXMESSAGE.WoxMessage
+                woxMessage = JSON.parse(event.data) as WOXMESSAGE.WoxMessage
             } catch (e) {
                 return
             }
-            if (woxMessageResponse === undefined) {
+            if (woxMessage === undefined) {
                 console.error(`woxMessageResponse is undefined`)
                 return
             }
 
-            if (!woxMessageResponse?.Id) {
-                console.error(`woxMessageResponse.Id is undefined`)
-                return
-            }
-
-            const promiseInstance = this.woxMessageResponseMap[woxMessageResponse.Id]
-            if (promiseInstance === undefined) {
-                console.error(`woxMessageResponseMap[${woxMessageResponse.Id}] is undefined`)
-                return
-            }
-
-            if (woxMessageResponse.Type === WoxMessageTypeEnum.RESPONSE.code) {
-                if (woxMessageResponse.Method === WoxMessageMethodEnum.QUERY.code && this.woxQueryCallback) {
-                    this.woxQueryCallback(woxMessageResponse.Data as WOXMESSAGE.WoxMessageResponseResult[])
+            if (woxMessage.Type === WoxMessageTypeEnum.RESPONSE.code) {
+                if (!woxMessage?.Id) {
+                    console.error(`woxMessageResponse.Id is undefined`)
+                    return
                 }
+
+                const promiseInstance = this.woxMessageResponseMap[woxMessage.Id]
+                if (promiseInstance === undefined) {
+                    console.error(`woxMessageResponseMap[${woxMessage.Id}] is undefined`)
+                    return
+                }
+                if (woxMessage.Method === WoxMessageMethodEnum.QUERY.code && this.woxQueryCallback) {
+                    this.woxQueryCallback(woxMessage.Data as WOXMESSAGE.WoxMessageResponseResult[])
+                }
+                promiseInstance.resolve(woxMessage.Data)
             }
-            if (woxMessageResponse.Type === WoxMessageTypeEnum.REQUEST.code) {
+            if (woxMessage.Type === WoxMessageTypeEnum.REQUEST.code) {
                 if (this.woxRequestCallback) {
-                    this.woxRequestCallback(woxMessageResponse)
+                    this.woxRequestCallback(woxMessage)
                 }
             }
-            promiseInstance.resolve(woxMessageResponse.Data)
-
         }
         this.initialized = true
     }
