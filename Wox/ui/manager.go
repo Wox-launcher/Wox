@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"sync"
+	"wox/setting"
 	"wox/share"
 	"wox/util"
 )
@@ -13,9 +14,10 @@ var managerOnce sync.Once
 var logger *util.Log
 
 type Manager struct {
-	mainHotkey *util.Hotkey
-	ui         share.UI
-	serverPort int
+	mainHotkey   *util.Hotkey
+	queryHotkeys []*util.Hotkey
+	ui           share.UI
+	serverPort   int
 }
 
 func GetUIManager() *Manager {
@@ -40,6 +42,19 @@ func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) err
 	return m.mainHotkey.Register(ctx, combineKey, func() {
 		m.ui.ToggleApp(ctx)
 	})
+}
+
+func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.QueryHotkey) error {
+	hotkey := &util.Hotkey{}
+	err := hotkey.Register(ctx, queryHotkey.Hotkey, func() {
+		m.ui.ChangeQuery(ctx, queryHotkey.Query)
+	})
+	if err != nil {
+		return err
+	}
+
+	m.queryHotkeys = append(m.queryHotkeys, hotkey)
+	return nil
 }
 
 func (m *Manager) StartWebsocketAndWait(ctx context.Context, port int) {

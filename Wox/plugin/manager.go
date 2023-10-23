@@ -252,17 +252,17 @@ func (m *Manager) parseMetadata(ctx context.Context, pluginDirectory string) (Me
 	var metadata Metadata
 	unmarshalErr := json.Unmarshal(metadataJson, &metadata)
 	if unmarshalErr != nil {
-		return Metadata{}, fmt.Errorf("failed to unmarshal plugin.json file: %w", unmarshalErr)
+		return Metadata{}, fmt.Errorf("failed to unmarshal plugin.json file (%s): %w", pluginDirectory, unmarshalErr)
 	}
 
 	if len(metadata.TriggerKeywords) == 0 {
-		return Metadata{}, fmt.Errorf("missing trigger keywords in plugin.json file")
+		return Metadata{}, fmt.Errorf("missing trigger keywords in plugin.json file (%s)", pluginDirectory)
 	}
 	if !IsSupportedRuntime(metadata.Runtime) {
-		return Metadata{}, fmt.Errorf("unsupported runtime in plugin.json file, runtime=%s", metadata.Runtime)
+		return Metadata{}, fmt.Errorf("unsupported runtime in plugin.json file (%s), runtime=%s", pluginDirectory, metadata.Runtime)
 	}
 	if !IsSupportedOSAny(metadata.SupportedOS) {
-		return Metadata{}, fmt.Errorf("unsupported os in plugin.json file, os=%s", metadata.SupportedOS)
+		return Metadata{}, fmt.Errorf("unsupported os in plugin.json file (%s), os=%s", pluginDirectory, metadata.SupportedOS)
 	}
 
 	return metadata, nil
@@ -274,7 +274,7 @@ func (m *Manager) GetPluginInstances() []*Instance {
 
 func (m *Manager) isQueryMatchPlugin(ctx context.Context, pluginInstance *Instance, query Query) bool {
 	// System Plugin Indicator is a special system plugin, it will be triggered even if query enter plugin mode, so that we can prompt plugin commands
-	if pluginInstance.Metadata.Id == "39a4a6155f094ef89778188ae4a3ca03" {
+	if pluginInstance.Metadata.Id == "38564bf0-75ad-4b3e-8afe-a0e0a287c42e" {
 		return true
 	}
 
@@ -292,6 +292,7 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	start := util.GetSystemTimestamp()
 	results := pluginInstance.Plugin.Query(ctx, query)
 	logger.Debug(ctx, fmt.Sprintf("[%s] finish query, result count: %d, cost: %dms", pluginInstance.Metadata.Name, len(results), util.GetSystemTimestamp()-start))
+
 	for i := range results {
 		// set default id
 		if results[i].Id == "" {

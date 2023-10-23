@@ -75,6 +75,8 @@ func onUIRequest(ctx context.Context, request WebsocketMsg) {
 		handleAction(ctx, request)
 	case "RegisterMainHotkey":
 		handleRegisterMainHotkey(ctx, request)
+	case "IsHotkeyAvailable":
+		handleIsHotkeyAvailable(ctx, request)
 	case "ChangeLanguage":
 		handleChangeLanguage(ctx, request)
 	case "GetLanguageJson":
@@ -204,6 +206,27 @@ func handleRegisterMainHotkey(ctx context.Context, request WebsocketMsg) {
 	} else {
 		responseUISuccess(ctx, request)
 	}
+}
+
+func handleIsHotkeyAvailable(ctx context.Context, request WebsocketMsg) {
+	hotkey, hotkeyErr := getWebsocketMsgParameter(ctx, request, "hotkey")
+	if hotkeyErr != nil {
+		logger.Error(ctx, hotkeyErr.Error())
+		responseUIError(ctx, request, hotkeyErr.Error())
+		return
+	}
+
+	isAvailable := false
+	hk := util.Hotkey{}
+	registerErr := hk.Register(ctx, hotkey, func() {
+
+	})
+	if registerErr == nil {
+		isAvailable = true
+		hk.Unregister(ctx)
+	}
+
+	responseUISuccessWithData(ctx, request, isAvailable)
 }
 
 func getWebsocketMsgParameter(ctx context.Context, msg WebsocketMsg, key string) (string, error) {

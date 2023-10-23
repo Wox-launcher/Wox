@@ -19,7 +19,7 @@ type IndicatorPlugin struct {
 
 func (i *IndicatorPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "39a4a6155f094ef89778188ae4a3ca03",
+		Id:            "38564bf0-75ad-4b3e-8afe-a0e0a287c42e",
 		Name:          "System Plugin Indicator",
 		Author:        "Wox Launcher",
 		Version:       "1.0.0",

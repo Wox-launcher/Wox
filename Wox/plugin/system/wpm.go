@@ -17,7 +17,7 @@ type WPMPlugin struct {
 
 func (i *WPMPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "f2a471feeff845079d902fa17a969ab1",
+		Id:            "e2c5f005-6c73-43c8-bc53-ab04def265b2",
 		Name:          "Wox Plugin Manager",
 		Author:        "Wox Launcher",
 		Version:       "1.0.0",
