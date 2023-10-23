@@ -1,6 +1,7 @@
 import {WoxPreviewType} from "../enums/WoxPreviewTypeEnum.ts";
 import {WoxImageType} from "../enums/WoxImageTypeEnum.ts";
 import {WoxMessageType} from "../enums/WoxMessageTypeEnum.ts";
+import {WoxPositionType} from "../enums/WoxPositionTypeEnum.ts";
 
 declare namespace WOXMESSAGE {
 
@@ -40,5 +41,11 @@ declare namespace WOXMESSAGE {
         Index?: number
         Preview: WoxPreview
         Actions: WoxResultAction[]
+    }
+
+    export interface Position {
+        X: number
+        Y: number
+        Type: WoxPositionType
     }
 }

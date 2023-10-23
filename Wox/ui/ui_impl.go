@@ -17,7 +17,7 @@ type uiImpl struct {
 }
 
 func (u *uiImpl) ChangeQuery(ctx context.Context, query string) {
-	u.send(ctx, "ChangeQuery", map[string]string{
+	u.send(ctx, "ChangeQuery", map[string]any{
 		"Query": query,
 	})
 }
@@ -27,23 +27,15 @@ func (u *uiImpl) HideApp(ctx context.Context) {
 }
 
 func (u *uiImpl) ShowApp(ctx context.Context) {
-	x, y := getWindowShowLocation()
-	u.send(ctx, "ShowApp", map[string]string{
-		"X": fmt.Sprintf("%d", x),
-		"Y": fmt.Sprintf("%d", y),
-	})
+	u.send(ctx, "ShowApp", NewMouseScreenPosition())
 }
 
 func (u *uiImpl) ToggleApp(ctx context.Context) {
-	x, y := getWindowShowLocation()
-	u.send(ctx, "ToggleApp", map[string]string{
-		"X": fmt.Sprintf("%d", x),
-		"Y": fmt.Sprintf("%d", y),
-	})
+	u.send(ctx, "ToggleApp", NewMouseScreenPosition())
 }
 
 func (u *uiImpl) ShowMsg(ctx context.Context, title string, description string, icon string) {
-	u.send(ctx, "ShowMsg", map[string]string{
+	u.send(ctx, "ShowMsg", map[string]any{
 		"Title":       title,
 		"Description": description,
 		"Icon":        icon,
@@ -54,16 +46,12 @@ func (u *uiImpl) GetServerPort(ctx context.Context) int {
 	return GetUIManager().serverPort
 }
 
-func (u *uiImpl) send(ctx context.Context, method string, params map[string]string) {
-	if params == nil {
-		params = make(map[string]string)
-	}
-
+func (u *uiImpl) send(ctx context.Context, method string, data any) {
 	util.GetLogger().Info(ctx, fmt.Sprintf("[->UI] %s", method))
 	requestUI(ctx, WebsocketMsg{
 		Id:     uuid.NewString(),
 		Method: method,
-		Data:   params,
+		Data:   data,
 	})
 }
 

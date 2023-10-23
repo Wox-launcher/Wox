@@ -9,7 +9,8 @@ import {WoxPreviewTypeEnum} from "../enums/WoxPreviewTypeEnum.ts";
 import Markdown from 'react-markdown'
 import {hide, show} from '@tauri-apps/api/app';
 import {WoxMessageRequestMethodEnum} from "../enums/WoxMessageRequestMethodEnum.ts";
-import {appWindow, LogicalSize} from "@tauri-apps/api/window";
+import {appWindow, LogicalPosition, LogicalSize} from "@tauri-apps/api/window";
+import {WoxPositionTypeEnum} from "../enums/WoxPositionTypeEnum.ts";
 
 const queryBoxRef = React.createRef<
     HTMLInputElement
@@ -26,10 +27,13 @@ export default () => {
     const [hasPreview, setHasPreview] = useState<boolean>(false)
 
 
-    const showApp = async () => {
-        await show()
-        await appWindow.setFocus()
+    const showApp = async (location: WOXMESSAGE.Position) => {
         queryBoxRef.current?.select()
+        if (location.Type === WoxPositionTypeEnum.WoxPositionTypeMouseScreen.code) {
+            await appWindow.setPosition(new LogicalPosition(Number(location.X), Number(location.Y)))
+        }
+        await appWindow.setFocus()
+        await show()
     }
 
     const hideApp = async () => {
@@ -44,14 +48,14 @@ export default () => {
             hideApp()
         }
         if (message.Method === WoxMessageRequestMethodEnum.ShowApp.code) {
-            showApp()
+            showApp(message.Data as WOXMESSAGE.Position)
         }
         if (message.Method === WoxMessageRequestMethodEnum.ToggleApp.code) {
             appWindow.isVisible().then(visible => {
                 if (visible) {
                     hideApp()
                 } else {
-                    showApp()
+                    showApp(message.Data as WOXMESSAGE.Position)
                 }
             });
         }
