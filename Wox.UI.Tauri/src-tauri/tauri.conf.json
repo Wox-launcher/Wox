@@ -42,7 +42,7 @@
     "windows": [
       {
         "fullscreen": false,
-        "resizable": true,
+        "resizable": false,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,
