@@ -50,7 +50,7 @@
         "acceptFirstMouse": true,
         "title": "Wox",
         "width": 800,
-        "height": 48,
+        "height": 60,
         "maxHeight": 500
       }
     ]

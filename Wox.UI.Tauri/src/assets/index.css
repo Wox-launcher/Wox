@@ -28,6 +28,10 @@
         box-shadow: none !important;
     }
 
+    .input-group {
+        height: 60px !important;
+    }
+
     .list-group {
         .list-group-item {
             padding: 0 10px !important;

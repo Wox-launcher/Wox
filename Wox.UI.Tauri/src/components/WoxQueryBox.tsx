@@ -130,7 +130,7 @@ export default () => {
     const setShownResultList = () => {
         const rsList = currentIndex.current >= fixedShownItemCount ? currentResultList.current.slice(currentIndex.current - fixedShownItemCount + 1, currentIndex.current + 1) : currentResultList.current.slice(0, fixedShownItemCount)
         if (resultList.length !== rsList.length) {
-            appWindow.setSize(new LogicalSize(800, 48 + 49 * rsList.length + (rsList.length > 0 ? 1 : 0))).then(_ => {
+            appWindow.setSize(new LogicalSize(800, 60 + 49 * rsList.length + (rsList.length > 0 ? 1 : 0))).then(_ => {
                 setResultList(rsList)
             })
         } else {
