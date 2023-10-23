@@ -287,7 +287,7 @@ func (m *Manager) isQueryMatchPlugin(ctx context.Context, pluginInstance *Instan
 	return true
 }
 
-func (m *Manager) QueryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) []QueryResult {
+func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) []QueryResult {
 	logger.Info(ctx, fmt.Sprintf("[%s] start query: %s", pluginInstance.Metadata.Name, query.RawQuery))
 	start := util.GetSystemTimestamp()
 	results := pluginInstance.Plugin.Query(ctx, query)
@@ -331,6 +331,17 @@ func (m *Manager) QueryForPlugin(ctx context.Context, pluginInstance *Instance, 
 		if defaultActionCount == 0 && len(results[i].Actions) > 0 {
 			results[i].Actions[0].IsDefault = true
 		}
+
+		// store actions for ui invoke later
+		for actionId := range results[i].Actions {
+			var action = results[i].Actions[actionId]
+			m.actions.Store(action.Id, action.Action)
+		}
+
+		// if trigger keyword is global, disable preview
+		if query.TriggerKeyword == "" {
+			results[i].Preview = WoxPreview{}
+		}
 	}
 	return results
 }
@@ -357,15 +368,7 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 		}
 
 		util.Go(ctx, fmt.Sprintf("[%s] parallel query", instance.Metadata.Name), func() {
-			queryResults := m.QueryForPlugin(ctx, pluginInstance, query)
-
-			// store actions for ui invoke later
-			for _, result := range queryResults {
-				for _, action := range result.Actions {
-					m.actions.Store(action.Id, action.Action)
-				}
-			}
-
+			queryResults := m.queryForPlugin(ctx, pluginInstance, query)
 			results <- lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
 				return QueryResultUI{
 					Id:              item.Id,
