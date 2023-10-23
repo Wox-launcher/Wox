@@ -9,6 +9,7 @@ import (
 	"wox/plugin"
 	"wox/resource"
 	"wox/setting"
+	"wox/share"
 	"wox/ui"
 	"wox/util"
 )
@@ -28,6 +29,8 @@ func main() {
 		util.GetLogger().Info(ctx, "------------------------------")
 		util.GetLogger().Info(ctx, "Wox starting")
 		util.GetLogger().Info(ctx, fmt.Sprintf("golang version: %s", strings.ReplaceAll(runtime.Version(), "go", "")))
+
+		share.ExitApp = ExitApp
 
 		extractErr := resource.Extract(ctx)
 		if extractErr != nil {

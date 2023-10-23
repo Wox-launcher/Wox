@@ -2,15 +2,25 @@ package util
 
 import (
 	"os/exec"
-	"runtime"
-	"strings"
 )
 
 func ShellOpen(path string) {
-	if strings.ToLower(runtime.GOOS) == "darwin" {
+	if IsMacOS() {
 		exec.Command("open", path).Start()
 	}
-	if strings.ToLower(runtime.GOOS) == "windows" {
+	if IsWindows() {
 		exec.Command("cmd", "/C", "start", path).Start()
 	}
+}
+
+func ShellRun(name string, arg ...string) error {
+	cmd := exec.Command(name, arg...)
+	cmd.Stdout = GetLogger().GetWriter()
+	cmd.Stderr = GetLogger().GetWriter()
+	cmdErr := cmd.Start()
+	if cmdErr != nil {
+		return cmdErr
+	}
+
+	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"os"
 	"os/exec"
 	"sync"
 	"wox/setting"
@@ -20,6 +21,7 @@ type Manager struct {
 	queryHotkeys []*util.Hotkey
 	ui           share.UI
 	serverPort   int
+	uiProcess    *os.Process
 }
 
 func GetUIManager() *Manager {
@@ -37,7 +39,19 @@ func (m *Manager) Send(ctx context.Context) error {
 }
 
 func (m *Manager) Stop(ctx context.Context) {
-	logger.Info(ctx, "start stopping ui client")
+	if !util.IsProd() {
+		logger.Info(ctx, "skip stopping ui app in dev mode")
+		return
+	}
+
+	logger.Info(ctx, "start stopping ui app")
+	var pid = m.uiProcess.Pid
+	killErr := m.uiProcess.Kill()
+	if killErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to kill ui process(%d): %s", pid, killErr))
+	} else {
+		util.GetLogger().Info(ctx, fmt.Sprintf("killed ui process(%d)", pid))
+	}
 }
 
 func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) error {
@@ -76,6 +90,7 @@ func (m *Manager) StartUIApp(ctx context.Context, port int) error {
 		return cmdErr
 	}
 
+	m.uiProcess = cmd.Process
 	util.GetLogger().Info(ctx, fmt.Sprintf("ui app pid: %d", cmd.Process.Pid))
 	return nil
 }

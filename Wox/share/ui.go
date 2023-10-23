@@ -14,3 +14,5 @@ type UI interface {
 type ShowContext struct {
 	SelectAll bool
 }
+
+var ExitApp func(ctx context.Context)

@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"runtime"
-	"strings"
 	"sync"
 )
 
@@ -140,7 +138,7 @@ func (l *Location) GetUIDirectory() string {
 
 func (l *Location) GetUIAppPath() string {
 	name := "wox"
-	if strings.ToLower(runtime.GOOS) == "windows" {
+	if IsWindows() {
 		name += ".exe"
 	}
 	return path.Join(l.GetUIDirectory(), name)

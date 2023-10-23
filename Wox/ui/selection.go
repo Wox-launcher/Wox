@@ -3,8 +3,6 @@ package ui
 import (
 	"errors"
 	"fmt"
-	"runtime"
-	"strings"
 	"wox/util"
 	"wox/util/keybd_event"
 )
@@ -27,10 +25,10 @@ func GetSelectedText() (Selection, error) {
 	}
 
 	kb.SetKeys(keybd_event.VK_C)
-	if strings.ToLower(runtime.GOOS) == "windows" || strings.ToLower(runtime.GOOS) == "linux" {
+	if util.IsWindows() || util.IsLinux() {
 		kb.HasCTRL(true)
 	}
-	if strings.ToLower(runtime.GOOS) == "darwin" {
+	if util.IsMacOS() {
 		kb.HasSuper(true)
 	}
 	err = kb.Launching()

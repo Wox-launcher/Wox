@@ -23,14 +23,17 @@ func onReady() {
 	mQuit.SetIcon(icon.Data)
 
 	for range mQuit.ClickedCh {
-		ctx := util.NewTraceContext()
-		util.GetLogger().Info(ctx, "start quitting")
-		plugin.GetPluginManager().Stop(ctx)
-		ui.GetUIManager().Stop(ctx)
-		util.GetLogger().Info(ctx, "bye~")
-		os.Exit(0)
+		ExitApp(util.NewTraceContext())
 	}
 }
 
 func onExit() {
+}
+
+func ExitApp(ctx context.Context) {
+	util.GetLogger().Info(ctx, "start quitting")
+	plugin.GetPluginManager().Stop(ctx)
+	ui.GetUIManager().Stop(ctx)
+	util.GetLogger().Info(ctx, "bye~")
+	os.Exit(0)
 }

@@ -1,8 +1,8 @@
 package plugin
 
 import (
-	"runtime"
 	"strings"
+	"wox/util"
 )
 
 type OS string
@@ -16,13 +16,13 @@ const (
 func IsSupportedOS(os string) bool {
 	osUpper := strings.ToUpper(os)
 	if osUpper == string(PLUGIN_OS_WINDOWS) {
-		return strings.ToLower(runtime.GOOS) == "windows"
+		return util.IsWindows()
 	}
 	if osUpper == string(PLUGIN_OS_DARWIN) {
-		return strings.ToLower(runtime.GOOS) == "darwin"
+		return util.IsMacOS()
 	}
 	if osUpper == string(PLUGIN_OS_LINUX) {
-		return strings.ToLower(runtime.GOOS) == "linux"
+		return util.IsLinux()
 	}
 
 	return false
