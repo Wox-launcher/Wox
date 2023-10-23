@@ -40,22 +40,48 @@ export default () => {
         await hide()
     }
 
+    const changeQuery = async (query: string) => {
+        if (queryBoxRef.current) {
+            queryBoxRef.current.value = query
+            onQueryChange(query)
+        }
+    }
+
+    const onQueryChange = (query: string) => {
+        queryText.current = query
+        currentResultList.current = []
+        clearTimeout(requestTimeoutId.current)
+        hasLatestQueryResult.current = false
+        WoxMessageHelper.getInstance().sendQueryMessage({
+            query: queryText.current,
+            type: "text"
+        }, handleQueryCallback)
+        requestTimeoutId.current = setTimeout(() => {
+            if (!hasLatestQueryResult.current) {
+                resetResultList()
+            }
+        }, 50)
+    }
+
     /*
         Handle Global Request
      */
-    const handleRequestCallback = (message: WOXMESSAGE.WoxMessage) => {
+    const handleRequestCallback = async (message: WOXMESSAGE.WoxMessage) => {
+        if (message.Method === WoxMessageRequestMethodEnum.ChangeQuery.code) {
+            await changeQuery(message.Data as string)
+        }
         if (message.Method === WoxMessageRequestMethodEnum.HideApp.code) {
-            hideApp()
+            await hideApp()
         }
         if (message.Method === WoxMessageRequestMethodEnum.ShowApp.code) {
-            showApp(message.Data as WOXMESSAGE.Position)
+            await showApp(message.Data as WOXMESSAGE.Position)
         }
         if (message.Method === WoxMessageRequestMethodEnum.ToggleApp.code) {
-            appWindow.isVisible().then(visible => {
+            appWindow.isVisible().then(async visible => {
                 if (visible) {
-                    hideApp()
+                    await hideApp()
                 } else {
-                    showApp(message.Data as WOXMESSAGE.Position)
+                    await showApp(message.Data as WOXMESSAGE.Position)
                 }
             });
         }
@@ -194,19 +220,7 @@ export default () => {
                 as={"input"}
                 autoFocus={true}
                 onChange={(e) => {
-                    queryText.current = e.target.value
-                    currentResultList.current = []
-                    clearTimeout(requestTimeoutId.current)
-                    hasLatestQueryResult.current = false
-                    WoxMessageHelper.getInstance().sendQueryMessage({
-                        query: queryText.current,
-                        type: "text"
-                    }, handleQueryCallback)
-                    requestTimeoutId.current = setTimeout(() => {
-                        if (!hasLatestQueryResult.current) {
-                            resetResultList()
-                        }
-                    }, 50)
+                    onQueryChange(e.target.value)
                 }}
             />
             <InputGroup.Text id="inputGroup-sizing-lg" aria-describedby={"Wox"}>Wox</InputGroup.Text>

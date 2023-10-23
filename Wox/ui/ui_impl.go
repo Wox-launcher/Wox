@@ -17,9 +17,7 @@ type uiImpl struct {
 }
 
 func (u *uiImpl) ChangeQuery(ctx context.Context, query string) {
-	u.send(ctx, "ChangeQuery", map[string]any{
-		"Query": query,
-	})
+	u.send(ctx, "ChangeQuery", query)
 }
 
 func (u *uiImpl) HideApp(ctx context.Context) {
