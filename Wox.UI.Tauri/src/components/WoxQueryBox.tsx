@@ -1,5 +1,5 @@
-import {Col, Form, Image, InputGroup, ListGroup, Row} from "react-bootstrap";
-import {useEffect, useRef, useState} from "react";
+import {Col, FormControl, Image, InputGroup, ListGroup, Row} from "react-bootstrap";
+import React, {useEffect, useRef, useState} from "react";
 import {WoxMessageHelper} from "../utils/WoxMessageHelper.ts";
 import styled from "styled-components";
 import {WOXMESSAGE} from "../entity/WoxMessage.typings";
@@ -11,6 +11,9 @@ import {hide, show} from '@tauri-apps/api/app';
 import {WoxMessageRequestMethodEnum} from "../enums/WoxMessageRequestMethodEnum.ts";
 import {appWindow, LogicalSize} from "@tauri-apps/api/window";
 
+const queryBoxRef = React.createRef<
+    HTMLInputElement
+>();
 export default () => {
     const queryText = useRef<string>()
     const currentResultList = useRef<WOXMESSAGE.WoxMessageResponseResult[]>([])
@@ -23,22 +26,32 @@ export default () => {
     const [hasPreview, setHasPreview] = useState<boolean>(false)
 
 
+    const showApp = async () => {
+        await show()
+        await appWindow.setFocus()
+        queryBoxRef.current?.select()
+    }
+
+    const hideApp = async () => {
+        await hide()
+    }
+
     /*
         Handle Global Request
      */
     const handleRequestCallback = (message: WOXMESSAGE.WoxMessage) => {
         if (message.Method === WoxMessageRequestMethodEnum.HideApp.code) {
-            hide()
+            hideApp()
         }
         if (message.Method === WoxMessageRequestMethodEnum.ShowApp.code) {
-            show()
+            showApp()
         }
         if (message.Method === WoxMessageRequestMethodEnum.ToggleApp.code) {
             appWindow.isVisible().then(visible => {
                 if (visible) {
-                    hide()
+                    hideApp()
                 } else {
-                    show()
+                    showApp()
                 }
             });
         }
@@ -86,7 +99,7 @@ export default () => {
      */
     const setShownResultList = () => {
         const rsList = currentIndex.current >= fixedShownItemCount ? currentResultList.current.slice(currentIndex.current - fixedShownItemCount + 1, currentIndex.current + 1) : currentResultList.current.slice(0, fixedShownItemCount)
-        appWindow.setSize(new LogicalSize(800, 50 + 49 * rsList.length)).then(_ => {
+        appWindow.setSize(new LogicalSize(800, 48 + 49 * rsList.length)).then(_ => {
             setResultList(rsList)
         })
     }
@@ -132,7 +145,8 @@ export default () => {
     }
 
     useEffect(() => {
-        WoxMessageHelper.getInstance().initialRequestCallback(handleRequestCallback);
+        WoxMessageHelper.getInstance().initialRequestCallback(handleRequestCallback)
+        appWindow.setFocus()
     }, []);
 
     return <Style onKeyDown={(event) => {
@@ -151,6 +165,12 @@ export default () => {
             event.preventDefault()
             event.stopPropagation()
         }
+        console.log(event.key)
+        if (event.key === "Escape") {
+            hideApp()
+            event.preventDefault()
+            event.stopPropagation()
+        }
     }} onWheel={(event) => {
         if (event.deltaY > 0) {
             dealActiveIndex(false)
@@ -160,12 +180,15 @@ export default () => {
         }
     }}>
         <InputGroup size={"lg"}>
-            <Form.Control
+            <FormControl
                 id="Wox"
+                ref={queryBoxRef}
                 aria-label="Wox"
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
+                as={"input"}
+                autoFocus={true}
                 onChange={(e) => {
                     queryText.current = e.target.value
                     currentResultList.current = []
