@@ -11,8 +11,14 @@
     "version": "0.0.0"
   },
   "tauri": {
+    "macOSPrivateApi": true,
     "allowlist": {
-      "all": false,
+      "window": {
+        "all": true
+      },
+      "app": {
+        "all": true
+      },
       "shell": {
         "all": false,
         "open": true
@@ -38,12 +44,13 @@
         "fullscreen": false,
         "resizable": true,
         "transparent": true,
-        "decorations": true,
+        "decorations": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "acceptFirstMouse": true,
         "title": "Wox",
         "width": 800,
+        "height": 48,
         "maxHeight": 500
       }
     ]

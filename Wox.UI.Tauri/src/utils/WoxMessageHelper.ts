@@ -13,6 +13,7 @@ export class WoxMessageHelper {
         [key: string]: Deferred.Deferred<unknown>
     } = {}
     private woxQueryCallback: ((data: WOXMESSAGE.WoxMessageResponseResult[]) => void | undefined) | undefined
+    private woxRequestCallback: ((data: WOXMESSAGE.WoxMessage) => void | undefined) | undefined
     private interval: number | undefined;
 
     private shouldReconnect() {
@@ -63,8 +64,11 @@ export class WoxMessageHelper {
                 if (woxMessageResponse.Method === WoxMessageMethodEnum.QUERY.code && this.woxQueryCallback) {
                     this.woxQueryCallback(woxMessageResponse.Data as WOXMESSAGE.WoxMessageResponseResult[])
                 }
-            } else {
-
+            }
+            if (woxMessageResponse.Type === WoxMessageTypeEnum.REQUEST.code) {
+                if (this.woxRequestCallback) {
+                    this.woxRequestCallback(woxMessageResponse)
+                }
             }
             promiseInstance.resolve(woxMessageResponse.Data)
 
@@ -111,6 +115,14 @@ export class WoxMessageHelper {
         this.port = port
         this.reconnect();
         this.checkConnection();
+    }
+
+    /**
+     * Initial Global Request Callback
+     * @param callback
+     */
+    public initialRequestCallback(callback: (data: WOXMESSAGE.WoxMessage) => void) {
+        this.woxRequestCallback = callback
     }
 
     /*

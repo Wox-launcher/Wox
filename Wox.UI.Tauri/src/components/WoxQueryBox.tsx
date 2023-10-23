@@ -1,5 +1,5 @@
 import {Col, Form, Image, InputGroup, ListGroup, Row} from "react-bootstrap";
-import {useRef, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 import {WoxMessageHelper} from "../utils/WoxMessageHelper.ts";
 import styled from "styled-components";
 import {WOXMESSAGE} from "../entity/WoxMessage.typings";
@@ -7,6 +7,9 @@ import {WoxMessageMethodEnum} from "../enums/WoxMessageMethodEnum.ts";
 import {WoxImageTypeEnum} from "../enums/WoxImageTypeEnum.ts";
 import {WoxPreviewTypeEnum} from "../enums/WoxPreviewTypeEnum.ts";
 import Markdown from 'react-markdown'
+import {hide, show} from '@tauri-apps/api/app';
+import {WoxMessageRequestMethodEnum} from "../enums/WoxMessageRequestMethodEnum.ts";
+import {appWindow, LogicalSize} from "@tauri-apps/api/window";
 
 export default () => {
     const queryText = useRef<string>()
@@ -18,6 +21,19 @@ export default () => {
     const requestTimeoutId = useRef<number>()
     const hasLatestQueryResult = useRef<boolean>(true)
     const [hasPreview, setHasPreview] = useState<boolean>(false)
+
+
+    /*
+        Handle Global Request
+     */
+    const handleRequestCallback = (message: WOXMESSAGE.WoxMessage) => {
+        if (message.Method === WoxMessageRequestMethodEnum.HideApp.code) {
+            hide()
+        }
+        if (message.Method === WoxMessageRequestMethodEnum.ShowApp.code) {
+            show()
+        }
+    }
 
     /*
         Reset the result list
@@ -60,11 +76,10 @@ export default () => {
         Set the result list to be shown
      */
     const setShownResultList = () => {
-        if (currentIndex.current >= fixedShownItemCount) {
-            setResultList(currentResultList.current.slice(currentIndex.current - fixedShownItemCount + 1, currentIndex.current + 1))
-        } else {
-            setResultList(currentResultList.current.slice(0, fixedShownItemCount))
-        }
+        const rsList = currentIndex.current >= fixedShownItemCount ? currentResultList.current.slice(currentIndex.current - fixedShownItemCount + 1, currentIndex.current + 1) : currentResultList.current.slice(0, fixedShownItemCount)
+        appWindow.setSize(new LogicalSize(800, 50 + 49 * rsList.length)).then(_ => {
+            setResultList(rsList)
+        })
     }
 
     /*
@@ -106,6 +121,10 @@ export default () => {
         }
         return {PreviewType: "", PreviewData: "", PreviewProperties: {}} as WOXMESSAGE.WoxPreview
     }
+
+    useEffect(() => {
+        WoxMessageHelper.getInstance().initialRequestCallback(handleRequestCallback);
+    }, []);
 
     return <Style onKeyDown={(event) => {
         if (event.key === "ArrowUp") {
