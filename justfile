@@ -47,7 +47,7 @@ default:
     just _build_python_host Wox/resource/hosts
 
 @_build_ui:
-    cd Wox.UI.Tauri && yarn install && yarn release && cd ..
+    cd Wox.UI.Tauri && pnpm install && pnpm release && cd ..
     cp Wox.UI.Tauri/src-tauri/target/release/wox Wox/resource/ui/wox
     chmod +x Wox/resource/ui/wox
 
