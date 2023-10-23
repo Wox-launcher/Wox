@@ -10,6 +10,7 @@ import (
 	"time"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/share"
 	"wox/util"
 )
 
@@ -24,12 +25,18 @@ func (u *uiImpl) HideApp(ctx context.Context) {
 	u.send(ctx, "HideApp", nil)
 }
 
-func (u *uiImpl) ShowApp(ctx context.Context) {
-	u.send(ctx, "ShowApp", NewMouseScreenPosition())
+func (u *uiImpl) ShowApp(ctx context.Context, showContext share.ShowContext) {
+	u.send(ctx, "ShowApp", map[string]any{
+		"SelectAll": showContext.SelectAll,
+		"Position":  NewMouseScreenPosition(),
+	})
 }
 
 func (u *uiImpl) ToggleApp(ctx context.Context) {
-	u.send(ctx, "ToggleApp", NewMouseScreenPosition())
+	u.send(ctx, "ToggleApp", map[string]any{
+		"SelectAll": true,
+		"Position":  NewMouseScreenPosition(),
+	})
 }
 
 func (u *uiImpl) ShowMsg(ctx context.Context, title string, description string, icon string) {

@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"path"
+	"wox/share"
 	"wox/util"
 )
 
@@ -33,7 +34,9 @@ func (a *APIImpl) HideApp(ctx context.Context) {
 }
 
 func (a *APIImpl) ShowApp(ctx context.Context) {
-	GetPluginManager().GetUI().ShowApp(ctx)
+	GetPluginManager().GetUI().ShowApp(ctx, share.ShowContext{
+		SelectAll: true,
+	})
 }
 
 func (a *APIImpl) ShowMsg(ctx context.Context, title string, description string, icon string) {

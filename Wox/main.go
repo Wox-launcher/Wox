@@ -58,6 +58,14 @@ func main() {
 			startTray(ctx)
 		}
 
+		//demo
+		woxSetting.QueryHotkeys = []setting.QueryHotkey{
+			{
+				Hotkey: "command+shift+v",
+				Query:  "cb ",
+			},
+		}
+
 		shareUI := ui.GetUIManager().GetUI(ctx)
 		plugin.GetPluginManager().Start(ctx, shareUI)
 

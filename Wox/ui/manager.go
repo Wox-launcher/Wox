@@ -48,6 +48,7 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 	hotkey := &util.Hotkey{}
 	err := hotkey.Register(ctx, queryHotkey.Hotkey, func() {
 		m.ui.ChangeQuery(ctx, queryHotkey.Query)
+		m.ui.ShowApp(ctx, share.ShowContext{SelectAll: false})
 	})
 	if err != nil {
 		return err

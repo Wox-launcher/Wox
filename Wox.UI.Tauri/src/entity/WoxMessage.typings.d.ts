@@ -48,4 +48,9 @@ declare namespace WOXMESSAGE {
         Y: number
         Type: WoxPositionType
     }
+
+    export interface ShowContext {
+        Position: Position
+        SelectAll: boolean
+    }
 }

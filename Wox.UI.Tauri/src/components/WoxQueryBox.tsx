@@ -27,10 +27,12 @@ export default () => {
     const [hasPreview, setHasPreview] = useState<boolean>(false)
 
 
-    const showApp = async (location: WOXMESSAGE.Position) => {
-        queryBoxRef.current?.select()
-        if (location.Type === WoxPositionTypeEnum.WoxPositionTypeMouseScreen.code) {
-            await appWindow.setPosition(new LogicalPosition(Number(location.X), Number(location.Y)))
+    const showApp = async (context: WOXMESSAGE.ShowContext) => {
+        if (context.Position.Type === WoxPositionTypeEnum.WoxPositionTypeMouseScreen.code) {
+            await appWindow.setPosition(new LogicalPosition(Number(context.Position.X), Number(context.Position.Y)))
+        }
+        if (context.SelectAll) {
+            queryBoxRef.current?.select()
         }
         await appWindow.setFocus()
         await show()
@@ -74,14 +76,14 @@ export default () => {
             await hideApp()
         }
         if (message.Method === WoxMessageRequestMethodEnum.ShowApp.code) {
-            await showApp(message.Data as WOXMESSAGE.Position)
+            await showApp(message.Data as WOXMESSAGE.ShowContext)
         }
         if (message.Method === WoxMessageRequestMethodEnum.ToggleApp.code) {
             appWindow.isVisible().then(async visible => {
                 if (visible) {
                     await hideApp()
                 } else {
-                    await showApp(message.Data as WOXMESSAGE.Position)
+                    await showApp(message.Data as WOXMESSAGE.ShowContext)
                 }
             });
         }
