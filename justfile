@@ -3,21 +3,25 @@ default:
 
 @dev:
     just _build_hosts
+    just _build_ui
 
     # build plugins
     just _build_dev_nodejs_plugin Wox.Plugin.ProcessKiller ~/.wox/wox-user/plugins
 
 @release target:
+    ENV PROD=true
+
     just _build_hosts
+    just _build_ui
 
     # windows platform in hotkey doesn't need C
     if [ "{{target}}" = "window" ]; then \
-      cd Wox && GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o ../Release/wox-windows-amd64.exe && cd ..; \
+      cd Wox && CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-windows-amd64.exe && cd ..; \
     elif [ "{{target}}" = "linux" ]; then \
-      cd Wox && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o ../Release/wox-linux && cd ..; \
+      cd Wox && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-linux && cd ..; \
     elif [ "{{target}}" = "darwin" ]; then \
-      cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o ../Release/wox-mac-amd64 && cd ..; \
-      cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -o ../Release/wox-mac-arm64 && cd ..; \
+      cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-amd64 && cd ..; \
+      cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-arm64 && cd ..; \
     fi
 
 @test:
@@ -41,6 +45,11 @@ default:
     mkdir Wox/resource/hosts
     just _build_nodejs_host Wox/resource/hosts
     just _build_python_host Wox/resource/hosts
+
+@_build_ui:
+    cd Wox.UI.Tauri && yarn install && yarn release && cd ..
+    cp Wox.UI.Tauri/src-tauri/target/release/wox Wox/resource/ui/wox
+    chmod +x Wox/resource/ui/wox
 
 @_build_nodejs_host directory:
     cd Wox.Plugin.Host.Nodejs && pnpm install && pnpm run build && cd ..

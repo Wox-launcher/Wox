@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
-	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -26,7 +25,7 @@ func (w *WebsocketHost) logIdentity(ctx context.Context) string {
 }
 
 func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, entry string) error {
-	port, portErr := w.getAvailableTcpPort(ctx)
+	port, portErr := util.GetAvailableTcpPort(ctx)
 	if portErr != nil {
 		return fmt.Errorf("failed to get available port: %w", portErr)
 	}
@@ -150,18 +149,6 @@ func (w *WebsocketHost) onMessage(ctx context.Context, data string) {
 	} else {
 		util.GetLogger().Error(ctx, fmt.Sprintf("%s unknown message type: %s", w.logIdentity(ctx), data))
 	}
-}
-
-func (w *WebsocketHost) getAvailableTcpPort(ctx context.Context) (port int, err error) {
-	var a *net.TCPAddr
-	if a, err = net.ResolveTCPAddr("tcp", "localhost:0"); err == nil {
-		var l *net.TCPListener
-		if l, err = net.ListenTCP("tcp", a); err == nil {
-			defer l.Close()
-			return l.Addr().(*net.TCPAddr).Port, nil
-		}
-	}
-	return
 }
 
 func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, data string) {

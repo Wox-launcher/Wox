@@ -7,8 +7,8 @@
     "withGlobalTauri": false
   },
   "package": {
-    "productName": "woxuitauri",
-    "version": "0.0.0"
+    "productName": "wox",
+    "version": "2.0.0"
   },
   "tauri": {
     "macOSPrivateApi": true,
@@ -27,7 +27,7 @@
     "bundle": {
       "active": true,
       "targets": "all",
-      "identifier": "com.tauri.dev",
+      "identifier": "wox",
       "icon": [
         "icons/32x32.png",
         "icons/128x128.png",

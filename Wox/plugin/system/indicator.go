@@ -45,17 +45,17 @@ func (i *IndicatorPlugin) Init(ctx context.Context, initParams plugin.InitParams
 
 func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	if query.TriggerKeyword == "" {
-		return i.queryForNonTriggerKeyword(ctx, query)
+		return i.queryForTriggerKeyword(ctx, query)
 	}
 
 	if query.Command == "" {
-		return i.queryForNonCommand(ctx, query)
+		return i.queryForCommand(ctx, query)
 	}
 
 	return []plugin.QueryResult{}
 }
 
-func (i *IndicatorPlugin) queryForNonTriggerKeyword(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (i *IndicatorPlugin) queryForTriggerKeyword(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	for _, pluginInstance := range plugin.GetPluginManager().GetPluginInstances() {
 		triggerKeyword, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
@@ -69,7 +69,8 @@ func (i *IndicatorPlugin) queryForNonTriggerKeyword(ctx context.Context, query p
 				Icon:     plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><circle cx="22" cy="9" r="2" fill="#c767e5"></circle><circle cx="12" cy="9" r="2" fill="#c767e5"></circle><path fill="#c767e5" d="M34,9c0-1.1-0.9-2-2-2H22l-2,2c0,3,3,3,3,7c0,0.702-0.127,1.374-0.349,2H34V9z"></path><path fill="#c767e5" d="M11,16c0-4,3-4,3-7l-2-2H2C0.9,7,0,7.9,0,9v9h11.349C11.127,17.374,11,16.702,11,16z"></path><path fill="#a238c2" d="M34,39v-9H0v9c0,1.1,0.9,2,2,2h30C33.1,41,34,40.1,34,39z"></path><path fill="#ba54d9" d="M34,29.806c0-1.854,2.204-2.772,3.558-1.507C38.513,29.19,39.75,30,42,30	c3.675,0,6.578-3.303,5.902-7.102c-0.572-3.218-3.665-5.24-6.909-4.838c-1.663,0.206-2.671,0.92-3.479,1.684	C36.185,20.998,34,20.028,34,18.2V18H22.651c-0.825,2.329-3.04,4-5.651,4s-4.827-1.671-5.651-4H0v12h34V29.806z"></path></svg>`),
 				Actions: []plugin.QueryResultAction{
 					{
-						Name: "activate",
+						Name:                   "activate",
+						PreventHideAfterAction: true,
 						Action: func() {
 							i.api.ChangeQuery(ctx, fmt.Sprintf("%s ", triggerKeyword))
 						},
@@ -86,7 +87,8 @@ func (i *IndicatorPlugin) queryForNonTriggerKeyword(ctx context.Context, query p
 					Icon:     plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><circle cx="22" cy="9" r="2" fill="#c767e5"></circle><circle cx="12" cy="9" r="2" fill="#c767e5"></circle><path fill="#c767e5" d="M34,9c0-1.1-0.9-2-2-2H22l-2,2c0,3,3,3,3,7c0,0.702-0.127,1.374-0.349,2H34V9z"></path><path fill="#c767e5" d="M11,16c0-4,3-4,3-7l-2-2H2C0.9,7,0,7.9,0,9v9h11.349C11.127,17.374,11,16.702,11,16z"></path><path fill="#a238c2" d="M34,39v-9H0v9c0,1.1,0.9,2,2,2h30C33.1,41,34,40.1,34,39z"></path><path fill="#ba54d9" d="M34,29.806c0-1.854,2.204-2.772,3.558-1.507C38.513,29.19,39.75,30,42,30	c3.675,0,6.578-3.303,5.902-7.102c-0.572-3.218-3.665-5.24-6.909-4.838c-1.663,0.206-2.671,0.92-3.479,1.684	C36.185,20.998,34,20.028,34,18.2V18H22.651c-0.825,2.329-3.04,4-5.651,4s-4.827-1.671-5.651-4H0v12h34V29.806z"></path></svg>`),
 					Actions: []plugin.QueryResultAction{
 						{
-							Name: "activate",
+							Name:                   "activate",
+							PreventHideAfterAction: true,
 							Action: func() {
 								i.api.ChangeQuery(ctx, fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command))
 							},
@@ -99,8 +101,7 @@ func (i *IndicatorPlugin) queryForNonTriggerKeyword(ctx context.Context, query p
 	return results
 }
 
-// query for trigger keyword exist but no command exist
-func (i *IndicatorPlugin) queryForNonCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (i *IndicatorPlugin) queryForCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	for _, pluginInstance := range plugin.GetPluginManager().GetPluginInstances() {
 		_, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
@@ -110,7 +111,7 @@ func (i *IndicatorPlugin) queryForNonCommand(ctx context.Context, query plugin.Q
 			for _, metadataCommandShadow := range pluginInstance.Metadata.Commands {
 				// action will be executed in another go routine, so we need to copy the variable
 				metadataCommand := metadataCommandShadow
-				if IsStringMatchNoPinYin(ctx, metadataCommand.Command, query.Search) {
+				if query.Search == "" || IsStringMatchNoPinYin(ctx, metadataCommand.Command, query.Search) {
 					results = append(results, plugin.QueryResult{
 						Id:       uuid.NewString(),
 						Title:    fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command),
@@ -119,7 +120,8 @@ func (i *IndicatorPlugin) queryForNonCommand(ctx context.Context, query plugin.Q
 						Icon:     plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><circle cx="22" cy="9" r="2" fill="#c767e5"></circle><circle cx="12" cy="9" r="2" fill="#c767e5"></circle><path fill="#c767e5" d="M34,9c0-1.1-0.9-2-2-2H22l-2,2c0,3,3,3,3,7c0,0.702-0.127,1.374-0.349,2H34V9z"></path><path fill="#c767e5" d="M11,16c0-4,3-4,3-7l-2-2H2C0.9,7,0,7.9,0,9v9h11.349C11.127,17.374,11,16.702,11,16z"></path><path fill="#a238c2" d="M34,39v-9H0v9c0,1.1,0.9,2,2,2h30C33.1,41,34,40.1,34,39z"></path><path fill="#ba54d9" d="M34,29.806c0-1.854,2.204-2.772,3.558-1.507C38.513,29.19,39.75,30,42,30	c3.675,0,6.578-3.303,5.902-7.102c-0.572-3.218-3.665-5.24-6.909-4.838c-1.663,0.206-2.671,0.92-3.479,1.684	C36.185,20.998,34,20.028,34,18.2V18H22.651c-0.825,2.329-3.04,4-5.651,4s-4.827-1.671-5.651-4H0v12h34V29.806z"></path></svg>`),
 						Actions: []plugin.QueryResultAction{
 							{
-								Name: "activate",
+								Name:                   "activate",
+								PreventHideAfterAction: true,
 								Action: func() {
 									i.api.ChangeQuery(ctx, fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command))
 								},

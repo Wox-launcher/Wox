@@ -29,9 +29,9 @@ func main() {
 		util.GetLogger().Info(ctx, "Wox starting")
 		util.GetLogger().Info(ctx, fmt.Sprintf("golang version: %s", strings.ReplaceAll(runtime.Version(), "go", "")))
 
-		extractErr := resource.ExtractHosts(ctx)
+		extractErr := resource.Extract(ctx)
 		if extractErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("failed to extract embed host file: %s", extractErr.Error()))
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to extract embed file: %s", extractErr.Error()))
 			return
 		}
 
@@ -52,6 +52,16 @@ func main() {
 		if langErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize lang(%s): %s", woxSetting.LangCode, langErr.Error()))
 			return
+		}
+
+		serverPort := 34987
+		if util.IsProd() {
+			availablePort, portErr := util.GetAvailableTcpPort(ctx)
+			if portErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize lang(%s): %s", woxSetting.LangCode, langErr.Error()))
+				return
+			}
+			serverPort = availablePort
 		}
 
 		if woxSetting.ShowTray {
@@ -90,6 +100,14 @@ func main() {
 			}
 		})
 
-		ui.GetUIManager().StartWebsocketAndWait(ctx, 34987)
+		if util.IsProd() {
+			appErr := ui.GetUIManager().StartUIApp(ctx, serverPort)
+			if appErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("failed to start ui app: %s", appErr.Error()))
+				return
+			}
+		}
+
+		ui.GetUIManager().StartWebsocketAndWait(ctx, serverPort)
 	})
 }

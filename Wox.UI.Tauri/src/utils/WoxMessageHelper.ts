@@ -6,7 +6,7 @@ import {WoxMessageTypeEnum} from "../enums/WoxMessageTypeEnum.ts";
 
 export class WoxMessageHelper {
     private initialized: boolean = false;
-    private port: string = "34987"
+    private port: string = ""
     private static instance: WoxMessageHelper;
     private ws: WebSocket | undefined;
     private woxMessageResponseMap: {

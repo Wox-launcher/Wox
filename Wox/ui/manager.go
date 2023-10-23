@@ -2,7 +2,9 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"github.com/google/uuid"
+	"os/exec"
 	"sync"
 	"wox/setting"
 	"wox/share"
@@ -61,6 +63,21 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 func (m *Manager) StartWebsocketAndWait(ctx context.Context, port int) {
 	m.serverPort = port
 	serveAndWait(ctx, port)
+}
+
+func (m *Manager) StartUIApp(ctx context.Context, port int) error {
+	var appPath = util.GetLocation().GetUIAppPath()
+	logger.Info(ctx, fmt.Sprintf("start ui app: %s", appPath))
+	cmd := exec.Command(appPath, fmt.Sprintf("%d", port))
+	cmd.Stdout = util.GetLogger().GetWriter()
+	cmd.Stderr = util.GetLogger().GetWriter()
+	cmdErr := cmd.Start()
+	if cmdErr != nil {
+		return cmdErr
+	}
+
+	util.GetLogger().Info(ctx, fmt.Sprintf("ui app pid: %d", cmd.Process.Pid))
+	return nil
 }
 
 func (m *Manager) ToggleWindow() {

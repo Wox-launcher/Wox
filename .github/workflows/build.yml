@@ -30,11 +30,12 @@ jobs:
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
 
-  build:
+  build-macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
       - uses: extractions/setup-just@v1
+      - uses: hecrj/setup-rust-action@v2
       - uses: actions/setup-go@v4
         with:
           go-version: '>=1.21.0'
@@ -47,5 +48,10 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      - name: Build darwin release
+      - name: Build
         run: just release darwin
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: wox-mac-arm64
+          path: Release/wox-mac-arm64

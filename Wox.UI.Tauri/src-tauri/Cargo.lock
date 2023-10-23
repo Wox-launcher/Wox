@@ -3582,8 +3582,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "woxuitauri"
-version = "0.0.0"
+name = "wox"
+version = "2.0.0"
 dependencies = [
  "serde",
  "serde_json",

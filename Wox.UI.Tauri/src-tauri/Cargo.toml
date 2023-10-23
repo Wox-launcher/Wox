@@ -1,10 +1,10 @@
 [package]
-name = "woxuitauri"
-version = "0.0.0"
-description = "A Tauri App"
-authors = ["you"]
-license = ""
-repository = ""
+name = "wox"
+version = "2.0.0"
+description = "A cross-platform launcher that simply works"
+authors = ["Wox Team"]
+license = "MIT"
+repository = "https://github.com/Wox-launcher/Wox"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

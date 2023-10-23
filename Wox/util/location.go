@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"runtime"
+	"strings"
 	"sync"
 )
 
@@ -86,6 +88,9 @@ func (l *Location) Init() error {
 	if directoryErr := l.EnsureDirectoryExist(l.GetPluginSettingDirectory()); directoryErr != nil {
 		return directoryErr
 	}
+	if directoryErr := l.EnsureDirectoryExist(l.GetUIDirectory()); directoryErr != nil {
+		return directoryErr
+	}
 
 	return nil
 }
@@ -127,4 +132,16 @@ func (l *Location) GetWoxSettingPath() string {
 
 func (l *Location) GetHostDirectory() string {
 	return path.Join(l.woxDataDirectory, "hosts")
+}
+
+func (l *Location) GetUIDirectory() string {
+	return path.Join(l.woxDataDirectory, "ui")
+}
+
+func (l *Location) GetUIAppPath() string {
+	name := "wox"
+	if strings.ToLower(runtime.GOOS) == "windows" {
+		name += ".exe"
+	}
+	return path.Join(l.GetUIDirectory(), name)
 }

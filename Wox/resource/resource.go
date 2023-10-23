@@ -15,7 +15,24 @@ var HostFS embed.FS
 //go:embed lang
 var LangFS embed.FS
 
-func ExtractHosts(ctx context.Context) error {
+//go:embed ui
+var UIFS embed.FS
+
+func Extract(ctx context.Context) error {
+	extractErr := extractHosts(ctx)
+	if extractErr != nil {
+		return extractErr
+	}
+
+	extractErr = extractUI(ctx)
+	if extractErr != nil {
+		return extractErr
+	}
+
+	return nil
+}
+
+func extractHosts(ctx context.Context) error {
 	dir, err := HostFS.ReadDir("hosts")
 	if err != nil {
 		return err
@@ -25,7 +42,7 @@ func ExtractHosts(ctx context.Context) error {
 	}
 
 	for _, entry := range dir {
-		util.GetLogger().Info(ctx, fmt.Sprintf("extracting host file: %s", entry.Name()))
+		start := util.GetSystemTimestamp()
 		hostData, readErr := HostFS.ReadFile("hosts/" + entry.Name())
 		if readErr != nil {
 			return readErr
@@ -36,6 +53,48 @@ func ExtractHosts(ctx context.Context) error {
 		if writeErr != nil {
 			return writeErr
 		}
+		util.GetLogger().Info(ctx, fmt.Sprintf("extracted host file: %s, cost: %dms", entry.Name(), util.GetSystemTimestamp()-start))
+	}
+
+	return nil
+}
+
+func extractUI(ctx context.Context) error {
+	// only extract UI in prod mode
+	if !util.IsProd() {
+		return nil
+	}
+
+	dir, err := UIFS.ReadDir("ui")
+	if err != nil {
+		return err
+	}
+	if len(dir) == 0 {
+		return fmt.Errorf("no ui file found")
+	}
+
+	for _, entry := range dir {
+		if entry.Name() == "placeholder.txt" {
+			continue
+		}
+
+		start := util.GetSystemTimestamp()
+		uiData, readErr := UIFS.ReadFile("ui/" + entry.Name())
+		if readErr != nil {
+			return readErr
+		}
+
+		var hostFilePath = path.Join(util.GetLocation().GetUIDirectory(), entry.Name())
+		writeErr := os.WriteFile(hostFilePath, uiData, 0777)
+		if writeErr != nil {
+			return writeErr
+		}
+
+		util.GetLogger().Info(ctx, fmt.Sprintf("extracted ui file: %s, cost: %dms", entry.Name(), util.GetSystemTimestamp()-start))
+	}
+
+	if _, statErr := os.Stat(util.GetLocation().GetUIAppPath()); os.IsNotExist(statErr) {
+		return fmt.Errorf("failed to extract ui: not found")
 	}
 
 	return nil
