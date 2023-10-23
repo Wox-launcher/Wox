@@ -165,16 +165,19 @@ export default () => {
         }
     }
 
-    const dealWithAction = () => {
+    const dealWithAction = async () => {
         const result = currentResultList.current.find((result) => result.Index === currentIndex.current)
         if (result) {
-            result.Actions.forEach((action) => {
+            for (const action of result.Actions) {
                 if (action.IsDefault) {
                     WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ACTION.code, {
                         id: action.Id,
                     })
+                    if (!action.PreventHideAfterAction) {
+                        await hideApp()
+                    }
                 }
-            })
+            }
         }
     }
 
