@@ -180,9 +180,10 @@ export default () => {
                                     <Image src={result.Icon.ImageData} className={"wox-query-result-image"}/>}
                                 {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeBase64.code &&
                                     <Image src={result.Icon.ImageData} className={"wox-query-result-image"}/>}
-                                <div className={"ms-2 me-auto"}>
+                                <div className={"ms-2 me-auto wox-query-result-item-intro"}>
                                     <div className={"fw-bold"}>{result.Title}</div>
-                                    <div className={"fw-lighter"}>{result.Score} - {result.SubTitle}</div>
+                                    <div
+                                        className={"fw-lighter result-item-sub-title"}>{result.Score} - {result.SubTitle}</div>
                                 </div>
                             </div>
                         </ListGroup.Item>
@@ -227,7 +228,16 @@ const Style = styled.div`
     }
     .wox-query-result-item {
         display: flex;
-        align-items:center
+        align-items:center;
+    }
+    .wox-query-result-item-intro {
+        width: 0;
+        flex: 1;
+    }
+    .result-item-sub-title {
+        overflow: hidden !important;
+        white-space: nowrap !important;
+        text-overflow: ellipsis !important;
     }
     .wox-query-result-image {
         width: 36px;
