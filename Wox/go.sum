@@ -43,6 +43,8 @@ github.com/go-vgo/robotgo v0.100.10 h1:bZe7AslG6oq5ops1SWUxsPfM9Z3QQvlqfA3ezxLFN
 github.com/go-vgo/robotgo v0.100.10/go.mod h1:7QeIpSHX7bjeXWRPxvQeKSx9mHI+3l80Ahq+CQF0C68=
 github.com/go-vgo/robotgo v1.0.0-rc2.1 h1:C7AZTxQmRc0GozMMbS5m/ZgfqjnSpvUvDZtzaXUdFWk=
 github.com/go-vgo/robotgo v1.0.0-rc2.1/go.mod h1:DdJUdi6mEU8ttHMbow6hKD1TjgsfgJC/H+4dusok8Uw=
+github.com/go-vgo/robotgo v1.0.0-rc2.1.0.20230915142143-a780825c0931 h1:qJNRI58i8qZ41MUXkJJpC4QDUN2KJ8q8J7Bctta2/CQ=
+github.com/go-vgo/robotgo v1.0.0-rc2.1.0.20230915142143-a780825c0931/go.mod h1:DdJUdi6mEU8ttHMbow6hKD1TjgsfgJC/H+4dusok8Uw=
 github.com/google/go-cmp v0.5.6/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 github.com/google/go-cmp v0.5.9/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/google/uuid v1.3.1 h1:KjJaJ9iWZ3jOFZIf1Lqf4laDRCasjl0BCmnEGxkdLb4=

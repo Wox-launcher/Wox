@@ -59,7 +59,7 @@ func (u *uiImpl) send(ctx context.Context, method string, params map[string]stri
 		params = make(map[string]string)
 	}
 
-	util.GetLogger().Info(ctx, fmt.Sprintf("[UI] %s", method))
+	util.GetLogger().Info(ctx, fmt.Sprintf("[->UI] %s", method))
 	requestUI(ctx, WebsocketMsg{
 		Id:     uuid.NewString(),
 		Method: method,
