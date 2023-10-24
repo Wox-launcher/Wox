@@ -29,6 +29,8 @@ func main() {
 		util.GetLogger().Info(ctx, "------------------------------")
 		util.GetLogger().Info(ctx, "Wox starting")
 		util.GetLogger().Info(ctx, fmt.Sprintf("golang version: %s", strings.ReplaceAll(runtime.Version(), "go", "")))
+		util.GetLogger().Info(ctx, fmt.Sprintf("wox data location: %s", util.GetLocation().GetWoxDataDirectory()))
+		util.GetLogger().Info(ctx, fmt.Sprintf("user data location: %s", util.GetLocation().GetUserDataDirectory()))
 
 		share.ExitApp = ExitApp
 
@@ -69,14 +71,6 @@ func main() {
 
 		if woxSetting.ShowTray {
 			startTray(ctx)
-		}
-
-		//demo
-		woxSetting.QueryHotkeys = []setting.QueryHotkey{
-			{
-				Hotkey: "command+shift+v",
-				Query:  "cb ",
-			},
 		}
 
 		shareUI := ui.GetUIManager().GetUI(ctx)

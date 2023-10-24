@@ -4,5 +4,9 @@
   "plugin_browser_bookmark_open_in_browser": "Open in browser",
   "plugin_clipboard_copy_date": "Copy date",
   "plugin_clipboard_copy_characters": "Copy characters",
-  "plugin_indicator_activate_plugin": "Activate %s plugin"
+  "plugin_indicator_activate_plugin": "Activate %s plugin",
+  "plugin_sys_empty_trash": "Empty trash",
+  "plugin_sys_lock_computer": "Lock computer",
+  "plugin_sys_execute": "Execute",
+  "plugin_sys_quit_wox": "Quit Wox"
 }

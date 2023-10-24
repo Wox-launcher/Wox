@@ -2,8 +2,10 @@ package util
 
 import (
 	"fmt"
+	"github.com/mitchellh/go-homedir"
 	"os"
 	"path"
+	"strings"
 	"sync"
 )
 
@@ -63,7 +65,9 @@ func (l *Location) Init() error {
 	if readFileErr != nil {
 		return fmt.Errorf("failed to read shortcut file: %w", readFileErr)
 	}
-	l.userDataDirectory = string(readFile)
+	userDataDirectory, _ := homedir.Expand(string(readFile))
+	userDataDirectory = strings.ReplaceAll(userDataDirectory, "\n", "")
+	l.userDataDirectory = userDataDirectory
 
 	if directoryErr := l.EnsureDirectoryExist(l.userDataDirectory); directoryErr != nil {
 		return directoryErr
@@ -108,6 +112,10 @@ func (l *Location) GetLogDirectory() string {
 	return path.Join(l.woxDataDirectory, "log")
 }
 
+func (l *Location) GetWoxDataDirectory() string {
+	return l.woxDataDirectory
+}
+
 func (l *Location) GetLogPluginDirectory() string {
 	return path.Join(l.GetLogDirectory(), "plugins")
 }
@@ -122,6 +130,10 @@ func (l *Location) GetPluginDirectory() string {
 
 func (l *Location) GetPluginSettingDirectory() string {
 	return path.Join(l.userDataDirectory, "settings")
+}
+
+func (l *Location) GetUserDataDirectory() string {
+	return l.userDataDirectory
 }
 
 func (l *Location) GetWoxSettingPath() string {

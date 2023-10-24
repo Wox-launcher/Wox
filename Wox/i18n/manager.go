@@ -75,6 +75,21 @@ func (m *Manager) TranslateWox(ctx context.Context, key string) string {
 	return originKey
 }
 
+func (m *Manager) TranslateWoxEnUs(ctx context.Context, key string) string {
+	originKey := key
+
+	if strings.HasPrefix(key, "i18n:") {
+		key = key[5:]
+	}
+
+	enUsResult := gjson.Get(m.enUsLangJson, key)
+	if enUsResult.Exists() {
+		return enUsResult.String()
+	}
+
+	return originKey
+}
+
 func (m *Manager) TranslatePlugin(ctx context.Context, key string, pluginDirectory string) string {
 	cacheKey := fmt.Sprintf("%s:%s", pluginDirectory, m.currentLangCode)
 	if v, ok := m.pluginLangJsonMap.Load(cacheKey); ok {

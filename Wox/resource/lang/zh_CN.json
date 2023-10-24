@@ -4,5 +4,9 @@
   "plugin_browser_bookmark_open_in_browser": "在浏览器中打开",
   "plugin_clipboard_copy_date": "复制日期",
   "plugin_clipboard_copy_characters": "复制字符",
-  "plugin_indicator_activate_plugin": "激活%s插件"
+  "plugin_indicator_activate_plugin": "激活%s插件",
+  "plugin_sys_empty_trash": "清空回收站",
+  "plugin_sys_lock_computer": "锁定电脑",
+  "plugin_sys_execute": "执行",
+  "plugin_sys_quit_wox": "退出Wox"
 }
