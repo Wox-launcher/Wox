@@ -3,6 +3,7 @@ import Deferred from "promise-deferred"
 import {WoxMessageMethodEnum} from "../enums/WoxMessageMethodEnum.ts";
 import {WOXMESSAGE} from "../entity/WoxMessage.typings";
 import {WoxMessageTypeEnum} from "../enums/WoxMessageTypeEnum.ts";
+import {WoxLogHelper} from "./WoxLogHelper.ts";
 
 export class WoxMessageHelper {
     private initialized: boolean = false;
@@ -14,7 +15,6 @@ export class WoxMessageHelper {
     } = {}
     private woxQueryCallback: ((data: WOXMESSAGE.WoxMessageResponseResult[]) => void | undefined) | undefined
     private woxRequestCallback: ((data: WOXMESSAGE.WoxMessage) => void | undefined) | undefined
-    private interval: number | undefined;
 
     private shouldReconnect() {
         // Check if the WebSocket is in a closed or closing state
@@ -30,14 +30,22 @@ export class WoxMessageHelper {
         }
         this.ws = new WebSocket(`ws://127.0.0.1:${this.port}/ws`);
         this.ws.onopen = (event) => {
-            console.log('WebSocket reconnected:', event);
+            WoxLogHelper.getInstance().log(`Websocket OnOpen: ${JSON.stringify(event)}`)
         }
         this.ws.onclose = (event) => {
-            console.log('WebSocket closed during reconnect:', event);
-            // Optionally, add logic to attempt reconnection again or handle it as needed
+            WoxLogHelper.getInstance().log(`Websocket OnClose: ${JSON.stringify(event)}`)
+            if (this.shouldReconnect()) {
+                this.reconnect()
+            }
         };
+        this.ws.onerror = (event) => {
+            WoxLogHelper.getInstance().log(`Websocket OnError: ${JSON.stringify(event)}`)
+            if (this.shouldReconnect()) {
+                this.reconnect()
+            }
+        }
         this.ws.onmessage = (event) => {
-            console.log(event.data);
+            WoxLogHelper.getInstance().log(`Receive Msg: ${JSON.stringify(event)}`)
             let woxMessage: WOXMESSAGE.WoxMessage
             try {
                 woxMessage = JSON.parse(event.data) as WOXMESSAGE.WoxMessage
@@ -45,19 +53,19 @@ export class WoxMessageHelper {
                 return
             }
             if (woxMessage === undefined) {
-                console.error(`woxMessageResponse is undefined`)
+                WoxLogHelper.getInstance().log(`woxMessageResponse is undefined`)
                 return
             }
 
             if (woxMessage.Type === WoxMessageTypeEnum.RESPONSE.code) {
                 if (!woxMessage?.Id) {
-                    console.error(`woxMessageResponse.Id is undefined`)
+                    WoxLogHelper.getInstance().log(`woxMessageResponse.Id is undefined`)
                     return
                 }
 
                 const promiseInstance = this.woxMessageResponseMap[woxMessage.Id]
                 if (promiseInstance === undefined) {
-                    console.error(`woxMessageResponseMap[${woxMessage.Id}] is undefined`)
+                    WoxLogHelper.getInstance().log(`woxMessageResponseMap[${woxMessage.Id}] is undefined`)
                     return
                 }
                 if (woxMessage.Method === WoxMessageMethodEnum.QUERY.code && this.woxQueryCallback) {
@@ -72,21 +80,6 @@ export class WoxMessageHelper {
             }
         }
         this.initialized = true
-    }
-
-
-    /*
-        Check if the connection is still alive
-     */
-    private checkConnection() {
-        if (this.interval !== undefined) {
-            clearInterval(this.interval)
-        }
-        this.interval = setInterval(() => {
-            if (this.shouldReconnect()) {
-                this.reconnect()
-            }
-        }, 5000)
     }
 
     /*
@@ -112,7 +105,6 @@ export class WoxMessageHelper {
         }
         this.port = port
         this.reconnect();
-        this.checkConnection();
     }
 
     /**
@@ -131,12 +123,14 @@ export class WoxMessageHelper {
             return Promise.reject("WoxMessageHelper is not initialized");
         }
         const requestId = `wox-react-${UUID()}`;
-        this.ws?.send(JSON.stringify({
+        const msg = JSON.stringify({
             Id: requestId,
             Method: method,
             Type: WoxMessageTypeEnum.REQUEST.code,
             Data: params
-        } as WOXMESSAGE.WoxMessage))
+        } as WOXMESSAGE.WoxMessage)
+        this.ws?.send(msg)
+        WoxLogHelper.getInstance().log(`Send Msg: ${msg}`)
         const deferred = new Deferred<unknown>()
         this.woxMessageResponseMap[requestId] = deferred
         return deferred.promise;
