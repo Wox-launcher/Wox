@@ -103,8 +103,8 @@ export default () => {
         Rest result list
      */
     const resetResultListData = (rsList: WOXMESSAGE.WoxMessageResponseResult[]) => {
-        lastResultList.current = rsList
-        setResultList(rsList)
+        lastResultList.current = [...rsList]
+        setResultList(lastResultList.current)
     }
 
     /*

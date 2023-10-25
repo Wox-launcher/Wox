@@ -29,10 +29,10 @@ export class WoxMessageHelper {
             this.ws.close()
         }
         this.ws = new WebSocket(`ws://127.0.0.1:${this.port}/ws`);
-        this.ws.onopen = (event) => {
-            WoxLogHelper.getInstance().log(`Websocket OnOpen: ${JSON.stringify(event)}`)
+        this.ws.onopen = (_) => {
+            WoxLogHelper.getInstance().log(`Websocket Opened`)
         }
-        this.ws.onclose = (event) => {
+        this.ws.onclose = (_) => {
             WoxLogHelper.getInstance().log(`Websocket OnClose: ${JSON.stringify(event)}`)
             if (this.shouldReconnect()) {
                 this.reconnect()
