@@ -17,7 +17,8 @@ const queryBoxRef = React.createRef<
 >();
 export default () => {
     const queryText = useRef<string>()
-    const currentResultList = useRef<WOXMESSAGE.WoxMessageResponseResult[]>([])
+    const fullResultList = useRef<WOXMESSAGE.WoxMessageResponseResult[]>([])
+    const lastResultList = useRef<WOXMESSAGE.WoxMessageResponseResult[]>([])
     const [resultList, setResultList] = useState<WOXMESSAGE.WoxMessageResponseResult[]>([])
     const [activeIndex, setActiveIndex] = useState<number>(0)
     const currentIndex = useRef(0)
@@ -51,7 +52,7 @@ export default () => {
 
     const onQueryChange = (query: string) => {
         queryText.current = query
-        currentResultList.current = []
+        fullResultList.current = []
         clearTimeout(requestTimeoutId.current)
         hasLatestQueryResult.current = false
         WoxMessageHelper.getInstance().sendQueryMessage({
@@ -60,7 +61,7 @@ export default () => {
         }, handleQueryCallback)
         requestTimeoutId.current = setTimeout(() => {
             if (!hasLatestQueryResult.current) {
-                resetResultList()
+                clearResultList()
             }
         }, 50)
     }
@@ -90,12 +91,20 @@ export default () => {
     }
 
     /*
-        Reset the result list
+        Clear result list
      */
-    const resetResultList = () => {
+    const clearResultList = () => {
         setResultList([])
         setActiveIndex(0)
         currentIndex.current = 0
+    }
+
+    /*
+        Rest result list
+     */
+    const resetResultListData = (rsList: WOXMESSAGE.WoxMessageResponseResult[]) => {
+        lastResultList.current = rsList
+        setResultList(rsList)
     }
 
     /*
@@ -103,7 +112,7 @@ export default () => {
      */
     const handleQueryCallback = (results: WOXMESSAGE.WoxMessageResponseResult[]) => {
         setHasPreview(false)
-        currentResultList.current = currentResultList.current.concat(results.filter((result) => {
+        fullResultList.current = fullResultList.current.concat(results.filter((result) => {
             if (result.AssociatedQuery === queryText.current) {
                 hasLatestQueryResult.current = true
             }
@@ -117,12 +126,11 @@ export default () => {
             return Object.assign({...result, Index: index})
         })
 
-        //sort currentResultList order by score desc
-        currentResultList.current.sort((a, b) => {
+        //sort fullResultList order by score desc
+        fullResultList.current.sort((a, b) => {
             return b.Score - a.Score
         })
-
-        resetResultList()
+        clearResultList()
         setShownResultList()
     }
 
@@ -130,21 +138,20 @@ export default () => {
         Set the result list to be shown
      */
     const setShownResultList = () => {
-        const rsList = currentIndex.current >= fixedShownItemCount ? currentResultList.current.slice(currentIndex.current - fixedShownItemCount + 1, currentIndex.current + 1) : currentResultList.current.slice(0, fixedShownItemCount)
-        if (hasPreview) {
-            appWindow.setSize(new LogicalSize(800, 60 + 491)).then(_ => {
-                setResultList(rsList)
-            })
+        const rsList = currentIndex.current >= fixedShownItemCount ? fullResultList.current.slice(currentIndex.current - fixedShownItemCount + 1, currentIndex.current + 1) : fullResultList.current.slice(0, fixedShownItemCount)
+        // when result is empty, reset query box to default
+        if (rsList.length === 0) {
+            appWindow.setSize(new LogicalSize(800, 60))
         } else {
-            if (resultList.length !== rsList.length) {
-                appWindow.setSize(new LogicalSize(800, 60 + 49 * rsList.length + (rsList.length > 0 ? 1 : 0))).then(_ => {
-                    setResultList(rsList)
+            const windowHeight = hasPreview ? 60 + 491 : 60 + 49 * rsList.length + (rsList.length > 0 ? 1 : 0)
+            if (hasPreview || lastResultList.current.length !== rsList.length) {
+                appWindow.setSize(new LogicalSize(800, windowHeight)).then(_ => {
+                    resetResultListData(rsList)
                 })
             } else {
-                setResultList(rsList)
+                resetResultListData(rsList)
             }
         }
-
     }
 
     /*
@@ -158,7 +165,7 @@ export default () => {
                 setShownResultList()
             }
         } else {
-            if (currentIndex.current < currentResultList.current.length - 1) {
+            if (currentIndex.current < fullResultList.current.length - 1) {
                 currentIndex.current = currentIndex.current + 1
                 setActiveIndex(currentIndex.current >= fixedShownItemCount ? fixedShownItemCount - 1 : currentIndex.current)
                 setShownResultList()
@@ -167,7 +174,7 @@ export default () => {
     }
 
     const dealWithAction = async () => {
-        const result = currentResultList.current.find((result) => result.Index === currentIndex.current)
+        const result = fullResultList.current.find((result) => result.Index === currentIndex.current)
         if (result) {
             for (const action of result.Actions) {
                 if (action.IsDefault) {
@@ -183,7 +190,7 @@ export default () => {
     }
 
     const getCurrentPreviewData = () => {
-        const result = currentResultList.current.find((result) => result.Index === currentIndex.current)
+        const result = fullResultList.current.find((result) => result.Index === currentIndex.current)
         if (result) {
             return result.Preview
         }
@@ -211,7 +218,6 @@ export default () => {
             event.preventDefault()
             event.stopPropagation()
         }
-        console.log(event.key)
         if (event.key === "Escape") {
             hideApp()
             event.preventDefault()

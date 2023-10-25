@@ -45,7 +45,6 @@ export class WoxMessageHelper {
             }
         }
         this.ws.onmessage = (event) => {
-            WoxLogHelper.getInstance().log(`Receive Msg: ${JSON.stringify(event)}`)
             let woxMessage: WOXMESSAGE.WoxMessage
             try {
                 woxMessage = JSON.parse(event.data) as WOXMESSAGE.WoxMessage
@@ -62,7 +61,7 @@ export class WoxMessageHelper {
                     WoxLogHelper.getInstance().log(`woxMessageResponse.Id is undefined`)
                     return
                 }
-
+                WoxLogHelper.getInstance().log(`Received Msg: ${JSON.stringify(woxMessage)}`)
                 const promiseInstance = this.woxMessageResponseMap[woxMessage.Id]
                 if (promiseInstance === undefined) {
                     WoxLogHelper.getInstance().log(`woxMessageResponseMap[${woxMessage.Id}] is undefined`)
@@ -74,6 +73,7 @@ export class WoxMessageHelper {
                 promiseInstance.resolve(woxMessage.Data)
             }
             if (woxMessage.Type === WoxMessageTypeEnum.REQUEST.code) {
+                WoxLogHelper.getInstance().log(`Received Msg: ${JSON.stringify(woxMessage)}`)
                 if (this.woxRequestCallback) {
                     this.woxRequestCallback(woxMessage)
                 }
