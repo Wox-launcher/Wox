@@ -41,6 +41,7 @@ declare namespace WOXMESSAGE {
         Index?: number
         Preview: WoxPreview
         Actions: WoxResultAction[]
+        RefreshInterval: number
     }
 
     export interface Position {

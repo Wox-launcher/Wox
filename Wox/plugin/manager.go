@@ -7,6 +7,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
+	"math"
 	"os"
 	"path"
 	"strings"
@@ -23,9 +24,10 @@ var managerOnce sync.Once
 var logger *util.Log
 
 type Manager struct {
-	instances []*Instance
-	ui        share.UI
-	actions   util.HashMap[string, func()]
+	instances        []*Instance
+	ui               share.UI
+	actions          util.HashMap[string, func()]
+	refreshCallbacks util.HashMap[string, func(QueryResult) QueryResult]
 }
 
 func GetPluginManager() *Manager {
@@ -339,6 +341,17 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 			m.actions.Store(action.Id, action.Action)
 		}
 
+		if results[i].RefreshInterval > 0 {
+			newInterval := int(math.Floor(float64(results[i].RefreshInterval)/100) * 100)
+			if results[i].RefreshInterval != newInterval {
+				logger.Info(ctx, fmt.Sprintf("[%s] result(%s) refresh interval %d is not divisible by 100, use %d instead", pluginInstance.Metadata.Name,
+					results[i].Id, results[i].RefreshInterval, newInterval))
+				results[i].RefreshInterval = newInterval
+			}
+
+			m.refreshCallbacks.Store(results[i].Id, results[i].OnRefresh)
+		}
+
 		// if trigger keyword is global, disable preview
 		if query.TriggerKeyword == "" {
 			results[i].Preview = WoxPreview{}
@@ -353,6 +366,7 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 
 	// clear old actions
 	m.actions.Clear()
+	m.refreshCallbacks.Clear()
 
 	counter := atomic.Int32{}
 	counter.Store(int32(len(m.instances)))
@@ -371,25 +385,8 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 		util.Go(ctx, fmt.Sprintf("[%s] parallel query", instance.Metadata.Name), func() {
 			queryResults := m.queryForPlugin(ctx, pluginInstance, query)
 			results <- lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
-				return QueryResultUI{
-					Id:              item.Id,
-					Title:           item.Title,
-					SubTitle:        item.SubTitle,
-					Icon:            item.Icon,
-					Preview:         item.Preview,
-					Score:           item.Score,
-					AssociatedQuery: query.RawQuery,
-					Actions: lo.Map(item.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
-						return QueryResultActionUI{
-							Id:                     action.Id,
-							Name:                   action.Name,
-							IsDefault:              action.IsDefault,
-							PreventHideAfterAction: action.PreventHideAfterAction,
-						}
-					}),
-				}
+				return item.ToUI(query.RawQuery)
 			})
-
 			counter.Add(-1)
 			if counter.Load() == 0 {
 				done <- true
@@ -425,6 +422,15 @@ func (m *Manager) GetAction(resultId string) func() {
 	action, found := m.actions.Load(resultId)
 	if found {
 		return action
+	}
+
+	return nil
+}
+
+func (m *Manager) GetRefreshCallback(resultId string) func(result QueryResult) QueryResult {
+	callback, found := m.refreshCallbacks.Load(resultId)
+	if found {
+		return callback
 	}
 
 	return nil

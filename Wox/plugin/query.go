@@ -48,6 +48,12 @@ type QueryResult struct {
 	Preview  WoxPreview
 	Score    int
 	Actions  []QueryResultAction
+	// refresh result after specified interval, in milliseconds. If this value is 0, Wox will not refresh this result
+	// interval can only divisible by 100, if not, Wox will use the nearest number which is divisible by 100
+	// E.g. if you set 123, Wox will use 200, if you set 1234, Wox will use 1300
+	RefreshInterval int
+	// refresh result by calling OnRefresh function
+	OnRefresh func(QueryResult) QueryResult
 }
 
 type QueryResultAction struct {
@@ -63,6 +69,27 @@ type QueryResultAction struct {
 	Action                 func()
 }
 
+func (q *QueryResult) ToUI(associatedQuery string) QueryResultUI {
+	return QueryResultUI{
+		Id:              q.Id,
+		Title:           q.Title,
+		SubTitle:        q.SubTitle,
+		Icon:            q.Icon,
+		Preview:         q.Preview,
+		Score:           q.Score,
+		AssociatedQuery: associatedQuery,
+		Actions: lo.Map(q.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
+			return QueryResultActionUI{
+				Id:                     action.Id,
+				Name:                   action.Name,
+				IsDefault:              action.IsDefault,
+				PreventHideAfterAction: action.PreventHideAfterAction,
+			}
+		}),
+		RefreshInterval: q.RefreshInterval,
+	}
+}
+
 type QueryResultUI struct {
 	Id              string
 	Title           string
@@ -72,6 +99,7 @@ type QueryResultUI struct {
 	Score           int
 	AssociatedQuery string
 	Actions         []QueryResultActionUI
+	RefreshInterval int
 }
 
 type QueryResultActionUI struct {

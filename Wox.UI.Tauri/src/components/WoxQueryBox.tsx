@@ -11,6 +11,7 @@ import {hide, show} from '@tauri-apps/api/app';
 import {WoxMessageRequestMethodEnum} from "../enums/WoxMessageRequestMethodEnum.ts";
 import {appWindow, LogicalPosition, LogicalSize} from "@tauri-apps/api/window";
 import {WoxPositionTypeEnum} from "../enums/WoxPositionTypeEnum.ts";
+import {useInterval} from "usehooks-ts";
 
 const queryBoxRef = React.createRef<
     HTMLInputElement
@@ -19,6 +20,7 @@ export default () => {
     const queryText = useRef<string>()
     const fullResultList = useRef<WOXMESSAGE.WoxMessageResponseResult[]>([])
     const lastResultList = useRef<WOXMESSAGE.WoxMessageResponseResult[]>([])
+    const refreshTotalCount = useRef<number>(0)
     const [resultList, setResultList] = useState<WOXMESSAGE.WoxMessageResponseResult[]>([])
     const [activeIndex, setActiveIndex] = useState<number>(0)
     const currentIndex = useRef(0)
@@ -27,6 +29,13 @@ export default () => {
     const hasLatestQueryResult = useRef<boolean>(true)
     const [hasPreview, setHasPreview] = useState<boolean>(false)
 
+    useInterval(
+        () => {
+            refreshTotalCount.current = refreshTotalCount.current + 100
+            refreshResults()
+        },
+        100
+    )
 
     const showApp = async (context: WOXMESSAGE.ShowContext) => {
         if (context.Position.Type === WoxPositionTypeEnum.WoxPositionTypeMouseScreen.code) {
@@ -64,6 +73,33 @@ export default () => {
                 clearResultList()
             }
         }, 50)
+    }
+
+    const refreshResults = async () => {
+        let needUpdate = false;
+        for (const [i, result] of lastResultList.current.entries()) {
+            if (result.RefreshInterval > 0) {
+                if (refreshTotalCount.current % result.RefreshInterval === 0) {
+                    let newResult = await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.REFRESH.code, {
+                        result: JSON.stringify(result)
+                    }) as WOXMESSAGE.WoxMessageResponseResult
+                    if (newResult) {
+                        lastResultList.current[i].Title = newResult.Title
+                        lastResultList.current[i].SubTitle = newResult.SubTitle
+                        lastResultList.current[i].Score = newResult.Score
+                        lastResultList.current[i].Icon = newResult.Icon
+                        lastResultList.current[i].Actions = newResult.Actions
+                        lastResultList.current[i].Preview = newResult.Preview
+                        lastResultList.current[i].RefreshInterval = newResult.RefreshInterval
+                        needUpdate = true
+                    }
+                }
+            }
+        }
+
+        if (needUpdate) {
+            setResultList([...lastResultList.current])
+        }
     }
 
     /*
@@ -252,7 +288,7 @@ export default () => {
                 <Col><ListGroup className={"wox-query-result-list"}>
                     {resultList?.map((result, index) => {
                         return <ListGroup.Item
-                            key={`wox-query-result-key-${index}`}
+                            key={`wox-query-result-key-${result.Id}`}
                             active={index === activeIndex}
                             onMouseMoveCapture={() => {
                                 if (result.Index !== undefined && currentIndex.current !== result.Index) {

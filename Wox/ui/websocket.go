@@ -31,6 +31,7 @@ type WebsocketMsg struct {
 
 func serveAndWait(ctx context.Context, port int) {
 	m = melody.New()
+	m.Config.MaxMessageSize = 1024 * 1024 * 10 // 10MB
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Wox"))

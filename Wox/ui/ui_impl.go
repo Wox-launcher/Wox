@@ -52,7 +52,8 @@ func (u *uiImpl) GetServerPort(ctx context.Context) int {
 }
 
 func (u *uiImpl) send(ctx context.Context, method string, data any) {
-	util.GetLogger().Info(ctx, fmt.Sprintf("[->UI] %s", method))
+	jsonData, _ := json.Marshal(data)
+	util.GetLogger().Info(ctx, fmt.Sprintf("[->UI] %s: %s", method, jsonData))
 	requestUI(ctx, WebsocketMsg{
 		Id:     uuid.NewString(),
 		Method: method,
@@ -66,6 +67,8 @@ func onUIRequest(ctx context.Context, request WebsocketMsg) {
 		handleQuery(ctx, request)
 	case "Action":
 		handleAction(ctx, request)
+	case "Refresh":
+		handleRefresh(ctx, request)
 	case "RegisterMainHotkey":
 		handleRegisterMainHotkey(ctx, request)
 	case "IsHotkeyAvailable":
@@ -137,6 +140,50 @@ func handleAction(ctx context.Context, request WebsocketMsg) {
 
 	action()
 	responseUISuccess(ctx, request)
+}
+
+func handleRefresh(ctx context.Context, request WebsocketMsg) {
+	resultStr, resultErr := getWebsocketMsgParameter(ctx, request, "result")
+	if resultErr != nil {
+		logger.Error(ctx, resultErr.Error())
+		responseUIError(ctx, request, resultErr.Error())
+		return
+	}
+
+	var result plugin.QueryResultUI
+	unmarshalErr := json.Unmarshal([]byte(resultStr), &result)
+	if unmarshalErr != nil {
+		logger.Error(ctx, unmarshalErr.Error())
+		responseUIError(ctx, request, unmarshalErr.Error())
+		return
+	}
+
+	if result.Id == "" {
+		logger.Error(ctx, "result id not found")
+		responseUIError(ctx, request, "result id not found")
+		return
+	}
+
+	refresh := plugin.GetPluginManager().GetRefreshCallback(result.Id)
+	if refresh == nil {
+		logger.Error(ctx, fmt.Sprintf("refresh not found for result id: %s", result.Id))
+		responseUIError(ctx, request, fmt.Sprintf("refresh not found for result id: %s", result.Id))
+		return
+	}
+
+	util.GetLogger().Info(ctx, fmt.Sprintf("refresh result: %s", result.Title))
+	newResult := refresh(plugin.QueryResult{
+		Id:              result.Id,
+		Title:           result.Title,
+		SubTitle:        result.SubTitle,
+		Icon:            result.Icon,
+		Preview:         result.Preview,
+		Score:           result.Score,
+		RefreshInterval: result.RefreshInterval,
+	})
+	newResultUI := newResult.ToUI(result.AssociatedQuery)
+
+	responseUISuccessWithData(ctx, request, newResultUI)
 }
 
 func handleChangeLanguage(ctx context.Context, request WebsocketMsg) {
