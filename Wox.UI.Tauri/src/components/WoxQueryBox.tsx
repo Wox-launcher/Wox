@@ -254,8 +254,8 @@ export default () => {
                         return <ListGroup.Item
                             key={`wox-query-result-key-${index}`}
                             active={index === activeIndex}
-                            onMouseOver={() => {
-                                if (result.Index !== undefined) {
+                            onMouseMoveCapture={() => {
+                                if (result.Index !== undefined && currentIndex.current !== result.Index) {
                                     currentIndex.current = result.Index
                                     setActiveIndex(index)
                                 }
