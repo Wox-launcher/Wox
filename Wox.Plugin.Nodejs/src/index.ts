@@ -35,6 +35,12 @@ export interface Result {
   Preview?: WoxPreview
   Score?: number
   Actions: ResultAction[]
+  // refresh result after specified interval, in milliseconds. If this value is 0, Wox will not refresh this result
+  // interval can only divisible by 100, if not, Wox will use the nearest number which is divisible by 100
+  // E.g. if you set 123, Wox will use 200, if you set 1234, Wox will use 1300
+  RefreshInterval: number
+  // refresh result by calling OnRefresh function
+  OnRefresh: (result: Result) => Promise<Result>
 }
 
 export interface ResultAction {

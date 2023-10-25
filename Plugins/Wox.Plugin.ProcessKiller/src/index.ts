@@ -1,9 +1,12 @@
-import type { Plugin, PluginInitContext, Query, Result, WoxImage } from "@wox-launcher/wox-plugin" // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+import type { Plugin, PluginInitContext, PublicAPI, Query, Result, WoxImage } from "@wox-launcher/wox-plugin" // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 import * as path from "path"
 import psList from "ps-list"
 
+let api: PublicAPI
+
 export const plugin: Plugin = {
   init: async (context: PluginInitContext) => {
+    api = context.API
     let s = await context.API.GetSetting("Search")
     await context.API.Log(`existing Setting: ${s}`)
     await context.API.OnSettingChanged(async (key, value) => {
@@ -24,11 +27,22 @@ export const plugin: Plugin = {
             ImageType: "relative",
             ImageData: path.join("images", "app.png")
           } as WoxImage,
+          RefreshInterval: 1000,
+          OnRefresh: async (result: Result) => {
+            let processes = await psList()
+            let p = processes.find(p => p.name === result.Title)
+            if (p === undefined) {
+              return result
+            }
+            result.SubTitle = `PID: ${p.pid} CPU: ${p.cpu} Memory: ${p.memory}`
+            return result
+          },
           Actions: [
             {
               Name: "Kill",
               Action: async () => {
-                process.kill(p.pid)
+                //process.kill(p.pid)
+                await api.Log(`Kill ${p.pid}`)
               }
             }
           ]

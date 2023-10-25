@@ -27,7 +27,7 @@ type Manager struct {
 	instances        []*Instance
 	ui               share.UI
 	actions          util.HashMap[string, func()]
-	refreshCallbacks util.HashMap[string, func(QueryResult) QueryResult]
+	refreshCallbacks util.HashMap[string, RefreshCallback]
 }
 
 func GetPluginManager() *Manager {
@@ -296,68 +296,76 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	logger.Debug(ctx, fmt.Sprintf("[%s] finish query, result count: %d, cost: %dms", pluginInstance.Metadata.Name, len(results), util.GetSystemTimestamp()-start))
 
 	for i := range results {
-		// set default id
-		if results[i].Id == "" {
-			results[i].Id = uuid.NewString()
-		}
-		for actionIndex := range results[i].Actions {
-			if results[i].Actions[actionIndex].Id == "" {
-				results[i].Actions[actionIndex].Id = uuid.NewString()
-			}
-		}
-
-		// convert icon
-		results[i].Icon = convertLocalImageToUrl(ctx, results[i].Icon, pluginInstance)
-
-		// translate title
-		results[i].Title = m.translatePlugin(ctx, pluginInstance, results[i].Title)
-		// translate subtitle
-		results[i].SubTitle = m.translatePlugin(ctx, pluginInstance, results[i].SubTitle)
-
-		// translate preview properties
-		var previewProperties = make(map[string]string)
-		for key, value := range results[i].Preview.PreviewProperties {
-			translatedKey := m.translatePlugin(ctx, pluginInstance, key)
-			previewProperties[translatedKey] = value
-		}
-		results[i].Preview.PreviewProperties = previewProperties
-
-		// translate action names
-		for actionIndex := range results[i].Actions {
-			results[i].Actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, results[i].Actions[actionIndex].Name)
-		}
-
-		// set first action as default if no default action is set
-		defaultActionCount := lo.CountBy(results[i].Actions, func(item QueryResultAction) bool {
-			return item.IsDefault
-		})
-		if defaultActionCount == 0 && len(results[i].Actions) > 0 {
-			results[i].Actions[0].IsDefault = true
-		}
-
-		// store actions for ui invoke later
-		for actionId := range results[i].Actions {
-			var action = results[i].Actions[actionId]
-			m.actions.Store(action.Id, action.Action)
-		}
-
-		if results[i].RefreshInterval > 0 {
-			newInterval := int(math.Floor(float64(results[i].RefreshInterval)/100) * 100)
-			if results[i].RefreshInterval != newInterval {
-				logger.Info(ctx, fmt.Sprintf("[%s] result(%s) refresh interval %d is not divisible by 100, use %d instead", pluginInstance.Metadata.Name,
-					results[i].Id, results[i].RefreshInterval, newInterval))
-				results[i].RefreshInterval = newInterval
-			}
-
-			m.refreshCallbacks.Store(results[i].Id, results[i].OnRefresh)
-		}
-
-		// if trigger keyword is global, disable preview
-		if query.TriggerKeyword == "" {
-			results[i].Preview = WoxPreview{}
-		}
+		results[i] = m.PolishResult(ctx, pluginInstance, query, results[i])
 	}
 	return results
+}
+
+func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult) QueryResult {
+	// set default id
+	if result.Id == "" {
+		result.Id = uuid.NewString()
+	}
+	for actionIndex := range result.Actions {
+		if result.Actions[actionIndex].Id == "" {
+			result.Actions[actionIndex].Id = uuid.NewString()
+		}
+	}
+
+	// convert icon
+	result.Icon = convertLocalImageToUrl(ctx, result.Icon, pluginInstance)
+	// translate title
+	result.Title = m.translatePlugin(ctx, pluginInstance, result.Title)
+	// translate subtitle
+	result.SubTitle = m.translatePlugin(ctx, pluginInstance, result.SubTitle)
+	// translate preview properties
+	var previewProperties = make(map[string]string)
+	for key, value := range result.Preview.PreviewProperties {
+		translatedKey := m.translatePlugin(ctx, pluginInstance, key)
+		previewProperties[translatedKey] = value
+	}
+	result.Preview.PreviewProperties = previewProperties
+	// translate action names
+	for actionIndex := range result.Actions {
+		result.Actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, result.Actions[actionIndex].Name)
+	}
+
+	// set first action as default if no default action is set
+	defaultActionCount := lo.CountBy(result.Actions, func(item QueryResultAction) bool {
+		return item.IsDefault
+	})
+	if defaultActionCount == 0 && len(result.Actions) > 0 {
+		result.Actions[0].IsDefault = true
+	}
+
+	// store actions for ui invoke later
+	for actionId := range result.Actions {
+		var action = result.Actions[actionId]
+		if action.Action != nil {
+			m.actions.Store(action.Id, action.Action)
+		}
+	}
+
+	if result.RefreshInterval > 0 && result.OnRefresh != nil {
+		newInterval := int(math.Floor(float64(result.RefreshInterval)/100) * 100)
+		if result.RefreshInterval != newInterval {
+			logger.Info(ctx, fmt.Sprintf("[%s] result(%s) refresh interval %d is not divisible by 100, use %d instead", pluginInstance.Metadata.Name, result.Id, result.RefreshInterval, newInterval))
+			result.RefreshInterval = newInterval
+		}
+		m.refreshCallbacks.Store(result.Id, RefreshCallback{
+			ResultId:       result.Id,
+			Refresh:        result.OnRefresh,
+			PluginInstance: pluginInstance,
+			Query:          query,
+		})
+	}
+
+	// if trigger keyword is global, disable preview
+	if query.TriggerKeyword == "" {
+		result.Preview = WoxPreview{}
+	}
+
+	return result
 }
 
 func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryResultUI, done chan bool) {
@@ -427,11 +435,11 @@ func (m *Manager) GetAction(resultId string) func() {
 	return nil
 }
 
-func (m *Manager) GetRefreshCallback(resultId string) func(result QueryResult) QueryResult {
+func (m *Manager) GetRefreshCallback(resultId string) (RefreshCallback, bool) {
 	callback, found := m.refreshCallbacks.Load(resultId)
 	if found {
-		return callback
+		return callback, true
 	}
 
-	return nil
+	return RefreshCallback{}, false
 }

@@ -7,15 +7,11 @@ import * as crypto from "crypto"
 
 const pluginMap = new Map<string, Plugin>()
 const actionCacheByPlugin = new Map<PluginJsonRpcRequest["PluginId"], Map<Result["Id"], ResultAction["Action"]>>()
+const refreshCacheByPlugin = new Map<PluginJsonRpcRequest["PluginId"], Map<Result["Id"], Result["OnRefresh"]>>()
 const pluginApiMap = new Map<PluginJsonRpcRequest["PluginId"], PluginAPI>()
 
 export const PluginJsonRpcTypeRequest: string = "WOX_JSONRPC_REQUEST"
 export const PluginJsonRpcTypeResponse: string = "WOX_JSONRPC_RESPONSE"
-
-export interface WrappedResult {
-  Id: string
-  Result: Result
-}
 
 export interface PluginJsonRpcRequest {
   Id: string
@@ -50,6 +46,8 @@ export async function handleRequestFromWox(request: PluginJsonRpcRequest, ws: We
       return query(request)
     case "action":
       return action(request)
+    case "refresh":
+      return refresh(request)
     case "unloadPlugin":
       return unloadPlugin(request)
     case "onPluginSettingChange":
@@ -116,7 +114,10 @@ async function query(request: PluginJsonRpcRequest) {
 
   //clean action cache for current plugin
   actionCacheByPlugin.set(request.PluginId, new Map<Result["Id"], ResultAction["Action"]>())
+  refreshCacheByPlugin.set(request.PluginId, new Map<Result["Id"], Result["OnRefresh"]>())
+
   const actionCache = actionCacheByPlugin.get(request.PluginId)!
+  const refreshCache = refreshCacheByPlugin.get(request.PluginId)!
 
   const results = await query({
     RawQuery: request.Params.RawQuery,
@@ -135,6 +136,14 @@ async function query(request: PluginJsonRpcRequest) {
       }
       actionCache.set(action.Id, action.Action)
     })
+    if (result.RefreshInterval === undefined || result.RefreshInterval === null) {
+      result.RefreshInterval = 0
+    }
+    if (result.RefreshInterval > 0) {
+      if (result.OnRefresh !== undefined && result.OnRefresh !== null) {
+        refreshCache.set(result.Id, result.OnRefresh)
+      }
+    }
   })
 
   return results
@@ -154,4 +163,30 @@ async function action(request: PluginJsonRpcRequest) {
   }
 
   return pluginAction()
+}
+
+async function refresh(request: PluginJsonRpcRequest) {
+  const actionCache = actionCacheByPlugin.get(request.PluginId)!
+
+  const pluginRefreshCache = refreshCacheByPlugin.get(request.PluginId)
+  if (pluginRefreshCache === undefined || pluginRefreshCache === null) {
+    logger.error(`[${request.PluginName}] plugin refresh cache not found: ${request.PluginName}`)
+    return
+  }
+
+  const result = JSON.parse(request.Params.Result) as Result
+
+  const pluginRefresh = pluginRefreshCache.get(result.Id)
+  if (pluginRefresh === undefined || pluginRefresh === null) {
+    logger.error(`[${request.PluginName}] plugin refresh not found: ${request.PluginName}`)
+    return
+  }
+
+  const newResult = await pluginRefresh(result)
+  newResult.Actions.forEach(action => {
+    if (action.Id === undefined || action.Id === null) {
+      action.Id = crypto.randomUUID()
+    }
+    actionCache.set(action.Id, action.Action)
+  })
 }

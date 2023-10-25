@@ -29,7 +29,7 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@wox-launcher/wox-plugin": "^0.0.41",
+    "@wox-launcher/wox-plugin": "^0.0.42",
     "ps-list": "^8.1.1"
   }
 }

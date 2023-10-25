@@ -64,6 +64,7 @@ func serveAndWait(ctx context.Context, port int) {
 
 	m.HandleMessage(func(s *melody.Session, msg []byte) {
 		ctxNew := util.NewTraceContext()
+
 		logger.Info(ctxNew, fmt.Sprintf("got request from ui: %s", string(msg)))
 
 		if strings.Contains(string(msg), string(WebsocketMsgTypeRequest)) {

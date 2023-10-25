@@ -63,6 +63,8 @@ func (u *uiImpl) send(ctx context.Context, method string, data any) {
 
 func onUIRequest(ctx context.Context, request WebsocketMsg) {
 	switch request.Method {
+	case "Ping":
+		responseUISuccessWithData(ctx, request, "Pong")
 	case "Query":
 		handleQuery(ctx, request)
 	case "Action":
@@ -164,15 +166,15 @@ func handleRefresh(ctx context.Context, request WebsocketMsg) {
 		return
 	}
 
-	refresh := plugin.GetPluginManager().GetRefreshCallback(result.Id)
-	if refresh == nil {
+	refresh, exist := plugin.GetPluginManager().GetRefreshCallback(result.Id)
+	if !exist {
 		logger.Error(ctx, fmt.Sprintf("refresh not found for result id: %s", result.Id))
 		responseUIError(ctx, request, fmt.Sprintf("refresh not found for result id: %s", result.Id))
 		return
 	}
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("refresh result: %s", result.Title))
-	newResult := refresh(plugin.QueryResult{
+	newResult := refresh.Refresh(plugin.QueryResult{
 		Id:              result.Id,
 		Title:           result.Title,
 		SubTitle:        result.SubTitle,
@@ -181,6 +183,7 @@ func handleRefresh(ctx context.Context, request WebsocketMsg) {
 		Score:           result.Score,
 		RefreshInterval: result.RefreshInterval,
 	})
+	newResult = plugin.GetPluginManager().PolishResult(ctx, refresh.PluginInstance, refresh.Query, newResult)
 	newResultUI := newResult.ToUI(result.AssociatedQuery)
 
 	responseUISuccessWithData(ctx, request, newResultUI)

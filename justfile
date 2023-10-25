@@ -6,7 +6,8 @@ default:
     just _build_ui
 
     # build plugins
-    just _build_dev_nodejs_plugin Wox.Plugin.ProcessKiller ~/.wox/wox-user/plugins
+    #just _build_dev_nodejs_plugin Wox.Plugin.ProcessKiller ~/.wox/wox-user/plugins
+    just _build_dev_nodejs_plugin Wox.Plugin.ProcessKiller ~/icloud/wox/plugins
 
 @release target:
     ENV PROD=true
@@ -34,10 +35,6 @@ default:
     cp Plugins/{{pluginName}}/dist/index.js {{directory}}/{{pluginName}}/index.js
     cp Plugins/{{pluginName}}/plugin.json {{directory}}/{{pluginName}}/plugin.json
     cp -r Plugins/{{pluginName}}/images {{directory}}/{{pluginName}}/images
-
-    if [ "{{pluginName}}" = "Wox.Plugin.Clipboard" ]; then \
-        cp -r Plugins/{{pluginName}}/platform {{directory}}/{{pluginName}}/; \
-    fi
 
 @_build_hosts:
     # build hosts
