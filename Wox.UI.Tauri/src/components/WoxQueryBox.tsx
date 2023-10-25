@@ -139,18 +139,13 @@ export default () => {
      */
     const setShownResultList = () => {
         const rsList = currentIndex.current >= fixedShownItemCount ? fullResultList.current.slice(currentIndex.current - fixedShownItemCount + 1, currentIndex.current + 1) : fullResultList.current.slice(0, fixedShownItemCount)
-        // when result is empty, reset query box to default
-        if (rsList.length === 0) {
-            appWindow.setSize(new LogicalSize(800, 60))
-        } else {
-            const windowHeight = hasPreview ? 60 + 491 : 60 + 49 * rsList.length + (rsList.length > 0 ? 1 : 0)
-            if (hasPreview || lastResultList.current.length !== rsList.length) {
-                appWindow.setSize(new LogicalSize(800, windowHeight)).then(_ => {
-                    resetResultListData(rsList)
-                })
-            } else {
+        const windowHeight = hasPreview ? 60 + 491 : 60 + 49 * rsList.length + (rsList.length > 0 ? 1 : 0)
+        if (hasPreview || lastResultList.current.length !== rsList.length) {
+            appWindow.setSize(new LogicalSize(800, windowHeight)).then(_ => {
                 resetResultListData(rsList)
-            }
+            })
+        } else {
+            resetResultListData(rsList)
         }
     }
 
