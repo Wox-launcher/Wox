@@ -1694,6 +1694,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc-foundation"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1add1b659e36c9607c7aab864a76c7a4c2760cd0cd2e120f3fb8b952c7e22bf9"
+dependencies = [
+ "block",
+ "objc",
+ "objc_id",
+]
+
+[[package]]
 name = "objc_exception"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2771,6 +2782,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-nspanel"
+version = "0.0.0"
+source = "git+https://github.com/ahkohd/tauri-nspanel#37ca9482e6a64e2e8e49a6a46473d4704b019bbc"
+dependencies = [
+ "block",
+ "cocoa",
+ "core-foundation",
+ "core-graphics",
+ "objc",
+ "objc-foundation",
+ "objc_id",
+ "tauri",
+]
+
+[[package]]
 name = "tauri-runtime"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3650,6 +3676,7 @@ dependencies = [
  "simplelog",
  "tauri",
  "tauri-build",
+ "tauri-nspanel",
 ]
 
 [[package]]
