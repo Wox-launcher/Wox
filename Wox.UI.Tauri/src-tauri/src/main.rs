@@ -27,8 +27,8 @@ fn log_ui(msg: String) {
     info!("{}", msg)
 }
 
-fn main() {
-   if let Some(home_dir) = dirs::home_dir() {
+fn init_log_file() {
+    if let Some(home_dir) = dirs::home_dir() {
        let mut base_path = PathBuf::new();
        base_path.push(home_dir);
        base_path.push(".wox");
@@ -43,6 +43,10 @@ fn main() {
    } else {
        println!("Can not find user main home path");
    }
+}
+
+fn main() {
+    init_log_file();
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![get_server_port, log_ui])
         .run(tauri::generate_context!())
