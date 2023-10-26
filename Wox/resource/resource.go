@@ -74,7 +74,7 @@ func extractUI(ctx context.Context) error {
 	}
 
 	for _, entry := range dir {
-		if entry.Name() == "placeholder.txt" {
+		if entry.IsDir() {
 			continue
 		}
 
@@ -103,4 +103,9 @@ func extractUI(ctx context.Context) error {
 func GetLangJson(ctx context.Context, langCode string) ([]byte, error) {
 	var langJsonPath = path.Join("lang", fmt.Sprintf("%s.json", langCode))
 	return LangFS.ReadFile(langJsonPath)
+}
+
+func GetUITheme(ctx context.Context, themeName string) ([]byte, error) {
+	var themePath = path.Join("ui", "themes", fmt.Sprintf("%s.css", themeName))
+	return UIFS.ReadFile(themePath)
 }
