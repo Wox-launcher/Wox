@@ -5,7 +5,7 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom"
 import { WoxMessageHelper } from "./utils/WoxMessageHelper.ts"
 import React from "react"
 import { invoke } from "@tauri-apps/api/tauri"
-import WoxLauncher from "./components/WoxLauncher.tsx"
+import WoxSearchBox from "./components/WoxSearchBox.tsx"
 
 invoke("get_server_port")
   .then((serverPort) => {
@@ -16,7 +16,7 @@ invoke("get_server_port")
 const router = createBrowserRouter([
   {
     path: "/",
-    element: <WoxLauncher />
+    element: <WoxSearchBox />
   },
   {
     path: "about",
