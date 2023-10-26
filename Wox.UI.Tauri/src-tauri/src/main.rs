@@ -10,6 +10,8 @@ use std::path::PathBuf;
 use simplelog::*;
 use std::fs::File;
 
+mod spotlight;
+
 #[tauri::command]
 fn get_server_port() -> String {
     let args: Vec<String> = env::args().collect();
@@ -47,8 +49,19 @@ fn init_log_file() {
 
 fn main() {
     init_log_file();
+
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![get_server_port, log_ui])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+           .invoke_handler(tauri::generate_handler![
+               spotlight::init_spotlight_window,
+               get_server_port,
+               log_ui
+           ])
+           .manage(spotlight::State::default())
+           .setup(move |app| {
+               // Set activation poicy to Accessory to prevent the app icon from showing on the dock
+               app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+               Ok(())
+           })
+           .run(tauri::generate_context!())
+           .expect("error while running tauri application");
 }

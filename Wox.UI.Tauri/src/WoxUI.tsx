@@ -7,6 +7,8 @@ import React from "react"
 import { invoke } from "@tauri-apps/api/tauri"
 import WoxSearchBox from "./components/WoxSearchBox.tsx"
 
+invoke("init_spotlight_window")
+
 invoke("get_server_port")
   .then((serverPort) => {
     WoxMessageHelper.getInstance().initialize(serverPort as string)
@@ -29,4 +31,3 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <RouterProvider router={router} />
   </React.StrictMode>
 )
-
