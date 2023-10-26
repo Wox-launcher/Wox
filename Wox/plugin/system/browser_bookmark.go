@@ -91,7 +91,7 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_browser_bookmark_open_in_browser",
-						Action: func() {
+						Action: func(actionContext plugin.ActionContext) {
 							util.ShellOpen(bookmark.Url)
 						},
 					},

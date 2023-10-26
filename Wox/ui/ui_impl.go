@@ -126,33 +126,39 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 }
 
 func handleAction(ctx context.Context, request WebsocketMsg) {
-	resultId, idErr := getWebsocketMsgParameter(ctx, request, "id")
+	resultId, idErr := getWebsocketMsgParameter(ctx, request, "resultId")
 	if idErr != nil {
 		logger.Error(ctx, idErr.Error())
 		responseUIError(ctx, request, idErr.Error())
 		return
 	}
-
-	action := plugin.GetPluginManager().GetAction(resultId)
-	if action == nil {
-		logger.Error(ctx, fmt.Sprintf("action not found for result id: %s", resultId))
-		responseUIError(ctx, request, fmt.Sprintf("action not found for result id: %s", resultId))
+	actionId, actionIdErr := getWebsocketMsgParameter(ctx, request, "actionId")
+	if actionIdErr != nil {
+		logger.Error(ctx, actionIdErr.Error())
+		responseUIError(ctx, request, actionIdErr.Error())
 		return
 	}
 
-	action()
+	plugin.GetPluginManager().ExecuteAction(ctx, resultId, actionId)
+
 	responseUISuccess(ctx, request)
 }
 
 func handleRefresh(ctx context.Context, request WebsocketMsg) {
-	resultStr, resultErr := getWebsocketMsgParameter(ctx, request, "result")
+	resultStr, resultErr := getWebsocketMsgParameter(ctx, request, "refreshableResult")
 	if resultErr != nil {
 		logger.Error(ctx, resultErr.Error())
 		responseUIError(ctx, request, resultErr.Error())
 		return
 	}
+	resultId, resultIdErr := getWebsocketMsgParameter(ctx, request, "resultId")
+	if resultIdErr != nil {
+		logger.Error(ctx, resultIdErr.Error())
+		responseUIError(ctx, request, resultIdErr.Error())
+		return
+	}
 
-	var result plugin.QueryResultUI
+	var result plugin.RefreshableResult
 	unmarshalErr := json.Unmarshal([]byte(resultStr), &result)
 	if unmarshalErr != nil {
 		logger.Error(ctx, unmarshalErr.Error())
@@ -160,33 +166,14 @@ func handleRefresh(ctx context.Context, request WebsocketMsg) {
 		return
 	}
 
-	if result.Id == "" {
-		logger.Error(ctx, "result id not found")
-		responseUIError(ctx, request, "result id not found")
+	newResult, refreshErr := plugin.GetPluginManager().ExecuteRefresh(ctx, resultId, result)
+	if refreshErr != nil {
+		logger.Error(ctx, refreshErr.Error())
+		responseUIError(ctx, request, refreshErr.Error())
 		return
 	}
 
-	refresh, exist := plugin.GetPluginManager().GetRefreshCallback(result.Id)
-	if !exist {
-		logger.Error(ctx, fmt.Sprintf("refresh not found for result id: %s", result.Id))
-		responseUIError(ctx, request, fmt.Sprintf("refresh not found for result id: %s", result.Id))
-		return
-	}
-
-	util.GetLogger().Info(ctx, fmt.Sprintf("refresh result: %s", result.Title))
-	newResult := refresh.Refresh(plugin.QueryResult{
-		Id:              result.Id,
-		Title:           result.Title,
-		SubTitle:        result.SubTitle,
-		Icon:            result.Icon,
-		Preview:         result.Preview,
-		Score:           result.Score,
-		RefreshInterval: result.RefreshInterval,
-	})
-	newResult = plugin.GetPluginManager().PolishResult(ctx, refresh.PluginInstance, refresh.Query, newResult)
-	newResultUI := newResult.ToUI(result.AssociatedQuery)
-
-	responseUISuccessWithData(ctx, request, newResultUI)
+	responseUISuccessWithData(ctx, request, newResult)
 }
 
 func handleChangeLanguage(ctx context.Context, request WebsocketMsg) {

@@ -51,9 +51,10 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 	for i, r := range results {
 		result := r
 		for j, action := range result.Actions {
-			result.Actions[j].Action = func() {
+			result.Actions[j].Action = func(actionContext plugin.ActionContext) {
 				_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "action", map[string]string{
-					"ActionId": action.Id,
+					"ActionId":    action.Id,
+					"ContextData": actionContext.ContextData,
 				})
 				if actionErr != nil {
 					util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", w.metadata.Name, actionErr.Error()))
@@ -61,41 +62,32 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			}
 		}
 
-		resultJson, marshalErr2 := json.Marshal(result.ToUI(query.RawQuery))
-		if marshalErr2 != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] marshal result err: %s", w.metadata.Name, marshalErr2.Error()))
-			continue
-		}
-		results[i].OnRefresh = func(result plugin.QueryResult) plugin.QueryResult {
+		results[i].OnRefresh = func(refreshableResult plugin.RefreshableResult) plugin.RefreshableResult {
+			refreshableJson, marshalErr2 := json.Marshal(refreshableResult)
+			if marshalErr2 != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal refreshable query results: %s", w.metadata.Name, marshalErr2.Error()))
+				return refreshableResult
+			}
+
 			rawResult, refreshErr := w.websocketHost.invokeMethod(ctx, w.metadata, "refresh", map[string]string{
-				"Result": string(resultJson),
+				"ResultId":          result.Id,
+				"RefreshableResult": string(refreshableJson),
 			})
 			if refreshErr != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] refresh failed: %s", w.metadata.Name, refreshErr.Error()))
-				return result
+				return refreshableResult
 			}
 
-			var newResult plugin.QueryResult
+			var newResult plugin.RefreshableResult
 			marshalData3, marshalErr3 := json.Marshal(rawResult)
 			if marshalErr3 != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query results: %s", w.metadata.Name, marshalErr3.Error()))
-				return result
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin refreshable results: %s", w.metadata.Name, marshalErr3.Error()))
+				return refreshableResult
 			}
 			unmarshalErr3 := json.Unmarshal(marshalData3, &newResult)
 			if unmarshalErr3 != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal query results: %s", w.metadata.Name, unmarshalErr3.Error()))
-				return result
-			}
-			newResult.OnRefresh = result.OnRefresh
-			for k, action := range newResult.Actions {
-				newResult.Actions[k].Action = func() {
-					_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "action", map[string]string{
-						"ActionId": action.Id,
-					})
-					if actionErr != nil {
-						util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action (from refresh) failed: %s", w.metadata.Name, actionErr.Error()))
-					}
-				}
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal query refreshable results: %s", w.metadata.Name, unmarshalErr3.Error()))
+				return refreshableResult
 			}
 			return newResult
 		}

@@ -3,7 +3,6 @@ default:
 
 @dev:
     just _build_hosts
-    just _build_ui
 
     # build plugins
     #just _build_dev_nodejs_plugin Wox.Plugin.ProcessKiller ~/.wox/wox-user/plugins

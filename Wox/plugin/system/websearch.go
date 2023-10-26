@@ -91,7 +91,7 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "Search",
-						Action: func() {
+						Action: func(actionContext plugin.ActionContext) {
 							util.ShellOpen(strings.ReplaceAll(search.Url, "{query}", otherQuery))
 						},
 					},

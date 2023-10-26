@@ -1,7 +1,7 @@
 import { logger } from "./logger"
 import path from "path"
 import { PluginAPI } from "./pluginAPI"
-import { Plugin, PluginInitContext, Query, Result, ResultAction } from "@wox-launcher/wox-plugin"
+import { Plugin, PluginInitContext, Query, RefreshableResult, Result, ResultAction } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 
@@ -162,31 +162,25 @@ async function action(request: PluginJsonRpcRequest) {
     return
   }
 
-  return pluginAction()
+  return pluginAction({
+    ContextData: request.Params.ContextData
+  })
 }
 
 async function refresh(request: PluginJsonRpcRequest) {
-  const actionCache = actionCacheByPlugin.get(request.PluginId)!
-
   const pluginRefreshCache = refreshCacheByPlugin.get(request.PluginId)
   if (pluginRefreshCache === undefined || pluginRefreshCache === null) {
     logger.error(`[${request.PluginName}] plugin refresh cache not found: ${request.PluginName}`)
     return
   }
 
-  const result = JSON.parse(request.Params.Result) as Result
+  const result = JSON.parse(request.Params.RefreshableResult) as RefreshableResult
 
-  const pluginRefresh = pluginRefreshCache.get(result.Id)
+  const pluginRefresh = pluginRefreshCache.get(request.Params.ResultId)
   if (pluginRefresh === undefined || pluginRefresh === null) {
     logger.error(`[${request.PluginName}] plugin refresh not found: ${request.PluginName}`)
     return
   }
 
-  const newResult = await pluginRefresh(result)
-  newResult.Actions.forEach(action => {
-    if (action.Id === undefined || action.Id === null) {
-      action.Id = crypto.randomUUID()
-    }
-    actionCache.set(action.Id, action.Action)
-  })
+  return await pluginRefresh(result)
 }

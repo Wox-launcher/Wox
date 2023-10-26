@@ -116,7 +116,7 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Copy to clipboard",
-					Action: func() {
+					Action: func(actionContext plugin.ActionContext) {
 						util.ClipboardWrite(history.Data)
 					},
 				},
@@ -144,7 +144,7 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Copy to clipboard",
-					Action: func() {
+					Action: func(actionContext plugin.ActionContext) {
 						util.ClipboardWrite(history.Data)
 					},
 				},

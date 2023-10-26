@@ -72,7 +72,7 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "install",
-						Action: func() {
+						Action: func(actionContext plugin.ActionContext) {
 							plugin.GetStoreManager().Install(ctx, pluginManifest)
 						},
 					},
@@ -99,7 +99,7 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "uninstall",
-						Action: func() {
+						Action: func(actionContext plugin.ActionContext) {
 							plugin.GetStoreManager().Uninstall(ctx, pluginInstance)
 						},
 					},

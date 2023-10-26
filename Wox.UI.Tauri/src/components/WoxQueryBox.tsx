@@ -82,18 +82,27 @@ export default () => {
     for (const [i, result] of lastResultList.current.entries()) {
       if (result.RefreshInterval > 0) {
         if (currentCount % result.RefreshInterval === 0) {
+          const refreshableResult = {
+            Title: result.Title,
+            SubTitle: result.SubTitle,
+            Icon: result.Icon,
+            Preview: result.Preview,
+            ContextData: result.ContextData,
+            RefreshInterval: result.RefreshInterval
+          } as WOXMESSAGE.WoxRefreshableResult
+
           let response = await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.REFRESH.code, {
-            result: JSON.stringify(result)
+            "resultId": result.Id,
+            "refreshableResult": JSON.stringify(refreshableResult)
           })
           if (response.Success) {
-            const newResult = response.Data as WOXMESSAGE.WoxMessageResponseResult
-            if (newResult && newResult.Id) {
+            const newResult = response.Data as WOXMESSAGE.WoxRefreshableResult
+            if (newResult) {
               lastResultList.current[i].Title = newResult.Title
               lastResultList.current[i].SubTitle = newResult.SubTitle
-              lastResultList.current[i].Score = newResult.Score
               lastResultList.current[i].Icon = newResult.Icon
-              lastResultList.current[i].Actions = newResult.Actions
               lastResultList.current[i].Preview = newResult.Preview
+              lastResultList.current[i].ContextData = newResult.ContextData
               lastResultList.current[i].RefreshInterval = newResult.RefreshInterval
               needUpdate = true
             }
@@ -217,7 +226,8 @@ export default () => {
       for (const action of result.Actions) {
         if (action.IsDefault) {
           await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ACTION.code, {
-            id: action.Id
+            "resultId": result.Id,
+            "actionId": action.Id
           })
           if (!action.PreventHideAfterAction) {
             await hideApp()
@@ -315,7 +325,7 @@ export default () => {
                 {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeBase64.code &&
                   <Image src={result.Icon.ImageData} className={"wox-query-result-image"} />}
                 <div className={"ms-2 me-auto wox-query-result-item-intro"}>
-                  <div className={"fw-bold result-item-title"}>{result.Title} - {result.Id}</div>
+                  <div className={"fw-bold result-item-title"}>{result.Title}</div>
                   <div
                     className={"fw-lighter result-item-sub-title"}>{result.Score} - {result.SubTitle}</div>
                 </div>

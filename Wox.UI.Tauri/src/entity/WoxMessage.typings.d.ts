@@ -40,7 +40,17 @@ declare namespace WOXMESSAGE {
         AssociatedQuery: string
         Index?: number
         Preview: WoxPreview
+        ContextData: string
         Actions: WoxResultAction[]
+        RefreshInterval: number
+    }
+
+    export interface WoxRefreshableResult {
+        Title: string
+        SubTitle: string
+        Icon: WoxImage
+        Preview: WoxPreview
+        ContextData: string
         RefreshInterval: number
     }
 

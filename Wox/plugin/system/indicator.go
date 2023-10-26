@@ -71,7 +71,7 @@ func (i *IndicatorPlugin) queryForTriggerKeyword(ctx context.Context, query plug
 					{
 						Name:                   "activate",
 						PreventHideAfterAction: true,
-						Action: func() {
+						Action: func(actionContext plugin.ActionContext) {
 							i.api.ChangeQuery(ctx, fmt.Sprintf("%s ", triggerKeyword))
 						},
 					},
@@ -89,7 +89,7 @@ func (i *IndicatorPlugin) queryForTriggerKeyword(ctx context.Context, query plug
 						{
 							Name:                   "activate",
 							PreventHideAfterAction: true,
-							Action: func() {
+							Action: func(actionContext plugin.ActionContext) {
 								i.api.ChangeQuery(ctx, fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command))
 							},
 						},
@@ -122,7 +122,7 @@ func (i *IndicatorPlugin) queryForCommand(ctx context.Context, query plugin.Quer
 							{
 								Name:                   "activate",
 								PreventHideAfterAction: true,
-								Action: func() {
+								Action: func(actionContext plugin.ActionContext) {
 									i.api.ChangeQuery(ctx, fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command))
 								},
 							},

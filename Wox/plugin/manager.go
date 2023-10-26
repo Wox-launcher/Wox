@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
@@ -24,10 +25,9 @@ var managerOnce sync.Once
 var logger *util.Log
 
 type Manager struct {
-	instances        []*Instance
-	ui               share.UI
-	actions          util.HashMap[string, func()]
-	refreshCallbacks util.HashMap[string, RefreshCallback]
+	instances   []*Instance
+	ui          share.UI
+	resultCache util.HashMap[string, *QueryResultCache]
 }
 
 func GetPluginManager() *Manager {
@@ -312,6 +312,14 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		}
 	}
 
+	var resultCache = &QueryResultCache{
+		ResultId:       result.Id,
+		ContextData:    result.ContextData,
+		PluginInstance: pluginInstance,
+		Query:          query,
+	}
+	m.resultCache.Store(result.Id, resultCache)
+
 	// convert icon
 	result.Icon = convertLocalImageToUrl(ctx, result.Icon, pluginInstance)
 	// translate title
@@ -342,7 +350,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	for actionId := range result.Actions {
 		var action = result.Actions[actionId]
 		if action.Action != nil {
-			m.actions.Store(action.Id, action.Action)
+			resultCache.Actions.Store(action.Id, action.Action)
 		}
 	}
 
@@ -352,12 +360,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			logger.Info(ctx, fmt.Sprintf("[%s] result(%s) refresh interval %d is not divisible by 100, use %d instead", pluginInstance.Metadata.Name, result.Id, result.RefreshInterval, newInterval))
 			result.RefreshInterval = newInterval
 		}
-		m.refreshCallbacks.Store(result.Id, RefreshCallback{
-			ResultId:       result.Id,
-			Refresh:        result.OnRefresh,
-			PluginInstance: pluginInstance,
-			Query:          query,
-		})
+		resultCache.Refresh = result.OnRefresh
 	}
 
 	// if trigger keyword is global, disable preview
@@ -368,13 +371,29 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	return result
 }
 
+func (m *Manager) PolishRefreshableResult(ctx context.Context, pluginInstance *Instance, result RefreshableResult) RefreshableResult {
+	// convert icon
+	result.Icon = convertLocalImageToUrl(ctx, result.Icon, pluginInstance)
+	// translate title
+	result.Title = m.translatePlugin(ctx, pluginInstance, result.Title)
+	// translate subtitle
+	result.SubTitle = m.translatePlugin(ctx, pluginInstance, result.SubTitle)
+	// translate preview properties
+	var previewProperties = make(map[string]string)
+	for key, value := range result.Preview.PreviewProperties {
+		translatedKey := m.translatePlugin(ctx, pluginInstance, key)
+		previewProperties[translatedKey] = value
+	}
+	result.Preview.PreviewProperties = previewProperties
+	return result
+}
+
 func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryResultUI, done chan bool) {
 	results = make(chan []QueryResultUI, 10)
 	done = make(chan bool)
 
-	// clear old actions
-	m.actions.Clear()
-	m.refreshCallbacks.Clear()
+	// clear old result cache
+	m.resultCache.Clear()
 
 	counter := atomic.Int32{}
 	counter.Store(int32(len(m.instances)))
@@ -426,20 +445,32 @@ func (m *Manager) GetUI() share.UI {
 	return m.ui
 }
 
-func (m *Manager) GetAction(resultId string) func() {
-	action, found := m.actions.Load(resultId)
-	if found {
-		return action
+func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId string) {
+	resultCache, found := m.resultCache.Load(resultId)
+	if !found {
+		logger.Error(ctx, fmt.Sprintf("result cache not found for result id: %s", resultId))
+		return
+	}
+	action, exist := resultCache.Actions.Load(actionId)
+	if !exist {
+		logger.Error(ctx, fmt.Sprintf("action not found for result id: %s, action id: %s", resultId, actionId))
+		return
 	}
 
-	return nil
+	action(ActionContext{
+		ContextData: resultCache.ContextData,
+	})
 }
 
-func (m *Manager) GetRefreshCallback(resultId string) (RefreshCallback, bool) {
-	callback, found := m.refreshCallbacks.Load(resultId)
-	if found {
-		return callback, true
+func (m *Manager) ExecuteRefresh(ctx context.Context, resultId string, refreshableResult RefreshableResult) (RefreshableResult, error) {
+	resultCache, found := m.resultCache.Load(resultId)
+	if !found {
+		logger.Error(ctx, fmt.Sprintf("result cache not found for result id: %s", resultId))
+		return refreshableResult, errors.New("result cache not found")
 	}
 
-	return RefreshCallback{}, false
+	newResult := resultCache.Refresh(refreshableResult)
+	newResult = m.PolishRefreshableResult(ctx, resultCache.PluginInstance, newResult)
+
+	return newResult, nil
 }

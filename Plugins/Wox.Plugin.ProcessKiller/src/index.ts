@@ -1,4 +1,5 @@
-import type { Plugin, PluginInitContext, PublicAPI, Query, Result, WoxImage } from "@wox-launcher/wox-plugin" // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+import type { Plugin, PluginInitContext, PublicAPI, Query, RefreshableResult, Result, WoxImage } from "@wox-launcher/wox-plugin" // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+import { ActionContext } from "@wox-launcher/wox-plugin"
 import * as path from "path"
 import psList from "ps-list"
 
@@ -7,12 +8,6 @@ let api: PublicAPI
 export const plugin: Plugin = {
   init: async (context: PluginInitContext) => {
     api = context.API
-    let s = await context.API.GetSetting("Search")
-    await context.API.Log(`existing Setting: ${s}`)
-    await context.API.OnSettingChanged(async (key, value) => {
-      await context.API.Log(`Setting changed: ${key} = ${value}`)
-    })
-    await context.API.SaveSetting("Search1", "1")
   },
 
   query: async (query: Query) => {
@@ -27,10 +22,13 @@ export const plugin: Plugin = {
             ImageType: "relative",
             ImageData: path.join("images", "app.png")
           } as WoxImage,
+          ContextData: `${p.pid}`,
           RefreshInterval: 1000,
-          OnRefresh: async (result: Result) => {
+          OnRefresh: async (result: RefreshableResult) => {
+            const pid = Number.parseInt(result.ContextData)
             let processes = await psList()
-            let p = processes.find(p => p.name === result.Title)
+            let p = processes.find(p => p.pid === pid)
+            await api.Log(`Refresh ${pid}, found: ${p === undefined}`)
             if (p === undefined) {
               return result
             }
@@ -40,9 +38,10 @@ export const plugin: Plugin = {
           Actions: [
             {
               Name: "Kill",
-              Action: async () => {
-                //process.kill(p.pid)
-                await api.Log(`Kill ${p.pid}`)
+              Action: async (actionContext: ActionContext) => {
+                const pid = Number.parseInt(actionContext.ContextData)
+                await api.Log(`Kill ${pid}`)
+                //process.kill(pid)
               }
             }
           ]

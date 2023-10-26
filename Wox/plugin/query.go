@@ -3,6 +3,7 @@ package plugin
 import (
 	"github.com/samber/lo"
 	"strings"
+	"wox/util"
 )
 
 type QueryType = string
@@ -47,13 +48,15 @@ type QueryResult struct {
 	Icon     WoxImage
 	Preview  WoxPreview
 	Score    int
-	Actions  []QueryResultAction
+	// Additional data associate with this result, can be retrieved in Action function
+	ContextData string
+	Actions     []QueryResultAction
 	// refresh result after specified interval, in milliseconds. If this value is 0, Wox will not refresh this result
 	// interval can only divisible by 100, if not, Wox will use the nearest number which is divisible by 100
 	// E.g. if you set 123, Wox will use 200, if you set 1234, Wox will use 1300
 	RefreshInterval int
 	// refresh result by calling OnRefresh function
-	OnRefresh func(QueryResult) QueryResult
+	OnRefresh func(current RefreshableResult) RefreshableResult
 }
 
 type QueryResultAction struct {
@@ -66,7 +69,12 @@ type QueryResultAction struct {
 	IsDefault bool
 	// If true, Wox will not hide after user select this result
 	PreventHideAfterAction bool
-	Action                 func()
+	Action                 func(actionContext ActionContext)
+}
+
+type ActionContext struct {
+	// Additional data associate with this result
+	ContextData string
 }
 
 func (q *QueryResult) ToUI(associatedQuery string) QueryResultUI {
@@ -78,6 +86,7 @@ func (q *QueryResult) ToUI(associatedQuery string) QueryResultUI {
 		Preview:         q.Preview,
 		Score:           q.Score,
 		AssociatedQuery: associatedQuery,
+		ContextData:     q.ContextData,
 		Actions: lo.Map(q.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
 			return QueryResultActionUI{
 				Id:                     action.Id,
@@ -97,6 +106,7 @@ type QueryResultUI struct {
 	Icon            WoxImage
 	Preview         WoxPreview
 	Score           int
+	ContextData     string
 	AssociatedQuery string
 	Actions         []QueryResultActionUI
 	RefreshInterval int
@@ -107,6 +117,16 @@ type QueryResultActionUI struct {
 	Name                   string
 	IsDefault              bool
 	PreventHideAfterAction bool
+}
+
+// store latest result value after query/refresh, so we can retrieve data later in action/refresh
+type QueryResultCache struct {
+	ResultId       string
+	ContextData    string
+	Refresh        func(RefreshableResult) RefreshableResult
+	PluginInstance *Instance
+	Query          Query
+	Actions        util.HashMap[string, func(actionContext ActionContext)]
 }
 
 func newQueryWithPlugins(query string, queryType QueryType, pluginInstances []*Instance) Query {

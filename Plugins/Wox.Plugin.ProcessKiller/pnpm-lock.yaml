@@ -6,8 +6,8 @@ settings:
 
 dependencies:
   '@wox-launcher/wox-plugin':
-    specifier: ^0.0.42
-    version: 0.0.42
+    specifier: ^0.0.45
+    version: 0.0.45
   ps-list:
     specifier: ^8.1.1
     version: 8.1.1
@@ -1513,8 +1513,8 @@ packages:
     hasBin: true
     dev: true
 
-  /@wox-launcher/wox-plugin@0.0.42:
-    resolution: {integrity: sha512-rzGeWZZCJnRk+DbwWsEx6XhXjpdWXoIzwtxzb3UVxyQODwf0c/wajcu+h/T4YDUqnDSHRxv5RfTAdclB1m98fg==}
+  /@wox-launcher/wox-plugin@0.0.45:
+    resolution: {integrity: sha512-1Fxgqxt5ffOIuU+gbFEXnwzsSEhv9lz5emlmJWC47LiqBrYRtGek0oneizDvloC1F77pb2WpQ+CmasWf2F1jcw==}
     dev: false
 
   /JSONStream@1.3.5:
@@ -2339,6 +2339,7 @@ packages:
   /fill-range@7.0.1:
     resolution: {integrity: sha512-qOo9F+dMUmC2Lcb4BbVvnKJxTPjCm+RRpe4gDuGrzkL7mEVl/djYSu2OdQ2Pa302N4oqkSg9ir6jaLWJ2USVpQ==}
     engines: {node: '>=8'}
+    requiresBuild: true
     dependencies:
       to-regex-range: 5.0.1
     dev: true
@@ -2653,6 +2654,7 @@ packages:
   /is-number@7.0.0:
     resolution: {integrity: sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng==}
     engines: {node: '>=0.12.0'}
+    requiresBuild: true
     dev: true
 
   /is-path-inside@3.0.3:
@@ -3404,6 +3406,7 @@ packages:
   /to-regex-range@5.0.1:
     resolution: {integrity: sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==}
     engines: {node: '>=8.0'}
+    requiresBuild: true
     dependencies:
       is-number: 7.0.0
     dev: true

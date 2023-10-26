@@ -102,7 +102,7 @@ func (a *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_app_open",
-						Action: func() {
+						Action: func(actionContext plugin.ActionContext) {
 							runErr := exec.Command("open", info.Path).Run()
 							if runErr != nil {
 								a.api.Log(ctx, fmt.Sprintf("error openning app %s: %s", info.Path, runErr.Error()))
