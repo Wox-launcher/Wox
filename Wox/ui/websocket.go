@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"wox/plugin"
+	"wox/resource"
 	"wox/util"
 )
 
@@ -60,6 +61,16 @@ func serveAndWait(ctx context.Context, port int) {
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		m.HandleRequest(w, r)
+	})
+
+	http.HandleFunc("/theme", func(w http.ResponseWriter, r *http.Request) {
+		defaultTheme, defaultErr := resource.GetUITheme(ctx, "default")
+		if defaultErr != nil {
+			w.Write([]byte(defaultErr.Error()))
+			return
+		}
+
+		w.Write(defaultTheme)
 	})
 
 	m.HandleMessage(func(s *melody.Session, msg []byte) {

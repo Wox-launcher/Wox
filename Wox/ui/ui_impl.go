@@ -10,7 +10,6 @@ import (
 	"time"
 	"wox/i18n"
 	"wox/plugin"
-	"wox/resource"
 	"wox/share"
 	"wox/util"
 )
@@ -80,8 +79,6 @@ func onUIRequest(ctx context.Context, request WebsocketMsg) {
 		handleChangeLanguage(ctx, request)
 	case "GetLanguageJson":
 		handleGetLanguageJson(ctx, request)
-	case "GetTheme":
-		handleGetTheme(ctx, request)
 	}
 }
 
@@ -236,15 +233,6 @@ func handleGetLanguageJson(ctx context.Context, request WebsocketMsg) {
 	}
 
 	responseUISuccessWithData(ctx, request, langJson)
-}
-
-func handleGetTheme(ctx context.Context, request WebsocketMsg) {
-	defaultTheme, defaultErr := resource.GetUITheme(ctx, "default")
-	if defaultErr != nil {
-		responseUIError(ctx, request, defaultErr.Error())
-		return
-	}
-	responseUISuccessWithData(ctx, request, string(defaultTheme))
 }
 
 func handleRegisterMainHotkey(ctx context.Context, request WebsocketMsg) {

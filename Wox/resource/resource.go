@@ -106,6 +106,6 @@ func GetLangJson(ctx context.Context, langCode string) ([]byte, error) {
 }
 
 func GetUITheme(ctx context.Context, themeName string) ([]byte, error) {
-	var themePath = path.Join("ui", "themes", fmt.Sprintf("%s.css", themeName))
+	var themePath = path.Join("ui", "themes", fmt.Sprintf("%s.json", themeName))
 	return UIFS.ReadFile(themePath)
 }
