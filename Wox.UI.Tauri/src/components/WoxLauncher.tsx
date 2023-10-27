@@ -4,9 +4,7 @@ import React, { useEffect, useRef } from "react"
 import WoxQueryResult, { WoxQueryResultRefHandler } from "./WoxQueryResult.tsx"
 import { WOXMESSAGE } from "../entity/WoxMessage.typings"
 import { WoxMessageHelper } from "../utils/WoxMessageHelper.ts"
-import { appWindow, LogicalPosition } from "@tauri-apps/api/window"
 import { WoxPositionTypeEnum } from "../enums/WoxPositionTypeEnum.ts"
-import { hide, show } from "@tauri-apps/api/app"
 import { WoxMessageRequestMethod, WoxMessageRequestMethodEnum } from "../enums/WoxMessageRequestMethodEnum.ts"
 import { useInterval } from "usehooks-ts"
 import { WoxMessageMethodEnum } from "../enums/WoxMessageMethodEnum.ts"
@@ -122,11 +120,11 @@ export default () => {
       await showWoxWindow(message.Data as WOXMESSAGE.ShowContext)
     }
     if (message.Method === WoxMessageRequestMethodEnum.ToggleApp.code) {
-      appWindow.isVisible().then(async visible => {
+      WoxTauriHelper.getInstance().isVisible().then(visible => {
         if (visible) {
-          await hideWoxWindow()
+          hideWoxWindow()
         } else {
-          await showWoxWindow(message.Data as WOXMESSAGE.ShowContext)
+          showWoxWindow(message.Data as WOXMESSAGE.ShowContext)
         }
       })
     }
@@ -137,20 +135,19 @@ export default () => {
    */
   const showWoxWindow = async (context: WOXMESSAGE.ShowContext) => {
     if (context.Position.Type === WoxPositionTypeEnum.WoxPositionTypeMouseScreen.code) {
-      await appWindow.setPosition(new LogicalPosition(Number(context.Position.X), Number(context.Position.Y)))
+      await WoxTauriHelper.getInstance().setPosition(Number(context.Position.X), Number(context.Position.Y))
     }
+    await WoxTauriHelper.getInstance().showWindow()
     if (context.SelectAll) {
       woxQueryBoxRef.current?.selectAll()
     }
-    await appWindow.setFocus()
-    await show()
   }
 
   /*
     Hide wox window
    */
   const hideWoxWindow = async () => {
-    await hide()
+    await WoxTauriHelper.getInstance().hideWindow()
   }
 
   /*
@@ -190,10 +187,9 @@ export default () => {
 
 
   useEffect(() => {
-    WoxTauriHelper.getInstance().setFocus().then(_ => {
-      WoxMessageHelper.getInstance().initialRequestCallback(handleRequestCallback)
-      bindKeyboardEvent()
-    })
+    WoxTauriHelper.getInstance().setFocus()
+    WoxMessageHelper.getInstance().initialRequestCallback(handleRequestCallback)
+    bindKeyboardEvent()
   }, [])
 
   return <Style className={"wox-launcher"}>

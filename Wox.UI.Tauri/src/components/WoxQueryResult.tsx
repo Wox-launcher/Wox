@@ -136,7 +136,6 @@ const Style = styled.div`
     height: 50px;
     line-height: 50px;
     border-bottom: 1px solid #dedede;
-    -webkit-app-region: no-drag;
     cursor: pointer;
     width: 100%;
   }
@@ -181,8 +180,7 @@ const Style = styled.div`
     line-height: 15px;
   }
 
-  ul li.active,
-  ul li:hover {
+  ul li.active {
     background-color: #dedede;
   }
 `

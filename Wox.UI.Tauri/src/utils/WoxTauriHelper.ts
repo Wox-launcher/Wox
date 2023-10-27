@@ -1,5 +1,7 @@
 import { invoke, InvokeArgs } from "@tauri-apps/api/tauri"
-import { appWindow, LogicalSize } from "@tauri-apps/api/window"
+import { appWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window"
+import { hide, show } from "@tauri-apps/api/app"
+import { WoxLogHelper } from "./WoxLogHelper.ts"
 
 export class WoxTauriHelper {
 
@@ -53,6 +55,37 @@ export class WoxTauriHelper {
     if (this.isTauri()) {
       return appWindow.startDragging()
     }
+    return Promise.resolve()
+  }
+
+  public async setPosition(x: number, y: number) {
+    return appWindow.setPosition(new LogicalPosition(x, y))
+  }
+
+  public async showWindow() {
+    if (this.isTauri()) {
+      WoxLogHelper.getInstance().log("showWindow")
+      return Promise.all([this.setFocus(), show()])
+    }
+    return Promise.resolve()
+  }
+
+  public async isVisible() {
+    if (this.isTauri()) {
+      return appWindow.isVisible().then((visible) => {
+        WoxLogHelper.getInstance().log(`isVisible:${visible}`)
+        return visible
+      })
+    }
+    return Promise.resolve(false)
+  }
+
+  public async hideWindow() {
+    if (this.isTauri()) {
+      WoxLogHelper.getInstance().log("hideWindow")
+      return hide()
+    }
+    WoxLogHelper.getInstance().log("hideWindow-not-tauri")
     return Promise.resolve()
   }
 }
