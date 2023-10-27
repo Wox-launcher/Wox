@@ -173,7 +173,6 @@ export default () => {
 }
 
 const Style = styled.div`
-  max-height: 560px;
   overflow: auto;
   display: flex;
   flex-direction: column;

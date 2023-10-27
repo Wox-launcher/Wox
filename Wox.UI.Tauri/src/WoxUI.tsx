@@ -5,7 +5,7 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom"
 import { WoxMessageHelper } from "./utils/WoxMessageHelper.ts"
 import React from "react"
 import { invoke } from "@tauri-apps/api/tauri"
-import WoxSearchBox from "./components/WoxSearchBox.tsx"
+import WoxLauncher from "./components/WoxLauncher.tsx"
 
 invoke("init_spotlight_window")
 
@@ -13,12 +13,14 @@ invoke("get_server_port")
   .then((serverPort) => {
     WoxMessageHelper.getInstance().initialize(serverPort as string)
   })
-  .catch(console.log)
+  .catch(_ => {
+    WoxMessageHelper.getInstance().initialize("34987")
+  })
 
 const router = createBrowserRouter([
   {
     path: "/",
-    element: <WoxSearchBox />
+    element: <WoxLauncher />
   },
   {
     path: "about",

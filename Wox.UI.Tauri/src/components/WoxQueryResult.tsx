@@ -2,6 +2,7 @@ import styled from "styled-components"
 import { WOXMESSAGE } from "../entity/WoxMessage.typings"
 import React, { useImperativeHandle, useRef, useState } from "react"
 import { appWindow, LogicalSize } from "@tauri-apps/api/window"
+import { WoxImageTypeEnum } from "../enums/WoxImageTypeEnum.ts"
 
 export type WoxQueryResultRefHandler = {
   clearResultList: () => void
@@ -36,10 +37,11 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     changeResultList: (preview: boolean, results: WOXMESSAGE.WoxMessageResponseResult[]) => {
       resetResultRelatedData(preview)
       //reset window size
-      if (results.length > 10 || (preview && currentWindowHeight.current === 560)) {
+      const windowHeight = preview ? 560 : 60 + 50 * (results.length > 10 ? 10 : results.length)
+      if (currentWindowHeight.current === windowHeight) {
         resetResultList(results)
       } else {
-        const windowHeight = hasPreview ? 560 : 60 + 50 * results.length
+        currentWindowHeight.current = windowHeight
         appWindow.setSize(new LogicalSize(800, windowHeight)).then(_ => {
           resetResultList(results)
         })
@@ -50,9 +52,16 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   return <Style className={"wox-results"}>
     {resultList?.length > 0 && <ul key={"wox-result-list"}>
       {resultList.map((result, index) => {
-        return <li key={index}>
-          <div className={"wox-result-title"}>{result.Title}</div>
-          <div className={"wox-result-subtitle"}>{result.SubTitle}</div>
+        return <li key={index} className={activeIndex === index ? "active" : "inactive"}>
+          {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeSvg.code &&
+            <div className={"wox-query-result-image"}
+                 dangerouslySetInnerHTML={{ __html: result.Icon.ImageData }}></div>}
+          {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeUrl.code &&
+            <img src={result.Icon.ImageData} className={"wox-query-result-image"} alt={"query-result-image"} />}
+          {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeBase64.code &&
+            <img src={result.Icon.ImageData} className={"wox-query-result-image"} alt={"query-result-image"} />}
+          <h2 className={"wox-result-title"}>{result.Title}</h2>
+          <h3 className={"wox-result-subtitle"}>{result.SubTitle}</h3>
         </li>
       })}
     </ul>}
@@ -63,12 +72,12 @@ const Style = styled.div`
   display: flex;
   flex-direction: row;
   overflow-y: auto;
+  height: 100%;
 
   ul {
     padding: 0;
     margin: 0;
-    border-top: 1px solid #dedede;
-    max-height: 333px;
+    max-height: 500px;
     overflow: hidden;
     width: 50%;
   }
@@ -83,21 +92,26 @@ const Style = styled.div`
 
   ul li {
     display: block;
-    height: 45px;
-    line-height: 45px;
+    height: 50px;
+    line-height: 50px;
     border-bottom: 1px solid #dedede;
     -webkit-app-region: no-drag;
     cursor: pointer;
     width: 100%;
   }
 
-  ul li .icon {
+  ul li .wox-query-result-image {
     text-align: center;
-    line-height: 30px;
-    height: 30px;
-    width: 30px;
-    margin: 7.5px;
+    line-height: 36px;
+    height: 36px;
+    width: 36px;
+    margin: 7px;
     float: left;
+
+    svg {
+      width: 36px !important;
+      height: 36px !important;
+    }
   }
 
   ul li h2,
@@ -113,16 +127,11 @@ const Style = styled.div`
 
   ul li h2 {
     font-size: 20px;
-    line-height: 25px;
-  }
-
-  ul li h2:last-child {
-    font-size: 20px;
-    line-height: 45px;
+    line-height: 30px;
   }
 
   ul li h3 {
-    font-size: 15px;
+    font-size: 13px;
     line-height: 15px;
   }
 
