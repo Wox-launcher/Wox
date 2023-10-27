@@ -10,7 +10,7 @@ use std::env;
 use std::fs::File;
 use std::path::PathBuf;
 use tauri::Manager;
-use tauri_nspanel::{panel_delegate, WindowExt};
+use tauri_nspanel::{WindowExt};
 use tauri_nspanel::cocoa::appkit::{NSMainMenuWindowLevel, NSWindowCollectionBehavior};
 
 #[tauri::command]

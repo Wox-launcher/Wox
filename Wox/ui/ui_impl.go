@@ -10,6 +10,7 @@ import (
 	"time"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/setting"
 	"wox/share"
 	"wox/util"
 )
@@ -79,6 +80,8 @@ func onUIRequest(ctx context.Context, request WebsocketMsg) {
 		handleChangeLanguage(ctx, request)
 	case "GetLanguageJson":
 		handleGetLanguageJson(ctx, request)
+	case "OnVisibilityChanged":
+		handleOnVisibilityChanged(ctx, request)
 	}
 }
 
@@ -220,6 +223,33 @@ func handleGetLanguageJson(ctx context.Context, request WebsocketMsg) {
 	}
 
 	responseUISuccessWithData(ctx, request, langJson)
+}
+
+func handleOnVisibilityChanged(ctx context.Context, request WebsocketMsg) {
+	isVisible, isVisibleErr := getWebsocketMsgParameter(ctx, request, "isVisible")
+	if isVisibleErr != nil {
+		logger.Error(ctx, isVisibleErr.Error())
+		responseUIError(ctx, request, isVisibleErr.Error())
+		return
+	}
+
+	if isVisible == "true" {
+		onAppShow(ctx)
+	} else {
+		onAppHide(ctx)
+	}
+}
+
+func onAppShow(ctx context.Context) {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if woxSetting.SwitchInputMethodABC {
+		util.GetLogger().Info(ctx, "switch input method to ABC")
+		util.SwitchInputMethodABC()
+	}
+}
+
+func onAppHide(ctx context.Context) {
+
 }
 
 func handleRegisterMainHotkey(ctx context.Context, request WebsocketMsg) {

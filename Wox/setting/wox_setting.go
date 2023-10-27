@@ -10,11 +10,12 @@ import (
 )
 
 type WoxSetting struct {
-	MainHotkey   string
-	UsePinYin    bool
-	ShowTray     bool
-	LangCode     i18n.LangCode
-	QueryHotkeys []QueryHotkey
+	MainHotkey           string
+	UsePinYin            bool
+	SwitchInputMethodABC bool
+	ShowTray             bool
+	LangCode             i18n.LangCode
+	QueryHotkeys         []QueryHotkey
 }
 
 type QueryHotkey struct {
