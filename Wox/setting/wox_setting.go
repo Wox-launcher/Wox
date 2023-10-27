@@ -26,16 +26,19 @@ type QueryHotkey struct {
 func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 	usePinYin := false
 	langCode := i18n.LangCodeEnUs
+	switchInputMethodABC := false
 	if isZhCN() {
 		usePinYin = true
+		switchInputMethodABC = true
 		langCode = i18n.LangCodeZhCn
 	}
 
 	return WoxSetting{
-		MainHotkey: getDefaultMainHotkey(ctx),
-		UsePinYin:  usePinYin,
-		ShowTray:   true,
-		LangCode:   langCode,
+		MainHotkey:           getDefaultMainHotkey(ctx),
+		UsePinYin:            usePinYin,
+		SwitchInputMethodABC: switchInputMethodABC,
+		ShowTray:             true,
+		LangCode:             langCode,
 	}
 }
 

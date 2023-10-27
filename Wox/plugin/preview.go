@@ -6,6 +6,7 @@ const (
 	WoxPreviewTypeMarkdown = "markdown"
 	WoxPreviewTypeText     = "text"
 	WoxPreviewTypeImage    = "image"
+	WoxPreviewTypeUrl      = "url"
 )
 
 type WoxPreview struct {

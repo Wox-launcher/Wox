@@ -106,6 +106,10 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 
 	var totalResultCount int
 	var startTimestamp = util.GetSystemTimestamp()
+	var responseMargin = NewResponseMargin(50, func(results []plugin.QueryResultUI, reason string) {
+		logger.Info(ctx, fmt.Sprintf("query: %s, result flushed (reason: %s), total results: %d, time %d ms", query, reason, totalResultCount, util.GetSystemTimestamp()-startTimestamp))
+		responseUISuccessWithData(ctx, request, results)
+	})
 	resultChan, doneChan := plugin.GetPluginManager().Query(ctx, plugin.NewQuery(query, queryType))
 	for {
 		select {
@@ -114,10 +118,10 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 				continue
 			}
 			totalResultCount += len(results)
-			responseUISuccessWithData(ctx, request, results)
+			responseMargin.Add(ctx, results)
 		case <-doneChan:
 			logger.Info(ctx, fmt.Sprintf("query done, total results: %d, cost %d ms", totalResultCount, util.GetSystemTimestamp()-startTimestamp))
-			responseUISuccessWithData(ctx, request, []string{})
+			responseMargin.Flush(ctx, "query done")
 			return
 		case <-time.After(time.Second * 10):
 			logger.Info(ctx, fmt.Sprintf("query timeout, query: %s, request id: %s", query, request.Id))
