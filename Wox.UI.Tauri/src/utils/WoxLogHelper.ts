@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/tauri"
+import { WoxTauriHelper } from "./WoxTauriHelper.ts"
 
 export class WoxLogHelper {
 
@@ -15,7 +15,7 @@ export class WoxLogHelper {
   }
 
   public log(msg: string) {
-    invoke("log_ui", { msg: msg }).then(_ => {
+    WoxTauriHelper.getInstance().invoke("log_ui", { msg: msg }).then(_ => {
       console.log(`${msg}`)
     }).catch(console.log)
   }

@@ -1,5 +1,6 @@
-import React, { useImperativeHandle } from "react"
+import React, { useEffect, useImperativeHandle } from "react"
 import styled from "styled-components"
+import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
 
 export type WoxQueryBoxRefHandler = {
   changeQuery: (query: string) => void
@@ -28,6 +29,12 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
     }
   }))
 
+  useEffect(() => {
+    setTimeout(() => {
+      queryBoxRef.current?.focus()
+    }, 200)
+  }, [])
+
   return <Style className="wox-query-box">
     <input ref={queryBoxRef} title={"Query Wox"}
            type="text"
@@ -45,7 +52,9 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
 
 const Style = styled.div`
   position: relative;
-  width: 100%;
+  width: 800px;
+  border: ${WoxTauriHelper.getInstance().isTauri() ? "0px" : "1px"} solid #dedede;
+  overflow: hidden;
 
   input {
     height: 60px;

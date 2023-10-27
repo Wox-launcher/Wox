@@ -1,8 +1,9 @@
 import styled from "styled-components"
 import { WOXMESSAGE } from "../entity/WoxMessage.typings"
-import React, { useImperativeHandle, useRef, useState } from "react"
-import { appWindow, LogicalSize } from "@tauri-apps/api/window"
+import React, { useCallback, useImperativeHandle, useRef, useState } from "react"
 import { WoxImageTypeEnum } from "../enums/WoxImageTypeEnum.ts"
+import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
+import lodash from "lodash"
 
 export type WoxQueryResultRefHandler = {
   clearResultList: () => void
@@ -30,19 +31,27 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     setResultList(currentResultList.current)
   }
 
+  const debounce = useCallback(
+    lodash.debounce((results: WOXMESSAGE.WoxMessageResponseResult[]) => {
+
+    }, 50),
+    []
+  )
+
+
   useImperativeHandle(ref, () => ({
     clearResultList: () => {
       resetResultRelatedData(false)
     },
     changeResultList: (preview: boolean, results: WOXMESSAGE.WoxMessageResponseResult[]) => {
-      resetResultRelatedData(preview)
+      setHasPreview(preview)
       //reset window size
       const windowHeight = preview ? 560 : 60 + 50 * (results.length > 10 ? 10 : results.length)
       if (currentWindowHeight.current === windowHeight) {
         resetResultList(results)
       } else {
         currentWindowHeight.current = windowHeight
-        appWindow.setSize(new LogicalSize(800, windowHeight)).then(_ => {
+        WoxTauriHelper.getInstance().setSize(800, currentWindowHeight.current).then(_ => {
           resetResultList(results)
         })
       }
@@ -50,9 +59,9 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   }))
 
   return <Style className={"wox-results"}>
-    {resultList?.length > 0 && <ul key={"wox-result-list"}>
+    <ul key={"wox-result-list"}>
       {resultList.map((result, index) => {
-        return <li key={index} className={activeIndex === index ? "active" : "inactive"}>
+        return <li id={`wox-result-li-${index}`} key={`wox-result-li-${index}`} className={activeIndex === index ? "active" : "inactive"}>
           {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeSvg.code &&
             <div className={"wox-query-result-image"}
                  dangerouslySetInnerHTML={{ __html: result.Icon.ImageData }}></div>}
@@ -61,18 +70,18 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
           {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeBase64.code &&
             <img src={result.Icon.ImageData} className={"wox-query-result-image"} alt={"query-result-image"} />}
           <h2 className={"wox-result-title"}>{result.Title}</h2>
-          <h3 className={"wox-result-subtitle"}>{result.SubTitle}</h3>
+          {result.SubTitle && <h3 className={"wox-result-subtitle"}>{result.SubTitle}</h3>}
         </li>
       })}
-    </ul>}
+    </ul>
   </Style>
 })
 
 const Style = styled.div`
   display: flex;
   flex-direction: row;
-  overflow-y: auto;
-  height: 100%;
+  overflow: hidden;
+  width: 800px;
 
   ul {
     padding: 0;
@@ -80,6 +89,7 @@ const Style = styled.div`
     max-height: 500px;
     overflow: hidden;
     width: 50%;
+    border-right: ${WoxTauriHelper.getInstance().isTauri() ? "0px" : "1px"} solid #dedede;;
   }
 
   ul:last-child {
@@ -128,6 +138,11 @@ const Style = styled.div`
   ul li h2 {
     font-size: 20px;
     line-height: 30px;
+  }
+
+  ul li h2:last-child {
+    font-size: 20px;
+    line-height: 50px;
   }
 
   ul li h3 {

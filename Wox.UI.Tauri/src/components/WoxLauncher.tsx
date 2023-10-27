@@ -11,6 +11,7 @@ import { WoxMessageRequestMethodEnum } from "../enums/WoxMessageRequestMethodEnu
 import { useInterval } from "usehooks-ts"
 import { WoxMessageMethodEnum } from "../enums/WoxMessageMethodEnum.ts"
 import { WoxLogHelper } from "../utils/WoxLogHelper.ts"
+import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
 
 export default () => {
   const woxQueryBoxRef = React.useRef<WoxQueryBoxRefHandler>(null)
@@ -37,7 +38,7 @@ export default () => {
       if (!hasLatestQueryResult.current) {
         woxQueryResultRef.current?.clearResultList()
       }
-    }, 50)
+    }, 500)
   }
 
   const refreshResults = async () => {
@@ -96,7 +97,7 @@ export default () => {
       return result.AssociatedQuery === currentQuery.current
     })).map((result, index) => {
       preview = !!result.Preview.PreviewType
-      return Object.assign({ ...result, Index: index })
+      return Object.assign({ ...result, Id: index, Index: index })
     })
 
     //sort fullResultList order by score desc
@@ -155,25 +156,32 @@ export default () => {
     woxQueryBoxRef.current?.changeQuery(query)
   }
 
-  useInterval(() => {
+  useInterval(async () => {
     refreshTotalCount.current = refreshTotalCount.current + 100
-    refreshResults()
+    await refreshResults()
   }, 100)
 
 
   useEffect(() => {
-    WoxMessageHelper.getInstance().initialRequestCallback(handleRequestCallback)
-    appWindow.setFocus()
+    WoxTauriHelper.getInstance().setFocus().then(_ => {
+      WoxMessageHelper.getInstance().initialRequestCallback(handleRequestCallback)
+    })
   }, [])
 
-  return <Style className={"wox-launcher"}>
+  return <Style className={"wox-launcher"} onKeyDown={(event) => {
+    if (event.key === "Escape") {
+      hideWoxWindow()
+      event.preventDefault()
+      event.stopPropagation()
+    }
+  }}>
     <WoxQueryBox ref={woxQueryBoxRef} onQueryChange={onQueryChange} />
     <WoxQueryResult ref={woxQueryResultRef} />
   </Style>
 }
 
 const Style = styled.div`
-  overflow: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 `

@@ -11,6 +11,9 @@ dependencies:
   bootstrap:
     specifier: ^5.3.2
     version: 5.3.2(@popperjs/core@2.11.8)
+  lodash:
+    specifier: ^4.17.21
+    version: 4.17.21
   promise-deferred:
     specifier: ^2.0.4
     version: 2.0.4
@@ -46,6 +49,9 @@ devDependencies:
   '@tauri-apps/cli':
     specifier: ^1.5.0
     version: 1.5.0
+  '@types/lodash':
+    specifier: ^4.14.200
+    version: 4.14.200
   '@types/promise-deferred':
     specifier: ^2.0.3
     version: 2.0.3
@@ -1821,6 +1827,10 @@ packages:
 
   /@types/json-schema@7.0.14:
     resolution: {integrity: sha512-U3PUjAudAdJBeC2pgN8uTIKgxrb4nlDF3SF0++EldXQvQBGkpFZMSnwQiIoDU77tv45VgNkl/L4ouD+rEomujw==}
+    dev: true
+
+  /@types/lodash@4.14.200:
+    resolution: {integrity: sha512-YI/M/4HRImtNf3pJgbF+W6FrXovqj+T+/HpENLTooK9PnkacBsDpeP3IpHab40CClUfhNmdM2WTNP2sa2dni5Q==}
     dev: true
 
   /@types/mdast@4.0.2:
