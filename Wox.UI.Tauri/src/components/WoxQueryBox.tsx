@@ -67,6 +67,7 @@ const Style = styled.div`
     background-color: transparent;
     -webkit-app-region: no-drag;
     cursor: auto;
+    color: black;
     display: inline-block;
   }
 

@@ -53,8 +53,6 @@ func (u *uiImpl) GetServerPort(ctx context.Context) int {
 }
 
 func (u *uiImpl) send(ctx context.Context, method string, data any) {
-	jsonData, _ := json.Marshal(data)
-	util.GetLogger().Info(ctx, fmt.Sprintf("[->UI] %s: %s", method, jsonData))
 	requestUI(ctx, WebsocketMsg{
 		Id:     uuid.NewString(),
 		Method: method,
@@ -106,10 +104,12 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 
 	var totalResultCount int
 	var startTimestamp = util.GetSystemTimestamp()
-	var responseMargin = NewResponseMargin(50, func(results []plugin.QueryResultUI, reason string) {
-		logger.Info(ctx, fmt.Sprintf("query: %s, result flushed (reason: %s), total results: %d, time %d ms", query, reason, totalResultCount, util.GetSystemTimestamp()-startTimestamp))
+	var resultDebouncer = util.NewDebouncer(30, func(results []plugin.QueryResultUI, reason string) {
+		logger.Info(ctx, fmt.Sprintf("query: %s, result flushed (reason: %s), total results: %d", query, reason, totalResultCount))
 		responseUISuccessWithData(ctx, request, results)
 	})
+	resultDebouncer.Start(ctx)
+	logger.Info(ctx, fmt.Sprintf("query: %s, result flushed (new start)", query))
 	resultChan, doneChan := plugin.GetPluginManager().Query(ctx, plugin.NewQuery(query, queryType))
 	for {
 		select {
@@ -118,13 +118,15 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 				continue
 			}
 			totalResultCount += len(results)
-			responseMargin.Add(ctx, results)
+			resultDebouncer.Add(ctx, results)
+			//responseUISuccessWithData(ctx, request, results)
 		case <-doneChan:
 			logger.Info(ctx, fmt.Sprintf("query done, total results: %d, cost %d ms", totalResultCount, util.GetSystemTimestamp()-startTimestamp))
-			responseMargin.Flush(ctx, "query done")
+			resultDebouncer.Done(ctx)
 			return
 		case <-time.After(time.Second * 10):
 			logger.Info(ctx, fmt.Sprintf("query timeout, query: %s, request id: %s", query, request.Id))
+			resultDebouncer.Done(ctx)
 			responseUIError(ctx, request, fmt.Sprintf("query timeout, query: %s, request id: %s", query, request.Id))
 			return
 		}

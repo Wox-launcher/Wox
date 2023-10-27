@@ -67,7 +67,9 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 		var matchScore int
 
 		var minMatchScore = 10 // bookmark plugin has strict match score to avoid too many unrelated results
+		startTimestamp := util.GetSystemTimestamp()
 		isNameMatch, nameScore := IsStringMatchScore(ctx, bookmark.Name, query.Search)
+		util.GetLogger().Info(ctx, fmt.Sprintf("name: %s, match: %v, score: %d, time: %d", bookmark.Name, isNameMatch, nameScore, util.GetSystemTimestamp()-startTimestamp))
 		if isNameMatch && nameScore >= minMatchScore {
 			isMatch = true
 			matchScore = nameScore

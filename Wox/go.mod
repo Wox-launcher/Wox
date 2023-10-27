@@ -4,8 +4,12 @@ go 1.20
 
 require (
 	github.com/Masterminds/semver/v3 v3.2.1
+	github.com/disintegration/imaging v1.6.2
+	github.com/fcjr/geticon v0.1.1
+	github.com/fsnotify/fsnotify v1.7.0
 	github.com/getlantern/systray v1.2.2
 	github.com/go-resty/resty/v2 v2.9.1
+	github.com/go-vgo/robotgo v1.0.0-rc2.1.0.20230915142143-a780825c0931
 	github.com/google/uuid v1.3.1
 	github.com/gorilla/websocket v1.5.0
 	github.com/jinzhu/now v1.1.5
@@ -27,9 +31,6 @@ require (
 require (
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/disintegration/imaging v1.6.2 // indirect
-	github.com/fcjr/geticon v0.1.1 // indirect
-	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/gen2brain/shm v0.0.0-20230802011745-f2460f5984f7 // indirect
 	github.com/getlantern/context v0.0.0-20190109183933-c447772a6520 // indirect
 	github.com/getlantern/errors v0.0.0-20190325191628-abdb3e3e36f7 // indirect
@@ -39,7 +40,6 @@ require (
 	github.com/getlantern/ops v0.0.0-20190325191751-d70cb0d6f85f // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
-	github.com/go-vgo/robotgo v1.0.0-rc2.1.0.20230915142143-a780825c0931 // indirect
 	github.com/jezek/xgb v1.1.0 // indirect
 	github.com/kbinani/screenshot v0.0.0-20230812210009-b87d31814237 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect

@@ -33,6 +33,7 @@ type WebsocketMsg struct {
 func serveAndWait(ctx context.Context, port int) {
 	m = melody.New()
 	m.Config.MaxMessageSize = 1024 * 1024 * 10 // 10MB
+	m.Config.MessageBufferSize = 1024 * 1024   // 1MB
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Wox"))
@@ -105,6 +106,9 @@ func requestUI(ctx context.Context, request WebsocketMsg) {
 		logger.Error(ctx, fmt.Sprintf("failed to marshal websocket request: %s", marshalErr.Error()))
 		return
 	}
+
+	jsonData, _ := json.Marshal(request.Data)
+	util.GetLogger().Info(ctx, fmt.Sprintf("[->UI] %s: %s", request.Method, jsonData))
 	m.Broadcast(marshalData)
 }
 
