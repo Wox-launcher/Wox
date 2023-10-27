@@ -29,8 +29,10 @@ func (r *ResponseMargin) Add(ctx context.Context, result []plugin.QueryResultUI)
 }
 
 func (r *ResponseMargin) Flush(ctx context.Context, reason string) {
-	r.lastFlushedTimestamp = util.GetSystemTimestamp()
-	flushedResults := r.results
-	r.results = nil
-	r.onFlush(flushedResults, reason)
+	if len(r.results) > 0 {
+		r.lastFlushedTimestamp = util.GetSystemTimestamp()
+		flushedResults := r.results
+		r.results = nil
+		r.onFlush(flushedResults, reason)
+	}
 }
