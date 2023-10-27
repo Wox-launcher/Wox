@@ -36,7 +36,9 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
   }, [])
 
   return <Style className="wox-query-box">
-    <input ref={queryBoxRef} title={"Query Wox"}
+    <input ref={queryBoxRef}
+           title={"Query Wox"}
+           className={"mousetrap"}
            type="text"
            aria-label="Wox"
            autoComplete="off"
@@ -46,20 +48,27 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
            onChange={(e) => {
              _props.onQueryChange(e.target.value)
            }} />
-    <button className={"wox-setting"}>Wox</button>
+    <button className={"wox-setting"} onMouseMoveCapture={(event) => {
+      WoxTauriHelper.getInstance().startDragging().then(_ => {
+        queryBoxRef.current?.focus()
+      })
+      event.preventDefault()
+      event.stopPropagation()
+    }}>Wox
+    </button>
   </Style>
 })
 
 const Style = styled.div`
   position: relative;
-  width: 800px;
+  width: ${WoxTauriHelper.getInstance().getWoxWindowWidth()}px;
   border: ${WoxTauriHelper.getInstance().isTauri() ? "0px" : "1px"} solid #dedede;
   overflow: hidden;
 
   input {
     height: 60px;
     line-height: 60px;
-    width: 800px;
+    width: ${WoxTauriHelper.getInstance().getWoxWindowWidth()}px;
     font-size: 24px;
     outline: none;
     padding: 10px;
@@ -69,6 +78,7 @@ const Style = styled.div`
     cursor: auto;
     color: black;
     display: inline-block;
+    color: black;
   }
 
   .wox-setting {

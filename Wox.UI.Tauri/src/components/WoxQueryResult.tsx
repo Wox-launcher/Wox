@@ -1,47 +1,70 @@
 import styled from "styled-components"
 import { WOXMESSAGE } from "../entity/WoxMessage.typings"
-import React, { useCallback, useImperativeHandle, useRef, useState } from "react"
+import React, { useImperativeHandle, useRef, useState } from "react"
 import { WoxImageTypeEnum } from "../enums/WoxImageTypeEnum.ts"
 import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
-import lodash from "lodash"
+import { WoxMessageHelper } from "../utils/WoxMessageHelper.ts"
+import { WoxMessageMethodEnum } from "../enums/WoxMessageMethodEnum.ts"
+import { WoxMessageRequestMethod, WoxMessageRequestMethodEnum } from "../enums/WoxMessageRequestMethodEnum.ts"
 
 export type WoxQueryResultRefHandler = {
   clearResultList: () => void
   changeResultList: (preview: boolean, results: WOXMESSAGE.WoxMessageResponseResult[]) => void
+  moveUp: () => void
+  moveDown: () => void
+  doAction: () => void
 }
 
-export type WoxQueryResultProps = {}
+export type WoxQueryResultProps = {
+  callback?: (method: WoxMessageRequestMethod) => void
+}
 
 export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<WoxQueryResultRefHandler>) => {
   const currentWindowHeight = useRef(60)
   const currentResultList = useRef<WOXMESSAGE.WoxMessageResponseResult[]>([])
+  const currentActiveIndex = useRef(0)
   const [activeIndex, setActiveIndex] = useState<number>(0)
   const [resultList, setResultList] = useState<WOXMESSAGE.WoxMessageResponseResult[]>([])
   const [hasPreview, setHasPreview] = useState<boolean>(false)
-
-
-  const resetResultRelatedData = (preview: boolean) => {
-    setResultList([])
-    setHasPreview(preview)
-    setActiveIndex(0)
-  }
 
   const resetResultList = (rsList: WOXMESSAGE.WoxMessageResponseResult[]) => {
     currentResultList.current = [...rsList]
     setResultList(currentResultList.current)
   }
 
-  const debounce = useCallback(
-    lodash.debounce((results: WOXMESSAGE.WoxMessageResponseResult[]) => {
+  const resizeWindowByResultList = (results: WOXMESSAGE.WoxMessageResponseResult[], windowHeight: number) => {
+    if (windowHeight > currentWindowHeight.current) {
+      WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), windowHeight).then(_ => {
+        resetResultList(results)
+      })
+    } else {
+      resetResultList(results)
+      WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), windowHeight)
+    }
+    currentWindowHeight.current = windowHeight
+  }
 
-    }, 50),
-    []
-  )
-
+  const handleAction = async () => {
+    const result = currentResultList.current.find((result) => result.Index === currentActiveIndex.current)
+    if (result) {
+      for (const action of result.Actions) {
+        if (action.IsDefault) {
+          await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ACTION.code, {
+            "resultId": result.Id,
+            "actionId": action.Id
+          })
+          if (!action.PreventHideAfterAction) {
+            _props.callback?.(WoxMessageRequestMethodEnum.HideApp.code)
+          }
+        }
+      }
+    }
+  }
 
   useImperativeHandle(ref, () => ({
     clearResultList: () => {
-      resetResultRelatedData(false)
+      setActiveIndex(0)
+      resizeWindowByResultList([], 60)
     },
     changeResultList: (preview: boolean, results: WOXMESSAGE.WoxMessageResponseResult[]) => {
       setHasPreview(preview)
@@ -50,11 +73,19 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       if (currentWindowHeight.current === windowHeight) {
         resetResultList(results)
       } else {
-        currentWindowHeight.current = windowHeight
-        WoxTauriHelper.getInstance().setSize(800, currentWindowHeight.current).then(_ => {
-          resetResultList(results)
-        })
+        resizeWindowByResultList(results, windowHeight)
       }
+    },
+    moveUp: () => {
+      currentActiveIndex.current = currentActiveIndex.current <= 0 ? currentResultList.current.length - 1 : currentActiveIndex.current - 1
+      setActiveIndex(currentActiveIndex.current)
+    },
+    moveDown: () => {
+      currentActiveIndex.current = currentActiveIndex.current >= currentResultList.current.length - 1 ? 0 : currentActiveIndex.current + 1
+      setActiveIndex(currentActiveIndex.current)
+    },
+    doAction: () => {
+      handleAction()
     }
   }))
 

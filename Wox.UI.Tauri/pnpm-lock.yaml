@@ -14,6 +14,9 @@ dependencies:
   lodash:
     specifier: ^4.17.21
     version: 4.17.21
+  mousetrap:
+    specifier: ^1.6.5
+    version: 1.6.5
   promise-deferred:
     specifier: ^2.0.4
     version: 2.0.4
@@ -52,6 +55,9 @@ devDependencies:
   '@types/lodash':
     specifier: ^4.14.200
     version: 4.14.200
+  '@types/mousetrap':
+    specifier: ^1.6.13
+    version: 1.6.13
   '@types/promise-deferred':
     specifier: ^2.0.3
     version: 2.0.3
@@ -1839,6 +1845,10 @@ packages:
       '@types/unist': 3.0.1
     dev: false
 
+  /@types/mousetrap@1.6.13:
+    resolution: {integrity: sha512-dEzDpaR+P/thkMsjsREQDX9OP8AMyLncTkgUgTTIxq5lJTlQffiLJt67ImDtaX+kC7CaNIX30pfdrrMZkym+eg==}
+    dev: true
+
   /@types/ms@0.7.33:
     resolution: {integrity: sha512-AuHIyzR5Hea7ij0P9q7vx7xu4z0C28ucwjAZC0ja7JhINyCnOw8/DnvAPQQ9TfOlCtZAmCERKQX9+o1mgQhuOQ==}
     dev: false
@@ -3131,6 +3141,10 @@ packages:
     resolution: {integrity: sha512-J7p63hRiAjw1NDEww1W7i37+ByIrOWO5XQQAzZ3VOcL0PNybwpfmV/N05zFAzwQ9USyEcX6t3UO+K5aqBQOIHw==}
     dependencies:
       brace-expansion: 1.1.11
+
+  /mousetrap@1.6.5:
+    resolution: {integrity: sha512-QNo4kEepaIBwiT8CDhP98umTetp+JNfQYBWvC1pc6/OAibuXtRcxZ58Qz8skvEHYvURne/7R8T5VoOI7rDsEUA==}
+    dev: false
 
   /ms@2.1.2:
     resolution: {integrity: sha512-sGkPx+VjMtmA6MX27oA4FBFELFCZZ4S4XqeGOXCv68tT+jb3vk/RyaKWP0PTKyWtmLSM0b+adUTEvbs1PEaH2w==}

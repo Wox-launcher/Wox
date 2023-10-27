@@ -5,6 +5,8 @@ export class WoxTauriHelper {
 
   private static instance: WoxTauriHelper
 
+  private static WINDOW_WIDTH = 800
+
   private constructor() {
   }
 
@@ -13,6 +15,13 @@ export class WoxTauriHelper {
       WoxTauriHelper.instance = new WoxTauriHelper()
     }
     return WoxTauriHelper.instance
+  }
+
+  /*
+     Get the width of the window
+   */
+  public getWoxWindowWidth() {
+    return WoxTauriHelper.WINDOW_WIDTH
   }
 
   public isTauri() {
@@ -31,12 +40,18 @@ export class WoxTauriHelper {
       return appWindow.setSize(new LogicalSize(width, height))
     }
     return Promise.resolve()
-
   }
 
   public async setFocus() {
     if (this.isTauri()) {
       return appWindow.setFocus()
+    }
+    return Promise.resolve()
+  }
+
+  public async startDragging() {
+    if (this.isTauri()) {
+      return appWindow.startDragging()
     }
     return Promise.resolve()
   }

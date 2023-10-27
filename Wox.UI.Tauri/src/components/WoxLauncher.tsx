@@ -7,11 +7,12 @@ import { WoxMessageHelper } from "../utils/WoxMessageHelper.ts"
 import { appWindow, LogicalPosition } from "@tauri-apps/api/window"
 import { WoxPositionTypeEnum } from "../enums/WoxPositionTypeEnum.ts"
 import { hide, show } from "@tauri-apps/api/app"
-import { WoxMessageRequestMethodEnum } from "../enums/WoxMessageRequestMethodEnum.ts"
+import { WoxMessageRequestMethod, WoxMessageRequestMethodEnum } from "../enums/WoxMessageRequestMethodEnum.ts"
 import { useInterval } from "usehooks-ts"
 import { WoxMessageMethodEnum } from "../enums/WoxMessageMethodEnum.ts"
 import { WoxLogHelper } from "../utils/WoxLogHelper.ts"
 import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
+import Mousetrap from "mousetrap"
 
 export default () => {
   const woxQueryBoxRef = React.useRef<WoxQueryBoxRefHandler>(null)
@@ -38,7 +39,7 @@ export default () => {
       if (!hasLatestQueryResult.current) {
         woxQueryResultRef.current?.clearResultList()
       }
-    }, 500)
+    }, 200)
   }
 
   const refreshResults = async () => {
@@ -152,8 +153,34 @@ export default () => {
     await hide()
   }
 
+  /*
+    Change query text
+   */
   const changeQuery = async (query: string) => {
     woxQueryBoxRef.current?.changeQuery(query)
+  }
+
+  const bindKeyboardEvent = () => {
+    Mousetrap.bind("esc", (event) => {
+      hideWoxWindow()
+      event.preventDefault()
+      event.stopPropagation()
+    })
+    Mousetrap.bind("down", (event) => {
+      woxQueryResultRef.current?.moveDown()
+      event.preventDefault()
+      event.stopPropagation()
+    })
+    Mousetrap.bind("up", (event) => {
+      woxQueryResultRef.current?.moveUp()
+      event.preventDefault()
+      event.stopPropagation()
+    })
+    Mousetrap.bind("enter", (event) => {
+      woxQueryResultRef.current?.doAction()
+      event.preventDefault()
+      event.stopPropagation()
+    })
   }
 
   useInterval(async () => {
@@ -165,18 +192,17 @@ export default () => {
   useEffect(() => {
     WoxTauriHelper.getInstance().setFocus().then(_ => {
       WoxMessageHelper.getInstance().initialRequestCallback(handleRequestCallback)
+      bindKeyboardEvent()
     })
   }, [])
 
-  return <Style className={"wox-launcher"} onKeyDown={(event) => {
-    if (event.key === "Escape") {
-      hideWoxWindow()
-      event.preventDefault()
-      event.stopPropagation()
-    }
-  }}>
+  return <Style className={"wox-launcher"}>
     <WoxQueryBox ref={woxQueryBoxRef} onQueryChange={onQueryChange} />
-    <WoxQueryResult ref={woxQueryResultRef} />
+    <WoxQueryResult ref={woxQueryResultRef} callback={(method: WoxMessageRequestMethod) => {
+      if (method === WoxMessageRequestMethodEnum.HideApp.code) {
+        hideWoxWindow()
+      }
+    }} />
   </Style>
 }
 
