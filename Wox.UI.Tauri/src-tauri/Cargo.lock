@@ -3677,6 +3677,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-nspanel",
+ "time",
 ]
 
 [[package]]

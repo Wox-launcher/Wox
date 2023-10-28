@@ -10,8 +10,8 @@ use std::env;
 use std::fs::File;
 use std::path::PathBuf;
 use tauri::Manager;
-use tauri_nspanel::{WindowExt};
 use tauri_nspanel::cocoa::appkit::{NSMainMenuWindowLevel, NSWindowCollectionBehavior};
+use tauri_nspanel::WindowExt;
 
 #[tauri::command]
 fn get_server_port() -> String {
@@ -31,6 +31,11 @@ fn log_ui(msg: String) {
 }
 
 fn init_log_file() {
+    let config = ConfigBuilder::new()
+        .set_time_offset_to_local().unwrap()
+        .set_time_format_custom(format_description!("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:3]"))
+        .build();
+
     if let Some(home_dir) = dirs::home_dir() {
         let mut base_path = PathBuf::new();
         base_path.push(home_dir);
@@ -39,8 +44,7 @@ fn init_log_file() {
         base_path.push("ui.log");
         CombinedLogger::init(
             vec![
-                TermLogger::new(LevelFilter::Warn, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
-                WriteLogger::new(LevelFilter::Info, Config::default(), File::create(base_path).unwrap()),
+                WriteLogger::new(LevelFilter::Info, config, File::create(base_path).unwrap()),
             ]
         ).unwrap();
     } else {
