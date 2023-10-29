@@ -35,6 +35,7 @@ func (r *Debouncer[T]) Start(ctx context.Context) {
 				r.flush(ctx, "tick")
 			case <-cancelCtx.Done():
 				r.ticker.Stop()
+				return
 			}
 		}
 	}()

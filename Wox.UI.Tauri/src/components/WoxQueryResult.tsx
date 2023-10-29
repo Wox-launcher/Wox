@@ -28,7 +28,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   const currentActiveIndex = useRef(0)
   const [activeIndex, setActiveIndex] = useState<number>(0)
   const [resultList, setResultList] = useState<WOXMESSAGE.WoxMessageResponseResult[]>([])
-  const [, setHasPreview] = useState<boolean>(false)
+  const [hasPreview, setHasPreview] = useState<boolean>(false)
 
   const resetResultList = (rsList: WOXMESSAGE.WoxMessageResponseResult[]) => {
     currentResultList.current = [...rsList]

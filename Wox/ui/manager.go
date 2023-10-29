@@ -39,7 +39,7 @@ func (m *Manager) Send(ctx context.Context) error {
 }
 
 func (m *Manager) Stop(ctx context.Context) {
-	if !util.IsProd() {
+	if util.IsDev() {
 		logger.Info(ctx, "skip stopping ui app in dev mode")
 		return
 	}

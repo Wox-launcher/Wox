@@ -30,9 +30,9 @@ pub(crate) fn conn(window: Window) {
 fn handle_msg(window: &Window, msg: &str) {
     if let Ok(v) = serde_json::from_str::<Value>(msg) {
         if let Some(method) = v.get("Method").and_then(|m| m.as_str()) {
-            info!("Received websocket msg: {:?}", msg);
             match method {
                 "ToggleApp" => {
+                    info!("tauri => ToggleApp");
                     if !window.is_visible().unwrap_or(false) {
                         if let Err(err) = handle_show_message(window, &v) {
                             info!("Error handling show message: {}", err);
@@ -44,6 +44,7 @@ fn handle_msg(window: &Window, msg: &str) {
                     }
                 }
                 "ShowApp" => {
+                    info!("tauri => ShowApp");
                     if let Err(err) = handle_show_message(window, &v) {
                         info!("Error handling show message: {}", err);
                     }

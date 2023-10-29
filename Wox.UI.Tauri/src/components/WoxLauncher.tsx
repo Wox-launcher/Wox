@@ -95,7 +95,7 @@ export default () => {
       return result.AssociatedQuery === currentQuery.current
     })).map((result, index) => {
       preview = !!result.Preview.PreviewType
-      return Object.assign({ ...result, Id: index, Index: index })
+      return Object.assign({ ...result, Index: index })
     })
 
     //sort fullResultList order by score desc

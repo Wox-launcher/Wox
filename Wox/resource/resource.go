@@ -61,7 +61,7 @@ func extractHosts(ctx context.Context) error {
 
 func extractUI(ctx context.Context) error {
 	// only extract UI in prod mode
-	if !util.IsProd() {
+	if util.IsDev() {
 		return nil
 	}
 
