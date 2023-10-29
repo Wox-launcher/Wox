@@ -4,7 +4,6 @@ import React, { useEffect, useRef } from "react"
 import WoxQueryResult, { WoxQueryResultRefHandler } from "./WoxQueryResult.tsx"
 import { WOXMESSAGE } from "../entity/WoxMessage.typings"
 import { WoxMessageHelper } from "../utils/WoxMessageHelper.ts"
-import { WoxPositionTypeEnum } from "../enums/WoxPositionTypeEnum.ts"
 import { WoxMessageRequestMethod, WoxMessageRequestMethodEnum } from "../enums/WoxMessageRequestMethodEnum.ts"
 import { useInterval } from "usehooks-ts"
 import { WoxMessageMethodEnum } from "../enums/WoxMessageMethodEnum.ts"
@@ -116,31 +115,6 @@ export default () => {
     if (message.Method === WoxMessageRequestMethodEnum.HideApp.code) {
       await hideWoxWindow()
     }
-    if (message.Method === WoxMessageRequestMethodEnum.ShowApp.code) {
-      await showWoxWindow(message.Data as WOXMESSAGE.ShowContext)
-    }
-    if (message.Method === WoxMessageRequestMethodEnum.ToggleApp.code) {
-      WoxTauriHelper.getInstance().isVisible().then(visible => {
-        if (visible) {
-          hideWoxWindow()
-        } else {
-          showWoxWindow(message.Data as WOXMESSAGE.ShowContext)
-        }
-      })
-    }
-  }
-
-  /*
-    Show wox window
-   */
-  const showWoxWindow = async (context: WOXMESSAGE.ShowContext) => {
-    if (context.Position.Type === WoxPositionTypeEnum.WoxPositionTypeMouseScreen.code) {
-      WoxTauriHelper.getInstance().setPosition(Number(context.Position.X), Number(context.Position.Y))
-    }
-    WoxTauriHelper.getInstance().showWindow()
-    if (context.SelectAll) {
-      woxQueryBoxRef.current?.selectAll()
-    }
   }
 
   /*
@@ -190,6 +164,11 @@ export default () => {
     WoxTauriHelper.getInstance().setFocus()
     WoxMessageHelper.getInstance().initialRequestCallback(handleRequestCallback)
     bindKeyboardEvent()
+
+    // @ts-ignore expose to tauri backend
+    window.selectAll = () => {
+      woxQueryBoxRef.current?.selectAll()
+    }
   }, [])
 
   return <Style className={"wox-launcher"}>

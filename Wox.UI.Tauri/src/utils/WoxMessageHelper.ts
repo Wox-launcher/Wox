@@ -108,15 +108,6 @@ export class WoxMessageHelper {
     }
     this.port = port
     this.reconnect()
-
-    // send ping message to Wox to keep the connection alive and prevent webview freeze after minimize
-    setInterval(() => {
-      try {
-        this.sendMessage(WoxMessageMethodEnum.PING.code, {})
-      } catch (e) {
-        WoxLogHelper.getInstance().log(`Ping Error: ${e}`)
-      }
-    }, 3000)
   }
 
   /**

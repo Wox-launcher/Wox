@@ -1,6 +1,8 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod websocket;
+
 #[macro_use]
 extern crate log;
 extern crate simplelog;
@@ -9,6 +11,7 @@ use simplelog::*;
 use std::env;
 use std::fs::File;
 use std::path::PathBuf;
+use std::thread::spawn;
 use tauri::Manager;
 use tauri_nspanel::cocoa::appkit::{NSMainMenuWindowLevel, NSWindowCollectionBehavior};
 use tauri_nspanel::WindowExt;
@@ -27,7 +30,7 @@ fn get_server_port() -> String {
 
 #[tauri::command]
 fn log_ui(msg: String) {
-    info!("{}", msg)
+    info!("UI: {}", msg)
 }
 
 fn init_log_file() {
@@ -58,11 +61,12 @@ fn main() {
         .plugin(tauri_nspanel::init())
         .invoke_handler(tauri::generate_handler![get_server_port, log_ui])
         .setup(|app| {
+            let window = app.get_window("main").unwrap();
+
             if cfg!(target_os = "macos") {
                 // hide the dock icon
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-                let window = app.get_window("main").unwrap();
                 let panel = window.to_panel().unwrap();
                 // Set panel above the main menu window level
                 panel.set_level(NSMainMenuWindowLevel + 1);
@@ -72,8 +76,10 @@ fn main() {
                 );
             }
 
+            spawn(move || {
+                websocket::conn(window);
+            });
+
             Ok(())
-        })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        }).run(tauri::generate_context!()).expect("error while running tauri application");
 }

@@ -7,7 +7,6 @@ import React from "react"
 import WoxLauncher from "./components/WoxLauncher.tsx"
 import { WoxTauriHelper } from "./utils/WoxTauriHelper.ts"
 
-WoxTauriHelper.getInstance().invoke("init_spotlight_window")
 WoxTauriHelper.getInstance().invoke("get_server_port").then((serverPort) => {
   WoxMessageHelper.getInstance().initialize(serverPort as string)
 }).catch(_ => {

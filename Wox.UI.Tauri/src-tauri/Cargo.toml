@@ -21,6 +21,8 @@ simplelog = "^0.12.1"
 dirs = "2.0"
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel" }
 time = { version = "0.3", features = ["macros"] }
+tungstenite = "0.20.1"
+url = "2.4.1"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem
