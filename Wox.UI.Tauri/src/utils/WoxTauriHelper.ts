@@ -59,15 +59,19 @@ export class WoxTauriHelper {
   }
 
   public async setPosition(x: number, y: number) {
-    return appWindow.setPosition(new LogicalPosition(x, y))
+    if (this.isTauri()) {
+      return appWindow.setPosition(new LogicalPosition(x, y))
+    }
+    return Promise.resolve()
   }
 
   public async showWindow() {
     if (this.isTauri()) {
-      WoxLogHelper.getInstance().log("showWindow")
-      return Promise.all([this.setFocus(), show()])
+      await this.setFocus()
+      await show()
+      return Promise.resolve(true)
     }
-    return Promise.resolve()
+    return Promise.resolve(false)
   }
 
   public async isVisible() {
@@ -82,10 +86,8 @@ export class WoxTauriHelper {
 
   public async hideWindow() {
     if (this.isTauri()) {
-      WoxLogHelper.getInstance().log("hideWindow")
       return hide()
     }
-    WoxLogHelper.getInstance().log("hideWindow-not-tauri")
-    return Promise.resolve()
+    return Promise.resolve(false)
   }
 }

@@ -49,19 +49,22 @@ export class WoxMessageHelper {
       try {
         woxMessage = JSON.parse(event.data) as WOXMESSAGE.WoxMessage
       } catch (e) {
+        WoxLogHelper.getInstance().log(`parse woxMessageResponse error: ${e}`)
         return
       }
       if (woxMessage === undefined) {
         WoxLogHelper.getInstance().log(`woxMessageResponse is undefined`)
         return
       }
-
       if (woxMessage.Type === WoxMessageTypeEnum.RESPONSE.code) {
         if (!woxMessage?.Id) {
           WoxLogHelper.getInstance().log(`woxMessageResponse.Id is undefined`)
           return
         }
         WoxLogHelper.getInstance().log(`Received Msg: ${JSON.stringify(woxMessage)}`)
+        if (woxMessage.Method === WoxMessageMethodEnum.PING.code) {
+          return
+        }
         const promiseInstance = this.woxMessageResponseMap[woxMessage.Id]
         if (promiseInstance === undefined) {
           WoxLogHelper.getInstance().log(`woxMessageResponseMap[${woxMessage.Id}] is undefined`)
@@ -140,6 +143,9 @@ export class WoxMessageHelper {
     } as WOXMESSAGE.WoxMessage)
     this.ws?.send(msg)
     WoxLogHelper.getInstance().log(`Send Msg: ${msg}`)
+    if (method === WoxMessageMethodEnum.PING.code) {
+      return Promise.resolve({} as WOXMESSAGE.WoxMessage)
+    }
     const deferred = new Deferred<WOXMESSAGE.WoxMessage>()
     this.woxMessageResponseMap[requestId] = deferred
     return deferred.promise

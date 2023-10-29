@@ -135,9 +135,9 @@ export default () => {
    */
   const showWoxWindow = async (context: WOXMESSAGE.ShowContext) => {
     if (context.Position.Type === WoxPositionTypeEnum.WoxPositionTypeMouseScreen.code) {
-      await WoxTauriHelper.getInstance().setPosition(Number(context.Position.X), Number(context.Position.Y))
+      WoxTauriHelper.getInstance().setPosition(Number(context.Position.X), Number(context.Position.Y))
     }
-    await WoxTauriHelper.getInstance().showWindow()
+    WoxTauriHelper.getInstance().showWindow()
     if (context.SelectAll) {
       woxQueryBoxRef.current?.selectAll()
     }

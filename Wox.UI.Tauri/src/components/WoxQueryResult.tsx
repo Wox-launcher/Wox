@@ -6,6 +6,9 @@ import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
 import { WoxMessageHelper } from "../utils/WoxMessageHelper.ts"
 import { WoxMessageMethodEnum } from "../enums/WoxMessageMethodEnum.ts"
 import { WoxMessageRequestMethod, WoxMessageRequestMethodEnum } from "../enums/WoxMessageRequestMethodEnum.ts"
+import { WoxPreviewTypeEnum } from "../enums/WoxPreviewTypeEnum.ts"
+import { Image } from "react-bootstrap"
+import Markdown from "react-markdown"
 
 export type WoxQueryResultRefHandler = {
   clearResultList: () => void
@@ -61,6 +64,14 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     }
   }
 
+  const getCurrentPreviewData = () => {
+    const result = currentResultList.current.find((result) => result.Index === currentActiveIndex.current)
+    if (result) {
+      return result.Preview
+    }
+    return { PreviewType: "", PreviewData: "", PreviewProperties: {} } as WOXMESSAGE.WoxPreview
+  }
+
   useImperativeHandle(ref, () => ({
     clearResultList: () => {
       setActiveIndex(0)
@@ -105,6 +116,30 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
         </li>
       })}
     </ul>
+    {hasPreview && getCurrentPreviewData().PreviewProperties && Object.keys(getCurrentPreviewData().PreviewProperties)?.length > 0 &&
+      <div
+        className={"wox-query-result-preview"}>
+        <div className={"wox-query-result-preview-content"}>
+          {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeText.code && <p>{getCurrentPreviewData().PreviewData}</p>}
+          {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
+            <Image src={getCurrentPreviewData().PreviewData}
+                   className={"wox-query-result-preview-image"} />}
+          {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
+            <Markdown>{getCurrentPreviewData().PreviewData}</Markdown>}
+        </div>
+
+        <div className={"wox-query-result-preview-properties"}>
+          {Object.keys(getCurrentPreviewData().PreviewProperties)?.map((key) => {
+            return <div key={`key-${key}`}
+                        className={"wox-query-result-preview-property"}>
+              <div
+                className={"wox-query-result-preview-property-key"}>{key}</div>
+              <div
+                className={"wox-query-result-preview-property-value"}>{getCurrentPreviewData().PreviewProperties[key]}</div>
+            </div>
+          })}
+        </div>
+      </div>}
   </Style>
 })
 
@@ -182,5 +217,58 @@ const Style = styled.div`
 
   ul li.active {
     background-color: #dedede;
+  }
+
+  .wox-query-result-preview {
+    position: relative;
+    min-height: 490px;
+    border-left: 1px solid #dedede;
+    padding: 10px;
+
+    .wox-query-result-preview-content {
+      max-height: 400px;
+      overflow-y: auto;
+
+      p {
+        word-wrap: break-word;
+      }
+
+      .wox-query-result-preview-image {
+        width: 100%;
+        max-height: 400px;
+      }
+    }
+
+    .wox-query-result-preview-properties {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      right: 0;
+      max-height: 90px;
+      overflow-y: auto;
+
+      .wox-query-result-preview-property {
+        display: flex;
+        width: 100%;
+        border-top: 1px solid #dee2e6;
+        padding: 2px 10px;
+        overflow: hidden;
+
+        .wox-query-result-preview-property-key {
+          flex: 3;
+        }
+
+        .wox-query-result-preview-property-value {
+          flex: 4;
+        }
+
+        .wox-query-result-preview-property-key, .wox-query-result-preview-property-value {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      }
+
+    }
   }
 `
