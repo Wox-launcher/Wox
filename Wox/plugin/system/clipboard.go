@@ -60,9 +60,8 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	util.ClipboardWatch(func(data util.ClipboardData) {
 		c.api.Log(ctx, fmt.Sprintf("clipboard data changed, type=%s", data.Type))
 
-		icon := plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><path fill="#90CAF9" d="M40 45L8 45 8 3 30 3 40 13z"></path><path fill="#E1F5FE" d="M38.5 14L29 14 29 4.5z"></path><path fill="#1976D2" d="M16 21H33V23H16zM16 25H29V27H16zM16 29H33V31H16zM16 33H29V35H16z"></path></svg>`)
-		iconFilePath, iconErr := c.getActiveWindowIconFilePath(ctx)
-		if iconErr == nil {
+		icon := c.getDefaultTextIcon()
+		if iconFilePath, iconErr := c.getActiveWindowIconFilePath(ctx); iconErr == nil {
 			icon = plugin.NewWoxImageAbsolutePath(iconFilePath)
 		}
 
@@ -121,6 +120,13 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 
 func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history ClipboardHistory) plugin.QueryResult {
 	if history.Data.Type == util.ClipboardTypeText {
+		if history.Icon.ImageType == plugin.WoxImageTypeAbsolutePath {
+			// if image doesn't exist, use default icon
+			if _, err := os.Stat(history.Icon.ImageData); err != nil {
+				history.Icon = c.getDefaultTextIcon()
+			}
+		}
+
 		return plugin.QueryResult{
 			Title: string(history.Data.Data),
 			Icon:  history.Icon,
@@ -224,4 +230,8 @@ func (c *ClipboardPlugin) loadHistory(ctx context.Context) {
 
 	c.api.Log(ctx, fmt.Sprintf("load clipboard history, count=%d", len(history)))
 	c.history = history
+}
+
+func (c *ClipboardPlugin) getDefaultTextIcon() plugin.WoxImage {
+	return plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><path fill="#90CAF9" d="M40 45L8 45 8 3 30 3 40 13z"></path><path fill="#E1F5FE" d="M38.5 14L29 14 29 4.5z"></path><path fill="#1976D2" d="M16 21H33V23H16zM16 25H29V27H16zM16 29H33V31H16zM16 33H29V35H16z"></path></svg>`)
 }

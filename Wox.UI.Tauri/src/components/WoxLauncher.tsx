@@ -122,6 +122,9 @@ export default () => {
    */
   const hideWoxWindow = async () => {
     await WoxTauriHelper.getInstance().hideWindow()
+    await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ON_VISIBILITY_CHANGED.code, {
+      "isVisible": "false"
+    })
   }
 
   /*
@@ -168,6 +171,12 @@ export default () => {
     // @ts-ignore expose to tauri backend
     window.selectAll = () => {
       woxQueryBoxRef.current?.selectAll()
+    }
+    // @ts-ignore expose to tauri backend
+    window.postShow = () => {
+      WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ON_VISIBILITY_CHANGED.code, {
+        "isVisible": "true"
+      })
     }
   }, [])
 

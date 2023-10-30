@@ -1,9 +1,10 @@
+use serde_json::Value;
 use std::thread;
 use std::time::Duration;
-use serde_json::Value;
 use tauri::{LogicalPosition, Position, Window};
 use tungstenite::{connect, Message};
 use url::Url;
+
 use crate::get_server_port;
 
 pub(crate) fn conn(window: Window) {
@@ -58,6 +59,8 @@ fn handle_msg(window: &Window, msg: &str) {
 fn handle_show_message(window: &Window, v: &Value) -> Result<(), Box<dyn std::error::Error>> {
     window.show()?;
     window.set_focus()?;
+
+    window.eval(&format!("window.postShow()"))?;
 
     if let Some(data) = v.get("Data") {
         if let Some(position) = data.get("Position") {

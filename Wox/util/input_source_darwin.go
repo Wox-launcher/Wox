@@ -9,6 +9,15 @@ package util
 #include <stdio.h>
 #include <CoreServices/CoreServices.h>
 
+char* getCurrentInputMethod() {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    TISInputSourceRef source = TISCopyCurrentKeyboardInputSource();
+    CFStringRef sourceID = TISGetInputSourceProperty(source, kTISPropertyInputSourceID);
+    NSString *inputMethodID = (__bridge NSString *)sourceID;
+    [pool release];
+    return (char *)[inputMethodID UTF8String];
+}
+
 void switchInputMethod(const char *inputMethodID) {
     CFStringRef inputMethodIDString = CFStringCreateWithCString(NULL, inputMethodID, kCFStringEncodingUTF8);
 
@@ -34,7 +43,14 @@ import (
 )
 
 func SwitchInputMethodABC() {
-	inputMethodIDStr := C.CString("com.apple.keylayout.ABC")
+	abcInputMethodID := "com.apple.keylayout.ABC"
+
+	inputMethod := C.GoString(C.getCurrentInputMethod())
+	if inputMethod == abcInputMethodID {
+		return
+	}
+
+	inputMethodIDStr := C.CString(abcInputMethodID)
 	defer C.free(unsafe.Pointer(inputMethodIDStr))
 	C.switchInputMethod(inputMethodIDStr)
 }

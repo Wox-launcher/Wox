@@ -5,7 +5,7 @@ type WoxPreviewType = string
 const (
 	WoxPreviewTypeMarkdown = "markdown"
 	WoxPreviewTypeText     = "text"
-	WoxPreviewTypeImage    = "image"
+	WoxPreviewTypeImage    = "image" // when type is image, data should be WoxImage serialized with json
 	WoxPreviewTypeUrl      = "url"
 )
 
