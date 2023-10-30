@@ -11,9 +11,7 @@ import (
 )
 
 func startTray(ctx context.Context) {
-	util.Go(ctx, "startTray", func() {
-		systray.Run(onReady, onExit)
-	})
+	systray.Register(onReady, nil)
 }
 
 func onReady() {
@@ -25,9 +23,6 @@ func onReady() {
 	for range mQuit.ClickedCh {
 		ExitApp(util.NewTraceContext())
 	}
-}
-
-func onExit() {
 }
 
 func ExitApp(ctx context.Context) {

@@ -81,32 +81,30 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		},
 	}
 
-	if util.IsDev() {
-		r.commands = append(r.commands, SysCommand{
-			Title: "Performance CPU profiling",
-			Icon:  plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAACXBIWXMAAAsTAAALEwEAmpwYAAACvUlEQVR4nO2cPW4UQRCFO4Gz8BM6GBNAOrKndruE5CsgxFXAixGJyRwQIdQNIXAMm4MAzoxUqDbjx6zk1eyrmX6fVOFqe96rqp6eGVVKhBBCCCGEEDIydprsf5GC/37yoAU0GkADoKAz2FgBNAAKOoONFUADoKAz2OZeAYuPi/tS9OVQ9EKKXkpVm3QUvfRrGYqulh+W91JUjt4d3ZaaXw81/4SLVscJv7ah5ld7b57cSuHEL/oFLZDszojPoUzwzEeLIjuPfJKi9Pw5tx25LopeHRa9GyH7T+BiVEwMNR+j9U9D0a9oIQQW+Rytfxpq/tFsBRT9jtY/oUUQcKD1pwFo0BkorAC8CDLnFrTp4RVaAAHH6A/3aIDSAAmQ6ayAihebLajiBeceUGPFpDfhw7dqj55l25dsXb/b8P98+FTt4Cy3aYCLv7/cvfB/GbHM67WENWATN124Z37Xxwhfy02vY3SBxzIA0Xa666pg0aABaNG7P4IG9DSAFVDZgowtiHuAcRPuuQmPfhCby12QTfUkjBa8owF40VkBPV54tqA+RnAP6GkAN+HKuyBjC+JJ2HgS7qezCSc0rR/EEhoaAIYGgKEBEzXAX4R3fYxo8qW8fxTVBRA//GcpYz2OPjhTe5BjfJjla2nuWdBvnyYuMG3H/3sb8SdvgMwgaEClAfAsFFYAXghhC8KLIYDgHlBnbsAm0AIIOEYXmAYoDZAAmc4KqHixQ7YgH1qEFkFQUfRbBAMu4ELUlkeWFV3hhVBIDEWfo/VPPs631bGV8v7xnRQBH+fbYPavUhR8jK+P821G/Jo/hRpd7PiC1kNcvTQDiCRjRNErz/xw4v9jTzj2O4Q5zBQd1teQz6XoixCjirdl24dXBv795EELaDSABkBBZ7CxAmgAFHQGGyuABkBBZ7C1XgGEEEIIIYSQhOYXgxYY872M2ekAAAAASUVORK5CYII=`),
-			Action: func(actionContext plugin.ActionContext) {
-				cpuProfPath := path.Join(util.GetLocation().GetWoxDataDirectory(), "cpu.prof")
-				f, err := os.Create(cpuProfPath)
-				if err != nil {
-					util.GetLogger().Info(ctx, "failed to create cpu profile file: "+err.Error())
-					return
-				}
+	r.commands = append(r.commands, SysCommand{
+		Title: "Performance CPU profiling",
+		Icon:  plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAACXBIWXMAAAsTAAALEwEAmpwYAAACvUlEQVR4nO2cPW4UQRCFO4Gz8BM6GBNAOrKndruE5CsgxFXAixGJyRwQIdQNIXAMm4MAzoxUqDbjx6zk1eyrmX6fVOFqe96rqp6eGVVKhBBCCCGEEDIydprsf5GC/37yoAU0GkADoKAz2FgBNAAKOoONFUADoKAz2OZeAYuPi/tS9OVQ9EKKXkpVm3QUvfRrGYqulh+W91JUjt4d3ZaaXw81/4SLVscJv7ah5ld7b57cSuHEL/oFLZDszojPoUzwzEeLIjuPfJKi9Pw5tx25LopeHRa9GyH7T+BiVEwMNR+j9U9D0a9oIQQW+Rytfxpq/tFsBRT9jtY/oUUQcKD1pwFo0BkorAC8CDLnFrTp4RVaAAHH6A/3aIDSAAmQ6ayAihebLajiBeceUGPFpDfhw7dqj55l25dsXb/b8P98+FTt4Cy3aYCLv7/cvfB/GbHM67WENWATN124Z37Xxwhfy02vY3SBxzIA0Xa666pg0aABaNG7P4IG9DSAFVDZgowtiHuAcRPuuQmPfhCby12QTfUkjBa8owF40VkBPV54tqA+RnAP6GkAN+HKuyBjC+JJ2HgS7qezCSc0rR/EEhoaAIYGgKEBEzXAX4R3fYxo8qW8fxTVBRA//GcpYz2OPjhTe5BjfJjla2nuWdBvnyYuMG3H/3sb8SdvgMwgaEClAfAsFFYAXghhC8KLIYDgHlBnbsAm0AIIOEYXmAYoDZAAmc4KqHixQ7YgH1qEFkFQUfRbBAMu4ELUlkeWFV3hhVBIDEWfo/VPPs631bGV8v7xnRQBH+fbYPavUhR8jK+P821G/Jo/hRpd7PiC1kNcvTQDiCRjRNErz/xw4v9jTzj2O4Q5zBQd1teQz6XoixCjirdl24dXBv795EELaDSABkBBZ7CxAmgAFHQGGyuABkBBZ7C1XgGEEEIIIYSQhOYXgxYY872M2ekAAAAASUVORK5CYII=`),
+		Action: func(actionContext plugin.ActionContext) {
+			cpuProfPath := path.Join(util.GetLocation().GetWoxDataDirectory(), "cpu.prof")
+			f, err := os.Create(cpuProfPath)
+			if err != nil {
+				util.GetLogger().Info(ctx, "failed to create cpu profile file: "+err.Error())
+				return
+			}
 
-				util.GetLogger().Info(ctx, "start cpu profile")
-				profileErr := pprof.StartCPUProfile(f)
-				if profileErr != nil {
-					util.GetLogger().Info(ctx, "failed to start cpu profile: "+profileErr.Error())
-					return
-				}
+			util.GetLogger().Info(ctx, "start cpu profile")
+			profileErr := pprof.StartCPUProfile(f)
+			if profileErr != nil {
+				util.GetLogger().Info(ctx, "failed to start cpu profile: "+profileErr.Error())
+				return
+			}
 
-				time.AfterFunc(30*time.Second, func() {
-					pprof.StopCPUProfile()
-					util.GetLogger().Info(ctx, "cpu profile saved to "+cpuProfPath)
-				})
-			},
-		})
-	}
+			time.AfterFunc(30*time.Second, func() {
+				pprof.StopCPUProfile()
+				util.GetLogger().Info(ctx, "cpu profile saved to "+cpuProfPath)
+			})
+		},
+	})
 }
 
 func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
