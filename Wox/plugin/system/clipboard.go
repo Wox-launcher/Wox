@@ -3,12 +3,15 @@ package system
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/disintegration/imaging"
 	"image/png"
 	"os"
 	"path"
+	"slices"
 	"strings"
+	"time"
 	"wox/plugin"
 	"wox/util"
 )
@@ -18,9 +21,9 @@ func init() {
 }
 
 type ClipboardHistory struct {
-	Data    util.ClipboardData
-	Icon    plugin.WoxImage
-	AddDate string
+	Data      util.ClipboardData
+	Icon      plugin.WoxImage
+	Timestamp int64
 }
 
 type ClipboardPlugin struct {
@@ -53,6 +56,7 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 
 func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
+	c.loadHistory(ctx)
 	util.ClipboardWatch(func(data util.ClipboardData) {
 		c.api.Log(ctx, fmt.Sprintf("clipboard data changed, type=%s", data.Type))
 
@@ -62,11 +66,27 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 			icon = plugin.NewWoxImageAbsolutePath(iconFilePath)
 		}
 
+		if data.Type == util.ClipboardTypeText {
+			if data.Data == nil || len(data.Data) == 0 {
+				return
+			}
+			if strings.TrimSpace(string(data.Data)) == "" {
+				return
+			}
+			// if last history is text and current changed text is same with last one, ignore it
+			if len(c.history) > 0 && c.history[len(c.history)-1].Data.Type == util.ClipboardTypeText && bytes.Equal(c.history[len(c.history)-1].Data.Data, data.Data) {
+				c.history[len(c.history)-1].Timestamp = util.GetSystemTimestamp()
+				return
+			}
+		}
+
 		c.history = append(c.history, ClipboardHistory{
-			Data:    data,
-			AddDate: util.FormatTimestamp(util.GetSystemTimestamp()),
-			Icon:    icon,
+			Data:      data,
+			Timestamp: util.GetSystemTimestamp(),
+			Icon:      icon,
 		})
+
+		c.saveHistory(ctx)
 	})
 }
 
@@ -108,7 +128,7 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 				PreviewType: plugin.WoxPreviewTypeText,
 				PreviewData: string(history.Data.Data),
 				PreviewProperties: map[string]string{
-					"i18n:plugin_clipboard_copy_date":       history.AddDate,
+					"i18n:plugin_clipboard_copy_date":       util.FormatTimestamp(history.Timestamp),
 					"i18n:plugin_clipboard_copy_characters": fmt.Sprintf("%d", len(history.Data.Data)),
 				},
 			},
@@ -118,6 +138,10 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 					Name: "Copy to clipboard",
 					Action: func(actionContext plugin.ActionContext) {
 						util.ClipboardWrite(history.Data)
+						util.Go(context.Background(), "clipboard history copy", func() {
+							time.Sleep(time.Millisecond * 100)
+							util.SimulateCtrlV()
+						})
 					},
 				},
 			},
@@ -176,4 +200,28 @@ func (c *ClipboardPlugin) getActiveWindowIconFilePath(ctx context.Context) (stri
 	}
 
 	return iconCachePath, nil
+}
+
+func (c *ClipboardPlugin) saveHistory(ctx context.Context) {
+	historyJson, _ := json.Marshal(c.history)
+	c.api.SaveSetting(ctx, "history", string(historyJson))
+	c.api.Log(ctx, fmt.Sprintf("save clipboard history, count=%d", len(c.history)))
+}
+
+func (c *ClipboardPlugin) loadHistory(ctx context.Context) {
+	historyJson := c.api.GetSetting(ctx, "history")
+	if historyJson == "" {
+		return
+	}
+
+	var history []ClipboardHistory
+	json.Unmarshal([]byte(historyJson), &history)
+
+	//sort history by timestamp asc
+	slices.SortStableFunc(history, func(i, j ClipboardHistory) int {
+		return int(i.Timestamp - j.Timestamp)
+	})
+
+	c.api.Log(ctx, fmt.Sprintf("load clipboard history, count=%d", len(history)))
+	c.history = history
 }

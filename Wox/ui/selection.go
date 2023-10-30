@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"wox/util"
-	"wox/util/keybd_event"
 )
 
 type SelectType string
@@ -19,21 +18,8 @@ type Selection struct {
 }
 
 func GetSelectedText() (Selection, error) {
-	kb, err := keybd_event.NewKeyBonding()
-	if err != nil {
-		return Selection{}, err
-	}
-
-	kb.SetKeys(keybd_event.VK_C)
-	if util.IsWindows() || util.IsLinux() {
-		kb.HasCTRL(true)
-	}
-	if util.IsMacOS() {
-		kb.HasSuper(true)
-	}
-	err = kb.Launching()
-	if err != nil {
-		return Selection{}, fmt.Errorf("error send copy command: %w", err)
+	if util.SimulateCtrlC() != nil {
+		return Selection{}, errors.New("error simulate ctrl c")
 	}
 
 	data, readErr := util.ClipboardRead()
