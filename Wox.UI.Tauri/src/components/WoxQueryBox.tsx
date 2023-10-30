@@ -62,8 +62,8 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
 const Style = styled.div`
   position: relative;
   width: ${WoxTauriHelper.getInstance().getWoxWindowWidth()}px;
-  border-bottom: 1px solid #dedede;
   overflow: hidden;
+  border: ${WoxTauriHelper.getInstance().isTauri() ? "0px" : "1px"} solid #dedede;
 
   input {
     height: 59px;
@@ -78,7 +78,6 @@ const Style = styled.div`
     cursor: auto;
     color: black;
     display: inline-block;
-    color: black;
   }
 
   .wox-setting {

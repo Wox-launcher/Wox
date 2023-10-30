@@ -29,6 +29,9 @@ dependencies:
   react-bootstrap:
     specifier: ^2.9.0
     version: 2.9.0(@types/react@18.2.15)(react-dom@18.2.0)(react@18.2.0)
+  react-custom-scrollbars:
+    specifier: ^4.2.1
+    version: 4.2.1(react-dom@18.2.0)(react@18.2.0)
   react-dom:
     specifier: ^18.2.0
     version: 18.2.0(react@18.2.0)
@@ -41,6 +44,9 @@ dependencies:
   react-router-dom:
     specifier: ^6.16.0
     version: 6.16.0(react-dom@18.2.0)(react@18.2.0)
+  react-tiny-virtual-list:
+    specifier: ^2.2.0
+    version: 2.2.0(react@18.2.0)
   styled-components:
     specifier: ^6.0.8
     version: 6.0.8(babel-plugin-styled-components@2.1.4)(react-dom@18.2.0)(react@18.2.0)
@@ -67,9 +73,15 @@ devDependencies:
   '@types/react':
     specifier: ^18.2.15
     version: 18.2.15
+  '@types/react-custom-scrollbars':
+    specifier: ^4.0.11
+    version: 4.0.11
   '@types/react-dom':
     specifier: ^18.2.7
     version: 18.2.7
+  '@types/react-scrollbar':
+    specifier: ^0.5.5
+    version: 0.5.5
   '@types/uuid':
     specifier: ^9.0.5
     version: 9.0.5
@@ -1863,8 +1875,20 @@ packages:
   /@types/prop-types@15.7.9:
     resolution: {integrity: sha512-n1yyPsugYNSmHgxDFjicaI2+gCNjsBck8UX9kuofAKlc0h1bL+20oSF72KeNaW2DUlesbEVCFgyV2dPGTiY42g==}
 
+  /@types/react-custom-scrollbars@4.0.11:
+    resolution: {integrity: sha512-Jpv0tWV716X+Jju2lKMV2e9AcVikwBp6QymgfOvkLYC6OuQMDvP7dSac/XZ0BUAXuJ0t4cXwn0OTA/jnZ87QCQ==}
+    dependencies:
+      '@types/react': 18.2.15
+    dev: true
+
   /@types/react-dom@18.2.7:
     resolution: {integrity: sha512-GRaAEriuT4zp9N4p1i8BDBYmEyfo+xQ3yHjJU4eiK5NDa1RmUZG+unZABUTK4/Ox/M+GaHwb6Ow8rUITrtjszA==}
+    dependencies:
+      '@types/react': 18.2.15
+    dev: true
+
+  /@types/react-scrollbar@0.5.5:
+    resolution: {integrity: sha512-EuT+bZiTpMhJmrV8cyDZzShPU4q5tD2KuESDSXZpAgZkeu4VL7Jcvv3BurszATsUL/8yARgCKA2O4DaYSOV9Dw==}
     dependencies:
       '@types/react': 18.2.15
     dev: true
@@ -2070,6 +2094,10 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
     dev: true
+
+  /add-px-to-style@1.0.0:
+    resolution: {integrity: sha512-YMyxSlXpPjD8uWekCQGuN40lV4bnZagUwqa2m/uFv1z/tNImSk9fnXVMUI5qwME/zzI3MMQRvjZ+69zyfSSyew==}
+    dev: false
 
   /ajv@6.12.6:
     resolution: {integrity: sha512-j3fVLgvTo527anyYyJOGTYJbG+vnnQYvE0m5mmkc1TK+nxAppkCLMIL0aZ4dblVCNoGShhm+kzE4ZUykBoMg4g==}
@@ -2383,6 +2411,14 @@ packages:
     dependencies:
       esutils: 2.0.3
     dev: true
+
+  /dom-css@2.1.0:
+    resolution: {integrity: sha512-w9kU7FAbaSh3QKijL6n59ofAhkkmMJ31GclJIz/vyQdjogfyxcB6Zf8CZyibOERI5o0Hxz30VmJS7+7r5fEj2Q==}
+    dependencies:
+      add-px-to-style: 1.0.0
+      prefix-style: 2.0.1
+      to-camel-case: 1.0.0
+    dev: false
 
   /dom-helpers@5.2.1:
     resolution: {integrity: sha512-nRCa7CK3VTrM2NmGkIy4cbK7IZlgBE/PYMn55rrXefr5xXDP0LdtfPnblFDoVdcAfslJ7or6iqAUnx0CCGIWQA==}
@@ -3257,6 +3293,10 @@ packages:
     engines: {node: '>=8'}
     dev: true
 
+  /performance-now@2.1.0:
+    resolution: {integrity: sha512-7EAHlyLHI56VEIdK57uwHdHKIaAGbnXPiw0yWbarQZOKaKpvUIgW0jWRVLiatnM+XXlSwsanIBH/hzGMJulMow==}
+    dev: false
+
   /picocolors@1.0.0:
     resolution: {integrity: sha512-1fygroTLlHu66zi26VoTDv8yRgm0Fccecssto+MhsZ0D/DGW2sm8E8AjW7NU5VVTRt5GxbeZ5qBuJr+HyLYkjQ==}
 
@@ -3278,6 +3318,10 @@ packages:
       nanoid: 3.3.6
       picocolors: 1.0.0
       source-map-js: 1.0.2
+
+  /prefix-style@2.0.1:
+    resolution: {integrity: sha512-gdr1MBNVT0drzTq95CbSNdsrBDoHGlb2aDJP/FoY+1e+jSDPOb1Cv554gH2MGiSr2WTcXi/zu+NaFzfcHQkfBQ==}
+    dev: false
 
   /prelude-ls@1.2.1:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}
@@ -3328,6 +3372,12 @@ packages:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
     dev: true
 
+  /raf@3.4.1:
+    resolution: {integrity: sha512-Sq4CW4QhwOHE8ucn6J34MqtZCeWFP2aQSmrlroYgqAV1PjStIhJXxYuTgUIfkEk7zTLjmIjLmU5q+fbD1NnOJA==}
+    dependencies:
+      performance-now: 2.1.0
+    dev: false
+
   /react-bootstrap@2.9.0(@types/react@18.2.15)(react-dom@18.2.0)(react@18.2.0):
     resolution: {integrity: sha512-dGh6fGjqR9MBzPOp2KbXJznt1Zy6SWepXYUdxMT18Zu/wJ73HCU8JNZe9dfzjmVssZYsJH9N3HHE4wAtQvNz7g==}
     peerDependencies:
@@ -3353,6 +3403,19 @@ packages:
       react-transition-group: 4.4.5(react-dom@18.2.0)(react@18.2.0)
       uncontrollable: 7.2.1(react@18.2.0)
       warning: 4.0.3
+    dev: false
+
+  /react-custom-scrollbars@4.2.1(react-dom@18.2.0)(react@18.2.0):
+    resolution: {integrity: sha512-VtJTUvZ7kPh/auZWIbBRceGPkE30XBYe+HktFxuMWBR2eVQQ+Ur6yFJMoaYcNpyGq22uYJ9Wx4UAEcC0K+LNPQ==}
+    peerDependencies:
+      react: ^0.14.0 || ^15.0.0 || ^16.0.0
+      react-dom: ^0.14.0 || ^15.0.0 || ^16.0.0
+    dependencies:
+      dom-css: 2.1.0
+      prop-types: 15.8.1
+      raf: 3.4.1
+      react: 18.2.0
+      react-dom: 18.2.0(react@18.2.0)
     dev: false
 
   /react-dom@18.2.0(react@18.2.0):
@@ -3420,6 +3483,15 @@ packages:
       react: '>=16.8'
     dependencies:
       '@remix-run/router': 1.9.0
+      react: 18.2.0
+    dev: false
+
+  /react-tiny-virtual-list@2.2.0(react@18.2.0):
+    resolution: {integrity: sha512-MDiy2xyqfvkWrRiQNdHFdm36lfxmcLLKuYnUqcf9xIubML85cmYCgzBJrDsLNZ3uJQ5LEHH9BnxGKKSm8+C0Bw==}
+    peerDependencies:
+      react: 15.x || 16.x
+    dependencies:
+      prop-types: 15.8.1
       react: 18.2.0
     dev: false
 
@@ -3676,9 +3748,19 @@ packages:
     resolution: {integrity: sha512-N+8UisAXDGk8PFXP4HAzVR9nbfmVJ3zYLAWiTIoqC5v5isinhr+r5uaO8+7r3BMfuNIufIsA7RdpVgacC2cSpw==}
     dev: true
 
+  /to-camel-case@1.0.0:
+    resolution: {integrity: sha512-nD8pQi5H34kyu1QDMFjzEIYqk0xa9Alt6ZfrdEMuHCFOfTLhDG5pgTu/aAM9Wt9lXILwlXmWP43b8sav0GNE8Q==}
+    dependencies:
+      to-space-case: 1.0.0
+    dev: false
+
   /to-fast-properties@2.0.0:
     resolution: {integrity: sha512-/OaKK0xYrs3DmxRYqL/yDc+FxFUVYhDlXMhRmv3z915w2HF1tnN1omB354j8VUGO/hbRzyD6Y3sA7v7GS/ceog==}
     engines: {node: '>=4'}
+
+  /to-no-case@1.0.2:
+    resolution: {integrity: sha512-Z3g735FxuZY8rodxV4gH7LxClE4H0hTIyHNIHdk+vpQxjLm0cwnKXq/OFVZ76SOQmto7txVcwSCwkU5kqp+FKg==}
+    dev: false
 
   /to-regex-range@5.0.1:
     resolution: {integrity: sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==}
@@ -3686,6 +3768,12 @@ packages:
     requiresBuild: true
     dependencies:
       is-number: 7.0.0
+
+  /to-space-case@1.0.0:
+    resolution: {integrity: sha512-rLdvwXZ39VOn1IxGL3V6ZstoTbwLRckQmn/U8ZDLuWwIXNpuZDhQ3AiRUlhTbOXFVE9C+dR51wM0CBDhk31VcA==}
+    dependencies:
+      to-no-case: 1.0.2
+    dev: false
 
   /trim-lines@3.0.1:
     resolution: {integrity: sha512-kRj8B+YHZCc9kQYdWfJB2/oUl9rA99qbowYYBtr4ui4mZyAQ2JpvVBd/6U2YloATfqBhBTSMhTpgBHtU0Mf3Rg==}

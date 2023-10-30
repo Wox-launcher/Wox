@@ -9,6 +9,7 @@ import { WoxMessageRequestMethod, WoxMessageRequestMethodEnum } from "../enums/W
 import { WoxPreviewTypeEnum } from "../enums/WoxPreviewTypeEnum.ts"
 import { Image } from "react-bootstrap"
 import Markdown from "react-markdown"
+import { Scrollbars } from "react-custom-scrollbars"
 
 export type WoxQueryResultRefHandler = {
   clearResultList: () => void
@@ -26,11 +27,14 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   const currentWindowHeight = useRef(60)
   const currentResultList = useRef<WOXMESSAGE.WoxMessageResponseResult[]>([])
   const currentActiveIndex = useRef(0)
+  const currentULRef = useRef<Scrollbars>(null)
   const [activeIndex, setActiveIndex] = useState<number>(0)
   const [resultList, setResultList] = useState<WOXMESSAGE.WoxMessageResponseResult[]>([])
   const [hasPreview, setHasPreview] = useState<boolean>(false)
 
   const resetResultList = (rsList: WOXMESSAGE.WoxMessageResponseResult[]) => {
+    currentActiveIndex.current = 0
+    setActiveIndex(0)
     currentResultList.current = [...rsList]
     setResultList(currentResultList.current)
   }
@@ -90,44 +94,69 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     moveUp: () => {
       currentActiveIndex.current = currentActiveIndex.current <= 0 ? currentResultList.current.length - 1 : currentActiveIndex.current - 1
       setActiveIndex(currentActiveIndex.current)
+      if (currentActiveIndex.current >= 10) {
+        currentULRef.current?.scrollTop(50 * (currentActiveIndex.current - 9))
+      }
+      if (currentActiveIndex.current === currentResultList.current.length - 1) {
+        currentULRef.current?.scrollTop(50 * (currentResultList.current.length - 1))
+      }
     },
     moveDown: () => {
       currentActiveIndex.current = currentActiveIndex.current >= currentResultList.current.length - 1 ? 0 : currentActiveIndex.current + 1
       setActiveIndex(currentActiveIndex.current)
+      if (currentActiveIndex.current >= 10) {
+        currentULRef.current?.scrollTop(50 * (currentActiveIndex.current - 9))
+      }
+      if (currentActiveIndex.current === 0) {
+        currentULRef.current?.scrollTop(0)
+      }
     },
     doAction: () => {
       handleAction()
     }
   }))
 
-  return <Style className={"wox-results"}>
-    <ul key={"wox-result-list"}>
-      {resultList.map((result, index) => {
-        return <li id={`wox-result-li-${index}`} key={`wox-result-li-${index}`} className={activeIndex === index ? "active" : "inactive"}>
-          {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeSvg.code &&
-            <div className={"wox-query-result-image"}
-                 dangerouslySetInnerHTML={{ __html: result.Icon.ImageData }}></div>}
-          {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeUrl.code &&
-            <img src={result.Icon.ImageData} className={"wox-query-result-image"} alt={"query-result-image"} />}
-          {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeBase64.code &&
-            <img src={result.Icon.ImageData} className={"wox-query-result-image"} alt={"query-result-image"} />}
-          <h2 className={"wox-result-title"}>{result.Title}</h2>
-          {result.SubTitle && <h3 className={"wox-result-subtitle"}>{result.SubTitle}</h3>}
-        </li>
-      })}
-    </ul>
+  return <Style className={resultList.length > 0 ? "wox-results wox-result-border" : "wox-results"}>
+    <Scrollbars
+      style={{ width: hasPreview ? 400 : 800 }}
+      ref={currentULRef}
+      autoHeight
+      autoHeightMin={0}
+      autoHeightMax={500}>
+      <ul id={"wox-result-list"} key={"wox-result-list"}>
+        {resultList.map((result, index) => {
+          return <li id={`wox-result-li-${index}`} key={`wox-result-li-${index}`} className={activeIndex === index ? "active" : "inactive"}>
+            {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeSvg.code &&
+              <div className={"wox-query-result-image"}
+                   dangerouslySetInnerHTML={{ __html: result.Icon.ImageData }}></div>}
+            {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeUrl.code &&
+              <img src={result.Icon.ImageData} className={"wox-query-result-image"} alt={"query-result-image"} />}
+            {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeBase64.code &&
+              <img src={result.Icon.ImageData} className={"wox-query-result-image"} alt={"query-result-image"} />}
+            <h2 className={"wox-result-title"}>{result.Title}</h2>
+            {result.SubTitle && <h3 className={"wox-result-subtitle"}>{result.SubTitle}</h3>}
+          </li>
+        })}
+      </ul>
+    </Scrollbars>
+
+
     {hasPreview && getCurrentPreviewData().PreviewProperties && Object.keys(getCurrentPreviewData().PreviewProperties)?.length > 0 &&
       <div
         className={"wox-query-result-preview"}>
-        <div className={"wox-query-result-preview-content"}>
-          {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeText.code && <p>{getCurrentPreviewData().PreviewData}</p>}
-          {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
-            <Image src={getCurrentPreviewData().PreviewData}
-                   className={"wox-query-result-preview-image"} />}
-          {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
-            <Markdown>{getCurrentPreviewData().PreviewData}</Markdown>}
-        </div>
-
+        <Scrollbars
+          autoHeight
+          autoHeightMin={0}
+          autoHeightMax={410}>
+          <div className={"wox-query-result-preview-content"}>
+            {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeText.code && <p>{getCurrentPreviewData().PreviewData}</p>}
+            {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
+              <Image src={getCurrentPreviewData().PreviewData}
+                     className={"wox-query-result-preview-image"} />}
+            {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
+              <Markdown>{getCurrentPreviewData().PreviewData}</Markdown>}
+          </div>
+        </Scrollbars>
         <div className={"wox-query-result-preview-properties"}>
           {Object.keys(getCurrentPreviewData().PreviewProperties)?.map((key) => {
             return <div key={`key-${key}`}
@@ -146,13 +175,13 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
 const Style = styled.div`
   display: flex;
   flex-direction: row;
-  overflow: hidden;
   width: 800px;
+  border-bottom: ${WoxTauriHelper.getInstance().isTauri() ? "0px" : "1px"} solid #dedede;
+
 
   ul {
     padding: 0;
     margin: 0;
-    max-height: 500px;
     overflow: hidden;
     width: 50%;
     border-right: ${WoxTauriHelper.getInstance().isTauri() ? "0px" : "1px"} solid #dedede;;
@@ -221,9 +250,11 @@ const Style = styled.div`
 
   .wox-query-result-preview {
     position: relative;
+    width: 400px;
     min-height: 490px;
     border-left: 1px solid #dedede;
-    padding: 10px;
+    padding: 10px 0 10px 10px;
+    border-right: ${WoxTauriHelper.getInstance().isTauri() ? "0px" : "1px"} solid #dedede;
 
     .wox-query-result-preview-content {
       max-height: 400px;

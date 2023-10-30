@@ -185,4 +185,8 @@ const Style = styled.div`
   overflow: hidden;
   display: flex;
   flex-direction: column;
+
+  .wox-result-border {
+    border-top: 1px solid #dedede !important;
+  }
 `
