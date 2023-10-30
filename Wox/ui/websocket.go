@@ -57,6 +57,7 @@ func serveAndWait(ctx context.Context, port int) {
 			return
 		}
 
+		w.Header().Set("Cache-Control", "public, max-age=3600")
 		http.ServeFile(w, r, imagePath)
 	})
 

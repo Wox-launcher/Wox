@@ -91,7 +91,7 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 	//only text support search
 	for i := len(c.history) - 1; i >= 0; i-- {
 		history := c.history[i]
-		if history.Data.Type == util.ClipboardTypeText && strings.Contains(string(history.Data.Data), query.Search) {
+		if history.Data.Type == util.ClipboardTypeText && strings.Contains(strings.ToLower(string(history.Data.Data)), strings.ToLower(query.Search)) {
 			results = append(results, c.convertClipboardData(ctx, history))
 		}
 	}

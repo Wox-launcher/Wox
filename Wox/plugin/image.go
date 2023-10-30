@@ -3,7 +3,6 @@ package plugin
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
 	"path"
 	"wox/util"
 )
@@ -50,13 +49,14 @@ func convertLocalImageToUrl(ctx context.Context, image WoxImage, pluginInstance 
 	newImage = image
 
 	if image.ImageType == WoxImageTypeAbsolutePath {
-		id := uuid.NewString()
+		//make sure same image has the same id
+		id := util.Md5([]byte(pluginInstance.Metadata.Id + image.ImageType + image.ImageData))
 		newImage.ImageType = WoxImageTypeUrl
 		newImage.ImageData = fmt.Sprintf("http://localhost:%d/image?id=%s", GetPluginManager().GetUI().GetServerPort(ctx), id)
 		localImageMap.Store(id, image.ImageData)
 	}
 	if image.ImageType == WoxImageTypeRelativePath {
-		id := uuid.NewString()
+		id := util.Md5([]byte(pluginInstance.Metadata.Id + image.ImageType + image.ImageData))
 		newImage.ImageType = WoxImageTypeUrl
 		newImage.ImageData = fmt.Sprintf("http://localhost:%d/image?id=%s", GetPluginManager().GetUI().GetServerPort(ctx), id)
 		localImageMap.Store(id, path.Join(pluginInstance.PluginDirectory, image.ImageData))
