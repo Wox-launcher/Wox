@@ -16,11 +16,17 @@ type WoxSetting struct {
 	ShowTray             bool
 	LangCode             i18n.LangCode
 	QueryHotkeys         []QueryHotkey
+	QueryHistories       []QueryHistory
 }
 
 type QueryHotkey struct {
 	Hotkey string
 	Query  string
+}
+
+type QueryHistory struct {
+	Query     string
+	Timestamp int64
 }
 
 func GetDefaultWoxSetting(ctx context.Context) WoxSetting {

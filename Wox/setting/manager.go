@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"sync"
 	"wox/util"
 )
@@ -56,6 +57,11 @@ func (m *Manager) Init(ctx context.Context) error {
 	if woxSetting.LangCode == "" {
 		woxSetting.LangCode = defaultWoxSetting.LangCode
 	}
+
+	//sort query history ascending
+	sort.Slice(woxSetting.QueryHistories, func(i, j int) bool {
+		return woxSetting.QueryHistories[i].Timestamp < woxSetting.QueryHistories[j].Timestamp
+	})
 
 	m.woxSetting = woxSetting
 
@@ -124,4 +130,20 @@ func (m *Manager) SavePluginSetting(ctx context.Context, pluginId string, plugin
 
 	logger.Info(ctx, fmt.Sprintf("plugin setting saved: %s", pluginId))
 	return nil
+}
+
+func (m *Manager) AddQueryHistory(ctx context.Context, query string) {
+	logger.Debug(ctx, fmt.Sprintf("add query history: %s", query))
+	woxSetting := m.GetWoxSetting(ctx)
+	woxSetting.QueryHistories = append(woxSetting.QueryHistories, QueryHistory{
+		Query:     query,
+		Timestamp: util.GetSystemTimestamp(),
+	})
+
+	// if query history is more than 100, remove the oldest ones
+	if len(woxSetting.QueryHistories) > 100 {
+		woxSetting.QueryHistories = woxSetting.QueryHistories[len(woxSetting.QueryHistories)-100:]
+	}
+
+	m.SaveWoxSetting(ctx, woxSetting)
 }

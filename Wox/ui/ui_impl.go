@@ -239,10 +239,17 @@ func handleOnVisibilityChanged(ctx context.Context, request WebsocketMsg) {
 		return
 	}
 
+	query, queryErr := getWebsocketMsgParameter(ctx, request, "query")
+	if queryErr != nil {
+		logger.Error(ctx, queryErr.Error())
+		responseUIError(ctx, request, queryErr.Error())
+		return
+	}
+
 	if isVisible == "true" {
 		onAppShow(ctx)
 	} else {
-		onAppHide(ctx)
+		onAppHide(ctx, query)
 	}
 }
 
@@ -254,8 +261,8 @@ func onAppShow(ctx context.Context) {
 	}
 }
 
-func onAppHide(ctx context.Context) {
-
+func onAppHide(ctx context.Context, query string) {
+	setting.GetSettingManager().AddQueryHistory(ctx, query)
 }
 
 func handleRegisterMainHotkey(ctx context.Context, request WebsocketMsg) {

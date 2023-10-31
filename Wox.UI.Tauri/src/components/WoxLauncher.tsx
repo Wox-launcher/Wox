@@ -123,7 +123,8 @@ export default () => {
   const hideWoxWindow = async () => {
     await WoxTauriHelper.getInstance().hideWindow()
     await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ON_VISIBILITY_CHANGED.code, {
-      "isVisible": "false"
+      "isVisible": "false",
+      "query": currentQuery.current || ""
     })
   }
 
@@ -175,7 +176,8 @@ export default () => {
     // @ts-ignore expose to tauri backend
     window.postShow = () => {
       WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ON_VISIBILITY_CHANGED.code, {
-        "isVisible": "true"
+        "isVisible": "true",
+        "query": currentQuery.current || ""
       })
     }
   }, [])
