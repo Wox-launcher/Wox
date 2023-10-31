@@ -126,16 +126,23 @@ async function query(request: PluginJsonRpcRequest) {
     Search: request.Params.Search
   } as Query)
 
+  if (!results) {
+    logger.info(`plugin query didn't return results: ${request.PluginName}`)
+    return []
+  }
+
   results.forEach(result => {
     if (result.Id === undefined || result.Id === null) {
       result.Id = crypto.randomUUID()
     }
-    result.Actions.forEach(action => {
-      if (action.Id === undefined || action.Id === null) {
-        action.Id = crypto.randomUUID()
-      }
-      actionCache.set(action.Id, action.Action)
-    })
+    if (result.Actions) {
+      result.Actions.forEach(action => {
+        if (action.Id === undefined || action.Id === null) {
+          action.Id = crypto.randomUUID()
+        }
+        actionCache.set(action.Id, action.Action)
+      })
+    }
     if (result.RefreshInterval === undefined || result.RefreshInterval === null) {
       result.RefreshInterval = 0
     }

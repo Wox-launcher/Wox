@@ -1,13 +1,13 @@
 {
-  "name": "wox-plugin-host-nodejs",
+  "name": "wox-plugin-clipboard",
   "version": "1.0.0",
-  "description": "Wox nodejs host",
+  "description": "A Wox plugin to get clipboard history",
   "repository": {
     "type": "git",
     "url": "https://github.com/Wox-launcher/Wox.git"
   },
   "scripts": {
-    "build": "pnpm clean && ncc build src/index.ts -o dist && babel dist --out-dir dist",
+    "build": "pnpm clean && ncc build src/index.ts -o dist && babel dist --out-dir ../dist",
     "clean": "node -e \"var { rmdirSync, existsSync } = require('fs'), path = require('path'); ['./dist'].forEach(fPath => {if (existsSync(path.join(__dirname, fPath))) rmdirSync(path.join(__dirname, fPath), { recursive: true })}); process.exit(0);\"",
     "clean:all": "npm run clean && (rm -r ./node_modules || true)",
     "lint": "eslint --ext .ts --fix src/**/*.ts"
@@ -16,26 +16,26 @@
     "@babel/cli": "^7.22.15",
     "@babel/core": "^7.22.20",
     "@babel/preset-env": "^7.22.20",
-    "babel-plugin-transform-import-meta": "^2.2.1",
-    "@types/node": "^20.4.1",
-    "@types/promise-deferred": "^2.0.2",
-    "@types/uuid": "^9.0.3",
+    "@types/express": "^4.17.20",
+    "@types/node": "^20.6.0",
     "@types/ws": "^8.5.5",
-    "@typescript-eslint/eslint-plugin": "^6.6.0",
-    "@typescript-eslint/parser": "^6.6.0",
+    "@typescript-eslint/eslint-plugin": "^6.7.0",
+    "@typescript-eslint/parser": "^6.7.0",
     "@vercel/ncc": "^0.38.0",
+    "babel-plugin-transform-import-meta": "^2.2.1",
     "browserify": "^17.0.0",
     "eslint": "^8.49.0",
     "eslint-config-prettier": "9.0.0",
     "prettier": "3.0.2",
-    "typescript": "^5.2.2"
+    "typescript": "^5.2.2",
+    "@types/react": "^18.2.15",
+    "@types/react-dom": "^18.2.7"
   },
   "dependencies": {
     "@wox-launcher/wox-plugin": "^0.0.46",
-    "dayjs": "^1.11.9",
-    "promise-deferred": "^2.0.4",
-    "winston": "^3.10.0",
-    "winston-daily-rotate-file": "^4.7.1",
-    "ws": "^8.14.1"
+    "chatgpt": "^5.2.5",
+    "express": "^4.18.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   }
 }

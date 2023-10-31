@@ -1,0 +1,25 @@
+{
+  "Id": "2eae58fe-a910-4194-b288-ac8ba838f8c4",
+  "TriggerKeywords": [
+    "chat"
+  ],
+  "Name": "Chatgpt",
+  "Description": "A Wox plugin for chatgpt",
+  "Author": "qianlifeng",
+  "Version": "1.0.0",
+  "MinWoxVersion": "2.0.0.",
+  "Runtime": "nodejs",
+  "Website": "https://github.com/Wox-launcher/Wox",
+  "Entry": "index.js",
+  "Icon": "relative:app.png",
+  "SupportedOS": [
+    "windows",
+    "linux",
+    "darwin"
+  ],
+  "Features": [
+    {
+      "Name": "preview"
+    }
+  ]
+}

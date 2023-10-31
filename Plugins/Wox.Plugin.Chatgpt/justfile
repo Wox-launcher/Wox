@@ -1,0 +1,7 @@
+default:
+    @just --list --unsorted
+
+@build:
+    rm -rf dist
+    cd Wox.Plugin.Chatgpt.Server && pnpm install && pnpm run build && cd ..
+    cd Wox.Plugin.Chatgpt.UI && pnpm install && pnpm run build && cd ..

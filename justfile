@@ -3,10 +3,14 @@ default:
 
 @dev:
     just _build_hosts
+    just plugins
 
+@plugins:
     # build plugins
     #just _build_dev_nodejs_plugin Wox.Plugin.ProcessKiller ~/.wox/wox-user/plugins
+
     just _build_dev_nodejs_plugin Wox.Plugin.ProcessKiller ~/icloud/wox/plugins
+    just _build_dev_nodejs_plugin_chatgpt Wox.Plugin.Chatgpt ~/icloud/wox/plugins
 
 @release target:
     ENV PROD=true
@@ -31,9 +35,17 @@ default:
     rm -rf {{directory}}/{{pluginName}}
     cd Plugins/{{pluginName}} && pnpm install && pnpm run build && cd ..
     mkdir -p {{directory}}/{{pluginName}}
-    cp Plugins/{{pluginName}}/dist/index.js {{directory}}/{{pluginName}}/index.js
+    cp -r Plugins/{{pluginName}}/dist/* {{directory}}/{{pluginName}}/
     cp Plugins/{{pluginName}}/plugin.json {{directory}}/{{pluginName}}/plugin.json
     cp -r Plugins/{{pluginName}}/images {{directory}}/{{pluginName}}/images
+
+@_build_dev_nodejs_plugin_chatgpt pluginName directory:
+    rm -rf {{directory}}/{{pluginName}}
+    cd Plugins/{{pluginName}} && just build && cd ..
+    mkdir -p {{directory}}/{{pluginName}}
+    cp -r Plugins/{{pluginName}}/dist/* {{directory}}/{{pluginName}}/
+    cp Plugins/{{pluginName}}/Wox.Plugin.Chatgpt.Server/plugin.json {{directory}}/{{pluginName}}/plugin.json
+    cp -r Plugins/{{pluginName}}/Wox.Plugin.Chatgpt.Server/images {{directory}}/{{pluginName}}/images
 
 @_build_hosts:
     # build hosts

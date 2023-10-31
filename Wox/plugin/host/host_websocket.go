@@ -24,7 +24,7 @@ func (w *WebsocketHost) logIdentity(ctx context.Context) string {
 	return fmt.Sprintf("[%s HOST]", w.host.GetRuntime(ctx))
 }
 
-func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, entry string) error {
+func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, entry string, executableArgs ...string) error {
 	port, portErr := util.GetAvailableTcpPort(ctx)
 	if portErr != nil {
 		return fmt.Errorf("failed to get available port: %w", portErr)
@@ -33,8 +33,14 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 	util.GetLogger().Info(ctx, fmt.Sprintf("%s starting host on port %d", w.logIdentity(ctx), port))
 	util.GetLogger().Info(ctx, fmt.Sprintf("%s host path: %s", w.logIdentity(ctx), executablePath))
 	util.GetLogger().Info(ctx, fmt.Sprintf("%s host entry: %s", w.logIdentity(ctx), entry))
+	util.GetLogger().Info(ctx, fmt.Sprintf("%s host args: %s", w.logIdentity(ctx), strings.Join(executableArgs, " ")))
 	util.GetLogger().Info(ctx, fmt.Sprintf("%s host log directory: %s", w.logIdentity(ctx), util.GetLocation().GetLogHostsDirectory()))
-	cmd := exec.Command(executablePath, entry, fmt.Sprintf("%d", port), util.GetLocation().GetLogHostsDirectory())
+
+	var args []string
+	args = append(args, executableArgs...)
+	args = append(args, entry, fmt.Sprintf("%d", port), util.GetLocation().GetLogHostsDirectory())
+
+	cmd := exec.Command(executablePath, args...)
 	cmd.Stdout = util.GetLogger().GetWriter()
 	cmd.Stderr = util.GetLogger().GetWriter()
 	err := cmd.Start()

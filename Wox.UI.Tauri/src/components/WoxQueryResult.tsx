@@ -141,7 +141,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     </Scrollbars>
 
 
-    {hasPreview && getCurrentPreviewData().PreviewProperties && Object.keys(getCurrentPreviewData().PreviewProperties)?.length > 0 &&
+    {hasPreview && getCurrentPreviewData().PreviewType !== "" &&
       <div
         className={"wox-query-result-preview"}>
         <Scrollbars
@@ -155,19 +155,23 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
                      className={"wox-query-result-preview-image"} />}
             {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
               <Markdown>{getCurrentPreviewData().PreviewData}</Markdown>}
+            {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeUrl.code &&
+              <iframe src={getCurrentPreviewData().PreviewData} className={"wox-query-result-preview-url"}></iframe>}
           </div>
         </Scrollbars>
-        <div className={"wox-query-result-preview-properties"}>
-          {Object.keys(getCurrentPreviewData().PreviewProperties)?.map((key) => {
-            return <div key={`key-${key}`}
-                        className={"wox-query-result-preview-property"}>
-              <div
-                className={"wox-query-result-preview-property-key"}>{key}</div>
-              <div
-                className={"wox-query-result-preview-property-value"}>{getCurrentPreviewData().PreviewProperties[key]}</div>
-            </div>
-          })}
-        </div>
+        {Object.keys(getCurrentPreviewData().PreviewProperties)?.length > 0 &&
+          <div className={"wox-query-result-preview-properties"}>
+            {Object.keys(getCurrentPreviewData().PreviewProperties)?.map((key) => {
+              return <div key={`key-${key}`}
+                          className={"wox-query-result-preview-property"}>
+                <div
+                  className={"wox-query-result-preview-property-key"}>{key}</div>
+                <div
+                  className={"wox-query-result-preview-property-value"}>{getCurrentPreviewData().PreviewProperties[key]}</div>
+              </div>
+            })}
+          </div>
+        }
       </div>}
   </Style>
 })
@@ -265,6 +269,11 @@ const Style = styled.div`
       }
 
       .wox-query-result-preview-image {
+        width: 100%;
+        max-height: 400px;
+      }
+      
+      .wox-query-result-preview-url {
         width: 100%;
         max-height: 400px;
       }
