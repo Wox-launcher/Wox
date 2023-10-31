@@ -17,6 +17,7 @@ export type WoxQueryResultRefHandler = {
   moveUp: () => void
   moveDown: () => void
   doAction: () => void
+  resetMouseIndex: () => void
 }
 
 export type WoxQueryResultProps = {
@@ -27,6 +28,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   const currentWindowHeight = useRef(60)
   const currentResultList = useRef<WOXMESSAGE.WoxMessageResponseResult[]>([])
   const currentActiveIndex = useRef(0)
+  const currentMouseOverIndex = useRef(0)
   const currentULRef = useRef<Scrollbars>(null)
   const [activeIndex, setActiveIndex] = useState<number>(0)
   const [resultList, setResultList] = useState<WOXMESSAGE.WoxMessageResponseResult[]>([])
@@ -76,6 +78,30 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     return { PreviewType: "", PreviewData: "", PreviewProperties: {} } as WOXMESSAGE.WoxPreview
   }
 
+  const handleMoveUp = () => {
+    currentMouseOverIndex.current = 0
+    currentActiveIndex.current = currentActiveIndex.current <= 0 ? currentResultList.current.length - 1 : currentActiveIndex.current - 1
+    setActiveIndex(currentActiveIndex.current)
+    if (currentActiveIndex.current >= 10) {
+      currentULRef.current?.scrollTop(50 * (currentActiveIndex.current - 9))
+    }
+    if (currentActiveIndex.current === currentResultList.current.length - 1) {
+      currentULRef.current?.scrollTop(50 * (currentResultList.current.length - 1))
+    }
+  }
+
+  const handleMoveDown = () => {
+    currentMouseOverIndex.current = 0
+    currentActiveIndex.current = currentActiveIndex.current >= currentResultList.current.length - 1 ? 0 : currentActiveIndex.current + 1
+    setActiveIndex(currentActiveIndex.current)
+    if (currentActiveIndex.current >= 10) {
+      currentULRef.current?.scrollTop(50 * (currentActiveIndex.current - 9))
+    }
+    if (currentActiveIndex.current === 0) {
+      currentULRef.current?.scrollTop(0)
+    }
+  }
+
   useImperativeHandle(ref, () => ({
     clearResultList: () => {
       setActiveIndex(0)
@@ -92,27 +118,16 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       }
     },
     moveUp: () => {
-      currentActiveIndex.current = currentActiveIndex.current <= 0 ? currentResultList.current.length - 1 : currentActiveIndex.current - 1
-      setActiveIndex(currentActiveIndex.current)
-      if (currentActiveIndex.current >= 10) {
-        currentULRef.current?.scrollTop(50 * (currentActiveIndex.current - 9))
-      }
-      if (currentActiveIndex.current === currentResultList.current.length - 1) {
-        currentULRef.current?.scrollTop(50 * (currentResultList.current.length - 1))
-      }
+      handleMoveUp()
     },
     moveDown: () => {
-      currentActiveIndex.current = currentActiveIndex.current >= currentResultList.current.length - 1 ? 0 : currentActiveIndex.current + 1
-      setActiveIndex(currentActiveIndex.current)
-      if (currentActiveIndex.current >= 10) {
-        currentULRef.current?.scrollTop(50 * (currentActiveIndex.current - 9))
-      }
-      if (currentActiveIndex.current === 0) {
-        currentULRef.current?.scrollTop(0)
-      }
+      handleMoveDown()
     },
     doAction: () => {
       handleAction()
+    },
+    resetMouseIndex: () => {
+      currentMouseOverIndex.current = 0
     }
   }))
 
@@ -125,7 +140,13 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       autoHeightMax={500}>
       <ul id={"wox-result-list"} key={"wox-result-list"}>
         {resultList.map((result, index) => {
-          return <li id={`wox-result-li-${index}`} key={`wox-result-li-${index}`} className={activeIndex === index ? "active" : "inactive"}>
+          return <li id={`wox-result-li-${index}`} key={`wox-result-li-${index}`} className={activeIndex === index ? "active" : "inactive"} onMouseOverCapture={() => {
+            currentMouseOverIndex.current += 1
+            if (result.Index !== undefined && currentActiveIndex.current !== result.Index && currentMouseOverIndex.current > 1) {
+              currentActiveIndex.current = index
+              setActiveIndex(index)
+            }
+          }}>
             {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeSvg.code &&
               <div className={"wox-query-result-image"}
                    dangerouslySetInnerHTML={{ __html: result.Icon.ImageData }}></div>}
@@ -208,6 +229,10 @@ const Style = styled.div`
     width: 100%;
   }
 
+  ul li:last-child {
+    margin-bottom: 2px;
+  }
+
   ul li .wox-query-result-image {
     text-align: center;
     line-height: 36px;
@@ -272,7 +297,7 @@ const Style = styled.div`
         width: 100%;
         max-height: 400px;
       }
-      
+
       .wox-query-result-preview-url {
         width: 100%;
         max-height: 400px;

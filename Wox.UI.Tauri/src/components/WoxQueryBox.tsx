@@ -74,7 +74,6 @@ const Style = styled.div`
     padding: 10px;
     border: 0;
     background-color: transparent;
-    -webkit-app-region: no-drag;
     cursor: auto;
     color: black;
     display: inline-block;

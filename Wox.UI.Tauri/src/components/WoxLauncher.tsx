@@ -100,9 +100,9 @@ export default () => {
     })
 
     let preview = false
-    fullResultList.current =  fullResultList.current.map((result, index) => {
-        preview = !!result.Preview.PreviewType
-        return Object.assign({ ...result, Index: index })
+    fullResultList.current = fullResultList.current.map((result, index) => {
+      preview = !!result.Preview.PreviewType
+      return Object.assign({ ...result, Index: index })
     })
 
     woxQueryResultRef.current?.changeResultList(preview, [...fullResultList.current])
@@ -140,6 +140,7 @@ export default () => {
 
   const bindKeyboardEvent = () => {
     Mousetrap.bind("esc", (event) => {
+      woxQueryResultRef.current?.resetMouseIndex()
       hideWoxWindow()
       event.preventDefault()
       event.stopPropagation()
@@ -175,6 +176,7 @@ export default () => {
     // @ts-ignore expose to tauri backend
     window.selectAll = () => {
       woxQueryBoxRef.current?.selectAll()
+      woxQueryResultRef.current?.resetMouseIndex()
     }
     // @ts-ignore expose to tauri backend
     window.postShow = () => {
