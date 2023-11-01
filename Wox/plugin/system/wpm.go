@@ -29,6 +29,11 @@ func (i *WPMPlugin) GetMetadata() plugin.Metadata {
 		TriggerKeywords: []string{
 			"wpm",
 		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureNameIgnoreAutoScore,
+			},
+		},
 		Commands: []plugin.MetadataCommand{
 			{
 				Command:     "install",

@@ -3,36 +3,43 @@ package util
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/tidwall/gjson"
 	"sync"
 )
 
 type HashMap[K comparable, V any] struct {
-	inner sync.Map
+	inner map[K]V
+	rw    sync.RWMutex
+}
+
+func NewHashMap[K comparable, V any]() *HashMap[K, V] {
+	return &HashMap[K, V]{
+		inner: make(map[K]V),
+	}
 }
 
 func (h *HashMap[K, V]) UnmarshalJSON(b []byte) error {
-	gjson.ParseBytes(b).ForEach(func(key, value gjson.Result) bool {
-		h.Store(key.Value().(K), value.Value().(V))
-		return true
-	})
+	h.inner = make(map[K]V)
+	json.Unmarshal(b, &h.inner)
 	return nil
 }
 
 func (h *HashMap[K, V]) MarshalJSON() ([]byte, error) {
-	return json.Marshal(h.ToMap())
+	return json.Marshal(h.inner)
 }
 
 func (h *HashMap[K, V]) Store(k K, v V) {
-	h.inner.Store(k, v)
+	h.rw.Lock()
+	defer h.rw.Unlock()
+
+	h.inner[k] = v
 }
 
 func (h *HashMap[K, V]) Exist(k K) bool {
-	if _, ok := h.inner.Load(k); ok {
-		return true
-	}
+	h.rw.RLock()
+	defer h.rw.RUnlock()
 
-	return false
+	_, ok := h.inner[k]
+	return ok
 }
 
 func (h *HashMap[K, V]) NotExist(k K) bool {
@@ -40,45 +47,51 @@ func (h *HashMap[K, V]) NotExist(k K) bool {
 }
 
 func (h *HashMap[K, V]) Load(k K) (V, bool) {
-	if load, ok := h.inner.Load(k); ok {
-		return load.(V), true
-	}
+	h.rw.RLock()
+	defer h.rw.RUnlock()
 
-	//nolint
-	return *new(V), false
+	v, ok := h.inner[k]
+	return v, ok
 }
 
 func (h *HashMap[K, V]) Clear() {
-	h.inner.Range(func(key, _ any) bool {
-		h.inner.Delete(key)
-		return true
-	})
+	h.rw.Lock()
+	defer h.rw.Unlock()
+
+	h.inner = make(map[K]V)
 }
 
 func (h *HashMap[K, V]) Delete(k K) {
-	h.inner.Delete(k)
+	h.rw.Lock()
+	defer h.rw.Unlock()
+
+	delete(h.inner, k)
 }
 
-func (h *HashMap[K, V]) Len() (length int64) {
-	h.inner.Range(func(_, _ any) bool {
-		length++
-		return true
-	})
-	return
+func (h *HashMap[K, V]) Len() (length int) {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+
+	return len(h.inner)
 }
 
 func (h *HashMap[K, V]) MustLoad(k K) V {
-	if load, ok := h.inner.Load(k); ok {
-		return load.(V)
+	v, ok := h.Load(k)
+	if !ok {
+		panic(fmt.Sprintf("key %v not exist", k))
 	}
-
-	panic(fmt.Sprintf("找不到%v的值", k))
+	return v
 }
 
 func (h *HashMap[K, V]) Range(f func(K, V) bool) {
-	h.inner.Range(func(key, value any) bool {
-		return f(key.(K), value.(V))
-	})
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+
+	for k, v := range h.inner {
+		if !f(k, v) {
+			break
+		}
+	}
 }
 
 func (h *HashMap[K, V]) String() (s string) {
@@ -91,10 +104,10 @@ func (h *HashMap[K, V]) String() (s string) {
 }
 
 func (h *HashMap[K, V]) ToMap() (m map[K]V) {
-	m = make(map[K]V)
 	h.Range(func(k K, v V) bool {
 		m[k] = v
 		return true
 	})
-	return
+
+	return m
 }

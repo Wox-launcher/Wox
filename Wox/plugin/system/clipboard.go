@@ -45,6 +45,11 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 		TriggerKeywords: []string{
 			"cb",
 		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureNameIgnoreAutoScore,
+			},
+		},
 		Commands: []plugin.MetadataCommand{},
 		SupportedOS: []string{
 			"Windows",

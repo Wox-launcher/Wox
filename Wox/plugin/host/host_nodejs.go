@@ -10,7 +10,8 @@ import (
 func init() {
 	host := &NodejsHost{}
 	host.websocketHost = &WebsocketHost{
-		host: host,
+		host:       host,
+		requestMap: util.NewHashMap[string, chan JsonRpcResponse](),
 	}
 	plugin.AllHosts = append(plugin.AllHosts, host)
 }

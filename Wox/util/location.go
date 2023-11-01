@@ -140,6 +140,10 @@ func (l *Location) GetWoxSettingPath() string {
 	return path.Join(l.GetPluginSettingDirectory(), "wox.json")
 }
 
+func (l *Location) GetWoxAppDataPath() string {
+	return path.Join(l.GetPluginSettingDirectory(), "wox.data.json")
+}
+
 func (l *Location) GetHostDirectory() string {
 	return path.Join(l.woxDataDirectory, "hosts")
 }

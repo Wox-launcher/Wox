@@ -9,14 +9,14 @@ import (
 type MetadataFeatureName = string
 
 const (
-	// enable preview panel besides result list
-	// plugin need to set QueryResult.Preview in query result
-	MetadataFeatureNamePreview MetadataFeatureName = "preview"
-
 	// enable query file feature
 	// user may drag multiple files into Wox, and Wox will pass these files to plugin
 	// plugin need to handle Query.Type == "file" in query
 	MetadataFeatureNameQueryFile MetadataFeatureName = "queryFile"
+
+	// enable this feature to let Wox don't auto score results
+	// by default, Wox will auto score results by the frequency of their actioned times
+	MetadataFeatureNameIgnoreAutoScore MetadataFeatureName = "ignoreAutoScore"
 )
 
 // Metadata parsed from plugin.json, see `Plugin.json.md` for more detail

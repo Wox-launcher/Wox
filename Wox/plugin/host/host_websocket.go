@@ -16,7 +16,7 @@ import (
 type WebsocketHost struct {
 	ws          *util.WebsocketClient
 	host        plugin.Host
-	requestMap  util.HashMap[string, chan JsonRpcResponse]
+	requestMap  *util.HashMap[string, chan JsonRpcResponse]
 	hostProcess *os.Process
 }
 

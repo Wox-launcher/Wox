@@ -7,7 +7,7 @@ import (
 	"wox/util"
 )
 
-var localImageMap util.HashMap[string, string]
+var localImageMap = util.NewHashMap[string, string]()
 
 type WoxImageType = string
 

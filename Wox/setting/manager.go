@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"sort"
 	"sync"
 	"wox/util"
 )
@@ -16,18 +15,37 @@ var managerOnce sync.Once
 var logger *util.Log
 
 type Manager struct {
-	woxSetting WoxSetting
+	woxSetting *WoxSetting
+	woxAppData *WoxAppData
 }
 
 func GetSettingManager() *Manager {
 	managerOnce.Do(func() {
-		managerInstance = &Manager{}
+		managerInstance = &Manager{
+			woxSetting: &WoxSetting{},
+			woxAppData: &WoxAppData{},
+		}
 		logger = util.GetLogger()
 	})
 	return managerInstance
 }
 
 func (m *Manager) Init(ctx context.Context) error {
+	woxSettingErr := m.loadWoxSetting(ctx)
+	if woxSettingErr != nil {
+		return woxSettingErr
+	}
+
+	woxAppDataErr := m.loadWoxAppData(ctx)
+	if woxAppDataErr != nil {
+		// wox app data is not essential, so we just log the error
+		logger.Error(ctx, fmt.Sprintf("failed to load wox app data: %s", woxAppDataErr.Error()))
+	}
+
+	return nil
+}
+
+func (m *Manager) loadWoxSetting(ctx context.Context) error {
 	defaultWoxSetting := GetDefaultWoxSetting(ctx)
 
 	woxSettingPath := util.GetLocation().GetWoxSettingPath()
@@ -49,8 +67,8 @@ func (m *Manager) Init(ctx context.Context) error {
 	}
 	defer woxSettingFile.Close()
 
-	woxSetting := WoxSetting{}
-	decodeErr := json.NewDecoder(woxSettingFile).Decode(&woxSetting)
+	woxSetting := &WoxSetting{}
+	decodeErr := json.NewDecoder(woxSettingFile).Decode(woxSetting)
 	if decodeErr != nil {
 		return decodeErr
 	}
@@ -58,23 +76,54 @@ func (m *Manager) Init(ctx context.Context) error {
 		woxSetting.LangCode = defaultWoxSetting.LangCode
 	}
 
-	//sort query history ascending
-	sort.Slice(woxSetting.QueryHistories, func(i, j int) bool {
-		return woxSetting.QueryHistories[i].Timestamp < woxSetting.QueryHistories[j].Timestamp
-	})
-
 	m.woxSetting = woxSetting
 
 	return nil
 }
 
-func (m *Manager) GetWoxSetting(ctx context.Context) WoxSetting {
+func (m *Manager) loadWoxAppData(ctx context.Context) error {
+	woxAppDataPath := util.GetLocation().GetWoxAppDataPath()
+	if _, statErr := os.Stat(woxAppDataPath); os.IsNotExist(statErr) {
+		defaultWoxAppData := GetDefaultWoxAppData(ctx)
+		defaultWoxAppDataJson, marshalErr := json.Marshal(defaultWoxAppData)
+		if marshalErr != nil {
+			return marshalErr
+		}
+
+		writeErr := os.WriteFile(woxAppDataPath, defaultWoxAppDataJson, 0644)
+		if writeErr != nil {
+			return writeErr
+		}
+	}
+
+	woxAppDataFile, openErr := os.Open(woxAppDataPath)
+	if openErr != nil {
+		return openErr
+	}
+	defer woxAppDataFile.Close()
+
+	woxAppData := &WoxAppData{}
+	decodeErr := json.NewDecoder(woxAppDataFile).Decode(woxAppData)
+	if decodeErr != nil {
+		return decodeErr
+	}
+
+	m.woxAppData = woxAppData
+
+	return nil
+}
+
+func (m *Manager) GetWoxSetting(ctx context.Context) *WoxSetting {
 	return m.woxSetting
 }
 
-func (m *Manager) SaveWoxSetting(ctx context.Context, woxSetting WoxSetting) error {
+func (m *Manager) GetWoxAppData(ctx context.Context) *WoxAppData {
+	return m.woxAppData
+}
+
+func (m *Manager) SaveWoxSetting(ctx context.Context) error {
 	woxSettingPath := util.GetLocation().GetWoxSettingPath()
-	settingJson, marshalErr := json.Marshal(woxSetting)
+	settingJson, marshalErr := json.Marshal(m.woxSetting)
 	if marshalErr != nil {
 		logger.Error(ctx, marshalErr.Error())
 		return marshalErr
@@ -86,7 +135,23 @@ func (m *Manager) SaveWoxSetting(ctx context.Context, woxSetting WoxSetting) err
 		return writeErr
 	}
 
-	m.woxSetting = woxSetting
+	logger.Info(ctx, "Wox setting saved")
+	return nil
+}
+
+func (m *Manager) saveWoxAppData(ctx context.Context) error {
+	woxAppDataPath := util.GetLocation().GetWoxAppDataPath()
+	settingJson, marshalErr := json.Marshal(m.woxAppData)
+	if marshalErr != nil {
+		logger.Error(ctx, marshalErr.Error())
+		return marshalErr
+	}
+
+	writeErr := os.WriteFile(woxAppDataPath, settingJson, 0644)
+	if writeErr != nil {
+		logger.Error(ctx, writeErr.Error())
+		return writeErr
+	}
 
 	logger.Info(ctx, "Wox setting saved")
 	return nil
@@ -134,16 +199,33 @@ func (m *Manager) SavePluginSetting(ctx context.Context, pluginId string, plugin
 
 func (m *Manager) AddQueryHistory(ctx context.Context, query string) {
 	logger.Debug(ctx, fmt.Sprintf("add query history: %s", query))
-	woxSetting := m.GetWoxSetting(ctx)
-	woxSetting.QueryHistories = append(woxSetting.QueryHistories, QueryHistory{
+	m.woxAppData.QueryHistories = append(m.woxAppData.QueryHistories, QueryHistory{
 		Query:     query,
 		Timestamp: util.GetSystemTimestamp(),
 	})
 
 	// if query history is more than 100, remove the oldest ones
-	if len(woxSetting.QueryHistories) > 100 {
-		woxSetting.QueryHistories = woxSetting.QueryHistories[len(woxSetting.QueryHistories)-100:]
+	if len(m.woxAppData.QueryHistories) > 100 {
+		m.woxAppData.QueryHistories = m.woxAppData.QueryHistories[len(m.woxAppData.QueryHistories)-100:]
 	}
 
-	m.SaveWoxSetting(ctx, woxSetting)
+	m.saveWoxAppData(ctx)
+}
+
+func (m *Manager) AddActionedResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string) {
+	resultHash := NewResultHash(pluginId, resultTitle, resultSubTitle)
+	actionedResult := ActionedResult{Timestamp: util.GetSystemTimestamp()}
+
+	if v, ok := m.woxAppData.ActionedResults.Load(resultHash); ok {
+		v = append(v, actionedResult)
+		// if current hash actioned results is more than 100, remove the oldest ones
+		if len(v) > 100 {
+			v = v[len(v)-100:]
+		}
+		m.woxAppData.ActionedResults.Store(resultHash, v)
+	} else {
+		m.woxAppData.ActionedResults.Store(resultHash, []ActionedResult{actionedResult})
+	}
+
+	m.saveWoxAppData(ctx)
 }

@@ -39,7 +39,7 @@ func (c CustomizedPluginSettings) GetValue(key string) (string, bool) {
 }
 
 func (c CustomizedPluginSettings) GetAll() (settings *util.HashMap[string, string]) {
-	settings = &util.HashMap[string, string]{}
+	settings = util.NewHashMap[string, string]()
 	for _, item := range c {
 		settings.Store(item.Value.GetKey(), item.Value.GetValue())
 	}

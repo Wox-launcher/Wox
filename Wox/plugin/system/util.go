@@ -11,7 +11,7 @@ type cacheResult struct {
 	score int
 }
 
-var pinyinMatchCache util.HashMap[string, cacheResult]
+var pinyinMatchCache = util.NewHashMap[string, cacheResult]()
 
 func IsStringMatchScore(ctx context.Context, term string, subTerm string) (bool, int) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)

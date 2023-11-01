@@ -27,12 +27,14 @@ var logger *util.Log
 type Manager struct {
 	instances   []*Instance
 	ui          share.UI
-	resultCache util.HashMap[string, *QueryResultCache]
+	resultCache *util.HashMap[string, *QueryResultCache]
 }
 
 func GetPluginManager() *Manager {
 	managerOnce.Do(func() {
-		managerInstance = &Manager{}
+		managerInstance = &Manager{
+			resultCache: util.NewHashMap[string, *QueryResultCache](),
+		}
 		logger = util.GetLogger()
 	})
 	return managerInstance
@@ -314,9 +316,12 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 
 	var resultCache = &QueryResultCache{
 		ResultId:       result.Id,
+		ResultTitle:    result.Title,
+		ResultSubTitle: result.SubTitle,
 		ContextData:    result.ContextData,
 		PluginInstance: pluginInstance,
 		Query:          query,
+		Actions:        util.NewHashMap[string, func(actionContext ActionContext)](),
 	}
 	m.resultCache.Store(result.Id, resultCache)
 
@@ -368,7 +373,53 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		result.Preview = WoxPreview{}
 	}
 
+	ignoreAutoScore := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureNameIgnoreAutoScore)
+	if !ignoreAutoScore {
+		score := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
+		if score > 0 {
+			logger.Info(ctx, fmt.Sprintf("[%s] result(%s) add score: %d", pluginInstance.Metadata.Name, result.Title, score))
+			result.Score += score
+		}
+	}
+
 	return result
+}
+
+func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string) int {
+	resultHash := setting.NewResultHash(pluginId, title, subTitle)
+	actionResults, ok := setting.GetSettingManager().GetWoxAppData(ctx).ActionedResults.Load(resultHash)
+	if !ok {
+		return 0
+	}
+
+	// actioned score are based on actioned counts, the more actioned, the more score
+	// also, action timestamp will be considered, the more recent actioned, the more score weight. If action is in recent 7 days, it will be considered as recent actioned and add score weight
+	// we will use fibonacci sequence to calculate score, the more recent actioned, the more score: 5, 8, 13, 21, 34, 55, 89
+	// that means, actions in day one, we will add weight 89, day two, we will add weight 55, day three, we will add weight 34, and so on
+	// E.g. if actioned 3 times in day one, 2 times in day two, 1 time in day three, the score will be: 89*3 + 55*2 + 34*1 = 450
+
+	var score = 0
+	for _, actionResult := range actionResults {
+		weight := 2
+
+		actionedTime := util.ParseTimeStamp(actionResult.Timestamp)
+		hours := util.GetSystemTime().Sub(actionedTime).Hours()
+		if hours < 24*7 {
+			fibonacciIndex := int(math.Ceil(hours / 24))
+			if fibonacciIndex > 7 {
+				fibonacciIndex = 7
+			}
+			if fibonacciIndex < 1 {
+				fibonacciIndex = 1
+			}
+			fibonacci := []int{5, 8, 13, 21, 34, 55, 89}
+			score += fibonacci[7-fibonacciIndex]
+		}
+
+		score += weight
+	}
+
+	return score
 }
 
 func (m *Manager) PolishRefreshableResult(ctx context.Context, pluginInstance *Instance, result RefreshableResult) RefreshableResult {
@@ -460,6 +511,8 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 	action(ActionContext{
 		ContextData: resultCache.ContextData,
 	})
+
+	setting.GetSettingManager().AddActionedResult(ctx, resultCache.PluginInstance.Metadata.Id, resultCache.ResultTitle, resultCache.ResultSubTitle)
 }
 
 func (m *Manager) ExecuteRefresh(ctx context.Context, resultId string, refreshableResult RefreshableResult) (RefreshableResult, error) {

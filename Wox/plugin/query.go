@@ -122,11 +122,13 @@ type QueryResultActionUI struct {
 // store latest result value after query/refresh, so we can retrieve data later in action/refresh
 type QueryResultCache struct {
 	ResultId       string
+	ResultTitle    string
+	ResultSubTitle string
 	ContextData    string
 	Refresh        func(RefreshableResult) RefreshableResult
 	PluginInstance *Instance
 	Query          Query
-	Actions        util.HashMap[string, func(actionContext ActionContext)]
+	Actions        *util.HashMap[string, func(actionContext ActionContext)]
 }
 
 func newQueryWithPlugins(query string, queryType QueryType, pluginInstances []*Instance) Query {
