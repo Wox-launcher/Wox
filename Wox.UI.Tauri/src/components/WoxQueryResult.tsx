@@ -300,7 +300,7 @@ const Style = styled.div`
 
       .wox-query-result-preview-url {
         width: 100%;
-        max-height: 400px;
+        height: 400px;
       }
     }
 

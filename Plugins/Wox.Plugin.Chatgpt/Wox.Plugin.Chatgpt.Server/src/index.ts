@@ -79,6 +79,10 @@ export const plugin: Plugin = {
   }
 }
 
+export function getChatGPTAPI() {
+  return chatgpt
+}
+
 function getIcon() {
   return {
     ImageType: "svg",

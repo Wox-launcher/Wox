@@ -3,13 +3,22 @@ import { PublicAPI } from "@wox-launcher/wox-plugin"
 import * as path from "path"
 
 import { promises as fs } from "fs"
+import { getChatGPTAPI } from "./index"
+import bodyParser from "body-parser"
 
 export function startServer(port: number, api: PublicAPI) {
   const app = express()
+  app.use(bodyParser.json())
 
   app.get("/index.html", async (req, res) => {
     const html = await readFile("index.html")
     res.send(html)
+  })
+
+  app.post("/chat", async (req, res) => {
+    const msg = req.body.msg
+    const chatMessage = await getChatGPTAPI().sendMessage(msg)
+    res.send(chatMessage.text)
   })
 
   app.get("/assets/:name", async (req, res) => {

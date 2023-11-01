@@ -62,7 +62,7 @@ func main() {
 	if util.IsProd() {
 		availablePort, portErr := util.GetAvailableTcpPort(ctx)
 		if portErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize lang(%s): %s", woxSetting.LangCode, langErr.Error()))
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize lang(%s): %s", woxSetting.LangCode, portErr.Error()))
 			return
 		}
 		serverPort = availablePort

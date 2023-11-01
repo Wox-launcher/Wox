@@ -85,14 +85,15 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 			}
 
 			results = append(results, plugin.QueryResult{
-				Title: strings.ReplaceAll(search.Title, "{query}", otherQuery),
-				Score: 100,
-				Icon:  plugin.NewWoxImageBase64(search.IconUrl),
+				Title:       strings.ReplaceAll(search.Title, "{query}", otherQuery),
+				Score:       100,
+				Icon:        plugin.NewWoxImageBase64(search.IconUrl),
+				ContextData: search.Url,
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "Search",
 						Action: func(actionContext plugin.ActionContext) {
-							util.ShellOpen(strings.ReplaceAll(search.Url, "{query}", otherQuery))
+							util.ShellOpen(strings.ReplaceAll(actionContext.ContextData, "{query}", otherQuery))
 						},
 					},
 				},
