@@ -58,9 +58,10 @@ fn handle_msg(window: &Window, msg: &str) {
 
 fn handle_show_message(window: &Window, v: &Value) -> Result<(), Box<dyn std::error::Error>> {
     window.show()?;
-    window.set_focus()?;
 
-    window.eval(&format!("window.postShow()"))?;
+    window.set_focus()?;
+    // if windows is already shown, above code will not set focus on query box, so we need to set focus again
+    window.eval(&format!("window.focus()"))?;
 
     if let Some(data) = v.get("Data") {
         if let Some(position) = data.get("Position") {

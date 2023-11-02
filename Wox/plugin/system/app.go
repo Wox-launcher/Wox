@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"runtime"
 	"strings"
 	"wox/plugin"
 	"wox/setting"
@@ -120,7 +119,7 @@ func (a *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 func (a *AppPlugin) indexApps(ctx context.Context) {
 	startTimestamp := util.GetSystemTimestamp()
 	var apps []appInfo
-	if strings.ToLower(runtime.GOOS) == "darwin" {
+	if util.IsMacOS() {
 		apps = a.getMacApps(ctx)
 	}
 
@@ -199,6 +198,18 @@ func (a *AppPlugin) getMacApps(ctx context.Context) []appInfo {
 		for _, entry := range appDir {
 			if strings.HasSuffix(entry.Name(), ".app") {
 				appDirectoryPaths = append(appDirectoryPaths, path.Join(appDirectory, entry.Name()))
+			} else {
+				appSubDir, readSubDirErr := os.ReadDir(path.Join(appDirectory, entry.Name()))
+				if readSubDirErr != nil {
+					a.api.Log(ctx, fmt.Sprintf("error reading directory %s: %s", appDirectory, readSubDirErr.Error()))
+					continue
+				}
+
+				for _, subEntry := range appSubDir {
+					if strings.HasSuffix(subEntry.Name(), ".app") {
+						appDirectoryPaths = append(appDirectoryPaths, path.Join(appDirectory, entry.Name(), subEntry.Name()))
+					}
+				}
 			}
 		}
 	}

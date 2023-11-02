@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/mitchellh/go-homedir"
 	"os"
-	"runtime"
 	"strings"
 	"wox/plugin"
 	"wox/util"
@@ -51,7 +50,7 @@ func (c *BrowserBookmarkPlugin) GetMetadata() plugin.Metadata {
 func (c *BrowserBookmarkPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
 
-	if strings.ToLower(runtime.GOOS) == "darwin" {
+	if util.IsMacOS() {
 		profiles := []string{"Default", "Profile 1", "Profile 2", "Profile 3"}
 		for _, profile := range profiles {
 			chromeBookmarks := c.loadChromeBookmarkInMacos(ctx, profile)

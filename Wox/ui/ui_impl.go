@@ -263,6 +263,9 @@ func onAppShow(ctx context.Context) {
 
 func onAppHide(ctx context.Context, query string) {
 	setting.GetSettingManager().AddQueryHistory(ctx, query)
+	if setting.GetSettingManager().GetWoxSetting(ctx).LastQueryMode == setting.LastQueryModeEmpty {
+		GetUIManager().GetUI(ctx).ChangeQuery(ctx, "")
+	}
 }
 
 func handleRegisterMainHotkey(ctx context.Context, request WebsocketMsg) {

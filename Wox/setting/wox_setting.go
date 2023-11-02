@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"wox/i18n"
+	"wox/util"
 )
 
 type WoxSetting struct {
@@ -16,7 +17,15 @@ type WoxSetting struct {
 	ShowTray             bool
 	LangCode             i18n.LangCode
 	QueryHotkeys         []QueryHotkey
+	LastQueryMode        LastQueryMode
 }
+
+type LastQueryMode = string
+
+const (
+	LastQueryModePreserve LastQueryMode = "preserve" // preserve last query and select all for quick modify
+	LastQueryModeEmpty    LastQueryMode = "empty"    // empty last query
+)
 
 type QueryHotkey struct {
 	Hotkey string
@@ -39,12 +48,13 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 		SwitchInputMethodABC: switchInputMethodABC,
 		ShowTray:             true,
 		LangCode:             langCode,
+		LastQueryMode:        LastQueryModeEmpty,
 	}
 }
 
 func getDefaultMainHotkey(ctx context.Context) string {
 	combineKey := "alt+space"
-	if strings.ToLower(runtime.GOOS) == "darwin" {
+	if util.IsMacOS() {
 		combineKey = "command+space"
 	}
 	return combineKey
