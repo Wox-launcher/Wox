@@ -1,8 +1,6 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod websocket;
-
 #[macro_use]
 extern crate log;
 extern crate simplelog;
@@ -13,8 +11,8 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::thread::spawn;
 use tauri::Manager;
-use tauri_nspanel::cocoa::appkit::{NSMainMenuWindowLevel, NSWindowCollectionBehavior};
-use tauri_nspanel::WindowExt;
+
+mod websocket;
 
 #[tauri::command]
 fn get_server_port() -> String {
@@ -57,13 +55,15 @@ fn init_log_file() {
 
 fn main() {
     init_log_file();
-    tauri::Builder::default()
-        .plugin(tauri_nspanel::init())
-        .invoke_handler(tauri::generate_handler![get_server_port, log_ui])
-        .setup(|app| {
-            let window = app.get_window("main").unwrap();
 
-            if cfg!(target_os = "macos") {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_nspanel::cocoa::appkit::{NSMainMenuWindowLevel, NSWindowCollectionBehavior};
+        use tauri_nspanel::WindowExt;
+        tauri::Builder::default()
+            .plugin(tauri_nspanel::init())
+            .setup(|app| {
+                let window = app.get_window("main").unwrap();
                 // hide the dock icon
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
@@ -74,12 +74,29 @@ fn main() {
                 panel.set_collection_behaviour(NSWindowCollectionBehavior::NSWindowCollectionBehaviorTransient
                     | NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace
                 );
-            }
 
-            spawn(move || {
-                websocket::conn(window);
-            });
+                spawn(move || {
+                    websocket::conn(window);
+                });
 
-            Ok(())
-        }).run(tauri::generate_context!()).expect("error while running tauri application");
+                Ok(())
+            })
+            .invoke_handler(tauri::generate_handler![get_server_port, log_ui])
+            .run(tauri::generate_context!()).expect("error while running tauri application");
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        tauri::Builder::default()
+            .setup(|app| {
+                let window = app.get_window("main").unwrap();
+                spawn(move || {
+                    websocket::conn(window);
+                });
+
+                Ok(())
+            })
+            .invoke_handler(tauri::generate_handler![get_server_port, log_ui])
+            .run(tauri::generate_context!()).expect("error while running tauri application");
+    }
 }
