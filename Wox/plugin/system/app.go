@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path"
 	"strings"
+	"time"
 	"wox/plugin"
 	"wox/setting"
 	"wox/util"
@@ -129,22 +130,29 @@ func (a *AppPlugin) indexApps(ctx context.Context) {
 
 	if len(apps) > 0 {
 		a.apps = apps
-
-		var cachePath = a.getAppCachePath()
-		cacheContent, marshalErr := json.Marshal(apps)
-		if marshalErr != nil {
-			a.api.Log(ctx, fmt.Sprintf("error marshalling app cache: %s", marshalErr.Error()))
-			return
-		}
-		writeErr := os.WriteFile(cachePath, cacheContent, 0644)
-		if writeErr != nil {
-			a.api.Log(ctx, fmt.Sprintf("error writing app cache: %s", writeErr.Error()))
-			return
-		}
-		a.api.Log(ctx, fmt.Sprintf("wrote app cache to %s", cachePath))
+		a.saveAppToCache(ctx)
 	}
 
 	a.api.Log(ctx, fmt.Sprintf("indexed %d apps, cost %d ms", len(a.apps), util.GetSystemTimestamp()-startTimestamp))
+}
+
+func (a *AppPlugin) saveAppToCache(ctx context.Context) {
+	if len(a.apps) == 0 {
+		return
+	}
+
+	var cachePath = a.getAppCachePath()
+	cacheContent, marshalErr := json.Marshal(a.apps)
+	if marshalErr != nil {
+		a.api.Log(ctx, fmt.Sprintf("error marshalling app cache: %s", marshalErr.Error()))
+		return
+	}
+	writeErr := os.WriteFile(cachePath, cacheContent, 0644)
+	if writeErr != nil {
+		a.api.Log(ctx, fmt.Sprintf("error writing app cache: %s", writeErr.Error()))
+		return
+	}
+	a.api.Log(ctx, fmt.Sprintf("wrote app cache to %s", cachePath))
 }
 
 func (a *AppPlugin) watchAppChanges(ctx context.Context) {
@@ -154,8 +162,37 @@ func (a *AppPlugin) watchAppChanges(ctx context.Context) {
 			var directory = d
 			util.WatchDirectories(ctx, directory, func(e fsnotify.Event) {
 				if strings.HasSuffix(e.Name, ".app") {
-					a.api.Log(ctx, fmt.Sprintf("app %s changed (%s), reindexing", e.Name, e.Op))
-					a.indexApps(util.NewTraceContext())
+					a.api.Log(ctx, fmt.Sprintf("app %s changed (%s)", e.Name, e.Op))
+					if e.Op == fsnotify.Remove || e.Op == fsnotify.Rename {
+						for i, app := range a.apps {
+							if app.Path == e.Name {
+								a.apps = append(a.apps[:i], a.apps[i+1:]...)
+								a.api.Log(ctx, fmt.Sprintf("app %s removed", e.Name))
+								a.saveAppToCache(ctx)
+								break
+							}
+						}
+					} else if e.Op == fsnotify.Create {
+						//check if already exist
+						for _, app := range a.apps {
+							if app.Path == e.Name {
+								return
+							}
+						}
+
+						//wait for file copy complete
+						time.Sleep(time.Second * 2)
+
+						info, getErr := a.getMacAppInfo(ctx, e.Name)
+						if getErr != nil {
+							a.api.Log(ctx, fmt.Sprintf("error getting app info for %s: %s", e.Name, getErr.Error()))
+							return
+						}
+
+						a.api.Log(ctx, fmt.Sprintf("app %s added", e.Name))
+						a.apps = append(a.apps, info)
+						a.saveAppToCache(ctx)
+					}
 				}
 			})
 		}

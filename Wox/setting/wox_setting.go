@@ -7,16 +7,15 @@ import (
 	"runtime"
 	"strings"
 	"wox/i18n"
-	"wox/util"
 )
 
 type WoxSetting struct {
-	MainHotkey           string
+	MainHotkey           PlatformSettingValue[string]
 	UsePinYin            bool
 	SwitchInputMethodABC bool
 	ShowTray             bool
 	LangCode             i18n.LangCode
-	QueryHotkeys         []QueryHotkey
+	QueryHotkeys         PlatformSettingValue[[]QueryHotkey]
 	LastQueryMode        LastQueryMode
 }
 
@@ -43,21 +42,17 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 	}
 
 	return WoxSetting{
-		MainHotkey:           getDefaultMainHotkey(ctx),
+		MainHotkey: PlatformSettingValue[string]{
+			WinValue:   "alt+space",
+			MacValue:   "command+space",
+			LinuxValue: "alt+space",
+		},
 		UsePinYin:            usePinYin,
 		SwitchInputMethodABC: switchInputMethodABC,
 		ShowTray:             true,
 		LangCode:             langCode,
 		LastQueryMode:        LastQueryModeEmpty,
 	}
-}
-
-func getDefaultMainHotkey(ctx context.Context) string {
-	combineKey := "alt+space"
-	if util.IsMacOS() {
-		combineKey = "command+space"
-	}
-	return combineKey
 }
 
 func isZhCN() bool {

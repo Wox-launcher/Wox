@@ -77,11 +77,11 @@ func main() {
 
 	// hotkey must be registered in main thread
 	mainthread.Init(func() {
-		registerMainHotkeyErr := ui.GetUIManager().RegisterMainHotkey(ctx, woxSetting.MainHotkey)
+		registerMainHotkeyErr := ui.GetUIManager().RegisterMainHotkey(ctx, woxSetting.MainHotkey.Get())
 		if registerMainHotkeyErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to register main hotkey: %s", registerMainHotkeyErr.Error()))
 		}
-		for _, queryHotkey := range woxSetting.QueryHotkeys {
+		for _, queryHotkey := range woxSetting.QueryHotkeys.Get() {
 			registerQueryHotkeyErr := ui.GetUIManager().RegisterQueryHotkey(ctx, queryHotkey)
 			if registerQueryHotkeyErr != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("failed to register query hotkey: %s", registerQueryHotkeyErr.Error()))

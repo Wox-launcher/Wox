@@ -73,6 +73,9 @@ func (m *Manager) loadWoxSetting(ctx context.Context) error {
 		return decodeErr
 	}
 	// some settings were added later, json file may not have them, so we need to set them to default value
+	if woxSetting.MainHotkey.Get() == "" {
+		woxSetting.MainHotkey.Set(defaultWoxSetting.MainHotkey.Get())
+	}
 	if woxSetting.LangCode == "" {
 		woxSetting.LangCode = defaultWoxSetting.LangCode
 	}
