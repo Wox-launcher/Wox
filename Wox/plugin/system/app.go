@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"github.com/mitchellh/go-homedir"
 	"howett.net/plist"
@@ -77,6 +78,9 @@ func (a *AppPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	util.Go(ctx, "index apps", func() {
 		a.indexApps(util.NewTraceContext())
 	})
+	util.Go(ctx, "watch app changes", func() {
+		a.watchAppChanges(util.NewTraceContext())
+	})
 }
 
 func (a *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -124,7 +128,6 @@ func (a *AppPlugin) indexApps(ctx context.Context) {
 	}
 
 	if len(apps) > 0 {
-		a.api.Log(ctx, fmt.Sprintf("indexed %d apps", len(a.apps)))
 		a.apps = apps
 
 		var cachePath = a.getAppCachePath()
@@ -142,6 +145,21 @@ func (a *AppPlugin) indexApps(ctx context.Context) {
 	}
 
 	a.api.Log(ctx, fmt.Sprintf("indexed %d apps, cost %d ms", len(a.apps), util.GetSystemTimestamp()-startTimestamp))
+}
+
+func (a *AppPlugin) watchAppChanges(ctx context.Context) {
+	if util.IsMacOS() {
+		var appDirectories = a.getMacAppDirectories(ctx)
+		for _, d := range appDirectories {
+			var directory = d
+			util.WatchDirectories(ctx, directory, func(e fsnotify.Event) {
+				if strings.HasSuffix(e.Name, ".app") {
+					a.api.Log(ctx, fmt.Sprintf("app %s changed (%s), reindexing", e.Name, e.Op))
+					a.indexApps(util.NewTraceContext())
+				}
+			})
+		}
+	}
 }
 
 func (a *AppPlugin) getAppCachePath() string {
@@ -177,15 +195,7 @@ func (a *AppPlugin) loadAppCache(ctx context.Context) ([]appInfo, error) {
 func (a *AppPlugin) getMacApps(ctx context.Context) []appInfo {
 	a.api.Log(ctx, "start to get mac apps")
 
-	userHomeApps, _ := homedir.Expand("~/Applications")
-	var appDirectories = []string{
-		userHomeApps,
-		"/Applications",
-		"/Applications/Utilities",
-		"/System/Applications",
-		"/System/Library/PreferencePanes",
-	}
-
+	var appDirectories = a.getMacAppDirectories(ctx)
 	var appDirectoryPaths []string
 	for _, appDirectory := range appDirectories {
 		// get all .app directories in appDirectory
@@ -199,17 +209,26 @@ func (a *AppPlugin) getMacApps(ctx context.Context) []appInfo {
 			if strings.HasSuffix(entry.Name(), ".app") {
 				appDirectoryPaths = append(appDirectoryPaths, path.Join(appDirectory, entry.Name()))
 			} else {
-				appSubDir, readSubDirErr := os.ReadDir(path.Join(appDirectory, entry.Name()))
-				if readSubDirErr != nil {
-					a.api.Log(ctx, fmt.Sprintf("error reading directory %s: %s", appDirectory, readSubDirErr.Error()))
+				subDir := path.Join(appDirectory, entry.Name())
+				isDirectory, dirErr := util.IsDirectory(subDir)
+				if dirErr != nil {
 					continue
 				}
 
-				for _, subEntry := range appSubDir {
-					if strings.HasSuffix(subEntry.Name(), ".app") {
-						appDirectoryPaths = append(appDirectoryPaths, path.Join(appDirectory, entry.Name(), subEntry.Name()))
+				if isDirectory {
+					appSubDir, readSubDirErr := os.ReadDir(subDir)
+					if readSubDirErr != nil {
+						a.api.Log(ctx, fmt.Sprintf("error reading directory %s: %s", appDirectory, readSubDirErr.Error()))
+						continue
+					}
+
+					for _, subEntry := range appSubDir {
+						if strings.HasSuffix(subEntry.Name(), ".app") {
+							appDirectoryPaths = append(appDirectoryPaths, path.Join(appDirectory, entry.Name(), subEntry.Name()))
+						}
 					}
 				}
+
 			}
 		}
 	}
@@ -226,6 +245,17 @@ func (a *AppPlugin) getMacApps(ctx context.Context) []appInfo {
 	}
 
 	return appInfos
+}
+
+func (a *AppPlugin) getMacAppDirectories(ctx context.Context) []string {
+	userHomeApps, _ := homedir.Expand("~/Applications")
+	return []string{
+		userHomeApps,
+		"/Applications",
+		"/Applications/Utilities",
+		"/System/Applications",
+		"/System/Library/PreferencePanes",
+	}
 }
 
 func (a *AppPlugin) getMacAppInfo(ctx context.Context, path string) (appInfo, error) {
