@@ -189,6 +189,19 @@ func (a *AppPlugin) watchAppChanges(ctx context.Context) {
 							return
 						}
 
+						if info.Name == "(null)" {
+							a.api.Log(ctx, "copy app to application folder may not finished, wait 2 seconds")
+
+							//copy may not ready wait for another 2 seconds
+							time.Sleep(time.Second * 2)
+
+							info, getErr = a.getMacAppInfo(ctx, e.Name)
+							if getErr != nil {
+								a.api.Log(ctx, fmt.Sprintf("error getting app info again for %s: %s", e.Name, getErr.Error()))
+								return
+							}
+						}
+
 						a.api.Log(ctx, fmt.Sprintf("app %s added", e.Name))
 						a.apps = append(a.apps, info)
 						a.saveAppToCache(ctx)

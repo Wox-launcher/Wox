@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"wox/util"
 )
@@ -205,6 +206,10 @@ func (m *Manager) SavePluginSetting(ctx context.Context, pluginId string, plugin
 }
 
 func (m *Manager) AddQueryHistory(ctx context.Context, query string) {
+	if strings.TrimSpace(query) == "" {
+		return
+	}
+
 	logger.Debug(ctx, fmt.Sprintf("add query history: %s", query))
 	m.woxAppData.QueryHistories = append(m.woxAppData.QueryHistories, QueryHistory{
 		Query:     query,
