@@ -14,6 +14,7 @@ export type WoxQueryBoxRefHandler = {
 export type WoxQueryBoxProps = {
   defaultValue?: string
   onQueryChange: (query: string) => void
+  onFocus?: () => void
 }
 
 export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQueryBoxRefHandler>) => {
@@ -59,6 +60,9 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
            autoCorrect="off"
            autoCapitalize="off"
            defaultValue={_props.defaultValue}
+           onFocus={() => {
+             _props.onFocus()
+           }}
            onChange={(e) => {
              _props.onQueryChange(e.target.value)
            }} />

@@ -10,6 +10,9 @@ import { WoxPreviewTypeEnum } from "../enums/WoxPreviewTypeEnum.ts"
 import { Image } from "react-bootstrap"
 import Markdown from "react-markdown"
 import { Scrollbars } from "react-custom-scrollbars"
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
+import { faCoffee } from "@fortawesome/free-solid-svg-icons"
+import { pinyin } from "pinyin-pro"
 
 export type WoxQueryResultRefHandler = {
   clearResultList: () => void
@@ -18,6 +21,8 @@ export type WoxQueryResultRefHandler = {
   moveDown: () => void
   doAction: () => void
   resetMouseIndex: () => void
+  showActionList: () => void
+  hideActionList: () => void
 }
 
 export type WoxQueryResultProps = {
@@ -28,11 +33,18 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   const currentWindowHeight = useRef(60)
   const currentResultList = useRef<WOXMESSAGE.WoxMessageResponseResult[]>([])
   const currentActiveIndex = useRef(0)
+  const currentActionActiveIndex = useRef(0)
   const currentMouseOverIndex = useRef(0)
   const currentULRef = useRef<Scrollbars>(null)
+  const currentResult = useRef<WOXMESSAGE.WoxMessageResponseResult>()
+  const currentFilterText = useRef<string>("")
   const [activeIndex, setActiveIndex] = useState<number>(0)
+  const [actionActiveIndex, setActionActiveIndex] = useState<number>(0)
   const [resultList, setResultList] = useState<WOXMESSAGE.WoxMessageResponseResult[]>([])
   const [hasPreview, setHasPreview] = useState<boolean>(false)
+  const [actionList, setActionList] = useState<WOXMESSAGE.WoxResultAction[]>([])
+  const [showActionList, setShowActionList] = useState<boolean>(false)
+  const filterInputRef = React.createRef<HTMLInputElement>()
 
   const resetResultList = (rsList: WOXMESSAGE.WoxMessageResponseResult[]) => {
     currentActiveIndex.current = 0
@@ -53,17 +65,49 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     currentWindowHeight.current = windowHeight
   }
 
+  const filterActionList = () => {
+    if (actionList.length > 1) {
+      const filteredActionList = actionList.filter((action) => {
+        if (!/[^\u4e00-\u9fa5]/.test(action.Name)) {
+          const pyTransfer = pinyin(action.Name)
+          return pyTransfer.indexOf(currentFilterText.current) > -1
+        }
+        return action.Name.toLowerCase().indexOf(currentFilterText.current.toLowerCase()) >= 0
+
+      })
+      setActionList(filteredActionList)
+      currentActionActiveIndex.current = 0
+      setActionActiveIndex(0)
+    }
+  }
+
+  const sendActionMessage = async (resultId: string, action: WOXMESSAGE.WoxResultAction) => {
+    await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ACTION.code, {
+      "resultId": resultId,
+      "actionId": action.Id
+    })
+    if (!action.PreventHideAfterAction) {
+      _props.callback?.(WoxMessageRequestMethodEnum.HideApp.code)
+    }
+  }
+
   const handleAction = async () => {
-    const result = currentResultList.current.find((result) => result.Index === currentActiveIndex.current)
-    if (result) {
-      for (const action of result.Actions) {
-        if (action.IsDefault) {
-          await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ACTION.code, {
-            "resultId": result.Id,
-            "actionId": action.Id
-          })
-          if (!action.PreventHideAfterAction) {
-            _props.callback?.(WoxMessageRequestMethodEnum.HideApp.code)
+    if (showActionList) {
+      const result = currentResultList.current.find((result) => result.Index === currentActiveIndex.current)
+      if (result) {
+        currentResult.current = result
+        const action = actionList.find((action) => action.Id === result.Actions[currentActionActiveIndex.current].Id)
+        if (action) {
+          await sendActionMessage(result.Id, action)
+        }
+      }
+    } else {
+      const result = currentResultList.current.find((result) => result.Index === currentActiveIndex.current)
+      if (result) {
+        currentResult.current = result
+        for (const action of result.Actions) {
+          if (action.IsDefault) {
+            await sendActionMessage(result.Id, action)
           }
         }
       }
@@ -79,26 +123,49 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   }
 
   const handleMoveUp = () => {
-    currentMouseOverIndex.current = 0
-    currentActiveIndex.current = currentActiveIndex.current <= 0 ? currentResultList.current.length - 1 : currentActiveIndex.current - 1
-    setActiveIndex(currentActiveIndex.current)
-    if (currentActiveIndex.current >= 10) {
-      currentULRef.current?.scrollTop(50 * (currentActiveIndex.current - 9))
-    }
-    if (currentActiveIndex.current === currentResultList.current.length - 1) {
-      currentULRef.current?.scrollTop(50 * (currentResultList.current.length - 1))
+    if (showActionList) {
+      currentActionActiveIndex.current = actionActiveIndex <= 0 ? actionList.length - 1 : actionActiveIndex - 1
+      setActionActiveIndex(currentActionActiveIndex.current)
+    } else {
+      currentMouseOverIndex.current = 0
+      currentActiveIndex.current = currentActiveIndex.current <= 0 ? currentResultList.current.length - 1 : currentActiveIndex.current - 1
+      setActiveIndex(currentActiveIndex.current)
+      if (currentActiveIndex.current >= 10) {
+        currentULRef.current?.scrollTop(50 * (currentActiveIndex.current - 9))
+      }
+      if (currentActiveIndex.current === currentResultList.current.length - 1) {
+        currentULRef.current?.scrollTop(50 * (currentResultList.current.length - 1))
+      }
     }
   }
 
   const handleMoveDown = () => {
-    currentMouseOverIndex.current = 0
-    currentActiveIndex.current = currentActiveIndex.current >= currentResultList.current.length - 1 ? 0 : currentActiveIndex.current + 1
-    setActiveIndex(currentActiveIndex.current)
-    if (currentActiveIndex.current >= 10) {
-      currentULRef.current?.scrollTop(50 * (currentActiveIndex.current - 9))
+    if (showActionList) {
+      currentActionActiveIndex.current = actionActiveIndex >= actionList.length - 1 ? 0 : actionActiveIndex + 1
+      setActionActiveIndex(currentActionActiveIndex.current)
+    } else {
+      currentMouseOverIndex.current = 0
+      currentActiveIndex.current = currentActiveIndex.current >= currentResultList.current.length - 1 ? 0 : currentActiveIndex.current + 1
+      setActiveIndex(currentActiveIndex.current)
+      if (currentActiveIndex.current >= 10) {
+        currentULRef.current?.scrollTop(50 * (currentActiveIndex.current - 9))
+      }
+      if (currentActiveIndex.current === 0) {
+        currentULRef.current?.scrollTop(0)
+      }
     }
-    if (currentActiveIndex.current === 0) {
-      currentULRef.current?.scrollTop(0)
+  }
+
+  const handleShowActionList = async () => {
+    const result = currentResultList.current.find((result) => result.Index === currentActiveIndex.current)
+    if (result) {
+      currentResult.current = result
+      //resize window
+      currentWindowHeight.current = 560
+      WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), currentWindowHeight.current).then(_ => {
+        setActionList(result.Actions)
+        setShowActionList(true)
+      })
     }
   }
 
@@ -127,7 +194,14 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       handleAction()
     },
     resetMouseIndex: () => {
+      setShowActionList(false)
       currentMouseOverIndex.current = 0
+    },
+    showActionList: () => {
+      handleShowActionList()
+    },
+    hideActionList: () => {
+      setShowActionList(false)
     }
   }))
 
@@ -146,6 +220,10 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
               currentActiveIndex.current = index
               setActiveIndex(index)
             }
+          }} onClick={(event) => {
+            handleAction()
+            event.preventDefault()
+            event.stopPropagation()
           }}>
             {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeSvg.code &&
               <div className={"wox-query-result-image"}
@@ -194,6 +272,40 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
           </div>
         }
       </div>}
+
+    {showActionList && <div className={"wox-query-result-action-container"} onClick={() => {
+      setShowActionList(false)
+    }}>
+      <div className={"wox-query-result-action-list"} onClick={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+      }}>
+        <div className={"wox-query-result-action-list-header"}>Actions</div>
+        {actionList.map((action, index) => {
+          return <div key={`wox-result-action-item-${index}`}
+                      className={index === actionActiveIndex ? "wox-result-action-item wox-result-action-item-active" : "wox-result-action-item"} onClick={(event) => {
+            sendActionMessage(currentResult.current?.Id || "", action)
+            event.preventDefault()
+            event.stopPropagation()
+          }}>
+            <FontAwesomeIcon className={"wox-result-action-item-icon"} icon={faCoffee} />
+            <span className={"wox-result-action-item-name"}>{action.Name}</span>
+          </div>
+        })}
+        <div className={"wox-action-list-filter"}>
+          <input ref={filterInputRef} className={"wox-action-list-filter-input mousetrap"} type="text"
+                 aria-label="Wox"
+                 autoComplete="off"
+                 autoCorrect="off"
+                 autoCapitalize="off"
+                 autoFocus={true}
+                 onChange={(e) => {
+                   currentFilterText.current = e.target.value
+                   filterActionList()
+                 }} />
+        </div>
+      </div>
+    </div>}
   </Style>
 })
 
@@ -333,7 +445,68 @@ const Style = styled.div`
           white-space: nowrap;
         }
       }
-
     }
+  }
+
+  .wox-query-result-action-container {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 60px;
+    bottom: 0;
+    z-index: 8888;
+  }
+
+  .wox-query-result-action-list {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background-color: #e8e8e6;
+    border: 1px solid #dedede;
+    border-radius: 5px;
+    width: 300px;
+    padding: 5px;
+    z-index: 9999;
+
+    .wox-query-result-action-list-header {
+      color: #747473;
+    }
+
+    .wox-result-action-item {
+      display: flex;
+      line-height: 30px;
+      align-items: center;
+      padding: 4px 5px;
+
+      .wox-result-action-item-icon {
+        padding-right: 8px;
+      }
+    }
+
+    .wox-result-action-item-active {
+      background-color: #d1d1cf;
+      border-radius: 5px;
+    }
+
+    .wox-action-list-filter {
+      border-top: 1px solid #dedede;
+      padding-top: 5px;
+      margin-top: 5px;
+
+      .wox-action-list-filter-input {
+        width: 100%;
+        font-size: 18px;
+        outline: none;
+        border: 0;
+        border-radius: 5px;
+        padding: 0 5px;
+        cursor: auto;
+        color: black;
+        display: inline-block;
+        background-color: transparent;
+      }
+    }
+
+
   }
 `

@@ -12,12 +12,17 @@
     "release": "tauri build -b none"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^6.4.2",
+    "@fortawesome/free-solid-svg-icons": "^6.4.2",
+    "@fortawesome/react-fontawesome": "^0.2.0",
     "@tauri-apps/api": "^1.5.0",
     "@uidotdev/usehooks": "^2.4.1",
     "bootstrap": "^5.3.2",
     "interweave": "^13.1.0",
     "lodash": "^4.17.21",
     "mousetrap": "^1.6.5",
+    "pinyin": "3.0.0-alpha.5",
+    "pinyin-pro": "^3.17.0",
     "promise-deferred": "^2.0.4",
     "react": "^18.2.0",
     "react-bootstrap": "^2.9.0",

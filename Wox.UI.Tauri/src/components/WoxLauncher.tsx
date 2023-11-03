@@ -24,6 +24,7 @@ export default () => {
     Deal with query change event
    */
   const onQueryChange = (query: string) => {
+    woxQueryResultRef.current?.hideActionList()
     currentQuery.current = query
     fullResultList.current = []
     clearTimeout(requestTimeoutId.current)
@@ -160,6 +161,11 @@ export default () => {
       event.preventDefault()
       event.stopPropagation()
     })
+    Mousetrap.bind("command+j", (event) => {
+      woxQueryResultRef.current?.showActionList()
+      event.preventDefault()
+      event.stopPropagation()
+    })
   }
 
   useInterval(async () => {
@@ -185,7 +191,9 @@ export default () => {
   }, [])
 
   return <Style className={"wox-launcher"}>
-    <WoxQueryBox ref={woxQueryBoxRef} onQueryChange={onQueryChange} />
+    <WoxQueryBox ref={woxQueryBoxRef} onQueryChange={onQueryChange} onFocus={() => {
+      woxQueryResultRef.current?.hideActionList()
+    }} />
     <WoxQueryResult ref={woxQueryResultRef} callback={(method: WoxMessageRequestMethod) => {
       if (method === WoxMessageRequestMethodEnum.HideApp.code) {
         hideWoxWindow()
