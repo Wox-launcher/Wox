@@ -4,7 +4,7 @@ default:
 @dev:
     # make sure lefthook installed
     go install github.com/evilmartians/lefthook@latest
-    lefthook install
+    lefthook install -f
 
     just _build_hosts
     just plugins
