@@ -150,8 +150,13 @@ export default () => {
 
   const bindKeyboardEvent = () => {
     Mousetrap.bind("esc", (event) => {
-      woxQueryResultRef.current?.resetMouseIndex()
-      hideWoxWindow()
+      if (woxQueryResultRef.current?.isActionListShown()) {
+        woxQueryResultRef.current?.hideActionList()
+        woxQueryBoxRef.current?.focus()
+      } else {
+        woxQueryResultRef.current?.resetMouseIndex()
+        hideWoxWindow()
+      }
       event.preventDefault()
       event.stopPropagation()
     })

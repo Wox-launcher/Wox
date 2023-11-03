@@ -23,6 +23,7 @@ export type WoxQueryResultRefHandler = {
   resetMouseIndex: () => void
   showActionList: () => void
   hideActionList: () => void
+  isActionListShown: () => boolean
 }
 
 export type WoxQueryResultProps = {
@@ -202,6 +203,9 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     },
     hideActionList: () => {
       setShowActionList(false)
+    },
+    isActionListShown: () => {
+      return showActionList
     }
   }))
 
