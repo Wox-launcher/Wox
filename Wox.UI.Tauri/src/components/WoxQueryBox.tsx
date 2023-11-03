@@ -75,7 +75,7 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
            }} />
     {currentQuery && <span className={"wox-placeholder"}>{placeHolder.split("").map((value, index) => {
       if (currentQuery && index < currentQuery.length) {
-        return <span style={{ color: "transparent", padding: 0, display: "inline" }}>{value}</span>
+        return <span style={{ color: "transparent", padding: 0, display: "inline" }}>{currentQuery.split("")[index]}</span>
       }
       return value
     })}</span>}
@@ -112,7 +112,7 @@ const Style = styled.div`
 
   .wox-placeholder {
     position: absolute;
-    left: 7px;
+    left: 10px;
     top: ${WoxTauriHelper.getInstance().isTauri() ? "12px" : "11px"};
     font-size: 24px;
     color: #545454;
