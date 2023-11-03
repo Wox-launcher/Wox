@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-macos:
-    runs-on: qlf_mac
+    runs-on: [ self-hosted, macOS ]
     steps:
       - uses: actions/checkout@v3
       - uses: extractions/setup-just@v1
@@ -27,7 +27,7 @@ jobs:
       - name: Build
         run: just release darwin
   build-windows:
-    runs-on: qlf_windows
+    runs-on: [ self-hosted, Windows ]
     steps:
       - uses: actions/checkout@v3
       - uses: extractions/setup-just@v1
