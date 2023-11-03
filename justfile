@@ -21,8 +21,6 @@ default:
     just _build_dev_nodejs_plugin_chatgpt Wox.Plugin.Chatgpt ~/icloud/wox/plugins
 
 @release target:
-    ENV PROD=true
-
     just _build_hosts
     just _build_ui
 
