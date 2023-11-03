@@ -61,7 +61,7 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
            autoCapitalize="off"
            defaultValue={_props.defaultValue}
            onFocus={() => {
-             _props.onFocus()
+             _props.onFocus?.()
            }}
            onChange={(e) => {
              _props.onQueryChange(e.target.value)

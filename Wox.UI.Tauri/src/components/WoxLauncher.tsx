@@ -194,6 +194,7 @@ export default () => {
     <WoxQueryBox ref={woxQueryBoxRef} onQueryChange={onQueryChange} onFocus={() => {
       woxQueryResultRef.current?.hideActionList()
     }} />
+
     <WoxQueryResult ref={woxQueryResultRef} callback={(method: WoxMessageRequestMethod) => {
       if (method === WoxMessageRequestMethodEnum.HideApp.code) {
         hideWoxWindow()
