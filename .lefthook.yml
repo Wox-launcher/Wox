@@ -1,0 +1,5 @@
+pre-commit:
+  commands:
+    ui-build:
+      root: "Wox.UI.Tauri/"
+      run: pnpm build

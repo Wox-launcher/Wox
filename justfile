@@ -2,6 +2,10 @@ default:
     @just --list --unsorted
 
 @dev:
+    # make sure lefthook installed
+    go install github.com/evilmartians/lefthook@latest
+    lefthook install
+
     just _build_hosts
     just plugins
 
