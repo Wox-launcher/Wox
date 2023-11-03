@@ -215,7 +215,7 @@ func (c *ClipboardPlugin) getActiveWindowIconFilePath(ctx context.Context) (stri
 
 func (c *ClipboardPlugin) saveHistory(ctx context.Context) {
 	historyJson, _ := json.Marshal(c.history)
-	c.api.SaveSetting(ctx, "history", string(historyJson))
+	c.api.SaveSetting(ctx, "history", string(historyJson), false)
 	c.api.Log(ctx, fmt.Sprintf("save clipboard history, count=%d", len(c.history)))
 }
 

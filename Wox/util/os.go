@@ -16,3 +16,7 @@ func IsMacOS() bool {
 func IsLinux() bool {
 	return strings.ToLower(runtime.GOOS) == "linux"
 }
+
+func GetCurrentPlatform() string {
+	return strings.ToLower(runtime.GOOS)
+}

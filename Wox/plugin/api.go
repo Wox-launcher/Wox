@@ -15,7 +15,7 @@ type API interface {
 	Log(ctx context.Context, msg string)
 	GetTranslation(ctx context.Context, key string) string
 	GetSetting(ctx context.Context, key string) string
-	SaveSetting(ctx context.Context, key string, value string)
+	SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool)
 	OnSettingChanged(ctx context.Context, callback func(key string, value string))
 }
 
@@ -53,14 +53,25 @@ func (a *APIImpl) GetTranslation(ctx context.Context, key string) string {
 }
 
 func (a *APIImpl) GetSetting(ctx context.Context, key string) string {
-	v, exist := a.pluginInstance.Setting.GetCustomizedSetting(key)
+	// try to get platform specific setting first
+	platformSpecificKey := key + "@" + util.GetCurrentPlatform()
+	v, exist := a.pluginInstance.Setting.GetCustomizedSetting(platformSpecificKey)
+	if exist {
+		return v
+	}
+
+	v, exist = a.pluginInstance.Setting.GetCustomizedSetting(key)
 	if exist {
 		return v
 	}
 	return ""
 }
 
-func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string) {
+func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool) {
+	if isPlatformSpecific {
+		key = key + "@" + util.GetCurrentPlatform()
+	}
+
 	existValue, exist := a.pluginInstance.Setting.CustomizedSettings.Load(key)
 	a.pluginInstance.Setting.CustomizedSettings.Store(key, value)
 	a.pluginInstance.SaveSetting(ctx)

@@ -76,8 +76,8 @@ export class PluginAPI implements PublicAPI {
     return (await this.invokeMethod("GetSetting", { key })) as string
   }
 
-  async SaveSetting(key: string, value: string): Promise<void> {
-    await this.invokeMethod("SaveSetting", { key, value })
+  async SaveSetting(key: string, value: string, isPlatformSpecific: boolean): Promise<void> {
+    await this.invokeMethod("SaveSetting", { key, value, isPlatformSpecific: isPlatformSpecific.toString() })
   }
 
   async OnSettingChanged(callback: (key: string, value: string) => void): Promise<void> {

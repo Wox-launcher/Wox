@@ -240,8 +240,14 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, data string
 			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] SaveSetting method must have a value parameter", request.PluginName))
 			return
 		}
+		isPlatformSpecificStr, isPlatformSpecificExist := request.Params["isPlatformSpecific"]
+		if !isPlatformSpecificExist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] SaveSetting method must have a isPlatformSpecific parameter", request.PluginName))
+			return
+		}
+		isPlatformSpecific := strings.ToLower(isPlatformSpecificStr) == "true"
 
-		pluginInstance.API.SaveSetting(ctx, key, value)
+		pluginInstance.API.SaveSetting(ctx, key, value, isPlatformSpecific)
 		w.sendResponse(ctx, request, "")
 	case "OnPluginSettingChanged":
 		callbackId, exist := request.Params["callbackId"]

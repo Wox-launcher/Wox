@@ -112,13 +112,17 @@ export interface PublicAPI {
 
   /**
    * Get customized setting
+   *
+   * will try to get platform specific setting first, if not found, will try to get global setting
    */
   GetSetting: (key: string) => Promise<string>
 
   /**
    * Save customized setting
+   *
+   * @isPlatformSpecific If true, setting will be only saved in current platform. If false, setting will be available in all platforms
    */
-  SaveSetting: (key: string, value: string) => Promise<void>
+  SaveSetting: (key: string, value: string, isPlatformSpecific: boolean) => Promise<void>
 
   /**
    * Register setting changed callback
