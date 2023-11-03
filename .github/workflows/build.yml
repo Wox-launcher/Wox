@@ -12,9 +12,27 @@ jobs:
       - uses: actions/checkout@v3
       - name: Build
         run: just release darwin
+      - name: Deploy nightly release
+        uses: WebFreak001/deploy-nightly@v3.0.0
+        with:
+          upload_url: https://uploads.github.com/repos/Wox-launcher/Wox/releases/127182165/assets{?name,label}
+          release_id: 127182165
+          asset_path: ./Release/wox-mac-amd64 # path to archive to upload
+          asset_name: wox-mac-amd64-$$ # name to upload the release as, use $$ to insert date (YYYYMMDD) and 6 letter commit hash
+          asset_content_type: application/vnd.microsoft.portable-executable # required by GitHub API
+          max_releases: 3
   build-windows:
     runs-on: [ self-hosted, Windows ]
     steps:
       - uses: actions/checkout@v3
       - name: Build
         run: just release windows
+      - name: Deploy nightly release
+        uses: WebFreak001/deploy-nightly@v3.0.0
+        with:
+          upload_url: https://uploads.github.com/repos/Wox-launcher/Wox/releases/127182165/assets{?name,label}
+          release_id: 127182165
+          asset_path: ./Release/wox-windows-amd64.exe # path to archive to upload
+          asset_name: wox-windows-amd64-$$.exe # name to upload the release as, use $$ to insert date (YYYYMMDD) and 6 letter commit hash
+          asset_content_type: application/vnd.microsoft.portable-executable # required by GitHub API
+          max_releases: 3
