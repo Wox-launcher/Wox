@@ -54,7 +54,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     setResultList(currentResultList.current)
   }
 
-  const resizeWindowByResultList = (results: WOXMESSAGE.WoxMessageResponseResult[], windowHeight: number) => {
+  const resizeWindowAndResultList = (results: WOXMESSAGE.WoxMessageResponseResult[], windowHeight: number) => {
     if (windowHeight > currentWindowHeight.current) {
       WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), windowHeight).then(_ => {
         resetResultList(results)
@@ -173,7 +173,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   useImperativeHandle(ref, () => ({
     clearResultList: () => {
       setActiveIndex(0)
-      resizeWindowByResultList([], 60)
+      resizeWindowAndResultList([], 60)
     },
     changeResultList: (preview: boolean, results: WOXMESSAGE.WoxMessageResponseResult[]) => {
       setHasPreview(preview)
@@ -182,7 +182,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       if (currentWindowHeight.current === windowHeight) {
         resetResultList(results)
       } else {
-        resizeWindowByResultList(results, windowHeight)
+        resizeWindowAndResultList(results, windowHeight)
       }
     },
     moveUp: () => {
@@ -203,6 +203,8 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     },
     hideActionList: () => {
       setShowActionList(false)
+      const windowHeight = hasPreview ? 560 : 60 + 50 * (currentResultList.current.length > 10 ? 10 : currentResultList.current.length)
+      WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), windowHeight)
     },
     isActionListShown: () => {
       return showActionList
