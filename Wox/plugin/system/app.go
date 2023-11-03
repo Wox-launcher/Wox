@@ -113,6 +113,21 @@ func (a *AppPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 							}
 						},
 					},
+					{
+						Name: "i18n:plugin_app_open_containing_folder",
+						Action: func(actionContext plugin.ActionContext) {
+							runErr := util.ShellOpen(path.Dir(info.Path))
+							if runErr != nil {
+								a.api.Log(ctx, fmt.Sprintf("error openning app %s: %s", info.Path, runErr.Error()))
+							}
+						},
+					},
+					{
+						Name: "i18n:plugin_app_copy_path",
+						Action: func(actionContext plugin.ActionContext) {
+							util.ClipboardWriteText(info.Path)
+						},
+					},
 				},
 			})
 		}

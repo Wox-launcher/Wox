@@ -1,6 +1,8 @@
 {
   "show_wox_preferences": "Show Wox Preferences",
   "plugin_app_open": "Open",
+  "plugin_app_open_containing_folder": "Open containing folder",
+  "plugin_app_copy_path": "Copy path",
   "plugin_browser_bookmark_open_in_browser": "Open in browser",
   "plugin_clipboard_copy_date": "Copy date",
   "plugin_clipboard_copy_characters": "Copy characters",

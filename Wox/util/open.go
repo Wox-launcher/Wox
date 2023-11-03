@@ -4,13 +4,18 @@ import (
 	"os/exec"
 )
 
-func ShellOpen(path string) {
+func ShellOpen(path string) error {
 	if IsMacOS() {
-		exec.Command("open", path).Start()
+		return exec.Command("open", path).Start()
 	}
 	if IsWindows() {
-		exec.Command("cmd", "/C", "start", path).Start()
+		return exec.Command("cmd", "/C", "start", path).Start()
 	}
+	if IsLinux() {
+		return exec.Command("xdg-open", path).Start()
+	}
+
+	return nil
 }
 
 func ShellRun(name string, arg ...string) error {
