@@ -5,6 +5,9 @@ default:
     just _build_hosts
     just plugins
 
+@precommit:
+    cd Wox.UI.Tauri && pnpm build && cd ..
+
 @plugins:
     # build plugins
     #just _build_dev_nodejs_plugin Wox.Plugin.ProcessKiller ~/.wox/wox-user/plugins
