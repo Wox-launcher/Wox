@@ -10,39 +10,11 @@ jobs:
     runs-on: [ self-hosted, macOS ]
     steps:
       - uses: actions/checkout@v3
-      - uses: extractions/setup-just@v1
-      - uses: hecrj/setup-rust-action@v2
-      - uses: actions/setup-go@v4
-        with:
-          go-version: '>=1.21.0'
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - uses: pnpm/action-setup@v2
-        with:
-          version: "latest"
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
       - name: Build
         run: just release darwin
   build-windows:
     runs-on: [ self-hosted, Windows ]
     steps:
       - uses: actions/checkout@v3
-      - uses: extractions/setup-just@v1
-      - uses: hecrj/setup-rust-action@v2
-      - uses: actions/setup-go@v4
-        with:
-          go-version: '>=1.21.0'
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - uses: pnpm/action-setup@v2
-        with:
-          version: "latest"
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
       - name: Build
         run: just release windows
