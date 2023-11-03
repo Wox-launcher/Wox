@@ -22,7 +22,7 @@ default:
 
 @release target:
     just _build_hosts
-    just _build_ui
+    just _build_ui {{target}}
 
     # windows platform in hotkey doesn't need C
     if [ "{{target}}" = "windows" ]; then \
@@ -60,10 +60,18 @@ default:
     just _build_nodejs_host Wox/resource/hosts
     just _build_python_host Wox/resource/hosts
 
-@_build_ui:
+@_build_ui target:
+    # on windows, for poor VPS performance, we set the target-dir="c:/.cargobuild" to cache the rust build between github action builds
     cd Wox.UI.Tauri && pnpm install && pnpm release && cd ..
-    cp Wox.UI.Tauri/src-tauri/target/release/wox Wox/resource/ui/wox
-    chmod +x Wox/resource/ui/wox
+    if [ "{{target}}" = "windows" ]; then \
+      cp "c:/.cargobuild/release/wox.exe" Wox/resource/ui/wox.exe; \
+    elif [ "{{target}}" = "linux" ]; then \
+      cp Wox.UI.Tauri/src-tauri/target/release/wox Wox/resource/ui/wox; \
+      chmod +x Wox/resource/ui/wox; \
+    elif [ "{{target}}" = "darwin" ]; then \
+      cp Wox.UI.Tauri/src-tauri/target/release/wox Wox/resource/ui/wox; \
+      chmod +x Wox/resource/ui/wox; \
+    fi
 
 @_build_nodejs_host directory:
     cd Wox.Plugin.Host.Nodejs && pnpm install && pnpm run build && cd ..

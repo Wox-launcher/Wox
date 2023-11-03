@@ -45,3 +45,18 @@ jobs:
           asset_name: wox-windows-amd64-$$.exe # name to upload the release as, use $$ to insert date (YYYYMMDD) and 6 letter commit hash
           asset_content_type: application/x-msdownload # required by GitHub API
           max_releases: 1
+  build-linux:
+    runs-on: [ self-hosted, Linux ]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build
+        run: just release linux
+      - name: Deploy nightly release
+        uses: WebFreak001/deploy-nightly@v3.0.0
+        with:
+          upload_url: https://uploads.github.com/repos/Wox-launcher/Wox/releases/127182165/assets{?name,label}
+          release_id: 127182165
+          asset_path: ./Release/wox-linux-amd64 # path to archive to upload
+          asset_name: wox-linux-amd64-$$ # name to upload the release as, use $$ to insert date (YYYYMMDD) and 6 letter commit hash
+          asset_content_type: application/x-msdownload # required by GitHub API
+          max_releases: 1
