@@ -66,8 +66,11 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		c.api.Log(ctx, fmt.Sprintf("clipboard data changed, type=%s", data.Type))
 
 		icon := c.getDefaultTextIcon()
-		if iconFilePath, iconErr := c.getActiveWindowIconFilePath(ctx); iconErr == nil {
-			icon = plugin.NewWoxImageAbsolutePath(iconFilePath)
+		// it sometimes is buggy on windows, so we only get active window icon on macos
+		if util.IsMacOS() {
+			if iconFilePath, iconErr := c.getActiveWindowIconFilePath(ctx); iconErr == nil {
+				icon = plugin.NewWoxImageAbsolutePath(iconFilePath)
+			}
 		}
 
 		if data.Type == util.ClipboardTypeText {
