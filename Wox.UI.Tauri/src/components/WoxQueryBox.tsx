@@ -1,15 +1,13 @@
-import React, { useEffect, useImperativeHandle } from "react"
+import React, { useImperativeHandle } from "react"
 import styled from "styled-components"
 import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
-import { useVisibilityChange } from "@uidotdev/usehooks"
-import { WoxMessageHelper } from "../utils/WoxMessageHelper.ts"
-import { WoxMessageMethodEnum } from "../enums/WoxMessageMethodEnum.ts"
 
 export type WoxQueryBoxRefHandler = {
   changeQuery: (query: string) => void
   selectAll: () => void
   focus: () => void
   updatePlaceHolder: (placeHolder: string) => void
+  getQuery: () => string
 }
 
 export type WoxQueryBoxProps = {
@@ -20,7 +18,6 @@ export type WoxQueryBoxProps = {
 
 export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQueryBoxRefHandler>) => {
   const queryBoxRef = React.createRef<HTMLInputElement>()
-  const documentVisible = useVisibilityChange()
   const [currentQuery, setCurrentQuery] = React.useState<string>("")
   const [placeHolder, setPlaceHolder] = React.useState<string>("")
 
@@ -40,20 +37,11 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
     },
     updatePlaceHolder(placeHolder: string) {
       setPlaceHolder(placeHolder)
+    },
+    getQuery: () => {
+      return queryBoxRef.current?.value ?? ""
     }
   }))
-
-  useEffect(() => {
-    // Focus on query box when document is visible
-    if (documentVisible) {
-      queryBoxRef.current?.focus()
-      WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ON_VISIBILITY_CHANGED.code, {
-        "isVisible": "true",
-        "query": queryBoxRef.current?.value || ""
-      })
-    }
-  }, [documentVisible])
-
 
   return <Style className="wox-query-box">
     <input ref={queryBoxRef}

@@ -199,8 +199,12 @@ export default () => {
       woxQueryResultRef.current?.resetMouseIndex()
     }
     // @ts-ignore expose to tauri backend
-    window.focus = () => {
+    window.postShow = () => {
       woxQueryBoxRef.current?.focus()
+      WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ON_VISIBILITY_CHANGED.code, {
+        "isVisible": "true",
+        "query": woxQueryBoxRef.current?.getQuery() || ""
+      })
     }
   }, [])
 
