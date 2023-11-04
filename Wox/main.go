@@ -16,6 +16,7 @@ import (
 
 import _ "wox/plugin/host"   // import all hosts
 import _ "wox/plugin/system" // import all system plugins
+import _ "wox/plugin/system/app"
 
 func main() {
 	// logger depends on location, so location must be initialized first

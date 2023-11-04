@@ -134,6 +134,9 @@ func (a *ApplicationPlugin) getRetriever(ctx context.Context) Retriever {
 	if util.IsMacOS() {
 		return &MacRetriever{api: a.api}
 	}
+	if util.IsWindows() {
+		return &WindowsRetriever{api: a.api}
+	}
 
 	return nil
 }
