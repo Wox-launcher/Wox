@@ -10,21 +10,18 @@ call_lefthook()
   osArch=$(uname | tr '[:upper:]' '[:lower:]')
   cpuArch=$(uname -m | sed 's/aarch64/arm64/')
 
-  if lefthook.exe -h >/dev/null 2>&1
+  if lefthook -h >/dev/null 2>&1
   then
-    lefthook.exe "$@"
-  elif lefthook.bat -h >/dev/null 2>&1
-  then
-    lefthook.bat "$@"
+    lefthook "$@"
   elif test -f "$dir/node_modules/lefthook/bin/index.js"
   then
     "$dir/node_modules/lefthook/bin/index.js" "$@"
-  elif test -f "$dir/node_modules/@evilmartians/lefthook/bin/lefthook_${osArch}_${cpuArch}/lefthook.exe"
+  elif test -f "$dir/node_modules/@evilmartians/lefthook/bin/lefthook_${osArch}_${cpuArch}/lefthook"
   then
-    "$dir/node_modules/@evilmartians/lefthook/bin/lefthook_${osArch}_${cpuArch}/lefthook.exe" "$@"
-  elif test -f "$dir/node_modules/@evilmartians/lefthook-installer/bin/lefthook_${osArch}_${cpuArch}/lefthook.exe"
+    "$dir/node_modules/@evilmartians/lefthook/bin/lefthook_${osArch}_${cpuArch}/lefthook" "$@"
+  elif test -f "$dir/node_modules/@evilmartians/lefthook-installer/bin/lefthook_${osArch}_${cpuArch}/lefthook"
   then
-    "$dir/node_modules/@evilmartians/lefthook-installer/bin/lefthook_${osArch}_${cpuArch}/lefthook.exe" "$@"
+    "$dir/node_modules/@evilmartians/lefthook-installer/bin/lefthook_${osArch}_${cpuArch}/lefthook" "$@"
   elif bundle exec lefthook -h >/dev/null 2>&1
   then
     bundle exec lefthook "$@"
