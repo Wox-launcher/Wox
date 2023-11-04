@@ -40,7 +40,7 @@ func (a *MacRetriever) GetAppExtensions(ctx context.Context) []string {
 }
 
 func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, error) {
-	out, err := exec.Command("mdls", "-name", "kMDItemDisplayName", "-raw", path).Output()
+	out, err := util.ShellRunOutput("mdls", "-name", "kMDItemDisplayName", "-raw", path)
 	if err != nil {
 		msg := fmt.Sprintf("failed to get app name from mdls(%s): %s", path, err.Error())
 		var exitError *exec.ExitError
@@ -87,7 +87,7 @@ func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (plugi
 	if strings.HasSuffix(rawImagePath, ".icns") {
 		//use sips to convert icns to png
 		//sips -s format png /Applications/Calculator.app/Contents/Resources/AppIcon.icns --out /tmp/wox-app-icon.png
-		out, openErr := exec.Command("sips", "-s", "format", "png", rawImagePath, "--out", iconCachePath).Output()
+		out, openErr := util.ShellRunOutput("sips", "-s", "format", "png", rawImagePath, "--out", iconCachePath)
 		if openErr != nil {
 			msg := fmt.Sprintf("failed to convert icns to png: %s", openErr.Error())
 			if out != nil {

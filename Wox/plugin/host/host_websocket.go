@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 	"wox/plugin"
@@ -40,10 +39,7 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 	args = append(args, executableArgs...)
 	args = append(args, entry, fmt.Sprintf("%d", port), util.GetLocation().GetLogHostsDirectory())
 
-	cmd := exec.Command(executablePath, args...)
-	cmd.Stdout = util.GetLogger().GetWriter()
-	cmd.Stderr = util.GetLogger().GetWriter()
-	err := cmd.Start()
+	cmd, err := util.ShellRun(executablePath, args...)
 	if err != nil {
 		return fmt.Errorf("failed to start host: %w", err)
 	}

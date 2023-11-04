@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"os"
-	"os/exec"
 	"path"
 	"strings"
 	"time"
@@ -101,7 +100,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 					{
 						Name: "i18n:plugin_app_open",
 						Action: func(actionContext plugin.ActionContext) {
-							runErr := exec.Command("open", info.Path).Run()
+							runErr := util.ShellOpen(info.Path)
 							if runErr != nil {
 								a.api.Log(ctx, fmt.Sprintf("error openning app %s: %s", info.Path, runErr.Error()))
 							}

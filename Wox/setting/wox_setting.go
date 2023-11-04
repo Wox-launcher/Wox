@@ -3,10 +3,10 @@ package setting
 import (
 	"context"
 	"os"
-	"os/exec"
 	"runtime"
 	"strings"
 	"wox/i18n"
+	"wox/util"
 )
 
 type WoxSetting struct {
@@ -67,8 +67,7 @@ func getLocale() (string, string) {
 	switch osHost {
 	case "windows":
 		// Exec powershell Get-Culture on Windows.
-		cmd := exec.Command("powershell", "Get-Culture | select -exp Name")
-		output, err := cmd.Output()
+		output, err := util.ShellRunOutput("powershell", "Get-Culture | select -exp Name")
 		if err == nil {
 			langLocRaw := strings.TrimSpace(string(output))
 			langLoc := strings.Split(langLocRaw, "-")
@@ -78,8 +77,7 @@ func getLocale() (string, string) {
 		}
 	case "darwin":
 		// Exec shell Get-Culture on MacOS.
-		cmd := exec.Command("sh", "osascript -e 'user locale of (get system info)'")
-		output, err := cmd.Output()
+		output, err := util.ShellRunOutput("sh", "osascript -e 'user locale of (get system info)'")
 		if err == nil {
 			langLocRaw := strings.TrimSpace(string(output))
 			langLoc := strings.Split(langLocRaw, "_")
