@@ -21,3 +21,9 @@ func ShellRun(name string, arg ...string) (*exec.Cmd, error) {
 
 	return cmd, nil
 }
+
+func ShellRunOutput(name string, arg ...string) ([]byte, error) {
+	cmd := exec.Command(name, arg...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true} // Hide the window
+	return cmd.Output()
+}

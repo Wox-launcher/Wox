@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"time"
 	"wox/plugin"
 	"wox/plugin/system"
@@ -193,15 +194,44 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 	startTimestamp := util.GetSystemTimestamp()
 	a.api.Log(ctx, "start to get apps")
 
-	var appInfos []appInfo
-	for _, appPath := range a.getAppPaths(ctx) {
-		info, getErr := a.retriever.ParseAppInfo(ctx, appPath)
-		if getErr != nil {
-			a.api.Log(ctx, fmt.Sprintf("error getting app info for %s: %s", appPath, getErr.Error()))
-			continue
+	appPaths := a.getAppPaths(ctx)
+
+	// split into groups, so we can index apps in parallel
+	var appPathGroups [][]string
+	var groupSize = 25
+	for i := 0; i < len(appPaths); i += groupSize {
+		var end = i + groupSize
+		if end > len(appPaths) {
+			end = len(appPaths)
 		}
-		appInfos = append(appInfos, info)
+		appPathGroups = append(appPathGroups, appPaths[i:end])
 	}
+	a.api.Log(ctx, fmt.Sprintf("found %d apps in %d groups", len(appPaths), len(appPathGroups)))
+
+	var appInfos []appInfo
+	var waitGroup sync.WaitGroup
+	var lock sync.Mutex
+	waitGroup.Add(len(appPathGroups))
+	for groupIndex := range appPathGroups {
+		var appPathGroup = appPathGroups[groupIndex]
+		util.Go(ctx, fmt.Sprintf("index app group: %d", groupIndex), func() {
+			for _, appPath := range appPathGroup {
+				info, getErr := a.retriever.ParseAppInfo(ctx, appPath)
+				if getErr != nil {
+					a.api.Log(ctx, fmt.Sprintf("error getting app info for %s: %s", appPath, getErr.Error()))
+					continue
+				}
+				lock.Lock()
+				appInfos = append(appInfos, info)
+				lock.Unlock()
+			}
+			waitGroup.Done()
+		}, func() {
+			waitGroup.Done()
+		})
+	}
+
+	waitGroup.Wait()
 
 	if len(appInfos) > 0 {
 		a.apps = appInfos

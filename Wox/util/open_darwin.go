@@ -17,3 +17,8 @@ func ShellRun(name string, arg ...string) (*exec.Cmd, error) {
 
 	return cmd, nil
 }
+
+func ShellRunOutput(name string, arg ...string) ([]byte, error) {
+	cmd := exec.Command(name, arg...)
+	return cmd.Output()
+}
