@@ -161,6 +161,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   const handleHideActionList = () => {
     setShowActionList(false)
     setActionActiveIndex(0)
+    currentMouseOverIndex.current = 0
     const windowHeight = hasPreview ? 560 : 60 + 50 * (currentResultList.current.length > 10 ? 10 : currentResultList.current.length)
     WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), windowHeight)
   }
