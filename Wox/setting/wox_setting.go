@@ -77,7 +77,7 @@ func getLocale() (string, string) {
 		}
 	case "darwin":
 		// Exec shell Get-Culture on MacOS.
-		output, err := util.ShellRunOutput("sh", "osascript -e 'user locale of (get system info)'")
+		output, err := util.ShellRunOutput("osascript", "-e", "user locale of (get system info)")
 		if err == nil {
 			langLocRaw := strings.TrimSpace(string(output))
 			langLoc := strings.Split(langLocRaw, "_")
