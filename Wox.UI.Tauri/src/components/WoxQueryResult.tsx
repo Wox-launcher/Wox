@@ -21,7 +21,7 @@ export type WoxQueryResultRefHandler = {
   moveDown: () => void
   doAction: () => void
   resetMouseIndex: () => void
-  showActionList: () => void
+  toggleActionList: () => void
   hideActionList: () => void
   isActionListShown: () => boolean
 }
@@ -33,6 +33,7 @@ export type WoxQueryResultProps = {
 export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<WoxQueryResultRefHandler>) => {
   const currentWindowHeight = useRef(60)
   const currentResultList = useRef<WOXMESSAGE.WoxMessageResponseResult[]>([])
+  const currentActionList = useRef<WOXMESSAGE.WoxResultAction[]>([])
   const currentActiveIndex = useRef(0)
   const currentActionActiveIndex = useRef(0)
   const currentMouseOverIndex = useRef(0)
@@ -67,8 +68,8 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   }
 
   const filterActionList = () => {
-    if (actionList.length > 1) {
-      const filteredActionList = actionList.filter((action) => {
+    if (currentActionList.current.length > 1) {
+      const filteredActionList = currentActionList.current.filter((action) => {
         if (!/[^\u4e00-\u9fa5]/.test(action.Name)) {
           const pyTransfer = pinyin(action.Name)
           return pyTransfer.indexOf(currentFilterText.current) > -1
@@ -157,17 +158,30 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     }
   }
 
-  const handleShowActionList = async () => {
-    const result = currentResultList.current.find((result) => result.Index === currentActiveIndex.current)
-    if (result) {
-      currentResult.current = result
-      //resize window
-      currentWindowHeight.current = 560
-      WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), currentWindowHeight.current).then(_ => {
-        setActionList(result.Actions)
-        setShowActionList(true)
-      })
+  const handleHideActionList = () => {
+    setShowActionList(false)
+    setActionActiveIndex(0)
+    const windowHeight = hasPreview ? 560 : 60 + 50 * (currentResultList.current.length > 10 ? 10 : currentResultList.current.length)
+    WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), windowHeight)
+  }
+
+  const handleToggleActionList = async () => {
+    if (showActionList) {
+      handleHideActionList()
+    } else {
+      const result = currentResultList.current.find((result) => result.Index === currentActiveIndex.current)
+      if (result) {
+        currentResult.current = result
+        //resize window
+        currentWindowHeight.current = 560
+        WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), currentWindowHeight.current).then(_ => {
+          currentActionList.current = result.Actions
+          setActionList(result.Actions)
+          setShowActionList(true)
+        })
+      }
     }
+
   }
 
   useImperativeHandle(ref, () => ({
@@ -198,13 +212,11 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       setShowActionList(false)
       currentMouseOverIndex.current = 0
     },
-    showActionList: () => {
-      handleShowActionList()
+    toggleActionList: () => {
+      handleToggleActionList()
     },
     hideActionList: () => {
-      setShowActionList(false)
-      const windowHeight = hasPreview ? 560 : 60 + 50 * (currentResultList.current.length > 10 ? 10 : currentResultList.current.length)
-      WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), windowHeight)
+      handleHideActionList()
     },
     isActionListShown: () => {
       return showActionList
@@ -348,7 +360,9 @@ const Style = styled.div`
   }
 
   ul li:last-child {
-    margin-bottom: 2px;
+    margin-bottom: 3px;
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
   }
 
   ul li .wox-query-result-image {

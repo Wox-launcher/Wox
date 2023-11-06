@@ -6,7 +6,6 @@ export type WoxQueryBoxRefHandler = {
   changeQuery: (query: string) => void
   selectAll: () => void
   focus: () => void
-  updatePlaceHolder: (placeHolder: string) => void
   getQuery: () => string
 }
 
@@ -18,14 +17,11 @@ export type WoxQueryBoxProps = {
 
 export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQueryBoxRefHandler>) => {
   const queryBoxRef = React.createRef<HTMLInputElement>()
-  const [currentQuery, setCurrentQuery] = React.useState<string>("")
-  const [placeHolder, setPlaceHolder] = React.useState<string>("")
 
   useImperativeHandle(ref, () => ({
     changeQuery: (query: string) => {
       if (queryBoxRef.current) {
         queryBoxRef.current!.value = query
-        setCurrentQuery(query)
         _props.onQueryChange(query)
       }
     },
@@ -34,9 +30,6 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
     },
     focus: () => {
       queryBoxRef.current?.focus()
-    },
-    updatePlaceHolder(placeHolder: string) {
-      setPlaceHolder(placeHolder)
     },
     getQuery: () => {
       return queryBoxRef.current?.value ?? ""
@@ -57,16 +50,8 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
              _props.onFocus?.()
            }}
            onChange={(e) => {
-             setCurrentQuery(e.target.value)
-             setPlaceHolder("")
              _props.onQueryChange(e.target.value)
            }} />
-    {currentQuery && <span className={"wox-placeholder"}>{placeHolder.split("").map((value, index) => {
-      if (currentQuery && index < currentQuery.length) {
-        return <span style={{ color: "transparent", padding: 0, display: "inline" }}>{currentQuery.split("")[index]}</span>
-      }
-      return value
-    })}</span>}
     <button className={"wox-setting"} onMouseMoveCapture={(event) => {
       WoxTauriHelper.getInstance().startDragging().then(_ => {
         queryBoxRef.current?.focus()

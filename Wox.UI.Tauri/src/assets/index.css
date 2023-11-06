@@ -5,6 +5,7 @@ body {
     padding: 0;
     font-size: 20px;
     box-sizing: border-box;
+    border-radius: 10px;
 }
 
 :root {

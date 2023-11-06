@@ -106,15 +106,6 @@ export default () => {
       return Object.assign({ ...result, Index: index })
     })
 
-    if (fullResultList.current.length > 0) {
-      const firstResultTitle = fullResultList.current[0].Title
-      if (currentQuery.current && firstResultTitle.toLowerCase().startsWith(currentQuery.current?.toLowerCase())) {
-        woxQueryBoxRef.current?.updatePlaceHolder(firstResultTitle)
-      }
-    } else {
-      woxQueryBoxRef.current?.updatePlaceHolder("")
-    }
-
     woxQueryResultRef.current?.changeResultList(preview, [...fullResultList.current])
   }
 
@@ -176,7 +167,7 @@ export default () => {
       event.stopPropagation()
     })
     Mousetrap.bind("command+j", (event) => {
-      woxQueryResultRef.current?.showActionList()
+      woxQueryResultRef.current?.toggleActionList()
       event.preventDefault()
       event.stopPropagation()
     })
