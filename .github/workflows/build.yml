@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Build
-        run: just release darwin
+        run: just release darwin-arm64
       - name: Deploy nightly release amd64
         uses: WebFreak001/deploy-nightly@v3.0.0
         with:
@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Build
-        run: just release darwin
+        run: just release darwin-amd64
       - name: Deploy nightly release arm64
         uses: WebFreak001/deploy-nightly@v3.0.0
         with:
