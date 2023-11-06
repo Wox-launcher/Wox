@@ -64,6 +64,7 @@ type QueryResultAction struct {
 	Id string
 	// Name support i18n
 	Name string
+	Icon WoxImage
 	// If true, Wox will use this action as default action. There can be only one default action in results
 	// This can be omitted, if you don't set it, Wox will use the first action as default action
 	IsDefault bool

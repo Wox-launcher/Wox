@@ -312,6 +312,9 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		if result.Actions[actionIndex].Id == "" {
 			result.Actions[actionIndex].Id = uuid.NewString()
 		}
+		if result.Actions[actionIndex].Icon.ImageType == "" {
+			result.Actions[actionIndex].Icon = NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAeCAYAAAA7MK6iAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAVklEQVR4nO3VQQqAMAxE0X88S29tb2K9hyJ0EQQhbirCf5BVFgOBISBNVIEd6ECZGdyBY8x227WwezPtq+A1E1xG+BW6pO8kJdjjyB7rn6r/OLDHEk9OW8N7ef+eTPQAAAAASUVORK5CYII=`)
+		}
 	}
 
 	var resultCache = &QueryResultCache{

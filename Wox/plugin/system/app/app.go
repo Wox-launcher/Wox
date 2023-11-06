@@ -100,6 +100,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_app_open",
+						Icon: plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="64" height="64" viewBox="0 0 32 32"><polygon fill="#0f518c" points="30,30 2,30 2,2 17,2 17,6 6,6 6,26 26,26 26,15 30,15"></polygon><polygon fill="#ed0049" points="19,2 19,6 23.172,6 14.586,14.586 17.414,17.414 26,8.828 26,13 30,13 30,2"></polygon></svg>`),
 						Action: func(actionContext plugin.ActionContext) {
 							runErr := util.ShellOpen(info.Path)
 							if runErr != nil {
@@ -109,6 +110,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 					},
 					{
 						Name: "i18n:plugin_app_open_containing_folder",
+						Icon: plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><path fill="#FFA000" d="M40,12H22l-4-4H8c-2.2,0-4,1.8-4,4v8h40v-4C44,13.8,42.2,12,40,12z"></path><path fill="#FFCA28" d="M40,12H8c-2.2,0-4,1.8-4,4v20c0,2.2,1.8,4,4,4h32c2.2,0,4-1.8,4-4V16C44,13.8,42.2,12,40,12z"></path></svg>`),
 						Action: func(actionContext plugin.ActionContext) {
 							runErr := util.ShellOpen(path.Dir(info.Path))
 							if runErr != nil {
@@ -118,6 +120,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 					},
 					{
 						Name: "i18n:plugin_app_copy_path",
+						Icon: plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAA+0lEQVR4nO3VLQ7CQBAF4L3Eih6HOQScAIfmDMhq0NVgcegaCAq7GoMpBJKyBEc2/GyZaafTzkue36/7sjVGo9FoICs8toOsmLF9Sezhh8szLwIL2B5LP1oxIrAAV9x5ERQAR41I86vHdrK+VAI4SgT28PPdLRrhXgBkCCzgcCr9IhLhAgAJAgt4HiIW4d4AQgQLoAoCfpQNQIUwnAAKhOEGYBGmDYAQAW0GxNSONx+rgLSBGwDpEwLpAPtl87UAkun+73YSANInBNIBtun/AHYynQOA9AmBdICV/oxa6QCQPiFQQN+e0UQ6ICWuqTMKyPUGej4hjUZjROQBwgDUDcPYwFwAAAAASUVORK5CYII=`),
 						Action: func(actionContext plugin.ActionContext) {
 							util.ClipboardWriteText(info.Path)
 						},
