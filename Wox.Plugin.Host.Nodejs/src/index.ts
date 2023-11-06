@@ -23,6 +23,7 @@ logger.info(`wox pid: ${woxPid}`)
 setInterval(() => {
   try {
     process.kill(Number.parseInt(woxPid), 0)
+    logger.error(`wox process is alive`)
   } catch (e) {
     logger.error(`wox process is not alive, exit`)
     process.exit(1)

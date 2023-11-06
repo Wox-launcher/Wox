@@ -10,6 +10,7 @@ use std::env;
 use std::fs::File;
 use std::path::PathBuf;
 use std::thread::spawn;
+use sysinfo::{Pid, System, SystemExt};
 use tauri::Manager;
 
 mod websocket;
@@ -53,8 +54,34 @@ fn init_log_file() {
     }
 }
 
+fn check_process(pid: i32) -> bool {
+    let mut system = System::new_all();
+    system.refresh_processes();
+    system.process(Pid::from(pid as usize)).is_some()
+}
+
+fn check_wox_alive() {
+    let args: Vec<String> = env::args().collect();
+    if args.len() > 2 {
+        let wox_pid = args[2].parse::<i32>().unwrap();
+
+        loop {
+            if !check_process(wox_pid) {
+                info!("wox process is not alive, exit ui process");
+                std::process::exit(0);
+            } else {
+                info!("wox process is alive");
+                std::thread::sleep(std::time::Duration::from_secs(3));
+            }
+        }
+    }
+}
+
 fn main() {
     init_log_file();
+    spawn(move || {
+        check_wox_alive();
+    });
 
     #[cfg(target_os = "macos")]
     {
