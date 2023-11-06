@@ -37,7 +37,7 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 
 	var args []string
 	args = append(args, executableArgs...)
-	args = append(args, entry, fmt.Sprintf("%d", port), util.GetLocation().GetLogHostsDirectory())
+	args = append(args, entry, fmt.Sprintf("%d", port), util.GetLocation().GetLogHostsDirectory(), fmt.Sprintf("%d", os.Getpid()))
 
 	cmd, err := util.ShellRun(executablePath, args...)
 	if err != nil {

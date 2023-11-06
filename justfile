@@ -30,11 +30,12 @@ default:
     elif [ "{{target}}" = "linux" ]; then \
       cd Wox && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-linux-amd64 && cd ..; \
       chmod +x Release/wox-linux-amd64; \
-    elif [ "{{target}}" = "darwin" ]; then \
-      cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-amd64 && cd ..; \
-      chmod +x Release/wox-mac-amd64; \
+    elif [ "{{target}}" = "darwin-arm64" ]; then \
       cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-arm64 && cd ..; \
       chmod +x Release/wox-mac-arm64; \
+    elif [ "{{target}}" = "darwin-amd64" ]; then \
+      cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-amd64 && cd ..; \
+      chmod +x Release/wox-mac-amd64; \
     fi
 
 @test:
@@ -71,7 +72,10 @@ default:
     elif [ "{{target}}" = "linux" ]; then \
       cp Wox.UI.Tauri/src-tauri/target/release/wox Wox/resource/ui/wox; \
       chmod +x Wox/resource/ui/wox; \
-    elif [ "{{target}}" = "darwin" ]; then \
+    elif [ "{{target}}" = "darwin-amd64" ]; then \
+      cp Wox.UI.Tauri/src-tauri/target/release/wox Wox/resource/ui/wox; \
+      chmod +x Wox/resource/ui/wox; \
+    elif [ "{{target}}" = "darwin-arm64" ]; then \
       cp Wox.UI.Tauri/src-tauri/target/release/wox Wox/resource/ui/wox; \
       chmod +x Wox/resource/ui/wox; \
     fi

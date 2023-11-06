@@ -5,17 +5,29 @@ import { logger } from "./logger"
 import * as crypto from "crypto"
 import Deferred from "promise-deferred"
 
-if (process.argv.length < 4) {
-  console.error("Usage: node node.js <port> <logDirectory>")
+if (process.argv.length < 5) {
+  console.error("Usage: node node.js <port> <logDirectory> <woxPid>")
   process.exit(1)
 }
 
 const port = process.argv[2]
+const woxPid = process.argv[4]
 const hostId = `node-${crypto.randomUUID()}`
 
 logger.info("----------------------------------------")
 logger.info(`Start nodejs host: ${hostId}`)
 logger.info(`port: ${port}`)
+logger.info(`wox pid: ${woxPid}`)
+
+//check wox process is alive, otherwise exit
+setInterval(() => {
+  try {
+    process.kill(Number.parseInt(woxPid), 0)
+  } catch (e) {
+    logger.error(`wox process is not alive, exit`)
+    process.exit(1)
+  }
+}, 1000)
 
 export const waitingForResponse: {
   [key: string]: Deferred.Deferred<unknown>

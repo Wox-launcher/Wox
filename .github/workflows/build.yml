@@ -6,8 +6,32 @@ on:
       - v2
 
 jobs:
-  build-macos:
-    runs-on: [ self-hosted, macOS ]
+  build-macos-amd64:
+    runs-on: [ self-hosted, macOS, X64 ]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build
+        run: just release darwin
+      - name: Deploy nightly release amd64
+        uses: WebFreak001/deploy-nightly@v3.0.0
+        with:
+          upload_url: https://uploads.github.com/repos/Wox-launcher/Wox/releases/127182165/assets{?name,label}
+          release_id: 127182165
+          asset_path: ./Release/wox-mac-amd64 # path to archive to upload
+          asset_name: wox-mac-amd64-$$ # name to upload the release as, use $$ to insert date (YYYYMMDD) and 6 letter commit hash
+          asset_content_type: application/x-elf # required by GitHub API
+          max_releases: 3
+      - name: Deploy nightly release arm64
+        uses: WebFreak001/deploy-nightly@v3.0.0
+        with:
+          upload_url: https://uploads.github.com/repos/Wox-launcher/Wox/releases/127182165/assets{?name,label}
+          release_id: 127182165
+          asset_path: ./Release/wox-mac-amd64 # path to archive to upload
+          asset_name: wox-mac-amd64-$$ # name to upload the release as, use $$ to insert date (YYYYMMDD) and 6 letter commit hash
+          asset_content_type: application/x-elf # required by GitHub API
+          max_releases: 1
+  build-macos-arm64:
+    runs-on: [ self-hosted, macOS, ARM64 ]
     steps:
       - uses: actions/checkout@v3
       - name: Build

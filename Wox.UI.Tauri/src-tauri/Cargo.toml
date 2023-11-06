@@ -22,6 +22,7 @@ dirs = "2.0"
 time = { version = "0.3", features = ["macros"] }
 tungstenite = "0.20.1"
 url = "2.4.1"
+sysinfo = "0.29.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel" }

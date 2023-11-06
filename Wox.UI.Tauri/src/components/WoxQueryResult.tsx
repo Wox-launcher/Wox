@@ -383,7 +383,6 @@ const Style = styled.div`
   ul li h2,
   ul li h3 {
     margin: 0;
-    padding-left: 10px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

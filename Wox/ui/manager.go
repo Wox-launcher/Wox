@@ -81,7 +81,7 @@ func (m *Manager) StartWebsocketAndWait(ctx context.Context, port int) {
 func (m *Manager) StartUIApp(ctx context.Context, port int) error {
 	var appPath = util.GetLocation().GetUIAppPath()
 	logger.Info(ctx, fmt.Sprintf("start ui app: %s", appPath))
-	cmd, cmdErr := util.ShellRun(appPath, fmt.Sprintf("%d", port))
+	cmd, cmdErr := util.ShellRun(appPath, fmt.Sprintf("%d", port), fmt.Sprintf("%d", os.Getpid()))
 	if cmdErr != nil {
 		return cmdErr
 	}
