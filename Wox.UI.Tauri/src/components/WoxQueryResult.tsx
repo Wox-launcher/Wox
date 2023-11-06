@@ -98,9 +98,11 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       const result = currentResultList.current.find((result) => result.Index === currentActiveIndex.current)
       if (result) {
         currentResult.current = result
-        const action = currentActionList.current.find((action) => action.Id === result.Actions[currentActionActiveIndex.current].Id)
-        if (action) {
-          await sendActionMessage(result.Id, action)
+        if (currentActionActiveIndex.current < actionList.length) {
+          const action = actionList[currentActionActiveIndex.current]
+          if (action) {
+            await sendActionMessage(result.Id, action)
+          }
         }
       }
     } else {
