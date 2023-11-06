@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 	"wox/plugin"
 	"wox/resource"
 	"wox/util"
@@ -81,7 +82,10 @@ func serveAndWait(ctx context.Context, port int) {
 			uiConnected = true
 			logger.Info(ctx, fmt.Sprintf("ui connected: %s", s.Request.RemoteAddr))
 
-			GetUIManager().PostAppStart(util.NewTraceContext())
+			util.Go(ctx, "post app start", func() {
+				time.Sleep(time.Millisecond * 500) // wait for ui to be ready
+				GetUIManager().PostAppStart(util.NewTraceContext())
+			})
 		}
 	})
 
