@@ -180,7 +180,6 @@ export default () => {
 
 
   useEffect(() => {
-    WoxTauriHelper.getInstance().setFocus()
     WoxMessageHelper.getInstance().initialRequestCallback(handleRequestCallback)
     bindKeyboardEvent()
 

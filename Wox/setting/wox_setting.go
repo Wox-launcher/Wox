@@ -13,6 +13,7 @@ type WoxSetting struct {
 	MainHotkey           PlatformSettingValue[string]
 	UsePinYin            bool
 	SwitchInputMethodABC bool
+	HideOnStart          bool
 	ShowTray             bool
 	LangCode             i18n.LangCode
 	QueryHotkeys         PlatformSettingValue[[]QueryHotkey]

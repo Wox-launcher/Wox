@@ -103,3 +103,10 @@ func (m *Manager) ToggleWindow() {
 func (m *Manager) GetUI(ctx context.Context) share.UI {
 	return m.ui
 }
+
+func (m *Manager) PostAppStart(ctx context.Context) {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if !woxSetting.HideOnStart {
+		m.ui.ShowApp(ctx, share.ShowContext{SelectAll: false})
+	}
+}

@@ -44,6 +44,7 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
            aria-label="Wox"
            autoComplete="off"
            autoCorrect="off"
+           autoFocus={true}
            autoCapitalize="off"
            defaultValue={_props.defaultValue}
            onFocus={() => {

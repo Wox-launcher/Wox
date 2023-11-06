@@ -14,6 +14,7 @@ import (
 )
 
 var m *melody.Melody
+var uiConnected = false
 
 type websocketMsgType string
 
@@ -73,6 +74,15 @@ func serveAndWait(ctx context.Context, port int) {
 		}
 
 		w.Write(defaultTheme)
+	})
+
+	m.HandleConnect(func(s *melody.Session) {
+		if !uiConnected {
+			uiConnected = true
+			logger.Info(ctx, fmt.Sprintf("ui connected: %s", s.Request.RemoteAddr))
+
+			GetUIManager().PostAppStart(util.NewTraceContext())
+		}
 	})
 
 	m.HandleMessage(func(s *melody.Session, msg []byte) {
