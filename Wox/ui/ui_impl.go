@@ -80,6 +80,8 @@ func onUIRequest(ctx context.Context, request WebsocketMsg) {
 		handleGetLanguageJson(ctx, request)
 	case "OnVisibilityChanged":
 		handleOnVisibilityChanged(ctx, request)
+	case "GetQueryHistories":
+		handleGetQueryHistories(ctx, request)
 	}
 }
 
@@ -251,6 +253,11 @@ func handleOnVisibilityChanged(ctx context.Context, request WebsocketMsg) {
 	} else {
 		onAppHide(ctx, query)
 	}
+}
+
+func handleGetQueryHistories(ctx context.Context, request WebsocketMsg) {
+	queryHistories := setting.GetSettingManager().GetWoxAppData(ctx).QueryHistories
+	responseUISuccessWithData(ctx, request, queryHistories)
 }
 
 func onAppShow(ctx context.Context) {
