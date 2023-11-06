@@ -182,7 +182,6 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
         })
       }
     }
-
   }
 
   useImperativeHandle(ref, () => ({

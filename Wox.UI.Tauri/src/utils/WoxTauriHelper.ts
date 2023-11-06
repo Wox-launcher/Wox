@@ -1,6 +1,7 @@
 import { invoke, InvokeArgs } from "@tauri-apps/api/tauri"
-import { appWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window"
+import { appWindow, LogicalPosition, LogicalSize, WebviewWindow } from "@tauri-apps/api/window"
 import { WoxLogHelper } from "./WoxLogHelper.ts"
+import { v4 as UUID } from "uuid"
 
 export class WoxTauriHelper {
 
@@ -88,5 +89,16 @@ export class WoxTauriHelper {
       return appWindow.hide()
     }
     return Promise.resolve(false)
+  }
+
+  public async openWindow(url: string) {
+    if (this.isTauri()) {
+      const webview = new WebviewWindow(UUID(), {
+        url: url
+      })
+      return webview
+    }
+    return undefined
+
   }
 }
