@@ -15,6 +15,7 @@ export class WoxMessageHelper {
   } = {}
   private woxQueryCallback: ((data: WOXMESSAGE.WoxMessageResponseResult[]) => void | undefined) | undefined
   private woxRequestCallback: ((data: WOXMESSAGE.WoxMessage) => void | undefined) | undefined
+  private connectTimes: number = 1
 
   private shouldReconnect() {
     // Check if the WebSocket is in a closed or closing state
@@ -24,24 +25,35 @@ export class WoxMessageHelper {
   /*
       Reconnect to Wox Server
    */
-  private reconnect() {
+  private doReconnect() {
+    this.connectTimes++
+    setTimeout(() => {
+      this.connectWebsocketServer()
+    }, 200 * (this.connectTimes > 5 ? 5 : this.connectTimes))
+  }
+
+  /*
+      connect to Wox Server
+   */
+  private connectWebsocketServer() {
     if (this.ws) {
       this.ws.close()
     }
     this.ws = new WebSocket(`ws://127.0.0.1:${this.port}/ws`)
     this.ws.onopen = (_) => {
       WoxLogHelper.getInstance().log(`Websocket Opened`)
+      this.connectTimes = 1
     }
     this.ws.onclose = (_) => {
       WoxLogHelper.getInstance().log(`Websocket OnClose: ${JSON.stringify(event)}`)
       if (this.shouldReconnect()) {
-        this.reconnect()
+        this.doReconnect()
       }
     }
     this.ws.onerror = (event) => {
       WoxLogHelper.getInstance().log(`Websocket OnError: ${JSON.stringify(event)}`)
       if (this.shouldReconnect()) {
-        this.reconnect()
+        this.doReconnect()
       }
     }
     this.ws.onmessage = (event) => {
@@ -107,7 +119,7 @@ export class WoxMessageHelper {
       return
     }
     this.port = port
-    this.reconnect()
+    this.connectWebsocketServer()
   }
 
   /**
@@ -148,9 +160,9 @@ export class WoxMessageHelper {
    */
   public sendQueryMessage(params: {
     [key: string]: string
-  }, callback: (data: WOXMESSAGE.WoxMessageResponseResult[]) => void) {
+  }, callback: (data: WOXMESSAGE.WoxMessageResponseResult[]) => void): Promise<WOXMESSAGE.WoxMessage> {
     this.woxQueryCallback = callback
-    this.sendMessage(WoxMessageMethodEnum.QUERY.code, params)
+    return this.sendMessage(WoxMessageMethodEnum.QUERY.code, params)
   }
 
   /*
