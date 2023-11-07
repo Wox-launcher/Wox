@@ -43,7 +43,7 @@ default:
 @_bundle_mac_app name:
     chmod +x Release/{{name}}
 
-    # bundle mac app
+    # bundle mac app, https://github.com/sindresorhus/create-dmg
     cd Release && \
     rm -rf {{name}}.app && \
     rm -rf Wox.app && \
@@ -53,7 +53,8 @@ default:
     cp ../Assets/Info.plist {{name}}.app/Contents/Info.plist && \
     cp ../Assets/app.icns {{name}}.app/Contents/Resources/app.icns && \
     mv {{name}}.app Wox.app && \
-    create-dmg --app-drop-link 400 20 {{name}}.dmg Wox.app && \
+    create-dmg Wox.app && \
+    mv "Wox 2.0.0.dmg" {{name}}.dmg && \
     rm -rf Wox.app
 
 @test:
