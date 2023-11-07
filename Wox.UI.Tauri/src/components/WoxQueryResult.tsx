@@ -1,7 +1,6 @@
 import styled from "styled-components"
 import { WOXMESSAGE } from "../entity/WoxMessage.typings"
 import React, { useImperativeHandle, useRef, useState } from "react"
-import { WoxImageTypeEnum } from "../enums/WoxImageTypeEnum.ts"
 import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
 import { WoxMessageHelper } from "../utils/WoxMessageHelper.ts"
 import { WoxMessageMethodEnum } from "../enums/WoxMessageMethodEnum.ts"
@@ -9,9 +8,8 @@ import { WoxMessageRequestMethod, WoxMessageRequestMethodEnum } from "../enums/W
 import { WoxPreviewTypeEnum } from "../enums/WoxPreviewTypeEnum.ts"
 import Markdown from "react-markdown"
 import { Scrollbars } from "react-custom-scrollbars"
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
-import { faCoffee } from "@fortawesome/free-solid-svg-icons"
 import { pinyin } from "pinyin-pro"
+import WoxImage from "./WoxImage.tsx"
 
 export type WoxQueryResultRefHandler = {
   clearResultList: () => void
@@ -244,13 +242,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
             event.preventDefault()
             event.stopPropagation()
           }}>
-            {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeSvg.code &&
-              <div className={"wox-query-result-image"}
-                   dangerouslySetInnerHTML={{ __html: result.Icon.ImageData }}></div>}
-            {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeUrl.code &&
-              <img src={result.Icon.ImageData} className={"wox-query-result-image"} alt={"query-result-image"} />}
-            {result.Icon.ImageType === WoxImageTypeEnum.WoxImageTypeBase64.code &&
-              <img src={result.Icon.ImageData} className={"wox-query-result-image"} alt={"query-result-image"} />}
+            <WoxImage img={result.Icon} height={36} width={36} />
             <h2 className={"wox-result-title"}>{result.Title}</h2>
             {result.SubTitle && <h3 className={"wox-result-subtitle"}>{result.SubTitle}</h3>}
           </li>
@@ -280,8 +272,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
         {Object.keys(getCurrentPreviewData().PreviewProperties)?.length > 0 &&
           <div className={"wox-query-result-preview-properties"}>
             {Object.keys(getCurrentPreviewData().PreviewProperties)?.map((key) => {
-              return <div key={`key-${key}`}
-                          className={"wox-query-result-preview-property"}>
+              return <div key={`key-${key}`} className={"wox-query-result-preview-property"}>
                 <div
                   className={"wox-query-result-preview-property-key"}>{key}</div>
                 <div
@@ -307,7 +298,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
             event.preventDefault()
             event.stopPropagation()
           }}>
-            <FontAwesomeIcon className={"wox-result-action-item-icon"} icon={faCoffee} />
+            <WoxImage img={action.Icon} width={24} height={24} />
             <span className={"wox-result-action-item-name"}>{action.Name}</span>
           </div>
         })}
@@ -366,18 +357,10 @@ const Style = styled.div`
     border-bottom-right-radius: 10px;
   }
 
-  ul li .wox-query-result-image {
+  ul li .wox-image {
     text-align: center;
-    line-height: 36px;
-    height: 36px;
-    width: 36px;
     margin: 7px;
     float: left;
-
-    svg {
-      width: 36px !important;
-      height: 36px !important;
-    }
   }
 
   ul li h2,
@@ -484,8 +467,8 @@ const Style = styled.div`
     background-color: #e8e8e6;
     border: 1px solid #dedede;
     border-radius: 5px;
-    width: 300px;
-    padding: 5px;
+    min-width: 300px;
+    padding: 5px 10px;
     z-index: 9999;
 
     .wox-query-result-action-list-header {
@@ -496,10 +479,10 @@ const Style = styled.div`
       display: flex;
       line-height: 30px;
       align-items: center;
-      padding: 4px 5px;
+      padding: 5px 10px;
 
-      .wox-result-action-item-icon {
-        padding-right: 8px;
+      .wox-image {
+        margin-right: 8px;
       }
     }
 

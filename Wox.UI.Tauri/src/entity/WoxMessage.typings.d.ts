@@ -22,6 +22,7 @@ declare namespace WOXMESSAGE {
     export interface WoxResultAction {
         Id: string
         Name: string
+        Icon: WoxImage
         IsDefault: boolean
         PreventHideAfterAction: boolean
     }

@@ -21,6 +21,7 @@ default:
     just _build_dev_nodejs_plugin_chatgpt Wox.Plugin.Chatgpt ~/icloud/wox/plugins
 
 @release target:
+    rm -rf Release
     just _build_hosts
     just _build_ui {{target}}
 
@@ -53,8 +54,7 @@ default:
     cp ../Assets/app.icns {{name}}.app/Contents/Resources/app.icns && \
     mv {{name}}.app Wox.app && \
     create-dmg --app-drop-link 400 20 {{name}}.dmg Wox.app && \
-    rm -rf Wox.app && \
-    rm -rf {{name}}
+    rm -rf Wox.app
 
 @test:
     cd Wox && go test ./...

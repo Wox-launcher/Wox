@@ -210,8 +210,10 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 		metadata := plugin.GetMetadata()
 		pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.Settings)
 		if settingErr != nil {
-			logger.Error(ctx, fmt.Errorf("failed to load system plugin[%s] setting: %w", metadata.Name, settingErr).Error())
-			continue
+			logger.Error(ctx, fmt.Errorf("failed to load system plugin[%s] setting, use default plugin setting: %w", metadata.Name, settingErr).Error())
+			pluginSetting = setting.PluginSetting{
+				CustomizedSettings: util.NewHashMap[string, string](),
+			}
 		}
 
 		instance := &Instance{

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/disintegration/imaging"
+	"github.com/google/uuid"
+	"github.com/samber/lo"
 	"image/png"
 	"os"
 	"path"
@@ -17,18 +19,23 @@ import (
 )
 
 func init() {
-	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ClipboardPlugin{})
+	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ClipboardPlugin{
+		maxHistoryCount: 5000,
+	})
 }
 
 type ClipboardHistory struct {
-	Data      util.ClipboardData
-	Icon      plugin.WoxImage
-	Timestamp int64
+	Id         string
+	Data       util.ClipboardData
+	Icon       plugin.WoxImage
+	Timestamp  int64
+	IsFavorite bool
 }
 
 type ClipboardPlugin struct {
-	api     plugin.API
-	history []ClipboardHistory
+	api             plugin.API
+	history         []ClipboardHistory
+	maxHistoryCount int
 }
 
 func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
@@ -50,7 +57,12 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 				Name: plugin.MetadataFeatureNameIgnoreAutoScore,
 			},
 		},
-		Commands: []plugin.MetadataCommand{},
+		Commands: []plugin.MetadataCommand{
+			{
+				Command:     "fav",
+				Description: "List favorite clipboard history",
+			},
+		},
 		SupportedOS: []string{
 			"Windows",
 			"Macos",
@@ -88,9 +100,11 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		}
 
 		c.history = append(c.history, ClipboardHistory{
-			Data:      data,
-			Timestamp: util.GetSystemTimestamp(),
-			Icon:      icon,
+			Id:         uuid.NewString(),
+			Data:       data,
+			Timestamp:  util.GetSystemTimestamp(),
+			Icon:       icon,
+			IsFavorite: false,
 		})
 
 		c.saveHistory(ctx)
@@ -99,6 +113,16 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 
 func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
+
+	if query.Command == "fav" {
+		for i := len(c.history) - 1; i >= 0; i-- {
+			history := c.history[i]
+			if history.IsFavorite {
+				results = append(results, c.convertClipboardData(ctx, history))
+			}
+		}
+		return results
+	}
 
 	if query.Search == "" {
 		//return top 50 clipboard history order by desc
@@ -135,6 +159,58 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 			}
 		}
 
+		actions := []plugin.QueryResultAction{
+			{
+				Name: "Copy to clipboard and paste",
+				Action: func(actionContext plugin.ActionContext) {
+					util.ClipboardWrite(history.Data)
+					util.Go(context.Background(), "clipboard history copy", func() {
+						time.Sleep(time.Millisecond * 100)
+						util.SimulateCtrlV()
+					})
+				},
+			},
+		}
+		if !history.IsFavorite {
+			actions = append(actions, plugin.QueryResultAction{
+				Name: "Save as favorite",
+				Icon: plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAADxElEQVR4nO1Z3UtUQRQf+zLCIhKih0AKvXPuVmotUmZpUVAPgtCbUI/1H2RvUUjoS5CQD+FDUFL5kRQZlhUWld4zu+GLWPhgPfVgWpYVfXpi5uqy997ZdT+8tgt7YF72zvzO7zdz58xv7jKWi1zkwrcgATWysWwNEvCEBH/MsjEIoZIEkGqWuZ9lW5DgDyMCBDxg2RQUNndHkbdbyKhi2RKE/L5HgOC9LBuCwrCLEGa9AmQzKlimByHc1ZMHIoQ7LJODMFAee/aVgFmyIMgyNQj5bSdh/pQEf+YS0c0yMQjNbYTw10nWPETCPOxZhSGjlGVakIAOV9UZjDxDeO5amVssk4KGSkzv7PMjkedoHHWtguy7/f+QRSgkC/aQME+QgEZCfpMEjLsIomYcujb1+NzYRoUlMREKF4fkcNl6WbPJgnoScJYEtNsE+FTMCuMUUKsRUJvQWMGn5sS2q9yKg1EhOSUyuxcIYSKxRDEJDBOxPA82sTz1LB1shAnJMbaAcHANIe9PPQF/TyGjLiZ+yKhTfVLH75cc46/CQNFq6VtigPwhAW+lxyeEK2SZDSTgGFklZTQSKFhwiedzjAQK1Bghx5oNCktiKmyVQ7eyvZJboglWeQ4lG+Sjn36G7JP8gybvPRorzk8OrJMtJ4TrmmX8JO2yLyZQ8EnN7HdQOLgyNVApQsBVzWaalmVv0chbENRWOOQ3aKBmRXrgsnogv6wB/0ohfiBt8iGjigR81rw2bURsWbr40SJaNSJmCM3qlHHRrFYYXtxWXSlOX4TgFzXJvpHFDyaNFzb2kYAvS0LekVjwJs1G60seB/o0r02TP6zdyeXmciZuThpD8Gb3hvWHrS45QpcjuQX1SWPYPouiKluXP2x1yRHeOJKH+Y6kMYaMUpeA1/6w1VqN6OOe/451ShKCIZv22VhxvhobbVMStQppH/fOzTfq6WMVb1Z1XBFUrU3+5uknYNS5CoFy/wXYFxntu0uDgQ1zm/O7pjz+VKbt5daNkf4I3c5+xvElEOCpHudsGw5nlE9a2BLPKIwXfC0hP7/kZdRrtXlPSh5fjeE9bsvsvwDk7xIjKZ0lPz3XJhMU9c5f8lbxurhf3uZNnnxFou6w6gKjXjGYjj8WZmUO/wQIvjcOcXuTYmBT3C8asTa5iIio9FEAnNIQ/0XIr5FlbEkYR5VZaCGEHxoBJ/0U0OL6ONVJQ2ZJynivzCL7Phx1MCJcWlzWnj/t1Kw/ImHuXDRcKxBQk6H2l49/CioX6sN92PHX1FK60lzkgmV//AM7f1WAktwY2AAAAABJRU5ErkJggg==`),
+				Action: func(actionContext plugin.ActionContext) {
+					needSave := false
+					for i := range c.history {
+						if c.history[i].Id == history.Id {
+							c.history[i].IsFavorite = true
+							needSave = true
+							break
+						}
+					}
+					if needSave {
+						c.api.Log(ctx, fmt.Sprintf("save history as favorite, id=%s", history.Id))
+						c.saveHistory(ctx)
+					}
+				},
+			})
+		} else {
+			actions = append(actions, plugin.QueryResultAction{
+				Name: "Cancel favorite",
+				Icon: plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAEiUlEQVR4nO2YTYgbZRzGR1RapQhqkepBKNqLlv0w2e9NJtvdZDe72Y/uNmm+11UvClJ70YMe6qEIHopeRLBaT3uwnizqRRBammQmbybJzGSVslDYQ62yUKHgrmXf95GZbCeTbXa7HzPZrOwDD+SSye//5pfJP+G4/exnP7YF8htOyAkntxeDucSzKE3fRSl5V3vM7bWglPwIpSSgJgAl9iG3l4Ib7x6Akrylw6txQI3dxs3pg9xeCdT4jAkeUKJAMfo6t1cCNVbQwe/DKxFACSsA9wjX6IES85Xho2Z4QDkNyGEv1+iBEv25Am6GDwFy8CeukYNS+FXIUVYBDwOyAQ8UgwzyVBPXqIEcuVh96iZ4+RRQPAUUJr/iGjEoxJ+DHF6qVsYMP1VuYXIZavAI12iBEv74AWWq4CdXexLIj5/jGim4OX0QSuh2TWUM+JNAQesEUBj7C6ngE7u75xRCx1E87YccmoESurSuMga8Bj6+2jFAClxCPjADKeBHYeQ4hAlr9iX8Hj8KNdGLuekw1ORZKIkLUOKzUKJXocbmIUeW1r3LrKeMAT9Wbn4UyAeA/IheJg2DSX5QaWiJSoPzVPJdpcQ3S8nABeS8Z5E7EQYZ6EXGe3RjeHX6PErTMJYw8zpQ84vpYcpMrIEfXQM/bMAzaQhMGgTLafWB5bxguYFyST8YOQFG+kCJ55MNBkhGoCZXKuCmXabmF9MWlDHAzfD+NfC+angDvAzPsh5AdL+z8btQSoxDjf9TY5exXBmmg5vhvTXg+8onn+VXQPi3N/c5mIt1Qoks7o4y/WvgPaAivwzBHdoUfEWn2CuQIwu7rQwV3XcguNxbgjeG+C38AoqhYpUya0/dJmWYDs/fgsC3bAveGEKOPg05eK2eyrAy/BxIz4s7gjeGuDF0AIWpy/VQhmV5DV4A4Q9bAm8M8V3wURQnvty5Mg/e25kZPuv6AcTxpKXwVYPkxz/YkTKktjJMP3n3t/iVf8w2+MoQo59ZqQwrn/zXdfvNjHzgolXKsKxbLxVdX9QFXh9ACihWKMN0eBeY6AIVe0l94NXgIeSHV9ZXxrspZSrwvXqp0HMPqU77fyMgP+KxQhnt1JkO37PabkDs6rZ/gJz/fSuUqcB3gwlau4BM53u2D0Cloe+tUKYC3wUmdOqlQsdsPQZYsEoZZsB36KWZ9nlb4UEGn699b6+xy2TdfyDrehPE9RYVXX/WUoYZ8O1gmXbQdBsDcRy2cQDfxMOUoSJ/j4r858i0P2U8T+UPUaHnHBW6ls3KMA0+o8G3rdYJpJ1+2wagOe/5jZShovsKSN9L6x5AuuMYzXRcua8MM+Cd5aYdoOlW+/4zoqT/l1rKUNEzB+IZ3Ox1IDoHaLqtVIF36PAs/RpoqvVHW+C1PYVm+++YlaFZfhGi+4y2qW75esTxONLOMzTl+FsDL7cVNNW8aMtOBGngWAXc8y/Nej41e77t6wptR2iq5RuaaqUs1QKWagYyTRv//7OtF0r5nqGkL0+J5zJy/MuWX/96Sxu93nyNXm9asPVOtJ/9/M/yHxdGim6TI9QDAAAAAElFTkSuQmCC`),
+				Action: func(actionContext plugin.ActionContext) {
+					needSave := false
+					for i := range c.history {
+						if c.history[i].Id == history.Id {
+							c.history[i].IsFavorite = false
+							needSave = true
+							break
+						}
+					}
+					if needSave {
+						c.api.Log(ctx, fmt.Sprintf("cancel history favorite, id=%s", history.Id))
+						c.saveHistory(ctx)
+					}
+				},
+			})
+		}
+
 		return plugin.QueryResult{
 			Title: string(history.Data.Data),
 			Icon:  history.Icon,
@@ -146,19 +222,8 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 					"i18n:plugin_clipboard_copy_characters": fmt.Sprintf("%d", len(history.Data.Data)),
 				},
 			},
-			Score: 0,
-			Actions: []plugin.QueryResultAction{
-				{
-					Name: "Copy to clipboard",
-					Action: func(actionContext plugin.ActionContext) {
-						util.ClipboardWrite(history.Data)
-						util.Go(context.Background(), "clipboard history copy", func() {
-							time.Sleep(time.Millisecond * 100)
-							util.SimulateCtrlV()
-						})
-					},
-				},
-			},
+			Score:   0,
+			Actions: actions,
 		}
 	}
 
@@ -217,9 +282,38 @@ func (c *ClipboardPlugin) getActiveWindowIconFilePath(ctx context.Context) (stri
 }
 
 func (c *ClipboardPlugin) saveHistory(ctx context.Context) {
-	historyJson, _ := json.Marshal(c.history)
+	// only save text history
+	histories := lo.Filter(c.history, func(item ClipboardHistory, index int) bool {
+		return item.Data.Type == util.ClipboardTypeText
+	})
+
+	// only save last 5000 history, but keep all favorite history
+	if len(histories) > c.maxHistoryCount+100 {
+		var favoriteHistories []ClipboardHistory
+		var normalHistories []ClipboardHistory
+		for i := len(histories) - 1; i >= 0; i-- {
+			if histories[i].IsFavorite {
+				favoriteHistories = append(favoriteHistories, histories[i])
+			} else {
+				normalHistories = append(normalHistories, histories[i])
+			}
+		}
+
+		if len(normalHistories) > c.maxHistoryCount {
+			normalHistories = normalHistories[:c.maxHistoryCount]
+		}
+
+		histories = append(favoriteHistories, normalHistories...)
+
+		// sort history by timestamp asc
+		slices.SortStableFunc(histories, func(i, j ClipboardHistory) int {
+			return int(i.Timestamp - j.Timestamp)
+		})
+	}
+
+	historyJson, _ := json.Marshal(histories)
 	c.api.SaveSetting(ctx, "history", string(historyJson), false)
-	c.api.Log(ctx, fmt.Sprintf("save clipboard history, count=%d", len(c.history)))
+	c.api.Log(ctx, fmt.Sprintf("save clipboard text history, count=%d", len(c.history)))
 }
 
 func (c *ClipboardPlugin) loadHistory(ctx context.Context) {

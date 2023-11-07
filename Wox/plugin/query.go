@@ -92,6 +92,7 @@ func (q *QueryResult) ToUI(associatedQuery string) QueryResultUI {
 			return QueryResultActionUI{
 				Id:                     action.Id,
 				Name:                   action.Name,
+				Icon:                   action.Icon,
 				IsDefault:              action.IsDefault,
 				PreventHideAfterAction: action.PreventHideAfterAction,
 			}
@@ -116,6 +117,7 @@ type QueryResultUI struct {
 type QueryResultActionUI struct {
 	Id                     string
 	Name                   string
+	Icon                   WoxImage
 	IsDefault              bool
 	PreventHideAfterAction bool
 }
