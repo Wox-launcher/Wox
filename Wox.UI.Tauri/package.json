@@ -29,7 +29,6 @@
     "pinyin-pro": "^3.17.0",
     "promise-deferred": "^2.0.4",
     "react": "^18.2.0",
-    "react-bootstrap": "^2.9.0",
     "react-custom-scrollbars": "^4.2.1",
     "react-dom": "^18.2.0",
     "react-markdown": "^9.0.0",

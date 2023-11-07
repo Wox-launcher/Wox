@@ -171,6 +171,12 @@ export default () => {
       event.preventDefault()
       event.stopPropagation()
     })
+    //TODO: for test: 'show setting page'
+    Mousetrap.bind("command+t", (event) => {
+      WoxTauriHelper.getInstance().openWindow("Wox Setting", "setting.html")
+      event.preventDefault()
+      event.stopPropagation()
+    })
   }
 
   useInterval(async () => {

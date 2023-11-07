@@ -1,18 +1,27 @@
-import { useEffect } from "react"
-import { WoxMessageHelper } from "../utils/WoxMessageHelper.ts"
-import { WoxMessageMethodEnum } from "../enums/WoxMessageMethodEnum.ts"
+import React, { useState } from "react"
+import { Tab, Tabs } from "@mui/material"
+import PhoneIcon from "@mui/icons-material/Phone"
+import FavoriteIcon from "@mui/icons-material/Favorite"
+import PersonPinIcon from "@mui/icons-material/PersonPin"
+import styled from "styled-components"
 
 export default () => {
+  const [tabIndex, setTabIndex] = useState(0)
 
-  useEffect(() => {
-    setTimeout(() => {
-      console.log("send action")
-      WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ACTION.code, {
-        "resultId": "1",
-        "actionId": "2"
-      })
-    }, 5000)
-  }, [])
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setTabIndex(newValue)
+  }
 
-  return <div>WoxSetting</div>
+  return <Style>
+    <Tabs value={tabIndex} onChange={handleTabChange}>
+      <Tab icon={<PhoneIcon />} label="RECENTS" />
+      <Tab icon={<FavoriteIcon />} label="FAVORITES" />
+      <Tab icon={<PersonPinIcon />} label="NEARBY" />
+    </Tabs>
+  </Style>
 }
+
+const Style = styled.div`
+  display: flex;
+  justify-content: center;
+`

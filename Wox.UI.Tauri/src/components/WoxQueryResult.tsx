@@ -527,7 +527,5 @@ const Style = styled.div`
         background-color: transparent;
       }
     }
-
-
   }
 `

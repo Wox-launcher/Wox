@@ -91,10 +91,18 @@ export class WoxTauriHelper {
     return Promise.resolve(false)
   }
 
-  public async openWindow(url: string) {
+  public async openWindow(title: string, url: string) {
     if (this.isTauri()) {
       const webview = new WebviewWindow(UUID(), {
-        url: url
+        title: title,
+        url: url,
+        width: 900,
+        height: 640,
+        center: true,
+        resizable: true,
+        maximized: false,
+        decorations: true,
+        alwaysOnTop: true
       })
       return webview
     }
