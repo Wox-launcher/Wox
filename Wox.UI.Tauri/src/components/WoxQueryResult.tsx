@@ -7,7 +7,6 @@ import { WoxMessageHelper } from "../utils/WoxMessageHelper.ts"
 import { WoxMessageMethodEnum } from "../enums/WoxMessageMethodEnum.ts"
 import { WoxMessageRequestMethod, WoxMessageRequestMethodEnum } from "../enums/WoxMessageRequestMethodEnum.ts"
 import { WoxPreviewTypeEnum } from "../enums/WoxPreviewTypeEnum.ts"
-import { Image } from "react-bootstrap"
 import Markdown from "react-markdown"
 import { Scrollbars } from "react-custom-scrollbars"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
@@ -270,8 +269,8 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
           <div className={"wox-query-result-preview-content"}>
             {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeText.code && <p>{getCurrentPreviewData().PreviewData}</p>}
             {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
-              <Image src={getCurrentPreviewData().PreviewData}
-                     className={"wox-query-result-preview-image"} />}
+              <img src={getCurrentPreviewData().PreviewData}
+                   className={"wox-query-result-preview-image"} />}
             {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
               <Markdown>{getCurrentPreviewData().PreviewData}</Markdown>}
             {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeUrl.code &&
