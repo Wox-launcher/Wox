@@ -27,6 +27,7 @@ default:
     # windows platform in hotkey doesn't need C
     if [ "{{target}}" = "windows" ]; then \
       cd Wox && CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-windows-amd64.exe && cd ..; \
+      upx --brute Release/wox-windows-amd64.exe; \
     elif [ "{{target}}" = "linux" ]; then \
       cd Wox && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-linux-amd64 && cd ..; \
       chmod +x Release/wox-linux-amd64; \
