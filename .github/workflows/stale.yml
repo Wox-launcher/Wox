@@ -25,3 +25,4 @@ jobs:
           stale-pr-label: 'no-pr-activity'
           exempt-issue-labels: 'keep-fresh'
           exempt-pr-labels: 'keep-fresh,awaiting-approval,work-in-progress'
+          ascending: true
