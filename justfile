@@ -32,11 +32,28 @@ default:
       chmod +x Release/wox-linux-amd64; \
     elif [ "{{target}}" = "darwin-arm64" ]; then \
       cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-arm64 && cd ..; \
-      chmod +x Release/wox-mac-arm64; \
+      just _bundle_mac_app wox-mac-arm64; \
     elif [ "{{target}}" = "darwin-amd64" ]; then \
       cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-amd64 && cd ..; \
-      chmod +x Release/wox-mac-amd64; \
+      just _bundle_mac_app wox-mac-amd64; \
     fi
+
+@_bundle_mac_app name:
+    chmod +x Release/{{name}}
+
+    # bundle mac app
+    cd Release && \
+    rm -rf {{name}}.app && \
+    rm -rf Wox.app && \
+    mkdir -p {{name}}.app/Contents/MacOS && \
+    mkdir -p {{name}}.app/Contents/Resources && \
+    cp {{name}} {{name}}.app/Contents/MacOS/wox && \
+    cp ../Assets/Info.plist {{name}}.app/Contents/Info.plist && \
+    cp ../Assets/app.icns {{name}}.app/Contents/Resources/app.icns && \
+    mv {{name}}.app Wox.app && \
+    create-dmg --app-drop-link 400 20 {{name}}.dmg Wox.app && \
+    rm -rf Wox.app && \
+    rm -rf {{name}}
 
 @test:
     cd Wox && go test ./...
