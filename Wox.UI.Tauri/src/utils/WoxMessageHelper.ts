@@ -16,8 +16,12 @@ export class WoxMessageHelper {
   private woxQueryCallback: ((data: WOXMESSAGE.WoxMessageResponseResult[]) => void | undefined) | undefined
   private woxRequestCallback: ((data: WOXMESSAGE.WoxMessage) => void | undefined) | undefined
   private connectTimes: number = 1
+  private connecting: boolean = false
 
   private shouldReconnect() {
+    if (this.connecting) {
+      return false
+    }
     // Check if the WebSocket is in a closed or closing state
     return this.ws && (this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING)
   }
@@ -26,8 +30,9 @@ export class WoxMessageHelper {
       Reconnect to Wox Server
    */
   private doReconnect() {
-    this.connectTimes++
+    this.connecting = true
     setTimeout(() => {
+      this.connectTimes++
       this.connectWebsocketServer()
     }, 200 * (this.connectTimes > 5 ? 5 : this.connectTimes))
   }
@@ -42,16 +47,17 @@ export class WoxMessageHelper {
     this.ws = new WebSocket(`ws://127.0.0.1:${this.port}/ws`)
     this.ws.onopen = (_) => {
       WoxLogHelper.getInstance().log(`Websocket Opened`)
+      this.connecting = false
       this.connectTimes = 1
     }
     this.ws.onclose = (_) => {
-      WoxLogHelper.getInstance().log(`Websocket OnClose: ${JSON.stringify(event)}`)
+      WoxLogHelper.getInstance().log(`Websocket Connection Close}`)
       if (this.shouldReconnect()) {
         this.doReconnect()
       }
     }
-    this.ws.onerror = (event) => {
-      WoxLogHelper.getInstance().log(`Websocket OnError: ${JSON.stringify(event)}`)
+    this.ws.onerror = (_) => {
+      WoxLogHelper.getInstance().log(`Websocket Connection Error}`)
       if (this.shouldReconnect()) {
         this.doReconnect()
       }
