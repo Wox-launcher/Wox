@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 	"wox/plugin"
-	"wox/resource"
 	"wox/util"
 )
 
@@ -74,13 +73,15 @@ func serveAndWait(ctx context.Context, port int) {
 	http.HandleFunc("/theme", func(w http.ResponseWriter, r *http.Request) {
 		enableCors(w)
 
-		defaultTheme, defaultErr := resource.GetUITheme(ctx, "default")
-		if defaultErr != nil {
-			w.Write([]byte(defaultErr.Error()))
+		theme := GetUIManager().GetCurrentTheme(util.NewTraceContext())
+		themeJson, jsonErr := json.Marshal(theme)
+		if jsonErr != nil {
+			w.Header().Set("code", "500")
+			w.Write([]byte(jsonErr.Error()))
 			return
 		}
 
-		w.Write(defaultTheme)
+		w.Write(themeJson)
 	})
 
 	m.HandleConnect(func(s *melody.Session) {

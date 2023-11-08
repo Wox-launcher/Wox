@@ -224,7 +224,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     }
   }))
 
-  return <Style theme={WoxThemeHelper.getInstance().getTheme()}>
+  return <Style theme={WoxThemeHelper.getInstance().getTheme()} resultCount={resultList.length}>
     <Scrollbars
       style={{ width: hasPreview ? 400 : 800 }}
       ref={currentULRef}
@@ -323,7 +323,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   </Style>
 })
 
-const Style = styled.div<{ theme: Theme }>`
+const Style = styled.div<{ theme: Theme, resultCount: number }>`
   display: flex;
   flex-direction: row;
   width: 800px;
@@ -463,7 +463,8 @@ const Style = styled.div<{ theme: Theme }>`
     position: absolute;
     left: 0;
     right: 0;
-    top: 60px;
+    top: ${props => (props.resultCount > 10 ? 10 : props.resultCount) * 50 + 60}px;
+    background-color: ${props => props.theme.AppBackgroundColor};
     bottom: 0;
     z-index: 8888;
   }
@@ -472,13 +473,13 @@ const Style = styled.div<{ theme: Theme }>`
     position: absolute;
     bottom: 10px;
     right: 10px;
-    background-color: #e8e8e6;
+    background-color: ${props => props.theme.AppBackgroundColor};
     min-width: 300px;
     padding: 5px 10px;
     z-index: 9999;
 
     .wox-query-result-action-list-header {
-      color: #747473;
+      color: ${props => props.theme.ActionContainerHeaderFontColor};
     }
 
     .wox-result-action-item {
@@ -493,12 +494,10 @@ const Style = styled.div<{ theme: Theme }>`
     }
 
     .wox-result-action-item-active {
-      background-color: #d1d1cf;
+      background-color: ${props => props.theme.ActionItemActiveBackgroundColor};
     }
 
     .wox-action-list-filter {
-      border-top: 1px solid #dedede;
-      padding-top: 5px;
       margin-top: 5px;
 
       .wox-action-list-filter-input {
@@ -508,7 +507,7 @@ const Style = styled.div<{ theme: Theme }>`
         border: 0;
         padding: 0 5px;
         cursor: auto;
-        color: black;
+        color:${props => props.theme.ActionQueryBoxFontColor}; ;
         display: inline-block;
         background-color: transparent;
       }

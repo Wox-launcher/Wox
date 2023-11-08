@@ -52,6 +52,10 @@ func (u *uiImpl) GetServerPort(ctx context.Context) int {
 	return GetUIManager().serverPort
 }
 
+func (u *uiImpl) ChangeTheme(ctx context.Context, theme string) {
+	u.send(ctx, "ChangeTheme", theme)
+}
+
 func (u *uiImpl) send(ctx context.Context, method string, data any) {
 	requestUI(ctx, WebsocketMsg{
 		Id:     uuid.NewString(),

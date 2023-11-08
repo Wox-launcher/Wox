@@ -59,6 +59,12 @@ func main() {
 		return
 	}
 
+	themeErr := ui.GetUIManager().LoadThemes(ctx)
+	if themeErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize themes: %s", themeErr.Error()))
+		return
+	}
+
 	serverPort := 34987
 	if util.IsProd() {
 		availablePort, portErr := util.GetAvailableTcpPort(ctx)

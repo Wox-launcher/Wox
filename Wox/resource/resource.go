@@ -18,6 +18,8 @@ var LangFS embed.FS
 //go:embed ui
 var UIFS embed.FS
 
+var embedThemes = []string{}
+
 func Extract(ctx context.Context) error {
 	extractErr := extractHosts(ctx)
 	if extractErr != nil {
@@ -25,6 +27,11 @@ func Extract(ctx context.Context) error {
 	}
 
 	extractErr = extractUI(ctx)
+	if extractErr != nil {
+		return extractErr
+	}
+
+	extractErr = extractThemes(ctx)
 	if extractErr != nil {
 		return extractErr
 	}
@@ -100,12 +107,41 @@ func extractUI(ctx context.Context) error {
 	return nil
 }
 
+func extractThemes(ctx context.Context) error {
+	dir, err := UIFS.ReadDir(path.Join("ui", "themes"))
+	if err != nil {
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	if len(dir) == 0 {
+		return fmt.Errorf("no theme file found")
+	}
+
+	for _, entry := range dir {
+		if entry.IsDir() {
+			continue
+		}
+
+		start := util.GetSystemTimestamp()
+		themeData, readErr := UIFS.ReadFile("ui/themes/" + entry.Name())
+		if readErr != nil {
+			return readErr
+		}
+
+		embedThemes = append(embedThemes, string(themeData))
+		util.GetLogger().Info(ctx, fmt.Sprintf("extracted theme file: %s, cost: %dms", entry.Name(), util.GetSystemTimestamp()-start))
+	}
+
+	return nil
+}
+
 func GetLangJson(ctx context.Context, langCode string) ([]byte, error) {
 	var langJsonPath = path.Join("lang", fmt.Sprintf("%s.json", langCode))
 	return LangFS.ReadFile(langJsonPath)
 }
 
-func GetUITheme(ctx context.Context, themeName string) ([]byte, error) {
-	var themePath = path.Join("ui", "themes", fmt.Sprintf("%s.json", themeName))
-	return UIFS.ReadFile(themePath)
+func GetEmbedThemes(ctx context.Context) []string {
+	return embedThemes
 }

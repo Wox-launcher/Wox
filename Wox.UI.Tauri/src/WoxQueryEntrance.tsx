@@ -15,7 +15,7 @@ await WoxThemeHelper.getInstance().loadTheme()
 
 appWindow.listen(TauriEvent.WINDOW_BLUR, () => {
   //TODO: respect config
-  WoxTauriHelper.getInstance().hideWindow()
+  // WoxTauriHelper.getInstance().hideWindow()
 })
 
 WoxThemeHelper.getInstance().loadTheme().then(() => {

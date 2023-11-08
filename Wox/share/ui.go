@@ -9,6 +9,7 @@ type UI interface {
 	ToggleApp(ctx context.Context)
 	ShowMsg(ctx context.Context, title string, description string, icon string)
 	GetServerPort(ctx context.Context) int
+	ChangeTheme(ctx context.Context, theme string)
 }
 
 type ShowContext struct {

@@ -22,6 +22,11 @@ export class WoxThemeHelper {
     WoxThemeHelper.currentTheme = theme.data
   }
 
+  public async changeTheme(theme: Theme) {
+    WoxLogHelper.getInstance().log(`change theme: ${JSON.stringify(theme.ThemeName)}`)
+    WoxThemeHelper.currentTheme = theme
+  }
+
   public getTheme() {
     return WoxThemeHelper.currentTheme || {} as Theme
   }

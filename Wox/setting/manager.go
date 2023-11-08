@@ -83,6 +83,9 @@ func (m *Manager) loadWoxSetting(ctx context.Context) error {
 	if woxSetting.LastQueryMode == "" {
 		woxSetting.LastQueryMode = defaultWoxSetting.LastQueryMode
 	}
+	if woxSetting.ThemeId == "" {
+		woxSetting.ThemeId = defaultWoxSetting.ThemeId
+	}
 
 	m.woxSetting = woxSetting
 

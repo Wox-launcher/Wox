@@ -1,0 +1,14 @@
+{
+  "ThemeId": "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03",
+  "ThemeName": "Wox Default Dark Theme",
+  "ThemeAuthor": "Wox launcher",
+  "ThemeUrl": "http://www.github.com/wox-launcher/wox",
+  "AppBackgroundColor": "rgba(66, 70, 73, 0.8)",
+  "ResultContainerPadding": "0",
+  "ResultItemBorderRadius": "0",
+  "ResultItemActiveBackgroundColor": "rgba(50, 53, 54, 0.6)",
+  "QueryBoxFontColor": "#e4e7e7",
+  "ActionContainerHeaderFontColor": "#e4e7e7",
+  "ActionItemActiveBackgroundColor": "rgba(50, 53, 54, 0.8)",
+  "ActionQueryBoxFontColor": "#e4e7e7"
+}

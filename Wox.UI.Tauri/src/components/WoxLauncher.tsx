@@ -121,6 +121,9 @@ export default () => {
     if (message.Method === WoxMessageRequestMethodEnum.HideApp.code) {
       await hideWoxWindow()
     }
+    if (message.Method === WoxMessageRequestMethodEnum.ChangeTheme.code) {
+      await changeTheme(message.Data as string)
+    }
   }
 
   /*
@@ -139,6 +142,10 @@ export default () => {
    */
   const changeQuery = async (query: string) => {
     woxQueryBoxRef.current?.changeQuery(query)
+  }
+
+  const changeTheme = async (theme: string) => {
+    await WoxThemeHelper.getInstance().changeTheme(JSON.parse(theme) as Theme)
   }
 
   const bindKeyboardEvent = () => {

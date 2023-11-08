@@ -19,6 +19,7 @@ type WoxSetting struct {
 	LangCode             i18n.LangCode
 	QueryHotkeys         PlatformSettingValue[[]QueryHotkey]
 	LastQueryMode        LastQueryMode
+	ThemeId              string
 }
 
 type LastQueryMode = string
@@ -55,6 +56,7 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 		HideOnLostFocus:      true,
 		LangCode:             langCode,
 		LastQueryMode:        LastQueryModeEmpty,
+		ThemeId:              "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03",
 	}
 }
 

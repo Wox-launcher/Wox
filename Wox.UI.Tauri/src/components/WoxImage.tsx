@@ -18,6 +18,8 @@ const Style = styled.div<{ width: number; height: number }>`
     line-height: ${props => props.height}px;
     height: ${props => props.height}px;
     width: ${props => props.width}px;
+    text-align: center;
+    vertical-align: middle;
     
     svg {
       width: ${props => props.height}px !important;
