@@ -1,11 +1,10 @@
 html,
 body {
-    background-color: #F7F7F7;
+    background-color: rgba(14, 13, 13, 0.3);
     margin: 0;
     padding: 0;
     font-size: 20px;
     box-sizing: border-box;
-    border-radius: 10px;
 }
 
 :root {
@@ -22,7 +21,6 @@ body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     -webkit-text-size-adjust: 100%;
-    background-color: #ffffff;
 }
 
 #root {

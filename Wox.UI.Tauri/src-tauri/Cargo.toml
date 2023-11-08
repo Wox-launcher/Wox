@@ -26,6 +26,11 @@ sysinfo = "0.29.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel" }
+window-vibrancy = "0.4.2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel" }
+window-vibrancy = "0.4.2"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem

@@ -87,12 +87,16 @@ fn main() {
     {
         use tauri_nspanel::cocoa::appkit::{NSMainMenuWindowLevel, NSWindowCollectionBehavior};
         use tauri_nspanel::WindowExt;
+        use window_vibrancy::{apply_blur, apply_vibrancy, NSVisualEffectMaterial};
+
         tauri::Builder::default()
             .plugin(tauri_nspanel::init())
             .setup(|app| {
                 let window = app.get_window("main").unwrap();
                 // hide the dock icon
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+                apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None).expect("Unsupported platform! 'apply_vibrancy' is only supported on macOS");
 
                 let panel = window.to_panel().unwrap();
                 // Set panel above the main menu window level
@@ -106,13 +110,32 @@ fn main() {
                     websocket::conn(window);
                 });
 
+
                 Ok(())
             })
             .invoke_handler(tauri::generate_handler![get_server_port, log_ui])
             .run(tauri::generate_context!()).expect("error while running tauri application");
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        tauri::Builder::default()
+            .setup(|app| {
+                let window = app.get_window("main").unwrap();
+
+                apply_blur(&window, Some((18, 18, 18, 125))).expect("Unsupported platform! 'apply_blur' is only supported on Windows");
+
+                spawn(move || {
+                    websocket::conn(window);
+                });
+
+                Ok(())
+            })
+            .invoke_handler(tauri::generate_handler![get_server_port, log_ui])
+            .run(tauri::generate_context!()).expect("error while running tauri application");
+    }
+
+    #[cfg(target_os = "linux")]
     {
         tauri::Builder::default()
             .setup(|app| {

@@ -1,6 +1,5 @@
 import ReactDOM from "react-dom/client"
 import "./assets/index.css"
-import "bootstrap/dist/css/bootstrap.min.css"
 import { WoxMessageHelper } from "./utils/WoxMessageHelper.ts"
 import React from "react"
 import WoxLauncher from "./components/WoxLauncher.tsx"
