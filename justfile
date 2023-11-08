@@ -54,8 +54,7 @@ default:
     cp ../Assets/app.icns {{name}}.app/Contents/Resources/app.icns && \
     mv {{name}}.app Wox.app && \
     create-dmg Wox.app && \
-    mv "Wox 2.0.0.dmg" {{name}}.dmg && \
-    rm -rf Wox.app
+    mv "Wox 2.0.0.dmg" {{name}}.dmg
 
 @test:
     cd Wox && go test ./...
