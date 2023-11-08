@@ -5,6 +5,7 @@ body {
     padding: 0;
     font-size: 20px;
     box-sizing: border-box;
+    overflow: hidden;
 }
 
 :root {
@@ -23,40 +24,6 @@ body {
     -webkit-text-size-adjust: 100%;
 }
 
-#root {
-    width: 100%;
-
-    .form-control, .form-control:focus, .input-group-text, .list-group {
-        border-radius: 0 !important;
-    }
-
-    .form-control:focus {
-        border: var(--bs-border-width) solid var(--bs-border-color) !important;
-        outline: 0 !important;
-        -webkit-box-shadow: none !important;
-        box-shadow: none !important;
-    }
-
-    .input-group {
-        height: 60px !important;
-    }
-
-    .list-group {
-        .list-group-item {
-            padding: 0 10px !important;
-            border-right: 0 !important;
-        }
-
-        .list-group-item:nth-of-type(1) {
-            border-top: 0 !important;
-        }
-
-        .list-group-item:nth-of-type(10) {
-            border-bottom: 0 !important;
-        }
-    }
-}
-
 
 /* custom scrollbar */
 ::-webkit-scrollbar {
@@ -69,7 +36,6 @@ body {
 
 ::-webkit-scrollbar-thumb {
     background-color: #d6dee1;
-    border-radius: 10px;
     border: 6px solid transparent;
     background-clip: content-box;
 }

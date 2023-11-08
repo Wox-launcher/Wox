@@ -71,8 +71,8 @@ const Style = styled.div`
   border: ${WoxTauriHelper.getInstance().isTauri() ? "0px" : "1px"} solid #dedede;
 
   input {
-    height: 59px;
-    line-height: 59px;
+    height: 60px;
+    line-height: 60px;
     width: ${WoxTauriHelper.getInstance().getWoxWindowWidth()}px;
     font-size: 24px;
     outline: none;
@@ -82,6 +82,7 @@ const Style = styled.div`
     cursor: auto;
     color: black;
     display: inline-block;
+    box-sizing: border-box;
   }
 
   .wox-placeholder {

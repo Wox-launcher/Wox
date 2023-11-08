@@ -349,12 +349,11 @@ const Style = styled.div`
     border-bottom: 1px solid #dedede;
     cursor: pointer;
     width: 100%;
+    box-sizing: border-box;
   }
 
   ul li:last-child {
     margin-bottom: 3px;
-    border-bottom-left-radius: 10px;
-    border-bottom-right-radius: 10px;
   }
 
   ul li .wox-image {
@@ -466,7 +465,6 @@ const Style = styled.div`
     right: 10px;
     background-color: #e8e8e6;
     border: 1px solid #dedede;
-    border-radius: 5px;
     min-width: 300px;
     padding: 5px 10px;
     z-index: 9999;
@@ -488,7 +486,6 @@ const Style = styled.div`
 
     .wox-result-action-item-active {
       background-color: #d1d1cf;
-      border-radius: 5px;
     }
 
     .wox-action-list-filter {
@@ -501,7 +498,6 @@ const Style = styled.div`
         font-size: 18px;
         outline: none;
         border: 0;
-        border-radius: 5px;
         padding: 0 5px;
         cursor: auto;
         color: black;
