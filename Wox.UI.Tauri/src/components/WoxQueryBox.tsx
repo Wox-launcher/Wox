@@ -1,6 +1,7 @@
 import React, { useImperativeHandle } from "react"
 import styled from "styled-components"
 import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
+import { getTheme } from "../api/WoxAPI.ts"
 
 export type WoxQueryBoxRefHandler = {
   changeQuery: (query: string) => void
@@ -53,7 +54,9 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
            onChange={(e) => {
              _props.onQueryChange(e.target.value)
            }} />
-    <button className={"wox-setting"} onMouseMoveCapture={(event) => {
+    <button className={"wox-setting"} onClick={() => {
+      getTheme().then(resp => console.log(resp.data))
+    }} onMouseMoveCapture={(event) => {
       WoxTauriHelper.getInstance().startDragging().then(_ => {
         queryBoxRef.current?.focus()
       })

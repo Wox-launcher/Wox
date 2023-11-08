@@ -1,6 +1,6 @@
-import WoxRequest from "../utils/WoxRequest.ts"
 import { Theme } from "../entity/Theme.typings"
+import { post } from "../utils/WoxRequest.ts"
 
 export async function getTheme() {
-  return WoxRequest.post<Theme>(`/theme`)
+  return post<Theme>(`/theme`)
 }
