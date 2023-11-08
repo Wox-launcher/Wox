@@ -34,6 +34,7 @@ export class WoxMessageHelper {
     setTimeout(() => {
       this.connectTimes++
       this.connectWebsocketServer()
+      this.connecting = false
     }, 200 * (this.connectTimes > 5 ? 5 : this.connectTimes))
   }
 
