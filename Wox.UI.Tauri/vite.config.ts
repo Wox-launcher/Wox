@@ -22,7 +22,8 @@ export default defineConfig(async () => ({
   // 1. prevent vite from obscuring rust errors
   clearScreen: false,
   build: {
-    target: "esnext"
+    target: "esnext",
+    chunkSizeWarningLimit: 1000
   },
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
