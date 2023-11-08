@@ -388,9 +388,9 @@ const Style = styled.div`
     line-height: 15px;
   }
 
-  ul li.active {
-    background-color: ${WoxThemeHelper.getInstance().getTheme().ResultActiveBackgroundColor};
-  }
+  // ul li.active {
+    //   background-color: ${WoxThemeHelper.getInstance().getTheme().ResultActiveBackgroundColor};
+  // }
 
   .wox-query-result-preview {
     position: relative;

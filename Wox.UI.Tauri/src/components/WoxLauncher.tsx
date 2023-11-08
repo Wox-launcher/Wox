@@ -226,9 +226,9 @@ const Style = styled.div`
   .wox-result-border {
     border-top: 1px solid #dedede !important;
   }
-  
-  
-  body, html {
-    background-color: ${WoxThemeHelper.getInstance().getTheme().BackgroundColor};
-  }
+
+  //
+  // body, html {
+    //   background-color: ${WoxThemeHelper.getInstance().getTheme().BackgroundColor};
+  // }
 `

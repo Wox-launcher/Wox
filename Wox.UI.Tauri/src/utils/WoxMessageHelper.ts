@@ -180,4 +180,9 @@ export class WoxMessageHelper {
     }
   }
 
+  public getPort() {
+    return this.port
+  }
+
+
 }
