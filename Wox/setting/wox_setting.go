@@ -14,6 +14,7 @@ type WoxSetting struct {
 	UsePinYin            bool
 	SwitchInputMethodABC bool
 	HideOnStart          bool
+	HideOnLostFocus      bool
 	ShowTray             bool
 	LangCode             i18n.LangCode
 	QueryHotkeys         PlatformSettingValue[[]QueryHotkey]
@@ -51,6 +52,7 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 		UsePinYin:            usePinYin,
 		SwitchInputMethodABC: switchInputMethodABC,
 		ShowTray:             true,
+		HideOnLostFocus:      true,
 		LangCode:             langCode,
 		LastQueryMode:        LastQueryModeEmpty,
 	}

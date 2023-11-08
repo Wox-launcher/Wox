@@ -10,6 +10,7 @@ import { WoxMessageMethodEnum } from "../enums/WoxMessageMethodEnum.ts"
 import { WoxLogHelper } from "../utils/WoxLogHelper.ts"
 import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
 import Mousetrap from "mousetrap"
+import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
 
 export default () => {
   const woxQueryBoxRef = React.useRef<WoxQueryBoxRefHandler>(null)
@@ -224,5 +225,10 @@ const Style = styled.div`
 
   .wox-result-border {
     border-top: 1px solid #dedede !important;
+  }
+  
+  
+  body, html {
+    background-color: ${WoxThemeHelper.getInstance().getTheme().BackgroundColor};
   }
 `

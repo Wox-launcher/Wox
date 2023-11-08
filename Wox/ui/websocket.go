@@ -32,6 +32,10 @@ type WebsocketMsg struct {
 	Data    any
 }
 
+func enableCors(w http.ResponseWriter) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+}
+
 func serveAndWait(ctx context.Context, port int) {
 	m = melody.New()
 	m.Config.MaxMessageSize = 1024 * 1024 * 10 // 10MB
@@ -68,6 +72,8 @@ func serveAndWait(ctx context.Context, port int) {
 	})
 
 	http.HandleFunc("/theme", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(w)
+
 		defaultTheme, defaultErr := resource.GetUITheme(ctx, "default")
 		if defaultErr != nil {
 			w.Write([]byte(defaultErr.Error()))

@@ -1,3 +1,4 @@
 {
-  "QueryBoxFontSize": "13px"
+  "BackgroundColor": "rgba(56, 69, 71, 0.7)",
+  "ResultActiveBackgroundColor": "rgba(57, 83, 88, 0.7)"
 }

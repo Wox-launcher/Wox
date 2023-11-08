@@ -10,6 +10,7 @@ import Markdown from "react-markdown"
 import { Scrollbars } from "react-custom-scrollbars"
 import { pinyin } from "pinyin-pro"
 import WoxImage from "./WoxImage.tsx"
+import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
 
 export type WoxQueryResultRefHandler = {
   clearResultList: () => void
@@ -388,7 +389,7 @@ const Style = styled.div`
   }
 
   ul li.active {
-    background-color: #dedede;
+    background-color: ${WoxThemeHelper.getInstance().getTheme().ResultActiveBackgroundColor};
   }
 
   .wox-query-result-preview {
