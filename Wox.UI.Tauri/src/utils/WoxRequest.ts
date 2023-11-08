@@ -17,7 +17,7 @@ export class Request {
 
     this.instance.interceptors.response.use(
       (res: AxiosResponse) => {
-        return res.data
+        return res
       },
       (err: any) => {
         switch (err.response.status) {
