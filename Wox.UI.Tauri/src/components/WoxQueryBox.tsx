@@ -1,7 +1,6 @@
 import React, { useImperativeHandle } from "react"
 import styled from "styled-components"
 import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
-import { getTheme } from "../api/WoxAPI.ts"
 import { Theme } from "../entity/Theme.typings"
 import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
 
@@ -55,32 +54,30 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
            }}
            onChange={(e) => {
              _props.onQueryChange(e.target.value)
-           }} />
-    <button className={"wox-setting"} onClick={() => {
-      getTheme().then(resp => console.log(resp.data))
-    }} onMouseMoveCapture={(event) => {
-      WoxTauriHelper.getInstance().startDragging().then(_ => {
-        queryBoxRef.current?.focus()
-      })
-      event.preventDefault()
-      event.stopPropagation()
-    }}>Wox
-    </button>
+           }}
+           onMouseMoveCapture={(event) => {
+             WoxTauriHelper.getInstance().startDragging().then(_ => {
+               queryBoxRef.current?.focus()
+             })
+             event.preventDefault()
+             event.stopPropagation()
+           }}
+    />
   </Style>
 })
 
 const Style = styled.div<{ theme: Theme }>`
   position: relative;
-  width: ${WoxTauriHelper.getInstance().getWoxWindowWidth()}px;
+  width: 100%;
   overflow: hidden;
 
   input {
     height: 60px;
     line-height: 60px;
-    width: ${WoxTauriHelper.getInstance().getWoxWindowWidth()}px;
+    width: 100%;
     font-size: 24px;
     outline: none;
-    padding: 10px;
+    padding-left: 10px;
     border: 0;
     background-color: transparent;
     cursor: auto;

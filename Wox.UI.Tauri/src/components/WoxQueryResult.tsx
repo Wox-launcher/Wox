@@ -326,7 +326,6 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
 const Style = styled.div<{ theme: Theme, resultCount: number }>`
   display: flex;
   flex-direction: row;
-  width: 800px;
 
   .wox-result-container {
     padding: ${props => props.theme.ResultContainerPadding};

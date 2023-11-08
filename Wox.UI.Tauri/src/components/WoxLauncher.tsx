@@ -1,6 +1,6 @@
 import styled from "styled-components"
 import WoxQueryBox, { WoxQueryBoxRefHandler } from "./WoxQueryBox.tsx"
-import React, { useEffect, useRef } from "react"
+import React, { useEffect, useReducer, useRef } from "react"
 import WoxQueryResult, { WoxQueryResultRefHandler } from "./WoxQueryResult.tsx"
 import { WOXMESSAGE } from "../entity/WoxMessage.typings"
 import { WoxMessageHelper } from "../utils/WoxMessageHelper.ts"
@@ -14,6 +14,7 @@ import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
 import { Theme } from "../entity/Theme.typings"
 
 export default () => {
+  const [_, forceUpdate] = useReducer((x) => x + 1, 0)
   const woxQueryBoxRef = React.useRef<WoxQueryBoxRefHandler>(null)
   const woxQueryResultRef = React.useRef<WoxQueryResultRefHandler>(null)
   const requestTimeoutId = useRef<number>()
@@ -146,6 +147,7 @@ export default () => {
 
   const changeTheme = async (theme: string) => {
     await WoxThemeHelper.getInstance().changeTheme(JSON.parse(theme) as Theme)
+    forceUpdate()
   }
 
   const bindKeyboardEvent = () => {

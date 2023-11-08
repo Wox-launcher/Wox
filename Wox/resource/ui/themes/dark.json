@@ -3,12 +3,12 @@
   "ThemeName": "Wox Default Dark Theme",
   "ThemeAuthor": "Wox launcher",
   "ThemeUrl": "http://www.github.com/wox-launcher/wox",
-  "AppBackgroundColor": "rgba(66, 70, 73, 0.8)",
+  "AppBackgroundColor": "rgba(44, 48, 50, 0.7)",
   "ResultContainerPadding": "0",
   "ResultItemBorderRadius": "0",
-  "ResultItemActiveBackgroundColor": "rgba(50, 53, 54, 0.6)",
+  "ResultItemActiveBackgroundColor": "rgba(31, 118, 124, 0.8)",
   "QueryBoxFontColor": "#e4e7e7",
   "ActionContainerHeaderFontColor": "#e4e7e7",
-  "ActionItemActiveBackgroundColor": "rgba(50, 53, 54, 0.8)",
+  "ActionItemActiveBackgroundColor": "rgba(47, 63, 73, 0.8)",
   "ActionQueryBoxFontColor": "#e4e7e7"
 }
