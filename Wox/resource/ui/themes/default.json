@@ -1,4 +1,7 @@
 {
-  "BackgroundColor": "rgba(56, 69, 71, 0.7)",
-  "ResultActiveBackgroundColor": "rgba(57, 83, 88, 0.7)"
+  "AppBackgroundColor": "rgba(66, 70, 73, 0.8)",
+  "ResultContainerPadding": "0",
+  "ResultItemBorderRadius": "0",
+  "ResultItemActiveBackgroundColor": "rgba(50, 53, 54, 0.6)",
+  "QueryBoxFontColor": "#e4e7e7"
 }

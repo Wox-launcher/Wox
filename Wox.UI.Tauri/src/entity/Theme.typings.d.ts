@@ -1,4 +1,7 @@
 export interface Theme {
-  BackgroundColor: string
-  ResultActiveBackgroundColor: string
+  AppBackgroundColor: string
+  ResultContainerPadding: string
+  ResultItemBorderRadius: string
+  ResultItemActiveBackgroundColor: string
+  QueryBoxFontColor: string
 }

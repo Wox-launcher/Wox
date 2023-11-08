@@ -11,6 +11,7 @@ import { WoxLogHelper } from "../utils/WoxLogHelper.ts"
 import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
 import Mousetrap from "mousetrap"
 import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
+import { Theme } from "../entity/Theme.typings"
 
 export default () => {
   const woxQueryBoxRef = React.useRef<WoxQueryBoxRefHandler>(null)
@@ -205,7 +206,7 @@ export default () => {
     }
   }, [])
 
-  return <Style className={"wox-launcher"}>
+  return <Style theme={WoxThemeHelper.getInstance().getTheme()} className={"wox-launcher"}>
     <WoxQueryBox ref={woxQueryBoxRef} onQueryChange={onQueryChange} onFocus={() => {
       woxQueryResultRef.current?.hideActionList()
     }} />
@@ -218,17 +219,9 @@ export default () => {
   </Style>
 }
 
-const Style = styled.div`
+const Style = styled.div<{ theme: Theme }>`
+  background-color: ${props => props.theme.AppBackgroundColor};
   overflow: hidden;
   display: flex;
   flex-direction: column;
-
-  .wox-result-border {
-    border-top: 1px solid #dedede !important;
-  }
-
-  //
-  // body, html {
-    //   background-color: ${WoxThemeHelper.getInstance().getTheme().BackgroundColor};
-  // }
 `

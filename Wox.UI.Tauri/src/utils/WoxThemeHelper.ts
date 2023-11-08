@@ -1,4 +1,6 @@
 import { Theme } from "../entity/Theme.typings"
+import { getTheme } from "../api/WoxAPI.ts"
+import { WoxLogHelper } from "./WoxLogHelper.ts"
 
 export class WoxThemeHelper {
   private static instance: WoxThemeHelper
@@ -14,11 +16,13 @@ export class WoxThemeHelper {
   private constructor() {
   }
 
-  public loadTheme() {
-
+  public async loadTheme() {
+    const theme = await getTheme()
+    WoxLogHelper.getInstance().log(`Theme: ${JSON.stringify(theme)}`)
+    WoxThemeHelper.currentTheme = theme.data
   }
 
   public getTheme() {
-    return WoxThemeHelper.currentTheme
+    return WoxThemeHelper.currentTheme || {} as Theme
   }
 }

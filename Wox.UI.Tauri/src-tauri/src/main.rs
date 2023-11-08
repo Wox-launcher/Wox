@@ -87,7 +87,7 @@ fn main() {
     {
         use tauri_nspanel::cocoa::appkit::{NSMainMenuWindowLevel, NSWindowCollectionBehavior};
         use tauri_nspanel::WindowExt;
-        use window_vibrancy::{apply_blur, apply_vibrancy, NSVisualEffectMaterial};
+        use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
         tauri::Builder::default()
             .plugin(tauri_nspanel::init())

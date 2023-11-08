@@ -1,24 +1,27 @@
 import ReactDOM from "react-dom/client"
 import "./assets/index.css"
-import { WoxMessageHelper } from "./utils/WoxMessageHelper.ts"
 import React from "react"
 import WoxLauncher from "./components/WoxLauncher.tsx"
 import { WoxThemeHelper } from "./utils/WoxThemeHelper.ts"
-import store from "store2"
 import { WoxTauriHelper } from "./utils/WoxTauriHelper.ts"
+import { WoxMessageHelper } from "./utils/WoxMessageHelper.ts"
+import { appWindow } from "@tauri-apps/api/window"
+import { TauriEvent } from "@tauri-apps/api/event"
 
-WoxTauriHelper.getInstance().invoke("get_server_port").then((serverPort) => {
-  store.set("serverPort", serverPort as string)
-  WoxMessageHelper.getInstance().initialize(serverPort as string)
-}).catch(_ => {
-  store.set("serverPort", "34987")
-  WoxMessageHelper.getInstance().initialize("34987")
+const serverPort = await WoxTauriHelper.getInstance().getServerPort()
+WoxMessageHelper.getInstance().initialize(serverPort)
+
+await WoxThemeHelper.getInstance().loadTheme()
+
+appWindow.listen(TauriEvent.WINDOW_BLUR, () => {
+  //TODO: respect config
+  WoxTauriHelper.getInstance().hideWindow()
 })
 
-WoxThemeHelper.getInstance().loadTheme()
-
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <WoxLauncher />
-  </React.StrictMode>
-)
+WoxThemeHelper.getInstance().loadTheme().then(() => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <WoxLauncher />
+    </React.StrictMode>
+  )
+})

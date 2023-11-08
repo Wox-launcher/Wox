@@ -10,6 +10,7 @@ import Markdown from "react-markdown"
 import { Scrollbars } from "react-custom-scrollbars"
 import { pinyin } from "pinyin-pro"
 import WoxImage from "./WoxImage.tsx"
+import { Theme } from "../entity/Theme.typings"
 import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
 
 export type WoxQueryResultRefHandler = {
@@ -223,32 +224,34 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     }
   }))
 
-  return <Style className={resultList.length > 0 ? "wox-results wox-result-border" : "wox-results"}>
+  return <Style theme={WoxThemeHelper.getInstance().getTheme()}>
     <Scrollbars
       style={{ width: hasPreview ? 400 : 800 }}
       ref={currentULRef}
       autoHeight
       autoHeightMin={0}
       autoHeightMax={500}>
-      <ul id={"wox-result-list"} key={"wox-result-list"}>
-        {resultList.map((result, index) => {
-          return <li id={`wox-result-li-${index}`} key={`wox-result-li-${index}`} className={activeIndex === index ? "active" : "inactive"} onMouseOverCapture={() => {
-            currentMouseOverIndex.current += 1
-            if (result.Index !== undefined && currentActiveIndex.current !== result.Index && currentMouseOverIndex.current > 1) {
-              currentActiveIndex.current = index
-              setActiveIndex(index)
-            }
-          }} onClick={(event) => {
-            handleAction()
-            event.preventDefault()
-            event.stopPropagation()
-          }}>
-            <WoxImage img={result.Icon} height={36} width={36} />
-            <h2 className={"wox-result-title"}>{result.Title}</h2>
-            {result.SubTitle && <h3 className={"wox-result-subtitle"}>{result.SubTitle}</h3>}
-          </li>
-        })}
-      </ul>
+      <div className={"wox-result-container"}>
+        <ul id={"wox-result-list"} key={"wox-result-list"}>
+          {resultList.map((result, index) => {
+            return <li id={`wox-result-li-${index}`} key={`wox-result-li-${index}`} className={activeIndex === index ? "active" : "inactive"} onMouseOverCapture={() => {
+              currentMouseOverIndex.current += 1
+              if (result.Index !== undefined && currentActiveIndex.current !== result.Index && currentMouseOverIndex.current > 1) {
+                currentActiveIndex.current = index
+                setActiveIndex(index)
+              }
+            }} onClick={(event) => {
+              handleAction()
+              event.preventDefault()
+              event.stopPropagation()
+            }}>
+              <WoxImage img={result.Icon} height={36} width={36} />
+              <h2 className={"wox-result-title"}>{result.Title}</h2>
+              {result.SubTitle && <h3 className={"wox-result-subtitle"}>{result.SubTitle}</h3>}
+            </li>
+          })}
+        </ul>
+      </div>
     </Scrollbars>
 
 
@@ -320,19 +323,20 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   </Style>
 })
 
-const Style = styled.div`
+const Style = styled.div<{ theme: Theme }>`
   display: flex;
   flex-direction: row;
   width: 800px;
-  border-bottom: ${WoxTauriHelper.getInstance().isTauri() ? "0px" : "1px"} solid #dedede;
 
+  .wox-result-container {
+    padding: ${props => props.theme.ResultContainerPadding};
+  }
 
   ul {
     padding: 0;
     margin: 0;
     overflow: hidden;
     width: 50%;
-    border-right: ${WoxTauriHelper.getInstance().isTauri() ? "0px" : "1px"} solid #dedede;;
   }
 
   ul:last-child {
@@ -347,10 +351,10 @@ const Style = styled.div`
     display: block;
     height: 50px;
     line-height: 50px;
-    border-bottom: 1px solid #dedede;
     cursor: pointer;
     width: 100%;
     box-sizing: border-box;
+    border-radius: ${props => props.theme.ResultItemBorderRadius};
   }
 
   ul li:last-child {
@@ -369,13 +373,17 @@ const Style = styled.div`
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-weight: 400;
-    font-family: "Lucida Sans Unicode", "Lucida Grande", sans-serif;
+    line-height: 30px;
   }
 
   ul li h2 {
-    font-size: 20px;
-    line-height: 30px;
+    font-size: 18px;
+    font-weight: 550;
+  }
+  
+  ul li h3 {
+    font-size: 16px;
+    font-weight: normal;
   }
 
   ul li h2:last-child {
@@ -388,9 +396,9 @@ const Style = styled.div`
     line-height: 15px;
   }
 
-  // ul li.active {
-    //   background-color: ${WoxThemeHelper.getInstance().getTheme().ResultActiveBackgroundColor};
-  // }
+  ul li.active {
+      background-color: ${props => props.theme.ResultItemActiveBackgroundColor};
+  }
 
   .wox-query-result-preview {
     position: relative;
@@ -465,7 +473,6 @@ const Style = styled.div`
     bottom: 10px;
     right: 10px;
     background-color: #e8e8e6;
-    border: 1px solid #dedede;
     min-width: 300px;
     padding: 5px 10px;
     z-index: 9999;

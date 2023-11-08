@@ -2,6 +2,8 @@ import React, { useImperativeHandle } from "react"
 import styled from "styled-components"
 import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
 import { getTheme } from "../api/WoxAPI.ts"
+import { Theme } from "../entity/Theme.typings"
+import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
 
 export type WoxQueryBoxRefHandler = {
   changeQuery: (query: string) => void
@@ -37,7 +39,7 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
     }
   }))
 
-  return <Style className="wox-query-box">
+  return <Style theme={WoxThemeHelper.getInstance().getTheme()} className="wox-query-box">
     <input ref={queryBoxRef}
            title={"Query Wox"}
            className={"mousetrap"}
@@ -67,11 +69,10 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
   </Style>
 })
 
-const Style = styled.div`
+const Style = styled.div<{ theme: Theme }>`
   position: relative;
   width: ${WoxTauriHelper.getInstance().getWoxWindowWidth()}px;
   overflow: hidden;
-  border: ${WoxTauriHelper.getInstance().isTauri() ? "0px" : "1px"} solid #dedede;
 
   input {
     height: 60px;
@@ -83,7 +84,7 @@ const Style = styled.div`
     border: 0;
     background-color: transparent;
     cursor: auto;
-    color: black;
+    color:  ${props => props.theme.QueryBoxFontColor};
     display: inline-block;
     box-sizing: border-box;
   }

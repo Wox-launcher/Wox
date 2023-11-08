@@ -26,6 +26,15 @@ export class WoxTauriHelper {
     return WoxTauriHelper.WINDOW_WIDTH
   }
 
+  public async getServerPort(): Promise<string> {
+    try {
+      const port = await WoxTauriHelper.getInstance().invoke("get_server_port")
+      return port as string
+    } catch {
+      return "34987"
+    }
+  }
+
   public isTauri() {
     return window.__TAURI__ !== undefined
   }
