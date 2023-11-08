@@ -11,6 +11,7 @@ WoxTauriHelper.getInstance().invoke("get_server_port").then((serverPort) => {
   store.set("serverPort", serverPort as string)
   WoxMessageHelper.getInstance().initialize(serverPort as string)
 }).catch(_ => {
+  store.set("serverPort", "34987")
   WoxMessageHelper.getInstance().initialize("34987")
 })
 

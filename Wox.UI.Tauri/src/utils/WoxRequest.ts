@@ -1,5 +1,6 @@
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios"
 import axios from "axios"
+import store from "store2"
 
 type Result<T> = {
   code: number;
@@ -9,7 +10,7 @@ type Result<T> = {
 
 export class Request {
   instance: AxiosInstance
-  baseConfig: AxiosRequestConfig = { timeout: 60000 }
+  baseConfig: AxiosRequestConfig = { baseURL: `http://localhost:${store.get("serverPort")}`, timeout: 60000 }
 
   constructor(config: AxiosRequestConfig) {
     this.instance = axios.create(Object.assign(this.baseConfig, config))
