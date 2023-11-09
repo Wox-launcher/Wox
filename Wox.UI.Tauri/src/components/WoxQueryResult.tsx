@@ -415,21 +415,18 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
   ul li h2 {
     font-size: 18px;
     font-weight: 550;
-  }
-
-  ul li h3 {
-    font-size: 16px;
-    font-weight: normal;
+    color: ${props => props.theme.ResultItemTitleColor};
   }
 
   ul li h2:last-child {
-    font-size: 20px;
     line-height: 50px;
   }
 
   ul li h3 {
     font-size: 13px;
     line-height: 15px;
+    font-weight: normal;
+    color: ${props => props.theme.ResultItemSubTitleColor};
   }
 
   ul li.active {
@@ -442,9 +439,9 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
     box-sizing: border-box;
     width: 50%;
     display: inline-block;
-    border-left: 1px solid #dedede;
+    border-left: 1px solid ${props => props.theme.PreviewSplitLineColor};
     padding: 10px 0 10px 10px;
-    border-right: ${WoxTauriHelper.getInstance().isTauri() ? "0px" : "1px"} solid #dedede;
+    color: ${props => props.theme.PreviewFontColor};
 
     .wox-query-result-preview-content {
       overflow: hidden;
@@ -474,20 +471,22 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
 
       .wox-query-result-preview-property {
         display: flex;
+        justify-content: space-between;
         width: 100%;
-        border-top: 1px solid #dee2e6;
+        border-top: 1px solid ${props => props.theme.PreviewSplitLineColor};
         padding: 2px 10px;
         overflow: hidden;
 
         .wox-query-result-preview-property-key {
-          flex: 3;
+          font-weight: 500;
+          color: ${props => props.theme.PreviewPropertyTitleColor};
         }
 
         .wox-query-result-preview-property-value {
-          flex: 4;
+        color: ${props => props.theme.PreviewPropertyContentColor};
         }
 
-        .wox-query-result-preview-property-key, .wox-query-result-preview-property-value {
+        .div {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -538,7 +537,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
         font-size: 18px;
         outline: none;
         border: 0;
-        padding: 0 5px;
+        padding: 0 8px;
         cursor: auto;
         color: ${props => props.theme.ActionQueryBoxFontColor};
         display: inline-block;

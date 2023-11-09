@@ -18,6 +18,8 @@ export interface Theme {
   ResultItemPaddingRight: number
   ResultItemPaddingBottom: number
   ResultItemActiveBackgroundColor: string
+  ResultItemTitleColor: string
+  ResultItemSubTitleColor: string
   QueryBoxFontColor: string
   QueryBoxBackgroundColor: string
   QueryBoxBorderRadius: number
@@ -31,4 +33,8 @@ export interface Theme {
   ActionQueryBoxFontColor: string
   ActionQueryBoxBackgroundColor: string
   ActionQueryBoxBorderRadius: number
+  PreviewFontColor: string
+  PreviewSplitLineColor: string
+  PreviewPropertyTitleColor: string
+  PreviewPropertyContentColor: string
 }

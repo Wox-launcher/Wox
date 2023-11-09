@@ -18,6 +18,8 @@
   "ResultItemPaddingRight": 0,
   "ResultItemPaddingBottom": 0,
   "ResultItemActiveBackgroundColor": "rgba(31, 118, 124, 0.8)",
+  "ResultItemTitleColor": "#f0f0f0",
+  "ResultItemSubTitleColor": "#f0f0f0",
   "QueryBoxFontColor": "#e4e7e7",
   "QueryBoxBackgroundColor": "rgba(44, 48, 50, 0.7)",
   "QueryBoxBorderRadius": 8,
@@ -30,5 +32,9 @@
   "ActionItemActiveBackgroundColor": "rgba(31, 118, 124, 0.8)",
   "ActionQueryBoxFontColor": "#e4e7e7",
   "ActionQueryBoxBackgroundColor": "rgba(44, 48, 50, 0.98)",
-  "ActionQueryBoxBorderRadius": 8
+  "ActionQueryBoxBorderRadius": 8,
+  "PreviewFontColor": "#f0f0f0",
+  "PreviewSplitLineColor": "#3a474e",
+  "PreviewPropertyTitleColor": "#b0b3b5",
+  "PreviewPropertyContentColor": "#f0f0f0"
 }

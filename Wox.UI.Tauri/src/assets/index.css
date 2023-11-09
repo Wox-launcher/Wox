@@ -2,9 +2,12 @@ html,
 body {
     margin: 0;
     padding: 0;
-    font-size: 20px;
-    box-sizing: border-box;
+    font-size: 16px;
     overflow: hidden;
+}
+
+* {
+    box-sizing: border-box;
 }
 
 :root {
@@ -22,25 +25,4 @@ body {
     -moz-osx-font-smoothing: grayscale;
     -webkit-text-size-adjust: 100%;
 }
-
-
-/* custom scrollbar */
-::-webkit-scrollbar {
-    width: 18px;
-}
-
-::-webkit-scrollbar-track {
-    background-color: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-    background-color: #d6dee1;
-    border: 6px solid transparent;
-    background-clip: content-box;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background-color: #a8bbbf;
-}
-
 
