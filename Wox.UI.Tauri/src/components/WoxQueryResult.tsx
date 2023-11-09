@@ -470,7 +470,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number }>`
     left: 0;
     right: 0;
     top: ${props => (props.resultCount > 10 ? 10 : props.resultCount) * 50 + 60}px;
-    background-color: ${props => props.theme.AppBackgroundColor};
+    background-color: ${props => props.theme.ActionContainerBackgroundColor};
     bottom: 0;
     z-index: 8888;
   }

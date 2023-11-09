@@ -20,6 +20,8 @@ export interface Theme {
   ResultItemActiveBackgroundColor: string
   QueryBoxFontColor: string
   QueryBoxBackgroundColor: string
+  QueryBoxBorderRadius: number
+  ActionContainerBackgroundColor: string
   ActionContainerHeaderFontColor: string
   ActionItemActiveBackgroundColor: string
   ActionQueryBoxFontColor: string

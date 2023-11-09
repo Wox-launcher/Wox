@@ -83,6 +83,7 @@ const Style = styled.div<{ theme: Theme }>`
     cursor: auto;
     color:  ${props => props.theme.QueryBoxFontColor};
     background-color: ${props => props.theme.QueryBoxBackgroundColor};
+    border-radius: ${props => props.theme.QueryBoxBorderRadius}px;
     display: inline-block;
     box-sizing: border-box;
   }

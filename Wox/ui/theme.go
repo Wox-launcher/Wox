@@ -22,6 +22,8 @@ type Theme struct {
 	ResultItemActiveBackgroundColor string
 	QueryBoxFontColor               string
 	QueryBoxBackgroundColor         string
+	QueryBoxBorderRadius            int
+	ActionContainerBackgroundColor  string
 	ActionContainerHeaderFontColor  string
 	ActionItemActiveBackgroundColor string
 	ActionQueryBoxFontColor         string
