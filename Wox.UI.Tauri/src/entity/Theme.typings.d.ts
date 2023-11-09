@@ -4,11 +4,23 @@ export interface Theme {
   ThemeAuthor: string
   ThemeUrl: string
   AppBackgroundColor: string
-  ResultContainerPadding: string
-  ResultItemBorderRadius: string
+  AppPaddingLeft: number
+  AppPaddingTop: number
+  AppPaddingRight: number
+  AppPaddingBottom: number
+  ResultContainerPaddingLeft: number
+  ResultContainerPaddingTop: number
+  ResultContainerPaddingRight: number
+  ResultContainerPaddingBottom: number
+  ResultItemBorderRadius: number
+  ResultItemPaddingLeft: number
+  ResultItemPaddingTop: number
+  ResultItemPaddingRight: number
+  ResultItemPaddingBottom: number
   ResultItemActiveBackgroundColor: string
-  QueryBoxFontColor: string,
-  ActionContainerHeaderFontColor: string,
-  ActionItemActiveBackgroundColor: string,
+  QueryBoxFontColor: string
+  QueryBoxBackgroundColor: string
+  ActionContainerHeaderFontColor: string
+  ActionItemActiveBackgroundColor: string
   ActionQueryBoxFontColor: string
 }

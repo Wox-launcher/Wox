@@ -328,7 +328,10 @@ const Style = styled.div<{ theme: Theme, resultCount: number }>`
   flex-direction: row;
 
   .wox-result-container {
-    padding: ${props => props.theme.ResultContainerPadding};
+    padding-top: ${props => props.theme.ResultContainerPaddingTop}px;
+    padding-right: ${props => props.theme.ResultContainerPaddingRight}px;
+    padding-bottom: ${props => props.theme.ResultContainerPaddingBottom}px;
+    padding-left: ${props => props.theme.ResultContainerPaddingLeft}px;
   }
 
   ul {
@@ -353,7 +356,11 @@ const Style = styled.div<{ theme: Theme, resultCount: number }>`
     cursor: pointer;
     width: 100%;
     box-sizing: border-box;
-    border-radius: ${props => props.theme.ResultItemBorderRadius};
+    border-radius: ${props => props.theme.ResultItemBorderRadius}px;
+    padding-top: ${props => props.theme.ResultItemPaddingTop}px;
+    padding-right: ${props => props.theme.ResultItemPaddingRight}px;
+    padding-bottom: ${props => props.theme.ResultItemPaddingBottom}px;
+    padding-left: ${props => props.theme.ResultItemPaddingLeft}px;
   }
 
   ul li:last-child {

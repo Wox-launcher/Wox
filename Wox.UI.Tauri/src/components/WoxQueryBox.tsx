@@ -82,6 +82,7 @@ const Style = styled.div<{ theme: Theme }>`
     background-color: transparent;
     cursor: auto;
     color:  ${props => props.theme.QueryBoxFontColor};
+    background-color: ${props => props.theme.QueryBoxBackgroundColor};
     display: inline-block;
     box-sizing: border-box;
   }

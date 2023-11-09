@@ -230,6 +230,10 @@ export default () => {
 
 const Style = styled.div<{ theme: Theme }>`
   background-color: ${props => props.theme.AppBackgroundColor};
+  padding-top: ${props => props.theme.AppPaddingTop}px;
+  padding-right: ${props => props.theme.AppPaddingRight}px;
+  padding-bottom: ${props => props.theme.AppPaddingBottom}px;
+  padding-left: ${props => props.theme.AppPaddingLeft}px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
