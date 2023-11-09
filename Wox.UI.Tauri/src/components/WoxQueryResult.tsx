@@ -69,7 +69,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
 
   const getWindowsHeight = (resultItemCount: number) => {
     const theme = WoxThemeHelper.getInstance().getTheme()
-    const windowHeight = 60 + theme.AppPaddingTop + theme.AppPaddingBottom
+    const windowHeight = 50 + theme.AppPaddingTop + theme.AppPaddingBottom
     if (resultItemCount > 0) {
       return windowHeight + getResultItemHeight(resultItemCount)
     }

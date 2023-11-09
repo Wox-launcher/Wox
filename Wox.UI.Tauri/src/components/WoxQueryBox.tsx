@@ -82,8 +82,8 @@ const Style = styled.div<{ theme: Theme }>`
   overflow: hidden;
 
   input {
-    height: 60px;
-    line-height: 60px;
+    height: 50px;
+    line-height: 50px;
     width: 100%;
     font-size: 24px;
     outline: none;

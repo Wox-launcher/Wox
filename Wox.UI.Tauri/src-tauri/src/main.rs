@@ -11,7 +11,7 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::thread::spawn;
 use sysinfo::{Pid, System, SystemExt};
-use tauri::{Manager, LogicalSize};
+use tauri::{LogicalSize, Manager};
 
 mod websocket;
 
@@ -82,7 +82,6 @@ fn get_windows_height() -> i32 {
     let resp = r.text().unwrap();
     let app_padding_top = ajson::get(resp.as_str(), "AppPaddingTop").unwrap().unwrap();
     let app_padding_bottom = ajson::get(resp.as_str(), "AppPaddingBottom").unwrap().unwrap();
-    info!("app_padding_top: {}, app_padding_bottom: {}", app_padding_top, app_padding_bottom);
     return (60 + app_padding_top.as_i64().unwrap() + app_padding_bottom.as_i64().unwrap()) as i32;
 }
 
@@ -107,6 +106,8 @@ fn main() {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
                 let windows_height = get_windows_height();
+                window.set_size(LogicalSize::new(800, windows_height)).unwrap();
+                info!("set windows height: {}", windows_height);
                 window.set_size(LogicalSize::new(800, windows_height)).unwrap();
 
                 apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None).expect("Unsupported platform! 'apply_vibrancy' is only supported on macOS");
