@@ -1,9 +1,12 @@
 import React, { useState } from "react"
-import { Tab, Tabs } from "@mui/material"
-import PhoneIcon from "@mui/icons-material/Phone"
-import FavoriteIcon from "@mui/icons-material/Favorite"
-import PersonPinIcon from "@mui/icons-material/PersonPin"
+import { Box, Tab, Tabs } from "@mui/material"
+import ExtensionIcon from "@mui/icons-material/Extension"
+import SettingsIcon from "@mui/icons-material/Settings"
+import DarkModeIcon from "@mui/icons-material/DarkMode"
 import styled from "styled-components"
+import WoxSettingGeneral from "./settings/WoxSettingGeneral.tsx"
+import WoxSettingPlugins from "./settings/WoxSettingPlugins.tsx"
+import WoxSettingThemes from "./settings/WoxSettingThemes.tsx"
 
 export default () => {
   const [tabIndex, setTabIndex] = useState(0)
@@ -13,15 +16,28 @@ export default () => {
   }
 
   return <Style>
-    <Tabs value={tabIndex} onChange={handleTabChange}>
-      <Tab icon={<PhoneIcon />} label="RECENTS" />
-      <Tab icon={<FavoriteIcon />} label="FAVORITES" />
-      <Tab icon={<PersonPinIcon />} label="NEARBY" />
-    </Tabs>
+    <Box sx={{ flexGrow: 1, display: "flex", height: 800 }}>
+      <Tabs value={tabIndex} onChange={handleTabChange} orientation="vertical"
+            variant="scrollable">
+        <Tab icon={<SettingsIcon />} label="General" sx={{
+          textTransform: "none"
+        }} />
+        <Tab icon={<ExtensionIcon />} label="Plugins" sx={{
+          textTransform: "none"
+        }} />
+        <Tab icon={<DarkModeIcon />} label="Themes" sx={{
+          textTransform: "none"
+        }} />
+      </Tabs>
+      {tabIndex == 0 && <WoxSettingGeneral />}
+      {tabIndex == 1 && <WoxSettingPlugins />}
+      {tabIndex == 2 && <WoxSettingThemes />}
+    </Box>
   </Style>
 }
 
 const Style = styled.div`
-  display: flex;
-  justify-content: center;
+  .MuiTabs-root {
+    background-color: #2e1534;
+  }
 `

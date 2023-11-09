@@ -36,7 +36,6 @@
     "react-router-dom": "^6.16.0",
     "store2": "^2.14.2",
     "styled-components": "^6.0.8",
-    "swr": "^2.2.4",
     "usehooks-ts": "^2.9.1",
     "uuid": "^9.0.1"
   },
