@@ -23,6 +23,7 @@ export type WoxQueryResultRefHandler = {
   toggleActionList: () => Promise<boolean>
   hideActionList: () => void
   isActionListShown: () => boolean
+  forceResizeWindow: () => void
 }
 
 export type WoxQueryResultProps = {
@@ -241,10 +242,13 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     },
     isActionListShown: () => {
       return showActionList
+    },
+    forceResizeWindow: () => {
+      resizeWindow(currentResultList.current.length)
     }
   }))
 
-  return <Style theme={WoxThemeHelper.getInstance().getTheme()} resultCount={resultList.length}>
+  return <Style theme={WoxThemeHelper.getInstance().getTheme()} resultCount={resultList.length} itemHeight={getResultItemHeight(10)}>
     <Scrollbars
       className={"wox-result-scrollbars"}
       style={{ width: hasPreview ? "50%" : "100%" }}
@@ -313,47 +317,44 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
         }
       </div>}
 
-    {showActionList && <div className={"wox-query-result-action-container"} onClick={() => {
-      setShowActionList(false)
-      resizeWindow(resultList.length)
+    {showActionList && <div className={"wox-query-result-action-list"} onClick={(event) => {
+      event.preventDefault()
+      event.stopPropagation()
     }}>
-      <div className={"wox-query-result-action-list"} onClick={(event) => {
-        event.preventDefault()
-        event.stopPropagation()
-      }}>
-        <div className={"wox-query-result-action-list-header"}>Actions</div>
-        {actionList.map((action, index) => {
-          return <div key={`wox-result-action-item-${index}`}
-                      className={index === actionActiveIndex ? "wox-result-action-item wox-result-action-item-active" : "wox-result-action-item"}
-                      onClick={(event) => {
-                        sendActionMessage(currentResult.current?.Id || "", action)
-                        event.preventDefault()
-                        event.stopPropagation()
-                      }}>
-            <WoxImage img={action.Icon} width={24} height={24} />
-            <span className={"wox-result-action-item-name"}>{action.Name}</span>
-          </div>
-        })}
-        <div className={"wox-action-list-filter"}>
-          <input ref={filterInputRef} className={"wox-action-list-filter-input mousetrap"} type="text"
-                 aria-label="Wox"
-                 autoComplete="off"
-                 autoCorrect="off"
-                 autoCapitalize="off"
-                 autoFocus={true}
-                 onChange={(e) => {
-                   currentFilterText.current = e.target.value
-                   filterActionList()
-                 }} />
+      <div className={"wox-query-result-action-list-header"}>Actions</div>
+      {actionList.map((action, index) => {
+        return <div key={`wox-result-action-item-${index}`}
+                    className={index === actionActiveIndex ? "wox-result-action-item wox-result-action-item-active" : "wox-result-action-item"}
+                    onClick={(event) => {
+                      sendActionMessage(currentResult.current?.Id || "", action)
+                      event.preventDefault()
+                      event.stopPropagation()
+                    }}>
+          <WoxImage img={action.Icon} width={24} height={24} />
+          <span className={"wox-result-action-item-name"}>{action.Name}</span>
         </div>
+      })}
+      <div className={"wox-action-list-filter"}>
+        <input ref={filterInputRef} className={"wox-action-list-filter-input mousetrap"} type="text"
+               aria-label="Wox"
+               autoComplete="off"
+               autoCorrect="off"
+               autoCapitalize="off"
+               autoFocus={true}
+               onChange={(e) => {
+                 currentFilterText.current = e.target.value
+                 filterActionList()
+               }} />
       </div>
-    </div>}
+    </div>
+    }
   </Style>
 })
 
-const Style = styled.div<{ theme: Theme, resultCount: number }>`
+const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number }>`
   display: flex;
   flex-direction: row;
+  min-height: ${props => props.itemHeight}px;
 
   .wox-result-scrollbars {
     flex: 1;
@@ -494,23 +495,16 @@ const Style = styled.div<{ theme: Theme, resultCount: number }>`
     }
   }
 
-  .wox-query-result-action-container {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: ${props => (props.resultCount > 10 ? 10 : props.resultCount) * (50 + props.theme.ResultItemPaddingTop + props.theme.ResultItemPaddingBottom) + (60 + props.theme.AppPaddingTop + props.theme.AppPaddingBottom + props.theme.AppPaddingBottom)}px;
-    background-color: ${props => props.theme.ActionContainerBackgroundColor};
-    bottom: 0;
-    z-index: 8888;
-  }
-
   .wox-query-result-action-list {
     position: absolute;
     bottom: 10px;
     right: 10px;
-    background-color: ${props => props.theme.AppBackgroundColor};
+    background-color: ${props => props.theme.ActionContainerBackgroundColor};
     min-width: 300px;
-    padding: 5px 10px;
+    padding-left: ${props => props.theme.ActionContainerPaddingLeft}px;
+    padding-right: ${props => props.theme.ActionContainerPaddingRight}px;
+    padding-top: ${props => props.theme.ActionContainerPaddingTop}px;
+    padding-bottom: ${props => props.theme.ActionContainerPaddingBottom}px;
     z-index: 9999;
 
     .wox-query-result-action-list-header {
@@ -537,14 +531,18 @@ const Style = styled.div<{ theme: Theme, resultCount: number }>`
 
       .wox-action-list-filter-input {
         width: 100%;
+        box-sizing: border-box;
+        height: 32px;
+        line-height:32px;
         font-size: 18px;
         outline: none;
         border: 0;
         padding: 0 5px;
         cursor: auto;
-        color: ${props => props.theme.ActionQueryBoxFontColor};;
+        color: ${props => props.theme.ActionQueryBoxFontColor};
         display: inline-block;
-        background-color: transparent;
+        background-color: ${props => props.theme.ActionQueryBoxBackgroundColor};
+        border-radius: ${props => props.theme.ActionQueryBoxBorderRadius}px;
       }
     }
   }

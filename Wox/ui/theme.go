@@ -25,6 +25,12 @@ type Theme struct {
 	QueryBoxBorderRadius            int
 	ActionContainerBackgroundColor  string
 	ActionContainerHeaderFontColor  string
+	ActionContainerPaddingLeft      int
+	ActionContainerPaddingTop       int
+	ActionContainerPaddingRight     int
+	ActionContainerPaddingBottom    int
 	ActionItemActiveBackgroundColor string
 	ActionQueryBoxFontColor         string
+	ActionQueryBoxBackgroundColor   string
+	ActionQueryBoxBorderRadius      int
 }

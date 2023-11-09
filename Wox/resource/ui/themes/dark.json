@@ -20,9 +20,15 @@
   "ResultItemActiveBackgroundColor": "rgba(31, 118, 124, 0.8)",
   "QueryBoxFontColor": "#e4e7e7",
   "QueryBoxBackgroundColor": "rgba(44, 48, 50, 0.7)",
-  "QueryBoxBorderRadius": 0,
-  "ActionContainerBackgroundColor": "rgba(44, 48, 50, 0.7)",
+  "QueryBoxBorderRadius": 8,
+  "ActionContainerBackgroundColor": "rgba(52, 57, 60, 0.98)",
   "ActionContainerHeaderFontColor": "#e4e7e7",
+  "ActionContainerPaddingLeft": 14,
+  "ActionContainerPaddingTop": 10,
+  "ActionContainerPaddingRight": 14,
+  "ActionContainerPaddingBottom": 10,
   "ActionItemActiveBackgroundColor": "rgba(31, 118, 124, 0.8)",
-  "ActionQueryBoxFontColor": "#e4e7e7"
+  "ActionQueryBoxFontColor": "#e4e7e7",
+  "ActionQueryBoxBackgroundColor": "rgba(44, 48, 50, 0.98)",
+  "ActionQueryBoxBorderRadius": 8
 }

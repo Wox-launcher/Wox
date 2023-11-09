@@ -148,6 +148,7 @@ export default () => {
   const changeTheme = async (theme: string) => {
     await WoxThemeHelper.getInstance().changeTheme(JSON.parse(theme) as Theme)
     forceUpdate()
+    woxQueryResultRef.current?.forceResizeWindow()
   }
 
   const bindKeyboardEvent = () => {

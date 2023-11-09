@@ -23,6 +23,12 @@ export interface Theme {
   QueryBoxBorderRadius: number
   ActionContainerBackgroundColor: string
   ActionContainerHeaderFontColor: string
+  ActionContainerPaddingLeft: number
+  ActionContainerPaddingTop: number
+  ActionContainerPaddingRight: number
+  ActionContainerPaddingBottom: number
   ActionItemActiveBackgroundColor: string
   ActionQueryBoxFontColor: string
+  ActionQueryBoxBackgroundColor: string
+  ActionQueryBoxBorderRadius: number
 }
