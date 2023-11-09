@@ -2,12 +2,11 @@ import { invoke, InvokeArgs } from "@tauri-apps/api/tauri"
 import { appWindow, LogicalPosition, LogicalSize, WebviewWindow } from "@tauri-apps/api/window"
 import { WoxLogHelper } from "./WoxLogHelper.ts"
 import { v4 as UUID } from "uuid"
+import { WOX_LAUNCHER_WIDTH } from "./WoxConst.ts"
 
 export class WoxTauriHelper {
 
   private static instance: WoxTauriHelper
-
-  private static WINDOW_WIDTH = 800
 
   private constructor() {
   }
@@ -23,7 +22,7 @@ export class WoxTauriHelper {
      Get the width of the window
    */
   public getWoxWindowWidth() {
-    return WoxTauriHelper.WINDOW_WIDTH
+    return WOX_LAUNCHER_WIDTH
   }
 
   public async getServerPort(): Promise<string> {

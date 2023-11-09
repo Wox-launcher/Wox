@@ -12,6 +12,7 @@ import { pinyin } from "pinyin-pro"
 import WoxImage from "./WoxImage.tsx"
 import { Theme } from "../entity/Theme.typings"
 import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
+import { WOX_QUERY_BOX_INPUT_HEIGHT, WOX_QUERY_RESULT_ITEM_HEIGHT } from "../utils/WoxConst.ts"
 
 export type WoxQueryResultRefHandler = {
   clearResultList: () => void
@@ -58,7 +59,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
 
   const getResultSingleItemHeight = () => {
     const theme = WoxThemeHelper.getInstance().getTheme()
-    return 50 + theme.ResultItemPaddingTop + theme.ResultItemPaddingBottom
+    return WOX_QUERY_RESULT_ITEM_HEIGHT + theme.ResultItemPaddingTop + theme.ResultItemPaddingBottom
   }
 
   const getResultItemHeight = (resultItemCount: number) => {
@@ -69,7 +70,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
 
   const getWindowsHeight = (resultItemCount: number) => {
     const theme = WoxThemeHelper.getInstance().getTheme()
-    const windowHeight = 50 + theme.AppPaddingTop + theme.AppPaddingBottom
+    const windowHeight = WOX_QUERY_BOX_INPUT_HEIGHT + theme.AppPaddingTop + theme.AppPaddingBottom
     if (resultItemCount > 0) {
       return windowHeight + getResultItemHeight(resultItemCount)
     }
@@ -172,7 +173,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       currentActiveIndex.current = currentActiveIndex.current >= currentResultList.current.length - 1 ? 0 : currentActiveIndex.current + 1
       setActiveIndex(currentActiveIndex.current)
       if (currentActiveIndex.current >= 10) {
-        currentULRef.current?.scrollTop(50 * (currentActiveIndex.current - 9))
+        currentULRef.current?.scrollTop(getResultSingleItemHeight() * (currentActiveIndex.current - 9))
       }
       if (currentActiveIndex.current === 0) {
         currentULRef.current?.scrollTop(0)
@@ -533,7 +534,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
         width: 100%;
         box-sizing: border-box;
         height: 32px;
-        line-height:32px;
+        line-height: 32px;
         font-size: 18px;
         outline: none;
         border: 0;
