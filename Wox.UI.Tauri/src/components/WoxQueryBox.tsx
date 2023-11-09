@@ -58,7 +58,6 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
              _props.onFocus?.()
            }}
            onClick={() => {
-             selectInputText()
              _props.onClick?.()
            }}
            onChange={(e) => {

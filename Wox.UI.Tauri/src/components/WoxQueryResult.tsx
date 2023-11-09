@@ -55,13 +55,22 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     setResultList(currentResultList.current)
   }
 
-  const getWindowsHeight = (resultItem: number) => {
+  const getResultSingleItemHeight = () => {
     const theme = WoxThemeHelper.getInstance().getTheme()
-    const baseItemHeight = (50 + theme.ResultItemPaddingTop + theme.ResultItemPaddingBottom)
-    let windowHeight = 60 + theme.AppPaddingTop + theme.AppPaddingBottom
-    if (resultItem > 0) {
-      windowHeight = currentPreview.current ? baseItemHeight * 10 + windowHeight : windowHeight + baseItemHeight * (resultItem > 10 ? 10 : resultItem)
-      windowHeight += +theme.ResultContainerPaddingTop + theme.ResultContainerPaddingBottom
+    return 50 + theme.ResultItemPaddingTop + theme.ResultItemPaddingBottom
+  }
+
+  const getResultItemHeight = (resultItemCount: number) => {
+    const theme = WoxThemeHelper.getInstance().getTheme()
+    const baseItemHeight = getResultSingleItemHeight()
+    return (currentPreview.current ? baseItemHeight * 10 : baseItemHeight * (resultItemCount > 10 ? 10 : resultItemCount)) + theme.ResultContainerPaddingTop + theme.ResultContainerPaddingBottom
+  }
+
+  const getWindowsHeight = (resultItemCount: number) => {
+    const theme = WoxThemeHelper.getInstance().getTheme()
+    const windowHeight = 60 + theme.AppPaddingTop + theme.AppPaddingBottom
+    if (resultItemCount > 0) {
+      return windowHeight + getResultItemHeight(resultItemCount)
     }
     return windowHeight
   }
@@ -145,10 +154,10 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       currentActiveIndex.current = currentActiveIndex.current <= 0 ? currentResultList.current.length - 1 : currentActiveIndex.current - 1
       setActiveIndex(currentActiveIndex.current)
       if (currentActiveIndex.current >= 10) {
-        currentULRef.current?.scrollTop(50 * (currentActiveIndex.current - 9))
+        currentULRef.current?.scrollTop(getResultSingleItemHeight() * (currentActiveIndex.current - 9))
       }
       if (currentActiveIndex.current === currentResultList.current.length - 1) {
-        currentULRef.current?.scrollTop(50 * (currentResultList.current.length - 1))
+        currentULRef.current?.scrollTop(getResultSingleItemHeight() * (currentResultList.current.length - 1))
       }
     }
   }
@@ -241,7 +250,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       ref={currentULRef}
       autoHeight
       autoHeightMin={0}
-      autoHeightMax={500}>
+      autoHeightMax={getResultItemHeight(resultList.length < 10 ? 10 : resultList.length)}>
       <div className={"wox-result-container"}>
         <ul id={"wox-result-list"} key={"wox-result-list"}>
           {resultList.map((result, index) => {
@@ -276,8 +285,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
         className={"wox-query-result-preview"}>
         <Scrollbars
           autoHeight
-          autoHeightMin={0}
-          autoHeightMax={410}>
+          autoHeightMin={0}>
           <div className={"wox-query-result-preview-content"}>
             {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeText.code && <p>{getCurrentPreviewData().PreviewData}</p>}
             {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
@@ -356,10 +364,6 @@ const Style = styled.div<{ theme: Theme, resultCount: number }>`
     padding: 0;
     margin: 0;
     overflow: hidden;
-    width: 50%;
-  }
-
-  ul:last-child {
     width: 100%;
   }
 
@@ -426,15 +430,14 @@ const Style = styled.div<{ theme: Theme, resultCount: number }>`
 
   .wox-query-result-preview {
     position: relative;
-    width: 400px;
-    min-height: 490px;
+    width: 50%;
+    display: inline-block;
     border-left: 1px solid #dedede;
     padding: 10px 0 10px 10px;
     border-right: ${WoxTauriHelper.getInstance().isTauri() ? "0px" : "1px"} solid #dedede;
 
     .wox-query-result-preview-content {
-      max-height: 400px;
-      overflow-y: auto;
+      overflow: hidden;
 
       p {
         word-wrap: break-word;
@@ -456,8 +459,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number }>`
       left: 0;
       bottom: 0;
       right: 0;
-      max-height: 90px;
-      overflow-y: auto;
+      overflow: hidden;
 
       .wox-query-result-preview-property {
         display: flex;
