@@ -432,6 +432,14 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
   ul li.active {
     background-color: ${props => props.theme.ResultItemActiveBackgroundColor};
   }
+  
+  ul li.active h2 {
+    color: ${props => props.theme.ResultItemActiveTitleColor};
+  }
+  
+  ul li.active h3 {
+    color: ${props => props.theme.ResultItemActiveSubTitleColor};
+  }
 
   .wox-query-result-preview {
     flex: 1;
@@ -509,6 +517,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
 
     .wox-query-result-action-list-header {
       color: ${props => props.theme.ActionContainerHeaderFontColor};
+      margin-bottom: 5px;
     }
 
     .wox-result-action-item {
@@ -516,6 +525,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
       line-height: 30px;
       align-items: center;
       padding: 5px 10px;
+      color: ${props => props.theme.ActionItemFontColor};
 
       .wox-image {
         margin-right: 8px;
@@ -524,6 +534,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
 
     .wox-result-action-item-active {
       background-color: ${props => props.theme.ActionItemActiveBackgroundColor};
+      color: ${props => props.theme.ActionItemActiveFontColor};
     }
 
     .wox-action-list-filter {

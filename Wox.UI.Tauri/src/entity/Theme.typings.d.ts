@@ -18,6 +18,8 @@ export interface Theme {
   ResultItemPaddingRight: number
   ResultItemPaddingBottom: number
   ResultItemActiveBackgroundColor: string
+  ResultItemActiveTitleColor: string
+  ResultItemActiveSubTitleColor: string
   ResultItemTitleColor: string
   ResultItemSubTitleColor: string
   QueryBoxFontColor: string
@@ -30,6 +32,8 @@ export interface Theme {
   ActionContainerPaddingRight: number
   ActionContainerPaddingBottom: number
   ActionItemActiveBackgroundColor: string
+  ActionItemActiveFontColor: string
+  ActionItemFontColor: string
   ActionQueryBoxFontColor: string
   ActionQueryBoxBackgroundColor: string
   ActionQueryBoxBorderRadius: number

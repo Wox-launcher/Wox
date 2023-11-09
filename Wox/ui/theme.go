@@ -20,6 +20,8 @@ type Theme struct {
 	ResultItemPaddingRight          int
 	ResultItemPaddingBottom         int
 	ResultItemActiveBackgroundColor string
+	ResultItemActiveTitleColor      string
+	ResultItemActiveSubTitleColor   string
 	ResultItemTitleColor            string
 	ResultItemSubTitleColor         string
 	QueryBoxFontColor               string
@@ -32,6 +34,8 @@ type Theme struct {
 	ActionContainerPaddingRight     int
 	ActionContainerPaddingBottom    int
 	ActionItemActiveBackgroundColor string
+	ActionItemActiveFontColor       string
+	ActionItemFontColor             string
 	ActionQueryBoxFontColor         string
 	ActionQueryBoxBackgroundColor   string
 	ActionQueryBoxBorderRadius      int
