@@ -137,7 +137,7 @@ func (m *Manager) LoadThemes(ctx context.Context) error {
 		util.Go(ctx, "watch user themes", func() {
 			watchErr := util.WatchDirectories(ctx, userThemesDirectory, func(e fsnotify.Event) {
 				var themePath = e.Name
-				if e.Op == fsnotify.Write {
+				if e.Op == fsnotify.Write || e.Op == fsnotify.Chmod {
 					logger.Info(ctx, fmt.Sprintf("user theme changed: %s", themePath))
 					themeData, readThemeErr := os.ReadFile(themePath)
 					if readThemeErr != nil {
