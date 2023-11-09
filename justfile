@@ -31,6 +31,7 @@ default:
       upx --brute Release/wox-windows-amd64.exe; \
     elif [ "{{target}}" = "linux" ]; then \
       cd Wox && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-linux-amd64 && cd ..; \
+      upx --brute Release/wox-linux-amd64; \
       chmod +x Release/wox-linux-amd64; \
     elif [ "{{target}}" = "darwin-arm64" ]; then \
       cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-arm64 && cd ..; \
