@@ -106,7 +106,6 @@ fn main() {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
                 let windows_height = get_windows_height();
-                window.set_size(LogicalSize::new(800, windows_height)).unwrap();
                 info!("set windows height: {}", windows_height);
                 window.set_size(LogicalSize::new(800, windows_height)).unwrap();
 
@@ -139,6 +138,10 @@ fn main() {
             .setup(|app| {
                 let window = app.get_window("main").unwrap();
 
+                let windows_height = get_windows_height();
+                info!("set windows height: {}", windows_height);
+                window.set_size(LogicalSize::new(800, windows_height)).unwrap();
+
                 apply_blur(&window, Some((18, 18, 18, 125))).expect("Unsupported platform! 'apply_blur' is only supported on Windows");
 
                 spawn(move || {
@@ -156,6 +159,11 @@ fn main() {
         tauri::Builder::default()
             .setup(|app| {
                 let window = app.get_window("main").unwrap();
+
+                let windows_height = get_windows_height();
+                info!("set windows height: {}", windows_height);
+                window.set_size(LogicalSize::new(800, windows_height)).unwrap();
+
                 spawn(move || {
                     websocket::conn(window);
                 });

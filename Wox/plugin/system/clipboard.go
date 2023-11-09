@@ -166,7 +166,10 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 					util.ClipboardWrite(history.Data)
 					util.Go(context.Background(), "clipboard history copy", func() {
 						time.Sleep(time.Millisecond * 100)
-						util.SimulateCtrlV()
+						err := util.SimulateCtrlV()
+						if err != nil {
+							c.api.Log(ctx, fmt.Sprintf("simulate paste clipboard failed, err=%s", err.Error()))
+						}
 					})
 				},
 			},
