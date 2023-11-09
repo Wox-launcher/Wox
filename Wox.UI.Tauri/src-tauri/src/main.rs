@@ -11,7 +11,7 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::thread::spawn;
 use sysinfo::{Pid, System, SystemExt};
-use tauri::{Manager, PhysicalSize};
+use tauri::{Manager, LogicalSize};
 
 mod websocket;
 
@@ -107,7 +107,7 @@ fn main() {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
                 let windows_height = get_windows_height();
-                window.set_size(PhysicalSize::new(800, windows_height)).unwrap();
+                window.set_size(LogicalSize::new(800, windows_height)).unwrap();
 
                 apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None).expect("Unsupported platform! 'apply_vibrancy' is only supported on macOS");
 

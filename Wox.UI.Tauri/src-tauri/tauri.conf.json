@@ -51,7 +51,6 @@
         "title": "Wox",
         "width": 800,
         "height": 60,
-        "maxHeight": 560,
         "visible": false
       }
     ]
