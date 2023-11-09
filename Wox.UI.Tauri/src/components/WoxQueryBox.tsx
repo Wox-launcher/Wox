@@ -64,14 +64,16 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
            onChange={(e) => {
              _props.onQueryChange(e.target.value)
            }}
-      // onMouseMoveCapture={(event) => {
-      //   WoxTauriHelper.getInstance().startDragging().then(_ => {
-      //     queryBoxRef.current?.focus()
-      //   })
-      //   event.preventDefault()
-      //   event.stopPropagation()
-      // }}
+
     />
+    <div className={"dragging-container"}
+         onMouseMoveCapture={(event) => {
+           WoxTauriHelper.getInstance().startDragging().then(_ => {
+             queryBoxRef.current?.focus()
+           })
+           event.preventDefault()
+           event.stopPropagation()
+         }}>&nbsp;</div>
   </Style>
 })
 
@@ -88,7 +90,6 @@ const Style = styled.div<{ theme: Theme }>`
     outline: none;
     padding-left: 10px;
     border: 0;
-    background-color: transparent;
     cursor: auto;
     color: ${props => props.theme.QueryBoxFontColor};
     background-color: ${props => props.theme.QueryBoxBackgroundColor};
@@ -97,22 +98,13 @@ const Style = styled.div<{ theme: Theme }>`
     box-sizing: border-box;
   }
 
-  .wox-placeholder {
+  .dragging-container {
     position: absolute;
-    left: 10px;
-    top: ${WoxTauriHelper.getInstance().isTauri() ? "12px" : "11px"};
-    font-size: 24px;
-    color: #545454;
-  }
-
-  .wox-setting {
-    position: absolute;
-    bottom: 3px;
-    right: 4px;
-    top: 3px;
-    padding: 0 10px;
-    background: transparent;
-    border: none;
-    color: #545454;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background-color: transparent;
+    width: 120px;
+    z-index: 999;
   }
 `
