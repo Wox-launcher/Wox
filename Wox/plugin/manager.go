@@ -279,11 +279,6 @@ func (m *Manager) GetPluginInstances() []*Instance {
 }
 
 func (m *Manager) isQueryMatchPlugin(ctx context.Context, pluginInstance *Instance, query Query) bool {
-	// System Plugin Indicator is a special system plugin, it will be triggered even if query enter plugin mode, so that we can prompt plugin commands
-	if pluginInstance.Metadata.Id == "38564bf0-75ad-4b3e-8afe-a0e0a287c42e" {
-		return true
-	}
-
 	var validGlobalQuery = lo.Contains(pluginInstance.GetTriggerKeywords(), "*") && query.TriggerKeyword == ""
 	var validNonGlobalQuery = lo.Contains(pluginInstance.GetTriggerKeywords(), query.TriggerKeyword)
 	if !validGlobalQuery && !validNonGlobalQuery {

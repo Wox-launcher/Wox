@@ -20,7 +20,7 @@ export type WoxQueryResultRefHandler = {
   moveDown: () => void
   doAction: () => void
   resetMouseIndex: () => void
-  toggleActionList: () => void
+  toggleActionList: () => Promise<boolean>
   hideActionList: () => void
   isActionListShown: () => boolean
 }
@@ -180,6 +180,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   const handleToggleActionList = async () => {
     if (showActionList) {
       await handleHideActionList()
+      return false
     } else {
       const result = currentResultList.current.find((result) => result.Index === currentActiveIndex.current)
       if (result) {
@@ -190,6 +191,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
           setShowActionList(true)
         })
       }
+      return true
     }
   }
 
@@ -222,8 +224,8 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       setShowActionList(false)
       currentMouseOverIndex.current = 0
     },
-    toggleActionList: () => {
-      handleToggleActionList()
+    toggleActionList: async () => {
+      return await handleToggleActionList()
     },
     hideActionList: () => {
       handleHideActionList()

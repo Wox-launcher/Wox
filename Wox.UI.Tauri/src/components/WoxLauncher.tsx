@@ -178,7 +178,11 @@ export default () => {
       event.stopPropagation()
     })
     Mousetrap.bind("command+j", (event) => {
-      woxQueryResultRef.current?.toggleActionList()
+      woxQueryResultRef.current?.toggleActionList().then((actionListVisibility) => {
+        if (!actionListVisibility) {
+          woxQueryBoxRef.current?.focus()
+        }
+      })
       event.preventDefault()
       event.stopPropagation()
     })
