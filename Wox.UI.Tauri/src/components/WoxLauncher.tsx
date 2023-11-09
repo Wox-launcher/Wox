@@ -216,7 +216,7 @@ export default () => {
   }, [])
 
   return <Style theme={WoxThemeHelper.getInstance().getTheme()} className={"wox-launcher"}>
-    <WoxQueryBox ref={woxQueryBoxRef} onQueryChange={onQueryChange} onFocus={() => {
+    <WoxQueryBox ref={woxQueryBoxRef} onQueryChange={onQueryChange} onClick={() => {
       woxQueryResultRef.current?.hideActionList()
     }} />
 

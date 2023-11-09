@@ -39,6 +39,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   const currentULRef = useRef<Scrollbars>(null)
   const currentResult = useRef<WOXMESSAGE.WoxMessageResponseResult>()
   const currentFilterText = useRef<string>("")
+  const currentPreview = useRef(false)
   const [activeIndex, setActiveIndex] = useState<number>(0)
   const [actionActiveIndex, setActionActiveIndex] = useState<number>(0)
   const [resultList, setResultList] = useState<WOXMESSAGE.WoxMessageResponseResult[]>([])
@@ -54,16 +55,26 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     setResultList(currentResultList.current)
   }
 
-  const resizeWindowAndResultList = (results: WOXMESSAGE.WoxMessageResponseResult[], windowHeight: number) => {
-    if (windowHeight > currentWindowHeight.current) {
-      WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), windowHeight).then(_ => {
-        resetResultList(results)
-      })
-    } else {
-      resetResultList(results)
-      WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), windowHeight)
+  const getWindowsHeight = (resultItem: number) => {
+    const theme = WoxThemeHelper.getInstance().getTheme()
+    const baseItemHeight = (50 + theme.ResultItemPaddingTop + theme.ResultItemPaddingBottom)
+    let windowHeight = 60 + theme.AppPaddingTop + theme.AppPaddingBottom
+    if (resultItem > 0) {
+      windowHeight = currentPreview.current ? baseItemHeight * 10 + windowHeight : windowHeight + baseItemHeight * (resultItem > 10 ? 10 : resultItem)
+      windowHeight += +theme.ResultContainerPaddingTop + theme.ResultContainerPaddingBottom
     }
-    currentWindowHeight.current = windowHeight
+    return windowHeight
+  }
+
+  const resizeWindow = async (resultItemCount: number) => {
+    const windowHeight = getWindowsHeight(resultItemCount)
+    if (windowHeight > currentWindowHeight.current) {
+      currentWindowHeight.current = windowHeight
+      return WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), windowHeight)
+    } else {
+      currentWindowHeight.current = windowHeight
+      return WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), windowHeight)
+    }
   }
 
   const filterActionList = () => {
@@ -159,24 +170,21 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     }
   }
 
-  const handleHideActionList = () => {
+  const handleHideActionList = async () => {
     setShowActionList(false)
     setActionActiveIndex(0)
     currentMouseOverIndex.current = 0
-    const windowHeight = hasPreview ? 560 : 60 + 50 * (currentResultList.current.length > 10 ? 10 : currentResultList.current.length)
-    WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), windowHeight)
+    await resizeWindow(currentResultList.current.length)
   }
 
   const handleToggleActionList = async () => {
     if (showActionList) {
-      handleHideActionList()
+      await handleHideActionList()
     } else {
       const result = currentResultList.current.find((result) => result.Index === currentActiveIndex.current)
       if (result) {
         currentResult.current = result
-        //resize window
-        currentWindowHeight.current = 560
-        WoxTauriHelper.getInstance().setSize(WoxTauriHelper.getInstance().getWoxWindowWidth(), currentWindowHeight.current).then(_ => {
+        resizeWindow(10).then(_ => {
           currentActionList.current = result.Actions
           setActionList(result.Actions)
           setShowActionList(true)
@@ -188,16 +196,17 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   useImperativeHandle(ref, () => ({
     clearResultList: () => {
       setActiveIndex(0)
-      resizeWindowAndResultList([], 60)
+      resizeWindow(0)
     },
     changeResultList: (preview: boolean, results: WOXMESSAGE.WoxMessageResponseResult[]) => {
+      currentPreview.current = preview
       setHasPreview(preview)
-      //reset window size
-      const windowHeight = preview ? 560 : 60 + 50 * (results.length > 10 ? 10 : results.length)
-      if (currentWindowHeight.current === windowHeight) {
+      if (currentWindowHeight.current === getWindowsHeight(results.length)) {
         resetResultList(results)
       } else {
-        resizeWindowAndResultList(results, windowHeight)
+        resizeWindow(results.length).then(_ => {
+          resetResultList(results)
+        })
       }
     },
     moveUp: () => {
@@ -234,17 +243,22 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       <div className={"wox-result-container"}>
         <ul id={"wox-result-list"} key={"wox-result-list"}>
           {resultList.map((result, index) => {
-            return <li id={`wox-result-li-${index}`} key={`wox-result-li-${index}`} className={activeIndex === index ? "active" : "inactive"} onMouseOverCapture={() => {
-              currentMouseOverIndex.current += 1
-              if (result.Index !== undefined && currentActiveIndex.current !== result.Index && currentMouseOverIndex.current > 1) {
-                currentActiveIndex.current = index
-                setActiveIndex(index)
-              }
-            }} onClick={(event) => {
-              handleAction()
-              event.preventDefault()
-              event.stopPropagation()
-            }}>
+            return <li id={`wox-result-li-${index}`} key={`wox-result-li-${index}`} className={activeIndex === index ? "active" : "inactive"}
+                       onMouseOverCapture={() => {
+                         if (showActionList) {
+                           return
+                         }
+                         currentMouseOverIndex.current += 1
+                         if (result.Index !== undefined && currentActiveIndex.current !== result.Index && currentMouseOverIndex.current > 1) {
+                           currentActiveIndex.current = index
+                           setActiveIndex(index)
+                         }
+                       }}
+                       onClick={(event) => {
+                         handleAction()
+                         event.preventDefault()
+                         event.stopPropagation()
+                       }}>
               <WoxImage img={result.Icon} height={36} width={36} />
               <h2 className={"wox-result-title"}>{result.Title}</h2>
               {result.SubTitle && <h3 className={"wox-result-subtitle"}>{result.SubTitle}</h3>}
@@ -289,6 +303,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
 
     {showActionList && <div className={"wox-query-result-action-container"} onClick={() => {
       setShowActionList(false)
+      resizeWindow(resultList.length)
     }}>
       <div className={"wox-query-result-action-list"} onClick={(event) => {
         event.preventDefault()
@@ -297,11 +312,12 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
         <div className={"wox-query-result-action-list-header"}>Actions</div>
         {actionList.map((action, index) => {
           return <div key={`wox-result-action-item-${index}`}
-                      className={index === actionActiveIndex ? "wox-result-action-item wox-result-action-item-active" : "wox-result-action-item"} onClick={(event) => {
-            sendActionMessage(currentResult.current?.Id || "", action)
-            event.preventDefault()
-            event.stopPropagation()
-          }}>
+                      className={index === actionActiveIndex ? "wox-result-action-item wox-result-action-item-active" : "wox-result-action-item"}
+                      onClick={(event) => {
+                        sendActionMessage(currentResult.current?.Id || "", action)
+                        event.preventDefault()
+                        event.stopPropagation()
+                      }}>
             <WoxImage img={action.Icon} width={24} height={24} />
             <span className={"wox-result-action-item-name"}>{action.Name}</span>
           </div>
@@ -386,7 +402,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number }>`
     font-size: 18px;
     font-weight: 550;
   }
-  
+
   ul li h3 {
     font-size: 16px;
     font-weight: normal;
@@ -403,7 +419,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number }>`
   }
 
   ul li.active {
-      background-color: ${props => props.theme.ResultItemActiveBackgroundColor};
+    background-color: ${props => props.theme.ResultItemActiveBackgroundColor};
   }
 
   .wox-query-result-preview {
@@ -469,7 +485,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number }>`
     position: absolute;
     left: 0;
     right: 0;
-    top: ${props => (props.resultCount > 10 ? 10 : props.resultCount) * 50 + 60}px;
+    top: ${props => (props.resultCount > 10 ? 10 : props.resultCount) * (50 + props.theme.ResultItemPaddingTop + props.theme.ResultItemPaddingBottom) + (60 + props.theme.AppPaddingTop + props.theme.AppPaddingBottom + props.theme.AppPaddingBottom)}px;
     background-color: ${props => props.theme.ActionContainerBackgroundColor};
     bottom: 0;
     z-index: 8888;
@@ -513,7 +529,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number }>`
         border: 0;
         padding: 0 5px;
         cursor: auto;
-        color:${props => props.theme.ActionQueryBoxFontColor}; ;
+        color: ${props => props.theme.ActionQueryBoxFontColor};;
         display: inline-block;
         background-color: transparent;
       }

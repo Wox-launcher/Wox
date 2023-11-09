@@ -15,10 +15,15 @@ export type WoxQueryBoxProps = {
   defaultValue?: string
   onQueryChange: (query: string) => void
   onFocus?: () => void
+  onClick?: () => void
 }
 
 export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQueryBoxRefHandler>) => {
   const queryBoxRef = React.createRef<HTMLInputElement>()
+
+  const selectInputText = () => {
+    queryBoxRef.current?.select()
+  }
 
   useImperativeHandle(ref, () => ({
     changeQuery: (query: string) => {
@@ -28,7 +33,7 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
       }
     },
     selectAll: () => {
-      queryBoxRef.current?.select()
+      selectInputText()
     },
     focus: () => {
       queryBoxRef.current?.focus()
@@ -52,16 +57,20 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
            onFocus={() => {
              _props.onFocus?.()
            }}
+           onClick={() => {
+             selectInputText()
+             _props.onClick?.()
+           }}
            onChange={(e) => {
              _props.onQueryChange(e.target.value)
            }}
-           onMouseMoveCapture={(event) => {
-             WoxTauriHelper.getInstance().startDragging().then(_ => {
-               queryBoxRef.current?.focus()
-             })
-             event.preventDefault()
-             event.stopPropagation()
-           }}
+      // onMouseMoveCapture={(event) => {
+      //   WoxTauriHelper.getInstance().startDragging().then(_ => {
+      //     queryBoxRef.current?.focus()
+      //   })
+      //   event.preventDefault()
+      //   event.stopPropagation()
+      // }}
     />
   </Style>
 })
@@ -81,7 +90,7 @@ const Style = styled.div<{ theme: Theme }>`
     border: 0;
     background-color: transparent;
     cursor: auto;
-    color:  ${props => props.theme.QueryBoxFontColor};
+    color: ${props => props.theme.QueryBoxFontColor};
     background-color: ${props => props.theme.QueryBoxBackgroundColor};
     border-radius: ${props => props.theme.QueryBoxBorderRadius}px;
     display: inline-block;
