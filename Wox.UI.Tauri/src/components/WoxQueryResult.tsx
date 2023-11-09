@@ -246,7 +246,8 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
 
   return <Style theme={WoxThemeHelper.getInstance().getTheme()} resultCount={resultList.length}>
     <Scrollbars
-      style={{ width: hasPreview ? 400 : 800 }}
+      className={"wox-result-scrollbars"}
+      style={{ width: hasPreview ? "50%" : "100%" }}
       ref={currentULRef}
       autoHeight
       autoHeightMin={0}
@@ -285,7 +286,8 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
         className={"wox-query-result-preview"}>
         <Scrollbars
           autoHeight
-          autoHeightMin={0}>
+          autoHeightMin={0}
+          autoHeightMax={getResultSingleItemHeight() * 8 + 10}>
           <div className={"wox-query-result-preview-content"}>
             {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeText.code && <p>{getCurrentPreviewData().PreviewData}</p>}
             {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
@@ -352,6 +354,10 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
 const Style = styled.div<{ theme: Theme, resultCount: number }>`
   display: flex;
   flex-direction: row;
+
+  .wox-result-scrollbars {
+    flex: 1;
+  }
 
   .wox-result-container {
     padding-top: ${props => props.theme.ResultContainerPaddingTop}px;
@@ -429,7 +435,9 @@ const Style = styled.div<{ theme: Theme, resultCount: number }>`
   }
 
   .wox-query-result-preview {
+    flex: 1;
     position: relative;
+    box-sizing: border-box;
     width: 50%;
     display: inline-block;
     border-left: 1px solid #dedede;
@@ -438,6 +446,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number }>`
 
     .wox-query-result-preview-content {
       overflow: hidden;
+      position: relative;
 
       p {
         word-wrap: break-word;
