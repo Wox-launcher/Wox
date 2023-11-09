@@ -11,7 +11,7 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::thread::spawn;
 use sysinfo::{Pid, System, SystemExt};
-use tauri::Manager;
+use tauri::{Manager, PhysicalSize};
 
 mod websocket;
 
@@ -77,11 +77,21 @@ fn check_wox_alive() {
     }
 }
 
+fn get_windows_height() -> i32 {
+    let r = reqwest::blocking::get(format!("http://localhost:{}/theme", get_server_port())).unwrap();
+    let resp = r.text().unwrap();
+    let app_padding_top = ajson::get(resp.as_str(), "AppPaddingTop").unwrap().unwrap();
+    let app_padding_bottom = ajson::get(resp.as_str(), "AppPaddingBottom").unwrap().unwrap();
+    info!("app_padding_top: {}, app_padding_bottom: {}", app_padding_top, app_padding_bottom);
+    return (60 + app_padding_top.as_i64().unwrap() + app_padding_bottom.as_i64().unwrap()) as i32;
+}
+
 fn main() {
     init_log_file();
     spawn(move || {
         check_wox_alive();
     });
+
 
     #[cfg(target_os = "macos")]
     {
@@ -95,6 +105,9 @@ fn main() {
                 let window = app.get_window("main").unwrap();
                 // hide the dock icon
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+                let windows_height = get_windows_height();
+                window.set_size(PhysicalSize::new(800, windows_height)).unwrap();
 
                 apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None).expect("Unsupported platform! 'apply_vibrancy' is only supported on macOS");
 
@@ -119,6 +132,8 @@ fn main() {
 
     #[cfg(target_os = "windows")]
     {
+        use window_vibrancy::apply_blur;
+
         tauri::Builder::default()
             .setup(|app| {
                 let window = app.get_window("main").unwrap();
