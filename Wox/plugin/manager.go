@@ -527,3 +527,16 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, resultId string, refreshab
 
 	return newResult, nil
 }
+
+func (m *Manager) PreProcessQuery(ctx context.Context, query string) string {
+	newQuery := m.processQueryVariables(ctx, query)
+	return newQuery
+}
+
+func (m *Manager) processQueryVariables(ctx context.Context, query string) string {
+	if !strings.Contains(query, "{wox:") {
+		return query
+	}
+
+	return query
+}

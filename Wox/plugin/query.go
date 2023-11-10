@@ -7,10 +7,15 @@ import (
 )
 
 type QueryType = string
+type QueryVariable = string
 
 const (
 	QueryTypeText QueryType = "text"
 	QueryTypeFile QueryType = "file"
+)
+
+const (
+	QueryVariableSelectedText QueryVariable = "{wox:selected_text}"
 )
 
 // Query from Wox. See "Doc/Query.md" for details.
