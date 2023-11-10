@@ -26,7 +26,6 @@ body {
     -webkit-text-size-adjust: 100%;
 }
 
-.wox-scroll-bar:first-child {
+.wox-scroll-bar div:first-child {
     overflow-x: hidden !important;
-    overflow-y: scroll !important;
 }
