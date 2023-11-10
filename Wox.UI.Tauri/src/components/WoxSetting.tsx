@@ -17,8 +17,7 @@ export default () => {
 
   return <Style>
     <Box sx={{ flexGrow: 1, display: "flex", height: 800 }}>
-      <Tabs value={tabIndex} onChange={handleTabChange} orientation="vertical"
-            variant="scrollable">
+      <Tabs value={tabIndex} onChange={handleTabChange} orientation="vertical">
         <Tab icon={<SettingsIcon />} label="General" sx={{
           textTransform: "none"
         }} />
@@ -29,9 +28,12 @@ export default () => {
           textTransform: "none"
         }} />
       </Tabs>
-      {tabIndex == 0 && <WoxSettingGeneral />}
-      {tabIndex == 1 && <WoxSettingPlugins />}
-      {tabIndex == 2 && <WoxSettingThemes />}
+      <div className={"setting-container"}>
+        {tabIndex == 0 && <WoxSettingGeneral />}
+        {tabIndex == 1 && <WoxSettingPlugins />}
+        {tabIndex == 2 && <WoxSettingThemes />}
+      </div>
+
     </Box>
   </Style>
 }
@@ -39,5 +41,19 @@ export default () => {
 const Style = styled.div`
   .MuiTabs-root {
     background-color: #2e1534;
+
+    .MuiTab-labelIcon {
+      color: #ffffff !important;
+    }
+
+    .Mui-selected {
+      color: cornflowerblue !important;
+    }
+  }
+
+  .setting-container {
+    width: 100%;
+    height: 100%;
+    background-color: black;
   }
 `

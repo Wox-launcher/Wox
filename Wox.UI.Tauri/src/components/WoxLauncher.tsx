@@ -91,12 +91,12 @@ export default () => {
     Because the query callback will be called multiple times, so we need to filter the result by query text
    */
   const handleQueryCallback = (results: WOXMESSAGE.WoxMessageResponseResult[]) => {
-    fullResultList.current = fullResultList.current.concat(results.filter((result) => {
+    fullResultList.current = fullResultList.current.concat(results).filter((result) => {
       if (result.AssociatedQuery === currentQuery.current) {
         hasLatestQueryResult.current = true
       }
       return result.AssociatedQuery === currentQuery.current
-    }))
+    })
 
     //sort fullResultList order by score desc
     fullResultList.current.sort((a, b) => {

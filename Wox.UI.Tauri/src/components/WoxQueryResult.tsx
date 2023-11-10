@@ -13,6 +13,7 @@ import WoxImage from "./WoxImage.tsx"
 import { Theme } from "../entity/Theme.typings"
 import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
 import { WOX_QUERY_BOX_INPUT_HEIGHT, WOX_QUERY_RESULT_ITEM_HEIGHT } from "../utils/WoxConst.ts"
+import { WoxLogHelper } from "../utils/WoxLogHelper.ts"
 
 export type WoxQueryResultRefHandler = {
   clearResultList: () => void
@@ -78,6 +79,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   }
 
   const resizeWindow = async (resultItemCount: number) => {
+    WoxLogHelper.getInstance().log("Resize Window: resultItemCount = " + resultItemCount)
     const windowHeight = getWindowsHeight(resultItemCount)
     if (windowHeight > currentWindowHeight.current) {
       currentWindowHeight.current = windowHeight
@@ -182,10 +184,12 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   }
 
   const handleHideActionList = async () => {
+    if (showActionList) {
+      await resizeWindow(currentResultList.current.length)
+    }
     setShowActionList(false)
     setActionActiveIndex(0)
     currentMouseOverIndex.current = 0
-    await resizeWindow(currentResultList.current.length)
   }
 
   const handleToggleActionList = async () => {
@@ -245,6 +249,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       return showActionList
     },
     forceResizeWindow: () => {
+      WoxLogHelper.getInstance().log("forceResizeWindow")
       resizeWindow(currentResultList.current.length)
     }
   }))
@@ -434,11 +439,11 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
     border-left: ${props => props.theme.ResultItemActiveBorderLeft};
     background-color: ${props => props.theme.ResultItemActiveBackgroundColor};
   }
-  
+
   ul li.active h2 {
     color: ${props => props.theme.ResultItemActiveTitleColor};
   }
-  
+
   ul li.active h3 {
     color: ${props => props.theme.ResultItemActiveSubTitleColor};
   }
@@ -493,7 +498,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
         }
 
         .wox-query-result-preview-property-value {
-        color: ${props => props.theme.PreviewPropertyContentColor};
+          color: ${props => props.theme.PreviewPropertyContentColor};
         }
 
         .div {
