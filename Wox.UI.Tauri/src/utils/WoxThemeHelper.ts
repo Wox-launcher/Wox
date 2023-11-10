@@ -18,8 +18,8 @@ export class WoxThemeHelper {
 
   public async loadTheme() {
     const apiResponse = await getTheme()
-    WoxLogHelper.getInstance().log(`load theme: ${JSON.stringify(apiResponse.data.Data)}`)
-    WoxThemeHelper.currentTheme = apiResponse.data.Data
+    WoxLogHelper.getInstance().log(`load theme: ${JSON.stringify(apiResponse.Data)}`)
+    WoxThemeHelper.currentTheme = apiResponse.Data
   }
 
   public async changeTheme(theme: Theme) {

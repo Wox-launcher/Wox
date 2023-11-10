@@ -9,42 +9,47 @@ function getBaseUrl() {
   return `http://127.0.0.1:${WoxMessageHelper.getInstance().getPort()}`
 }
 
-export function request<T = any>(
+export async function request<T = any>(
   config: AxiosRequestConfig
 ): Promise<AxiosResponse<T>> {
-  return instance.request(config)
+  const response = await instance.request(config)
+  return response.data
 }
 
-export function get<T = any>(
+export async function get<T = any>(
   url: string,
   config?: AxiosRequestConfig
-): Promise<AxiosResponse<T>> {
+): Promise<T> {
   url = getBaseUrl() + url
-  return instance.get(url, config)
+  const response = await instance.get(url, config)
+  return response.data
 }
 
-export function post<T = any>(
-  url: string,
-  data?: any,
-  config?: AxiosRequestConfig
-): Promise<AxiosResponse<T>> {
-  url = getBaseUrl() + url
-  return instance.post(url, data, config)
-}
-
-export function put<T = any>(
+export async function post<T = any>(
   url: string,
   data?: any,
   config?: AxiosRequestConfig
-): Promise<AxiosResponse<T>> {
+): Promise<T> {
   url = getBaseUrl() + url
-  return instance.put(url, data, config)
+  const response = await instance.post(url, data, config)
+  return response.data
 }
 
-export function del<T = any>(
+export async function put<T = any>(
+  url: string,
+  data?: any,
+  config?: AxiosRequestConfig
+): Promise<T> {
+  url = getBaseUrl() + url
+  const response = await instance.put(url, data, config)
+  return response.data
+}
+
+export async function del<T = any>(
   url: string,
   config?: AxiosRequestConfig
-): Promise<AxiosResponse<T>> {
+): Promise<T> {
   url = getBaseUrl() + url
-  return instance.delete(url, config)
+  const response = await instance.delete(url, config)
+  return response.data
 }
