@@ -37,7 +37,15 @@ func (p *PlatformSettingValue[T]) UnmarshalJSON(b []byte) error {
 
 	result := gjson.Get(string(b), pathName)
 	if result.Exists() {
-		return json.Unmarshal([]byte(result.Raw), &p.WinValue)
+		if util.IsWindows() {
+			return json.Unmarshal([]byte(result.Raw), &p.WinValue)
+		} else if util.IsMacOS() {
+			return json.Unmarshal([]byte(result.Raw), &p.MacValue)
+		} else if util.IsLinux() {
+			return json.Unmarshal([]byte(result.Raw), &p.LinuxValue)
+		} else {
+			return errors.New("unknown platform to deserialize PlatformSettingValue")
+		}
 	} else {
 		return nil
 	}
