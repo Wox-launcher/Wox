@@ -97,6 +97,9 @@ fn main() {
         use tauri_nspanel::cocoa::appkit::{NSMainMenuWindowLevel, NSWindowCollectionBehavior};
         use tauri_nspanel::WindowExt;
         use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+        use tauri_nspanel::cocoa;
+        use tauri_nspanel::cocoa::appkit::NSWindow;
+        use tauri_nspanel::cocoa::base::BOOL;
 
         tauri::Builder::default()
             .plugin(tauri_nspanel::init())
@@ -104,6 +107,11 @@ fn main() {
                 let window = app.get_window("main").unwrap();
                 // hide the dock icon
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+                unsafe {
+                    let id = window.ns_window().unwrap() as cocoa::base::id;
+                    id.setHasShadow_(BOOL::from(false));
+                }
 
                 let windows_height = get_windows_height();
                 info!("set windows height: {}", windows_height);

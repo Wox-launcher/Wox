@@ -506,7 +506,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
   .wox-query-result-action-list {
     position: absolute;
     bottom: 10px;
-    right: 10px;
+    right: 20px;
     background-color: ${props => props.theme.ActionContainerBackgroundColor};
     min-width: 300px;
     padding-left: ${props => props.theme.ActionContainerPaddingLeft}px;
