@@ -80,8 +80,9 @@ fn check_wox_alive() {
 fn get_windows_height() -> i32 {
     let r = reqwest::blocking::get(format!("http://localhost:{}/theme", get_server_port())).unwrap();
     let resp = r.text().unwrap();
-    let app_padding_top = ajson::get(resp.as_str(), "AppPaddingTop").unwrap().unwrap();
-    let app_padding_bottom = ajson::get(resp.as_str(), "AppPaddingBottom").unwrap().unwrap();
+    info!("get theme response: {}", resp);
+    let app_padding_top = ajson::get(resp.as_str(), "Data.AppPaddingTop").unwrap().unwrap();
+    let app_padding_bottom = ajson::get(resp.as_str(), "Data.AppPaddingBottom").unwrap().unwrap();
     return (50 + app_padding_top.as_i64().unwrap() + app_padding_bottom.as_i64().unwrap()) as i32;
 }
 
