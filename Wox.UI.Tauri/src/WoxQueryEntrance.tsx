@@ -1,7 +1,7 @@
 import ReactDOM from "react-dom/client"
 import "./assets/index.css"
 import React from "react"
-import WoxLauncher from "./components/WoxLauncher.tsx"
+import WoxLauncher from "./page/WoxLauncher.tsx"
 import { WoxThemeHelper } from "./utils/WoxThemeHelper.ts"
 import { WoxTauriHelper } from "./utils/WoxTauriHelper.ts"
 import { WoxMessageHelper } from "./utils/WoxMessageHelper.ts"

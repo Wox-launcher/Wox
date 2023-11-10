@@ -42,5 +42,7 @@
   "PreviewFontColor": "#f0f0f0",
   "PreviewSplitLineColor": "#3a474e",
   "PreviewPropertyTitleColor": "#b0b3b5",
-  "PreviewPropertyContentColor": "#f0f0f0"
+  "PreviewPropertyContentColor": "#f0f0f0",
+  "SettingMenuBarBackgroundColor": "rgba(31, 118, 124, 0.8)",
+  "SettingContainerBackgroundColor": "rgba(44, 48, 50, 0.7)"
 }

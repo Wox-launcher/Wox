@@ -7,13 +7,12 @@ import { WoxMessageMethodEnum } from "../enums/WoxMessageMethodEnum.ts"
 import { WoxMessageRequestMethod, WoxMessageRequestMethodEnum } from "../enums/WoxMessageRequestMethodEnum.ts"
 import { WoxPreviewTypeEnum } from "../enums/WoxPreviewTypeEnum.ts"
 import Markdown from "react-markdown"
-import { Scrollbars } from "react-custom-scrollbars"
 import { pinyin } from "pinyin-pro"
 import WoxImage from "./WoxImage.tsx"
 import { Theme } from "../entity/Theme.typings"
 import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
 import { WOX_QUERY_BOX_INPUT_HEIGHT, WOX_QUERY_RESULT_ITEM_HEIGHT } from "../utils/WoxConst.ts"
-import { WoxLogHelper } from "../utils/WoxLogHelper.ts"
+import WoxScrollbar, { WoxScrollbarRefHandler } from "./WoxScrollbar.tsx"
 
 export type WoxQueryResultRefHandler = {
   clearResultList: () => void
@@ -39,7 +38,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   const currentActiveIndex = useRef(0)
   const currentActionActiveIndex = useRef(0)
   const currentMouseOverIndex = useRef(0)
-  const currentULRef = useRef<Scrollbars>(null)
+  const currentResultScrollbarRef = useRef<WoxScrollbarRefHandler>(null)
   const currentResult = useRef<WOXMESSAGE.WoxMessageResponseResult>()
   const currentFilterText = useRef<string>("")
   const currentPreview = useRef(false)
@@ -79,7 +78,6 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   }
 
   const resizeWindow = async (resultItemCount: number) => {
-    WoxLogHelper.getInstance().log("Resize Window: resultItemCount = " + resultItemCount)
     const windowHeight = getWindowsHeight(resultItemCount)
     if (windowHeight > currentWindowHeight.current) {
       currentWindowHeight.current = windowHeight
@@ -158,10 +156,10 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       currentActiveIndex.current = currentActiveIndex.current <= 0 ? currentResultList.current.length - 1 : currentActiveIndex.current - 1
       setActiveIndex(currentActiveIndex.current)
       if (currentActiveIndex.current >= 10) {
-        currentULRef.current?.scrollTop(getResultSingleItemHeight() * (currentActiveIndex.current - 9))
+        currentResultScrollbarRef.current?.scrollTop(getResultSingleItemHeight() * (currentActiveIndex.current - 9))
       }
       if (currentActiveIndex.current === currentResultList.current.length - 1) {
-        currentULRef.current?.scrollTop(getResultSingleItemHeight() * (currentResultList.current.length - 1))
+        currentResultScrollbarRef.current?.scrollTop(getResultSingleItemHeight() * (currentResultList.current.length - 1))
       }
     }
   }
@@ -175,10 +173,10 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       currentActiveIndex.current = currentActiveIndex.current >= currentResultList.current.length - 1 ? 0 : currentActiveIndex.current + 1
       setActiveIndex(currentActiveIndex.current)
       if (currentActiveIndex.current >= 10) {
-        currentULRef.current?.scrollTop(getResultSingleItemHeight() * (currentActiveIndex.current - 9))
+        currentResultScrollbarRef.current?.scrollTop(getResultSingleItemHeight() * (currentActiveIndex.current - 9))
       }
       if (currentActiveIndex.current === 0) {
-        currentULRef.current?.scrollTop(0)
+        currentResultScrollbarRef.current?.scrollTop(0)
       }
     }
   }
@@ -249,19 +247,15 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       return showActionList
     },
     forceResizeWindow: () => {
-      WoxLogHelper.getInstance().log("forceResizeWindow")
       resizeWindow(currentResultList.current.length)
     }
   }))
 
   return <Style theme={WoxThemeHelper.getInstance().getTheme()} resultCount={resultList.length} itemHeight={getResultItemHeight(10)}>
-    <Scrollbars
+    <WoxScrollbar
+      ref={currentResultScrollbarRef}
       className={"wox-result-scrollbars"}
-      style={{ width: hasPreview ? "50%" : "100%" }}
-      ref={currentULRef}
-      autoHeight
-      autoHeightMin={0}
-      autoHeightMax={getResultItemHeight(resultList.length < 10 ? 10 : resultList.length)}>
+      scrollbarProps={{ autoHeightMax: getResultItemHeight(resultList.length < 10 ? 10 : resultList.length), style: { width: hasPreview ? "50%" : "100%" } }}>
       <div className={"wox-result-container"}>
         <ul id={"wox-result-list"} key={"wox-result-list"}>
           {resultList.map((result, index) => {
@@ -288,16 +282,13 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
           })}
         </ul>
       </div>
-    </Scrollbars>
+    </WoxScrollbar>
 
 
     {hasPreview && getCurrentPreviewData().PreviewType !== "" &&
       <div
         className={"wox-query-result-preview"}>
-        <Scrollbars
-          autoHeight
-          autoHeightMin={0}
-          autoHeightMax={getResultSingleItemHeight() * 8 + 10}>
+        <WoxScrollbar scrollbarProps={{ autoHeight: true, autoHeightMin: 0, autoHeightMax: getResultSingleItemHeight() * 8 + 10 }}>
           <div className={"wox-query-result-preview-content"}>
             {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeText.code && <p>{getCurrentPreviewData().PreviewData}</p>}
             {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
@@ -308,7 +299,8 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
             {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeUrl.code &&
               <iframe src={getCurrentPreviewData().PreviewData} className={"wox-query-result-preview-url"}></iframe>}
           </div>
-        </Scrollbars>
+        </WoxScrollbar>
+
         {Object.keys(getCurrentPreviewData().PreviewProperties)?.length > 0 &&
           <div className={"wox-query-result-preview-properties"}>
             {Object.keys(getCurrentPreviewData().PreviewProperties)?.map((key) => {

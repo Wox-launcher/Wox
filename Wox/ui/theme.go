@@ -45,4 +45,6 @@ type Theme struct {
 	PreviewSplitLineColor           string
 	PreviewPropertyTitleColor       string
 	PreviewPropertyContentColor     string
+	SettingMenuBarBackgroundColor   string
+	SettingContainerBackgroundColor string
 }
