@@ -15,5 +15,6 @@ type SystemPlugin interface {
 }
 
 type InitParams struct {
-	API API
+	API             API
+	PluginDirectory string
 }

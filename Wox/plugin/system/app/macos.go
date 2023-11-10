@@ -71,7 +71,7 @@ func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, 
 func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (plugin.WoxImage, error) {
 	// md5 iconPath
 	iconPathMd5 := fmt.Sprintf("%x", md5.Sum([]byte(appPath)))
-	iconCachePath := path.Join(os.TempDir(), fmt.Sprintf("%s.png", iconPathMd5))
+	iconCachePath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("app_%s.png", iconPathMd5))
 	if _, err := os.Stat(iconCachePath); err == nil {
 		return plugin.WoxImage{
 			ImageType: plugin.WoxImageTypeAbsolutePath,
@@ -96,17 +96,17 @@ func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (plugi
 			return plugin.WoxImage{}, errors.New(msg)
 		}
 	} else {
+		originF, originErr := os.Open(rawImagePath)
+		if originErr != nil {
+			return plugin.WoxImage{}, fmt.Errorf("can't open origin image file: %s", originErr.Error())
+		}
+
 		//copy image to cache
 		destF, destErr := os.Create(iconCachePath)
 		if destErr != nil {
 			return plugin.WoxImage{}, fmt.Errorf("can't create cache file: %s", destErr.Error())
 		}
 		defer destF.Close()
-
-		originF, originErr := os.Open(rawImagePath)
-		if originErr != nil {
-			return plugin.WoxImage{}, fmt.Errorf("can't open origin image file: %s", originErr.Error())
-		}
 
 		if _, err := io.Copy(destF, originF); err != nil {
 			return plugin.WoxImage{}, fmt.Errorf("can't copy image to cache: %s", err.Error())

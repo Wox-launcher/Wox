@@ -21,7 +21,9 @@ func NewWebsocketPlugin(metadata plugin.Metadata, websocketHost *WebsocketHost) 
 }
 
 func (w *WebsocketPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
-	w.websocketHost.invokeMethod(ctx, w.metadata, "init", make(map[string]string))
+	w.websocketHost.invokeMethod(ctx, w.metadata, "init", map[string]string{
+		"PluginDirectory": initParams.PluginDirectory,
+	})
 }
 
 func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {

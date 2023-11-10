@@ -277,7 +277,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
                          event.stopPropagation()
                        }}>
               <div className={"wox-result-image"}>
-                <WoxImage img={result.Icon} height={40} width={40} />
+                <WoxImage img={result.Icon} height={36} width={36} />
               </div>
               <div className={"wox-result-title-container"}>
                 <h2 className={"wox-result-title"}>{result.Title}</h2>

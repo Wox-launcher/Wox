@@ -238,7 +238,8 @@ func (m *Manager) initPlugin(ctx context.Context, instance *Instance) {
 	logger.Info(ctx, fmt.Sprintf("[%s] init plugin", instance.Metadata.Name))
 	instance.InitStartTimestamp = util.GetSystemTimestamp()
 	instance.Plugin.Init(ctx, InitParams{
-		API: instance.API,
+		API:             instance.API,
+		PluginDirectory: instance.PluginDirectory,
 	})
 	instance.InitFinishedTimestamp = util.GetSystemTimestamp()
 	logger.Info(ctx, fmt.Sprintf("[%s] init plugin finished, cost %d ms", instance.Metadata.Name, instance.InitFinishedTimestamp-instance.InitStartTimestamp))
@@ -326,7 +327,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	m.resultCache.Store(result.Id, resultCache)
 
 	// convert icon
-	result.Icon = convertLocalImageToUrl(ctx, result.Icon, pluginInstance)
+	result.Icon = ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
 	// translate title
 	result.Title = m.translatePlugin(ctx, pluginInstance, result.Title)
 	// translate subtitle
@@ -424,7 +425,7 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, sub
 
 func (m *Manager) PolishRefreshableResult(ctx context.Context, pluginInstance *Instance, result RefreshableResult) RefreshableResult {
 	// convert icon
-	result.Icon = convertLocalImageToUrl(ctx, result.Icon, pluginInstance)
+	result.Icon = ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
 	// translate title
 	result.Title = m.translatePlugin(ctx, pluginInstance, result.Title)
 	// translate subtitle

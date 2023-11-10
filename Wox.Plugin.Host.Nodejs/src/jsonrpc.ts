@@ -99,7 +99,7 @@ async function initPlugin(request: PluginJsonRpcRequest, ws: WebSocket) {
   const init = getMethod(request, "init")
   const pluginApi = new PluginAPI(ws, request.PluginId, request.PluginName)
   pluginApiMap.set(request.PluginId, pluginApi)
-  return init({ API: pluginApi } as PluginInitContext)
+  return init({ API: pluginApi, PluginDirectory: request.Params.PluginDirectory } as PluginInitContext)
 }
 
 async function onPluginSettingChange(request: PluginJsonRpcRequest) {

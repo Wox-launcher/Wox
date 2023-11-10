@@ -15,16 +15,22 @@ export default (props: { img: WOXMESSAGE.WoxImage, height: number, width: number
 }
 
 const Style = styled.div<{ width: number; height: number }>`
+  display: flex;
+  height: ${props => props.height}px;
+  width: ${props => props.width}px;
+  justify-content: center;
+  align-items: center;
+
   .wox-image {
     line-height: ${props => props.height}px;
-    height: ${props => props.height}px;
-    width: ${props => props.width}px;
+    max-height: ${props => props.height}px;
+    max-width: ${props => props.width}px;
     text-align: center;
     vertical-align: middle;
 
     svg {
-      width: ${props => props.height}px !important;
-      height: ${props => props.height}px !important;
+      max-width: ${props => props.height}px !important;
+      max-height: ${props => props.height}px !important;
     }
   }
 `

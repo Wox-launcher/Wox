@@ -78,6 +78,7 @@ export interface ActionContext {
 
 export interface PluginInitContext {
   API: PublicAPI
+  PluginDirectory: string
 }
 
 export interface PublicAPI {

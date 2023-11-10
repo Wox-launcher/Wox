@@ -23,9 +23,10 @@ func init() {
 }
 
 type ApplicationPlugin struct {
-	api  plugin.API
-	apps []appInfo
+	api             plugin.API
+	pluginDirectory string
 
+	apps      []appInfo
 	retriever Retriever
 }
 
@@ -63,6 +64,7 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 
 func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	a.api = initParams.API
+	a.pluginDirectory = initParams.PluginDirectory
 	a.retriever = a.getRetriever(ctx)
 
 	appCache, cacheErr := a.loadAppCache(ctx)
@@ -224,6 +226,10 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 					a.api.Log(ctx, fmt.Sprintf("error getting app info for %s: %s", appPath, getErr.Error()))
 					continue
 				}
+
+				//preprocess icon
+				info.Icon = plugin.ConvertIcon(ctx, info.Icon, a.pluginDirectory)
+
 				lock.Lock()
 				appInfos = append(appInfos, info)
 				lock.Unlock()
