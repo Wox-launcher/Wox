@@ -391,6 +391,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
     padding-right: ${props => props.theme.ResultItemPaddingRight}px;
     padding-bottom: ${props => props.theme.ResultItemPaddingBottom}px;
     padding-left: ${props => props.theme.ResultItemPaddingLeft}px;
+    border-left: ${props => props.theme.ResultItemBorderLeft};
   }
 
   ul li:last-child {
@@ -430,6 +431,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
   }
 
   ul li.active {
+    border-left: ${props => props.theme.ResultItemActiveBorderLeft};
     background-color: ${props => props.theme.ResultItemActiveBackgroundColor};
   }
   

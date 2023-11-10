@@ -17,11 +17,13 @@ export interface Theme {
   ResultItemPaddingTop: number
   ResultItemPaddingRight: number
   ResultItemPaddingBottom: number
+  ResultItemTitleColor: string
+  ResultItemSubTitleColor: string
+  ResultItemBorderLeft: string
   ResultItemActiveBackgroundColor: string
   ResultItemActiveTitleColor: string
   ResultItemActiveSubTitleColor: string
-  ResultItemTitleColor: string
-  ResultItemSubTitleColor: string
+  ResultItemActiveBorderLeft: string
   QueryBoxFontColor: string
   QueryBoxBackgroundColor: string
   QueryBoxBorderRadius: number

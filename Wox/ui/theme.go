@@ -19,11 +19,13 @@ type Theme struct {
 	ResultItemPaddingTop            int
 	ResultItemPaddingRight          int
 	ResultItemPaddingBottom         int
+	ResultItemTitleColor            string
+	ResultItemSubTitleColor         string
+	ResultItemBorderLeft            string
 	ResultItemActiveBackgroundColor string
 	ResultItemActiveTitleColor      string
 	ResultItemActiveSubTitleColor   string
-	ResultItemTitleColor            string
-	ResultItemSubTitleColor         string
+	ResultItemActiveBorderLeft      string
 	QueryBoxFontColor               string
 	QueryBoxBackgroundColor         string
 	QueryBoxBorderRadius            int

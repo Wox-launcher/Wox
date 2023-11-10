@@ -82,7 +82,7 @@ fn get_windows_height() -> i32 {
     let resp = r.text().unwrap();
     let app_padding_top = ajson::get(resp.as_str(), "AppPaddingTop").unwrap().unwrap();
     let app_padding_bottom = ajson::get(resp.as_str(), "AppPaddingBottom").unwrap().unwrap();
-    return (60 + app_padding_top.as_i64().unwrap() + app_padding_bottom.as_i64().unwrap()) as i32;
+    return (50 + app_padding_top.as_i64().unwrap() + app_padding_bottom.as_i64().unwrap()) as i32;
 }
 
 fn main() {
