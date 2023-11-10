@@ -257,9 +257,9 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       className={"wox-result-scrollbars"}
       scrollbarProps={{ autoHeightMax: getResultItemHeight(resultList.length < 10 ? 10 : resultList.length), style: { width: hasPreview ? "50%" : "100%" } }}>
       <div className={"wox-result-container"}>
-        <ul id={"wox-result-list"} key={"wox-result-list"}>
+        <ul className={"wox-result-list"}>
           {resultList.map((result, index) => {
-            return <li id={`wox-result-li-${index}`} key={`wox-result-li-${index}`} className={activeIndex === index ? "active" : "inactive"}
+            return <li id={`wox-result-li-${index}`} key={`wox-result-li-${index}`} className={`wox-result-item ${activeIndex === index ? "active" : "inactive"}`}
                        onMouseOverCapture={() => {
                          if (showActionList) {
                            return
@@ -275,9 +275,13 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
                          event.preventDefault()
                          event.stopPropagation()
                        }}>
-              <WoxImage img={result.Icon} height={36} width={36} />
-              <h2 className={"wox-result-title"}>{result.Title}</h2>
-              {result.SubTitle && <h3 className={"wox-result-subtitle"}>{result.SubTitle}</h3>}
+              <div className={"wox-result-image"}>
+                <WoxImage img={result.Icon} height={40} width={40} />
+              </div>
+              <div className={"wox-result-title-container"}>
+                <h2 className={"wox-result-title"}>{result.Title}</h2>
+                {result.SubTitle && <h3 className={"wox-result-subtitle"}>{result.SubTitle}</h3>}
+              </div>
             </li>
           })}
         </ul>
@@ -365,80 +369,78 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
     padding-left: ${props => props.theme.ResultContainerPaddingLeft}px;
   }
 
-  ul {
+  .wox-result-list {
     padding: 0;
     margin: 0;
     overflow: hidden;
     width: 100%;
+
+    .wox-result-item {
+      display: flex;
+      flex-direction: column;
+      flex-flow: row;
+      height: 50px;
+      line-height: 50px;
+      cursor: pointer;
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: ${props => props.theme.ResultItemBorderRadius}px;
+      padding-top: ${props => props.theme.ResultItemPaddingTop}px;
+      padding-right: ${props => props.theme.ResultItemPaddingRight}px;
+      padding-bottom: ${props => props.theme.ResultItemPaddingBottom}px;
+      padding-left: ${props => props.theme.ResultItemPaddingLeft}px;
+      border-left: ${props => props.theme.ResultItemBorderLeft};
+    }
+
+    .wox-result-item:last-child {
+      margin-bottom: 3px;
+    }
+
+    .wox-result-image {
+      padding: 0 5px;
+      display: flex;
+      align-items: center;
+    }
+
+    .wox-result-title, .wox-result-subtitle {
+      margin: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 30px;
+    }
+
+    .wox-result-title {
+      font-size: 18px;
+      font-weight: 550;
+      color: ${props => props.theme.ResultItemTitleColor};
+    }
+
+    .wox-result-title:last-child {
+      line-height: 50px;
+    }
+
+    .wox-result-subtitle {
+      font-size: 13px;
+      line-height: 15px;
+      font-weight: normal;
+      color: ${props => props.theme.ResultItemSubTitleColor};
+    }
+
+    .wox-result-item.active {
+      border-left: ${props => props.theme.ResultItemActiveBorderLeft};
+      background-color: ${props => props.theme.ResultItemActiveBackgroundColor};
+    }
+
+    .wox-result-item.active .wox-result-title {
+      color: ${props => props.theme.ResultItemActiveTitleColor};
+    }
+
+    .wox-result-item.active .wox-result-subtitle {
+      color: ${props => props.theme.ResultItemActiveSubTitleColor};
+    }
   }
 
-  ul + div {
-    width: 50%;
-  }
-
-  ul li {
-    display: block;
-    height: 50px;
-    line-height: 50px;
-    cursor: pointer;
-    width: 100%;
-    box-sizing: border-box;
-    border-radius: ${props => props.theme.ResultItemBorderRadius}px;
-    padding-top: ${props => props.theme.ResultItemPaddingTop}px;
-    padding-right: ${props => props.theme.ResultItemPaddingRight}px;
-    padding-bottom: ${props => props.theme.ResultItemPaddingBottom}px;
-    padding-left: ${props => props.theme.ResultItemPaddingLeft}px;
-    border-left: ${props => props.theme.ResultItemBorderLeft};
-  }
-
-  ul li:last-child {
-    margin-bottom: 3px;
-  }
-
-  ul li .wox-image {
-    text-align: center;
-    margin: 7px;
-    float: left;
-  }
-
-  ul li h2,
-  ul li h3 {
-    margin: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 30px;
-  }
-
-  ul li h2 {
-    font-size: 18px;
-    font-weight: 550;
-    color: ${props => props.theme.ResultItemTitleColor};
-  }
-
-  ul li h2:last-child {
-    line-height: 50px;
-  }
-
-  ul li h3 {
-    font-size: 13px;
-    line-height: 15px;
-    font-weight: normal;
-    color: ${props => props.theme.ResultItemSubTitleColor};
-  }
-
-  ul li.active {
-    border-left: ${props => props.theme.ResultItemActiveBorderLeft};
-    background-color: ${props => props.theme.ResultItemActiveBackgroundColor};
-  }
-
-  ul li.active h2 {
-    color: ${props => props.theme.ResultItemActiveTitleColor};
-  }
-
-  ul li.active h3 {
-    color: ${props => props.theme.ResultItemActiveSubTitleColor};
-  }
 
   .wox-query-result-preview {
     flex: 1;
