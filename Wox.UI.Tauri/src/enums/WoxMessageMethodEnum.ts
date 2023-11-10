@@ -6,5 +6,6 @@ export class WoxMessageMethodEnum extends BaseEnum {
   static readonly ACTION = WoxMessageMethodEnum.define("Action", "Action")
   static readonly REFRESH = WoxMessageMethodEnum.define("Refresh", "Refresh")
   static readonly REGISTER_MAIN_HOTKEY = WoxMessageMethodEnum.define("RegisterMainHotkey", "Register Main Hotkey")
-  static readonly ON_VISIBILITY_CHANGED = WoxMessageMethodEnum.define("OnVisibilityChanged", "Visibility changed")
+  static readonly VISIBILITY_CHANGED = WoxMessageMethodEnum.define("VisibilityChanged", "Visibility changed")
+  static readonly LOST_FOCUS = WoxMessageMethodEnum.define("LostFocus", "Lost focus")
 }

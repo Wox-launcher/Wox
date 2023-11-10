@@ -82,8 +82,10 @@ func onUIRequest(ctx context.Context, request WebsocketMsg) {
 		handleChangeLanguage(ctx, request)
 	case "GetLanguageJson":
 		handleGetLanguageJson(ctx, request)
-	case "OnVisibilityChanged":
+	case "VisibilityChanged":
 		handleOnVisibilityChanged(ctx, request)
+	case "LostFocus":
+		handleLostFocus(ctx, request)
 	case "GetQueryHistories":
 		handleGetQueryHistories(ctx, request)
 	}
@@ -256,6 +258,13 @@ func handleOnVisibilityChanged(ctx context.Context, request WebsocketMsg) {
 		onAppShow(ctx)
 	} else {
 		onAppHide(ctx, query)
+	}
+}
+
+func handleLostFocus(ctx context.Context, request WebsocketMsg) {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if woxSetting.HideOnLostFocus {
+		GetUIManager().GetUI(ctx).HideApp(ctx)
 	}
 }
 

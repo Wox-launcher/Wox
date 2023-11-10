@@ -7,6 +7,7 @@ import { WoxTauriHelper } from "./utils/WoxTauriHelper.ts"
 import { WoxMessageHelper } from "./utils/WoxMessageHelper.ts"
 import { appWindow } from "@tauri-apps/api/window"
 import { TauriEvent } from "@tauri-apps/api/event"
+import { WoxMessageMethodEnum } from "./enums/WoxMessageMethodEnum.ts"
 
 const serverPort = await WoxTauriHelper.getInstance().getServerPort()
 WoxMessageHelper.getInstance().initialize(serverPort)
@@ -14,8 +15,7 @@ WoxMessageHelper.getInstance().initialize(serverPort)
 await WoxThemeHelper.getInstance().loadTheme()
 
 appWindow.listen(TauriEvent.WINDOW_BLUR, () => {
-  //TODO: respect config
-  // WoxTauriHelper.getInstance().hideWindow()
+  WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.LOST_FOCUS.code, {})
 })
 
 WoxThemeHelper.getInstance().loadTheme().then(() => {

@@ -128,6 +128,11 @@ func (m *Manager) GetWoxSetting(ctx context.Context) *WoxSetting {
 	return m.woxSetting
 }
 
+func (m *Manager) UpdateWoxSetting(ctx context.Context, setting WoxSetting) error {
+	m.woxSetting = &setting
+	return m.SaveWoxSetting(ctx)
+}
+
 func (m *Manager) GetWoxAppData(ctx context.Context) *WoxAppData {
 	return m.woxAppData
 }

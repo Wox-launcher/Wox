@@ -132,7 +132,7 @@ export default () => {
    */
   const hideWoxWindow = async () => {
     await WoxTauriHelper.getInstance().hideWindow()
-    await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ON_VISIBILITY_CHANGED.code, {
+    await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.VISIBILITY_CHANGED.code, {
       "isVisible": "false",
       "query": currentQuery.current || ""
     })
@@ -213,7 +213,7 @@ export default () => {
     // @ts-ignore expose to tauri backend
     window.postShow = () => {
       woxQueryBoxRef.current?.focus()
-      WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ON_VISIBILITY_CHANGED.code, {
+      WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.VISIBILITY_CHANGED.code, {
         "isVisible": "true",
         "query": woxQueryBoxRef.current?.getQuery() || ""
       })

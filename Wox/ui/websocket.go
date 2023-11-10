@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 	"wox/plugin"
+	"wox/setting"
 	"wox/util"
 )
 
@@ -31,6 +32,38 @@ type WebsocketMsg struct {
 	Data    any
 }
 
+type RestResponse struct {
+	Success bool
+	Message string
+	Data    any
+}
+
+func writeSuccessResponse(w http.ResponseWriter, data any) {
+	d, marshalErr := json.Marshal(RestResponse{
+		Success: true,
+		Message: "",
+		Data:    data,
+	})
+	if marshalErr != nil {
+		writeErrorResponse(w, marshalErr.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(d)
+}
+
+func writeErrorResponse(w http.ResponseWriter, errMsg string) {
+	d, _ := json.Marshal(RestResponse{
+		Success: false,
+		Message: errMsg,
+		Data:    "",
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(d)
+}
+
 func enableCors(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 }
@@ -41,7 +74,7 @@ func serveAndWait(ctx context.Context, port int) {
 	m.Config.MessageBufferSize = 1024 * 1024   // 1MB
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Wox"))
+		writeSuccessResponse(w, "Wox")
 	})
 
 	http.HandleFunc("/image", func(w http.ResponseWriter, r *http.Request) {
@@ -72,16 +105,37 @@ func serveAndWait(ctx context.Context, port int) {
 
 	http.HandleFunc("/theme", func(w http.ResponseWriter, r *http.Request) {
 		enableCors(w)
-
 		theme := GetUIManager().GetCurrentTheme(util.NewTraceContext())
-		themeJson, jsonErr := json.Marshal(theme)
-		if jsonErr != nil {
+		writeSuccessResponse(w, theme)
+	})
+
+	http.HandleFunc("/setting/wox", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(w)
+
+		woxSetting := setting.GetSettingManager().GetWoxSetting(util.NewTraceContext())
+		writeSuccessResponse(w, woxSetting)
+	})
+
+	http.HandleFunc("/setting/wox/update", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(w)
+
+		decoder := json.NewDecoder(r.Body)
+		var woxSetting setting.WoxSetting
+		err := decoder.Decode(&woxSetting)
+		if err != nil {
 			w.Header().Set("code", "500")
-			w.Write([]byte(jsonErr.Error()))
+			w.Write([]byte(err.Error()))
 			return
 		}
 
-		w.Write(themeJson)
+		updateErr := setting.GetSettingManager().UpdateWoxSetting(util.NewTraceContext(), woxSetting)
+		if updateErr != nil {
+			w.Header().Set("code", "500")
+			w.Write([]byte(updateErr.Error()))
+			return
+		}
+
+		writeSuccessResponse(w, "")
 	})
 
 	m.HandleConnect(func(s *melody.Session) {
