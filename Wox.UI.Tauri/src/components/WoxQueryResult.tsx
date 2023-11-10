@@ -62,17 +62,17 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     return WOX_QUERY_RESULT_ITEM_HEIGHT + theme.ResultItemPaddingTop + theme.ResultItemPaddingBottom
   }
 
-  const getResultItemHeight = (resultItemCount: number) => {
+  const getResultListHeight = (resultItemCount: number) => {
     const theme = WoxThemeHelper.getInstance().getTheme()
     const baseItemHeight = getResultSingleItemHeight()
-    return (currentPreview.current ? baseItemHeight * 10 : baseItemHeight * (resultItemCount > 10 ? 10 : resultItemCount)) + theme.ResultContainerPaddingTop + theme.ResultContainerPaddingBottom
+    return baseItemHeight * (resultItemCount > 10 ? 10 : resultItemCount) + theme.ResultContainerPaddingTop + theme.ResultContainerPaddingBottom
   }
 
   const getWindowsHeight = (resultItemCount: number) => {
     const theme = WoxThemeHelper.getInstance().getTheme()
     const windowHeight = WOX_QUERY_BOX_INPUT_HEIGHT + theme.AppPaddingTop + theme.AppPaddingBottom
     if (resultItemCount > 0) {
-      return windowHeight + getResultItemHeight(resultItemCount)
+      return windowHeight + getResultListHeight(resultItemCount)
     }
     return windowHeight
   }
@@ -147,6 +147,14 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     return { PreviewType: "", PreviewData: "", PreviewProperties: {} } as WOXMESSAGE.WoxPreview
   }
 
+  const moveScrollBar = () => {
+    if (currentActiveIndex.current >= 10) {
+      currentResultScrollbarRef.current?.scrollTop(getResultSingleItemHeight() * (currentActiveIndex.current - 9))
+    } else {
+      currentResultScrollbarRef.current?.scrollTop(0)
+    }
+  }
+
   const handleMoveUp = () => {
     if (showActionList) {
       currentActionActiveIndex.current = actionActiveIndex <= 0 ? actionList.length - 1 : actionActiveIndex - 1
@@ -155,12 +163,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       currentMouseOverIndex.current = 0
       currentActiveIndex.current = currentActiveIndex.current <= 0 ? currentResultList.current.length - 1 : currentActiveIndex.current - 1
       setActiveIndex(currentActiveIndex.current)
-      if (currentActiveIndex.current >= 10) {
-        currentResultScrollbarRef.current?.scrollTop(getResultSingleItemHeight() * (currentActiveIndex.current - 9))
-      }
-      if (currentActiveIndex.current === currentResultList.current.length - 1) {
-        currentResultScrollbarRef.current?.scrollTop(getResultSingleItemHeight() * (currentResultList.current.length - 1))
-      }
+      moveScrollBar()
     }
   }
 
@@ -172,12 +175,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       currentMouseOverIndex.current = 0
       currentActiveIndex.current = currentActiveIndex.current >= currentResultList.current.length - 1 ? 0 : currentActiveIndex.current + 1
       setActiveIndex(currentActiveIndex.current)
-      if (currentActiveIndex.current >= 10) {
-        currentResultScrollbarRef.current?.scrollTop(getResultSingleItemHeight() * (currentActiveIndex.current - 9))
-      }
-      if (currentActiveIndex.current === 0) {
-        currentResultScrollbarRef.current?.scrollTop(0)
-      }
+      moveScrollBar()
     }
   }
 
@@ -251,11 +249,14 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     }
   }))
 
-  return <Style theme={WoxThemeHelper.getInstance().getTheme()} resultCount={resultList.length} itemHeight={getResultItemHeight(10)}>
+  return <Style theme={WoxThemeHelper.getInstance().getTheme()} resultCount={resultList.length} itemHeight={getResultListHeight(10)}>
     <WoxScrollbar
       ref={currentResultScrollbarRef}
       className={"wox-result-scrollbars"}
-      scrollbarProps={{ autoHeightMax: getResultItemHeight(resultList.length < 10 ? 10 : resultList.length), style: { width: hasPreview ? "50%" : "100%" } }}>
+      scrollbarProps={{
+        autoHeightMax: getResultListHeight(resultList.length < 10 ? 10 : resultList.length),
+        style: { width: hasPreview ? "50%" : "100%" }
+      }}>
       <div className={"wox-result-container"}>
         <ul className={"wox-result-list"}>
           {resultList.map((result, index) => {
@@ -358,10 +359,6 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
   flex-direction: row;
   min-height: ${props => props.itemHeight}px;
 
-  .wox-result-scrollbars {
-    flex: 1;
-  }
-
   .wox-result-container {
     padding-top: ${props => props.theme.ResultContainerPaddingTop}px;
     padding-right: ${props => props.theme.ResultContainerPaddingRight}px;
@@ -393,7 +390,7 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
     }
 
     .wox-result-item:last-child {
-      margin-bottom: 3px;
+      margin-bottom: 15px;
     }
 
     .wox-result-image {
