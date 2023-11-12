@@ -34,34 +34,12 @@ type WoxImage struct {
 	ImageData string
 }
 
-func (w *WoxImage) canConvertToPng() bool {
-	if w.ImageType == WoxImageTypeBase64 {
-		return strings.HasPrefix(w.ImageData, "data:image/png;")
-	}
-	if w.ImageType == WoxImageTypeAbsolutePath {
-		return strings.HasSuffix(w.ImageData, ".png")
-	}
-	if w.ImageType == WoxImageTypeRelativePath {
-		//currently we don't support relative path image, you should convert to absolute path first
-		return false
-	}
-	if w.ImageType == WoxImageTypeSvg {
-		return true
-	}
-	if w.ImageType == WoxImageTypeUrl {
-		//currently we don't support url image, because we need to download it first which is not efficient
-		return false
-	}
-
-	return false
-}
-
 func (w *WoxImage) ToPng() (image.Image, error) {
-	if !w.canConvertToPng() {
-		return nil, notPngErr
-	}
-
 	if w.ImageType == WoxImageTypeBase64 {
+		if !strings.HasPrefix(w.ImageData, "data:image/png;") {
+			return nil, notPngErr
+		}
+
 		data := strings.Split(w.ImageData, ",")[1]
 		decodedData, base64DecodeErr := base64.StdEncoding.DecodeString(data)
 		if base64DecodeErr != nil {
@@ -73,6 +51,10 @@ func (w *WoxImage) ToPng() (image.Image, error) {
 	}
 
 	if w.ImageType == WoxImageTypeAbsolutePath {
+		if !strings.HasSuffix(w.ImageData, ".png") {
+			return nil, notPngErr
+		}
+
 		imgReader, openErr := os.Open(w.ImageData)
 		if openErr != nil {
 			return nil, openErr
@@ -82,10 +64,10 @@ func (w *WoxImage) ToPng() (image.Image, error) {
 	}
 
 	if w.ImageType == WoxImageTypeSvg {
-
+		//TODO: convert svg to png
 	}
 
-	return nil, fmt.Errorf("unsupported image type: %s", w.ImageType)
+	return nil, notPngErr
 }
 
 func (w *WoxImage) ToImage() (image.Image, error) {

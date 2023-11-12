@@ -97,7 +97,7 @@ func main() {
 
 		t := util.Hotkey{}
 		t.Register(ctx, "command+m", func() {
-			data, selectedErr := ui.GetSelectedText()
+			data, selectedErr := util.GetSelectedText()
 			if selectedErr != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("failed to get selected text: %s", selectedErr.Error()))
 			} else {

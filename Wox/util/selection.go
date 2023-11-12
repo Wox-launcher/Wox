@@ -1,9 +1,8 @@
-package ui
+package util
 
 import (
 	"errors"
 	"fmt"
-	"wox/util"
 )
 
 type SelectType string
@@ -18,16 +17,16 @@ type Selection struct {
 }
 
 func GetSelectedText() (Selection, error) {
-	if util.SimulateCtrlC() != nil {
+	if SimulateCtrlC() != nil {
 		return Selection{}, errors.New("error simulate ctrl c")
 	}
 
-	data, readErr := util.ClipboardRead()
+	data, readErr := ClipboardRead()
 	if readErr != nil {
 		return Selection{}, fmt.Errorf("error read clipboard: %w", readErr)
 	}
 
-	if data.Type == util.ClipboardTypeText {
+	if data.Type == ClipboardTypeText {
 		return Selection{
 			Type: SelectTypeText,
 			Data: string(data.Data),

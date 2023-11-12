@@ -165,10 +165,12 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 				Action: func(actionContext plugin.ActionContext) {
 					util.ClipboardWrite(history.Data)
 					util.Go(context.Background(), "clipboard history copy", func() {
-						time.Sleep(time.Millisecond * 100)
+						time.Sleep(time.Millisecond * 300)
 						err := util.SimulateCtrlV()
 						if err != nil {
 							c.api.Log(ctx, fmt.Sprintf("simulate paste clipboard failed, err=%s", err.Error()))
+						} else {
+							c.api.Log(ctx, "simulate paste clipboard success")
 						}
 					})
 				},

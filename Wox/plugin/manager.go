@@ -529,14 +529,14 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, resultId string, refreshab
 	return newResult, nil
 }
 
-func (m *Manager) PreProcessQuery(ctx context.Context, query string) string {
-	newQuery := m.processQueryVariables(ctx, query)
-	return newQuery
-}
-
-func (m *Manager) processQueryVariables(ctx context.Context, query string) string {
-	if !strings.Contains(query, "{wox:") {
-		return query
+func (m *Manager) ReplaceQueryVariable(ctx context.Context, query string) string {
+	if strings.Contains(query, QueryVariableSelectedText) {
+		data, selectedErr := util.GetSelectedText()
+		if selectedErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to get selected text: %s", selectedErr.Error()))
+		} else {
+			query = strings.ReplaceAll(query, QueryVariableSelectedText, data.Data)
+		}
 	}
 
 	return query

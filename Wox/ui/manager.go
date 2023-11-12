@@ -67,7 +67,7 @@ func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) err
 func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.QueryHotkey) error {
 	hotkey := &util.Hotkey{}
 	err := hotkey.Register(ctx, queryHotkey.Hotkey, func() {
-		query := plugin.GetPluginManager().PreProcessQuery(ctx, queryHotkey.Query)
+		query := plugin.GetPluginManager().ReplaceQueryVariable(ctx, queryHotkey.Query)
 		m.ui.ChangeQuery(ctx, query)
 		m.ui.ShowApp(ctx, share.ShowContext{SelectAll: false})
 	})
