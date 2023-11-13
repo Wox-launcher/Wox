@@ -11,7 +11,7 @@ import { pinyin } from "pinyin-pro"
 import WoxImage from "./WoxImage.tsx"
 import { Theme } from "../entity/Theme.typings"
 import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
-import { WOX_QUERY_BOX_INPUT_HEIGHT, WOX_QUERY_RESULT_ITEM_HEIGHT } from "../utils/WoxConst.ts"
+import { WOX_QUERY_BOX_INPUT_HEIGHT, WOX_QUERY_RESULT_ITEM_HEIGHT, WOX_QUERY_RESULT_PREVIEW_HEIGHT } from "../utils/WoxConst.ts"
 import WoxScrollbar, { WoxScrollbarRefHandler } from "./WoxScrollbar.tsx"
 
 export type WoxQueryResultRefHandler = {
@@ -63,6 +63,10 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   }
 
   const getResultListHeight = (resultItemCount: number) => {
+    if (hasPreview) {
+      return WOX_QUERY_RESULT_PREVIEW_HEIGHT
+    }
+
     const theme = WoxThemeHelper.getInstance().getTheme()
     const baseItemHeight = getResultSingleItemHeight()
     return baseItemHeight * (resultItemCount > 10 ? 10 : resultItemCount) + theme.ResultContainerPaddingTop + theme.ResultContainerPaddingBottom
@@ -297,9 +301,8 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
           <div className={"wox-query-result-preview-content"}>
             {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeText.code && <p>{getCurrentPreviewData().PreviewData}</p>}
             {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
-              <img src={getCurrentPreviewData().PreviewData}
-                   className={"wox-query-result-preview-image"} />}
-            {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
+              <img src={getCurrentPreviewData().PreviewData} className={"wox-query-result-preview-image"} />}
+            {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeMarkdown.code &&
               <Markdown>{getCurrentPreviewData().PreviewData}</Markdown>}
             {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeUrl.code &&
               <iframe src={getCurrentPreviewData().PreviewData} className={"wox-query-result-preview-url"}></iframe>}
