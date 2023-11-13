@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/sashabaranov/go-openai"
 	"io"
+	"strings"
 	"wox/plugin"
 	"wox/setting"
 )
@@ -35,12 +36,7 @@ func (c *ChatgptPlugin) GetMetadata() plugin.Metadata {
 		TriggerKeywords: []string{
 			"gpt",
 		},
-		Commands: []plugin.MetadataCommand{
-			{
-				Command:     "translate",
-				Description: "Translate text",
-			},
-		},
+		Commands: []plugin.MetadataCommand{},
 		SupportedOS: []string{
 			"Windows",
 			"Macos",
@@ -77,21 +73,32 @@ func (c *ChatgptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.
 		}
 	}
 
-	if query.Command == "translate" {
-		return []plugin.QueryResult{c.generateGptAnswer(ctx, []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: `你是一个翻译引擎，请将给到的文本翻译成中文, 翻译需要言简意赅，不要太长。`,
-			},
-			{
-				Role:    openai.ChatMessageRoleSystem,
-				Content: `好的，我明白了，请给我这个单词。`,
-			},
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: fmt.Sprintf(`单词是：%s`, query.Search),
-			},
-		}, nil)}
+	if query.Command != "" {
+		//TODO: need a simple way to read user settings
+		var prompts []string
+		commandContent := c.api.GetSetting(ctx, fmt.Sprintf("command_key_%s", query.Command))
+		if commandContent != "" {
+			prompts = strings.Split(commandContent, "|")
+		}
+
+		if len(prompts) > 0 {
+			var chatMessages []openai.ChatCompletionMessage
+			for index, message := range prompts {
+				msg := fmt.Sprintf(message, query.Search)
+				if index%2 == 0 {
+					chatMessages = append(chatMessages, openai.ChatCompletionMessage{
+						Role:    openai.ChatMessageRoleUser,
+						Content: msg,
+					})
+				} else {
+					chatMessages = append(chatMessages, openai.ChatCompletionMessage{
+						Role:    openai.ChatMessageRoleSystem,
+						Content: msg,
+					})
+				}
+			}
+			return []plugin.QueryResult{c.generateGptAnswer(ctx, chatMessages, nil)}
+		}
 	}
 
 	return []plugin.QueryResult{}

@@ -182,7 +182,7 @@ func newQueryWithPlugins(query string, queryType QueryType, pluginInstances []*I
 				search = terms[1]
 			} else {
 				var possibleCommand = terms[1]
-				if lo.ContainsBy(pluginInstance.Metadata.Commands, func(item MetadataCommand) bool {
+				if lo.ContainsBy(pluginInstance.GetQueryCommands(), func(item MetadataCommand) bool {
 					return item.Command == possibleCommand
 				}) {
 					// command and search

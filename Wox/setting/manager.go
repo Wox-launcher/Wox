@@ -173,29 +173,29 @@ func (m *Manager) saveWoxAppData(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, defaultSettings CustomizedPluginSettings) (pluginSetting PluginSetting, err error) {
+func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, defaultSettings CustomizedPluginSettings) (*PluginSetting, error) {
 	pluginSettingPath := path.Join(util.GetLocation().GetPluginSettingDirectory(), fmt.Sprintf("%s.json", pluginId))
 	if _, statErr := os.Stat(pluginSettingPath); os.IsNotExist(statErr) {
-		pluginSetting = PluginSetting{
+		return &PluginSetting{
 			CustomizedSettings: defaultSettings.GetAll(),
-		}
-		return pluginSetting, nil
+		}, nil
 	}
 
 	fileContent, readErr := os.ReadFile(pluginSettingPath)
 	if readErr != nil {
-		return PluginSetting{}, readErr
+		return &PluginSetting{}, readErr
 	}
 
-	decodeErr := json.Unmarshal(fileContent, &pluginSetting)
+	var pluginSetting = &PluginSetting{}
+	decodeErr := json.Unmarshal(fileContent, pluginSetting)
 	if decodeErr != nil {
-		return PluginSetting{}, decodeErr
+		return &PluginSetting{}, decodeErr
 	}
 
 	return pluginSetting, nil
 }
 
-func (m *Manager) SavePluginSetting(ctx context.Context, pluginId string, pluginSetting PluginSetting) error {
+func (m *Manager) SavePluginSetting(ctx context.Context, pluginId string, pluginSetting *PluginSetting) error {
 	pluginSettingPath := path.Join(util.GetLocation().GetPluginSettingDirectory(), fmt.Sprintf("%s.json", pluginId))
 	pluginSettingJson, marshalErr := json.Marshal(pluginSetting)
 	if marshalErr != nil {

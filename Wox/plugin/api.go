@@ -2,7 +2,9 @@ package plugin
 
 import (
 	"context"
+	"github.com/samber/lo"
 	"path"
+	"wox/setting"
 	"wox/share"
 	"wox/util"
 )
@@ -17,6 +19,7 @@ type API interface {
 	GetSetting(ctx context.Context, key string) string
 	SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool)
 	OnSettingChanged(ctx context.Context, callback func(key string, value string))
+	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
 }
 
 type APIImpl struct {
@@ -85,6 +88,16 @@ func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string, isP
 
 func (a *APIImpl) OnSettingChanged(ctx context.Context, callback func(key string, value string)) {
 	a.settingChangeCallbacks = append(a.settingChangeCallbacks, callback)
+}
+
+func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []MetadataCommand) {
+	a.pluginInstance.Setting.CustomizedQueryCommands = lo.Map(commands, func(command MetadataCommand, _ int) setting.PluginQueryCommand {
+		return setting.PluginQueryCommand{
+			Command:     command.Command,
+			Description: command.Description,
+		}
+	})
+	a.pluginInstance.SaveSetting(ctx)
 }
 
 func NewAPI(instance *Instance) API {

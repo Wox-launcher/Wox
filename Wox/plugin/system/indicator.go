@@ -77,7 +77,7 @@ func (i *IndicatorPlugin) queryForTriggerKeyword(ctx context.Context, query plug
 					},
 				},
 			})
-			for _, metadataCommandShadow := range pluginInstance.Metadata.Commands {
+			for _, metadataCommandShadow := range pluginInstance.GetQueryCommands() {
 				// action will be executed in another go routine, so we need to copy the variable
 				metadataCommand := metadataCommandShadow
 				results = append(results, plugin.QueryResult{
@@ -108,7 +108,7 @@ func (i *IndicatorPlugin) queryForCommand(ctx context.Context, query plugin.Quer
 			return IsStringMatchNoPinYin(ctx, triggerKeyword, query.TriggerKeyword)
 		})
 		if found {
-			for _, metadataCommandShadow := range pluginInstance.Metadata.Commands {
+			for _, metadataCommandShadow := range pluginInstance.GetQueryCommands() {
 				// action will be executed in another go routine, so we need to copy the variable
 				metadataCommand := metadataCommandShadow
 				if query.Search == "" || IsStringMatchNoPinYin(ctx, metadataCommand.Command, query.Search) {
