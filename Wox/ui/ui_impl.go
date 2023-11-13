@@ -118,7 +118,7 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 	})
 	resultDebouncer.Start(ctx)
 	logger.Info(ctx, fmt.Sprintf("query: %s, result flushed (new start)", query))
-	resultChan, doneChan := plugin.GetPluginManager().Query(ctx, plugin.NewQuery(query, queryType))
+	resultChan, doneChan := plugin.GetPluginManager().Query(ctx, plugin.GetPluginManager().NewQuery(ctx, query, queryType))
 	for {
 		select {
 		case results := <-resultChan:

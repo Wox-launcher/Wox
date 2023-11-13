@@ -3,6 +3,7 @@ package setting
 import (
 	"context"
 	"os"
+	"regexp"
 	"runtime"
 	"strings"
 	"wox/i18n"
@@ -18,6 +19,7 @@ type WoxSetting struct {
 	ShowTray             bool
 	LangCode             i18n.LangCode
 	QueryHotkeys         PlatformSettingValue[[]QueryHotkey]
+	QueryShortcuts       []QueryShortcut
 	LastQueryMode        LastQueryMode
 	ThemeId              string
 }
@@ -28,6 +30,19 @@ const (
 	LastQueryModePreserve LastQueryMode = "preserve" // preserve last query and select all for quick modify
 	LastQueryModeEmpty    LastQueryMode = "empty"    // empty last query
 )
+
+type QueryShortcut struct {
+	Shortcut string // support index placeholder, e.g. shortcut "wi" => "wpm install {0} to {1}", when user input "wi 1 2", the query will be "wpm install 1 to 2"
+	Query    string
+}
+
+func (q *QueryShortcut) HasPlaceholder() bool {
+	return strings.Contains(q.Query, "{0}")
+}
+
+func (q *QueryShortcut) PlaceholderCount() int {
+	return len(regexp.MustCompile(`(?m){\d}`).FindAllString(q.Query, -1))
+}
 
 type QueryHotkey struct {
 	Hotkey string

@@ -65,6 +65,7 @@ require (
 	github.com/vcaesar/imgo v0.40.0 // indirect
 	github.com/vcaesar/keycode v0.10.1 // indirect
 	github.com/vcaesar/tt v0.20.0 // indirect
+	github.com/wissance/stringFormatter v1.1.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.design/x/mainthread v0.3.0 // indirect

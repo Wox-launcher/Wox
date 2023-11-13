@@ -8,9 +8,11 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
+	"github.com/wissance/stringFormatter"
 	"math"
 	"os"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -464,7 +466,11 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 		util.Go(ctx, fmt.Sprintf("[%s] parallel query", instance.Metadata.Name), func() {
 			queryResults := m.queryForPlugin(ctx, pluginInstance, query)
 			results <- lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
-				return item.ToUI(query.RawQuery)
+				rawQuery := query.RawQuery
+				if query.ShortcutFrom != "" {
+					rawQuery = query.ShortcutFrom
+				}
+				return item.ToUI(rawQuery)
 			})
 			counter.Add(-1)
 			if counter.Load() == 0 {
@@ -495,6 +501,61 @@ func (m *Manager) translatePlugin(ctx context.Context, pluginInstance *Instance,
 
 func (m *Manager) GetUI() share.UI {
 	return m.ui
+}
+
+func (m *Manager) NewQuery(ctx context.Context, query string, queryType QueryType) Query {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if len(woxSetting.QueryShortcuts) > 0 {
+		originQuery := query
+		query = m.expandQueryShortcut(ctx, query, woxSetting.QueryShortcuts)
+		if originQuery != query {
+			logger.Info(ctx, fmt.Sprintf("expand query shortcut: %s -> %s", originQuery, query))
+		}
+		q := newQueryWithPlugins(query, queryType, GetPluginManager().GetPluginInstances())
+		q.ShortcutFrom = originQuery
+		return q
+	}
+
+	return newQueryWithPlugins(query, queryType, GetPluginManager().GetPluginInstances())
+}
+
+func (m *Manager) expandQueryShortcut(ctx context.Context, query string, queryShorts []setting.QueryShortcut) (newQuery string) {
+	newQuery = query
+
+	//sort query shorts by shortcut length, we will expand the longest shortcut first
+	slices.SortFunc(queryShorts, func(i, j setting.QueryShortcut) int {
+		return len(j.Shortcut) - len(i.Shortcut)
+	})
+
+	for _, shortcut := range queryShorts {
+		if strings.HasPrefix(query, shortcut.Shortcut) {
+			if !shortcut.HasPlaceholder() {
+				newQuery = strings.Replace(query, shortcut.Shortcut, shortcut.Query, 1)
+				break
+			} else {
+				queryWithoutShortcut := strings.Replace(query, shortcut.Shortcut, "", 1)
+				queryWithoutShortcut = strings.TrimLeft(queryWithoutShortcut, " ")
+				parameters := strings.Split(queryWithoutShortcut, " ")
+				placeholderCount := shortcut.PlaceholderCount()
+				var paramsCount = 0
+
+				var params []any
+				var nonPrams string
+				for _, param := range parameters {
+					if paramsCount < placeholderCount {
+						paramsCount++
+						params = append(params, param)
+					} else {
+						nonPrams += " " + param
+					}
+				}
+				newQuery = stringFormatter.Format(shortcut.Query, params...) + nonPrams
+				break
+			}
+		}
+	}
+
+	return newQuery
 }
 
 func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId string) {

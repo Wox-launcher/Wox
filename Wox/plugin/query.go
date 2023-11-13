@@ -40,6 +40,9 @@ type Query struct {
 	// Search part of a query.
 	// Empty search means this query doesn't have a search part.
 	Search string
+
+	// if this query is a shortcut expand query, this property will be query before expand
+	ShortcutFrom string
 }
 
 // Query result return from plugin
@@ -206,8 +209,4 @@ func newQueryWithPlugins(query string, queryType QueryType, pluginInstances []*I
 		Command:        command,
 		Search:         search,
 	}
-}
-
-func NewQuery(query string, queryType QueryType) Query {
-	return newQueryWithPlugins(query, queryType, GetPluginManager().GetPluginInstances())
 }
