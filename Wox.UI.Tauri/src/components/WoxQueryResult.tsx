@@ -63,7 +63,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   }
 
   const getResultListHeight = (resultItemCount: number) => {
-    if (hasPreview) {
+    if (currentPreview.current) {
       return WOX_QUERY_RESULT_PREVIEW_HEIGHT
     }
 

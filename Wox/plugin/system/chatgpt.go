@@ -2,8 +2,10 @@ package system
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/sashabaranov/go-openai"
+	"io"
 	"wox/plugin"
 	"wox/setting"
 )
@@ -65,7 +67,6 @@ func (c *ChatgptPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 }
 
 func (c *ChatgptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	var results []plugin.QueryResult
 	if c.client == nil {
 		return []plugin.QueryResult{
 			{
@@ -77,54 +78,90 @@ func (c *ChatgptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.
 	}
 
 	if query.Command == "translate" {
-		resp, err := c.client.CreateChatCompletion(
-			context.Background(),
-			openai.ChatCompletionRequest{
-				Model: openai.GPT3Dot5Turbo,
-				Messages: []openai.ChatCompletionMessage{
-					{
-						Role: openai.ChatMessageRoleUser,
-						Content: `你是一个翻译引擎，请将给到的文本翻译成中文。请列出3种（如果有）最常用翻译结果：单词或短语，并列出对应的适用语境（用中文阐述）、音标或转写、词性、双语示例。请按照markdown的语法返回,并按照下面格式用中文阐述：
-  <序号><单词或短语> · [<词性缩写>] <适用语境（用中文阐述）> 例句：<例句>(例句翻译)`,
-					},
-					{
-						Role:    openai.ChatMessageRoleSystem,
-						Content: `好的，我明白了，请给我这个单词。`,
-					},
-					{
-						Role:    openai.ChatMessageRoleUser,
-						Content: fmt.Sprintf(`单词是：%s`, query.Search),
-					},
-				},
+		return []plugin.QueryResult{c.generateGptAnswer(ctx, []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleUser,
+				Content: `你是一个翻译引擎，请将给到的文本翻译成中文, 翻译需要言简意赅，不要太长。`,
 			},
-		)
-		if err != nil {
-			return []plugin.QueryResult{
-				{
-					Title:    "chatgpt error",
-					SubTitle: err.Error(),
-					Icon:     chatgptIcon,
-				},
-			}
-		}
-
-		results = append(results, plugin.QueryResult{
-			Title:    resp.Choices[0].Message.Content,
-			SubTitle: "Press Enter to copy",
-			Icon:     chatgptIcon,
-			Preview: plugin.WoxPreview{
-				PreviewType: plugin.WoxPreviewTypeMarkdown,
-				PreviewData: resp.Choices[0].Message.Content,
+			{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: `好的，我明白了，请给我这个单词。`,
 			},
-			Actions: []plugin.QueryResultAction{
-				{
-					Name: "Copy",
-					Action: func(actionContext plugin.ActionContext) {
-					},
-				},
+			{
+				Role:    openai.ChatMessageRoleUser,
+				Content: fmt.Sprintf(`单词是：%s`, query.Search),
 			},
-		})
+		}, nil)}
 	}
 
-	return results
+	return []plugin.QueryResult{}
+}
+
+func (c *ChatgptPlugin) generateGptAnswer(ctx context.Context, messages []openai.ChatCompletionMessage, action func(actionContext plugin.ActionContext)) plugin.QueryResult {
+	var stream *openai.ChatCompletionStream
+	var creatingStream bool
+	return plugin.QueryResult{
+		Title: "Answering...",
+		Icon:  chatgptIcon,
+		Preview: plugin.WoxPreview{
+			PreviewType: plugin.WoxPreviewTypeMarkdown,
+			PreviewData: "",
+		},
+		RefreshInterval: 100,
+		OnRefresh: func(current plugin.RefreshableResult) plugin.RefreshableResult {
+			if stream == nil {
+				if creatingStream {
+					c.api.Log(ctx, "Already creating stream, waiting create finish")
+					return current
+				}
+
+				c.api.Log(ctx, "Creating stream")
+				creatingStream = true
+				createdStream, createErr := c.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
+					Stream:   true,
+					Model:    openai.GPT3Dot5Turbo,
+					Messages: messages,
+				})
+				creatingStream = false
+				c.api.Log(ctx, "Created stream")
+				if createErr != nil {
+					current.Title = "Answer error"
+					current.Preview.PreviewData = createErr.Error()
+					current.RefreshInterval = 0 // stop refreshing
+					return current
+				}
+				stream = createdStream
+			}
+
+			c.api.Log(ctx, "Reading stream")
+			response, streamErr := stream.Recv()
+			if errors.Is(streamErr, io.EOF) {
+				stream.Close()
+				current.Title = "Answer finished"
+				current.RefreshInterval = 0 // stop refreshing
+				return current
+			}
+
+			if streamErr != nil {
+				stream.Close()
+				current.Title = "Answer error"
+				current.Preview.PreviewData = streamErr.Error()
+				current.RefreshInterval = 0 // stop refreshing
+				return current
+			}
+
+			current.Preview.PreviewData += response.Choices[0].Delta.Content
+			return current
+		},
+		Actions: []plugin.QueryResultAction{
+			{
+				Name: "Copy",
+				Action: func(actionContext plugin.ActionContext) {
+					if action != nil {
+						action(actionContext)
+					}
+				},
+			},
+		},
+	}
 }
