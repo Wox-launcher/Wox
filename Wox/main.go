@@ -40,12 +40,6 @@ func main() {
 		return
 	}
 
-	clipboardErr := util.ClipboardInit()
-	if clipboardErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize clipboard: %s", clipboardErr.Error()))
-		return
-	}
-
 	settingErr := setting.GetSettingManager().Init(ctx)
 	if settingErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize settings: %s", settingErr.Error()))
@@ -97,11 +91,11 @@ func main() {
 
 		t := util.Hotkey{}
 		t.Register(ctx, "command+m", func() {
-			data, selectedErr := util.GetSelectedText()
+			data, selectedErr := util.GetSelected()
 			if selectedErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("failed to get selected text: %s", selectedErr.Error()))
+				util.GetLogger().Error(ctx, fmt.Sprintf("failed to get selected: %s", selectedErr.Error()))
 			} else {
-				util.GetLogger().Info(ctx, fmt.Sprintf("selected text: %s", data.Data))
+				util.GetLogger().Info(ctx, fmt.Sprintf("selected %s: %s", data.GetType(), data.String()))
 			}
 		})
 

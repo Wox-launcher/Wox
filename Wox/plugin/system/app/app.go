@@ -16,6 +16,7 @@ import (
 	"wox/plugin/system"
 	"wox/setting"
 	"wox/util"
+	"wox/util/clipboard"
 )
 
 func init() {
@@ -124,7 +125,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 						Name: "i18n:plugin_app_copy_path",
 						Icon: plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAA+0lEQVR4nO3VLQ7CQBAF4L3Eih6HOQScAIfmDMhq0NVgcegaCAq7GoMpBJKyBEc2/GyZaafTzkue36/7sjVGo9FoICs8toOsmLF9Sezhh8szLwIL2B5LP1oxIrAAV9x5ERQAR41I86vHdrK+VAI4SgT28PPdLRrhXgBkCCzgcCr9IhLhAgAJAgt4HiIW4d4AQgQLoAoCfpQNQIUwnAAKhOEGYBGmDYAQAW0GxNSONx+rgLSBGwDpEwLpAPtl87UAkun+73YSANInBNIBtun/AHYynQOA9AmBdICV/oxa6QCQPiFQQN+e0UQ6ICWuqTMKyPUGej4hjUZjROQBwgDUDcPYwFwAAAAASUVORK5CYII=`),
 						Action: func(actionContext plugin.ActionContext) {
-							util.ClipboardWriteText(info.Path)
+							clipboard.WriteText(info.Path)
 						},
 					},
 				},

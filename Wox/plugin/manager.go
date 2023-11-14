@@ -21,6 +21,7 @@ import (
 	"wox/setting"
 	"wox/share"
 	"wox/util"
+	"wox/util/clipboard"
 )
 
 var managerInstance *Manager
@@ -634,11 +635,16 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, resultId string, refreshab
 
 func (m *Manager) ReplaceQueryVariable(ctx context.Context, query string) string {
 	if strings.Contains(query, QueryVariableSelectedText) {
-		data, selectedErr := util.GetSelectedText()
+		data, selectedErr := util.GetSelected()
 		if selectedErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to get selected text: %s", selectedErr.Error()))
 		} else {
-			query = strings.ReplaceAll(query, QueryVariableSelectedText, data.Data)
+			if data.GetType() == clipboard.ClipboardTypeText {
+				textData := data.(*clipboard.TextData)
+				query = strings.ReplaceAll(query, QueryVariableSelectedText, textData.Text)
+			} else {
+				logger.Error(ctx, fmt.Sprintf("selected data is not text, type: %s", data.GetType()))
+			}
 		}
 	}
 

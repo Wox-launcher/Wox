@@ -7,6 +7,7 @@ import (
 	"strings"
 	"wox/plugin"
 	"wox/util"
+	"wox/util/clipboard"
 )
 
 func init() {
@@ -78,7 +79,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 							Result:     result,
 							AddDate:    util.FormatDateTime(util.GetSystemTime()),
 						})
-						util.ClipboardWriteText(result)
+						clipboard.WriteText(result)
 					},
 				},
 			},
@@ -101,7 +102,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 								Result:     result,
 								AddDate:    util.FormatDateTime(util.GetSystemTime()),
 							})
-							util.ClipboardWriteText(result)
+							clipboard.WriteText(result)
 						},
 					},
 				},
@@ -128,7 +129,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 							Name:      "Copy result",
 							IsDefault: true,
 							Action: func(actionContext plugin.ActionContext) {
-								util.ClipboardWriteText(h.Result)
+								clipboard.WriteText(h.Result)
 							},
 						},
 						{
