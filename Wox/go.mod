@@ -17,11 +17,14 @@ require (
 	github.com/mnogu/go-calculator v0.0.1
 	github.com/mozillazg/go-pinyin v0.20.0
 	github.com/olahol/melody v1.1.4
+	github.com/parsiya/golnk v0.0.0-20221103095132-740a4c27c4ff
 	github.com/petermattis/goid v0.0.0-20230904192822-1876fd5063bc
 	github.com/sahilm/fuzzy v0.1.0
 	github.com/samber/lo v1.38.1
+	github.com/sashabaranov/go-openai v1.17.5
 	github.com/stretchr/testify v1.8.4
 	github.com/tidwall/gjson v1.17.0
+	github.com/wissance/stringFormatter v1.1.1
 	go.uber.org/zap v1.26.0
 	golang.design/x/clipboard v0.7.0
 	golang.design/x/hotkey v0.4.1
@@ -49,12 +52,10 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/otiai10/gosseract v2.2.1+incompatible // indirect
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
-	github.com/parsiya/golnk v0.0.0-20221103095132-740a4c27c4ff // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20221212215047-62379fc7944b // indirect
 	github.com/robotn/xgb v0.0.0-20190912153532-2cb92d044934 // indirect
 	github.com/robotn/xgbutil v0.0.0-20190912154524-c861d6f87770 // indirect
-	github.com/sashabaranov/go-openai v1.17.5 // indirect
 	github.com/shirou/gopsutil/v3 v3.23.8 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
@@ -65,7 +66,6 @@ require (
 	github.com/vcaesar/imgo v0.40.0 // indirect
 	github.com/vcaesar/keycode v0.10.1 // indirect
 	github.com/vcaesar/tt v0.20.0 // indirect
-	github.com/wissance/stringFormatter v1.1.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.design/x/mainthread v0.3.0 // indirect

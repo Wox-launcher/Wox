@@ -51,6 +51,14 @@ func (c *ChatgptPlugin) GetMetadata() plugin.Metadata {
 				},
 			},
 		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureDebounce,
+				Params: map[string]string{
+					"intervalMs": "500",
+				},
+			},
+		},
 	}
 }
 
@@ -74,6 +82,15 @@ func (c *ChatgptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.
 	}
 
 	if query.Command != "" {
+		if query.Search == "" {
+			return []plugin.QueryResult{
+				{
+					Title: "Please input something",
+					Icon:  chatgptIcon,
+				},
+			}
+		}
+
 		//TODO: need a simple way to read user settings
 		var prompts []string
 		commandContent := c.api.GetSetting(ctx, fmt.Sprintf("command_key_%s", query.Command))

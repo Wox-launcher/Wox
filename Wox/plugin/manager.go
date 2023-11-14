@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"wox/i18n"
 	"wox/setting"
 	"wox/share"
@@ -26,16 +27,23 @@ var managerInstance *Manager
 var managerOnce sync.Once
 var logger *util.Log
 
+type debounceTimer struct {
+	timer  *time.Timer
+	onStop func()
+}
+
 type Manager struct {
-	instances   []*Instance
-	ui          share.UI
-	resultCache *util.HashMap[string, *QueryResultCache]
+	instances          []*Instance
+	ui                 share.UI
+	resultCache        *util.HashMap[string, *QueryResultCache]
+	debounceQueryTimer *util.HashMap[string, *debounceTimer]
 }
 
 func GetPluginManager() *Manager {
 	managerOnce.Do(func() {
 		managerInstance = &Manager{
-			resultCache: util.NewHashMap[string, *QueryResultCache](),
+			resultCache:        util.NewHashMap[string, *QueryResultCache](),
+			debounceQueryTimer: util.NewHashMap[string, *debounceTimer](),
 		}
 		logger = util.GetLogger()
 	})
@@ -449,7 +457,7 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 	// clear old result cache
 	m.resultCache.Clear()
 
-	counter := atomic.Int32{}
+	counter := &atomic.Int32{}
 	counter.Store(int32(len(m.instances)))
 
 	for _, instance := range m.instances {
@@ -463,28 +471,62 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 			continue
 		}
 
-		util.Go(ctx, fmt.Sprintf("[%s] parallel query", instance.Metadata.Name), func() {
-			queryResults := m.queryForPlugin(ctx, pluginInstance, query)
-			results <- lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
-				rawQuery := query.RawQuery
-				if query.ShortcutFrom != "" {
-					rawQuery = query.ShortcutFrom
+		if pluginInstance.Metadata.IsSupportFeature(MetadataFeatureDebounce) {
+			debounceParams, err := pluginInstance.Metadata.GetFeatureParamsForDebounce()
+			if err == nil {
+				logger.Debug(ctx, fmt.Sprintf("[%s] debounce query, will execute in %d ms", pluginInstance.Metadata.Name, debounceParams.intervalMs))
+				if v, ok := m.debounceQueryTimer.Load(pluginInstance.Metadata.Id); ok {
+					if v.timer.Stop() {
+						v.onStop()
+					}
 				}
-				return item.ToUI(rawQuery)
-			})
-			counter.Add(-1)
-			if counter.Load() == 0 {
-				done <- true
+
+				timer := time.AfterFunc(time.Duration(debounceParams.intervalMs)*time.Millisecond, func() {
+					m.queryParallel(ctx, pluginInstance, query, results, done, counter)
+				})
+				onStop := func() {
+					logger.Debug(ctx, fmt.Sprintf("[%s] previous debounced query cancelled", pluginInstance.Metadata.Name))
+					counter.Add(-1)
+					if counter.Load() == 0 {
+						done <- true
+					}
+				}
+				m.debounceQueryTimer.Store(pluginInstance.Metadata.Id, &debounceTimer{
+					timer:  timer,
+					onStop: onStop,
+				})
+				continue
+			} else {
+				logger.Error(ctx, fmt.Sprintf("[%s] %s, query directlly", pluginInstance.Metadata.Name, err))
 			}
-		}, func() {
-			counter.Add(-1)
-			if counter.Load() == 0 {
-				done <- true
-			}
-		})
+		}
+
+		m.queryParallel(ctx, pluginInstance, query, results, done, counter)
 	}
 
 	return
+}
+
+func (m *Manager) queryParallel(ctx context.Context, pluginInstance *Instance, query Query, results chan []QueryResultUI, done chan bool, counter *atomic.Int32) {
+	util.Go(ctx, fmt.Sprintf("[%s] parallel query", pluginInstance.Metadata.Name), func() {
+		queryResults := m.queryForPlugin(ctx, pluginInstance, query)
+		results <- lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
+			rawQuery := query.RawQuery
+			if query.ShortcutFrom != "" {
+				rawQuery = query.ShortcutFrom
+			}
+			return item.ToUI(rawQuery)
+		})
+		counter.Add(-1)
+		if counter.Load() == 0 {
+			done <- true
+		}
+	}, func() {
+		counter.Add(-1)
+		if counter.Load() == 0 {
+			done <- true
+		}
+	})
 }
 
 func (m *Manager) translatePlugin(ctx context.Context, pluginInstance *Instance, key string) string {

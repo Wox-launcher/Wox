@@ -2,6 +2,8 @@ package plugin
 
 import (
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 	"wox/setting"
 )
@@ -12,7 +14,12 @@ const (
 	// enable query file feature
 	// user may drag multiple files into Wox, and Wox will pass these files to plugin
 	// plugin need to handle Query.Type == "file" in query
+	// params see MetadataFeatureParamsQueryFile
 	MetadataFeatureNameQueryFile MetadataFeatureName = "queryFile"
+
+	// enable this feature to let Wox debounce queries between user input
+	// params see MetadataFeatureParamsDebounce
+	MetadataFeatureDebounce MetadataFeatureName = "debounce"
 
 	// enable this feature to let Wox don't auto score results
 	// by default, Wox will auto score results by the frequency of their actioned times
@@ -64,6 +71,27 @@ func (m *Metadata) GetFeatureParamsForQueryFile() (MetadataFeatureParamsQueryFil
 	return MetadataFeatureParamsQueryFile{}, errors.New("plugin does not support queryFile feature")
 }
 
+func (m *Metadata) GetFeatureParamsForDebounce() (MetadataFeatureParamsDebounce, error) {
+	for _, feature := range m.Features {
+		if strings.ToLower(feature.Name) == strings.ToLower(MetadataFeatureDebounce) {
+			if v, ok := feature.Params["intervalMs"]; !ok {
+				return MetadataFeatureParamsDebounce{}, errors.New("debounce feature does not have intervalMs param")
+			} else {
+				timeInMilliseconds, convertErr := strconv.Atoi(v)
+				if convertErr != nil {
+					return MetadataFeatureParamsDebounce{}, fmt.Errorf("debounce feature intervalMs param is not a valid number: %s", convertErr.Error())
+				}
+
+				return MetadataFeatureParamsDebounce{
+					intervalMs: timeInMilliseconds,
+				}, nil
+			}
+		}
+	}
+
+	return MetadataFeatureParamsDebounce{}, errors.New("plugin does not support debounce feature")
+}
+
 type MetadataFeature struct {
 	Name   MetadataFeatureName
 	Params map[string]string
@@ -81,4 +109,8 @@ type MetadataWithDirectory struct {
 
 type MetadataFeatureParamsQueryFile struct {
 	FileExtensions []string
+}
+
+type MetadataFeatureParamsDebounce struct {
+	intervalMs int
 }
