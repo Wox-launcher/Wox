@@ -1,6 +1,20 @@
 #import <Cocoa/Cocoa.h>
 #import <Foundation/Foundation.h>
 
+static NSInteger lastChangeCount = 0;
+
+_Bool hasClipboardChanged() {
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    NSInteger currentChangeCount = [pasteboard changeCount];
+
+    if (currentChangeCount != lastChangeCount) {
+        lastChangeCount = currentChangeCount;
+        return 1;
+    }
+
+    return 0;
+}
+
 const char* GetClipboardText() {
     NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
     NSString *string = [pasteboard stringForType:NSPasteboardTypeString];

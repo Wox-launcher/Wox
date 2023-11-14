@@ -191,6 +191,9 @@ func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, defaul
 	if decodeErr != nil {
 		return &PluginSetting{}, decodeErr
 	}
+	if pluginSetting.CustomizedSettings == nil {
+		pluginSetting.CustomizedSettings = defaultSettings.GetAll()
+	}
 
 	return pluginSetting, nil
 }

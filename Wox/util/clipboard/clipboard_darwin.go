@@ -9,6 +9,7 @@ const char* GetClipboardText();
 char* GetAllClipboardFilePaths();
 unsigned char *GetClipboardImage(size_t *length);
 void WriteClipboardText(const char *text);
+_Bool hasClipboardChanged();
 */
 import "C"
 import (
@@ -66,4 +67,8 @@ func writeTextData(text string) error {
 	C.WriteClipboardText(cText)
 
 	return nil
+}
+
+func isClipboardChanged() bool {
+	return bool(C.hasClipboardChanged())
 }
