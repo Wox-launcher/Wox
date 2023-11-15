@@ -125,7 +125,7 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 		},
 		Features: []plugin.MetadataFeature{
 			{
-				Name: plugin.MetadataFeatureNameIgnoreAutoScore,
+				Name: plugin.MetadataFeatureIgnoreAutoScore,
 			},
 		},
 		Commands: []plugin.MetadataCommand{
@@ -147,14 +147,7 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	c.loadHistory(ctx)
 	clipboard.Watch(func(data clipboard.Data) {
 		c.api.Log(ctx, fmt.Sprintf("clipboard data changed, type=%s", data.GetType()))
-
 		icon := c.getDefaultTextIcon()
-		// it sometimes is buggy on windows, so we only get active window icon on macos
-		if util.IsMacOS() {
-			if iconFilePath, iconErr := c.getActiveWindowIconFilePath(ctx); iconErr == nil {
-				icon = plugin.NewWoxImageAbsolutePath(iconFilePath)
-			}
-		}
 
 		if data.GetType() == clipboard.ClipboardTypeText {
 			textData := data.(*clipboard.TextData)
@@ -173,6 +166,13 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 						c.history[len(c.history)-1].Timestamp = util.GetSystemTimestamp()
 						return
 					}
+				}
+			}
+
+			// it sometimes is buggy on windows, so we only get active window icon on macos
+			if util.IsMacOS() {
+				if iconFilePath, iconErr := c.getActiveWindowIconFilePath(ctx); iconErr == nil {
+					icon = plugin.NewWoxImageAbsolutePath(iconFilePath)
 				}
 			}
 		}

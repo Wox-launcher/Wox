@@ -7,6 +7,7 @@ import (
 	"github.com/samber/lo"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/share"
 )
 
 func init() {
@@ -72,7 +73,10 @@ func (i *IndicatorPlugin) queryForTriggerKeyword(ctx context.Context, query plug
 						Name:                   "activate",
 						PreventHideAfterAction: true,
 						Action: func(actionContext plugin.ActionContext) {
-							i.api.ChangeQuery(ctx, fmt.Sprintf("%s ", triggerKeyword))
+							i.api.ChangeQuery(ctx, share.ChangeQueryParam{
+								QueryType: plugin.QueryTypeInput,
+								QueryText: fmt.Sprintf("%s ", triggerKeyword),
+							})
 						},
 					},
 				},
@@ -90,7 +94,10 @@ func (i *IndicatorPlugin) queryForTriggerKeyword(ctx context.Context, query plug
 							Name:                   "activate",
 							PreventHideAfterAction: true,
 							Action: func(actionContext plugin.ActionContext) {
-								i.api.ChangeQuery(ctx, fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command))
+								i.api.ChangeQuery(ctx, share.ChangeQueryParam{
+									QueryType: plugin.QueryTypeInput,
+									QueryText: fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command),
+								})
 							},
 						},
 					},
@@ -123,7 +130,10 @@ func (i *IndicatorPlugin) queryForCommand(ctx context.Context, query plugin.Quer
 								Name:                   "activate",
 								PreventHideAfterAction: true,
 								Action: func(actionContext plugin.ActionContext) {
-									i.api.ChangeQuery(ctx, fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command))
+									i.api.ChangeQuery(ctx, share.ChangeQueryParam{
+										QueryType: plugin.QueryTypeInput,
+										QueryText: fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command),
+									})
 								},
 							},
 						},

@@ -12,6 +12,7 @@ import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
 import Mousetrap from "mousetrap"
 import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
 import { Theme } from "../entity/Theme.typings"
+import { WoxQueryTypeEnum } from "../enums/WoxQueryTypeEnum.ts"
 
 export default () => {
   const [_, forceUpdate] = useReducer((x) => x + 1, 0)
@@ -34,7 +35,7 @@ export default () => {
     hasLatestQueryResult.current = false
     WoxMessageHelper.getInstance().sendQueryMessage({
       query: query,
-      type: "text"
+      type: "input"
     }, handleQueryCallback)
     requestTimeoutId.current = setTimeout(() => {
       if (!hasLatestQueryResult.current) {
@@ -118,7 +119,7 @@ export default () => {
    */
   const handleRequestCallback = async (message: WOXMESSAGE.WoxMessage) => {
     if (message.Method === WoxMessageRequestMethodEnum.ChangeQuery.code) {
-      await changeQuery(message.Data as string)
+      await changeQuery(message.Data as WOXMESSAGE.ChangeQueryParam)
     }
     if (message.Method === WoxMessageRequestMethodEnum.HideApp.code) {
       await hideWoxWindow()
@@ -142,8 +143,10 @@ export default () => {
   /*
     Change query text
    */
-  const changeQuery = async (query: string) => {
-    woxQueryBoxRef.current?.changeQuery(query)
+  const changeQuery = async (query: WOXMESSAGE.ChangeQueryParam) => {
+    if (query.QueryType === WoxQueryTypeEnum.WoxQueryTypeInput.code) {
+      woxQueryBoxRef.current?.changeQuery(query.QueryText)
+    }
   }
 
   const changeTheme = async (theme: string) => {

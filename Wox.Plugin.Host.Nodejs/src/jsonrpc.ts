@@ -1,7 +1,7 @@
 import { logger } from "./logger"
 import path from "path"
 import { PluginAPI } from "./pluginAPI"
-import { Plugin, PluginInitContext, Query, RefreshableResult, Result, ResultAction } from "@wox-launcher/wox-plugin"
+import { Plugin, PluginInitContext, Query, RefreshableResult, Result, ResultAction, Selection } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 
@@ -120,10 +120,13 @@ async function query(request: PluginJsonRpcRequest) {
   const refreshCache = refreshCacheByPlugin.get(request.PluginId)!
 
   const results = await query({
+    Type: request.Params.Type,
     RawQuery: request.Params.RawQuery,
     TriggerKeyword: request.Params.TriggerKeyword,
     Command: request.Params.Command,
-    Search: request.Params.Search
+    Search: request.Params.Search,
+    ShortcutFrom: request.Params.ShortcutFrom,
+    Selection: JSON.parse(request.Params.Selection) as Selection
   } as Query)
 
   if (!results) {

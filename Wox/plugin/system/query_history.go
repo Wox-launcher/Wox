@@ -5,6 +5,7 @@ import (
 	"strings"
 	"wox/plugin"
 	"wox/setting"
+	"wox/share"
 	"wox/util"
 )
 
@@ -32,7 +33,7 @@ func (i *QueryHistoryPlugin) GetMetadata() plugin.Metadata {
 		},
 		Features: []plugin.MetadataFeature{
 			{
-				Name: plugin.MetadataFeatureNameIgnoreAutoScore,
+				Name: plugin.MetadataFeatureIgnoreAutoScore,
 			},
 		},
 		SupportedOS: []string{
@@ -64,7 +65,10 @@ func (i *QueryHistoryPlugin) Query(ctx context.Context, query plugin.Query) (res
 						Name:                   "Use",
 						PreventHideAfterAction: true,
 						Action: func(actionContext plugin.ActionContext) {
-							i.api.ChangeQuery(ctx, history.Query)
+							i.api.ChangeQuery(ctx, share.ChangeQueryParam{
+								QueryType: plugin.QueryTypeInput,
+								QueryText: history.Query,
+							})
 						},
 					},
 				},

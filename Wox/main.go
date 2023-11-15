@@ -82,6 +82,10 @@ func main() {
 		if registerMainHotkeyErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to register main hotkey: %s", registerMainHotkeyErr.Error()))
 		}
+		registerSelectionHotkeyErr := ui.GetUIManager().RegisterSelectionHotkey(ctx, woxSetting.SelectionHotkey.Get())
+		if registerSelectionHotkeyErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to register selection hotkey: %s", registerSelectionHotkeyErr.Error()))
+		}
 		for _, queryHotkey := range woxSetting.QueryHotkeys.Get() {
 			registerQueryHotkeyErr := ui.GetUIManager().RegisterQueryHotkey(ctx, queryHotkey)
 			if registerQueryHotkeyErr != nil {
@@ -95,7 +99,7 @@ func main() {
 			if selectedErr != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("failed to get selected: %s", selectedErr.Error()))
 			} else {
-				util.GetLogger().Info(ctx, fmt.Sprintf("selected %s: %s", data.GetType(), data.String()))
+				util.GetLogger().Info(ctx, fmt.Sprintf("selected %s: %s", data.Type, data.String()))
 			}
 		})
 

@@ -12,6 +12,7 @@ import (
 
 type WoxSetting struct {
 	MainHotkey           PlatformSettingValue[string]
+	SelectionHotkey      PlatformSettingValue[string]
 	UsePinYin            bool
 	SwitchInputMethodABC bool
 	HideOnStart          bool

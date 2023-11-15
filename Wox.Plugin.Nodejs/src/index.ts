@@ -3,28 +3,59 @@ export interface Plugin {
   query: (query: Query) => Promise<Result[]>
 }
 
+export interface Selection {
+  Type: "text" | "file"
+  // Only available when Type is text
+  Text: string
+  // Only available when Type is file
+  FilePaths: string[]
+}
+
 export interface Query {
   /**
-   * Type of a query.
+   *  By default, Wox will only pass input query to plugin.
+   *  plugin author need to enable MetadataFeatureQuerySelection feature to handle selection query
    */
-  Type: "text" | "file"
+  Type: "input" | "selection"
   /**
    * Raw query, this includes trigger keyword if it has
    * We didn't recommend use this property directly. You should always use Search property.
+   *
+   * NOTE: Only available when query type is input
    */
   RawQuery: string
   /**
    * Trigger keyword of a query. It can be empty if user is using global trigger keyword.
+   *
+   * NOTE: Only available when query type is input
    */
   TriggerKeyword?: string
   /**
    * Command part of a query.
+   *
+   * NOTE: Only available when query type is input
    */
   Command?: string
   /**
    * Search part of a query.
+   *
+   * NOTE: Only available when query type is input
    */
   Search: string
+
+  /**
+   * if this query is a shortcut expand query, this property will be origin query before expand
+   *
+   * NOTE: Only available when query type is input
+   */
+  ShortcutFrom: string
+
+  /**
+   * User selected or drag-drop data, can be text or file or image etc
+   *
+   * NOTE: Only available when query type is selection
+   */
+  Selection: Selection
 }
 
 export interface Result {
@@ -81,11 +112,17 @@ export interface PluginInitContext {
   PluginDirectory: string
 }
 
+export interface ChangeQueryParam {
+  QueryType: "input" | "selection"
+  QueryText: string
+  QuerySelection: Selection
+}
+
 export interface PublicAPI {
   /**
    * Change Wox query
    */
-  ChangeQuery: (query: string) => Promise<void>
+  ChangeQuery: (query: ChangeQueryParam) => Promise<void>
 
   /**
    * Hide Wox

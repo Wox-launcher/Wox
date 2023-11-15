@@ -20,18 +20,20 @@ var managerOnce sync.Once
 var logger *util.Log
 
 type Manager struct {
-	mainHotkey   *util.Hotkey
-	queryHotkeys []*util.Hotkey
-	ui           share.UI
-	serverPort   int
-	uiProcess    *os.Process
-	themes       []Theme
+	mainHotkey      *util.Hotkey
+	selectionHotkey *util.Hotkey
+	queryHotkeys    []*util.Hotkey
+	ui              share.UI
+	serverPort      int
+	uiProcess       *os.Process
+	themes          []Theme
 }
 
 func GetUIManager() *Manager {
 	managerOnce.Do(func() {
 		managerInstance = &Manager{}
 		managerInstance.mainHotkey = &util.Hotkey{}
+		managerInstance.selectionHotkey = &util.Hotkey{}
 		managerInstance.ui = &uiImpl{}
 		logger = util.GetLogger()
 	})
@@ -64,11 +66,26 @@ func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) err
 	})
 }
 
+func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string) error {
+	return m.selectionHotkey.Register(ctx, combineKey, func() {
+		_, err := util.GetSelected()
+		if err != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to get selected: %s", err.Error()))
+			return
+		}
+
+		//m.ui.ToggleApp(ctx)
+	})
+}
+
 func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.QueryHotkey) error {
 	hotkey := &util.Hotkey{}
 	err := hotkey.Register(ctx, queryHotkey.Hotkey, func() {
 		query := plugin.GetPluginManager().ReplaceQueryVariable(ctx, queryHotkey.Query)
-		m.ui.ChangeQuery(ctx, query)
+		m.ui.ChangeQuery(ctx, share.ChangeQueryParam{
+			QueryType: plugin.QueryTypeInput,
+			QueryText: query,
+		})
 		m.ui.ShowApp(ctx, share.ShowContext{SelectAll: false})
 	})
 	if err != nil {

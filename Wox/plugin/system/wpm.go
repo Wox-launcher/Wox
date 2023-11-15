@@ -31,7 +31,7 @@ func (i *WPMPlugin) GetMetadata() plugin.Metadata {
 		},
 		Features: []plugin.MetadataFeature{
 			{
-				Name: plugin.MetadataFeatureNameIgnoreAutoScore,
+				Name: plugin.MetadataFeatureIgnoreAutoScore,
 			},
 		},
 		Commands: []plugin.MetadataCommand{

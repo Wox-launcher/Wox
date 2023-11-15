@@ -1,9 +1,18 @@
 package share
 
-import "context"
+import (
+	"context"
+	"wox/util"
+)
+
+type ChangeQueryParam struct {
+	QueryType      string
+	QueryText      string
+	QuerySelection util.Selection
+}
 
 type UI interface {
-	ChangeQuery(ctx context.Context, query string)
+	ChangeQuery(ctx context.Context, query ChangeQueryParam)
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context, showContext ShowContext)
 	ToggleApp(ctx context.Context)

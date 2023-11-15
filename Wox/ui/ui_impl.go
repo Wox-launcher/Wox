@@ -18,7 +18,7 @@ import (
 type uiImpl struct {
 }
 
-func (u *uiImpl) ChangeQuery(ctx context.Context, query string) {
+func (u *uiImpl) ChangeQuery(ctx context.Context, query share.ChangeQueryParam) {
 	u.send(ctx, "ChangeQuery", query)
 }
 
@@ -284,7 +284,10 @@ func onAppShow(ctx context.Context) {
 func onAppHide(ctx context.Context, query string) {
 	setting.GetSettingManager().AddQueryHistory(ctx, query)
 	if setting.GetSettingManager().GetWoxSetting(ctx).LastQueryMode == setting.LastQueryModeEmpty {
-		GetUIManager().GetUI(ctx).ChangeQuery(ctx, "")
+		GetUIManager().GetUI(ctx).ChangeQuery(ctx, share.ChangeQueryParam{
+			QueryType: plugin.QueryTypeInput,
+			QueryText: "",
+		})
 	}
 }
 

@@ -1,4 +1,4 @@
-import { PublicAPI } from "@wox-launcher/wox-plugin"
+import { ChangeQueryParam, PublicAPI } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import { PluginJsonRpcRequest, PluginJsonRpcTypeRequest } from "./jsonrpc"
 import * as crypto from "crypto"
@@ -44,8 +44,12 @@ export class PluginAPI implements PublicAPI {
     return result
   }
 
-  async ChangeQuery(query: string): Promise<void> {
-    await this.invokeMethod("ChangeQuery", { query })
+  async ChangeQuery(query: ChangeQueryParam): Promise<void> {
+    await this.invokeMethod("ChangeQuery", {
+      queryType: query.QueryType,
+      queryText: query.QueryText,
+      querySelection: JSON.stringify(query.QuerySelection)
+    })
   }
 
   async HideApp(): Promise<void> {

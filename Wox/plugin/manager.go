@@ -21,7 +21,6 @@ import (
 	"wox/setting"
 	"wox/share"
 	"wox/util"
-	"wox/util/clipboard"
 )
 
 var managerInstance *Manager
@@ -385,7 +384,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		result.Preview = WoxPreview{}
 	}
 
-	ignoreAutoScore := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureNameIgnoreAutoScore)
+	ignoreAutoScore := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureIgnoreAutoScore)
 	if !ignoreAutoScore {
 		score := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
 		if score > 0 {
@@ -635,15 +634,14 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, resultId string, refreshab
 
 func (m *Manager) ReplaceQueryVariable(ctx context.Context, query string) string {
 	if strings.Contains(query, QueryVariableSelectedText) {
-		data, selectedErr := util.GetSelected()
+		selection, selectedErr := util.GetSelected()
 		if selectedErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to get selected text: %s", selectedErr.Error()))
 		} else {
-			if data.GetType() == clipboard.ClipboardTypeText {
-				textData := data.(*clipboard.TextData)
-				query = strings.ReplaceAll(query, QueryVariableSelectedText, textData.Text)
+			if selection.Type == util.SelectionTypeText {
+				query = strings.ReplaceAll(query, QueryVariableSelectedText, selection.Text)
 			} else {
-				logger.Error(ctx, fmt.Sprintf("selected data is not text, type: %s", data.GetType()))
+				logger.Error(ctx, fmt.Sprintf("selected data is not text, type: %s", selection.Type))
 			}
 		}
 	}
