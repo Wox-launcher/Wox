@@ -66,6 +66,11 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 			MacValue:   "command+space",
 			LinuxValue: "alt+space",
 		},
+		SelectionHotkey: PlatformSettingValue[string]{
+			WinValue:   "win+alt+space",
+			MacValue:   "command+option+space",
+			LinuxValue: "win+alt+space",
+		},
 		UsePinYin:            usePinYin,
 		SwitchInputMethodABC: switchInputMethodABC,
 		ShowTray:             true,

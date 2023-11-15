@@ -44,13 +44,6 @@ export interface Query {
   Search: string
 
   /**
-   * if this query is a shortcut expand query, this property will be origin query before expand
-   *
-   * NOTE: Only available when query type is input
-   */
-  ShortcutFrom: string
-
-  /**
    * User selected or drag-drop data, can be text or file or image etc
    *
    * NOTE: Only available when query type is selection

@@ -77,6 +77,9 @@ func (m *Manager) loadWoxSetting(ctx context.Context) error {
 	if woxSetting.MainHotkey.Get() == "" {
 		woxSetting.MainHotkey.Set(defaultWoxSetting.MainHotkey.Get())
 	}
+	if woxSetting.SelectionHotkey.Get() == "" {
+		woxSetting.SelectionHotkey.Set(defaultWoxSetting.SelectionHotkey.Get())
+	}
 	if woxSetting.LangCode == "" {
 		woxSetting.LangCode = defaultWoxSetting.LangCode
 	}

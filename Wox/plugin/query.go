@@ -48,15 +48,20 @@ type Query struct {
 	// NOTE: Only available when query type is QueryTypeInput
 	Search string
 
-	// if this query is a shortcut expand query, this property will be origin query before expand
-	//
-	// NOTE: Only available when query type is QueryTypeInput
-	ShortcutFrom string
-
 	// User selected or drag-drop data, can be text or file or image etc
 	//
 	// NOTE: Only available when query type is QueryTypeSelection
 	Selection util.Selection
+}
+
+func (q *Query) String() string {
+	if q.Type == QueryTypeInput {
+		return q.RawQuery
+	}
+	if q.Type == QueryTypeSelection {
+		return q.Selection.String()
+	}
+	return ""
 }
 
 // Query result return from plugin
@@ -100,16 +105,15 @@ type ActionContext struct {
 	ContextData string
 }
 
-func (q *QueryResult) ToUI(associatedQuery string) QueryResultUI {
+func (q *QueryResult) ToUI() QueryResultUI {
 	return QueryResultUI{
-		Id:              q.Id,
-		Title:           q.Title,
-		SubTitle:        q.SubTitle,
-		Icon:            q.Icon,
-		Preview:         q.Preview,
-		Score:           q.Score,
-		AssociatedQuery: associatedQuery,
-		ContextData:     q.ContextData,
+		Id:          q.Id,
+		Title:       q.Title,
+		SubTitle:    q.SubTitle,
+		Icon:        q.Icon,
+		Preview:     q.Preview,
+		Score:       q.Score,
+		ContextData: q.ContextData,
 		Actions: lo.Map(q.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
 			return QueryResultActionUI{
 				Id:                     action.Id,
@@ -124,6 +128,7 @@ func (q *QueryResult) ToUI(associatedQuery string) QueryResultUI {
 }
 
 type QueryResultUI struct {
+	QueryId         string
 	Id              string
 	Title           string
 	SubTitle        string
@@ -131,7 +136,6 @@ type QueryResultUI struct {
 	Preview         WoxPreview
 	Score           int
 	ContextData     string
-	AssociatedQuery string
 	Actions         []QueryResultActionUI
 	RefreshInterval int
 }
@@ -156,15 +160,7 @@ type QueryResultCache struct {
 	Actions        *util.HashMap[string, func(actionContext ActionContext)]
 }
 
-func newQueryWithPlugins(query string, queryType QueryType, pluginInstances []*Instance) Query {
-	if queryType == QueryTypeSelection {
-		return Query{
-			Type:     QueryTypeSelection,
-			RawQuery: query,
-			Search:   query,
-		}
-	}
-
+func newQueryInputWithPlugins(query string, pluginInstances []*Instance) Query {
 	var terms = strings.Split(query, " ")
 	if len(terms) == 0 {
 		return Query{

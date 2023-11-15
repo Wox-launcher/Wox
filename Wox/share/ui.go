@@ -5,14 +5,14 @@ import (
 	"wox/util"
 )
 
-type ChangeQueryParam struct {
+type ChangedQuery struct {
 	QueryType      string
 	QueryText      string
 	QuerySelection util.Selection
 }
 
 type UI interface {
-	ChangeQuery(ctx context.Context, query ChangeQueryParam)
+	ChangeQuery(ctx context.Context, query ChangedQuery)
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context, showContext ShowContext)
 	ToggleApp(ctx context.Context)

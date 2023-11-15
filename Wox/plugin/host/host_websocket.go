@@ -196,7 +196,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, data string
 				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] ChangeQuery method must have a queryText parameter", request.PluginName))
 				return
 			}
-			pluginInstance.API.ChangeQuery(ctx, share.ChangeQueryParam{
+			pluginInstance.API.ChangeQuery(ctx, share.ChangedQuery{
 				QueryType: plugin.QueryTypeInput,
 				QueryText: queryText,
 			})
@@ -215,7 +215,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, data string
 				return
 			}
 
-			pluginInstance.API.ChangeQuery(ctx, share.ChangeQueryParam{
+			pluginInstance.API.ChangeQuery(ctx, share.ChangedQuery{
 				QueryType:      plugin.QueryTypeSelection,
 				QuerySelection: selection,
 			})

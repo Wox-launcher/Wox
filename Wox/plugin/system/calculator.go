@@ -136,7 +136,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 						{
 							Name: "Recalculate",
 							Action: func(actionContext plugin.ActionContext) {
-								c.api.ChangeQuery(ctx, share.ChangeQueryParam{
+								c.api.ChangeQuery(ctx, share.ChangedQuery{
 									QueryType: plugin.QueryTypeInput,
 									QueryText: h.Expression,
 								})

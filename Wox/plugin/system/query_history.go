@@ -65,7 +65,7 @@ func (i *QueryHistoryPlugin) Query(ctx context.Context, query plugin.Query) (res
 						Name:                   "Use",
 						PreventHideAfterAction: true,
 						Action: func(actionContext plugin.ActionContext) {
-							i.api.ChangeQuery(ctx, share.ChangeQueryParam{
+							i.api.ChangeQuery(ctx, share.ChangedQuery{
 								QueryType: plugin.QueryTypeInput,
 								QueryText: history.Query,
 							})

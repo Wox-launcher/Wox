@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
 	"time"
 	"wox/i18n"
@@ -18,7 +19,7 @@ import (
 type uiImpl struct {
 }
 
-func (u *uiImpl) ChangeQuery(ctx context.Context, query share.ChangeQueryParam) {
+func (u *uiImpl) ChangeQuery(ctx context.Context, query share.ChangedQuery) {
 	u.send(ctx, "ChangeQuery", query)
 }
 
@@ -92,39 +93,84 @@ func onUIRequest(ctx context.Context, request WebsocketMsg) {
 }
 
 func handleQuery(ctx context.Context, request WebsocketMsg) {
-	query, queryErr := getWebsocketMsgParameter(ctx, request, "query")
-	if queryErr != nil {
-		logger.Error(ctx, queryErr.Error())
-		responseUIError(ctx, request, queryErr.Error())
+	queryId, queryIdErr := getWebsocketMsgParameter(ctx, request, "queryId")
+	if queryIdErr != nil {
+		logger.Error(ctx, queryIdErr.Error())
+		responseUIError(ctx, request, queryIdErr.Error())
 		return
 	}
-	queryType, queryTypeErr := getWebsocketMsgParameter(ctx, request, "type")
+	queryType, queryTypeErr := getWebsocketMsgParameter(ctx, request, "queryType")
 	if queryTypeErr != nil {
 		logger.Error(ctx, queryTypeErr.Error())
 		responseUIError(ctx, request, queryTypeErr.Error())
 		return
 	}
+	queryText, queryTextErr := getWebsocketMsgParameter(ctx, request, "queryText")
+	if queryTextErr != nil {
+		logger.Error(ctx, queryTextErr.Error())
+		responseUIError(ctx, request, queryTextErr.Error())
+		return
+	}
+	querySelectionJson, querySelectionErr := getWebsocketMsgParameter(ctx, request, "querySelection")
+	if querySelectionErr != nil {
+		logger.Error(ctx, querySelectionErr.Error())
+		responseUIError(ctx, request, querySelectionErr.Error())
+		return
+	}
+	var querySelection util.Selection
+	json.Unmarshal([]byte(querySelectionJson), &querySelection)
 
-	if query == "" {
+	var changedQuery share.ChangedQuery
+	if queryType == plugin.QueryTypeInput {
+		changedQuery = share.ChangedQuery{
+			QueryType: plugin.QueryTypeInput,
+			QueryText: queryText,
+		}
+	} else if queryType == plugin.QueryTypeSelection {
+		changedQuery = share.ChangedQuery{
+			QueryType:      plugin.QueryTypeSelection,
+			QuerySelection: querySelection,
+		}
+	} else {
+		logger.Error(ctx, fmt.Sprintf("unsupported query type: %s", queryType))
+		responseUIError(ctx, request, fmt.Sprintf("unsupported query type: %s", queryType))
+		return
+	}
+
+	if changedQuery.QueryType == plugin.QueryTypeInput && changedQuery.QueryText == "" {
 		responseUISuccessWithData(ctx, request, []string{})
+		return
+	}
+	if changedQuery.QueryType == plugin.QueryTypeSelection && changedQuery.QuerySelection.String() == "" {
+		responseUISuccessWithData(ctx, request, []string{})
+		return
+	}
+
+	query, queryErr := plugin.GetPluginManager().NewQuery(ctx, changedQuery)
+	if queryErr != nil {
+		logger.Error(ctx, queryErr.Error())
+		responseUIError(ctx, request, queryErr.Error())
 		return
 	}
 
 	var totalResultCount int
 	var startTimestamp = util.GetSystemTimestamp()
 	var resultDebouncer = util.NewDebouncer(30, func(results []plugin.QueryResultUI, reason string) {
-		logger.Info(ctx, fmt.Sprintf("query: %s, result flushed (reason: %s), total results: %d", query, reason, totalResultCount))
+		logger.Info(ctx, fmt.Sprintf("query %s: %s, result flushed (reason: %s), total results: %d", query.Type, query.String(), reason, totalResultCount))
 		responseUISuccessWithData(ctx, request, results)
 	})
 	resultDebouncer.Start(ctx)
-	logger.Info(ctx, fmt.Sprintf("query: %s, result flushed (new start)", query))
-	resultChan, doneChan := plugin.GetPluginManager().Query(ctx, plugin.GetPluginManager().NewQuery(ctx, query, queryType))
+	logger.Info(ctx, fmt.Sprintf("query %s: %s, result flushed (new start)", query.Type, query.String()))
+	resultChan, doneChan := plugin.GetPluginManager().Query(ctx, query)
 	for {
 		select {
 		case results := <-resultChan:
 			if len(results) == 0 {
 				continue
 			}
+			lo.ForEach(results, func(_ plugin.QueryResultUI, index int) {
+				results[index].QueryId = queryId
+			})
 			totalResultCount += len(results)
 			resultDebouncer.Add(ctx, results)
 			//responseUISuccessWithData(ctx, request, results)
@@ -284,7 +330,7 @@ func onAppShow(ctx context.Context) {
 func onAppHide(ctx context.Context, query string) {
 	setting.GetSettingManager().AddQueryHistory(ctx, query)
 	if setting.GetSettingManager().GetWoxSetting(ctx).LastQueryMode == setting.LastQueryModeEmpty {
-		GetUIManager().GetUI(ctx).ChangeQuery(ctx, share.ChangeQueryParam{
+		GetUIManager().GetUI(ctx).ChangeQuery(ctx, share.ChangedQuery{
 			QueryType: plugin.QueryTypeInput,
 			QueryText: "",
 		})

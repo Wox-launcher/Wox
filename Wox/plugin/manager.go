@@ -295,6 +295,9 @@ func (m *Manager) isQueryMatchPlugin(ctx context.Context, pluginInstance *Instan
 	if !validGlobalQuery && !validNonGlobalQuery {
 		return false
 	}
+	if query.Type == QueryTypeSelection && !pluginInstance.Metadata.IsSupportFeature(MetadataFeatureQuerySelection) {
+		return false
+	}
 
 	return true
 }
@@ -462,15 +465,6 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 
 	for _, instance := range m.instances {
 		pluginInstance := instance
-
-		if !m.isQueryMatchPlugin(ctx, pluginInstance, query) {
-			counter.Add(-1)
-			if counter.Load() == 0 {
-				done <- true
-			}
-			continue
-		}
-
 		if pluginInstance.Metadata.IsSupportFeature(MetadataFeatureDebounce) {
 			debounceParams, err := pluginInstance.Metadata.GetFeatureParamsForDebounce()
 			if err == nil {
@@ -509,13 +503,17 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 
 func (m *Manager) queryParallel(ctx context.Context, pluginInstance *Instance, query Query, results chan []QueryResultUI, done chan bool, counter *atomic.Int32) {
 	util.Go(ctx, fmt.Sprintf("[%s] parallel query", pluginInstance.Metadata.Name), func() {
+		if !m.isQueryMatchPlugin(ctx, pluginInstance, query) {
+			counter.Add(-1)
+			if counter.Load() == 0 {
+				done <- true
+			}
+			return
+		}
+
 		queryResults := m.queryForPlugin(ctx, pluginInstance, query)
 		results <- lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
-			rawQuery := query.RawQuery
-			if query.ShortcutFrom != "" {
-				rawQuery = query.ShortcutFrom
-			}
-			return item.ToUI(rawQuery)
+			return item.ToUI()
 		})
 		counter.Add(-1)
 		if counter.Load() == 0 {
@@ -545,20 +543,29 @@ func (m *Manager) GetUI() share.UI {
 	return m.ui
 }
 
-func (m *Manager) NewQuery(ctx context.Context, query string, queryType QueryType) Query {
-	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if len(woxSetting.QueryShortcuts) > 0 {
-		originQuery := query
-		query = m.expandQueryShortcut(ctx, query, woxSetting.QueryShortcuts)
-		if originQuery != query {
-			logger.Info(ctx, fmt.Sprintf("expand query shortcut: %s -> %s", originQuery, query))
+func (m *Manager) NewQuery(ctx context.Context, changedQuery share.ChangedQuery) (Query, error) {
+	if changedQuery.QueryType == QueryTypeInput {
+		newQuery := changedQuery.QueryText
+		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+		if len(woxSetting.QueryShortcuts) > 0 {
+			originQuery := changedQuery.QueryText
+			expandedQuery := m.expandQueryShortcut(ctx, changedQuery.QueryText, woxSetting.QueryShortcuts)
+			if originQuery != expandedQuery {
+				logger.Info(ctx, fmt.Sprintf("expand query shortcut: %s -> %s", originQuery, changedQuery))
+				newQuery = expandedQuery
+			}
 		}
-		q := newQueryWithPlugins(query, queryType, GetPluginManager().GetPluginInstances())
-		q.ShortcutFrom = originQuery
-		return q
+		return newQueryInputWithPlugins(newQuery, GetPluginManager().GetPluginInstances()), nil
 	}
 
-	return newQueryWithPlugins(query, queryType, GetPluginManager().GetPluginInstances())
+	if changedQuery.QueryType == QueryTypeSelection {
+		return Query{
+			Type:      QueryTypeSelection,
+			Selection: changedQuery.QuerySelection,
+		}, nil
+	}
+
+	return Query{}, errors.New("invalid query type")
 }
 
 func (m *Manager) expandQueryShortcut(ctx context.Context, query string, queryShorts []setting.QueryShortcut) (newQuery string) {

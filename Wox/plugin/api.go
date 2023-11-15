@@ -10,7 +10,7 @@ import (
 )
 
 type API interface {
-	ChangeQuery(ctx context.Context, query share.ChangeQueryParam)
+	ChangeQuery(ctx context.Context, query share.ChangedQuery)
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context)
 	ShowMsg(ctx context.Context, title string, description string, icon string)
@@ -28,7 +28,7 @@ type APIImpl struct {
 	settingChangeCallbacks []func(key string, value string)
 }
 
-func (a *APIImpl) ChangeQuery(ctx context.Context, query share.ChangeQueryParam) {
+func (a *APIImpl) ChangeQuery(ctx context.Context, query share.ChangedQuery) {
 	GetPluginManager().GetUI().ChangeQuery(ctx, query)
 }
 

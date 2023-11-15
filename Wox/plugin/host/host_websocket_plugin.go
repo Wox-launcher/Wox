@@ -39,7 +39,6 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 		"TriggerKeyword": query.TriggerKeyword,
 		"Command":        query.Command,
 		"Search":         query.Search,
-		"ShortcutFrom":   query.ShortcutFrom,
 		"Selection":      string(selectionJson),
 	})
 	if queryErr != nil {

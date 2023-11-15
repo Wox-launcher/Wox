@@ -68,13 +68,17 @@ func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) err
 
 func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string) error {
 	return m.selectionHotkey.Register(ctx, combineKey, func() {
-		_, err := util.GetSelected()
+		selection, err := util.GetSelected()
 		if err != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to get selected: %s", err.Error()))
 			return
 		}
 
-		//m.ui.ToggleApp(ctx)
+		m.ui.ChangeQuery(ctx, share.ChangedQuery{
+			QueryType:      plugin.QueryTypeSelection,
+			QuerySelection: selection,
+		})
+		m.ui.ToggleApp(ctx)
 	})
 }
 
@@ -82,7 +86,7 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 	hotkey := &util.Hotkey{}
 	err := hotkey.Register(ctx, queryHotkey.Hotkey, func() {
 		query := plugin.GetPluginManager().ReplaceQueryVariable(ctx, queryHotkey.Query)
-		m.ui.ChangeQuery(ctx, share.ChangeQueryParam{
+		m.ui.ChangeQuery(ctx, share.ChangedQuery{
 			QueryType: plugin.QueryTypeInput,
 			QueryText: query,
 		})

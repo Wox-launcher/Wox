@@ -35,12 +35,12 @@ declare namespace WOXMESSAGE {
   }
 
   export interface WoxMessageResponseResult {
+    QueryId: string
     Id: string
     Title: string
     SubTitle: string
     Icon: WoxImage
     Score: number
-    AssociatedQuery: string
     Index?: number
     Preview: WoxPreview
     ContextData: string
@@ -74,7 +74,7 @@ declare namespace WOXMESSAGE {
     FilePaths: string[]
   }
 
-  export interface ChangeQueryParam {
+  export interface ChangedQuery {
     QueryType: WoxQueryType
     QueryText: string
     QuerySelection: Selection
