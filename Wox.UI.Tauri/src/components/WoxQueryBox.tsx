@@ -3,9 +3,11 @@ import styled from "styled-components"
 import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
 import { Theme } from "../entity/Theme.typings"
 import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
+import { WOXMESSAGE } from "../entity/WoxMessage.typings"
+import { WoxQueryTypeEnum } from "../enums/WoxQueryTypeEnum.ts"
 
 export type WoxQueryBoxRefHandler = {
-  changeQuery: (query: string) => void
+  changeQuery: (changedQuery: WOXMESSAGE.ChangedQuery) => void
   selectAll: () => void
   focus: () => void
   getQuery: () => string
@@ -13,7 +15,7 @@ export type WoxQueryBoxRefHandler = {
 
 export type WoxQueryBoxProps = {
   defaultValue?: string
-  onQueryChange: (query: string) => void
+  onQueryChange: (changedQuery: WOXMESSAGE.ChangedQuery) => void
   onFocus?: () => void
   onClick?: () => void
 }
@@ -26,10 +28,15 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
   }
 
   useImperativeHandle(ref, () => ({
-    changeQuery: (query: string) => {
+    changeQuery: (changedQuery: WOXMESSAGE.ChangedQuery) => {
       if (queryBoxRef.current) {
-        queryBoxRef.current!.value = query
-        _props.onQueryChange(query)
+        if (changedQuery.QueryType === WoxQueryTypeEnum.WoxQueryTypeInput.code) {
+          queryBoxRef.current!.value = changedQuery.QueryText
+        }
+        if (changedQuery.QueryType === WoxQueryTypeEnum.WoxQueryTypeSelection.code) {
+          queryBoxRef.current!.value = ""
+        }
+        _props.onQueryChange(changedQuery)
       }
     },
     selectAll: () => {
@@ -61,7 +68,10 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
              _props.onClick?.()
            }}
            onChange={(e) => {
-             _props.onQueryChange(e.target.value)
+             _props.onQueryChange({
+               QueryText: e.target.value,
+               QueryType: WoxQueryTypeEnum.WoxQueryTypeInput.code
+             } as WOXMESSAGE.ChangedQuery)
            }}
 
     />

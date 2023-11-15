@@ -20,21 +20,24 @@ export default () => {
   const requestTimeoutId = useRef<number>()
   const refreshTotalCount = useRef<number>(0)
   const hasLatestQueryResult = useRef<boolean>(true)
-  const currentQuery = useRef<string>()
+  const currentQueryId = useRef<string>()
   const fullResultList = useRef<WOXMESSAGE.WoxMessageResponseResult[]>([])
 
-  /*
-    Deal with query change event
+  /**
+   * Deal with user input change
+   * @param query
    */
-  const onQueryChange = (query: string) => {
+  const onQueryChange = (query: WOXMESSAGE.ChangedQuery) => {
     woxQueryResultRef.current?.hideActionList()
-    currentQuery.current = query
+    currentQueryId.current = crypto.randomUUID()
     fullResultList.current = []
     clearTimeout(requestTimeoutId.current)
     hasLatestQueryResult.current = false
     WoxMessageHelper.getInstance().sendQueryMessage({
-      query: query,
-      type: "text"
+      queryId: currentQueryId.current,
+      queryType: query.QueryType,
+      queryText: query.QueryText || "",
+      querySelection: JSON.stringify(query.QuerySelection || {})
     }, handleQueryCallback)
     requestTimeoutId.current = setTimeout(() => {
       if (!hasLatestQueryResult.current) {
@@ -93,10 +96,10 @@ export default () => {
   const handleQueryCallback = (results: WOXMESSAGE.WoxMessageResponseResult[]) => {
     console.log(results)
     fullResultList.current = fullResultList.current.concat(results).filter((result) => {
-      if (result.AssociatedQuery === currentQuery.current) {
+      if (result.QueryId === currentQueryId.current) {
         hasLatestQueryResult.current = true
       }
-      return result.AssociatedQuery === currentQuery.current
+      return result.QueryId === currentQueryId.current
     })
 
     //sort fullResultList order by score desc
@@ -118,7 +121,7 @@ export default () => {
    */
   const handleRequestCallback = async (message: WOXMESSAGE.WoxMessage) => {
     if (message.Method === WoxMessageRequestMethodEnum.ChangeQuery.code) {
-      await changeQuery(message.Data as string)
+      await changeQuery(message.Data as WOXMESSAGE.ChangedQuery)
     }
     if (message.Method === WoxMessageRequestMethodEnum.HideApp.code) {
       await hideWoxWindow()
@@ -135,14 +138,14 @@ export default () => {
     await WoxTauriHelper.getInstance().hideWindow()
     await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.VISIBILITY_CHANGED.code, {
       "isVisible": "false",
-      "query": currentQuery.current || ""
+      "query": currentQueryId.current || ""
     })
   }
 
   /*
     Change query text
    */
-  const changeQuery = async (query: string) => {
+  const changeQuery = async (query: WOXMESSAGE.ChangedQuery) => {
     woxQueryBoxRef.current?.changeQuery(query)
   }
 

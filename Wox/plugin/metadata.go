@@ -11,11 +11,8 @@ import (
 type MetadataFeatureName = string
 
 const (
-	// enable query file feature
-	// user may drag multiple files into Wox, and Wox will pass these files to plugin
-	// plugin need to handle Query.Type == "file" in query
-	// params see MetadataFeatureParamsQueryFile
-	MetadataFeatureNameQueryFile MetadataFeatureName = "queryFile"
+	// enable this to handle QueryTypeSelection, by default Wox will only pass QueryTypeInput to plugin
+	MetadataFeatureQuerySelection MetadataFeatureName = "querySelection"
 
 	// enable this feature to let Wox debounce queries between user input
 	// params see MetadataFeatureParamsDebounce
@@ -23,7 +20,7 @@ const (
 
 	// enable this feature to let Wox don't auto score results
 	// by default, Wox will auto score results by the frequency of their actioned times
-	MetadataFeatureNameIgnoreAutoScore MetadataFeatureName = "ignoreAutoScore"
+	MetadataFeatureIgnoreAutoScore MetadataFeatureName = "ignoreAutoScore"
 )
 
 // Metadata parsed from plugin.json, see `Plugin.json.md` for more detail
@@ -53,22 +50,6 @@ func (m *Metadata) IsSupportFeature(f MetadataFeatureName) bool {
 		}
 	}
 	return false
-}
-
-func (m *Metadata) GetFeatureParamsForQueryFile() (MetadataFeatureParamsQueryFile, error) {
-	for _, feature := range m.Features {
-		if strings.ToLower(feature.Name) == strings.ToLower(MetadataFeatureNameQueryFile) {
-			if v, ok := feature.Params["extensions"]; !ok {
-				return MetadataFeatureParamsQueryFile{}, errors.New("queryFile feature does not have extensions param")
-			} else {
-				return MetadataFeatureParamsQueryFile{
-					FileExtensions: strings.Split(v, ","),
-				}, nil
-			}
-		}
-	}
-
-	return MetadataFeatureParamsQueryFile{}, errors.New("plugin does not support queryFile feature")
 }
 
 func (m *Metadata) GetFeatureParamsForDebounce() (MetadataFeatureParamsDebounce, error) {
@@ -105,10 +86,6 @@ type MetadataCommand struct {
 type MetadataWithDirectory struct {
 	Metadata  Metadata
 	Directory string
-}
-
-type MetadataFeatureParamsQueryFile struct {
-	FileExtensions []string
 }
 
 type MetadataFeatureParamsDebounce struct {

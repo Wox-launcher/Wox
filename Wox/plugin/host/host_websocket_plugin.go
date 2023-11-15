@@ -27,11 +27,19 @@ func (w *WebsocketPlugin) Init(ctx context.Context, initParams plugin.InitParams
 }
 
 func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	selectionJson, marshalErr := json.Marshal(query.Selection)
+	if marshalErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query selection: %s", w.metadata.Name, marshalErr.Error()))
+		return []plugin.QueryResult{}
+	}
+
 	rawResults, queryErr := w.websocketHost.invokeMethod(ctx, w.metadata, "query", map[string]string{
+		"Type":           query.Type,
 		"RawQuery":       query.RawQuery,
 		"TriggerKeyword": query.TriggerKeyword,
 		"Command":        query.Command,
 		"Search":         query.Search,
+		"Selection":      string(selectionJson),
 	})
 	if queryErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] query failed: %s", w.metadata.Name, queryErr.Error()))

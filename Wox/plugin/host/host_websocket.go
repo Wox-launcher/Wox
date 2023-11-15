@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 	"wox/plugin"
+	"wox/share"
 	"wox/util"
 )
 
@@ -183,12 +184,43 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, data string
 		pluginInstance.API.ShowApp(ctx)
 		w.sendResponse(ctx, request, "")
 	case "ChangeQuery":
-		query, exist := request.Params["query"]
+		queryType, exist := request.Params["queryType"]
 		if !exist {
-			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] ChangeQuery method must have a query parameter", request.PluginName))
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] ChangeQuery method must have a queryType parameter", request.PluginName))
 			return
 		}
-		pluginInstance.API.ChangeQuery(ctx, query)
+
+		if queryType == plugin.QueryTypeInput {
+			queryText, queryTextExist := request.Params["queryText"]
+			if !queryTextExist {
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] ChangeQuery method must have a queryText parameter", request.PluginName))
+				return
+			}
+			pluginInstance.API.ChangeQuery(ctx, share.ChangedQuery{
+				QueryType: plugin.QueryTypeInput,
+				QueryText: queryText,
+			})
+		}
+		if queryType == plugin.QueryTypeSelection {
+			querySelection, querySelectionExist := request.Params["querySelection"]
+			if !querySelectionExist {
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] ChangeQuery method must have a querySelection parameter", request.PluginName))
+				return
+			}
+
+			var selection util.Selection
+			unmarshalSelectionErr := json.Unmarshal([]byte(querySelection), &selection)
+			if unmarshalSelectionErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal selection: %s", request.PluginName, unmarshalSelectionErr))
+				return
+			}
+
+			pluginInstance.API.ChangeQuery(ctx, share.ChangedQuery{
+				QueryType:      plugin.QueryTypeSelection,
+				QuerySelection: selection,
+			})
+		}
+
 		w.sendResponse(ctx, request, "")
 	case "ShowMsg":
 		title, exist := request.Params["title"]

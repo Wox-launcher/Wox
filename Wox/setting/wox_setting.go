@@ -12,6 +12,7 @@ import (
 
 type WoxSetting struct {
 	MainHotkey           PlatformSettingValue[string]
+	SelectionHotkey      PlatformSettingValue[string]
 	UsePinYin            bool
 	SwitchInputMethodABC bool
 	HideOnStart          bool
@@ -64,6 +65,11 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 			WinValue:   "alt+space",
 			MacValue:   "command+space",
 			LinuxValue: "alt+space",
+		},
+		SelectionHotkey: PlatformSettingValue[string]{
+			WinValue:   "win+alt+space",
+			MacValue:   "command+option+space",
+			LinuxValue: "win+alt+space",
 		},
 		UsePinYin:            usePinYin,
 		SwitchInputMethodABC: switchInputMethodABC,

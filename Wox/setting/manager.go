@@ -77,6 +77,9 @@ func (m *Manager) loadWoxSetting(ctx context.Context) error {
 	if woxSetting.MainHotkey.Get() == "" {
 		woxSetting.MainHotkey.Set(defaultWoxSetting.MainHotkey.Get())
 	}
+	if woxSetting.SelectionHotkey.Get() == "" {
+		woxSetting.SelectionHotkey.Set(defaultWoxSetting.SelectionHotkey.Get())
+	}
 	if woxSetting.LangCode == "" {
 		woxSetting.LangCode = defaultWoxSetting.LangCode
 	}
@@ -190,6 +193,9 @@ func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, defaul
 	decodeErr := json.Unmarshal(fileContent, pluginSetting)
 	if decodeErr != nil {
 		return &PluginSetting{}, decodeErr
+	}
+	if pluginSetting.CustomizedSettings == nil {
+		pluginSetting.CustomizedSettings = defaultSettings.GetAll()
 	}
 
 	return pluginSetting, nil

@@ -10,8 +10,8 @@ type QueryType = string
 type QueryVariable = string
 
 const (
-	QueryTypeText QueryType = "text"
-	QueryTypeFile QueryType = "file"
+	QueryTypeInput     QueryType = "input"     // user input query
+	QueryTypeSelection QueryType = "selection" // user selection query
 )
 
 const (
@@ -20,29 +20,48 @@ const (
 
 // Query from Wox. See "Doc/Query.md" for details.
 type Query struct {
-	// Query type, can be "text" or "file"
-	// if query type is "file", search property will be a absolute file path(split by , if have multiple files).
-	// note: you need to add features "queryFile" in plugin.json to support query type of file
+	// By default, Wox will only pass QueryTypeInput query to plugin.
+	// plugin author need to enable MetadataFeatureQuerySelection feature to handle QueryTypeSelection query
 	Type QueryType
 
 	// Raw query, this includes trigger keyword if it has.
 	// We didn't recommend use this property directly. You should always use Search property.
+	//
+	// NOTE: Only available when query type is QueryTypeInput
 	RawQuery string
 
 	// Trigger keyword of a query. It can be empty if user is using global trigger keyword.
 	// Empty trigger keyword means this query will be a global query.
+	//
+	// NOTE: Only available when query type is QueryTypeInput
 	TriggerKeyword string
 
 	// Command part of a query.
 	// Empty command means this query doesn't have a command.
+	//
+	// NOTE: Only available when query type is QueryTypeInput
 	Command string
 
 	// Search part of a query.
 	// Empty search means this query doesn't have a search part.
+	//
+	// NOTE: Only available when query type is QueryTypeInput
 	Search string
 
-	// if this query is a shortcut expand query, this property will be query before expand
-	ShortcutFrom string
+	// User selected or drag-drop data, can be text or file or image etc
+	//
+	// NOTE: Only available when query type is QueryTypeSelection
+	Selection util.Selection
+}
+
+func (q *Query) String() string {
+	if q.Type == QueryTypeInput {
+		return q.RawQuery
+	}
+	if q.Type == QueryTypeSelection {
+		return q.Selection.String()
+	}
+	return ""
 }
 
 // Query result return from plugin
@@ -86,16 +105,15 @@ type ActionContext struct {
 	ContextData string
 }
 
-func (q *QueryResult) ToUI(associatedQuery string) QueryResultUI {
+func (q *QueryResult) ToUI() QueryResultUI {
 	return QueryResultUI{
-		Id:              q.Id,
-		Title:           q.Title,
-		SubTitle:        q.SubTitle,
-		Icon:            q.Icon,
-		Preview:         q.Preview,
-		Score:           q.Score,
-		AssociatedQuery: associatedQuery,
-		ContextData:     q.ContextData,
+		Id:          q.Id,
+		Title:       q.Title,
+		SubTitle:    q.SubTitle,
+		Icon:        q.Icon,
+		Preview:     q.Preview,
+		Score:       q.Score,
+		ContextData: q.ContextData,
 		Actions: lo.Map(q.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
 			return QueryResultActionUI{
 				Id:                     action.Id,
@@ -110,6 +128,7 @@ func (q *QueryResult) ToUI(associatedQuery string) QueryResultUI {
 }
 
 type QueryResultUI struct {
+	QueryId         string
 	Id              string
 	Title           string
 	SubTitle        string
@@ -117,7 +136,6 @@ type QueryResultUI struct {
 	Preview         WoxPreview
 	Score           int
 	ContextData     string
-	AssociatedQuery string
 	Actions         []QueryResultActionUI
 	RefreshInterval int
 }
@@ -142,19 +160,11 @@ type QueryResultCache struct {
 	Actions        *util.HashMap[string, func(actionContext ActionContext)]
 }
 
-func newQueryWithPlugins(query string, queryType QueryType, pluginInstances []*Instance) Query {
-	if queryType == QueryTypeFile {
-		return Query{
-			Type:     QueryTypeFile,
-			RawQuery: query,
-			Search:   query,
-		}
-	}
-
+func newQueryInputWithPlugins(query string, pluginInstances []*Instance) Query {
 	var terms = strings.Split(query, " ")
 	if len(terms) == 0 {
 		return Query{
-			Type:     QueryTypeText,
+			Type:     QueryTypeInput,
 			RawQuery: query,
 		}
 	}
@@ -203,7 +213,7 @@ func newQueryWithPlugins(query string, queryType QueryType, pluginInstances []*I
 	}
 
 	return Query{
-		Type:           QueryTypeText,
+		Type:           QueryTypeInput,
 		RawQuery:       query,
 		TriggerKeyword: triggerKeyword,
 		Command:        command,

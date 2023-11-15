@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"wox/plugin"
+	"wox/share"
 	"wox/util"
 	"wox/util/clipboard"
 )
@@ -135,7 +136,10 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 						{
 							Name: "Recalculate",
 							Action: func(actionContext plugin.ActionContext) {
-								c.api.ChangeQuery(ctx, h.Expression)
+								c.api.ChangeQuery(ctx, share.ChangedQuery{
+									QueryType: plugin.QueryTypeInput,
+									QueryText: h.Expression,
+								})
 							},
 						},
 					},
