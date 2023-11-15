@@ -193,7 +193,7 @@ export default () => {
     })
     //TODO: for test: 'show setting page'
     Mousetrap.bind("command+t", (event) => {
-      WoxTauriHelper.getInstance().openWindow("Wox Setting", "setting.html")
+      WoxTauriHelper.getInstance().openWindow("Wox Setting", "/setting", "WoxSetting")
       event.preventDefault()
       event.stopPropagation()
     })
