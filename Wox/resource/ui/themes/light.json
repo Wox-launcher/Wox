@@ -42,7 +42,5 @@
   "PreviewFontColor": "#454545",
   "PreviewSplitLineColor": "#caced0",
   "PreviewPropertyTitleColor": "#716b6b",
-  "PreviewPropertyContentColor": "#716b6b",
-  "SettingMenuBarBackgroundColor": "#0061d5",
-  "SettingContainerBackgroundColor": "#ecf0f0"
+  "PreviewPropertyContentColor": "#716b6b"
 }
