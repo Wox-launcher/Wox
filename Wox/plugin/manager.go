@@ -341,6 +341,27 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 
 	// convert icon
 	result.Icon = ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
+
+	// if query is input and trigger keyword is global, disable preview
+	if query.IsGlobalQuery() {
+		result.Preview = WoxPreview{}
+	}
+	// if query is selection, replace preview with selection
+	if query.Type == QueryTypeSelection {
+		if query.Selection.Type == util.SelectionTypeText {
+			result.Preview = WoxPreview{
+				PreviewType: WoxPreviewTypeText,
+				PreviewData: query.Selection.Text,
+			}
+		}
+		if query.Selection.Type == util.SelectionTypeFile {
+			result.Preview = WoxPreview{
+				PreviewType: WoxPreviewTypeMarkdown,
+				PreviewData: strings.Join(query.Selection.FilePaths, "\n"),
+			}
+		}
+	}
+
 	// translate title
 	result.Title = m.translatePlugin(ctx, pluginInstance, result.Title)
 	// translate subtitle
@@ -380,11 +401,6 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			result.RefreshInterval = newInterval
 		}
 		resultCache.Refresh = result.OnRefresh
-	}
-
-	// if trigger keyword is global, disable preview
-	if query.TriggerKeyword == "" {
-		result.Preview = WoxPreview{}
 	}
 
 	ignoreAutoScore := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureIgnoreAutoScore)

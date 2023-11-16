@@ -31,7 +31,7 @@ type Query struct {
 	RawQuery string
 
 	// Trigger keyword of a query. It can be empty if user is using global trigger keyword.
-	// Empty trigger keyword means this query will be a global query.
+	// Empty trigger keyword means this query will be a global query, see IsGlobalQuery.
 	//
 	// NOTE: Only available when query type is QueryTypeInput
 	TriggerKeyword string
@@ -52,6 +52,10 @@ type Query struct {
 	//
 	// NOTE: Only available when query type is QueryTypeSelection
 	Selection util.Selection
+}
+
+func (q *Query) IsGlobalQuery() bool {
+	return q.Type == QueryTypeInput && q.TriggerKeyword == ""
 }
 
 func (q *Query) String() string {

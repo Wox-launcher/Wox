@@ -5,14 +5,14 @@ import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
 import { WoxMessageHelper } from "../utils/WoxMessageHelper.ts"
 import { WoxMessageMethodEnum } from "../enums/WoxMessageMethodEnum.ts"
 import { WoxMessageRequestMethod, WoxMessageRequestMethodEnum } from "../enums/WoxMessageRequestMethodEnum.ts"
-import { WoxPreviewTypeEnum } from "../enums/WoxPreviewTypeEnum.ts"
-import Markdown from "react-markdown"
+
 import { pinyin } from "pinyin-pro"
 import WoxImage from "./WoxImage.tsx"
 import { Theme } from "../entity/Theme.typings"
 import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
 import { WOX_QUERY_BOX_INPUT_HEIGHT, WOX_QUERY_RESULT_ITEM_HEIGHT, WOX_QUERY_RESULT_PREVIEW_HEIGHT } from "../utils/WoxConst.ts"
 import WoxScrollbar, { WoxScrollbarRefHandler } from "./WoxScrollbar.tsx"
+import WoxPreview from "./WoxPreview.tsx"
 
 export type WoxQueryResultRefHandler = {
   clearResultList: () => void
@@ -293,35 +293,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       </div>
     </WoxScrollbar>
 
-
-    {hasPreview && getCurrentPreviewData().PreviewType !== "" &&
-      <div
-        className={"wox-query-result-preview"}>
-        <WoxScrollbar scrollbarProps={{ autoHeight: true, autoHeightMin: 0, autoHeightMax: getResultSingleItemHeight() * 8 + 10 }}>
-          <div className={"wox-query-result-preview-content"}>
-            {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeText.code && <p>{getCurrentPreviewData().PreviewData}</p>}
-            {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code &&
-              <img src={getCurrentPreviewData().PreviewData} className={"wox-query-result-preview-image"} />}
-            {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeMarkdown.code &&
-              <Markdown>{getCurrentPreviewData().PreviewData}</Markdown>}
-            {getCurrentPreviewData().PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeUrl.code &&
-              <iframe src={getCurrentPreviewData().PreviewData} className={"wox-query-result-preview-url"}></iframe>}
-          </div>
-        </WoxScrollbar>
-
-        {Object.keys(getCurrentPreviewData().PreviewProperties)?.length > 0 &&
-          <div className={"wox-query-result-preview-properties"}>
-            {Object.keys(getCurrentPreviewData().PreviewProperties)?.map((key) => {
-              return <div key={`key-${key}`} className={"wox-query-result-preview-property"}>
-                <div
-                  className={"wox-query-result-preview-property-key"}>{key}</div>
-                <div
-                  className={"wox-query-result-preview-property-value"}>{getCurrentPreviewData().PreviewProperties[key]}</div>
-              </div>
-            })}
-          </div>
-        }
-      </div>}
+    {hasPreview && getCurrentPreviewData().PreviewType !== "" && <WoxPreview preview={getCurrentPreviewData()} resultSingleItemHeight={getResultSingleItemHeight()} />}
 
     {showActionList && <div className={"wox-query-result-action-list"} onClick={(event) => {
       event.preventDefault()
@@ -438,69 +410,6 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
 
     .wox-result-item.active .wox-result-subtitle {
       color: ${props => props.theme.ResultItemActiveSubTitleColor};
-    }
-  }
-
-
-  .wox-query-result-preview {
-    flex: 1;
-    position: relative;
-    box-sizing: border-box;
-    width: 50%;
-    display: inline-block;
-    border-left: 1px solid ${props => props.theme.PreviewSplitLineColor};
-    padding: 10px 0 10px 10px;
-    color: ${props => props.theme.PreviewFontColor};
-
-    .wox-query-result-preview-content {
-      overflow: hidden;
-      position: relative;
-
-      p {
-        word-wrap: break-word;
-      }
-
-      .wox-query-result-preview-image {
-        width: 100%;
-        max-height: 400px;
-      }
-
-      .wox-query-result-preview-url {
-        width: 100%;
-        height: 400px;
-      }
-    }
-
-    .wox-query-result-preview-properties {
-      position: absolute;
-      left: 0;
-      bottom: 0;
-      right: 0;
-      overflow: hidden;
-
-      .wox-query-result-preview-property {
-        display: flex;
-        justify-content: space-between;
-        width: 100%;
-        border-top: 1px solid ${props => props.theme.PreviewSplitLineColor};
-        padding: 2px 10px;
-        overflow: hidden;
-
-        .wox-query-result-preview-property-key {
-          font-weight: 500;
-          color: ${props => props.theme.PreviewPropertyTitleColor};
-        }
-
-        .wox-query-result-preview-property-value {
-          color: ${props => props.theme.PreviewPropertyContentColor};
-        }
-
-        .div {
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-      }
     }
   }
 
