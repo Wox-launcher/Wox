@@ -142,10 +142,27 @@ fn main() {
     #[cfg(target_os = "windows")]
     {
         use window_vibrancy::apply_blur;
+        use windows::Win32::{
+            Foundation::{BOOL, HWND},
+            Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED},
+        };
+        use std::ffi::c_void;
 
         tauri::Builder::default()
             .setup(|app| {
                 let window = app.get_window("main").unwrap();
+
+                // disable windows animation
+                if let Ok(hwnd) = window.hwnd() {
+                    unsafe {
+                        let _ = DwmSetWindowAttribute(
+                            HWND(hwnd.0 as isize),
+                            DWMWA_TRANSITIONS_FORCEDISABLED,
+                            &true as *const _ as *const c_void,
+                            std::mem::size_of::<BOOL>() as u32,
+                        );
+                    }
+                }
 
                 let windows_height = get_windows_height();
                 info!("set windows height: {}", windows_height);

@@ -154,3 +154,7 @@ func readFilePaths() ([]string, error) {
 func readImage() (image.Image, error) {
 	return nil, notImplement
 }
+
+func isClipboardChanged() bool {
+	return false
+}

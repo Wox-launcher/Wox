@@ -95,7 +95,7 @@ func main() {
 		}
 
 		t := util.Hotkey{}
-		t.Register(ctx, "command+m", func() {
+		t.Register(ctx, "alt+m", func() {
 			screen.GetMouseScreen()
 			//data, selectedErr := util.GetSelected()
 			//if selectedErr != nil {

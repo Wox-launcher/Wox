@@ -25,7 +25,6 @@ default:
     just _build_hosts
     just _build_ui {{target}}
 
-    # windows platform in hotkey doesn't need C
     if [ "{{target}}" = "windows" ]; then \
       cd Wox && CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-windows-amd64.exe && cd ..; \
       upx --brute Release/wox-windows-amd64.exe; \
@@ -84,10 +83,9 @@ default:
     just _build_python_host Wox/resource/hosts
 
 @_build_ui target:
-    # on windows, for poor VPS performance, we set the target-dir="c:/.cargobuild" to cache the rust build between github action builds
     cd Wox.UI.Tauri && pnpm install && pnpm release && cd ..
     if [ "{{target}}" = "windows" ]; then \
-      cp "c:/.cargobuild/release/wox.exe" Wox/resource/ui/wox.exe; \
+       cp Wox.UI.Tauri/src-tauri/target/release/wox.exe Wox/resource/ui/wox.exe; \
     elif [ "{{target}}" = "linux" ]; then \
       cp Wox.UI.Tauri/src-tauri/target/release/wox Wox/resource/ui/wox; \
       chmod +x Wox/resource/ui/wox; \
