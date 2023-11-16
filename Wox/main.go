@@ -12,6 +12,7 @@ import (
 	"wox/share"
 	"wox/ui"
 	"wox/util"
+	"wox/util/screen"
 )
 
 import _ "wox/plugin/host"   // import all hosts
@@ -95,12 +96,13 @@ func main() {
 
 		t := util.Hotkey{}
 		t.Register(ctx, "command+m", func() {
-			data, selectedErr := util.GetSelected()
-			if selectedErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("failed to get selected: %s", selectedErr.Error()))
-			} else {
-				util.GetLogger().Info(ctx, fmt.Sprintf("selected %s: %s", data.Type, data.String()))
-			}
+			screen.GetMouseScreen()
+			//data, selectedErr := util.GetSelected()
+			//if selectedErr != nil {
+			//	util.GetLogger().Error(ctx, fmt.Sprintf("failed to get selected: %s", selectedErr.Error()))
+			//} else {
+			//	util.GetLogger().Info(ctx, fmt.Sprintf("selected %s: %s", data.Type, data.String()))
+			//}
 		})
 
 		if util.IsProd() {

@@ -1,4 +1,4 @@
-package keybd_event
+package keyboard
 
 /*
  #cgo CFLAGS: -x objective-c

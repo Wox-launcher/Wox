@@ -14,6 +14,7 @@ import (
 	"wox/setting"
 	"wox/share"
 	"wox/util"
+	"wox/util/screen"
 )
 
 type uiImpl struct {
@@ -389,5 +390,9 @@ func getWebsocketMsgParameter(ctx context.Context, msg WebsocketMsg, key string)
 }
 
 func getWindowShowLocation() (int, int) {
-	return util.GetWindowShowLocation(800)
+	windowWidth := 800
+	size := screen.GetMouseScreen()
+	x := size.X + (size.Width-windowWidth)/2
+	y := size.Height / 5
+	return x, y
 }

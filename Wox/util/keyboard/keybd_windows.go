@@ -1,4 +1,4 @@
-package keybd_event
+package keyboard
 
 import (
 	"syscall"

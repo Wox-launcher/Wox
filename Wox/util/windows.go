@@ -3,25 +3,8 @@ package util
 import (
 	"fmt"
 	"github.com/go-vgo/robotgo"
-	"wox/util/keybd_event"
+	"wox/util/keyboard"
 )
-
-func GetWindowShowLocation(windowWidth int) (x, y int) {
-	var curDisplayX, curDisplayW, curDisplayH int
-
-	curX, curY := robotgo.Location()
-	for i := 0; i < robotgo.DisplaysNum(); i++ {
-		displayX, displayY, displayW, displayH := robotgo.GetDisplayBounds(i)
-		if curX >= displayX && curX <= displayX+displayW && curY >= displayY && curY <= displayY+displayH {
-			curDisplayX, curDisplayW, curDisplayH = displayX, displayW, displayH
-		}
-	}
-
-	x = curDisplayX + (curDisplayW-windowWidth)/2
-	y = curDisplayH / 5
-
-	return
-}
 
 func GetActiveWindowHash() string {
 	activePid := robotgo.GetPid()
@@ -30,12 +13,12 @@ func GetActiveWindowHash() string {
 }
 
 func SimulateCtrlC() error {
-	kb, err := keybd_event.NewKeyBonding()
+	kb, err := keyboard.NewKeyBonding()
 	if err != nil {
 		return err
 	}
 
-	kb.SetKeys(keybd_event.VK_C)
+	kb.SetKeys(keyboard.VK_C)
 	if IsWindows() || IsLinux() {
 		kb.HasCTRL(true)
 	}
@@ -51,12 +34,12 @@ func SimulateCtrlC() error {
 }
 
 func SimulateCtrlV() error {
-	kb, err := keybd_event.NewKeyBonding()
+	kb, err := keyboard.NewKeyBonding()
 	if err != nil {
 		return err
 	}
 
-	kb.SetKeys(keybd_event.VK_V)
+	kb.SetKeys(keyboard.VK_V)
 	if IsWindows() || IsLinux() {
 		kb.HasCTRL(true)
 	}
