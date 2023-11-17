@@ -17,3 +17,7 @@ func readImage() (image.Image, error) {
 func writeTextData(text string) error {
 	return notImplement
 }
+
+func isClipboardChanged() bool {
+	return false
+}
