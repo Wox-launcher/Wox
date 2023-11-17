@@ -39,6 +39,9 @@ jobs:
   build-windows:
     runs-on: [ self-hosted, Windows ]
     steps:
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
       - uses: actions/checkout@v3
       - name: Build
         run: just release windows
