@@ -84,7 +84,7 @@ default:
 
 @_build_ui:
     # react
-    cd Wox.UI.React && pnpm build && cd ..
+    cd Wox.UI.React && pnpm install && pnpm build && cd ..
 
 @_build_nodejs_host directory:
     cd Wox.Plugin.Host.Nodejs && pnpm install && pnpm run build && cd ..

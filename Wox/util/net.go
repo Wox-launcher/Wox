@@ -3,6 +3,7 @@ package util
 import (
 	"context"
 	"net"
+	"strconv"
 )
 
 func GetAvailableTcpPort(ctx context.Context) (port int, err error) {
@@ -15,4 +16,13 @@ func GetAvailableTcpPort(ctx context.Context) (port int, err error) {
 		}
 	}
 	return
+}
+
+func IsTcpPortAvailable(ctx context.Context, port int) bool {
+	l, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+	if err != nil {
+		return false
+	}
+	defer l.Close()
+	return true
 }

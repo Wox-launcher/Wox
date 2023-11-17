@@ -393,6 +393,6 @@ func getWindowShowLocation() (int, int) {
 	windowWidth := 800
 	size := screen.GetMouseScreen()
 	x := size.X + (size.Width-windowWidth)/2
-	y := size.Height / 5
+	y := size.Height / 6
 	return x, y
 }
