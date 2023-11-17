@@ -310,3 +310,4 @@ Wox.Plugin.Host.Python/venv/
 *.pyz
 Wox/resource/ui/wox
 Plugins/Wox.Plugin.Chatgpt/dist/
+Wox/resource/ui/react/

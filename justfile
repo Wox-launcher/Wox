@@ -7,11 +7,11 @@ default:
     lefthook install -f
 
     just _build_hosts
-    just plugins
+    just _build_ui
+    #just plugins
 
 @precommit:
-    cd Wox.UI.Tauri && pnpm build && cd ..
-
+    cd Wox.UI.React && pnpm build && cd ..
 
 @plugins:
     # build plugins
@@ -23,7 +23,7 @@ default:
 @release target:
     rm -rf Release
     just _build_hosts
-    just _build_ui {{target}}
+    just _build_ui
 
     if [ "{{target}}" = "windows" ]; then \
       cd Wox && CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-windows-amd64.exe && cd ..; \
@@ -82,20 +82,14 @@ default:
     just _build_nodejs_host Wox/resource/hosts
     just _build_python_host Wox/resource/hosts
 
-@_build_ui target:
-    cd Wox.UI.Tauri && pnpm install && pnpm release && cd ..
-    if [ "{{target}}" = "windows" ]; then \
-       cp Wox.UI.Tauri/src-tauri/target/release/wox.exe Wox/resource/ui/wox.exe; \
-    elif [ "{{target}}" = "linux" ]; then \
-      cp Wox.UI.Tauri/src-tauri/target/release/wox Wox/resource/ui/wox; \
-      chmod +x Wox/resource/ui/wox; \
-    elif [ "{{target}}" = "darwin-amd64" ]; then \
-      cp Wox.UI.Tauri/src-tauri/target/release/wox Wox/resource/ui/wox; \
-      chmod +x Wox/resource/ui/wox; \
-    elif [ "{{target}}" = "darwin-arm64" ]; then \
-      cp Wox.UI.Tauri/src-tauri/target/release/wox Wox/resource/ui/wox; \
-      chmod +x Wox/resource/ui/wox; \
-    fi
+@_build_ui:
+    # react
+    cd Wox.UI.React && pnpm build && cd ..
+
+    # electron
+    mkdir -p Wox/resource/ui/electron
+    cp Wox.UI.Electron/main.js Wox/resource/ui/electron/main.js
+    cp Wox.UI.Electron/preload.js Wox/resource/ui/electron/preload.js
 
 @_build_nodejs_host directory:
     cd Wox.Plugin.Host.Nodejs && pnpm install && pnpm run build && cd ..

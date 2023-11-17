@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 	"wox/plugin"
+	"wox/resource"
 	"wox/setting"
 	"wox/util"
 )
@@ -75,6 +76,37 @@ func serveAndWait(ctx context.Context, port int) {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeSuccessResponse(w, "Wox")
+	})
+
+	http.HandleFunc("/index.html", func(w http.ResponseWriter, r *http.Request) {
+		fileContent, err := resource.GetReactFile(util.NewTraceContext(), "index.html")
+		if err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(fileContent)
+	})
+
+	http.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/assets/")
+		fileContent, err := resource.GetReactFile(util.NewTraceContext(), "assets", path)
+		if err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+
+		contentType := "text/plain"
+		if strings.HasSuffix(path, "js") {
+			contentType = "text/javascript; charset=utf-8"
+		}
+		if strings.HasSuffix(path, "css") {
+			contentType = "text/css"
+		}
+
+		w.Header().Set("Content-Type", contentType)
+		w.Write(fileContent)
 	})
 
 	http.HandleFunc("/image", func(w http.ResponseWriter, r *http.Request) {

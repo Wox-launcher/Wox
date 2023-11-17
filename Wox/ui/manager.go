@@ -7,6 +7,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"os"
+	"path"
 	"sync"
 	"wox/plugin"
 	"wox/resource"
@@ -106,9 +107,32 @@ func (m *Manager) StartWebsocketAndWait(ctx context.Context, port int) {
 }
 
 func (m *Manager) StartUIApp(ctx context.Context, port int) error {
-	var appPath = util.GetLocation().GetUIAppPath()
-	logger.Info(ctx, fmt.Sprintf("start ui app: %s", appPath))
-	cmd, cmdErr := util.ShellRun(appPath, fmt.Sprintf("%d", port), fmt.Sprintf("%d", os.Getpid()))
+	//check if electron exist
+	var electronExecutablePath = util.GetLocation().GetUIAppPath()
+	if _, statErr := os.Stat(electronExecutablePath); os.IsNotExist(statErr) {
+		logger.Info(ctx, "electron not exist, download it")
+		//download electron
+		downloadErr := util.HttpDownload(ctx, "https://registry.npmmirror.com/-/binary/electron/27.1.0/electron-v27.1.0-darwin-x64.zip",
+			path.Join(util.GetLocation().GetElectronDirectory(), "electron-v27.1.0-darwin-x64.zip"))
+		if downloadErr != nil {
+			return downloadErr
+		}
+
+		logger.Info(ctx, "unzip electron")
+		//unzip electron
+		unzipErr := util.Unzip(util.GetLocation().GetElectronDirectory()+"/electron-v27.1.0-darwin-x64.zip",
+			path.Join(util.GetLocation().GetElectronBinDirectory()))
+		if unzipErr != nil {
+			return unzipErr
+		}
+	}
+
+	logger.Info(ctx, fmt.Sprintf("start ui app: %s", electronExecutablePath))
+	cmd, cmdErr := util.ShellRun(electronExecutablePath,
+		util.GetLocation().GetElectronMainJsPath(),
+		util.GetLocation().GetElectronPreloadJsPath(),
+		fmt.Sprintf("%d", port),
+		fmt.Sprintf("%d", os.Getpid()))
 	if cmdErr != nil {
 		return cmdErr
 	}

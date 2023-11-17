@@ -23,7 +23,8 @@ export default defineConfig(async () => ({
   clearScreen: false,
   build: {
     target: "esnext",
-    chunkSizeWarningLimit: 1000
+    chunkSizeWarningLimit: 1000,
+    outDir: "../Wox/resource/ui/react"
   },
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {

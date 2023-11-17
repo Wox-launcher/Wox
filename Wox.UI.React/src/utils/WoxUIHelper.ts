@@ -22,6 +22,9 @@ export class WoxUIHelper {
   }
 
   public async getServerPort(): Promise<string> {
+    if (this.isElectron()) {
+      return await this.getElectronAPI().getServerPort() as string
+    }
     return "34987"
   }
 

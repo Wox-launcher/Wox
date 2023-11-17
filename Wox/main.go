@@ -105,13 +105,13 @@ func main() {
 			//}
 		})
 
-		if util.IsProd() {
+		util.Go(ctx, "start ui", func() {
 			appErr := ui.GetUIManager().StartUIApp(ctx, serverPort)
 			if appErr != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("failed to start ui app: %s", appErr.Error()))
 				return
 			}
-		}
+		})
 
 		ui.GetUIManager().StartWebsocketAndWait(ctx, serverPort)
 	})

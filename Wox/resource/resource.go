@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 	"wox/util"
 )
 
@@ -21,26 +22,28 @@ var UIFS embed.FS
 var embedThemes = []string{}
 
 func Extract(ctx context.Context) error {
-	extractErr := extractHosts(ctx)
-	if extractErr != nil {
-		return extractErr
+	start := util.GetSystemTimestamp()
+	extractHostErr := extractFiles(ctx, HostFS, util.GetLocation().GetHostDirectory(), "hosts", false)
+	if extractHostErr != nil {
+		return extractHostErr
 	}
 
-	extractErr = extractUI(ctx)
-	if extractErr != nil {
-		return extractErr
+	extractElectronErr := extractFiles(ctx, UIFS, util.GetLocation().GetUIDirectory(), "ui/electron", false)
+	if extractElectronErr != nil {
+		return extractElectronErr
 	}
 
-	extractErr = extractThemes(ctx)
-	if extractErr != nil {
-		return extractErr
+	themeErr := parseThemes(ctx)
+	if themeErr != nil {
+		return themeErr
 	}
 
+	util.GetLogger().Info(ctx, fmt.Sprintf("extracted embed files, cost: %dms", util.GetSystemTimestamp()-start))
 	return nil
 }
 
-func extractHosts(ctx context.Context) error {
-	dir, err := HostFS.ReadDir("hosts")
+func extractFiles(ctx context.Context, fs embed.FS, extractDirectory string, filePath string, recursive bool) error {
+	dir, err := fs.ReadDir(filePath)
 	if err != nil {
 		return err
 	}
@@ -48,66 +51,37 @@ func extractHosts(ctx context.Context) error {
 		return fmt.Errorf("no host file found")
 	}
 
-	for _, entry := range dir {
-		start := util.GetSystemTimestamp()
-		hostData, readErr := HostFS.ReadFile("hosts/" + entry.Name())
-		if readErr != nil {
-			return readErr
-		}
-
-		var hostFilePath = path.Join(util.GetLocation().GetHostDirectory(), entry.Name())
-		writeErr := os.WriteFile(hostFilePath, hostData, 0644)
-		if writeErr != nil {
-			return writeErr
-		}
-		util.GetLogger().Info(ctx, fmt.Sprintf("extracted host file: %s, cost: %dms", entry.Name(), util.GetSystemTimestamp()-start))
-	}
-
-	return nil
-}
-
-func extractUI(ctx context.Context) error {
-	// only extract UI in prod mode
-	if util.IsDev() {
-		return nil
-	}
-
-	dir, err := UIFS.ReadDir("ui")
-	if err != nil {
-		return err
-	}
-	if len(dir) == 0 {
-		return fmt.Errorf("no ui file found")
+	extractDirectoryPath := path.Join(extractDirectory, strings.Join(strings.Split(filePath, "/")[1:], "/"))
+	createDirErr := util.GetLocation().EnsureDirectoryExist(extractDirectoryPath)
+	if createDirErr != nil {
+		return createDirErr
 	}
 
 	for _, entry := range dir {
-		if entry.IsDir() {
+		if entry.IsDir() && recursive {
+			extractErr := extractFiles(ctx, fs, extractDirectory, path.Join(filePath, entry.Name()), recursive)
+			if extractErr != nil {
+				return extractErr
+			}
 			continue
 		}
 
-		start := util.GetSystemTimestamp()
-		uiData, readErr := UIFS.ReadFile("ui/" + entry.Name())
+		fileData, readErr := fs.ReadFile(path.Join(filePath, entry.Name()))
 		if readErr != nil {
 			return readErr
 		}
 
-		var hostFilePath = path.Join(util.GetLocation().GetUIDirectory(), entry.Name())
-		writeErr := os.WriteFile(hostFilePath, uiData, 0777)
+		var subFilePath = path.Join(extractDirectoryPath, entry.Name())
+		writeErr := os.WriteFile(subFilePath, fileData, 0644)
 		if writeErr != nil {
 			return writeErr
 		}
-
-		util.GetLogger().Info(ctx, fmt.Sprintf("extracted ui file: %s, cost: %dms", entry.Name(), util.GetSystemTimestamp()-start))
-	}
-
-	if _, statErr := os.Stat(util.GetLocation().GetUIAppPath()); os.IsNotExist(statErr) {
-		return fmt.Errorf("failed to extract ui: not found")
 	}
 
 	return nil
 }
 
-func extractThemes(ctx context.Context) error {
+func parseThemes(ctx context.Context) error {
 	dir, err := UIFS.ReadDir(path.Join("ui", "themes"))
 	if err != nil {
 		return err
@@ -135,6 +109,10 @@ func extractThemes(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func GetReactFile(ctx context.Context, paths ...string) ([]byte, error) {
+	return UIFS.ReadFile(path.Join("ui", "react", path.Join(paths...)))
 }
 
 func GetLangJson(ctx context.Context, langCode string) ([]byte, error) {

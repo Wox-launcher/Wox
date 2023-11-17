@@ -1,12 +1,9 @@
-const { app, BrowserWindow, ipcMain } = require("electron")
+const { app, BrowserWindow, ipcMain, remote, dialog } = require("electron")
 
 const createWindow = () => {
   const win = new BrowserWindow({
-    width: 800,
-    frame: false,
-    resizable: false,
-    height: 60, webPreferences: {
-      preload: __dirname + "/preload.js"
+    width: 800, frame: false, resizable: false, height: 60, webPreferences: {
+      preload: process.argv[2]
     }
   })
 
@@ -43,11 +40,17 @@ const createWindow = () => {
     win.setTitle(title)
   })
 
+  win.openDevTools()
+
   ipcMain.handle("isVisible", async (event) => {
     return win.isVisible()
   })
 
-  win.loadURL("http://localhost:1420")
+  ipcMain.handle("getServerPort", async (event) => {
+    return process.argv[3]
+  })
+
+  win.loadURL("http://localhost:" + process.argv[3] + "/index.html")
 }
 
 app.whenReady().then(() => {
