@@ -19,6 +19,14 @@ func IsMacOS() bool {
 	return strings.ToLower(runtime.GOOS) == PlatformMacOS
 }
 
+func IsArm64() bool {
+	return strings.ToLower(runtime.GOARCH) == "arm64"
+}
+
+func IsAmd64() bool {
+	return strings.ToLower(runtime.GOARCH) == "amd64"
+}
+
 func IsLinux() bool {
 	return strings.ToLower(runtime.GOOS) == PlatformLinux
 }

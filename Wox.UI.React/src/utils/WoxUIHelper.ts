@@ -53,6 +53,14 @@ export class WoxUIHelper {
     return Promise.resolve()
   }
 
+  public async setBackgroundColor(color: string) {
+      if(this.isElectron()) {
+          await this.getElectronAPI().setBackgroundColor(color)
+          return Promise.resolve(true)
+      }
+      return Promise.resolve()
+  }
+
   public async setPosition(x: number, y: number) {
     if (this.isElectron()) {
       await this.getElectronAPI().setPosition(x, y)

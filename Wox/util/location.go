@@ -181,7 +181,7 @@ func (l *Location) GetImageCacheDirectory() string {
 
 func (l *Location) GetUIAppPath() string {
 	if IsWindows() {
-		return ""
+		return path.Join(l.GetElectronBinDirectory(), "electron.exe")
 	}
 	if IsMacOS() {
 		return path.Join(l.GetElectronBinDirectory(), "Electron.app/Contents/MacOS/Electron")

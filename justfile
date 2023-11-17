@@ -86,11 +86,6 @@ default:
     # react
     cd Wox.UI.React && pnpm build && cd ..
 
-    # electron
-    mkdir -p Wox/resource/ui/electron
-    cp Wox.UI.Electron/main.js Wox/resource/ui/electron/main.js
-    cp Wox.UI.Electron/preload.js Wox/resource/ui/electron/preload.js
-
 @_build_nodejs_host directory:
     cd Wox.Plugin.Host.Nodejs && pnpm install && pnpm run build && cd ..
     mkdir -p {{directory}}
