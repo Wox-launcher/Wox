@@ -11,10 +11,12 @@ WoxMessageHelper.getInstance().initialize(serverPort)
 
 await WoxThemeHelper.getInstance().loadTheme()
 
-WoxThemeHelper.getInstance().loadTheme().then(() => {
-  ReactDOM.createRoot(document.getElementById("root")!).render(
-    <React.StrictMode>
-      <WoxLauncher />
-    </React.StrictMode>
-  )
-})
+WoxThemeHelper.getInstance()
+  .loadTheme()
+  .then(() => {
+    ReactDOM.createRoot(document.getElementById("root")!).render(
+      <React.StrictMode>
+        <WoxLauncher />
+      </React.StrictMode>
+    )
+  })

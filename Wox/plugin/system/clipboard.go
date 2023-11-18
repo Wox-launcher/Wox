@@ -250,7 +250,7 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 					clipboard.Write(history.Data)
 					//TODO: still buggy because we didn't return focus to frontmost app
 					util.Go(context.Background(), "clipboard history copy", func() {
-						time.Sleep(time.Millisecond * 300)
+						time.Sleep(time.Millisecond * 100)
 						err := util.SimulateCtrlV()
 						if err != nil {
 							c.api.Log(ctx, fmt.Sprintf("simulate paste clipboard failed, err=%s", err.Error()))

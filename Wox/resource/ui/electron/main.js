@@ -22,8 +22,7 @@ setInterval(() => {
 
 const createWindow = () => {
   const win = new BrowserWindow({
-    width: 800, show: false, frame: false, resizable: false, height: 70,
-    webPreferences: {
+    width: 800, show: false, frame: false, resizable: false, height: 70, webPreferences: {
       preload: preloadJs
     }
   })
@@ -33,12 +32,27 @@ const createWindow = () => {
   win.setSkipTaskbar(true)
   win.setFullScreenable(false)
 
+  win.on("blur", (e) => {
+    win.webContents.send("onBlur")
+  })
+
   ipcMain.on("show", (event) => {
     win.show()
+    win.focus()
   })
 
   ipcMain.on("hide", (event) => {
-    win.hide()
+    if (process.platform === "darwin") {
+      // Hides the window
+      win.hide()
+      // Make other windows to gain focus
+      app.hide()
+    } else {
+      // On Windows 11, previously active window gain focus when the current window is minimized
+      win.minimize()
+      // Then we call hide to hide app from the taskbar
+      win.hide()
+    }
   })
 
   ipcMain.on("setSize", (event, width, height) => {
@@ -77,10 +91,6 @@ const createWindow = () => {
   })
 
   win.loadURL(homeUrl)
-
-  win.once("ready-to-show", () => {
-    win.show()
-  })
 }
 
 app.whenReady().then(() => {

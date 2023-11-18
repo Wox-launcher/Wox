@@ -137,7 +137,7 @@ func (m *Manager) StartUIApp(ctx context.Context, port int) error {
 	}
 
 	url := fmt.Sprintf("http://localhost:%d/index.html", port)
-	if util.IsDev() && !util.IsTcpPortAvailable(ctx, 1420) {
+	if util.IsDev() {
 		url = fmt.Sprintf("http://localhost:%d", 1420)
 	}
 	logger.Info(ctx, fmt.Sprintf("start ui app, path=%s", electronExecutablePath))

@@ -15,7 +15,7 @@ import { Theme } from "../entity/Theme.typings"
 import { WoxPositionTypeEnum } from "../enums/WoxPositionTypeEnum.ts"
 
 export default () => {
-  const [_, forceUpdate] = useReducer((x) => x + 1, 0)
+  const [_, forceUpdate] = useReducer(x => x + 1, 0)
   const woxQueryBoxRef = React.useRef<WoxQueryBoxRefHandler>(null)
   const woxQueryResultRef = React.useRef<WoxQueryResultRefHandler>(null)
   const requestTimeoutId = useRef<number>(0)
@@ -34,12 +34,15 @@ export default () => {
     fullResultList.current = []
     clearTimeout(requestTimeoutId.current)
     hasLatestQueryResult.current = false
-    WoxMessageHelper.getInstance().sendQueryMessage({
-      queryId: currentQueryId.current,
-      queryType: query.QueryType,
-      queryText: query.QueryText || "",
-      querySelection: JSON.stringify(query.QuerySelection || {})
-    }, handleQueryCallback)
+    WoxMessageHelper.getInstance().sendQueryMessage(
+      {
+        queryId: currentQueryId.current,
+        queryType: query.QueryType,
+        queryText: query.QueryText || "",
+        querySelection: JSON.stringify(query.QuerySelection || {})
+      },
+      handleQueryCallback
+    )
     // @ts-ignore
     requestTimeoutId.current = setTimeout(() => {
       if (!hasLatestQueryResult.current) {
@@ -65,8 +68,8 @@ export default () => {
           } as WOXMESSAGE.WoxRefreshableResult
 
           let response = await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.REFRESH.code, {
-            "resultId": result.Id,
-            "refreshableResult": JSON.stringify(refreshableResult)
+            resultId: result.Id,
+            refreshableResult: JSON.stringify(refreshableResult)
           })
           if (response.Success) {
             const newResult = response.Data as WOXMESSAGE.WoxRefreshableResult
@@ -97,7 +100,7 @@ export default () => {
    */
   const handleQueryCallback = (results: WOXMESSAGE.WoxMessageResponseResult[]) => {
     console.log(results)
-    fullResultList.current = fullResultList.current.concat(results).filter((result) => {
+    fullResultList.current = fullResultList.current.concat(results).filter(result => {
       if (result.QueryId === currentQueryId.current) {
         hasLatestQueryResult.current = true
       }
@@ -145,8 +148,8 @@ export default () => {
   const hideWoxWindow = async () => {
     await WoxUIHelper.getInstance().hideWindow()
     await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.VISIBILITY_CHANGED.code, {
-      "isVisible": "false",
-      "query": currentQueryId.current || ""
+      isVisible: "false",
+      query: currentQueryId.current || ""
     })
   }
 
@@ -160,11 +163,11 @@ export default () => {
     if (param.SelectAll) {
       woxQueryBoxRef.current?.selectAll()
     }
-    woxQueryBoxRef.current?.focus()
     await WoxUIHelper.getInstance().showWindow()
+    woxQueryBoxRef.current?.focus()
     await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.VISIBILITY_CHANGED.code, {
-      "isVisible": "true",
-      "query": currentQueryId.current || ""
+      isVisible: "true",
+      query: currentQueryId.current || ""
     })
   }
 
@@ -194,7 +197,7 @@ export default () => {
   }
 
   const bindKeyboardEvent = () => {
-    Mousetrap.bind("esc", (event) => {
+    Mousetrap.bind("esc", event => {
       if (woxQueryResultRef.current?.isActionListShown()) {
         woxQueryResultRef.current?.hideActionList()
         woxQueryBoxRef.current?.focus()
@@ -205,23 +208,23 @@ export default () => {
       event.preventDefault()
       event.stopPropagation()
     })
-    Mousetrap.bind("down", (event) => {
+    Mousetrap.bind("down", event => {
       woxQueryResultRef.current?.moveDown()
       event.preventDefault()
       event.stopPropagation()
     })
-    Mousetrap.bind("up", (event) => {
+    Mousetrap.bind("up", event => {
       woxQueryResultRef.current?.moveUp()
       event.preventDefault()
       event.stopPropagation()
     })
-    Mousetrap.bind("enter", (event) => {
+    Mousetrap.bind("enter", event => {
       woxQueryResultRef.current?.doAction()
       event.preventDefault()
       event.stopPropagation()
     })
-    Mousetrap.bind("command+j", (event) => {
-      woxQueryResultRef.current?.toggleActionList().then((actionListVisibility) => {
+    Mousetrap.bind("command+j", event => {
+      woxQueryResultRef.current?.toggleActionList().then(actionListVisibility => {
         if (!actionListVisibility) {
           woxQueryBoxRef.current?.focus()
         }
@@ -230,7 +233,7 @@ export default () => {
       event.stopPropagation()
     })
     //TODO: for test: 'show setting page'
-    Mousetrap.bind("command+t", (event) => {
+    Mousetrap.bind("command+t", event => {
       WoxUIHelper.getInstance().openWindow("Wox Setting", "setting.html")
       event.preventDefault()
       event.stopPropagation()
@@ -241,7 +244,6 @@ export default () => {
     refreshTotalCount.current = refreshTotalCount.current + 100
     await refreshResults()
   }, 100)
-
 
   useEffect(() => {
     WoxMessageHelper.getInstance().initialRequestCallback(handleRequestCallback)
@@ -256,23 +258,32 @@ export default () => {
     window.postShow = () => {
       woxQueryBoxRef.current?.focus()
       WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.VISIBILITY_CHANGED.code, {
-        "isVisible": "true",
-        "query": woxQueryBoxRef.current?.getQuery() || ""
+        isVisible: "true",
+        query: woxQueryBoxRef.current?.getQuery() || ""
       })
     }
   }, [])
 
-  return <Style theme={WoxThemeHelper.getInstance().getTheme()} className={"wox-launcher"}>
-    <WoxQueryBox ref={woxQueryBoxRef} onQueryChange={onQueryChange} onClick={() => {
-      woxQueryResultRef.current?.hideActionList()
-    }} />
+  return (
+    <Style theme={WoxThemeHelper.getInstance().getTheme()} className={"wox-launcher"}>
+      <WoxQueryBox
+        ref={woxQueryBoxRef}
+        onQueryChange={onQueryChange}
+        onClick={() => {
+          woxQueryResultRef.current?.hideActionList()
+        }}
+      />
 
-    <WoxQueryResult ref={woxQueryResultRef} callback={async (method: WoxMessageRequestMethod) => {
-      if (method === WoxMessageRequestMethodEnum.HideApp.code) {
-        await hideWoxWindow()
-      }
-    }} />
-  </Style>
+      <WoxQueryResult
+        ref={woxQueryResultRef}
+        callback={async (method: WoxMessageRequestMethod) => {
+          if (method === WoxMessageRequestMethodEnum.HideApp.code) {
+            await hideWoxWindow()
+          }
+        }}
+      />
+    </Style>
+  )
 }
 
 const Style = styled.div<{ theme: Theme }>`

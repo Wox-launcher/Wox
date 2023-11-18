@@ -1,15 +1,15 @@
 import { WOX_LAUNCHER_WIDTH } from "./WoxConst.ts"
+import { WoxMessageHelper } from "./WoxMessageHelper.ts"
 
 export class WoxUIHelper {
-
   private static instance: WoxUIHelper
 
-  private constructor() {
-  }
+  private constructor() {}
 
   static getInstance(): WoxUIHelper {
     if (!WoxUIHelper.instance) {
       WoxUIHelper.instance = new WoxUIHelper()
+      WoxUIHelper.instance.registerOnBlur()
     }
     return WoxUIHelper.instance
   }
@@ -23,7 +23,7 @@ export class WoxUIHelper {
 
   public async getServerPort(): Promise<string> {
     if (this.isElectron()) {
-      return await this.getElectronAPI().getServerPort() as string
+      return (await this.getElectronAPI().getServerPort()) as string
     }
     return "34987"
   }
@@ -35,6 +35,15 @@ export class WoxUIHelper {
   public getElectronAPI() {
     // @ts-ignore
     return window.electronAPI
+  }
+
+  public async registerOnBlur() {
+    if (this.isElectron()) {
+      console.log("registerOnBlur")
+      await this.getElectronAPI().onBlur(() => {
+        WoxMessageHelper.getInstance().sendMessage("LostFocus", {})
+      })
+    }
   }
 
   public async setSize(width: number, height: number) {
@@ -54,11 +63,11 @@ export class WoxUIHelper {
   }
 
   public async setBackgroundColor(color: string) {
-      if(this.isElectron()) {
-          await this.getElectronAPI().setBackgroundColor(color)
-          return Promise.resolve(true)
-      }
-      return Promise.resolve()
+    if (this.isElectron()) {
+      await this.getElectronAPI().setBackgroundColor(color)
+      return Promise.resolve(true)
+    }
+    return Promise.resolve()
   }
 
   public async setPosition(x: number, y: number) {
@@ -72,7 +81,6 @@ export class WoxUIHelper {
   public async showWindow() {
     if (this.isElectron()) {
       await this.getElectronAPI().show()
-      await this.setFocus()
       return Promise.resolve(true)
     }
     return Promise.resolve(false)
@@ -99,6 +107,5 @@ export class WoxUIHelper {
       return Promise.resolve(true)
     }
     return undefined
-
   }
 }
