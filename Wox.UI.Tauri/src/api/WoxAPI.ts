@@ -9,3 +9,7 @@ export async function getTheme() {
 export async function getSetting() {
   return post<API.WoxRestResponse<Setting>>(`/setting/wox`)
 }
+
+export async function updateSetting(setting: Setting) {
+  return post<API.WoxRestResponse<Setting>>(`/setting/wox/update`, JSON.stringify(setting))
+}

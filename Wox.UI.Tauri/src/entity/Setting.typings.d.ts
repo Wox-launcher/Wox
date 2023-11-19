@@ -1,6 +1,12 @@
+export interface PlatformSettingValue {
+  MacValue?: string
+  WinValue?: string
+  LinuxValue?: string
+}
+
 export interface Setting {
-  MainHotkey: string
-  SelectionHotkey: string
+  MainHotkey: PlatformSettingValue
+  SelectionHotkey: PlatformSettingValue
   UsePinYin: boolean
   SwitchInputMethodABC: boolean
   HideOnStart: boolean

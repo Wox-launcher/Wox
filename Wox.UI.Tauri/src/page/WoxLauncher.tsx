@@ -9,9 +9,9 @@ import { useInterval } from "usehooks-ts"
 import { WoxMessageMethodEnum } from "../enums/WoxMessageMethodEnum.ts"
 import { WoxLogHelper } from "../utils/WoxLogHelper.ts"
 import { WoxTauriHelper } from "../utils/WoxTauriHelper.ts"
-import Mousetrap from "mousetrap"
 import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
 import { Theme } from "../entity/Theme.typings"
+import Mousetrap from "mousetrap"
 
 export default () => {
   const [_, forceUpdate] = useReducer((x) => x + 1, 0)
@@ -94,7 +94,6 @@ export default () => {
     Because the query callback will be called multiple times, so we need to filter the result by query text
    */
   const handleQueryCallback = (results: WOXMESSAGE.WoxMessageResponseResult[]) => {
-    console.log(results)
     fullResultList.current = fullResultList.current.concat(results).filter((result) => {
       if (result.QueryId === currentQueryId.current) {
         hasLatestQueryResult.current = true
@@ -208,7 +207,6 @@ export default () => {
   useEffect(() => {
     WoxMessageHelper.getInstance().initialRequestCallback(handleRequestCallback)
     bindKeyboardEvent()
-
     // @ts-ignore expose to tauri backend
     window.selectAll = () => {
       woxQueryBoxRef.current?.selectAll()

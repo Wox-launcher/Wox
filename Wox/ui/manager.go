@@ -112,45 +112,27 @@ func (m *Manager) StartUIApp(ctx context.Context, port int) error {
 	if _, statErr := os.Stat(electronExecutablePath); os.IsNotExist(statErr) {
 		logger.Info(ctx, "electron not exist, download it")
 		//download electron
-		isDownloaded := false
-		urls := m.getElectronDownloadUrl(ctx)
-		if len(urls) == 0 {
-			return fmt.Errorf("failed to get electron download urls")
-		}
-		for _, url := range urls {
-			downloadErr := util.HttpDownload(ctx, url, path.Join(util.GetLocation().GetElectronDirectory(), "electron.zip"))
-			if downloadErr != nil {
-				continue
-			}
-			isDownloaded = true
-		}
-		if !isDownloaded {
-			return fmt.Errorf("failed to download electron")
+		downloadErr := util.HttpDownload(ctx, "https://registry.npmmirror.com/-/binary/electron/27.1.0/electron-v27.1.0-darwin-x64.zip",
+			path.Join(util.GetLocation().GetElectronDirectory(), "electron-v27.1.0-darwin-x64.zip"))
+		if downloadErr != nil {
+			return downloadErr
 		}
 
 		logger.Info(ctx, "unzip electron")
 		//unzip electron
-		unzipErr := util.Unzip(util.GetLocation().GetElectronDirectory()+"/electron.zip", path.Join(util.GetLocation().GetElectronBinDirectory()))
+		unzipErr := util.Unzip(util.GetLocation().GetElectronDirectory()+"/electron-v27.1.0-darwin-x64.zip",
+			path.Join(util.GetLocation().GetElectronBinDirectory()))
 		if unzipErr != nil {
 			return unzipErr
 		}
 	}
 
-	url := fmt.Sprintf("http://localhost:%d/index.html", port)
-	if util.IsDev() {
-		url = fmt.Sprintf("http://localhost:%d", 1420)
-	}
-	logger.Info(ctx, fmt.Sprintf("start ui app, path=%s", electronExecutablePath))
-	logger.Info(ctx, fmt.Sprintf("url: %s, port=%d, pid=%d", url, port, os.Getpid()))
-	logger.Info(ctx, fmt.Sprintf("main.js: %s", util.GetLocation().GetElectronMainJsPath()))
-	logger.Info(ctx, fmt.Sprintf("preload.js: %s", util.GetLocation().GetElectronPreloadJsPath()))
+	logger.Info(ctx, fmt.Sprintf("start ui app: %s", electronExecutablePath))
 	cmd, cmdErr := util.ShellRun(electronExecutablePath,
 		util.GetLocation().GetElectronMainJsPath(),
 		util.GetLocation().GetElectronPreloadJsPath(),
 		fmt.Sprintf("%d", port),
-		fmt.Sprintf("%d", os.Getpid()),
-		url,
-	)
+		fmt.Sprintf("%d", os.Getpid()))
 	if cmdErr != nil {
 		return cmdErr
 	}
@@ -158,24 +140,6 @@ func (m *Manager) StartUIApp(ctx context.Context, port int) error {
 	m.uiProcess = cmd.Process
 	util.GetLogger().Info(ctx, fmt.Sprintf("ui app pid: %d", cmd.Process.Pid))
 	return nil
-}
-
-func (m *Manager) getElectronDownloadUrl(ctx context.Context) []string {
-	if util.IsMacOS() {
-		if util.IsArm64() {
-			return []string{"https://registry.npmmirror.com/-/binary/electron/27.1.0/electron-v27.1.0-darwin-arm64.zip"}
-		}
-		if util.IsAmd64() {
-			return []string{"https://registry.npmmirror.com/-/binary/electron/27.1.0/electron-v27.1.0-darwin-x64.zip"}
-		}
-	}
-	if util.IsWindows() {
-		if util.IsAmd64() {
-			return []string{"https://registry.npmmirror.com/-/binary/electron/27.1.0/electron-v27.1.0-win32-x64.zip"}
-		}
-	}
-
-	return []string{}
 }
 
 func (m *Manager) LoadThemes(ctx context.Context) error {
