@@ -33,17 +33,17 @@ type Data interface {
 }
 
 func Read() (Data, error) {
-	filePaths, fileErr := readFilePaths()
-	if fileErr == nil {
-		return &FilePathData{
-			FilePaths: filePaths,
-		}, nil
-	}
-
 	imageData, imgErr := readImage()
 	if imgErr == nil {
 		return &ImageData{
 			Image: imageData,
+		}, nil
+	}
+
+	filePaths, fileErr := readFilePaths()
+	if fileErr == nil {
+		return &FilePathData{
+			FilePaths: filePaths,
 		}, nil
 	}
 

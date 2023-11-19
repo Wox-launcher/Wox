@@ -32,7 +32,7 @@ func (h *Hotkey) Register(ctx context.Context, combineKey string, callback func(
 	Go(ctx, "", func() {
 		for {
 			select {
-			case <-h.hk.Keydown():
+			case <-h.hk.Keyup():
 				Go(ctx, "hotkey callback", func() {
 					if callback != nil {
 						callback()

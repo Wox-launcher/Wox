@@ -15,6 +15,7 @@ import (
 	"wox/plugin"
 	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/keyboard"
 )
 
 func init() {
@@ -251,7 +252,7 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 					//TODO: still buggy because we didn't return focus to frontmost app
 					util.Go(context.Background(), "clipboard history copy", func() {
 						time.Sleep(time.Millisecond * 100)
-						err := util.SimulateCtrlV()
+						err := keyboard.SimulatePaste()
 						if err != nil {
 							c.api.Log(ctx, fmt.Sprintf("simulate paste clipboard failed, err=%s", err.Error()))
 						} else {

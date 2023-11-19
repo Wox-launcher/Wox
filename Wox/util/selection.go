@@ -4,7 +4,9 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"strings"
+	"time"
 	"wox/util/clipboard"
+	"wox/util/keyboard"
 )
 
 var noSelection = errors.New("no selection")
@@ -41,8 +43,13 @@ func GetSelected() (Selection, error) {
 		clipboardDataBefore = &clipboard.TextData{Text: uuid.NewString()}
 	}
 
-	if SimulateCtrlC() != nil {
+	if keyboard.SimulateCopy() != nil {
 		return Selection{}, errors.New("error simulate ctrl c")
+	}
+
+	// wait for clipboard data to be updated
+	if IsWindows() {
+		time.Sleep(200 * time.Millisecond)
 	}
 
 	clipboardDataAfter, err := clipboard.Read()
