@@ -3,21 +3,19 @@ import react from "@vitejs/plugin-react"
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
-  plugins: [
-    react({
-      babel: {
-        plugins: [
-          [
-            "babel-plugin-styled-components",
-            {
-              displayName: true,
-              fileName: false
-            }
-          ]
+  plugins: [react({
+    babel: {
+      plugins: [
+        [
+          "babel-plugin-styled-components",
+          {
+            displayName: true,
+            fileName: false
+          }
         ]
-      }
-    })
-  ],
+      ]
+    }
+  })],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
@@ -25,8 +23,7 @@ export default defineConfig(async () => ({
   clearScreen: false,
   build: {
     target: "esnext",
-    chunkSizeWarningLimit: 1000,
-    outDir: "../Wox/resource/ui/react"
+    chunkSizeWarningLimit: 1000
   },
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {

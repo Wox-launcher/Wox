@@ -1,11 +1,12 @@
 {
   "name": "wox",
-  "version": "2.0.0",
-  "description": "Wox launcher",
   "private": true,
+  "version": "2.0.0",
+  "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build"
+    "build": "tsc && vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@emotion/react": "^11.11.1",
@@ -17,15 +18,16 @@
     "@mui/icons-material": "^5.14.16",
     "@mui/material": "^5.14.16",
     "@mui/styled-engine-sc": "6.0.0-alpha.4",
-    "@uidotdev/usehooks": "^2.4.1",
     "axios": "^1.6.0",
     "lodash": "^4.17.21",
     "mousetrap": "^1.6.5",
     "pinyin-pro": "^3.17.0",
     "promise-deferred": "^2.0.4",
-    "react": "^18.2.0",
+    "react": "0.0.0-experimental-bbb9cb116-20231117",
     "react-custom-scrollbars": "^4.2.1",
-    "react-dom": "^18.2.0",
+    "react-dom": "0.0.0-experimental-bbb9cb116-20231117",
+    "react-hotkeys": "^2.0.0",
+    "react-hotkeys-hook": "^4.4.1",
     "react-markdown": "^9.0.0",
     "react-router": "^6.16.0",
     "react-router-dom": "^6.16.0",
@@ -53,7 +55,6 @@
     "eslint-plugin-react-refresh": "^0.4.3",
     "postcss": "^8.4.30",
     "typescript": "^5.0.2",
-    "vite": "^4.4.5",
-    "prettier": "3.0.2"
+    "vite": "^4.4.5"
   }
 }

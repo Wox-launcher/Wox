@@ -1,7 +1,6 @@
 import { Theme } from "../entity/Theme.typings"
 import { getTheme } from "../api/WoxAPI.ts"
 import { WoxLogHelper } from "./WoxLogHelper.ts"
-import { WoxUIHelper } from "./WoxUIHelper.ts"
 
 export class WoxThemeHelper {
   private static instance: WoxThemeHelper
@@ -14,13 +13,13 @@ export class WoxThemeHelper {
     return WoxThemeHelper.instance
   }
 
-  private constructor() {}
+  private constructor() {
+  }
 
   public async loadTheme() {
     const apiResponse = await getTheme()
     WoxLogHelper.getInstance().log(`load theme: ${JSON.stringify(apiResponse.Data)}`)
     WoxThemeHelper.currentTheme = apiResponse.Data
-    await WoxUIHelper.getInstance().setBackgroundColor(WoxThemeHelper.currentTheme.AppBackgroundColor)
   }
 
   public async changeTheme(theme: Theme) {
@@ -29,6 +28,6 @@ export class WoxThemeHelper {
   }
 
   public getTheme() {
-    return WoxThemeHelper.currentTheme || ({} as Theme)
+    return WoxThemeHelper.currentTheme || {} as Theme
   }
 }

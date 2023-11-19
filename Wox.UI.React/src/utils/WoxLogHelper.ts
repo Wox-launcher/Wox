@@ -1,3 +1,4 @@
+
 export class WoxLogHelper {
 
   private static instance: WoxLogHelper
