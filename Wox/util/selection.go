@@ -48,9 +48,7 @@ func GetSelected() (Selection, error) {
 	}
 
 	// wait for clipboard data to be updated
-	if IsWindows() {
-		time.Sleep(200 * time.Millisecond)
-	}
+	time.Sleep(200 * time.Millisecond)
 
 	clipboardDataAfter, err := clipboard.Read()
 	if err != nil {
