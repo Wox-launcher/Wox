@@ -1,0 +1,8 @@
+{
+  "name": "wox",
+  "version": "2.0.0",
+  "main": "main.js",
+  "devDependencies": {
+    "electron": "^27.1.0"
+  }
+}

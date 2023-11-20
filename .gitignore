@@ -311,3 +311,4 @@ Wox.Plugin.Host.Python/venv/
 Wox/resource/ui/wox
 Plugins/Wox.Plugin.Chatgpt/dist/
 Wox/resource/ui/react/
+Wox/resource/ui/electron/
