@@ -234,7 +234,7 @@ export default () => {
         })
         //TODO: for test: 'show setting page'
         Mousetrap.bind("command+t", event => {
-            WoxUIHelper.getInstance().openWindow("Wox Setting", "setting.html")
+            WoxUIHelper.getInstance().openWindow("Wox Setting", "/setting")
             event.preventDefault()
             event.stopPropagation()
         })

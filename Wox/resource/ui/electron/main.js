@@ -10,6 +10,7 @@ const preloadJs = process.argv[2];
 const serverPort = process.argv[3];
 const pid = process.argv[4];
 const homeUrl = process.argv[5];
+const baseUrl = process.argv[6];
 
 // watch pid if exists, otherwise exit
 setInterval(() => {
@@ -46,7 +47,7 @@ const createWindow = () => {
             // Hides the window
             win.hide();
             // Make other windows to gain focus
-            app.hide();
+            // app.hide();
         } else {
             // On Windows 11, previously active window gain focus when the current window is minimized
             win.minimize();
@@ -75,7 +76,7 @@ const createWindow = () => {
         const win = new BrowserWindow({
             width: 800, height: 600
         });
-        win.loadURL(url);
+        win.loadURL(baseUrl + url);
         win.setTitle(title);
     });
 

@@ -7,6 +7,7 @@ import {RouterProvider} from "react-router"
 import {WoxThemeHelper} from "./utils/WoxThemeHelper.ts"
 import WoxLauncher from "./page/WoxLauncher.tsx"
 import {createBrowserRouter} from "react-router-dom"
+import WoxSetting from "./page/WoxSetting.tsx"
 
 const serverPort = await WoxUIHelper.getInstance().getServerPort()
 WoxMessageHelper.getInstance().initialize(serverPort)
@@ -15,11 +16,11 @@ const router = createBrowserRouter([
     {
         path: "/",
         element: <WoxLauncher/>
+    },
+    {
+        path: "/setting",
+        element: <WoxSetting/>
     }
-    // {
-    //     path: "/setting",
-    //     element: <WoxSetting/>
-    // }
 ])
 
 WoxThemeHelper.getInstance().loadTheme().then(() => {

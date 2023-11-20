@@ -137,8 +137,10 @@ func (m *Manager) StartUIApp(ctx context.Context, port int) error {
 	}
 
 	url := fmt.Sprintf("http://localhost:%d/index.html", port)
+	baseUrl := fmt.Sprintf("http://localhost:%d", port)
 	if util.IsDev() {
 		url = fmt.Sprintf("http://localhost:%d", 1420)
+		baseUrl = fmt.Sprintf("http://localhost:%d", 1420)
 	}
 	logger.Info(ctx, fmt.Sprintf("start ui app, path=%s", electronExecutablePath))
 	logger.Info(ctx, fmt.Sprintf("url: %s, port=%d, pid=%d", url, port, os.Getpid()))
@@ -150,6 +152,7 @@ func (m *Manager) StartUIApp(ctx context.Context, port int) error {
 		fmt.Sprintf("%d", port),
 		fmt.Sprintf("%d", os.Getpid()),
 		url,
+		baseUrl,
 	)
 	if cmdErr != nil {
 		return cmdErr
