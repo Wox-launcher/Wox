@@ -1,10 +1,12 @@
 import { WOX_LAUNCHER_WIDTH } from "./WoxConst.ts"
 import { WoxMessageHelper } from "./WoxMessageHelper.ts"
+import { WoxLogHelper } from "./WoxLogHelper.ts"
 
 export class WoxUIHelper {
   private static instance: WoxUIHelper
 
-  private constructor() {}
+  private constructor() {
+  }
 
   static getInstance(): WoxUIHelper {
     if (!WoxUIHelper.instance) {
@@ -49,6 +51,7 @@ export class WoxUIHelper {
   public async setSize(width: number, height: number) {
     if (this.isElectron()) {
       await this.getElectronAPI().setSize(width, height)
+      WoxLogHelper.getInstance().log(`setSize from react: ${width} ${height}`)
       return Promise.resolve(true)
     }
     return Promise.resolve()
@@ -99,6 +102,23 @@ export class WoxUIHelper {
       return Promise.resolve(true)
     }
     return Promise.resolve(false)
+  }
+
+  public async openDevTools() {
+    if (this.isElectron()) {
+      await this.getElectronAPI().openDevTools()
+      return Promise.resolve(true)
+    }
+    return Promise.resolve(false)
+  }
+
+  public async log(msg: string) {
+    if (this.isElectron()) {
+      this.getElectronAPI().log(msg)
+      return
+    }
+
+    console.log(msg)
   }
 
   public async openWindow(title: string, url: string) {

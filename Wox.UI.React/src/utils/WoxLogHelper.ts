@@ -1,3 +1,4 @@
+import { WoxUIHelper } from "./WoxUIHelper.ts"
 
 export class WoxLogHelper {
 
@@ -14,6 +15,6 @@ export class WoxLogHelper {
   }
 
   public log(msg: string) {
-    console.log(`${msg}`)
+    WoxUIHelper.getInstance().log(msg)
   }
 }

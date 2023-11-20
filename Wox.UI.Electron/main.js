@@ -1,16 +1,16 @@
 const { app, BrowserWindow, ipcMain, remote, dialog } = require("electron")
 
-if (process.argv.length !== 7) {
+if (process.argv.length !== 8) {
   dialog.showErrorBox("Error", "Arguments not enough")
   process.exit(1)
 }
 
-const mainJs = process.argv[1]
-const preloadJs = process.argv[2]
-const serverPort = process.argv[3]
-const pid = process.argv[4]
-const homeUrl = process.argv[5]
-const baseUrl = process.argv[6]
+const preloadJs = process.argv[3]
+const serverPort = process.argv[4]
+const pid = process.argv[5]
+const homeUrl = process.argv[6]
+const baseUrl = process.argv[7]
+let settingWindow = null
 
 // watch pid if exists, otherwise exit
 setInterval(() => {
@@ -23,7 +23,12 @@ setInterval(() => {
 
 const createWindow = () => {
   const win = new BrowserWindow({
-    width: 800, show: true, frame: false, resizable: false, height: 70, webPreferences: {
+    width: 800,
+    height: 70,
+    show: false,
+    frame: false,
+    resizable: false,
+    webPreferences: {
       preload: preloadJs
     }
   })
@@ -37,9 +42,13 @@ const createWindow = () => {
     win.webContents.send("onBlur")
   })
 
+  win.on("resize", (e) => {
+    const size = win.getSize()
+    console.log(`resize: ${size[0]} ${size[1]}`)
+  })
+
   ipcMain.on("show", (event) => {
     win.show()
-    win.focus()
   })
 
   ipcMain.on("hide", (event) => {
@@ -47,7 +56,11 @@ const createWindow = () => {
       // Hides the window
       win.hide()
       // Make other windows to gain focus
-      // app.hide();
+      if (settingWindow !== null && settingWindow.isVisible()) {
+        //don't hide app when setting window is visible
+      } else {
+        app.hide()
+      }
     } else {
       // On Windows 11, previously active window gain focus when the current window is minimized
       win.minimize()
@@ -58,6 +71,10 @@ const createWindow = () => {
 
   ipcMain.on("setSize", (event, width, height) => {
     win.setBounds({ width, height })
+  })
+
+  ipcMain.on("openDevTools", (event) => {
+    win.openDevTools()
   })
 
   ipcMain.on("setPosition", (event, x, y) => {
@@ -73,11 +90,15 @@ const createWindow = () => {
   })
 
   ipcMain.on("openWindow", (event, title, url) => {
-    const win = new BrowserWindow({
+    settingWindow = new BrowserWindow({
       width: 800, height: 600
     })
-    win.loadURL(baseUrl + url)
-    win.setTitle(title)
+    settingWindow.loadURL(baseUrl + url)
+    settingWindow.setTitle(title)
+  })
+
+  ipcMain.on("log", (event, msg) => {
+    console.log(`UI: ${msg}`)
   })
 
   ipcMain.handle("isVisible", async (event) => {
@@ -88,8 +109,6 @@ const createWindow = () => {
     return serverPort
   })
 
-  dialog.showMessageBox({ message: homeUrl })
-  win.openDevTools()
   win.loadURL(homeUrl)
 }
 

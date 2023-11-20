@@ -148,6 +148,8 @@ func (m *Manager) StartUIApp(ctx context.Context, port int) error {
 	logger.Info(ctx, fmt.Sprintf("preload.js: %s", util.GetLocation().GetElectronPreloadJsPath()))
 	cmd, cmdErr := util.ShellRun(electronExecutablePath,
 		util.GetLocation().GetElectronMainJsPath(),
+		//below -- is necessary in windows, see https://stackoverflow.com/questions/75567967/electron-app-not-starting-with-command-line-arguments#:~:text=Well%2C%20because%20Electron%20can%20also%20take%20arguments
+		"--",
 		util.GetLocation().GetElectronPreloadJsPath(),
 		fmt.Sprintf("%d", port),
 		fmt.Sprintf("%d", os.Getpid()),
