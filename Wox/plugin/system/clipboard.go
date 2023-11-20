@@ -150,6 +150,11 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	c.loadHistory(ctx)
 	clipboard.Watch(func(data clipboard.Data) {
 		c.api.Log(ctx, fmt.Sprintf("clipboard data changed, type=%s", data.GetType()))
+		// ignore file type
+		if data.GetType() == clipboard.ClipboardTypeFile {
+			return
+		}
+
 		icon := c.getDefaultTextIcon()
 
 		if data.GetType() == clipboard.ClipboardTypeText {

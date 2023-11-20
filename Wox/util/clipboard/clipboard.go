@@ -40,6 +40,10 @@ func Read() (Data, error) {
 		}, nil
 	}
 
+	return ReadFilesAndText()
+}
+
+func ReadFilesAndText() (Data, error) {
 	filePaths, fileErr := readFilePaths()
 	if fileErr == nil {
 		return &FilePathData{

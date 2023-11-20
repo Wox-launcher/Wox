@@ -38,7 +38,7 @@ func (s *Selection) String() string {
 }
 
 func GetSelected() (Selection, error) {
-	clipboardDataBefore, errBefore := clipboard.Read()
+	clipboardDataBefore, errBefore := clipboard.ReadFilesAndText()
 	if errBefore != nil {
 		clipboardDataBefore = &clipboard.TextData{Text: uuid.NewString()}
 	}
@@ -50,7 +50,7 @@ func GetSelected() (Selection, error) {
 	// wait for clipboard data to be updated
 	time.Sleep(200 * time.Millisecond)
 
-	clipboardDataAfter, err := clipboard.Read()
+	clipboardDataAfter, err := clipboard.ReadFilesAndText()
 	if err != nil {
 		return Selection{}, err
 	}
