@@ -1,6 +1,6 @@
 const { app, BrowserWindow, ipcMain, remote, dialog } = require("electron")
 
-if (process.argv.length < 6) {
+if (process.argv.length !== 7) {
   dialog.showErrorBox("Error", "Arguments not enough")
   process.exit(1)
 }
@@ -23,7 +23,7 @@ setInterval(() => {
 
 const createWindow = () => {
   const win = new BrowserWindow({
-    width: 800, show: false, frame: false, resizable: false, height: 70, webPreferences: {
+    width: 800, show: true, frame: false, resizable: false, height: 70, webPreferences: {
       preload: preloadJs
     }
   })
@@ -87,6 +87,9 @@ const createWindow = () => {
   ipcMain.handle("getServerPort", async (event) => {
     return serverPort
   })
+
+  dialog.showMessageBox({ message: homeUrl })
+  win.openDevTools()
   win.loadURL(homeUrl)
 }
 
