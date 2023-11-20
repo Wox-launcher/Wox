@@ -1,14 +1,15 @@
 package system
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
+	"image/png"
 	"os"
-	"path"
 	"slices"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/keyboard"
+	"wox/util/window"
 )
 
 func init() {
@@ -170,11 +172,8 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 				}
 			}
 
-			// it sometimes is buggy on windows, so we only get active window icon on macos
-			if util.IsMacOS() {
-				if iconFilePath, iconErr := c.getActiveWindowIconFilePath(ctx); iconErr == nil {
-					icon = plugin.NewWoxImageAbsolutePath(iconFilePath)
-				}
+			if iconImage, iconErr := c.getActiveWindowIcon(ctx); iconErr == nil {
+				icon = iconImage
 			}
 		}
 
@@ -358,25 +357,20 @@ func (c *ClipboardPlugin) moveHistoryToTop(ctx context.Context, id string) {
 	})
 }
 
-func (c *ClipboardPlugin) getActiveWindowIconFilePath(ctx context.Context) (string, error) {
-	activeWindowHash := util.GetActiveWindowHash()
-	iconCachePath := path.Join(os.TempDir(), fmt.Sprintf("%s.png", activeWindowHash))
-	if _, err := os.Stat(iconCachePath); err == nil {
-		c.api.Log(ctx, fmt.Sprintf("get active window icon from cache: %s", iconCachePath))
-		return iconCachePath, nil
-	}
-
-	icon, err := util.GetActiveWindowIcon()
+func (c *ClipboardPlugin) getActiveWindowIcon(ctx context.Context) (plugin.WoxImage, error) {
+	icon, err := window.GetActiveWindowIcon()
 	if err != nil {
-		return "", err
+		return plugin.WoxImage{}, err
 	}
 
-	saveErr := imaging.Save(icon, iconCachePath)
-	if saveErr != nil {
-		return "", saveErr
+	var buf bytes.Buffer
+	encodeErr := png.Encode(&buf, icon)
+	if encodeErr != nil {
+		return plugin.WoxImage{}, encodeErr
 	}
 
-	return iconCachePath, nil
+	base64Str := base64.StdEncoding.EncodeToString(buf.Bytes())
+	return plugin.NewWoxImageBase64(fmt.Sprintf("data:image/png;base64,%s", base64Str)), nil
 }
 
 func (c *ClipboardPlugin) saveHistory(ctx context.Context) {

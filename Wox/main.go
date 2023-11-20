@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	"github.com/disintegration/imaging"
 	"golang.design/x/hotkey/mainthread"
+	"os"
+	"path"
 	"runtime"
 	"strings"
 	"wox/i18n"
@@ -12,6 +15,7 @@ import (
 	"wox/share"
 	"wox/ui"
 	"wox/util"
+	"wox/util/window"
 )
 
 import _ "wox/plugin/host"   // import all hosts
@@ -94,12 +98,18 @@ func main() {
 		}
 
 		t := util.Hotkey{}
-		t.Register(ctx, "alt+m", func() {
-			data, selectedErr := util.GetSelected()
+		combineKey := "alt+m"
+		if util.IsMacOS() {
+			combineKey = "cmd+m"
+		}
+		t.Register(ctx, combineKey, func() {
+			data, selectedErr := window.GetActiveWindowIcon()
 			if selectedErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("failed to get selected: %s", selectedErr.Error()))
+				util.GetLogger().Error(ctx, fmt.Sprintf("failed to get icon: %s", selectedErr.Error()))
 			} else {
-				util.GetLogger().Info(ctx, fmt.Sprintf("selected %s: %s", data.Type, data.String()))
+				dirname, _ := os.UserHomeDir()
+				imaging.Save(data, path.Join(dirname, "Desktop", "icon.png"))
+				util.GetLogger().Info(ctx, fmt.Sprintf("icon %v", data.Bounds()))
 			}
 		})
 

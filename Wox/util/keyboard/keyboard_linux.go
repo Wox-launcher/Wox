@@ -1,9 +1,11 @@
 package keyboard
 
+import "errors"
+
 func simulateCopy() error {
-	panic("not implemented")
+	return errors.New("not implemented")
 }
 
 func simulatePaste() error {
-	panic("not implemented")
+	return errors.New("not implemented")
 }
