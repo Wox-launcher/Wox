@@ -80,6 +80,8 @@ func main() {
 	shareUI := ui.GetUIManager().GetUI(ctx)
 	plugin.GetPluginManager().Start(ctx, shareUI)
 
+	util.InitSelection()
+
 	// hotkey must be registered in main thread
 	mainthread.Init(func() {
 		registerMainHotkeyErr := ui.GetUIManager().RegisterMainHotkey(ctx, woxSetting.MainHotkey.Get())

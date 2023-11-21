@@ -2,7 +2,6 @@ package util
 
 import (
 	"errors"
-	"github.com/google/uuid"
 	"strings"
 	"time"
 	"wox/util/clipboard"
@@ -10,6 +9,7 @@ import (
 )
 
 var noSelection = errors.New("no selection")
+var lastClipboardChangeTimestamp int64 = 0
 
 type SelectionType string
 
@@ -26,6 +26,12 @@ type Selection struct {
 	FilePaths []string
 }
 
+func InitSelection() {
+	clipboard.Watch(func(data clipboard.Data) {
+		lastClipboardChangeTimestamp = GetSystemTimestamp()
+	})
+}
+
 func (s *Selection) String() string {
 	switch s.Type {
 	case SelectionTypeText:
@@ -38,11 +44,7 @@ func (s *Selection) String() string {
 }
 
 func GetSelected() (Selection, error) {
-	clipboardDataBefore, errBefore := clipboard.ReadFilesAndText()
-	if errBefore != nil {
-		clipboardDataBefore = &clipboard.TextData{Text: uuid.NewString()}
-	}
-
+	simulateStartTimestamp := GetSystemTimestamp()
 	if keyboard.SimulateCopy() != nil {
 		return Selection{}, errors.New("error simulate ctrl c")
 	}
@@ -50,24 +52,17 @@ func GetSelected() (Selection, error) {
 	// wait for clipboard data to be updated
 	time.Sleep(200 * time.Millisecond)
 
+	simulateEndTimestamp := GetSystemTimestamp()
+
 	clipboardDataAfter, err := clipboard.ReadFilesAndText()
 	if err != nil {
 		return Selection{}, err
 	}
 
-	// check if clipboard data is changed
-	if clipboardDataBefore.GetType() == clipboardDataAfter.GetType() {
-		if clipboardDataBefore.GetType() == clipboard.ClipboardTypeImage {
-			imgBefore := clipboardDataBefore.(*clipboard.ImageData).Image
-			imgAfter := clipboardDataAfter.(*clipboard.ImageData).Image
-			if imgBefore.Bounds().Eq(imgAfter.Bounds()) {
-				return Selection{}, noSelection
-			}
-		} else {
-			if clipboardDataBefore.String() == clipboardDataAfter.String() {
-				return Selection{}, noSelection
-			}
-		}
+	// clipboard data must be updated between simulateStartTimestamp and simulateEndTimestamp
+	// otherwise, it means that the clipboard data is not updated by the simulated ctrl c
+	if lastClipboardChangeTimestamp < simulateStartTimestamp || lastClipboardChangeTimestamp > simulateEndTimestamp {
+		return Selection{}, noSelection
 	}
 
 	switch clipboardDataAfter.GetType() {

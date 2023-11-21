@@ -15,7 +15,7 @@ var noDataErr = errors.New("no such data")
 var notImplement = errors.New("not implemented")
 var watchList = make([]func(Data), 0)
 var isWatching = false
-var WatchIntervalMillisecond = 500
+var WatchIntervalMillisecond = 150
 
 type Type string
 

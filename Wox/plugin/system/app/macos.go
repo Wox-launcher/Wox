@@ -32,6 +32,7 @@ func (a *MacRetriever) GetAppDirectories(ctx context.Context) []string {
 		"/Applications/Utilities",
 		"/System/Applications",
 		"/System/Library/PreferencePanes",
+		"/System/Library/CoreServices",
 	}
 }
 
