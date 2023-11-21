@@ -29,17 +29,11 @@ func (u *uiImpl) HideApp(ctx context.Context) {
 }
 
 func (u *uiImpl) ShowApp(ctx context.Context, showContext share.ShowContext) {
-	u.send(ctx, "ShowApp", map[string]any{
-		"SelectAll": showContext.SelectAll,
-		"Position":  NewMouseScreenPosition(),
-	})
+	u.send(ctx, "ShowApp", getShowAppParams(ctx, showContext.SelectAll))
 }
 
 func (u *uiImpl) ToggleApp(ctx context.Context) {
-	u.send(ctx, "ToggleApp", map[string]any{
-		"SelectAll": true,
-		"Position":  NewMouseScreenPosition(),
-	})
+	u.send(ctx, "ToggleApp", getShowAppParams(ctx, true))
 }
 
 func (u *uiImpl) ShowMsg(ctx context.Context, title string, description string, icon string) {
@@ -64,6 +58,15 @@ func (u *uiImpl) send(ctx context.Context, method string, data any) {
 		Method: method,
 		Data:   data,
 	})
+}
+
+func getShowAppParams(ctx context.Context, selectAll bool) map[string]any {
+	return map[string]any{
+		"SelectAll":      selectAll,
+		"Position":       NewMouseScreenPosition(),
+		"QueryHistories": setting.GetSettingManager().GetLatestQueryHistory(ctx, 10),
+		"LastQueryMode":  setting.GetSettingManager().GetWoxSetting(ctx).LastQueryMode,
+	}
 }
 
 func onUIRequest(ctx context.Context, request WebsocketMsg) {
@@ -300,11 +303,18 @@ func handleOnVisibilityChanged(ctx context.Context, request WebsocketMsg) {
 		responseUIError(ctx, request, queryErr.Error())
 		return
 	}
+	var changedQuery share.ChangedQuery
+	unmarshalErr := json.Unmarshal([]byte(query), &changedQuery)
+	if unmarshalErr != nil {
+		logger.Error(ctx, unmarshalErr.Error())
+		responseUIError(ctx, request, unmarshalErr.Error())
+		return
+	}
 
 	if isVisible == "true" {
 		onAppShow(ctx)
 	} else {
-		onAppHide(ctx, query)
+		onAppHide(ctx, changedQuery)
 	}
 }
 
@@ -328,7 +338,7 @@ func onAppShow(ctx context.Context) {
 	}
 }
 
-func onAppHide(ctx context.Context, query string) {
+func onAppHide(ctx context.Context, query share.ChangedQuery) {
 	setting.GetSettingManager().AddQueryHistory(ctx, query)
 	if setting.GetSettingManager().GetWoxSetting(ctx).LastQueryMode == setting.LastQueryModeEmpty {
 		GetUIManager().GetUI(ctx).ChangeQuery(ctx, share.ChangedQuery{

@@ -13,6 +13,7 @@ import Mousetrap from "mousetrap"
 import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
 import { Theme } from "../entity/Theme.typings"
 import { WoxPositionTypeEnum } from "../enums/WoxPositionTypeEnum.ts"
+import { WoxLastQueryMode, WoxLastQueryModeEnum } from "../enums/WoxLastQueryModeEnum.ts"
 
 export default () => {
   const [_, forceUpdate] = useReducer(x => x + 1, 0)
@@ -22,6 +23,10 @@ export default () => {
   const refreshTotalCount = useRef<number>(0)
   const hasLatestQueryResult = useRef<boolean>(true)
   const currentQueryId = useRef<string>()
+  const latestChangedQuery = useRef<WOXMESSAGE.ChangedQuery>({} as WOXMESSAGE.ChangedQuery)
+  const latestQueryHistories = useRef<WOXMESSAGE.QueryHistory[]>([])
+  const lastQueryMode = useRef<WoxLastQueryMode>(WoxLastQueryModeEnum.WoxLastQueryModeEmpty.code)
+  const selectedQueryHistoryIndex = useRef<number>(0)
   const fullResultList = useRef<WOXMESSAGE.WoxMessageResponseResult[]>([])
 
   /**
@@ -29,6 +34,7 @@ export default () => {
    * @param query
    */
   const onQueryChange = (query: WOXMESSAGE.ChangedQuery) => {
+    latestChangedQuery.current = query
     woxQueryResultRef.current?.hideActionList()
     currentQueryId.current = crypto.randomUUID()
     fullResultList.current = []
@@ -146,10 +152,23 @@ export default () => {
     Hide wox window
    */
   const hideWoxWindow = async () => {
+    const isVisible = await WoxUIHelper.getInstance().isVisible()
+    if (!isVisible) {
+      //already hide
+      return
+    }
+
+    if (lastQueryMode.current === WoxLastQueryModeEnum.WoxLastQueryModePreserve.code) {
+      //skip the first one, because it's the current query
+      selectedQueryHistoryIndex.current = 0
+    } else {
+      selectedQueryHistoryIndex.current = -1
+    }
+
     await WoxUIHelper.getInstance().hideWindow()
     await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.VISIBILITY_CHANGED.code, {
       isVisible: "false",
-      query: currentQueryId.current || ""
+      query: JSON.stringify(latestChangedQuery.current || {})
     })
   }
 
@@ -157,6 +176,8 @@ export default () => {
   Show wox window
  */
   const showWoxWindow = async (param: WOXMESSAGE.ShowAppParams) => {
+    latestQueryHistories.current = param.QueryHistories || []
+    lastQueryMode.current = param.LastQueryMode || WoxLastQueryModeEnum.WoxLastQueryModeEmpty.code
     if (param.Position.Type === WoxPositionTypeEnum.WoxPositionTypeMouseScreen.code) {
       await WoxUIHelper.getInstance().setPosition(param.Position.X, param.Position.Y)
     }
@@ -169,7 +190,7 @@ export default () => {
     woxQueryResultRef.current?.forceResizeWindow()
     await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.VISIBILITY_CHANGED.code, {
       isVisible: "true",
-      query: currentQueryId.current || ""
+      query: woxQueryBoxRef.current?.getQuery() || ""
     })
   }
 
@@ -220,6 +241,24 @@ export default () => {
       event.preventDefault()
       event.stopPropagation()
     })
+    Mousetrap.bind("ctrl+up", event => {
+      if (selectedQueryHistoryIndex.current < latestQueryHistories.current.length - 1) {
+        selectedQueryHistoryIndex.current = selectedQueryHistoryIndex.current + 1
+        changeQuery(latestQueryHistories.current[selectedQueryHistoryIndex.current].Query)
+        woxQueryBoxRef.current?.selectAll()
+      }
+      event.preventDefault()
+      event.stopPropagation()
+    })
+    Mousetrap.bind("ctrl+down", event => {
+      if (selectedQueryHistoryIndex.current > 0) {
+        selectedQueryHistoryIndex.current = selectedQueryHistoryIndex.current - 1
+        changeQuery(latestQueryHistories.current[selectedQueryHistoryIndex.current].Query)
+        woxQueryBoxRef.current?.selectAll()
+      }
+      event.preventDefault()
+      event.stopPropagation()
+    })
     Mousetrap.bind("enter", event => {
       woxQueryResultRef.current?.doAction()
       event.preventDefault()
@@ -255,20 +294,6 @@ export default () => {
   useEffect(() => {
     WoxMessageHelper.getInstance().initialRequestCallback(handleRequestCallback)
     bindKeyboardEvent()
-
-    // @ts-ignore expose to tauri backend
-    window.selectAll = () => {
-      woxQueryBoxRef.current?.selectAll()
-      woxQueryResultRef.current?.resetMouseIndex()
-    }
-    // @ts-ignore expose to tauri backend
-    window.postShow = () => {
-      woxQueryBoxRef.current?.focus()
-      WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.VISIBILITY_CHANGED.code, {
-        isVisible: "true",
-        query: woxQueryBoxRef.current?.getQuery() || ""
-      })
-    }
   }, [])
 
   return (

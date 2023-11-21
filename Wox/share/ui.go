@@ -11,6 +11,18 @@ type ChangedQuery struct {
 	QuerySelection util.Selection
 }
 
+func (c *ChangedQuery) IsEmpty() bool {
+	return c.QueryText == "" && c.QuerySelection.String() == ""
+}
+
+func (c *ChangedQuery) String() string {
+	if c.QueryText != "" {
+		return c.QueryText
+	}
+
+	return c.QuerySelection.String()
+}
+
 type UI interface {
 	ChangeQuery(ctx context.Context, query ChangedQuery)
 	HideApp(ctx context.Context)

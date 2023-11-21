@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"strings"
+	"slices"
 	"sync"
+	"wox/share"
 	"wox/util"
 )
 
@@ -121,6 +122,14 @@ func (m *Manager) loadWoxAppData(ctx context.Context) error {
 	if decodeErr != nil {
 		return decodeErr
 	}
+	if woxAppData.ActionedResults == nil {
+		woxAppData.ActionedResults = util.NewHashMap[ResultHash, []ActionedResult]()
+	}
+
+	// sort query histories by timestamp asc
+	slices.SortFunc(woxAppData.QueryHistories, func(i, j QueryHistory) int {
+		return int(i.Timestamp - j.Timestamp)
+	})
 
 	m.woxAppData = woxAppData
 
@@ -219,8 +228,8 @@ func (m *Manager) SavePluginSetting(ctx context.Context, pluginId string, plugin
 	return nil
 }
 
-func (m *Manager) AddQueryHistory(ctx context.Context, query string) {
-	if strings.TrimSpace(query) == "" {
+func (m *Manager) AddQueryHistory(ctx context.Context, query share.ChangedQuery) {
+	if query.IsEmpty() {
 		return
 	}
 
@@ -236,6 +245,25 @@ func (m *Manager) AddQueryHistory(ctx context.Context, query string) {
 	}
 
 	m.saveWoxAppData(ctx)
+}
+
+func (m *Manager) GetLatestQueryHistory(ctx context.Context, n int) []QueryHistory {
+	if n <= 0 {
+		return []QueryHistory{}
+	}
+
+	if n > len(m.woxAppData.QueryHistories) {
+		n = len(m.woxAppData.QueryHistories)
+	}
+
+	histories := m.woxAppData.QueryHistories[len(m.woxAppData.QueryHistories)-n:]
+
+	// copy to new list and order by time desc
+	result := make([]QueryHistory, n)
+	for i := 0; i < n; i++ {
+		result[i] = histories[n-i-1]
+	}
+	return result
 }
 
 func (m *Manager) AddActionedResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string) {
