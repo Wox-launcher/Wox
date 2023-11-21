@@ -173,8 +173,8 @@ export default () => {
   }
 
   /*
-  Show wox window
- */
+    Show wox window
+  */
   const showWoxWindow = async (param: WOXMESSAGE.ShowAppParams) => {
     latestQueryHistories.current = param.QueryHistories || []
     lastQueryMode.current = param.LastQueryMode || WoxLastQueryModeEnum.WoxLastQueryModeEmpty.code
@@ -195,8 +195,8 @@ export default () => {
   }
 
   /*
-  Show wox window
-*/
+    Toggle wox window
+  */
   const toggleWoxWindow = async (param: WOXMESSAGE.ShowAppParams) => {
     const isVisible = await WoxUIHelper.getInstance().isVisible()
     if (isVisible) {
@@ -208,7 +208,7 @@ export default () => {
 
   /*
     Change query text
-   */
+  */
   const changeQuery = async (query: WOXMESSAGE.ChangedQuery) => {
     woxQueryBoxRef.current?.changeQuery(query)
   }

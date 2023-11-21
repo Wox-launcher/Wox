@@ -1,22 +1,37 @@
 import React, { useEffect, useState } from "react"
-import { Box, Tab, Tabs } from "@mui/material"
-import ExtensionIcon from "@mui/icons-material/Extension"
-import SettingsIcon from "@mui/icons-material/Settings"
-import DarkModeIcon from "@mui/icons-material/DarkMode"
+import { Box, ListItemIcon, ListItemText, MenuItem, MenuList, Paper } from "@mui/material"
 import styled from "styled-components"
 import WoxSettingGeneral, { WoxSettingGeneralRefHandler } from "../components/settings/WoxSettingGeneral.tsx"
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined"
+import ExtensionIcon from "@mui/icons-material/Extension"
+import DarkModeIcon from "@mui/icons-material/DarkMode"
+import { WoxSettingHelper } from "../utils/WoxSettingHelper.ts"
 import WoxSettingPlugins from "../components/settings/WoxSettingPlugins.tsx"
 import WoxSettingThemes from "../components/settings/WoxSettingThemes.tsx"
 
-import { WoxSettingHelper } from "../utils/WoxSettingHelper.ts"
-
 export default () => {
-  const [tabIndex, setTabIndex] = useState(0)
-  const tabSxSetting = { textTransform: "none" }
+  const menuList = [
+    {
+      Icon: SettingsOutlinedIcon,
+      Text: "General"
+    },
+    {
+      Icon: ExtensionIcon,
+      Text: "Plugins"
+    },
+    {
+      Icon: DarkModeIcon,
+      Text: "Themes"
+    }
+  ]
+  const [selectedIndex, setSelectedIndex] = useState(0)
   const woxSettingGeneralRef = React.useRef<WoxSettingGeneralRefHandler>(null)
 
-  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setTabIndex(newValue)
+
+  const handleMenuItemClick = (event: React.MouseEvent<HTMLLIElement, MouseEvent>, index: number) => {
+    setSelectedIndex(index)
+    event.preventDefault()
+    event.stopPropagation()
   }
 
   useEffect(() => {
@@ -24,39 +39,46 @@ export default () => {
       woxSettingGeneralRef.current?.initialize()
     })
   }, [])
-  return <Style>
-    <Box sx={{ flexGrow: 1, display: "flex", height: 800 }}>
-      <Tabs value={tabIndex} onChange={handleTabChange} orientation="vertical">
-        <Tab icon={<SettingsIcon />} label="General" sx={tabSxSetting} />
-        <Tab icon={<ExtensionIcon />} label="Plugins" sx={tabSxSetting} />
-        <Tab icon={<DarkModeIcon />} label="Themes" sx={tabSxSetting} />
-      </Tabs>
-      <div className={"setting-container"}>
-        <div className={"setting-item"} style={{ display: tabIndex === 0 ? "block" : "none" }}><WoxSettingGeneral ref={woxSettingGeneralRef} /></div>
-        <div className={"setting-item"} style={{ display: tabIndex === 1 ? "block" : "none" }}><WoxSettingPlugins /></div>
-        <div className={"setting-item"} style={{ display: tabIndex === 2 ? "block" : "none" }}><WoxSettingThemes /></div>
-      </div>
 
+  return <Style>
+    <Box sx={{ flexGrow: 1, display: "flex", height: "100%" }}>
+      <Paper sx={{ width: "260px", paddingTop: "16px", paddingLeft: "16px", paddingRight: "16px", background: "#23272d", height: "100%", borderRadius: 0 }}>
+        <MenuList>
+          {menuList.map((item, index) => {
+            return <MenuItem sx={{ color: "white", margin: "0px 0px 4px", boxSizing: "content-box" }} key={index} selected={selectedIndex === index}
+                             onClick={(event) => {
+                               handleMenuItemClick(event, index)
+                             }}>
+              <ListItemIcon sx={{ color: "white" }}>
+                <item.Icon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>{item.Text}</ListItemText>
+            </MenuItem>
+          })}
+        </MenuList>
+      </Paper>
+
+      <div className={"setting-container"}>
+        <div className={"setting-item"} style={{ display: selectedIndex === 0 ? "block" : "none" }}><WoxSettingGeneral ref={woxSettingGeneralRef} /></div>
+        <div className={"setting-item"} style={{ display: selectedIndex === 1 ? "block" : "none" }}><WoxSettingPlugins /></div>
+        <div className={"setting-item"} style={{ display: selectedIndex === 2 ? "block" : "none" }}><WoxSettingThemes /></div>
+      </div>
     </Box>
   </Style>
 }
 
 const Style = styled.div`
-  .MuiTabs-root {
-    background-color: rgba(52, 57, 60, 0.98);
+  width: 100%;
+  height: 100%;
 
-    .MuiTab-labelIcon {
-      color: white !important;
-    }
-
-    .Mui-selected {
-      color: #1976d2 !important;
-    }
+  .Mui-selected {
+    border: 1px solid #4480f8 !important;
+    border-radius: 5px;
   }
 
   .setting-container {
     width: 100%;
     height: 100%;
-    background-color: rgba(44, 48, 50, 0.7);
+    background-color: #16161c;
   }
 `

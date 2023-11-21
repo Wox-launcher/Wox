@@ -3,6 +3,7 @@ import styled from "styled-components"
 import { Box, Checkbox, Skeleton } from "@mui/material"
 import { WoxSettingHelper } from "../../utils/WoxSettingHelper"
 import { useHotkeys } from "react-hotkeys-hook"
+import { Setting } from "../../entity/Setting.typings"
 
 export type WoxSettingGeneralRefHandler = {
   initialize: () => void
@@ -11,6 +12,8 @@ export type WoxSettingGeneralRefHandler = {
 export type WoxSettingGeneralProps = {}
 
 export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<WoxSettingGeneralRefHandler>) => {
+  const currentMainHotKey = useRef<string[]>([])
+  const currentSelectionHotKey = useRef<string[]>([])
   const [loading, setLoading] = useState(true)
   const [mainHotkey, setMainHotkey] = useState<string[]>([])
   const [selectionHotkey, setSelectionHotkey] = useState<string[]>([])
@@ -28,11 +31,8 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
     "space": "Space"
   }
 
-  const updateSetting = async () => {
-    const setting = WoxSettingHelper.getInstance().getSetting()
-    setting.SelectionHotkey = { MacValue: selectionHotkey.join("+") }
-    setting.MainHotkey = { MacValue: mainHotkey.join("+") }
-    const resp = await WoxSettingHelper.getInstance().updateSetting(setting)
+  const executeSettingUpdate = async (updateSetting: Setting) => {
+    const resp = await WoxSettingHelper.getInstance().updateSetting(updateSetting)
     console.log(resp)
   }
 
@@ -52,14 +52,22 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
       hotKeyCombinations.push("command")
     }
     if (mainHotKeyFocus) {
-      setMainHotkey(hotKeyCombinations)
+      currentMainHotKey.current = hotKeyCombinations
+      setMainHotkey(currentMainHotKey.current)
     }
     if (selectionHotKeyFocus) {
-      setSelectionHotkey(hotKeyCombinations)
+      currentSelectionHotKey.current = hotKeyCombinations
+      setSelectionHotkey(currentSelectionHotKey.current)
     }
     if (!updatingSetting.current) {
       setTimeout(() => {
-        updateSetting().then(_ => {
+        const setting = WoxSettingHelper.getInstance().getSetting()
+        const updateSetting = {
+          ...setting,
+          MainHotkey: { MacValue: currentMainHotKey.current.join("+") },
+          SelectionHotkey: { MacValue: currentSelectionHotKey.current.join("+") }
+        }
+        executeSettingUpdate(updateSetting).then(_ => {
           updatingSetting.current = false
         })
       }, 500)
@@ -70,10 +78,12 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
   useImperativeHandle(ref, () => ({
     initialize: () => {
       const setting = WoxSettingHelper.getInstance().getSetting()
-      // @ts-ignore
-      setMainHotkey(setting.MainHotkey.split("+"))
-      // @ts-ignore
-      setSelectionHotkey(setting.SelectionHotkey.split("+"))
+      if (typeof setting.MainHotkey === "string" && typeof setting.SelectionHotkey === "string") {
+        currentMainHotKey.current = setting.MainHotkey.split("+")
+        currentSelectionHotKey.current = setting.SelectionHotkey.split("+")
+      }
+      setMainHotkey(currentMainHotKey.current)
+      setSelectionHotkey(currentSelectionHotKey.current)
       setUsePinYin(setting.UsePinYin)
       setHideOnLostFocus(setting.HideOnLostFocus)
       setLoading(false)
@@ -121,21 +131,45 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
       <div className={"wox-setting-item"}>
         <div className={"setting-item-label"}>Use PinYin:</div>
         <div className={"setting-item-content"}>
-          <div className={"setting-item-detail"}><Checkbox defaultChecked={usePinYin} /> Use PinYin For Searching</div>
+          <div className={"setting-item-detail"}><Checkbox defaultChecked={usePinYin} onChange={async (event) => {
+            const setting = WoxSettingHelper.getInstance().getSetting()
+            const updateSetting = {
+              ...setting,
+              UsePinYin: event.target.checked
+            }
+            await executeSettingUpdate(updateSetting)
+          }} /> Use PinYin For Searching
+          </div>
           <div className={"setting-item-intro"}>If selected, When searching, it converts Chinese into Pinyin and matches it.</div>
         </div>
       </div>
       <div className={"wox-setting-item"}>
         <div className={"setting-item-label"}>Hide On Lost Focus:</div>
         <div className={"setting-item-content"}>
-          <div className={"setting-item-detail"}><Checkbox defaultChecked={hideOnLostFocus} /> Hide Wox On Lost Focus</div>
+          <div className={"setting-item-detail"}><Checkbox defaultChecked={hideOnLostFocus} onChange={async (event) => {
+            const setting = WoxSettingHelper.getInstance().getSetting()
+            const updateSetting = {
+              ...setting,
+              HideOnLostFocus: event.target.checked
+            }
+            await executeSettingUpdate(updateSetting)
+          }} /> Hide Wox On Lost Focus
+          </div>
           <div className={"setting-item-intro"}>If selected, When wox lost focus, it will be hidden.</div>
         </div>
       </div>
       <div className={"wox-setting-item"}>
         <div className={"setting-item-label"}>Hide On Start:</div>
         <div className={"setting-item-content"}>
-          <div className={"setting-item-detail"}><Checkbox defaultChecked={hideOnLostFocus} /> Hide Wox On Start</div>
+          <div className={"setting-item-detail"}><Checkbox defaultChecked={hideOnLostFocus} onChange={async (event) => {
+            const setting = WoxSettingHelper.getInstance().getSetting()
+            const updateSetting = {
+              ...setting,
+              HideOnStart: event.target.checked
+            }
+            await executeSettingUpdate(updateSetting)
+          }} /> Hide Wox On Start
+          </div>
           <div className={"setting-item-intro"}>If selected, When wox start, it will be hidden.</div>
         </div>
       </div>

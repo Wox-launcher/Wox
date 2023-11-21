@@ -4,10 +4,16 @@ body {
     padding: 0;
     font-size: 16px;
     overflow: hidden;
+    height: 100%;
+    width: 100%;
 }
 
 * {
     box-sizing: border-box;
+}
+
+#root{
+    height: 100%;
 }
 
 :root {
