@@ -25,7 +25,7 @@ setInterval(() => {
 
 const createWindow = () => {
   const win = new BrowserWindow({
-    width: 800, height: 70, show: false, vibrancy: "under-window", visualEffectState: "active", frame: false, resizable: false, webPreferences: {
+    width: 800, height: 70, show: false, vibrancy: "popover", visualEffectState: "active", frame: false, resizable: false, webPreferences: {
       preload: preloadJs
     }
   })
