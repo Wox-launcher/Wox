@@ -173,6 +173,11 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 	instance.API = NewAPI(instance)
 	m.instances = append(m.instances, instance)
 
+	if pluginSetting.Disabled {
+		logger.Info(ctx, fmt.Errorf("[%s HOST] plugin is disabled by user, skip init: %s", host.GetRuntime(ctx), metadata.Metadata.Name).Error())
+		return nil
+	}
+
 	util.Go(ctx, fmt.Sprintf("[%s] init plugin", metadata.Metadata.Name), func() {
 		m.initPlugin(ctx, instance)
 	})
@@ -289,13 +294,16 @@ func (m *Manager) GetPluginInstances() []*Instance {
 	return m.instances
 }
 
-func (m *Manager) isQueryMatchPlugin(ctx context.Context, pluginInstance *Instance, query Query) bool {
+func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance, query Query) bool {
 	var validGlobalQuery = lo.Contains(pluginInstance.GetTriggerKeywords(), "*") && query.TriggerKeyword == ""
 	var validNonGlobalQuery = lo.Contains(pluginInstance.GetTriggerKeywords(), query.TriggerKeyword)
 	if !validGlobalQuery && !validNonGlobalQuery {
 		return false
 	}
 	if query.Type == QueryTypeSelection && !pluginInstance.Metadata.IsSupportFeature(MetadataFeatureQuerySelection) {
+		return false
+	}
+	if pluginInstance.Setting.Disabled {
 		return false
 	}
 
@@ -519,7 +527,7 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 
 func (m *Manager) queryParallel(ctx context.Context, pluginInstance *Instance, query Query, results chan []QueryResultUI, done chan bool, counter *atomic.Int32) {
 	util.Go(ctx, fmt.Sprintf("[%s] parallel query", pluginInstance.Metadata.Name), func() {
-		if !m.isQueryMatchPlugin(ctx, pluginInstance, query) {
+		if !m.canOperateQuery(ctx, pluginInstance, query) {
 			counter.Add(-1)
 			if counter.Load() == 0 {
 				done <- true

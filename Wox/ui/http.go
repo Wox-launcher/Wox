@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/jinzhu/copier"
 	"github.com/olahol/melody"
+	"github.com/samber/lo"
 	"net/http"
 	"os"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	"wox/plugin"
 	"wox/resource"
 	"wox/setting"
+	"wox/ui/dto"
 	"wox/util"
 )
 
@@ -144,11 +147,54 @@ func serveAndWait(ctx context.Context, port int) {
 	http.HandleFunc("/plugin/store", func(w http.ResponseWriter, r *http.Request) {
 		enableCors(w)
 		manifests := plugin.GetStoreManager().GetStorePluginManifests(util.NewTraceContext())
-		writeSuccessResponse(w, manifests)
+		var plugins = make([]dto.StorePlugin, len(manifests))
+		copyErr := copier.Copy(&plugins, &manifests)
+		if copyErr != nil {
+			writeErrorResponse(w, copyErr.Error())
+			return
+		}
+
+		for i, storePlugin := range plugins {
+			isInstalled := lo.ContainsBy(plugin.GetPluginManager().GetPluginInstances(), func(item *plugin.Instance) bool {
+				return item.Metadata.Id == storePlugin.Id
+			})
+			plugins[i].IsInstalled = isInstalled
+		}
+
+		writeSuccessResponse(w, plugins)
 	})
 
 	http.HandleFunc("/plugin/installed", func(w http.ResponseWriter, r *http.Request) {
+		defer util.GoRecover(util.NewTraceContext(), "get installed plugins")
 		enableCors(w)
+
+		getCtx := util.NewTraceContext()
+		instances := plugin.GetPluginManager().GetPluginInstances()
+		var plugins []dto.InstalledPlugin
+		for _, instance := range instances {
+			var installedPlugin dto.InstalledPlugin
+			copyErr := copier.Copy(&installedPlugin, &instance.Metadata)
+			if copyErr != nil {
+				writeErrorResponse(w, copyErr.Error())
+				return
+			}
+
+			logger.Debug(getCtx, fmt.Sprintf("get plugin setting: %s", instance.Metadata.Name))
+			installedPlugin.CustomizedSettingDefinitions = instance.Metadata.Settings
+
+			var definitionSettings = util.NewHashMap[string, string]()
+			for _, item := range instance.Metadata.Settings {
+				settingValue := instance.API.GetSetting(getCtx, item.Value.GetKey())
+				definitionSettings.Store(item.Value.GetKey(), settingValue)
+			}
+			installedPlugin.Settings = *instance.Setting
+			//only return user pre-defined settings
+			installedPlugin.Settings.CustomizedSettings = definitionSettings
+
+			plugins = append(plugins, installedPlugin)
+		}
+
+		writeSuccessResponse(w, plugins)
 	})
 
 	http.HandleFunc("/setting/wox", func(w http.ResponseWriter, r *http.Request) {

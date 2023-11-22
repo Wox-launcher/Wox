@@ -23,6 +23,7 @@ type StorePluginManifest struct {
 	Name           string
 	Author         string
 	Version        string
+	MinWoxVersion  string
 	Runtime        Runtime
 	Description    string
 	IconUrl        string
