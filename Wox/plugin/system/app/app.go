@@ -318,7 +318,7 @@ func (a *ApplicationPlugin) saveAppToCache(ctx context.Context) {
 }
 
 func (a *ApplicationPlugin) getAppCachePath() string {
-	return path.Join(os.TempDir(), "wox-app-cache.json")
+	return path.Join(util.GetLocation().GetCacheDirectory(), "wox-app-cache.json")
 }
 
 func (a *ApplicationPlugin) loadAppCache(ctx context.Context) ([]appInfo, error) {
