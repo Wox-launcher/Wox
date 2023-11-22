@@ -47,7 +47,7 @@ func GetStoreManager() *Store {
 	return storeInstance
 }
 
-func (s *Store) GetStoreManifests(ctx context.Context) []StoreManifest {
+func (s *Store) getStoreManifests(ctx context.Context) []StoreManifest {
 	return []StoreManifest{
 		{
 			Name: "Wox Official Plugin",
@@ -73,7 +73,7 @@ func (s *Store) Start(ctx context.Context) {
 func (s *Store) GetStorePluginManifests(ctx context.Context) []StorePluginManifest {
 	var storePluginManifests []StorePluginManifest
 
-	for _, store := range s.GetStoreManifests(ctx) {
+	for _, store := range s.getStoreManifests(ctx) {
 		storePluginManifest, manifestErr := s.GetStorePluginManifest(ctx, store)
 		if manifestErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to get plugin manifest from %s store: %s", store.Name, manifestErr.Error()))

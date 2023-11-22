@@ -141,6 +141,12 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, theme)
 	})
 
+	http.HandleFunc("/plugin/store", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(w)
+		manifests := plugin.GetStoreManager().GetStorePluginManifests(util.NewTraceContext())
+		writeSuccessResponse(w, manifests)
+	})
+
 	http.HandleFunc("/setting/wox", func(w http.ResponseWriter, r *http.Request) {
 		enableCors(w)
 
