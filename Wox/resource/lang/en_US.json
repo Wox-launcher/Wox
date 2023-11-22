@@ -10,5 +10,6 @@
   "plugin_sys_empty_trash": "Empty Trash",
   "plugin_sys_lock_computer": "Lock PC",
   "plugin_sys_execute": "Execute",
-  "plugin_sys_quit_wox": "Exit"
+  "plugin_sys_quit_wox": "Exit",
+  "plugin_sys_open_wox_preferences": "Open Wox Preferences"
 }

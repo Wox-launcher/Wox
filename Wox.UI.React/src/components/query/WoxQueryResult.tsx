@@ -401,6 +401,7 @@ const Style = styled.div<{ theme: Theme; resultCount: number; itemHeight: number
       overflow: hidden;
       text-overflow: ellipsis;
       line-height: 30px;
+      padding-left: 4px;
     }
 
     .wox-result-title {

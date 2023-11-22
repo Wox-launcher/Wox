@@ -146,6 +146,12 @@ export default () => {
     if (message.Method === WoxMessageRequestMethodEnum.ChangeTheme.code) {
       await changeTheme(message.Data as string)
     }
+    if (message.Method === WoxMessageRequestMethodEnum.OpenSettingDialog.code) {
+      await WoxUIHelper.getInstance().openWindow("Wox Setting", "/setting")
+    }
+    if (message.Method === WoxMessageRequestMethodEnum.OpenDevTools.code) {
+      await WoxUIHelper.getInstance().openDevTools()
+    }
   }
 
   /*
@@ -248,8 +254,9 @@ export default () => {
     Mousetrap.bind("ctrl+up", event => {
       if (selectedQueryHistoryIndex.current < latestQueryHistories.current.length - 1) {
         selectedQueryHistoryIndex.current = selectedQueryHistoryIndex.current + 1
-        changeQuery(latestQueryHistories.current[selectedQueryHistoryIndex.current].Query)
-        woxQueryBoxRef.current?.selectAll()
+        changeQuery(latestQueryHistories.current[selectedQueryHistoryIndex.current].Query).then(_ => {
+          woxQueryBoxRef.current?.selectAll()
+        })
       }
       event.preventDefault()
       event.stopPropagation()
@@ -257,8 +264,9 @@ export default () => {
     Mousetrap.bind("ctrl+down", event => {
       if (selectedQueryHistoryIndex.current > 0) {
         selectedQueryHistoryIndex.current = selectedQueryHistoryIndex.current - 1
-        changeQuery(latestQueryHistories.current[selectedQueryHistoryIndex.current].Query)
-        woxQueryBoxRef.current?.selectAll()
+        changeQuery(latestQueryHistories.current[selectedQueryHistoryIndex.current].Query).then(_ => {
+          woxQueryBoxRef.current?.selectAll()
+        })
       }
       event.preventDefault()
       event.stopPropagation()
@@ -274,23 +282,6 @@ export default () => {
           woxQueryBoxRef.current?.focus()
         }
       })
-      event.preventDefault()
-      event.stopPropagation()
-    })
-    Mousetrap.bind("ctrl+i", event => {
-      WoxUIHelper.getInstance()
-        .isDev()
-        .then(isDev => {
-          if (isDev) {
-            WoxUIHelper.getInstance().openDevTools()
-          }
-        })
-      event.preventDefault()
-      event.stopPropagation()
-    })
-    //TODO: for test: 'show setting page'
-    Mousetrap.bind("command+t", event => {
-      WoxUIHelper.getInstance().openWindow("Wox Setting", "/setting")
       event.preventDefault()
       event.stopPropagation()
     })

@@ -52,6 +52,14 @@ func (u *uiImpl) ChangeTheme(ctx context.Context, theme string) {
 	u.send(ctx, "ChangeTheme", theme)
 }
 
+func (u *uiImpl) OpenSettingDialog(ctx context.Context) {
+	u.send(ctx, "OpenSettingDialog", nil)
+}
+
+func (u *uiImpl) OpenDevTools(ctx context.Context) {
+	u.send(ctx, "OpenDevTools", nil)
+}
+
 func (u *uiImpl) send(ctx context.Context, method string, data any) {
 	requestUI(ctx, WebsocketMsg{
 		Id:     uuid.NewString(),
