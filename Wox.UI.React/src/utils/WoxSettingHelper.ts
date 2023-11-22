@@ -1,7 +1,7 @@
 import { Theme } from "../entity/Theme.typings"
 import { getSetting, updateSetting } from "../api/WoxAPI.ts"
 import { WoxLogHelper } from "./WoxLogHelper.ts"
-import { Setting } from "../entity/Setting.typings"
+import { Setting, UpdateSetting } from "../entity/Setting.typings"
 
 export class WoxSettingHelper {
   private static instance: WoxSettingHelper
@@ -14,8 +14,7 @@ export class WoxSettingHelper {
     return WoxSettingHelper.instance
   }
 
-  private constructor() {
-  }
+  private constructor() {}
 
   public async loadSetting() {
     const apiResponse = await getSetting()
@@ -23,14 +22,14 @@ export class WoxSettingHelper {
     WoxSettingHelper.currentSetting = apiResponse.Data
   }
 
-  public async updateSetting(setting: Setting) {
+  public async updateSetting(setting: UpdateSetting) {
     WoxLogHelper.getInstance().log(`update theme: ${JSON.stringify(setting)}`)
     updateSetting(setting).then(_ => {
-      WoxSettingHelper.currentSetting = setting
+      this.loadSetting()
     })
   }
 
   public getSetting() {
-    return WoxSettingHelper.currentSetting || {} as Theme
+    return WoxSettingHelper.currentSetting || ({} as Theme)
   }
 }

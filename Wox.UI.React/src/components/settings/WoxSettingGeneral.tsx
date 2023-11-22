@@ -3,7 +3,7 @@ import styled from "styled-components"
 import { Box, Checkbox, Skeleton } from "@mui/material"
 import { WoxSettingHelper } from "../../utils/WoxSettingHelper"
 import { useHotkeys } from "react-hotkeys-hook"
-import { Setting } from "../../entity/Setting.typings"
+import { UpdateSetting } from "../../entity/Setting.typings"
 
 export type WoxSettingGeneralRefHandler = {
   initialize: () => void
@@ -24,64 +24,59 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
   const updatingSetting = useRef(false)
   const hotKeyArray: string[] = ["control", "option", "shift", "command", "space"]
   const keyMap: { [key: string]: string } = {
-    "control": "⌃",
-    "option": "⌥",
-    "shift": "⇧",
-    "command": "⌘",
-    "space": "Space"
+    control: "⌃",
+    option: "⌥",
+    shift: "⇧",
+    command: "⌘",
+    space: "Space"
   }
 
-  const executeSettingUpdate = async (updateSetting: Setting) => {
-    const resp = await WoxSettingHelper.getInstance().updateSetting(updateSetting)
-    console.log(resp)
+  const executeSettingUpdate = async (updateSetting: UpdateSetting) => {
+    await WoxSettingHelper.getInstance().updateSetting(updateSetting)
   }
 
-  useHotkeys(["ctrl", "alt", "shift", "meta", "ctrl+alt", "ctrl+shift", "ctrl+meta", "ctrl+alt+shift",
-    "ctrl+alt+meta", "ctrl+alt+shift+meta", "alt+shift", "alt+meta", "alt+shift+meta", "shift+meta"], (_, handler) => {
-    const hotKeyCombinations = ["space"]
-    if (handler.ctrl) {
-      hotKeyCombinations.push("control")
+  useHotkeys(
+    ["ctrl", "alt", "shift", "meta", "ctrl+alt", "ctrl+shift", "ctrl+meta", "ctrl+alt+shift", "ctrl+alt+meta", "ctrl+alt+shift+meta", "alt+shift", "alt+meta", "alt+shift+meta", "shift+meta"],
+    (keyboardEvent, handler) => {
+      console.log(keyboardEvent)
+      const hotKeyCombinations = ["space"]
+      if (handler.ctrl) {
+        hotKeyCombinations.push("control")
+      }
+      if (handler.alt) {
+        hotKeyCombinations.push("option")
+      }
+      if (handler.shift) {
+        hotKeyCombinations.push("shift")
+      }
+      if (handler.meta) {
+        hotKeyCombinations.push("command")
+      }
+      if (mainHotKeyFocus) {
+        currentMainHotKey.current = hotKeyCombinations
+        setMainHotkey(currentMainHotKey.current)
+      }
+      if (selectionHotKeyFocus) {
+        currentSelectionHotKey.current = hotKeyCombinations
+        setSelectionHotkey(currentSelectionHotKey.current)
+      }
+      if (!updatingSetting.current) {
+        setTimeout(() => {
+          const setting = mainHotKeyFocus ? { Key: "MainHotkey", Value: currentMainHotKey.current.join("+") } : { Key: "SelectionHotkey", Value: currentSelectionHotKey.current.join("+") }
+          executeSettingUpdate(setting).then(_ => {
+            updatingSetting.current = false
+          })
+        }, 500)
+      }
+      updatingSetting.current = true
     }
-    if (handler.alt) {
-      hotKeyCombinations.push("option")
-    }
-    if (handler.shift) {
-      hotKeyCombinations.push("shift")
-    }
-    if (handler.meta) {
-      hotKeyCombinations.push("command")
-    }
-    if (mainHotKeyFocus) {
-      currentMainHotKey.current = hotKeyCombinations
-      setMainHotkey(currentMainHotKey.current)
-    }
-    if (selectionHotKeyFocus) {
-      currentSelectionHotKey.current = hotKeyCombinations
-      setSelectionHotkey(currentSelectionHotKey.current)
-    }
-    if (!updatingSetting.current) {
-      setTimeout(() => {
-        const setting = WoxSettingHelper.getInstance().getSetting()
-        const updateSetting = {
-          ...setting,
-          MainHotkey: { MacValue: currentMainHotKey.current.join("+") },
-          SelectionHotkey: { MacValue: currentSelectionHotKey.current.join("+") }
-        }
-        executeSettingUpdate(updateSetting).then(_ => {
-          updatingSetting.current = false
-        })
-      }, 500)
-    }
-    updatingSetting.current = true
-  })
+  )
 
   useImperativeHandle(ref, () => ({
     initialize: () => {
       const setting = WoxSettingHelper.getInstance().getSetting()
-      if (typeof setting.MainHotkey === "string" && typeof setting.SelectionHotkey === "string") {
-        currentMainHotKey.current = setting.MainHotkey.split("+")
-        currentSelectionHotKey.current = setting.SelectionHotkey.split("+")
-      }
+      currentMainHotKey.current = setting.MainHotkey.split("+")
+      currentSelectionHotKey.current = setting.SelectionHotkey.split("+")
       setMainHotkey(currentMainHotKey.current)
       setSelectionHotkey(currentSelectionHotKey.current)
       setUsePinYin(setting.UsePinYin)
@@ -90,91 +85,110 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
     }
   }))
 
-  return <Style>
-    {loading &&
-      <Box>
-        <Skeleton />
-        <Skeleton animation="wave" />
-        <Skeleton animation={false} />
-      </Box>}
-    {!loading && <>
-      <div className={"wox-setting-item"}>
-        <div className={"setting-item-label"}>Wox Main Hotkey:</div>
-        <div className={"setting-item-content"}>
-          <div className={"setting-item-detail"}>
-            <div className={`hot-key-area ${mainHotKeyFocus ? "hot-key-focus" : ""}`} onClick={() => {
-              setMainHotKeyFocus(true)
-              setSelectionHotKeyFocus(false)
-            }}>
-              {hotKeyArray.map((key, index) => {
-                return <span key={index} className={`hot-key-item ${mainHotkey.includes(key) ? "hot-key-item-include" : ""}`}>{keyMap[key]}</span>
-              })}
+  return (
+    <Style>
+      {loading && (
+        <Box>
+          <Skeleton />
+          <Skeleton animation="wave" />
+          <Skeleton animation={false} />
+        </Box>
+      )}
+      {!loading && (
+        <>
+          <div className={"wox-setting-item"}>
+            <div className={"setting-item-label"}>Wox Main Hotkey:</div>
+            <div className={"setting-item-content"}>
+              <div className={"setting-item-detail"}>
+                <div
+                  className={`hot-key-area ${mainHotKeyFocus ? "hot-key-focus" : ""}`}
+                  onClick={() => {
+                    setMainHotKeyFocus(true)
+                    setSelectionHotKeyFocus(false)
+                  }}
+                >
+                  {hotKeyArray.map((key, index) => {
+                    return (
+                      <span key={index} className={`hot-key-item ${mainHotkey.includes(key) ? "hot-key-item-include" : ""}`}>
+                        {keyMap[key]}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
-      <div className={"wox-setting-item"}>
-        <div className={"setting-item-label"}>Wox Selection Hotkey:</div>
-        <div className={"setting-item-content"}>
-          <div className={"setting-item-detail"}>
-            <div className={`hot-key-area ${selectionHotKeyFocus ? "hot-key-focus" : ""}`} onClick={() => {
-              setMainHotKeyFocus(false)
-              setSelectionHotKeyFocus(true)
-            }}>
-              {hotKeyArray.map((key, index) => {
-                return <span key={index} className={`hot-key-item ${selectionHotkey.includes(key) ? "hot-key-item-include" : ""}`}>{keyMap[key]}</span>
-              })}
+          <div className={"wox-setting-item"}>
+            <div className={"setting-item-label"}>Wox Selection Hotkey:</div>
+            <div className={"setting-item-content"}>
+              <div className={"setting-item-detail"}>
+                <div
+                  className={`hot-key-area ${selectionHotKeyFocus ? "hot-key-focus" : ""}`}
+                  onClick={() => {
+                    setMainHotKeyFocus(false)
+                    setSelectionHotKeyFocus(true)
+                  }}
+                >
+                  {hotKeyArray.map((key, index) => {
+                    return (
+                      <span key={index} className={`hot-key-item ${selectionHotkey.includes(key) ? "hot-key-item-include" : ""}`}>
+                        {keyMap[key]}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
-      <div className={"wox-setting-item"}>
-        <div className={"setting-item-label"}>Use PinYin:</div>
-        <div className={"setting-item-content"}>
-          <div className={"setting-item-detail"}><Checkbox defaultChecked={usePinYin} onChange={async (event) => {
-            const setting = WoxSettingHelper.getInstance().getSetting()
-            const updateSetting = {
-              ...setting,
-              UsePinYin: event.target.checked
-            }
-            await executeSettingUpdate(updateSetting)
-          }} /> Use PinYin For Searching
+          <div className={"wox-setting-item"}>
+            <div className={"setting-item-label"}>Use PinYin:</div>
+            <div className={"setting-item-content"}>
+              <div className={"setting-item-detail"}>
+                <Checkbox
+                  defaultChecked={usePinYin}
+                  onChange={async event => {
+                    await executeSettingUpdate({ Key: "UsePinYin", Value: event.target.checked + "" })
+                  }}
+                />{" "}
+                Use PinYin For Searching
+              </div>
+              <div className={"setting-item-intro"}>If selected, When searching, it converts Chinese into Pinyin and matches it.</div>
+            </div>
           </div>
-          <div className={"setting-item-intro"}>If selected, When searching, it converts Chinese into Pinyin and matches it.</div>
-        </div>
-      </div>
-      <div className={"wox-setting-item"}>
-        <div className={"setting-item-label"}>Hide On Lost Focus:</div>
-        <div className={"setting-item-content"}>
-          <div className={"setting-item-detail"}><Checkbox defaultChecked={hideOnLostFocus} onChange={async (event) => {
-            const setting = WoxSettingHelper.getInstance().getSetting()
-            const updateSetting = {
-              ...setting,
-              HideOnLostFocus: event.target.checked
-            }
-            await executeSettingUpdate(updateSetting)
-          }} /> Hide Wox On Lost Focus
+          <div className={"wox-setting-item"}>
+            <div className={"setting-item-label"}>Hide On Lost Focus:</div>
+            <div className={"setting-item-content"}>
+              <div className={"setting-item-detail"}>
+                <Checkbox
+                  defaultChecked={hideOnLostFocus}
+                  onChange={async event => {
+                    await executeSettingUpdate({ Key: "HideOnLostFocus", Value: event.target.checked + "" })
+                  }}
+                />{" "}
+                Hide Wox On Lost Focus
+              </div>
+              <div className={"setting-item-intro"}>If selected, When wox lost focus, it will be hidden.</div>
+            </div>
           </div>
-          <div className={"setting-item-intro"}>If selected, When wox lost focus, it will be hidden.</div>
-        </div>
-      </div>
-      <div className={"wox-setting-item"}>
-        <div className={"setting-item-label"}>Hide On Start:</div>
-        <div className={"setting-item-content"}>
-          <div className={"setting-item-detail"}><Checkbox defaultChecked={hideOnLostFocus} onChange={async (event) => {
-            const setting = WoxSettingHelper.getInstance().getSetting()
-            const updateSetting = {
-              ...setting,
-              HideOnStart: event.target.checked
-            }
-            await executeSettingUpdate(updateSetting)
-          }} /> Hide Wox On Start
+          <div className={"wox-setting-item"}>
+            <div className={"setting-item-label"}>Hide On Start:</div>
+            <div className={"setting-item-content"}>
+              <div className={"setting-item-detail"}>
+                <Checkbox
+                  defaultChecked={hideOnLostFocus}
+                  onChange={async event => {
+                    await executeSettingUpdate({ Key: "HideOnStart", Value: event.target.checked + "" })
+                  }}
+                />{" "}
+                Hide Wox On Start
+              </div>
+              <div className={"setting-item-intro"}>If selected, When wox start, it will be hidden.</div>
+            </div>
           </div>
-          <div className={"setting-item-intro"}>If selected, When wox start, it will be hidden.</div>
-        </div>
-      </div>
-    </>}
-  </Style>
+        </>
+      )}
+    </Style>
+  )
 })
 
 const Style = styled.div`
@@ -185,7 +199,8 @@ const Style = styled.div`
     justify-content: center;
     margin-bottom: 10px;
 
-    .setting-item-label, .setting-item-additional {
+    .setting-item-label,
+    .setting-item-additional {
       flex: 1;
     }
 
@@ -237,7 +252,8 @@ const Style = styled.div`
         padding-left: 10px;
       }
 
-      .MuiCheckbox-root, .Mui-disabled {
+      .MuiCheckbox-root,
+      .Mui-disabled {
         color: #1976d2;
       }
 

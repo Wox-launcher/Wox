@@ -278,7 +278,13 @@ export default () => {
       event.stopPropagation()
     })
     Mousetrap.bind("ctrl+i", event => {
-      WoxUIHelper.getInstance().openDevTools()
+      WoxUIHelper.getInstance()
+        .isDev()
+        .then(isDev => {
+          if (isDev) {
+            WoxUIHelper.getInstance().openDevTools()
+          }
+        })
       event.preventDefault()
       event.stopPropagation()
     })

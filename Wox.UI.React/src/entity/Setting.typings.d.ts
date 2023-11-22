@@ -5,8 +5,8 @@ export interface PlatformSettingValue {
 }
 
 export interface Setting {
-  MainHotkey: string | PlatformSettingValue
-  SelectionHotkey: string | PlatformSettingValue
+  MainHotkey: string
+  SelectionHotkey: string
   UsePinYin: boolean
   SwitchInputMethodABC: boolean
   HideOnStart: boolean
@@ -17,13 +17,6 @@ export interface Setting {
 }
 
 export interface UpdateSetting {
-  MainHotkey: PlatformSettingValue
-  SelectionHotkey: PlatformSettingValue
-  UsePinYin: boolean
-  SwitchInputMethodABC: boolean
-  HideOnStart: boolean
-  HideOnLostFocus: boolean
-  ShowTray: boolean
-  LangCode: string
-  ThemeId: string
+  Key: string
+  Value: string
 }
