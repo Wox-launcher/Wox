@@ -13,8 +13,7 @@ export class WoxThemeHelper {
     return WoxThemeHelper.instance
   }
 
-  private constructor() {
-  }
+  private constructor() {}
 
   public async loadTheme() {
     const apiResponse = await getTheme()
@@ -28,6 +27,6 @@ export class WoxThemeHelper {
   }
 
   public getTheme() {
-    return WoxThemeHelper.currentTheme || {} as Theme
+    return WoxThemeHelper.currentTheme || ({} as Theme)
   }
 }

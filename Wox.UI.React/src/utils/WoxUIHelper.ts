@@ -5,8 +5,7 @@ import { WoxLogHelper } from "./WoxLogHelper.ts"
 export class WoxUIHelper {
   private static instance: WoxUIHelper
 
-  private constructor() {
-  }
+  private constructor() {}
 
   static getInstance(): WoxUIHelper {
     if (!WoxUIHelper.instance) {
