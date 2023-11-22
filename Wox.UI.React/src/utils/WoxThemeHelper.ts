@@ -1,6 +1,7 @@
 import { Theme } from "../entity/Theme.typings"
 import { getTheme } from "../api/WoxAPI.ts"
 import { WoxLogHelper } from "./WoxLogHelper.ts"
+import { WoxUIHelper } from "./WoxUIHelper.ts"
 
 export class WoxThemeHelper {
   private static instance: WoxThemeHelper
@@ -24,6 +25,7 @@ export class WoxThemeHelper {
   public async changeTheme(theme: Theme) {
     WoxLogHelper.getInstance().log(`change theme: ${JSON.stringify(theme.ThemeName)}`)
     WoxThemeHelper.currentTheme = theme
+    await WoxUIHelper.getInstance().setBackgroundColor(theme.AppBackgroundColor)
   }
 
   public getTheme() {

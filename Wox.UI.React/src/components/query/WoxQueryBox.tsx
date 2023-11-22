@@ -109,6 +109,7 @@ const Style = styled.div<{ theme: Theme }>`
     background-color: transparent;
     width: 120px;
     z-index: 999;
+    -webkit-user-select: none;
     -webkit-app-region: drag;
   }
 `
