@@ -147,6 +147,10 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, manifests)
 	})
 
+	http.HandleFunc("/plugin/installed", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(w)
+	})
+
 	http.HandleFunc("/setting/wox", func(w http.ResponseWriter, r *http.Request) {
 		enableCors(w)
 

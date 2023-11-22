@@ -41,8 +41,10 @@ func (m *Manager) Init(ctx context.Context) error {
 
 	woxAppDataErr := m.loadWoxAppData(ctx)
 	if woxAppDataErr != nil {
-		// wox app data is not essential, so we just log the error
+		// wox app data is not essential, so we just log the error and use default value
 		logger.Error(ctx, fmt.Sprintf("failed to load wox app data: %s", woxAppDataErr.Error()))
+		defaultWoxAppData := GetDefaultWoxAppData(ctx)
+		m.woxAppData = &defaultWoxAppData
 	}
 
 	return nil
