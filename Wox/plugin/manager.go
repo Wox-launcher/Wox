@@ -336,17 +336,6 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		}
 	}
 
-	var resultCache = &QueryResultCache{
-		ResultId:       result.Id,
-		ResultTitle:    result.Title,
-		ResultSubTitle: result.SubTitle,
-		ContextData:    result.ContextData,
-		PluginInstance: pluginInstance,
-		Query:          query,
-		Actions:        util.NewHashMap[string, func(actionContext ActionContext)](),
-	}
-	m.resultCache.Store(result.Id, resultCache)
-
 	// convert icon
 	result.Icon = ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
 
@@ -394,6 +383,16 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		result.Actions[0].IsDefault = true
 	}
 
+	var resultCache = &QueryResultCache{
+		ResultId:       result.Id,
+		ResultTitle:    result.Title,
+		ResultSubTitle: result.SubTitle,
+		ContextData:    result.ContextData,
+		PluginInstance: pluginInstance,
+		Query:          query,
+		Actions:        util.NewHashMap[string, func(actionContext ActionContext)](),
+	}
+
 	// store actions for ui invoke later
 	for actionId := range result.Actions {
 		var action = result.Actions[actionId]
@@ -420,12 +419,15 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		}
 	}
 
+	m.resultCache.Store(result.Id, resultCache)
+
 	return result
 }
 
 func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string) int {
 	resultHash := setting.NewResultHash(pluginId, title, subTitle)
-	actionResults, ok := setting.GetSettingManager().GetWoxAppData(ctx).ActionedResults.Load(resultHash)
+	woxAppData := setting.GetSettingManager().GetWoxAppData(ctx)
+	actionResults, ok := woxAppData.ActionedResults.Load(resultHash)
 	if !ok {
 		return 0
 	}

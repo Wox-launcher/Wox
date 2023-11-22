@@ -1,9 +1,6 @@
 package setting
 
 import (
-	"encoding/json"
-	"errors"
-	"github.com/tidwall/gjson"
 	"wox/util"
 )
 
@@ -12,43 +9,6 @@ type PlatformSettingValue[T any] struct {
 	MacValue   T
 	WinValue   T
 	LinuxValue T
-}
-
-func (p *PlatformSettingValue[T]) MarshalJSON() ([]byte, error) {
-	marshal, err := json.Marshal(p.Get())
-	if err != nil {
-		return nil, err
-	}
-
-	return marshal, nil
-}
-
-func (p *PlatformSettingValue[T]) UnmarshalJSON(b []byte) error {
-	pathName := ""
-	if util.IsWindows() {
-		pathName = "WinValue"
-	} else if util.IsMacOS() {
-		pathName = "MacValue"
-	} else if util.IsLinux() {
-		pathName = "LinuxValue"
-	} else {
-		return errors.New("unknown platform to deserialize PlatformSettingValue")
-	}
-
-	result := gjson.Get(string(b), pathName)
-	if result.Exists() {
-		if util.IsWindows() {
-			return json.Unmarshal([]byte(result.Raw), &p.WinValue)
-		} else if util.IsMacOS() {
-			return json.Unmarshal([]byte(result.Raw), &p.MacValue)
-		} else if util.IsLinux() {
-			return json.Unmarshal([]byte(result.Raw), &p.LinuxValue)
-		} else {
-			return errors.New("unknown platform to deserialize PlatformSettingValue")
-		}
-	} else {
-		return nil
-	}
 }
 
 func (p *PlatformSettingValue[T]) Get() T {

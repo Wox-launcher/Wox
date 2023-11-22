@@ -201,7 +201,19 @@ func serveAndWait(ctx context.Context, port int) {
 		enableCors(w)
 
 		woxSetting := setting.GetSettingManager().GetWoxSetting(util.NewTraceContext())
-		writeSuccessResponse(w, woxSetting)
+
+		var settingDto dto.WoxSetting
+		copyErr := copier.Copy(&settingDto, &woxSetting)
+		if copyErr != nil {
+			writeErrorResponse(w, copyErr.Error())
+			return
+		}
+
+		settingDto.MainHotkey = woxSetting.MainHotkey.Get()
+		settingDto.SelectionHotkey = woxSetting.SelectionHotkey.Get()
+		settingDto.QueryHotkeys = woxSetting.QueryHotkeys.Get()
+
+		writeSuccessResponse(w, settingDto)
 	})
 
 	http.HandleFunc("/setting/wox/update", func(w http.ResponseWriter, r *http.Request) {

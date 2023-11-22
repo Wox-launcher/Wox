@@ -44,7 +44,7 @@ export default () => {
   return (
     <Style>
       <Box sx={{ flexGrow: 1, display: "flex", height: "100%" }}>
-        <Paper className={"menu-container"} sx={{ width: "260px", background: "#23272d", height: "100%", borderRadius: 0 }}>
+        <Paper className={"menu-container"} sx={{ width: "260px", background: "rgb(35 39 45 / 50%)", height: "100%", borderRadius: 0 }}>
           <div className={"drag-area"}>&nbsp;</div>
           <MenuList sx={{ paddingLeft: "16px", paddingRight: "16px" }}>
             {menuList.map((item, index) => {
@@ -105,6 +105,6 @@ const Style = styled.div`
   .setting-container {
     width: 100%;
     height: 100%;
-    background-color: #16161c;
+    background-color: #313335;
   }
 `

@@ -89,7 +89,7 @@ const createWindow = () => {
 
   ipcMain.on("openWindow", (event, title, url) => {
     settingWindow = new BrowserWindow({
-      width: 800, height: 600, titleBarStyle: "hiddenInset"
+      width: 800, height: 600, vibrancy: "popover", titleBarStyle: "hiddenInset"
     })
     settingWindow.loadURL(baseUrl + url)
     settingWindow.setTitle(title)
