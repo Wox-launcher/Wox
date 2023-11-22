@@ -8,6 +8,7 @@ import (
 	"path"
 	"slices"
 	"sync"
+	"wox/i18n"
 	"wox/share"
 	"wox/util"
 )
@@ -140,8 +141,35 @@ func (m *Manager) GetWoxSetting(ctx context.Context) *WoxSetting {
 	return m.woxSetting
 }
 
-func (m *Manager) UpdateWoxSetting(ctx context.Context, setting WoxSetting) error {
-	m.woxSetting = &setting
+func (m *Manager) UpdateWoxSetting(ctx context.Context, key, value string) error {
+	if key == "" {
+		return fmt.Errorf("key is empty")
+	}
+
+	if key == "MainHotkey" {
+		m.woxSetting.MainHotkey.Set(value)
+	} else if key == "SelectionHotkey" {
+		m.woxSetting.SelectionHotkey.Set(value)
+	} else if key == "UsePinYin" {
+		m.woxSetting.UsePinYin = value == "true"
+	} else if key == "SwitchInputMethodABC" {
+		m.woxSetting.SwitchInputMethodABC = value == "true"
+	} else if key == "HideOnStart" {
+		m.woxSetting.HideOnStart = value == "true"
+	} else if key == "HideOnLostFocus" {
+		m.woxSetting.HideOnLostFocus = value == "true"
+	} else if key == "ShowTray" {
+		m.woxSetting.ShowTray = value == "true"
+	} else if key == "LangCode" {
+		m.woxSetting.LangCode = i18n.LangCode(value)
+	} else if key == "LastQueryMode" {
+		m.woxSetting.LastQueryMode = value
+	} else if key == "ThemeId" {
+		m.woxSetting.ThemeId = value
+	} else {
+		return fmt.Errorf("unknown key: %s", key)
+	}
+
 	return m.SaveWoxSetting(ctx)
 }
 

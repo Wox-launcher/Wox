@@ -1,6 +1,6 @@
 const { app, BrowserWindow, ipcMain, remote, dialog } = require("electron")
 
-if (process.argv.length !== 8) {
+if (process.argv.length !== 10) {
   dialog.showErrorBox("Error", "Arguments not enough")
   process.exit(1)
 }
@@ -10,6 +10,8 @@ const serverPort = process.argv[4]
 const pid = process.argv[5]
 const homeUrl = process.argv[6]
 const baseUrl = process.argv[7]
+const appBackgroundColor = process.argv[8]
+const isDev = process.argv[9]
 let settingWindow = null
 
 // watch pid if exists, otherwise exit
@@ -37,6 +39,7 @@ const createWindow = () => {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   win.setSkipTaskbar(true)
   win.setFullScreenable(false)
+  win.setBackgroundColor(appBackgroundColor)
 
   win.on("blur", (e) => {
     win.webContents.send("onBlur")
@@ -103,6 +106,10 @@ const createWindow = () => {
 
   ipcMain.handle("isVisible", async (event) => {
     return win.isVisible()
+  })
+
+  ipcMain.handle("isDev", async (event) => {
+    return isDev === "true"
   })
 
   ipcMain.handle("getServerPort", async (event) => {

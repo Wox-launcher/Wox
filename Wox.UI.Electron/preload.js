@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   hide: () => ipcRenderer.send("hide"),
   isVisible: async () => ipcRenderer.invoke("isVisible"),
   getServerPort: async () => ipcRenderer.invoke("getServerPort"),
+  isDev: async () => ipcRenderer.invoke("isDev"),
   setPosition: (x, y) => ipcRenderer.send("setPosition", x, y),
   log: (msg) => ipcRenderer.send("log", msg),
   openDevTools: () => ipcRenderer.send("openDevTools"),

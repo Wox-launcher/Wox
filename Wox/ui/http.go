@@ -151,16 +151,21 @@ func serveAndWait(ctx context.Context, port int) {
 	http.HandleFunc("/setting/wox/update", func(w http.ResponseWriter, r *http.Request) {
 		enableCors(w)
 
+		type keyValuePair struct {
+			Key   string
+			Value string
+		}
+
 		decoder := json.NewDecoder(r.Body)
-		var woxSetting setting.WoxSetting
-		err := decoder.Decode(&woxSetting)
+		var kv keyValuePair
+		err := decoder.Decode(&kv)
 		if err != nil {
 			w.Header().Set("code", "500")
 			w.Write([]byte(err.Error()))
 			return
 		}
 
-		updateErr := setting.GetSettingManager().UpdateWoxSetting(util.NewTraceContext(), woxSetting)
+		updateErr := setting.GetSettingManager().UpdateWoxSetting(util.NewTraceContext(), kv.Key, kv.Value)
 		if updateErr != nil {
 			w.Header().Set("code", "500")
 			w.Write([]byte(updateErr.Error()))

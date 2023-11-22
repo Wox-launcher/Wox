@@ -155,6 +155,8 @@ func (m *Manager) StartUIApp(ctx context.Context, port int) error {
 		fmt.Sprintf("%d", os.Getpid()),
 		url,
 		baseUrl,
+		m.GetCurrentTheme(ctx).AppBackgroundColor,
+		fmt.Sprintf("%t", util.IsDev()),
 	)
 	if cmdErr != nil {
 		return cmdErr

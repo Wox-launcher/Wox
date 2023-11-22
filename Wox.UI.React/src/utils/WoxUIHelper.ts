@@ -95,6 +95,13 @@ export class WoxUIHelper {
     return Promise.resolve(false)
   }
 
+  public async isDev() {
+    if (this.isElectron()) {
+      return this.getElectronAPI().isDev() as boolean
+    }
+    return Promise.resolve(false)
+  }
+
   public async hideWindow() {
     if (this.isElectron()) {
       await this.getElectronAPI().hide()
