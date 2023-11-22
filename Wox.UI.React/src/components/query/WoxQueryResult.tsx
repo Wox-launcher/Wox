@@ -1,18 +1,18 @@
 import styled from "styled-components"
-import { WOXMESSAGE } from "../entity/WoxMessage.typings"
+import { WOXMESSAGE } from "../../entity/WoxMessage.typings"
 import React, { useImperativeHandle, useRef, useState } from "react"
-import { WoxUIHelper } from "../utils/WoxUIHelper.ts"
-import { WoxMessageHelper } from "../utils/WoxMessageHelper.ts"
-import { WoxMessageMethodEnum } from "../enums/WoxMessageMethodEnum.ts"
-import { WoxMessageRequestMethod, WoxMessageRequestMethodEnum } from "../enums/WoxMessageRequestMethodEnum.ts"
+import { WoxUIHelper } from "../../utils/WoxUIHelper.ts"
+import { WoxMessageHelper } from "../../utils/WoxMessageHelper.ts"
+import { WoxMessageMethodEnum } from "../../enums/WoxMessageMethodEnum.ts"
+import { WoxMessageRequestMethod, WoxMessageRequestMethodEnum } from "../../enums/WoxMessageRequestMethodEnum.ts"
 
 import { pinyin } from "pinyin-pro"
-import WoxImage from "./WoxImage.tsx"
-import { Theme } from "../entity/Theme.typings"
-import { WoxThemeHelper } from "../utils/WoxThemeHelper.ts"
-import { WOX_QUERY_BOX_INPUT_HEIGHT, WOX_QUERY_RESULT_ITEM_HEIGHT, WOX_QUERY_RESULT_PREVIEW_HEIGHT } from "../utils/WoxConst.ts"
-import WoxScrollbar, { WoxScrollbarRefHandler } from "./WoxScrollbar.tsx"
-import WoxPreview from "./WoxPreview.tsx"
+import WoxImage from "../tools/WoxImage.tsx"
+import { Theme } from "../../entity/Theme.typings"
+import { WoxThemeHelper } from "../../utils/WoxThemeHelper.ts"
+import { WOX_QUERY_BOX_INPUT_HEIGHT, WOX_QUERY_RESULT_ITEM_HEIGHT, WOX_QUERY_RESULT_PREVIEW_HEIGHT } from "../../utils/WoxConst.ts"
+import WoxScrollbar, { WoxScrollbarRefHandler } from "../tools/WoxScrollbar.tsx"
+import WoxPreview from "../tools/WoxPreview.tsx"
 
 export type WoxQueryResultRefHandler = {
   clearResultList: () => void
@@ -94,13 +94,12 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
 
   const filterActionList = () => {
     if (currentActionList.current.length > 1) {
-      const filteredActionList = currentActionList.current.filter((action) => {
+      const filteredActionList = currentActionList.current.filter(action => {
         if (!/[^\u4e00-\u9fa5]/.test(action.Name)) {
           const pyTransfer = pinyin(action.Name)
           return pyTransfer.indexOf(currentFilterText.current) > -1
         }
         return action.Name.toLowerCase().indexOf(currentFilterText.current.toLowerCase()) >= 0
-
       })
       setActionList(filteredActionList)
       currentActionActiveIndex.current = 0
@@ -110,8 +109,8 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
 
   const sendActionMessage = async (resultId: string, action: WOXMESSAGE.WoxResultAction) => {
     await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.ACTION.code, {
-      "resultId": resultId,
-      "actionId": action.Id
+      resultId: resultId,
+      actionId: action.Id
     })
     if (!action.PreventHideAfterAction) {
       _props.callback?.(WoxMessageRequestMethodEnum.HideApp.code)
@@ -120,7 +119,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
 
   const handleAction = async () => {
     if (showActionList) {
-      const result = currentResultList.current.find((result) => result.Index === currentActiveIndex.current)
+      const result = currentResultList.current.find(result => result.Index === currentActiveIndex.current)
       if (result) {
         currentResult.current = result
         if (currentActionActiveIndex.current < actionList.length) {
@@ -131,7 +130,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
         }
       }
     } else {
-      const result = currentResultList.current.find((result) => result.Index === currentActiveIndex.current)
+      const result = currentResultList.current.find(result => result.Index === currentActiveIndex.current)
       if (result) {
         currentResult.current = result
         for (const action of result.Actions) {
@@ -144,7 +143,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   }
 
   const getCurrentPreviewData = () => {
-    const result = currentResultList.current.find((result) => result.Index === currentActiveIndex.current)
+    const result = currentResultList.current.find(result => result.Index === currentActiveIndex.current)
     if (result) {
       return result.Preview
     }
@@ -197,7 +196,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
       await handleHideActionList()
       return false
     } else {
-      const result = currentResultList.current.find((result) => result.Index === currentActiveIndex.current)
+      const result = currentResultList.current.find(result => result.Index === currentActiveIndex.current)
       if (result) {
         currentResult.current = result
         resizeWindow(10).then(_ => {
@@ -253,83 +252,104 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
     }
   }))
 
-  return <Style theme={WoxThemeHelper.getInstance().getTheme()} resultCount={resultList.length} itemHeight={getResultListHeight(10)}>
-    <WoxScrollbar
-      ref={currentResultScrollbarRef}
-      className={"wox-result-scrollbars"}
-      scrollbarProps={{
-        autoHeightMax: getResultListHeight(resultList.length < 10 ? 10 : resultList.length),
-        style: { width: hasPreview ? "50%" : "100%" }
-      }}>
-      <div className={"wox-result-container"}>
-        <ul className={"wox-result-list"}>
-          {resultList.map((result, index) => {
-            return <li id={`wox-result-li-${index}`} key={`wox-result-li-${index}`} className={`wox-result-item ${activeIndex === index ? "active" : "inactive"}`}
-                       onMouseOverCapture={() => {
-                         if (showActionList) {
-                           return
-                         }
-                         currentMouseOverIndex.current += 1
-                         if (result.Index !== undefined && currentActiveIndex.current !== result.Index && currentMouseOverIndex.current > 1) {
-                           currentActiveIndex.current = index
-                           setActiveIndex(index)
-                         }
-                       }}
-                       onClick={(event) => {
-                         handleAction()
-                         event.preventDefault()
-                         event.stopPropagation()
-                       }}>
-              <div className={"wox-result-image"}>
-                <WoxImage img={result.Icon} height={36} width={36} />
-              </div>
-              <div className={"wox-result-title-container"}>
-                <h2 className={"wox-result-title"}>{result.Title}</h2>
-                {result.SubTitle && <h3 className={"wox-result-subtitle"}>{result.SubTitle}</h3>}
-              </div>
-            </li>
-          })}
-        </ul>
-      </div>
-    </WoxScrollbar>
-
-    {hasPreview && getCurrentPreviewData().PreviewType !== "" && <WoxPreview preview={getCurrentPreviewData()} resultSingleItemHeight={getResultSingleItemHeight()} />}
-
-    {showActionList && <div className={"wox-query-result-action-list"} onClick={(event) => {
-      event.preventDefault()
-      event.stopPropagation()
-    }}>
-      <div className={"wox-query-result-action-list-header"}>Actions</div>
-      {actionList.map((action, index) => {
-        return <div key={`wox-result-action-item-${index}`}
-                    className={index === actionActiveIndex ? "wox-result-action-item wox-result-action-item-active" : "wox-result-action-item"}
-                    onClick={(event) => {
-                      sendActionMessage(currentResult.current?.Id || "", action)
-                      event.preventDefault()
-                      event.stopPropagation()
-                    }}>
-          <WoxImage img={action.Icon} width={24} height={24} />
-          <span className={"wox-result-action-item-name"}>{action.Name}</span>
+  return (
+    <Style theme={WoxThemeHelper.getInstance().getTheme()} resultCount={resultList.length} itemHeight={getResultListHeight(10)}>
+      <WoxScrollbar
+        ref={currentResultScrollbarRef}
+        className={"wox-result-scrollbars"}
+        scrollbarProps={{
+          autoHeightMax: getResultListHeight(resultList.length < 10 ? 10 : resultList.length),
+          style: { width: hasPreview ? "50%" : "100%" }
+        }}
+      >
+        <div className={"wox-result-container"}>
+          <ul className={"wox-result-list"}>
+            {resultList.map((result, index) => {
+              return (
+                <li
+                  id={`wox-result-li-${index}`}
+                  key={`wox-result-li-${index}`}
+                  className={`wox-result-item ${activeIndex === index ? "active" : "inactive"}`}
+                  onMouseOverCapture={() => {
+                    if (showActionList) {
+                      return
+                    }
+                    currentMouseOverIndex.current += 1
+                    if (result.Index !== undefined && currentActiveIndex.current !== result.Index && currentMouseOverIndex.current > 1) {
+                      currentActiveIndex.current = index
+                      setActiveIndex(index)
+                    }
+                  }}
+                  onClick={event => {
+                    handleAction()
+                    event.preventDefault()
+                    event.stopPropagation()
+                  }}
+                >
+                  <div className={"wox-result-image"}>
+                    <WoxImage img={result.Icon} height={36} width={36} />
+                  </div>
+                  <div className={"wox-result-title-container"}>
+                    <h2 className={"wox-result-title"}>{result.Title}</h2>
+                    {result.SubTitle && <h3 className={"wox-result-subtitle"}>{result.SubTitle}</h3>}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
         </div>
-      })}
-      <div className={"wox-action-list-filter"}>
-        <input ref={filterInputRef} className={"wox-action-list-filter-input mousetrap"} type="text"
-               aria-label="Wox"
-               autoComplete="off"
-               autoCorrect="off"
-               autoCapitalize="off"
-               autoFocus={true}
-               onChange={(e) => {
-                 currentFilterText.current = e.target.value
-                 filterActionList()
-               }} />
-      </div>
-    </div>
-    }
-  </Style>
+      </WoxScrollbar>
+
+      {hasPreview && getCurrentPreviewData().PreviewType !== "" && <WoxPreview preview={getCurrentPreviewData()} resultSingleItemHeight={getResultSingleItemHeight()} />}
+
+      {showActionList && (
+        <div
+          className={"wox-query-result-action-list"}
+          onClick={event => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+        >
+          <div className={"wox-query-result-action-list-header"}>Actions</div>
+          {actionList.map((action, index) => {
+            return (
+              <div
+                key={`wox-result-action-item-${index}`}
+                className={index === actionActiveIndex ? "wox-result-action-item wox-result-action-item-active" : "wox-result-action-item"}
+                onClick={event => {
+                  sendActionMessage(currentResult.current?.Id || "", action)
+                  event.preventDefault()
+                  event.stopPropagation()
+                }}
+              >
+                <WoxImage img={action.Icon} width={24} height={24} />
+                <span className={"wox-result-action-item-name"}>{action.Name}</span>
+              </div>
+            )
+          })}
+          <div className={"wox-action-list-filter"}>
+            <input
+              ref={filterInputRef}
+              className={"wox-action-list-filter-input mousetrap"}
+              type="text"
+              aria-label="Wox"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              autoFocus={true}
+              onChange={e => {
+                currentFilterText.current = e.target.value
+                filterActionList()
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </Style>
+  )
 })
 
-const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number }>`
+const Style = styled.div<{ theme: Theme; resultCount: number; itemHeight: number }>`
   display: flex;
   flex-direction: row;
   min-height: ${props => props.itemHeight}px;
@@ -374,7 +394,8 @@ const Style = styled.div<{ theme: Theme, resultCount: number, itemHeight: number
       align-items: center;
     }
 
-    .wox-result-title, .wox-result-subtitle {
+    .wox-result-title,
+    .wox-result-subtitle {
       margin: 0;
       white-space: nowrap;
       overflow: hidden;

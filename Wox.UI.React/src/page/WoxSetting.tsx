@@ -44,7 +44,7 @@ export default () => {
   return (
     <Style>
       <Box sx={{ flexGrow: 1, display: "flex", height: "100%" }}>
-        <Paper sx={{ width: "260px", background: "#23272d", height: "100%", borderRadius: 0 }}>
+        <Paper className={"menu-container"} sx={{ width: "260px", background: "#23272d", height: "100%", borderRadius: 0 }}>
           <div className={"drag-area"}>&nbsp;</div>
           <MenuList sx={{ paddingLeft: "16px", paddingRight: "16px" }}>
             {menuList.map((item, index) => {
@@ -95,9 +95,11 @@ const Style = styled.div`
     width: 100%;
   }
 
-  .Mui-selected {
-    border: 1px solid #4480f8 !important;
-    border-radius: 5px;
+  .menu-container {
+    .Mui-selected {
+      border: 1px solid #4480f8 !important;
+      border-radius: 5px;
+    }
   }
 
   .setting-container {
