@@ -47,7 +47,7 @@ func (q *QueryShortcut) PlaceholderCount() int {
 
 type QueryHotkey struct {
 	Hotkey string
-	Query  string
+	Query  string // Support plugin.QueryVariable
 }
 
 func GetDefaultWoxSetting(ctx context.Context) WoxSetting {

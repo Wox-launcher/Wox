@@ -32,7 +32,7 @@ func (i *Instance) GetTriggerKeywords() []string {
 // query commands to query this plugin. Maybe plugin author dynamical registered or pre-defined in plugin.json
 func (i *Instance) GetQueryCommands() []MetadataCommand {
 	commands := i.Metadata.Commands
-	for _, command := range i.Setting.CustomizedQueryCommands {
+	for _, command := range i.Setting.QueryCommands {
 		commands = append(commands, MetadataCommand{
 			Command:     command.Command,
 			Description: command.Description,

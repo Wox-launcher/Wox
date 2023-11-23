@@ -91,7 +91,7 @@ func (a *APIImpl) OnSettingChanged(ctx context.Context, callback func(key string
 }
 
 func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []MetadataCommand) {
-	a.pluginInstance.Setting.CustomizedQueryCommands = lo.Map(commands, func(command MetadataCommand, _ int) setting.PluginQueryCommand {
+	a.pluginInstance.Setting.QueryCommands = lo.Map(commands, func(command MetadataCommand, _ int) setting.PluginQueryCommand {
 		return setting.PluginQueryCommand{
 			Command:     command.Command,
 			Description: command.Description,
