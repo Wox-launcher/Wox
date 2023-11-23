@@ -1,4 +1,4 @@
-package util
+package hotkey
 
 import (
 	"fmt"
@@ -149,4 +149,8 @@ func (h *Hotkey) parseCombineKey(combineKey string) ([]hotkey.Modifier, hotkey.K
 	}
 
 	return mods, key, nil
+}
+
+func getModifierKeyCode(ctx context.Context, modifier hotkey.Modifier) (uint16, error) {
+	return 0, fmt.Errorf("unknown modifier: %d", modifier)
 }

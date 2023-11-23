@@ -14,6 +14,7 @@ import (
 	"wox/setting"
 	"wox/share"
 	"wox/util"
+	"wox/util/hotkey"
 	"wox/util/screen"
 )
 
@@ -377,7 +378,7 @@ func handleRegisterMainHotkey(ctx context.Context, request WebsocketMsg) {
 }
 
 func handleIsHotkeyAvailable(ctx context.Context, request WebsocketMsg) {
-	hotkey, hotkeyErr := getWebsocketMsgParameter(ctx, request, "hotkey")
+	hotkeyStr, hotkeyErr := getWebsocketMsgParameter(ctx, request, "hotkey")
 	if hotkeyErr != nil {
 		logger.Error(ctx, hotkeyErr.Error())
 		responseUIError(ctx, request, hotkeyErr.Error())
@@ -385,8 +386,8 @@ func handleIsHotkeyAvailable(ctx context.Context, request WebsocketMsg) {
 	}
 
 	isAvailable := false
-	hk := util.Hotkey{}
-	registerErr := hk.Register(ctx, hotkey, func() {
+	hk := hotkey.Hotkey{}
+	registerErr := hk.Register(ctx, hotkeyStr, func() {
 
 	})
 	if registerErr == nil {

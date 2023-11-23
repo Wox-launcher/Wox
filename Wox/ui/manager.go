@@ -14,6 +14,7 @@ import (
 	"wox/setting"
 	"wox/share"
 	"wox/util"
+	"wox/util/hotkey"
 )
 
 var managerInstance *Manager
@@ -21,9 +22,9 @@ var managerOnce sync.Once
 var logger *util.Log
 
 type Manager struct {
-	mainHotkey      *util.Hotkey
-	selectionHotkey *util.Hotkey
-	queryHotkeys    []*util.Hotkey
+	mainHotkey      *hotkey.Hotkey
+	selectionHotkey *hotkey.Hotkey
+	queryHotkeys    []*hotkey.Hotkey
 	ui              share.UI
 	serverPort      int
 	uiProcess       *os.Process
@@ -33,8 +34,8 @@ type Manager struct {
 func GetUIManager() *Manager {
 	managerOnce.Do(func() {
 		managerInstance = &Manager{}
-		managerInstance.mainHotkey = &util.Hotkey{}
-		managerInstance.selectionHotkey = &util.Hotkey{}
+		managerInstance.mainHotkey = &hotkey.Hotkey{}
+		managerInstance.selectionHotkey = &hotkey.Hotkey{}
 		managerInstance.ui = &uiImpl{}
 		managerInstance.themes = util.NewHashMap[string, Theme]()
 		logger = util.GetLogger()
@@ -158,8 +159,8 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 }
 
 func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.QueryHotkey) error {
-	hotkey := &util.Hotkey{}
-	err := hotkey.Register(ctx, queryHotkey.Hotkey, func() {
+	hk := &hotkey.Hotkey{}
+	err := hk.Register(ctx, queryHotkey.Hotkey, func() {
 		query := plugin.GetPluginManager().ReplaceQueryVariable(ctx, queryHotkey.Query)
 		m.ui.ChangeQuery(ctx, share.ChangedQuery{
 			QueryType: plugin.QueryTypeInput,
@@ -171,7 +172,7 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 		return err
 	}
 
-	m.queryHotkeys = append(m.queryHotkeys, hotkey)
+	m.queryHotkeys = append(m.queryHotkeys, hk)
 	return nil
 }
 

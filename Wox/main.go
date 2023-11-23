@@ -96,13 +96,18 @@ func main() {
 			}
 		}
 
-		t := util.Hotkey{}
-		combineKey := "alt+m"
-		if util.IsMacOS() {
-			combineKey = "cmd+m"
-		}
-		t.Register(ctx, combineKey, func() {
-			hotkey.InitHotkey()
+		t := hotkey.Hotkey{}
+		t.Register(ctx, "ctrl+ctrl", func() {
+			ui.GetUIManager().GetUI(ctx).ToggleApp(ctx)
+		})
+		t.Register(ctx, "cmd+cmd", func() {
+			ui.GetUIManager().GetUI(ctx).ToggleApp(ctx)
+		})
+		t.Register(ctx, "option+option", func() {
+			ui.GetUIManager().GetUI(ctx).ToggleApp(ctx)
+		})
+		t.Register(ctx, "shift+shift", func() {
+			ui.GetUIManager().GetUI(ctx).ToggleApp(ctx)
 		})
 
 		util.Go(ctx, "start ui", func() {
