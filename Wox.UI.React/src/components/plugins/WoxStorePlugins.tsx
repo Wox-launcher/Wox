@@ -14,11 +14,7 @@ export default () => {
     WoxPluginHelper.getInstance()
       .loadStorePlugins()
       .then(_ => {
-        const plugins = []
-        for (let i = 0; i < 10; i++) {
-          plugins.push(WoxPluginHelper.getInstance().getStorePlugins()[0])
-        }
-        setPlugins(plugins)
+        setPlugins(WoxPluginHelper.getInstance().getStorePlugins())
         setLoading(false)
       })
   }, [])

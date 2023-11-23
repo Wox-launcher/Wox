@@ -3,15 +3,20 @@ import { Box, Button, Divider, List, ListItemAvatar, ListItemButton, ListItemTex
 import ImageGallery from "react-image-gallery"
 import { useWindowSize } from "usehooks-ts"
 import { StorePluginManifest } from "../../entity/Plugin.typing"
-import { useState } from "react"
+import React, { useState } from "react"
 import styled from "styled-components"
+import { openUrl } from "../../api/WoxAPI.ts"
 
 export default (props: { plugins: StorePluginManifest[]; type: string }) => {
   const { plugins } = props
+  const [selectedTab, setSelectedTab] = useState(0)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const size = useWindowSize()
-
   const isStore = props.type === "store"
+
+  const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setSelectedTab(newValue)
+  }
 
   return (
     <Style>
@@ -34,16 +39,23 @@ export default (props: { plugins: StorePluginManifest[]; type: string }) => {
                       }}
                     >
                       <ListItemAvatar>
-                        <img alt={plugin.Name} src={plugin.IconUrl} height={36} width={36} />
+                        <img alt={plugin.Name} src={plugin.IconUrl ?? "/react.svg"} height={36} width={36} />
                       </ListItemAvatar>
                       <ListItemText primary={plugin.Name} secondary={<span className={"plugin-description"}>{plugin.Description}</span>} />
-                      {!plugin.IsInstalled && (
-                        <Button variant="outlined" sx={{ textTransform: "none", marginLeft: "5px" }}>
+                      {isStore && !plugin.IsInstalled && (
+                        <Button
+                          variant="contained"
+                          sx={{ textTransform: "none", marginLeft: "5px" }}
+                          onClick={event => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                          }}
+                        >
                           Install
                         </Button>
                       )}
                       {plugin.NeedUpdate && (
-                        <Button variant="outlined" sx={{ textTransform: "none", marginLeft: "5px" }}>
+                        <Button variant="contained" sx={{ textTransform: "none", marginLeft: "5px" }}>
                           Update
                         </Button>
                       )}
@@ -57,49 +69,56 @@ export default (props: { plugins: StorePluginManifest[]; type: string }) => {
         </div>
         <div className={"plugin-detail-container"}>
           <div className={"plugin-detail-summary"}>
-            <Typography variant="h4" gutterBottom>
-              {plugins[selectedIndex].Name}
+            <div className={"detail-title"}>
+              <Typography variant="h4" gutterBottom display={"inline"}>
+                {plugins[selectedIndex].Name}
+              </Typography>
               <Typography variant="subtitle2" display={"inline"} gutterBottom sx={{ paddingLeft: "10px" }}>
                 Version: {plugins[selectedIndex].Version}
               </Typography>
-            </Typography>
-            <Typography variant="subtitle1" sx={{ color: "#6f737a" }} display={"inline"} gutterBottom>
-              {plugins[selectedIndex].Author} -{" "}
-            </Typography>
-            <Typography
-              onClick={() => {
-                window.open(plugins[selectedIndex].Website)
-              }}
-              variant="subtitle1"
-              display={"inline"}
-              sx={{ color: "#6a99f6" }}
-              gutterBottom
-            >
-              Plugin homepage
-            </Typography>
+            </div>
+
+            <div className={"detail-subtitle"}>
+              <Typography variant="subtitle1" sx={{ color: "#6f737a" }} display={"inline"} gutterBottom>
+                {plugins[selectedIndex].Author} -{" "}
+              </Typography>
+              <Typography
+                onClick={async () => {
+                  await openUrl(plugins[selectedIndex].Website)
+                }}
+                variant="subtitle1"
+                display={"inline"}
+                sx={{ color: "#6a99f6" }}
+                gutterBottom
+              >
+                Plugin homepage
+              </Typography>
+            </div>
           </div>
 
-          <Tabs value={0} sx={{ borderBottom: "1px solid #23272d" }}>
+          <Tabs value={selectedTab} sx={{ borderBottom: "1px solid #23272d" }} onChange={handleChange}>
             <Tab label="Description" sx={{ textTransform: "none" }} />
+            {!isStore && <Tab label="Setting" sx={{ textTransform: "none" }} />}
           </Tabs>
 
-          {isStore && plugins[selectedIndex].ScreenshotUrls && (
-            <ImageGallery
-              showNav={false}
-              showThumbnails={false}
-              showFullscreenButton={false}
-              showPlayButton={false}
-              items={
-                plugins[selectedIndex].ScreenshotUrls?.map(value => {
-                  return { original: value, thumbnail: value }
-                }) || []
-              }
-            />
-          )}
-
-          <Typography variant="body1" gutterBottom sx={{ paddingLeft: "15px", paddingRight: "15px" }}>
-            {plugins[selectedIndex].Description}
-          </Typography>
+          <div className={"plugin-detail-description"} style={{ display: `${selectedTab === 0 ? "block" : "none"}` }}>
+            {isStore && plugins[selectedIndex].ScreenshotUrls && (
+              <ImageGallery
+                showNav={false}
+                showThumbnails={false}
+                showFullscreenButton={false}
+                showPlayButton={false}
+                items={
+                  plugins[selectedIndex].ScreenshotUrls?.map(value => {
+                    return { original: value, thumbnail: value }
+                  }) || []
+                }
+              />
+            )}
+            <Typography variant="body1" gutterBottom>
+              {plugins[selectedIndex].Description}
+            </Typography>
+          </div>
         </div>
       </Box>
     </Style>
@@ -129,7 +148,11 @@ const Style = styled.div`
     padding: 15px;
   }
 
-  .image-gallery-content .image-gallery-slide .image-gallery-image {
-    max-height: 350px;
+  .plugin-detail-description {
+    padding: 15px;
+
+    .image-gallery-content .image-gallery-slide .image-gallery-image {
+      max-height: 350px;
+    }
   }
 `

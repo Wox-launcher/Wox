@@ -22,3 +22,7 @@ export async function getInstalledPlugins() {
 export async function updateSetting(setting: UpdateSetting) {
   return post<API.WoxRestResponse<Setting>>(`/setting/wox/update`, JSON.stringify(setting))
 }
+
+export async function openUrl(url: string) {
+  return post<API.WoxRestResponse<string>>(`/open/url`, JSON.stringify({ url: url }))
+}
