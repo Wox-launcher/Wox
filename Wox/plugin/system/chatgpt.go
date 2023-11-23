@@ -42,9 +42,9 @@ func (c *ChatgptPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
-		Settings: setting.CustomizedPluginSettings{
+		SettingDefinitions: setting.PluginSettingDefinitions{
 			{
-				Type: setting.PluginSettingTypeTextBox,
+				Type: setting.PluginSettingDefinitionTypeTextBox,
 				Value: setting.PluginSettingValueTextBox{
 					Key:   "api_key",
 					Label: "API Key",

@@ -1,4 +1,4 @@
-package ui
+package dto
 
 type Theme struct {
 	ThemeId                         string
@@ -46,4 +46,5 @@ type Theme struct {
 	PreviewSplitLineColor           string
 	PreviewPropertyTitleColor       string
 	PreviewPropertyContentColor     string
+	IsInstalled                     bool
 }

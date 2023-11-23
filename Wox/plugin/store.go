@@ -13,12 +13,12 @@ import (
 	"wox/util"
 )
 
-type StoreManifest struct {
+type storeManifest struct {
 	Name string
 	Url  string
 }
 
-type StorePluginManifest struct {
+type storePluginManifest struct {
 	Id             string
 	Name           string
 	Author         string
@@ -38,7 +38,7 @@ var storeInstance *Store
 var storeOnce sync.Once
 
 type Store struct {
-	pluginManifests []StorePluginManifest
+	pluginManifests []storePluginManifest
 }
 
 func GetStoreManager() *Store {
@@ -48,10 +48,10 @@ func GetStoreManager() *Store {
 	return storeInstance
 }
 
-func (s *Store) getStoreManifests(ctx context.Context) []StoreManifest {
-	return []StoreManifest{
+func (s *Store) getStoreManifests(ctx context.Context) []storeManifest {
+	return []storeManifest{
 		{
-			Name: "Wox Official Plugin",
+			Name: "Wox Official Plugin Store",
 			Url:  "https://raw.githubusercontent.com/Wox-launcher/Wox/v2/plugin-store.json",
 		},
 	}
@@ -71,18 +71,18 @@ func (s *Store) Start(ctx context.Context) {
 	})
 }
 
-func (s *Store) GetStorePluginManifests(ctx context.Context) []StorePluginManifest {
-	var storePluginManifests []StorePluginManifest
+func (s *Store) GetStorePluginManifests(ctx context.Context) []storePluginManifest {
+	var storePluginManifests []storePluginManifest
 
 	for _, store := range s.getStoreManifests(ctx) {
-		storePluginManifest, manifestErr := s.GetStorePluginManifest(ctx, store)
+		pluginManifest, manifestErr := s.GetStorePluginManifest(ctx, store)
 		if manifestErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to get plugin manifest from %s store: %s", store.Name, manifestErr.Error()))
 			continue
 		}
 
-		for _, manifest := range storePluginManifest {
-			existingManifest, found := lo.Find(storePluginManifests, func(manifest StorePluginManifest) bool {
+		for _, manifest := range pluginManifest {
+			existingManifest, found := lo.Find(storePluginManifests, func(manifest storePluginManifest) bool {
 				return manifest.Id == manifest.Id
 			})
 			if found {
@@ -104,7 +104,7 @@ func (s *Store) GetStorePluginManifests(ctx context.Context) []StorePluginManife
 	return storePluginManifests
 }
 
-func (s *Store) GetStorePluginManifest(ctx context.Context, store StoreManifest) ([]StorePluginManifest, error) {
+func (s *Store) GetStorePluginManifest(ctx context.Context, store storeManifest) ([]storePluginManifest, error) {
 	logger.Info(ctx, fmt.Sprintf("start to get plugin manifest from %s(%s)", store.Name, store.Url))
 
 	response, getErr := util.HttpGet(ctx, store.Url)
@@ -112,7 +112,7 @@ func (s *Store) GetStorePluginManifest(ctx context.Context, store StoreManifest)
 		return nil, getErr
 	}
 
-	var storePluginManifests []StorePluginManifest
+	var storePluginManifests []storePluginManifest
 	unmarshalErr := json.Unmarshal(response, &storePluginManifests)
 	if unmarshalErr != nil {
 		return nil, unmarshalErr
@@ -121,13 +121,13 @@ func (s *Store) GetStorePluginManifest(ctx context.Context, store StoreManifest)
 	return storePluginManifests, nil
 }
 
-func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifest {
-	return lo.Filter(s.pluginManifests, func(manifest StorePluginManifest, _ int) bool {
+func (s *Store) Search(ctx context.Context, keyword string) []storePluginManifest {
+	return lo.Filter(s.pluginManifests, func(manifest storePluginManifest, _ int) bool {
 		return util.IsStringMatch(manifest.Name, keyword, false)
 	})
 }
 
-func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) {
+func (s *Store) Install(ctx context.Context, manifest storePluginManifest) {
 	logger.Info(ctx, fmt.Sprintf("start to install plugin %s(%s)", manifest.Name, manifest.Version))
 
 	// check if installed newer version

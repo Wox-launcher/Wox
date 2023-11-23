@@ -156,7 +156,7 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 	}
 	loadFinishTimestamp := util.GetSystemTimestamp()
 
-	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Metadata.Id, metadata.Metadata.Settings)
+	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Metadata.Id, metadata.Metadata.SettingDefinitions)
 	if settingErr != nil {
 		return settingErr
 	}
@@ -223,11 +223,11 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 
 	for _, plugin := range AllSystemPlugin {
 		metadata := plugin.GetMetadata()
-		pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.Settings)
+		pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.SettingDefinitions)
 		if settingErr != nil {
 			logger.Error(ctx, fmt.Errorf("failed to load system plugin[%s] setting, use default plugin setting: %w", metadata.Name, settingErr).Error())
 			pluginSetting = &setting.PluginSetting{
-				CustomizedSettings: util.NewHashMap[string, string](),
+				Settings: util.NewHashMap[string, string](),
 			}
 		}
 

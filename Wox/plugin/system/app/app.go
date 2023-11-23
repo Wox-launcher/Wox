@@ -50,13 +50,13 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
-		Settings: []setting.PluginSettingItem{
+		SettingDefinitions: []setting.PluginSettingDefinitionItem{
 			{
-				Type: setting.PluginSettingTypeCheckBox,
+				Type: setting.PluginSettingDefinitionTypeCheckBox,
 				Value: setting.PluginSettingValueCheckBox{
-					Key:   "UsePinYin",
-					Label: "Use pinyin to search",
-					Value: "false",
+					Key:          "UsePinYin",
+					Label:        "Use pinyin to search",
+					DefaultValue: "false",
 				},
 			},
 		},

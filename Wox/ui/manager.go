@@ -27,7 +27,7 @@ type Manager struct {
 	ui              share.UI
 	serverPort      int
 	uiProcess       *os.Process
-	themes          []Theme
+	themes          *util.HashMap[string, Theme]
 }
 
 func GetUIManager() *Manager {
@@ -36,12 +36,86 @@ func GetUIManager() *Manager {
 		managerInstance.mainHotkey = &util.Hotkey{}
 		managerInstance.selectionHotkey = &util.Hotkey{}
 		managerInstance.ui = &uiImpl{}
+		managerInstance.themes = util.NewHashMap[string, Theme]()
 		logger = util.GetLogger()
 	})
 	return managerInstance
 }
 
-func (m *Manager) Send(ctx context.Context) error {
+func (m *Manager) Start(ctx context.Context) error {
+	//load embed themes
+	embedThemes := resource.GetEmbedThemes(ctx)
+	for _, themeJson := range embedThemes {
+		theme, themeErr := m.parseTheme(themeJson)
+		if themeErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to parse theme: %s", themeErr.Error()))
+			continue
+		}
+		m.themes.Store(theme.ThemeId, theme)
+	}
+
+	//load user themes
+	userThemesDirectory := util.GetLocation().GetThemeDirectory()
+	dirEntry, readErr := os.ReadDir(userThemesDirectory)
+	if readErr != nil {
+		return readErr
+	}
+	for _, entry := range dirEntry {
+		if entry.IsDir() {
+			continue
+		}
+
+		themeData, readThemeErr := os.ReadFile(userThemesDirectory + "/" + entry.Name())
+		if readThemeErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to read user theme: %s, %s", entry.Name(), readThemeErr.Error()))
+			continue
+		}
+
+		theme, themeErr := m.parseTheme(string(themeData))
+		if themeErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to parse user theme: %s, %s", entry.Name(), themeErr.Error()))
+			continue
+		}
+		m.themes.Store(theme.ThemeId, theme)
+	}
+
+	if util.IsDev() {
+		//watch user themes folder and reload themes
+		util.Go(ctx, "watch user themes", func() {
+			watchErr := util.WatchDirectories(ctx, userThemesDirectory, func(e fsnotify.Event) {
+				var themePath = e.Name
+				if e.Op == fsnotify.Write || e.Op == fsnotify.Chmod {
+					logger.Info(ctx, fmt.Sprintf("user theme changed: %s", themePath))
+					themeData, readThemeErr := os.ReadFile(themePath)
+					if readThemeErr != nil {
+						logger.Error(ctx, fmt.Sprintf("failed to read user theme: %s, %s", themePath, readThemeErr.Error()))
+						return
+					}
+
+					changedTheme, themeErr := m.parseTheme(string(themeData))
+					if themeErr != nil {
+						logger.Error(ctx, fmt.Sprintf("failed to parse user theme: %s, %s", themePath, themeErr.Error()))
+						return
+					}
+
+					//replace theme
+					if _, ok := m.themes.Load(changedTheme.ThemeId); ok {
+						m.themes.Store(changedTheme.ThemeId, changedTheme)
+						logger.Info(ctx, fmt.Sprintf("replaced theme: %s", changedTheme.ThemeName))
+						m.ChangeTheme(ctx, changedTheme)
+					}
+				}
+			})
+			if watchErr != nil {
+				logger.Error(ctx, fmt.Sprintf("failed to watch user themes: %s", watchErr.Error()))
+			}
+		})
+	}
+
+	util.Go(ctx, "start store manager", func() {
+		GetStoreManager().Start(util.NewTraceContext())
+	})
+
 	return nil
 }
 
@@ -185,91 +259,34 @@ func (m *Manager) getElectronDownloadUrl(ctx context.Context) []string {
 	return []string{}
 }
 
-func (m *Manager) LoadThemes(ctx context.Context) error {
-	//load embed themes
-	embedThemes := resource.GetEmbedThemes(ctx)
-	for _, themeJson := range embedThemes {
-		theme, themeErr := m.parseTheme(themeJson)
-		if themeErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to parse theme: %s", themeErr.Error()))
-			continue
-		}
-		m.themes = append(m.themes, theme)
-	}
-
-	//load user themes
-	userThemesDirectory := util.GetLocation().GetThemeDirectory()
-	dirEntry, readErr := os.ReadDir(userThemesDirectory)
-	if readErr != nil {
-		return readErr
-	}
-	for _, entry := range dirEntry {
-		if entry.IsDir() {
-			continue
-		}
-
-		themeData, readThemeErr := os.ReadFile(userThemesDirectory + "/" + entry.Name())
-		if readThemeErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to read user theme: %s, %s", entry.Name(), readThemeErr.Error()))
-			continue
-		}
-
-		theme, themeErr := m.parseTheme(string(themeData))
-		if themeErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to parse user theme: %s, %s", entry.Name(), themeErr.Error()))
-			continue
-		}
-		m.themes = append(m.themes, theme)
-	}
-
-	if util.IsDev() {
-		//watch user themes folder and reload themes
-		util.Go(ctx, "watch user themes", func() {
-			watchErr := util.WatchDirectories(ctx, userThemesDirectory, func(e fsnotify.Event) {
-				var themePath = e.Name
-				if e.Op == fsnotify.Write || e.Op == fsnotify.Chmod {
-					logger.Info(ctx, fmt.Sprintf("user theme changed: %s", themePath))
-					themeData, readThemeErr := os.ReadFile(themePath)
-					if readThemeErr != nil {
-						logger.Error(ctx, fmt.Sprintf("failed to read user theme: %s, %s", themePath, readThemeErr.Error()))
-						return
-					}
-
-					changedTheme, themeErr := m.parseTheme(string(themeData))
-					if themeErr != nil {
-						logger.Error(ctx, fmt.Sprintf("failed to parse user theme: %s, %s", themePath, themeErr.Error()))
-						return
-					}
-
-					//replace theme
-					for i, theme := range m.themes {
-						if theme.ThemeId == changedTheme.ThemeId {
-							m.themes[i] = changedTheme
-							logger.Info(ctx, fmt.Sprintf("replaced theme: %s", theme.ThemeName))
-							m.OnThemeChange(ctx, changedTheme)
-							return
-						}
-					}
-				}
-			})
-			if watchErr != nil {
-				logger.Error(ctx, fmt.Sprintf("failed to watch user themes: %s", watchErr.Error()))
-			}
-		})
-	}
-
-	return nil
-}
-
 func (m *Manager) GetCurrentTheme(ctx context.Context) Theme {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	for _, theme := range m.themes {
-		if theme.ThemeId == woxSetting.ThemeId {
-			return theme
-		}
+	if v, ok := m.themes.Load(woxSetting.ThemeId); ok {
+		return v
 	}
 
 	return Theme{}
+}
+
+func (m *Manager) GetAllThemes(ctx context.Context) []Theme {
+	var themes []Theme
+	m.themes.Range(func(key string, value Theme) bool {
+		themes = append(themes, value)
+		return true
+	})
+	return themes
+}
+
+func (m *Manager) AddTheme(ctx context.Context, theme Theme) {
+	m.themes.Store(theme.ThemeId, theme)
+	m.ChangeTheme(ctx, theme)
+}
+
+func (m *Manager) RemoveTheme(ctx context.Context, theme Theme) {
+	m.themes.Delete(theme.ThemeId)
+	if v, ok := m.themes.Load("53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03"); ok {
+		m.ChangeTheme(ctx, v)
+	}
 }
 
 func (m *Manager) parseTheme(themeJson string) (Theme, error) {
@@ -281,7 +298,7 @@ func (m *Manager) parseTheme(themeJson string) (Theme, error) {
 	return theme, nil
 }
 
-func (m *Manager) OnThemeChange(ctx context.Context, theme Theme) {
+func (m *Manager) ChangeTheme(ctx context.Context, theme Theme) {
 	themeJson, marshalErr := json.Marshal(theme)
 	if marshalErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to marshal theme and send to ui: %s", marshalErr.Error()))

@@ -57,7 +57,7 @@ func main() {
 		return
 	}
 
-	themeErr := ui.GetUIManager().LoadThemes(ctx)
+	themeErr := ui.GetUIManager().Start(ctx)
 	if themeErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize themes: %s", themeErr.Error()))
 		return

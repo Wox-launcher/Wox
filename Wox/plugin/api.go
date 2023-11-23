@@ -58,12 +58,12 @@ func (a *APIImpl) GetTranslation(ctx context.Context, key string) string {
 func (a *APIImpl) GetSetting(ctx context.Context, key string) string {
 	// try to get platform specific setting first
 	platformSpecificKey := key + "@" + util.GetCurrentPlatform()
-	v, exist := a.pluginInstance.Setting.GetCustomizedSetting(platformSpecificKey)
+	v, exist := a.pluginInstance.Setting.GetSetting(platformSpecificKey)
 	if exist {
 		return v
 	}
 
-	v, exist = a.pluginInstance.Setting.GetCustomizedSetting(key)
+	v, exist = a.pluginInstance.Setting.GetSetting(key)
 	if exist {
 		return v
 	}
@@ -75,8 +75,8 @@ func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string, isP
 		key = key + "@" + util.GetCurrentPlatform()
 	}
 
-	existValue, exist := a.pluginInstance.Setting.CustomizedSettings.Load(key)
-	a.pluginInstance.Setting.CustomizedSettings.Store(key, value)
+	existValue, exist := a.pluginInstance.Setting.Settings.Load(key)
+	a.pluginInstance.Setting.Settings.Store(key, value)
 	a.pluginInstance.SaveSetting(ctx)
 
 	if !exist || (exist && existValue != value) {

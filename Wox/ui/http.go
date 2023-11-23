@@ -180,21 +180,54 @@ func serveAndWait(ctx context.Context, port int) {
 			}
 
 			logger.Debug(getCtx, fmt.Sprintf("get plugin setting: %s", instance.Metadata.Name))
-			installedPlugin.CustomizedSettingDefinitions = instance.Metadata.Settings
+			installedPlugin.SettingDefinitions = instance.Metadata.SettingDefinitions
 
 			var definitionSettings = util.NewHashMap[string, string]()
-			for _, item := range instance.Metadata.Settings {
+			for _, item := range instance.Metadata.SettingDefinitions {
 				settingValue := instance.API.GetSetting(getCtx, item.Value.GetKey())
 				definitionSettings.Store(item.Value.GetKey(), settingValue)
 			}
 			installedPlugin.Settings = *instance.Setting
 			//only return user pre-defined settings
-			installedPlugin.Settings.CustomizedSettings = definitionSettings
+			installedPlugin.Settings.Settings = definitionSettings
 
 			plugins = append(plugins, installedPlugin)
 		}
 
 		writeSuccessResponse(w, plugins)
+	})
+
+	http.HandleFunc("/theme/store", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(w)
+		storeThemes := GetStoreManager().GetThemes()
+		var themes = make([]dto.Theme, len(storeThemes))
+		copyErr := copier.Copy(&themes, &storeThemes)
+		if copyErr != nil {
+			writeErrorResponse(w, copyErr.Error())
+			return
+		}
+
+		for i, storeTheme := range themes {
+			isInstalled := lo.ContainsBy(GetUIManager().GetAllThemes(ctx), func(item Theme) bool {
+				return item.ThemeId == storeTheme.ThemeId
+			})
+			themes[i].IsInstalled = isInstalled
+		}
+
+		writeSuccessResponse(w, themes)
+	})
+
+	http.HandleFunc("/theme/installed", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(w)
+		installedThemes := GetUIManager().GetAllThemes(ctx)
+		var themes = make([]dto.Theme, len(installedThemes))
+		copyErr := copier.Copy(&themes, &installedThemes)
+		if copyErr != nil {
+			writeErrorResponse(w, copyErr.Error())
+			return
+		}
+
+		writeSuccessResponse(w, themes)
 	})
 
 	http.HandleFunc("/setting/wox", func(w http.ResponseWriter, r *http.Request) {

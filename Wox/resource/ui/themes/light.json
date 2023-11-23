@@ -3,6 +3,7 @@
   "ThemeName": "Wox Default Light Theme",
   "ThemeAuthor": "Wox launcher",
   "ThemeUrl": "http://www.github.com/wox-launcher/wox",
+  "IsSystemTheme": true,
   "AppBackgroundColor": "rgba(236, 240, 240, 0.65)",
   "AppPaddingLeft": 10,
   "AppPaddingTop": 10,

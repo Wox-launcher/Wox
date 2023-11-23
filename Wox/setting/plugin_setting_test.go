@@ -9,12 +9,12 @@ import (
 
 func TestUnMarshalPluginSettingItem(t *testing.T) {
 	type metadataForTest struct {
-		Settings CustomizedPluginSettings
+		SettingDefinitions PluginSettingDefinitions
 	}
 
 	jsonStr := `
 {
-    "Settings":[
+    "SettingDefinitions":[
         {
             "Type":"head",
             "Value":{
@@ -71,16 +71,16 @@ func TestUnMarshalPluginSettingItem(t *testing.T) {
 	}
 
 	assert.Nil(t, err)
-	assert.Equal(t, len(metadata.Settings), 6)
-	assert.Equal(t, metadata.Settings[0].Type, PluginSettingTypeHead)
-	assert.Equal(t, metadata.Settings[1].Type, PluginSettingTypeTextBox)
-	assert.Equal(t, metadata.Settings[2].Type, PluginSettingTypeCheckBox)
-	assert.Equal(t, metadata.Settings[3].Type, PluginSettingTypeSelect)
-	assert.Equal(t, metadata.Settings[4].Type, PluginSettingTypeNewLine)
-	assert.Equal(t, metadata.Settings[5].Type, PluginSettingTypeLabel)
-	assert.Equal(t, len(metadata.Settings[3].Value.(PluginSettingValueSelect).Options), 2)
+	assert.Equal(t, len(metadata.SettingDefinitions), 6)
+	assert.Equal(t, metadata.SettingDefinitions[0].Type, PluginSettingDefinitionTypeHead)
+	assert.Equal(t, metadata.SettingDefinitions[1].Type, PluginSettingDefinitionTypeTextBox)
+	assert.Equal(t, metadata.SettingDefinitions[2].Type, PluginSettingDefinitionTypeCheckBox)
+	assert.Equal(t, metadata.SettingDefinitions[3].Type, PluginSettingDefinitionTypeSelect)
+	assert.Equal(t, metadata.SettingDefinitions[4].Type, PluginSettingDefinitionTypeNewLine)
+	assert.Equal(t, metadata.SettingDefinitions[5].Type, PluginSettingDefinitionTypeLabel)
+	assert.Equal(t, len(metadata.SettingDefinitions[3].Value.(PluginSettingValueSelect).Options), 2)
 
-	val, exist := metadata.Settings.GetValue("IndexDirectories")
+	val, exist := metadata.SettingDefinitions.GetDefaultValue("IndexDirectories")
 	assert.True(t, exist)
 	assert.Equal(t, val, "test;test1")
 
@@ -95,9 +95,9 @@ func TestMarshalPluginSetting(t *testing.T) {
 	h.Store("test1", "test")
 
 	ps := PluginSetting{
-		Disabled:           true,
-		TriggerKeywords:    nil,
-		CustomizedSettings: &h,
+		Disabled:        true,
+		TriggerKeywords: nil,
+		Settings:        &h,
 	}
 
 	marshalData, marshalErr := json.Marshal(ps)
@@ -108,5 +108,5 @@ func TestMarshalPluginSetting(t *testing.T) {
 	err := json.Unmarshal(marshalData, &ps1)
 	assert.Nil(t, err)
 	assert.Equal(t, ps.Disabled, ps1.Disabled)
-	assert.Equal(t, ps1.CustomizedSettings.Len(), int64(2))
+	assert.Equal(t, ps1.Settings.Len(), int64(2))
 }
