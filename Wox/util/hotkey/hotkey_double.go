@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/robotn/gohook"
 	"golang.design/x/hotkey"
+	"time"
 	"wox/util"
 )
 
@@ -34,7 +35,6 @@ func registerDoubleHotKey(ctx context.Context, modifier hotkey.Modifier, callbac
 			select {
 			case ev := <-evChan:
 				if ev.Kind == hook.KeyUp {
-					util.GetLogger().Info(ctx, fmt.Sprintf("keycode: %d, rawkeycode: %d", ev.Keycode, ev.Rawcode))
 					if cb, callbackExist := keyCallback.Load(ev.Keycode); callbackExist {
 						var keyUpMaxInterval int64 = 500
 						if v, ok := lastKeyUpTimestamp.Load(ev.Keycode); ok {
@@ -53,6 +53,8 @@ func registerDoubleHotKey(ctx context.Context, modifier hotkey.Modifier, callbac
 				util.GetLogger().Info(ctx, fmt.Sprintf("unregister double hotkey event received, exit loop"))
 				return
 			default:
+				// avoid 100% cpu usage
+				time.Sleep(20 * time.Millisecond)
 			}
 		}
 	})
