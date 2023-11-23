@@ -1,16 +1,14 @@
 import { useEffect, useState } from "react"
 import { WoxPluginHelper } from "../../utils/WoxPluginHelper.ts"
-import { Box, Button, CircularProgress, Divider, List, ListItem, ListItemAvatar, ListItemText } from "@mui/material"
+import { CircularProgress } from "@mui/material"
 import styled from "styled-components"
 import { StorePluginManifest } from "../../entity/Plugin.typing"
-import WoxScrollbar from "../tools/WoxScrollbar.tsx"
-import { useWindowSize } from "usehooks-ts"
+import "react-image-gallery/styles/css/image-gallery.css"
+import WoxPluginList from "./WoxPluginList.tsx"
 
 export default () => {
   const [loading, setLoading] = useState(true)
   const [plugins, setPlugins] = useState<StorePluginManifest[]>([])
-
-  const size = useWindowSize()
 
   useEffect(() => {
     WoxPluginHelper.getInstance()
@@ -28,49 +26,14 @@ export default () => {
   return (
     <Style>
       {loading && <CircularProgress />}
-      {!loading && (
-        <Box sx={{ flexGrow: 1, display: "flex", height: "100%" }}>
-          <WoxScrollbar
-            className={"plugin-list-scrollbars"}
-            scrollbarProps={{
-              style: { width: "50%" },
-              autoHeightMax: size.height - 80
-            }}
-          >
-            <List sx={{ width: "100%" }}>
-              {plugins.map((plugin, index) => {
-                return (
-                  <div key={`list-item-${index}`}>
-                    <ListItem>
-                      <ListItemAvatar>
-                        <img alt={plugin.Name} src={plugin.IconUrl} height={36} width={36} />
-                      </ListItemAvatar>
-                      <ListItemText primary={plugin.Name} secondary={<span className={"plugin-description"}>{plugin.Description}</span>} />
-                      {!plugin.IsInstalled && (
-                        <Button variant="outlined" sx={{ textTransform: "none", marginLeft: "5px" }}>
-                          Install
-                        </Button>
-                      )}
-                      {plugin.NeedUpdate && (
-                        <Button variant="outlined" sx={{ textTransform: "none", marginLeft: "5px" }}>
-                          Update
-                        </Button>
-                      )}
-                    </ListItem>
-                    <Divider variant="inset" component="li" sx={{ borderColor: "#23272d" }} />
-                  </div>
-                )
-              })}
-            </List>
-          </WoxScrollbar>
-        </Box>
-      )}
+      {!loading && <WoxPluginList plugins={plugins} type={"store"} />}
     </Style>
   )
 }
 
 const Style = styled.div`
-  .plugin-list-scrollbars {
+  .plugin-list-container {
+    height: 100%;
     border-right: 1px solid #23272d;
   }
 
@@ -81,5 +44,17 @@ const Style = styled.div`
     overflow: hidden;
     text-overflow: ellipsis;
     width: calc(50vw - 280px);
+  }
+
+  .plugin-detail-container {
+    width: 100%;
+  }
+
+  .plugin-detail-summary {
+    padding: 15px;
+  }
+
+  .image-gallery-content .image-gallery-slide .image-gallery-image {
+    max-height: 350px;
   }
 `

@@ -8,7 +8,7 @@ export interface StorePluginManifest {
   IconUrl: string
   Website: string
   DownloadUrl: string
-  ScreenshotUrls: string[]
+  ScreenshotUrls?: string[]
   DateCreated: string
   DateUpdated: string
   IsInstalled: boolean

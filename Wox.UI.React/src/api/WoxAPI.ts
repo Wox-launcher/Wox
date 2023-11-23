@@ -15,6 +15,10 @@ export async function getStorePlugins() {
   return post<API.WoxRestResponse<StorePluginManifest[]>>(`/plugin/store`)
 }
 
+export async function getInstalledPlugins() {
+  return post<API.WoxRestResponse<StorePluginManifest[]>>(`/plugin/installed`)
+}
+
 export async function updateSetting(setting: UpdateSetting) {
   return post<API.WoxRestResponse<Setting>>(`/setting/wox/update`, JSON.stringify(setting))
 }
