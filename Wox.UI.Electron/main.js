@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, remote, dialog } = require("electron")
+const { app, BrowserWindow, ipcMain, remote, dialog, nativeTheme } = require("electron")
 
 if (process.argv.length !== 10) {
   dialog.showErrorBox("Error", "Arguments not enough")
@@ -115,5 +115,6 @@ const createWindow = () => {
 }
 
 app.whenReady().then(() => {
+  nativeTheme.themeSource = "light"
   createWindow()
 })

@@ -470,7 +470,7 @@ const Style = styled.div<{ theme: Theme; resultCount: number; itemHeight: number
     }
 
     .wox-action-list-filter {
-      margin-top: 5px;
+      margin-top: 10px;
 
       .wox-action-list-filter-input {
         width: 100%;
