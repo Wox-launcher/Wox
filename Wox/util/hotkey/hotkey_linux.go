@@ -150,15 +150,9 @@ func getModifierKeyCode(ctx context.Context, modifier hotkey.Modifier) (uint16, 
 	if modifier == hotkey.ModCtrl {
 		return 29, nil
 	}
-	if modifier == hotkey.ModWin {
-		return 3675, nil
-	}
 	if modifier == hotkey.ModShift {
 		return 42, nil
 	}
-	if modifier == hotkey.ModAlt {
-		return 56, nil
-	}
-	
+
 	return 0, fmt.Errorf("unknown modifier: %d", modifier)
 }
