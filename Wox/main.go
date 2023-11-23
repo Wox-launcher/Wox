@@ -100,15 +100,6 @@ func main() {
 		t.Register(ctx, "ctrl+ctrl", func() {
 			ui.GetUIManager().GetUI(ctx).ToggleApp(ctx)
 		})
-		t.Register(ctx, "cmd+cmd", func() {
-			ui.GetUIManager().GetUI(ctx).ToggleApp(ctx)
-		})
-		t.Register(ctx, "option+option", func() {
-			ui.GetUIManager().GetUI(ctx).ToggleApp(ctx)
-		})
-		t.Register(ctx, "shift+shift", func() {
-			ui.GetUIManager().GetUI(ctx).ToggleApp(ctx)
-		})
 
 		util.Go(ctx, "start ui", func() {
 			appErr := ui.GetUIManager().StartUIApp(ctx, serverPort)

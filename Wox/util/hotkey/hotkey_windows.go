@@ -1,6 +1,7 @@
 package hotkey
 
 import (
+	"context"
 	"fmt"
 	"github.com/samber/lo"
 	"golang.design/x/hotkey"
@@ -152,5 +153,18 @@ func (h *Hotkey) parseCombineKey(combineKey string) ([]hotkey.Modifier, hotkey.K
 }
 
 func getModifierKeyCode(ctx context.Context, modifier hotkey.Modifier) (uint16, error) {
+	if modifier == hotkey.ModCtrl {
+		return 29, nil
+	}
+	if modifier == hotkey.ModWin {
+		return 3675, nil
+	}
+	if modifier == hotkey.ModShift {
+		return 42, nil
+	}
+	if modifier == hotkey.ModAlt {
+		return 56, nil
+	}
+
 	return 0, fmt.Errorf("unknown modifier: %d", modifier)
 }
