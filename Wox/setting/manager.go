@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/tidwall/pretty"
 	"os"
 	"path"
 	"slices"
@@ -60,7 +61,7 @@ func (m *Manager) loadWoxSetting(ctx context.Context) error {
 			return marshalErr
 		}
 
-		writeErr := os.WriteFile(woxSettingPath, defaultWoxSettingJson, 0644)
+		writeErr := os.WriteFile(woxSettingPath, pretty.Pretty(defaultWoxSettingJson), 0644)
 		if writeErr != nil {
 			return writeErr
 		}
@@ -108,7 +109,7 @@ func (m *Manager) loadWoxAppData(ctx context.Context) error {
 			return marshalErr
 		}
 
-		writeErr := os.WriteFile(woxAppDataPath, defaultWoxAppDataJson, 0644)
+		writeErr := os.WriteFile(woxAppDataPath, pretty.Pretty(defaultWoxAppDataJson), 0644)
 		if writeErr != nil {
 			return writeErr
 		}
@@ -187,7 +188,7 @@ func (m *Manager) SaveWoxSetting(ctx context.Context) error {
 		return marshalErr
 	}
 
-	writeErr := os.WriteFile(woxSettingPath, settingJson, 0644)
+	writeErr := os.WriteFile(woxSettingPath, pretty.Pretty(settingJson), 0644)
 	if writeErr != nil {
 		logger.Error(ctx, writeErr.Error())
 		return writeErr
@@ -205,7 +206,7 @@ func (m *Manager) saveWoxAppData(ctx context.Context) error {
 		return marshalErr
 	}
 
-	writeErr := os.WriteFile(woxAppDataPath, settingJson, 0644)
+	writeErr := os.WriteFile(woxAppDataPath, pretty.Pretty(settingJson), 0644)
 	if writeErr != nil {
 		logger.Error(ctx, writeErr.Error())
 		return writeErr
@@ -248,7 +249,7 @@ func (m *Manager) SavePluginSetting(ctx context.Context, pluginId string, plugin
 		return marshalErr
 	}
 
-	writeErr := os.WriteFile(pluginSettingPath, pluginSettingJson, 0644)
+	writeErr := os.WriteFile(pluginSettingPath, pretty.Pretty(pluginSettingJson), 0644)
 	if writeErr != nil {
 		logger.Error(ctx, writeErr.Error())
 		return writeErr

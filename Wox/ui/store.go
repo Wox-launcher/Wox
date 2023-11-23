@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/samber/lo"
+	"github.com/tidwall/pretty"
 	"os"
 	"path"
 	"sync"
@@ -107,7 +108,7 @@ func (s *Store) Install(ctx context.Context, theme Theme) error {
 		return err
 	}
 
-	writeErr := os.WriteFile(themePath, themeJson, os.ModePerm)
+	writeErr := os.WriteFile(themePath, pretty.Pretty(themeJson), os.ModePerm)
 	if writeErr != nil {
 		return writeErr
 	}

@@ -115,13 +115,13 @@ func serveAndWait(ctx context.Context, port int) {
 	http.HandleFunc("/image", func(w http.ResponseWriter, r *http.Request) {
 		id := r.URL.Query().Get("id")
 		if id == "" {
-			w.Write([]byte("no id"))
+			writeErrorResponse(w, "id is empty")
 			return
 		}
 
 		imagePath, ok := plugin.GetLocalImageMap(id)
 		if !ok {
-			w.Write([]byte("no image"))
+			writeErrorResponse(w, "imagePath is empty")
 			return
 		}
 
@@ -272,6 +272,20 @@ func serveAndWait(ctx context.Context, port int) {
 			w.Write([]byte(updateErr.Error()))
 			return
 		}
+
+		writeSuccessResponse(w, "")
+	})
+
+	http.HandleFunc("/open/url", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(w)
+
+		url := r.URL.Query().Get("url")
+		if url == "" {
+			writeErrorResponse(w, "url is empty")
+			return
+		}
+
+		util.ShellOpen(url)
 
 		writeSuccessResponse(w, "")
 	})
