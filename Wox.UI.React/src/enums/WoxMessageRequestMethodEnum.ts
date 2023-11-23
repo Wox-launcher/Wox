@@ -9,6 +9,6 @@ export class WoxMessageRequestMethodEnum extends BaseEnum {
   static readonly ToggleApp = WoxMessageRequestMethodEnum.define("ToggleApp", "Toggle App")
   static readonly ShowMsg = WoxMessageRequestMethodEnum.define("ShowMsg", "Show Msg")
   static readonly ChangeTheme = WoxMessageRequestMethodEnum.define("ChangeTheme", "Change Theme")
-  static readonly OpenSettingDialog = WoxMessageRequestMethodEnum.define("OpenSettingDialog", "Open Setting Dialog")
+  static readonly OpenSettingWindow = WoxMessageRequestMethodEnum.define("OpenSettingWindow", "Open Setting Dialog")
   static readonly OpenDevTools = WoxMessageRequestMethodEnum.define("OpenDevTools", "Open Dev Tools")
 }

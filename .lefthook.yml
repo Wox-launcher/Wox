@@ -4,5 +4,5 @@ pre-commit:
       root: "Wox/"
       run: go vet
     ui-build:
-      root: "Wox.UI.Tauri/"
+      root: "Wox.UI.React/"
       run: pnpm build

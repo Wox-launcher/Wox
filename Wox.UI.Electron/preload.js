@@ -1,17 +1,17 @@
-const {contextBridge, ipcRenderer} = require("electron")
+const { contextBridge, ipcRenderer } = require("electron")
 
 contextBridge.exposeInMainWorld("electronAPI", {
-    show: () => ipcRenderer.send("show"),
-    hide: () => ipcRenderer.send("hide"),
-    isVisible: async () => ipcRenderer.invoke("isVisible"),
-    getServerPort: async () => ipcRenderer.invoke("getServerPort"),
-    isDev: async () => ipcRenderer.invoke("isDev"),
-    setPosition: (x, y) => ipcRenderer.send("setPosition", x, y),
-    log: (msg) => ipcRenderer.send("log", msg),
-    openDevTools: () => ipcRenderer.send("openDevTools"),
-    setBackgroundColor: (backgroundColor) => ipcRenderer.send("setBackgroundColor", backgroundColor),
-    setSize: (width, height) => ipcRenderer.send("setSize", width, height),
-    focus: () => ipcRenderer.send("focus"),
-    openSettingWindow: (url) => ipcRenderer.send("openSettingWindow", url),
-    onBlur: (callback) => ipcRenderer.on("onBlur", callback)
+  show: () => ipcRenderer.send("show"),
+  hide: () => ipcRenderer.send("hide"),
+  isVisible: async () => ipcRenderer.invoke("isVisible"),
+  getServerPort: async () => ipcRenderer.invoke("getServerPort"),
+  isDev: async () => ipcRenderer.invoke("isDev"),
+  setPosition: (x, y) => ipcRenderer.send("setPosition", x, y),
+  log: msg => ipcRenderer.send("log", msg),
+  openDevTools: () => ipcRenderer.send("openDevTools"),
+  setBackgroundColor: backgroundColor => ipcRenderer.send("setBackgroundColor", backgroundColor),
+  setSize: (width, height) => ipcRenderer.send("setSize", width, height),
+  focus: () => ipcRenderer.send("focus"),
+  openSettingWindow: (url, x, y) => ipcRenderer.send("openSettingWindow", url, x, y),
+  onBlur: callback => ipcRenderer.on("onBlur", callback)
 })

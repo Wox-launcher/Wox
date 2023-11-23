@@ -146,8 +146,8 @@ export default () => {
     if (message.Method === WoxMessageRequestMethodEnum.ChangeTheme.code) {
       await changeTheme(message.Data as string)
     }
-    if (message.Method === WoxMessageRequestMethodEnum.OpenSettingDialog.code) {
-      await WoxUIHelper.getInstance().openSettingWindow()
+    if (message.Method === WoxMessageRequestMethodEnum.OpenSettingWindow.code) {
+      await WoxUIHelper.getInstance().openSettingWindow(message.Data as { x: number; y: number })
     }
     if (message.Method === WoxMessageRequestMethodEnum.OpenDevTools.code) {
       await WoxUIHelper.getInstance().openDevTools()

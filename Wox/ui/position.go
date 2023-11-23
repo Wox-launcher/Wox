@@ -14,7 +14,7 @@ type Position struct {
 }
 
 func NewMouseScreenPosition() Position {
-	x, y := getWindowShowLocation()
+	x, y := getWindowMouseScreenLocation(800)
 	return Position{
 		Type: PositionTypeMouseScreen,
 		X:    x,

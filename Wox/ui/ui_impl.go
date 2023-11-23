@@ -52,8 +52,12 @@ func (u *uiImpl) ChangeTheme(ctx context.Context, theme string) {
 	u.send(ctx, "ChangeTheme", theme)
 }
 
-func (u *uiImpl) OpenSettingDialog(ctx context.Context) {
-	u.send(ctx, "OpenSettingDialog", nil)
+func (u *uiImpl) OpenSettingWindow(ctx context.Context) {
+	x, y := getWindowMouseScreenLocation(1200)
+	u.send(ctx, "OpenSettingWindow", map[string]int{
+		"x": x,
+		"y": y,
+	})
 }
 
 func (u *uiImpl) OpenDevTools(ctx context.Context) {
@@ -407,8 +411,7 @@ func getWebsocketMsgParameter(ctx context.Context, msg WebsocketMsg, key string)
 	return paramterData.String(), nil
 }
 
-func getWindowShowLocation() (int, int) {
-	windowWidth := 800
+func getWindowMouseScreenLocation(windowWidth int) (int, int) {
 	size := screen.GetMouseScreen()
 	x := size.X + (size.Width-windowWidth)/2
 	y := size.Height / 6

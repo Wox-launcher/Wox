@@ -84,7 +84,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			SubTitle: "",
 			Icon:     plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAAC9UlEQVR4nO2Zy27TQBSGB0ThMbijBNRV1sCymYlYdhMWXCRCKSvaHS1BAglQJSg7eAFYtLYDiugO5ZwTsQus+gSgPkObboKOc7PH48ShsZMU/9KRIo1nPF/mXGbGQqRKlSpVqlRTpvzOzpk84u1CHUpekwDFxd3d02JWJAlWFGHLZNwmZkWK4FUYCLeJaVKu0ZhTiOuSaveOCsJj8Fi5RmNOJCl+oUR0PJMr+0AQ3w4A+eCDQHzWcztEJzGYIETP91/erNVOFQCuS4S9cBDcd1cSYF4SbATGwQRgwiB6hnA4ACCyybhh+J8cx0SjGazFBuIGZUIgBcQ7sYHowTnADhSBxUUwD6DY3IJIaLfbhq5GOVaIKDCS8Kv68f1sWN+FWu2cQqiG94cNkaQU4a9gkMI70WqdGNb3eat1UhJsGkEA5pMhEELwfkkR/NZXIgqEF8a4MojrsU1aAqxKxDc9IyQ9Jthl9L4Zx7mSse1ltqxlXdbbbyGeN8TMviT42HsXwOpYNpq8i40QnFYAwrJKGdtuZm275ZplHWQc54H+3MC6RG3jORwZRCIuDU2VdSgZVqIP4YG5urV1adTxJeJSMiCICz4Q234cgOgYu5lv/DrIqQFRVMtrIMthIFnH8U2Ka8z0gCA+9PbhwGY3MrnWNce5OOr4chwgUYKdK7bejwPbB8O/t7fv688phMrQ8QGKsaRfRfhJT7+cSvW+vDKd1PtIXwlWoV6/IBGaWlHd48LaT/WwEus5XxJ88bsXVLnIjVQQCb8Z3PSGSFLuniq4T9qMAtOBeB+EgEM+nCVD0D6Tl8MDH6omN/O6k3El+sX1xeQh+n7e5IrN2aa7jXezE0JFj4mJbONlggcrhXj3WBx1JcHTSV4+VExJwGB/JMHPcNfEyd2k8Kmx+4xE/DwAFrp1wRRvcpJ3W16IYTeNkuC19mx5IhC+K1OCNdNtx6hXphzYHBO5pCGO1SX2v35WUERPxKxosb3RLM78h55UqVKlSvXf6C+Yr/vPFuJ7FAAAAABJRU5ErkJggg==`),
 			Action: func(actionContext plugin.ActionContext) {
-				plugin.GetPluginManager().GetUI().OpenSettingDialog(ctx)
+				plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx)
 			},
 		},
 	}

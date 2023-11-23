@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { WoxPluginHelper } from "../../utils/WoxPluginHelper.ts"
 import { Box, Button, CircularProgress, Divider, List, ListItem, ListItemAvatar, ListItemText } from "@mui/material"
 import styled from "styled-components"

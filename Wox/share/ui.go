@@ -31,7 +31,7 @@ type UI interface {
 	ShowMsg(ctx context.Context, title string, description string, icon string)
 	GetServerPort(ctx context.Context) int
 	ChangeTheme(ctx context.Context, theme string)
-	OpenSettingDialog(ctx context.Context)
+	OpenSettingWindow(ctx context.Context)
 	OpenDevTools(ctx context.Context)
 }
 
