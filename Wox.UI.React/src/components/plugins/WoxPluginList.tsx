@@ -11,6 +11,8 @@ export default (props: { plugins: StorePluginManifest[]; type: string }) => {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const size = useWindowSize()
 
+  const isStore = props.type === "store"
+
   return (
     <Style>
       <Box sx={{ flexGrow: 1, display: "flex", height: "calc(100vh - 85px)" }}>
@@ -81,7 +83,7 @@ export default (props: { plugins: StorePluginManifest[]; type: string }) => {
             <Tab label="Description" sx={{ textTransform: "none" }} />
           </Tabs>
 
-          {plugins[selectedIndex].ScreenshotUrls && plugins[selectedIndex].ScreenshotUrls?.length > 0 && (
+          {isStore && plugins[selectedIndex].ScreenshotUrls && (
             <ImageGallery
               showNav={false}
               showThumbnails={false}
