@@ -11,4 +11,6 @@ export interface StorePluginManifest {
   ScreenshotUrls: string[]
   DateCreated: string
   DateUpdated: string
+  IsInstalled: boolean
+  NeedUpdate: boolean
 }

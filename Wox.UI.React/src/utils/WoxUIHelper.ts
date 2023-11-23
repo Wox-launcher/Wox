@@ -127,9 +127,9 @@ export class WoxUIHelper {
     console.log(msg)
   }
 
-  public async openWindow(title: string, url: string) {
+  public async openSettingWindow() {
     if (this.isElectron()) {
-      await this.getElectronAPI().openWindow(title, url)
+      await this.getElectronAPI().openSettingWindow("/setting")
       return Promise.resolve(true)
     }
     return undefined

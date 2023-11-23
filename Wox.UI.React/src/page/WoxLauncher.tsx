@@ -147,7 +147,7 @@ export default () => {
       await changeTheme(message.Data as string)
     }
     if (message.Method === WoxMessageRequestMethodEnum.OpenSettingDialog.code) {
-      await WoxUIHelper.getInstance().openWindow("Wox Setting", "/setting")
+      await WoxUIHelper.getInstance().openSettingWindow()
     }
     if (message.Method === WoxMessageRequestMethodEnum.OpenDevTools.code) {
       await WoxUIHelper.getInstance().openDevTools()
