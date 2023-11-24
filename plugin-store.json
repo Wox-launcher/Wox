@@ -3,7 +3,7 @@
     "Id": "47b92e1d-fe3a-455f-a70f-c231a3e4c43e",
     "Name": "Obsidian",
     "Author": "qianlifeng",
-    "Version": "0.0.1",
+    "Version": "0.0.2",
     "MinWoxVersion": "2.0.0",
     "Runtime": "dotnet",
     "Description": "Wox plugin to manage obsidian vault notes",
@@ -14,6 +14,6 @@
       "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Obsidian/main/images/app.png"
     ],
     "DateCreated": "2021-08-29 00:00:00",
-    "DateUpdated": "2021-08-29 00:00:00"
+    "DateUpdated": "2023-11-24 15:51:03"
   }
 ]
