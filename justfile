@@ -20,6 +20,9 @@ default:
     just _build_dev_nodejs_plugin Wox.Plugin.ProcessKiller ~/icloud/wox/plugins
     just _build_dev_nodejs_plugin_chatgpt Wox.Plugin.Chatgpt ~/icloud/wox/plugins
 
+@ci_plugin:
+    cd ci && go run plugin.go
+
 @release target:
     rm -rf Release
     just _build_hosts

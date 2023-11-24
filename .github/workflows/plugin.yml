@@ -1,0 +1,20 @@
+name: build
+
+on:
+  push:
+    branches:
+      - v2
+  schedule:
+    - cron: "0 */3 * * *"
+
+jobs:
+  build-macos-arm64:
+    runs-on: [ self-hosted, macOS, ARM64 ]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check plugin updates
+        run: just ci_plugin
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          add-paths: plugin-store.json
