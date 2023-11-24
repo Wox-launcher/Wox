@@ -18,4 +18,5 @@ jobs:
         uses: peter-evans/create-pull-request@v5
         with:
           title: "[Plugin Store] Update plugins version"
+          branch: update-plugin-store-version
           add-paths: plugin-store.json
