@@ -1,4 +1,4 @@
-name: build
+name: Update plugin store
 
 on:
   push:

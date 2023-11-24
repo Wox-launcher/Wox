@@ -1,4 +1,4 @@
-name: crowdin_i18n
+name: Update i18n
 
 on:
   push:
