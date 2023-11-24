@@ -34,6 +34,10 @@ type WoxImage struct {
 	ImageData string
 }
 
+func (w *WoxImage) String() string {
+	return fmt.Sprintf("%s:%s", w.ImageType, w.ImageData)
+}
+
 func (w *WoxImage) ToPng() (image.Image, error) {
 	if w.ImageType == WoxImageTypeBase64 {
 		if !strings.HasPrefix(w.ImageData, "data:image/png;") {
@@ -111,6 +115,38 @@ func NewWoxImageBase64(data string) WoxImage {
 		ImageType: WoxImageTypeBase64,
 		ImageData: data,
 	}
+}
+
+func NewWoxImageUrl(url string) WoxImage {
+	return WoxImage{
+		ImageType: WoxImageTypeUrl,
+		ImageData: url,
+	}
+}
+
+func ParseWoxImage(image string) (WoxImage, error) {
+	n := strings.SplitN(image, ":", 2)
+	if len(n) != 2 {
+		return WoxImage{}, fmt.Errorf("invalid image format: %s", image)
+	}
+
+	imageType := n[0]
+	imageData := n[1]
+
+	if imageType == WoxImageTypeAbsolutePath {
+		return NewWoxImageAbsolutePath(imageData), nil
+	}
+	if imageType == WoxImageTypeBase64 {
+		return NewWoxImageBase64(imageData), nil
+	}
+	if imageType == WoxImageTypeSvg {
+		return NewWoxImageSvg(imageData), nil
+	}
+	if imageType == WoxImageTypeUrl {
+		return NewWoxImageUrl(imageData), nil
+	}
+
+	return WoxImage{}, fmt.Errorf("unsupported image type: %s", imageType)
 }
 
 func ConvertIcon(ctx context.Context, image WoxImage, pluginDirectory string) (newImage WoxImage) {

@@ -1,3 +1,5 @@
+import { WOXMESSAGE } from "./WoxMessage.typings"
+
 export interface StorePluginManifest {
   Id: string
   Name: string
@@ -5,7 +7,7 @@ export interface StorePluginManifest {
   Version: string
   Runtime: string
   Description: string
-  IconUrl: string
+  Icon: WOXMESSAGE.WoxImage
   Website: string
   DownloadUrl: string
   ScreenshotUrls: string[]

@@ -13,7 +13,7 @@ type StorePlugin struct {
 	MinWoxVersion  string
 	Runtime        string
 	Description    string
-	IconUrl        string
+	Icon           plugin.WoxImage
 	Website        string
 	DownloadUrl    string
 	ScreenshotUrls []string
@@ -30,7 +30,7 @@ type InstalledPlugin struct {
 	MinWoxVersion      string
 	Runtime            string
 	Description        string
-	Icon               string
+	Icon               plugin.WoxImage
 	Website            string
 	Entry              string
 	TriggerKeywords    []string //User can add/update/delete trigger keywords

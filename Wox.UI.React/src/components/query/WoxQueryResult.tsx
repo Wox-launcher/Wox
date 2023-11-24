@@ -202,7 +202,10 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
         resizeWindow(10).then(_ => {
           currentActionList.current = result.Actions
           setActionList(result.Actions)
-          setShowActionList(true)
+          // avoid action list flicker
+          setTimeout(() => {
+            setShowActionList(true)
+          }, 10)
         })
       }
       return true

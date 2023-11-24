@@ -6,6 +6,7 @@ import { StorePluginManifest } from "../../entity/Plugin.typing"
 import React, { useState } from "react"
 import styled from "styled-components"
 import { openUrl } from "../../api/WoxAPI.ts"
+import WoxImage from "../tools/WoxImage.tsx"
 
 export default (props: { plugins: StorePluginManifest[]; type: string }) => {
   const { plugins } = props
@@ -39,7 +40,7 @@ export default (props: { plugins: StorePluginManifest[]; type: string }) => {
                       }}
                     >
                       <ListItemAvatar>
-                        <img alt={plugin.Name} src={plugin.IconUrl ?? "/react.svg"} height={36} width={36} />
+                        <WoxImage img={plugin.Icon} height={36} width={36} />
                       </ListItemAvatar>
                       <ListItemText primary={plugin.Name} secondary={<span className={"plugin-description"}>{plugin.Description}</span>} />
                       {isStore && !plugin.IsInstalled && (

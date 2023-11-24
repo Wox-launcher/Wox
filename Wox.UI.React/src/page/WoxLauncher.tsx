@@ -196,7 +196,7 @@ export default () => {
     woxQueryResultRef.current?.forceResizeWindow()
     await WoxMessageHelper.getInstance().sendMessage(WoxMessageMethodEnum.VISIBILITY_CHANGED.code, {
       isVisible: "true",
-      query: woxQueryBoxRef.current?.getQuery() || ""
+      query: JSON.stringify(latestChangedQuery.current || {})
     })
   }
 

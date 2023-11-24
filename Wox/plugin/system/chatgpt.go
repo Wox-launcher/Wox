@@ -31,7 +31,7 @@ func (c *ChatgptPlugin) GetMetadata() plugin.Metadata {
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",
 		Description:   "Chatgpt for Wox",
-		Icon:          "",
+		Icon:          chatgptIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
 			"gpt",

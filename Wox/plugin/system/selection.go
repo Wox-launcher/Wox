@@ -8,6 +8,8 @@ import (
 	"wox/util/clipboard"
 )
 
+var selectionIcon = plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><path fill="#388e3c" d="M43,38.833C43,41.135,41.135,43,38.833,43H17.167C14.866,43,13,41.135,13,38.833V17.167 C13,14.865,14.866,13,17.167,13h21.667C41.135,13,43,14.865,43,17.167V38.833z"></path><path fill="#c8e6c9" d="M35,30.833C35,33.135,33.135,35,30.833,35H9.167C6.866,35,5,33.135,5,30.833V9.167 C5,6.865,6.866,5,9.167,5h21.667C33.135,5,35,6.865,35,9.167V30.833z"></path><path fill="#4caf50" d="M18 28.121L11.064 21.186 13.186 19.064 18 23.879 28.814 13.064 30.936 15.186z"></path></svg>`)
+
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &SelectionPlugin{})
 }
@@ -25,7 +27,7 @@ func (i *SelectionPlugin) GetMetadata() plugin.Metadata {
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",
 		Description:   "Wox default actions for selection query",
-		Icon:          "",
+		Icon:          selectionIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
 			"*",
