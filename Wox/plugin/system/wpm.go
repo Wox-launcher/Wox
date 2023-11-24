@@ -75,7 +75,7 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				Id:       uuid.NewString(),
 				Title:    pluginManifest.Name,
 				SubTitle: pluginManifest.Description,
-				Icon:     wpmIcon,
+				Icon:     plugin.NewWoxImageUrl(pluginManifest.IconUrl),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "install",
@@ -102,7 +102,7 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				Id:       uuid.NewString(),
 				Title:    pluginInstance.Metadata.Name,
 				SubTitle: pluginInstance.Metadata.Description,
-				Icon:     wpmIcon,
+				Icon:     plugin.ParseWoxImageOrDefault(pluginInstance.Metadata.Icon, wpmIcon),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "uninstall",

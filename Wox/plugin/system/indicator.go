@@ -47,18 +47,6 @@ func (i *IndicatorPlugin) Init(ctx context.Context, initParams plugin.InitParams
 }
 
 func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	if query.TriggerKeyword == "" {
-		return i.queryForTriggerKeyword(ctx, query)
-	}
-
-	if query.Command == "" {
-		return i.queryForCommand(ctx, query)
-	}
-
-	return []plugin.QueryResult{}
-}
-
-func (i *IndicatorPlugin) queryForTriggerKeyword(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	for _, pluginInstance := range plugin.GetPluginManager().GetPluginInstances() {
 		triggerKeyword, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
@@ -69,7 +57,7 @@ func (i *IndicatorPlugin) queryForTriggerKeyword(ctx context.Context, query plug
 				Id:       uuid.NewString(),
 				Title:    triggerKeyword,
 				SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), pluginInstance.Metadata.Name),
-				Icon:     indicatorIcon,
+				Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   "activate",
@@ -89,8 +77,8 @@ func (i *IndicatorPlugin) queryForTriggerKeyword(ctx context.Context, query plug
 				results = append(results, plugin.QueryResult{
 					Id:       uuid.NewString(),
 					Title:    fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command),
-					SubTitle: pluginInstance.Metadata.Description,
-					Icon:     indicatorIcon,
+					SubTitle: metadataCommand.Description,
+					Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
 					Actions: []plugin.QueryResultAction{
 						{
 							Name:                   "activate",
@@ -104,43 +92,6 @@ func (i *IndicatorPlugin) queryForTriggerKeyword(ctx context.Context, query plug
 						},
 					},
 				})
-			}
-		}
-	}
-	return results
-}
-
-func (i *IndicatorPlugin) queryForCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	var results []plugin.QueryResult
-	for _, pluginInstance := range plugin.GetPluginManager().GetPluginInstances() {
-		_, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
-			return IsStringMatchNoPinYin(ctx, triggerKeyword, query.TriggerKeyword)
-		})
-		if found {
-			for _, metadataCommandShadow := range pluginInstance.GetQueryCommands() {
-				// action will be executed in another go routine, so we need to copy the variable
-				metadataCommand := metadataCommandShadow
-				if query.Search == "" || IsStringMatchNoPinYin(ctx, metadataCommand.Command, query.Search) {
-					results = append(results, plugin.QueryResult{
-						Id:       uuid.NewString(),
-						Title:    fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command),
-						SubTitle: metadataCommand.Description,
-						Score:    100,
-						Icon:     indicatorIcon,
-						Actions: []plugin.QueryResultAction{
-							{
-								Name:                   "activate",
-								PreventHideAfterAction: true,
-								Action: func(actionContext plugin.ActionContext) {
-									i.api.ChangeQuery(ctx, share.ChangedQuery{
-										QueryType: plugin.QueryTypeInput,
-										QueryText: fmt.Sprintf("%s %s ", query.TriggerKeyword, metadataCommand.Command),
-									})
-								},
-							},
-						},
-					})
-				}
 			}
 		}
 	}

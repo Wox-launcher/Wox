@@ -124,6 +124,19 @@ func NewWoxImageUrl(url string) WoxImage {
 	}
 }
 
+func ParseWoxImageOrDefault(image string, defaultImage WoxImage) WoxImage {
+	if image == "" {
+		return defaultImage
+	}
+
+	parsedImage, parseErr := ParseWoxImage(image)
+	if parseErr != nil {
+		return defaultImage
+	}
+
+	return parsedImage
+}
+
 func ParseWoxImage(image string) (WoxImage, error) {
 	n := strings.SplitN(image, ":", 2)
 	if len(n) != 2 {
@@ -135,6 +148,12 @@ func ParseWoxImage(image string) (WoxImage, error) {
 
 	if imageType == WoxImageTypeAbsolutePath {
 		return NewWoxImageAbsolutePath(imageData), nil
+	}
+	if imageType == WoxImageTypeRelativePath {
+		return WoxImage{
+			ImageType: WoxImageTypeRelativePath,
+			ImageData: imageData,
+		}, nil
 	}
 	if imageType == WoxImageTypeBase64 {
 		return NewWoxImageBase64(imageData), nil

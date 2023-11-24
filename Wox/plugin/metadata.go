@@ -3,6 +3,7 @@ package plugin
 import (
 	"errors"
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 	"wox/setting"
@@ -41,6 +42,15 @@ type Metadata struct {
 	SupportedOS        []string
 	Features           []MetadataFeature
 	SettingDefinitions setting.PluginSettingDefinitions
+}
+
+func (m *Metadata) GetIconOrDefault(pluginDirectory string, defaultImage WoxImage) WoxImage {
+	image := ParseWoxImageOrDefault(m.Icon, defaultImage)
+	if image.ImageType == WoxImageTypeRelativePath {
+		image.ImageData = path.Join(pluginDirectory, image.ImageData)
+		image.ImageType = WoxImageTypeAbsolutePath
+	}
+	return image
 }
 
 func (m *Metadata) IsSupportFeature(f MetadataFeatureName) bool {
