@@ -14,9 +14,10 @@ export type WoxQueryBoxRefHandler = {
 
 export type WoxQueryBoxProps = {
   defaultValue?: string
-  onQueryChange: (changedQuery: WOXMESSAGE.ChangedQuery) => void
+  onQueryChange?: (changedQuery: WOXMESSAGE.ChangedQuery) => void
   onFocus?: () => void
   onClick?: () => void
+  isPreview?: boolean
 }
 
 export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQueryBoxRefHandler>) => {
@@ -35,7 +36,7 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
         if (changedQuery.QueryType === WoxQueryTypeEnum.WoxQueryTypeSelection.code) {
           queryBoxRef.current!.value = ""
         }
-        _props.onQueryChange(changedQuery)
+        _props.onQueryChange?.(changedQuery)
       }
     },
     selectAll: () => {
@@ -52,6 +53,7 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
   return (
     <Style theme={WoxThemeHelper.getInstance().getTheme()} className="wox-query-box">
       <input
+        disabled={_props.isPreview}
         ref={queryBoxRef}
         title={"Query Wox"}
         className={"mousetrap"}
@@ -69,7 +71,7 @@ export default React.forwardRef((_props: WoxQueryBoxProps, ref: React.Ref<WoxQue
           _props.onClick?.()
         }}
         onChange={e => {
-          _props.onQueryChange({
+          _props.onQueryChange?.({
             QueryText: e.target.value,
             QueryType: WoxQueryTypeEnum.WoxQueryTypeInput.code
           } as WOXMESSAGE.ChangedQuery)

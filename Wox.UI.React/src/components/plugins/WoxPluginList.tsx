@@ -89,7 +89,7 @@ export default (props: { plugins: StorePluginManifest[]; type: string }) => {
                 }}
                 variant="subtitle1"
                 display={"inline"}
-                sx={{ color: "#6a99f6" }}
+                sx={{ color: "#6a99f6", cursor: "pointer" }}
                 gutterBottom
               >
                 Plugin homepage

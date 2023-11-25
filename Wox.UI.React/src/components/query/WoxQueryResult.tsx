@@ -29,6 +29,8 @@ export type WoxQueryResultRefHandler = {
 
 export type WoxQueryResultProps = {
   callback?: (method: WoxMessageRequestMethod) => void
+  isPreview?: boolean
+  initResultList?: WOXMESSAGE.WoxMessageResponseResult[]
 }
 
 export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<WoxQueryResultRefHandler>) => {
@@ -44,7 +46,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   const currentPreview = useRef(false)
   const [activeIndex, setActiveIndex] = useState<number>(0)
   const [actionActiveIndex, setActionActiveIndex] = useState<number>(0)
-  const [resultList, setResultList] = useState<WOXMESSAGE.WoxMessageResponseResult[]>([])
+  const [resultList, setResultList] = useState<WOXMESSAGE.WoxMessageResponseResult[]>(_props.initResultList ? _props.initResultList : [])
   const [hasPreview, setHasPreview] = useState<boolean>(false)
   const [actionList, setActionList] = useState<WOXMESSAGE.WoxResultAction[]>([])
   const [showActionList, setShowActionList] = useState<boolean>(false)
@@ -256,7 +258,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   }))
 
   return (
-    <Style theme={WoxThemeHelper.getInstance().getTheme()} resultCount={resultList.length} itemHeight={getResultListHeight(10)}>
+    <Style theme={WoxThemeHelper.getInstance().getTheme()} resultCount={resultList.length} itemHeight={getResultListHeight(_props.isPreview ? 3 : 10)}>
       <WoxScrollbar
         ref={currentResultScrollbarRef}
         className={"wox-result-scrollbars"}
@@ -274,7 +276,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
                   key={`wox-result-li-${index}`}
                   className={`wox-result-item ${activeIndex === index ? "active" : "inactive"}`}
                   onMouseOverCapture={() => {
-                    if (showActionList) {
+                    if (showActionList || _props.isPreview) {
                       return
                     }
                     currentMouseOverIndex.current += 1
@@ -283,8 +285,11 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
                       setActiveIndex(index)
                     }
                   }}
-                  onClick={event => {
-                    handleAction()
+                  onClick={async event => {
+                    if (_props.isPreview) {
+                      return
+                    }
+                    await handleAction()
                     event.preventDefault()
                     event.stopPropagation()
                   }}
@@ -319,8 +324,11 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
               <div
                 key={`wox-result-action-item-${index}`}
                 className={index === actionActiveIndex ? "wox-result-action-item wox-result-action-item-active" : "wox-result-action-item"}
-                onClick={event => {
-                  sendActionMessage(currentResult.current?.Id || "", action)
+                onClick={async event => {
+                  if (_props.isPreview) {
+                    return
+                  }
+                  await sendActionMessage(currentResult.current?.Id || "", action)
                   event.preventDefault()
                   event.stopPropagation()
                 }}
