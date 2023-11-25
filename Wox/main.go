@@ -5,6 +5,7 @@ import (
 	"golang.design/x/hotkey/mainthread"
 	"runtime"
 	"strings"
+	"time"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/resource"
@@ -102,6 +103,7 @@ func main() {
 		})
 
 		util.Go(ctx, "start ui", func() {
+			time.Sleep(time.Millisecond * 200) // wait websocket server start
 			appErr := ui.GetUIManager().StartUIApp(ctx, serverPort)
 			if appErr != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("failed to start ui app: %s", appErr.Error()))
