@@ -6,6 +6,8 @@
   "plugin_browser_bookmark_open_in_browser": "在浏览器中打开",
   "plugin_clipboard_copy_date": "复制日期",
   "plugin_clipboard_copy_characters": "复制字符",
+  "plugin_clipboard_image_width": "图片宽度",
+  "plugin_clipboard_image_height": "图片高度",
   "plugin_indicator_activate_plugin": "激活%s插件",
   "plugin_sys_empty_trash": "清空回收站",
   "plugin_sys_lock_computer": "锁定电脑",

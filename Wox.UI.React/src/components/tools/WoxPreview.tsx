@@ -5,6 +5,7 @@ import Markdown from "react-markdown"
 import styled from "styled-components"
 import { WoxThemeHelper } from "../../utils/WoxThemeHelper.ts"
 import { Theme } from "../../entity/Theme.typings"
+import WoxImage, { parseWoxImage } from "./WoxImage.tsx"
 
 export default (props: { preview: WOXMESSAGE.WoxPreview; resultSingleItemHeight: number }) => {
   return (
@@ -12,7 +13,7 @@ export default (props: { preview: WOXMESSAGE.WoxPreview; resultSingleItemHeight:
       <WoxScrollbar scrollbarProps={{ autoHeight: true, autoHeightMin: 0, autoHeightMax: props.resultSingleItemHeight * 8 + 10 }}>
         <div className={"wox-query-result-preview-content"}>
           {props.preview.PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeText.code && <p className={"wox-query-result-preview-text"}>{props.preview.PreviewData}</p>}
-          {props.preview.PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code && <img className={"wox-query-result-preview-image"} src={props.preview.PreviewData} />}
+          {props.preview.PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeImage.code && <WoxImage img={parseWoxImage(props.preview.PreviewData)} height={360} width={360}></WoxImage>}
           {props.preview.PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeMarkdown.code && <Markdown>{props.preview.PreviewData}</Markdown>}
           {props.preview.PreviewType === WoxPreviewTypeEnum.WoxPreviewTypeUrl.code && <iframe className={"wox-query-result-preview-url"} src={props.preview.PreviewData}></iframe>}
         </div>

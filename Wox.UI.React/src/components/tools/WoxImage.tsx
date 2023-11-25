@@ -2,6 +2,27 @@ import { WoxImageTypeEnum } from "../../enums/WoxImageTypeEnum.ts"
 import { WOXMESSAGE } from "../../entity/WoxMessage.typings"
 import styled from "styled-components"
 
+export function parseWoxImage(data: string): WOXMESSAGE.WoxImage {
+  const img = {} as WOXMESSAGE.WoxImage
+  if (data.startsWith("base64:")) {
+    img.ImageType = WoxImageTypeEnum.WoxImageTypeBase64.code
+    img.ImageData = data.slice(7)
+    return img
+  }
+  if (data.startsWith("svg:")) {
+    img.ImageType = WoxImageTypeEnum.WoxImageTypeSvg.code
+    img.ImageData = data.slice(4)
+    return img
+  }
+  if (data.startsWith("url:")) {
+    img.ImageType = WoxImageTypeEnum.WoxImageTypeUrl.code
+    img.ImageData = data.slice(4)
+    return img
+  }
+
+  return img
+}
+
 export default (props: { img: WOXMESSAGE.WoxImage; height: number; width: number }) => {
   return (
     <Style width={props.width} height={props.height}>

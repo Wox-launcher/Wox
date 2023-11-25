@@ -2,6 +2,7 @@ package clipboard
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -198,24 +199,24 @@ func (i *ImageData) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 
-	var mapData = make(map[string]string)
-	mapData["type"] = string(i.GetType())
-	mapData["image"] = string(buf.Bytes())
-	return json.Marshal(mapData)
+	return json.Marshal(base64.StdEncoding.EncodeToString(buf.Bytes()))
 }
 
 func (i *ImageData) UnmarshalJSON(data []byte) error {
-	var mapData = make(map[string]string)
-	err := json.Unmarshal(data, &mapData)
+	var base64ImgData string
+	unmarshalErr := json.Unmarshal(data, &base64ImgData)
+	if unmarshalErr != nil {
+		return unmarshalErr
+	}
+
+	decodeBytes, err := base64.StdEncoding.DecodeString(base64ImgData)
 	if err != nil {
 		return err
 	}
 
-	imageBytes := []byte(mapData["image"])
-	imageReader := bytes.NewReader(imageBytes)
-	img, _, err := image.Decode(imageReader)
-	if err != nil {
-		return err
+	img, decodeErr := png.Decode(bytes.NewReader(decodeBytes))
+	if decodeErr != nil {
+		return decodeErr
 	}
 
 	i.Image = img

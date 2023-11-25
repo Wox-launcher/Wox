@@ -15,3 +15,4 @@ Wox/resource/ui/react/
 Wox/resource/ui/electron/
 Wox.UI.React/dist/
 node_modules/
+__pycache__/

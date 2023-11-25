@@ -6,14 +6,16 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
-	"github.com/samber/lo"
 	"image/png"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"wox/plugin"
+	"wox/setting"
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/keyboard"
@@ -21,6 +23,10 @@ import (
 )
 
 var clipboardIcon = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAHhklEQVR4nO2aW2wU1xnHB1FFkfpGFMt2hIX7mqovfYripChCFEpoogYSpc2ljRK8l/SiEHAShSBit3FrcOKusWPCesvEWeNdm1RqzMUXCCUkIRAD8WVtr72zGzAIcwu293LGhH91Njur2Tmzc/Eaj2vxSb8Hr885853fzHw7e85w3J24E3diLqOtrS3P7/dXtLa2nm5tbZ1K0eP3+8vp/7iFHH6/f31LS8uEz+eDGqn/reMWYuzdu3e91+u91dzcDC1oG6/Xu7Ak8Dyf19TUNNHU1ASD3PD5fPdyCyV4nq/geR4Se/bsITzPb/Z6vYUUnufLUp+l2/A8/za3UMLj8ZzxeDyQaGxsLFO2oZ8p2vRwCyXcbvek2+2GRENDQ4GyjcfjyZe3cbvdE9x8DuxzPopWRzfaHFNoc0LOrl27NNm9e3ehcrz6+vr79Popj4M25+QPOdjXzO3k2xwVKsmkqa+v16Suro65Berq6l7T66d1TLQ5y+dm8n565p3Qora2Vg/icrnKXC5XYYoy+pleP73jXjzXixBBEkEEwiIQSSEQ3AyJ6AsRPJmbAJ/zMPxOaFFTU3Nb0Dtu7EgNRlMClBLCKUIEt3KSAJ9zEj4ntKiurr4t6B33+30bMUKgKYH+LYg4O3MBLQ4wnGgEolcAMZakqqrqtiCNnzzWl242jxZHUoBcQmrCGRJCBHFmYqFprIwQHA8TRCVTodRA0qBBAtWDyidPqXW5UFlZOavspDVAdgxEL6vmQnNUk6CoByczJj+awFpaJOSXiTR5SQAdeJgK2OtgkScmxtDdeQgVFRWzyuGuDuY4arnQHCUJoyoSwgQ3hWn8KkOAIOKUvFAoz740+aSAZgeLIrGb8Ul0dRxE9Y4d2LZtW07QMehYdExGgEouUp5yCal6EBUIjkWmsYK5/MMERO3syy99OuhQAoDXwaJMbK5QyYXmmJSQQHOQ4H4Ai3ULW1hEr97ZpwMPZhUQtQaVXGiOg3E0A1hkuLJHCJ4SCG5pXfppAR85WKwSoJILzZGeecOTlyJC8KQgojeUwHS2sx+gApocLFYJUMmF5tgH3MXlGmeAHw+JeGiI4Mj/m4CAiJ9zsxUAFgcS6KIDD1ABHzpYrBKgkgvNMRDHfwwVP6MxEMMDVEA/FcDbWUwkPXgjjn+ERbw5Oj1HiOffGJlezeUSAnA3Ndsfz13A3wURb4zMLX8Vpmk9GwsSVM6oPgwS/IwK6KMC9thZTAh4PShaguzBqNLU5AEsCsTR3i8J+JedxYSAsmFiCbLfCGNGJ754gOCngTj2J+//ONA7CwI2DRFLMCRgKIr7ggSfDCcQk3//D8gFeOws4pRhNg4mLEF2C7yTVcAIQceIysOPdP8nBTTaWUwIeCWQsIRhI0VwJIGJoJ4At53FhIC/DCQswdB9HyTovN0C/tQftwRDAkZjKAoSHBpKIJFVwG47iwkBL/fGLYEzE0eAHw3G8CCtHYyAD+wsJgQ4v4ll8MT+yyje2o+CTWd1+cnWfjxx4IpmX2UbCW4mMRhDyWwLsJ+NZVD8Vh/yXz1jmOKtfbp95W0khqWvwQRuhhIG9wcE4G7ma3CXncWEgNIz0QyWbelF/sbThil+q1e3r7yNhMoS2S26BKApIBDHcqkOpAU02FlMCHjpdDSDx9rHsezNb5D/So8udMK0vVZfZRsJpYDUIunZ7DUgjkeGEriYFiA9CjfYWMRJw7zYM2UJqgII4slH3pCILaMEYa2VoPSPofdtLCYEvPD1lCWoCRDo/oBAUK63ECqvA6i3sZgQ8PtT1qBSA37YH4gQXDCyGpxeEMlRwHMnM1n18UUUbe5B3h9PpCkq68Hqf1/UbJMNZV+J9EZJQrE/EBYxZlRAckmszsZiQsCzX2VStOkU8pxfMBRtPqXbJhvyvhJZK32EoDKbANVV4Z02FhMCfvflRAZFr36FPMdxhqWbTuq2yYa8r0RWAX3AXWGCdwQR541cBbkKePqLiQxWto5h6cYTuNd2LA39m36u1SYbyr4S3ExjMI7iIYKD6Y2RWhuLCQFPfX7DErhcIhjD0rQAl43FhID1x29YQk4CAnEsS2+O5ihg3WffWcKMJz8aQ9EwwcH09vg/bSzihGF+c+y7DJY3h1H48lHc84cuXQqdR7G8OcKMYYSQiPO01ukui0PxZMi8IFFjYzEh4PH/Xs+g0PEp7nm+wzC0vXIMI8hekPibpoAIQbnmKzI5Cvj10esZFJR2Y8kzBwxTYOtmxjCC7B2hc3oCLsjepmIk4D0bS3TMsIC1n17LoOTDEPJf6sSS37brUrChM9leOYYRJAECwQVNAYKIMeXbInIJeLeUpavWsIQ1h69ZQnpOBNpvoQupJ8NsEr7f+Wd1CQZZ3X3VEsIiwnRPVnfXuC/1ZBgWcV5NQqylGqgunTG/7LpqCdxsBao2rMGOUsyUlZ1XLWHWBNDA9tLymQpY0XHFErjZDtArYfuGblRtmMT2UhjlkUNXLIGbL7H84GVYATdf4uED4+d+ceAy5pT9499y8yUebB9fXdJ+6dxD+8cxF5S0X/q25JNLq6ye953g5mn8D6+NUearhucuAAAAAElFTkSuQmCC`)
+var isKeepTextHistorySettingKey = "is_keep_text_history"
+var textHistoryDaysSettingKey = "text_history_days"
+var isKeepImageHistorySettingKey = "is_keep_image_history"
+var imageHistoryDaysSettingKey = "image_history_days"
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ClipboardPlugin{
@@ -144,6 +150,43 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
+		SettingDefinitions: []setting.PluginSettingDefinitionItem{
+			{
+				Type: setting.PluginSettingDefinitionTypeCheckBox,
+				Value: setting.PluginSettingValueCheckBox{
+					Key:          isKeepTextHistorySettingKey,
+					Label:        "i18n:plugin_clipboard_keep_text_history",
+					DefaultValue: "true",
+				},
+			},
+			{
+				Type: setting.PluginSettingDefinitionTypeTextBox,
+				Value: setting.PluginSettingValueTextBox{
+					Key:          textHistoryDaysSettingKey,
+					Suffix:       "i18n:plugin_clipboard_days",
+					DefaultValue: "90",
+				},
+			},
+			{
+				Type: setting.PluginSettingDefinitionTypeNewLine,
+			},
+			{
+				Type: setting.PluginSettingDefinitionTypeCheckBox,
+				Value: setting.PluginSettingValueCheckBox{
+					Key:          isKeepImageHistorySettingKey,
+					Label:        "i18n:plugin_clipboard_keep_image_history",
+					DefaultValue: "true",
+				},
+			},
+			{
+				Type: setting.PluginSettingDefinitionTypeTextBox,
+				Value: setting.PluginSettingValueTextBox{
+					Key:          imageHistoryDaysSettingKey,
+					Suffix:       "i18n:plugin_clipboard_days",
+					DefaultValue: "3",
+				},
+			},
+		},
 	}
 }
 
@@ -154,6 +197,13 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		c.api.Log(ctx, fmt.Sprintf("clipboard data changed, type=%s", data.GetType()))
 		// ignore file type
 		if data.GetType() == clipboard.ClipboardTypeFile {
+			return
+		}
+
+		if data.GetType() == clipboard.ClipboardTypeText && !c.isKeepTextHistory(ctx) {
+			return
+		}
+		if data.GetType() == clipboard.ClipboardTypeImage && !c.isKeepImageHistory(ctx) {
 			return
 		}
 
@@ -326,12 +376,28 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 
 	if history.Data.GetType() == clipboard.ClipboardTypeImage {
 		historyData := history.Data.(*clipboard.ImageData)
+		compressedPreviewImg := imaging.Resize(historyData.Image, 400, 0, imaging.Lanczos)
+		compressedIconImg := imaging.Resize(historyData.Image, 40, 0, imaging.Lanczos)
+		previewImage, err := plugin.NewWoxImage(compressedPreviewImg)
+		if err != nil {
+			previewImage = c.getDefaultTextIcon()
+		}
+		iconImage, iconErr := plugin.NewWoxImage(compressedIconImg)
+		if iconErr != nil {
+			iconImage = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAACi0lEQVR4nO3U/0sTcRzH8f0calFmmvltc04jixLcyvwhKsgstv6hfllQWhSSVGLfZOlEHSJhRBRBy775Uz8Ytem8brvb5mat7eYtmnvFHUrFduFtt7sb3Bue3E8b9/jc3Vun00YbbbRR5VwIotdGI2CjASWz0vDbaPSIBmz8ECqJFA1QwU3j7zSATXsC4A/hUiQJL0OBZZf5qz2SLJ1XiLt5pHxZXY4mSwPAnXgugIehSgOwxhI5AWssURqAkn8CdoFvwL6FD1kVgE0Ed+IsS/BXxbfQiY8sOl7E0PEyhpMLqaKgbcUAWCmg0/0DLa7wP3W9Z9QPsFIZ/sSNk6GcHX2TUC/ASmVw5Pl3NE+E/ptFYoROCoDVn8Ghp6swjAe3lGUunvUfpxZSsLjjMLvjOP3pp3yA8+Q62mcj0I/RojK/3kBQQPc8wx/AwSeraJ+N4sDjKLrnZdhC54h1tM1E0DhK51WnO47jHxgcfvYtC7B/JoKud0zxAL2+NExTYTQ4qIJqnV4RBLRNr+DYW0Z6wNmlNL9V6kcCkmRyhQUBrS4OkZAOcMbzC3pnEHUPA5JmnAwLAkxTYcEVLBrAPfba+/6iZJwICQJauBU8lygcsPcuiWJmcAYFAc3jIVg2t1e+gJphEsVO7wwKAgxjQZhfxfMHVA99hRw1jdKCAP2jPwjRgD13CMhVgyMgCGhy0PzrJBqw+xYBOavn1qwAoHGEEg+oHFyG3NU9CEgH2HXTByXad4+UBrBzwAelqh0mCwfsuLEEJasZIgsDbL++CKWr5tZsvoCKa4tQQ1W3ifwA5f1ef3m/F2qoapCIiQZsu/K5p6zvi7+szwMlq7jqTVcO+C6KBmijjTba6OSY31QFs+h9sYumAAAAAElFTkSuQmCC`)
+		}
+
 		return plugin.QueryResult{
 			Title: fmt.Sprintf("Image (%d*%d)", historyData.Image.Bounds().Dx(), historyData.Image.Bounds().Dy()),
-			Icon:  plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAACi0lEQVR4nO3U/0sTcRzH8f0calFmmvltc04jixLcyvwhKsgstv6hfllQWhSSVGLfZOlEHSJhRBRBy775Uz8Ytem8brvb5mat7eYtmnvFHUrFduFtt7sb3Bue3E8b9/jc3Vun00YbbbRR5VwIotdGI2CjASWz0vDbaPSIBmz8ECqJFA1QwU3j7zSATXsC4A/hUiQJL0OBZZf5qz2SLJ1XiLt5pHxZXY4mSwPAnXgugIehSgOwxhI5AWssURqAkn8CdoFvwL6FD1kVgE0Ed+IsS/BXxbfQiY8sOl7E0PEyhpMLqaKgbcUAWCmg0/0DLa7wP3W9Z9QPsFIZ/sSNk6GcHX2TUC/ASmVw5Pl3NE+E/ptFYoROCoDVn8Ghp6swjAe3lGUunvUfpxZSsLjjMLvjOP3pp3yA8+Q62mcj0I/RojK/3kBQQPc8wx/AwSeraJ+N4sDjKLrnZdhC54h1tM1E0DhK51WnO47jHxgcfvYtC7B/JoKud0zxAL2+NExTYTQ4qIJqnV4RBLRNr+DYW0Z6wNmlNL9V6kcCkmRyhQUBrS4OkZAOcMbzC3pnEHUPA5JmnAwLAkxTYcEVLBrAPfba+/6iZJwICQJauBU8lygcsPcuiWJmcAYFAc3jIVg2t1e+gJphEsVO7wwKAgxjQZhfxfMHVA99hRw1jdKCAP2jPwjRgD13CMhVgyMgCGhy0PzrJBqw+xYBOavn1qwAoHGEEg+oHFyG3NU9CEgH2HXTByXad4+UBrBzwAelqh0mCwfsuLEEJasZIgsDbL++CKWr5tZsvoCKa4tQQ1W3ifwA5f1ef3m/F2qoapCIiQZsu/K5p6zvi7+szwMlq7jqTVcO+C6KBmijjTba6OSY31QFs+h9sYumAAAAAElFTkSuQmCC`),
+			Icon:  iconImage,
 			Preview: plugin.WoxPreview{
 				PreviewType: plugin.WoxPreviewTypeImage,
-				PreviewData: "image",
+				PreviewData: previewImage.String(),
+				PreviewProperties: map[string]string{
+					"i18n:plugin_clipboard_copy_date":    util.FormatTimestamp(history.Timestamp),
+					"i18n:plugin_clipboard_image_width":  fmt.Sprintf("%d", historyData.Image.Bounds().Dx()),
+					"i18n:plugin_clipboard_image_height": fmt.Sprintf("%d", historyData.Image.Bounds().Dy()),
+				},
 			},
 			Score: 0,
 			Actions: []plugin.QueryResultAction{
@@ -381,34 +447,39 @@ func (c *ClipboardPlugin) getActiveWindowIcon(ctx context.Context) (plugin.WoxIm
 }
 
 func (c *ClipboardPlugin) saveHistory(ctx context.Context) {
-	// only save text history
-	histories := lo.Filter(c.history, func(item ClipboardHistory, index int) bool {
-		return item.Data.GetType() == clipboard.ClipboardTypeText
-	})
+	startTimestamp := util.GetSystemTimestamp()
 
-	// only save last 5000 history, but keep all favorite history
-	if len(histories) > c.maxHistoryCount+100 {
-		var favoriteHistories []ClipboardHistory
-		var normalHistories []ClipboardHistory
-		for i := len(histories) - 1; i >= 0; i-- {
-			if histories[i].IsFavorite {
-				favoriteHistories = append(favoriteHistories, histories[i])
-			} else {
-				normalHistories = append(normalHistories, histories[i])
+	var favoriteHistories []ClipboardHistory
+	var normalHistories []ClipboardHistory
+	for i := len(c.history) - 1; i >= 0; i-- {
+		if c.history[i].Data == nil {
+			continue
+		}
+		if c.history[i].IsFavorite {
+			favoriteHistories = append(favoriteHistories, c.history[i])
+			continue
+		}
+
+		if c.history[i].Data.GetType() == clipboard.ClipboardTypeText {
+			if util.GetSystemTimestamp()-c.history[i].Timestamp > int64(c.getTextHistoryDays(ctx))*24*60*60*1000 {
+				continue
+			}
+		}
+		if c.history[i].Data.GetType() == clipboard.ClipboardTypeImage {
+			if util.GetSystemTimestamp()-c.history[i].Timestamp > int64(c.getImageHistoryDays(ctx))*24*60*60*1000 {
+				continue
 			}
 		}
 
-		if len(normalHistories) > c.maxHistoryCount {
-			normalHistories = normalHistories[:c.maxHistoryCount]
-		}
-
-		histories = append(favoriteHistories, normalHistories...)
-
-		// sort history by timestamp asc
-		slices.SortStableFunc(histories, func(i, j ClipboardHistory) int {
-			return int(i.Timestamp - j.Timestamp)
-		})
+		normalHistories = append(normalHistories, c.history[i])
 	}
+
+	histories := append(favoriteHistories, normalHistories...)
+
+	// sort history by timestamp asc
+	slices.SortStableFunc(histories, func(i, j ClipboardHistory) int {
+		return int(i.Timestamp - j.Timestamp)
+	})
 
 	historyJson, marshalErr := json.Marshal(histories)
 	if marshalErr != nil {
@@ -417,7 +488,7 @@ func (c *ClipboardPlugin) saveHistory(ctx context.Context) {
 	}
 
 	c.api.SaveSetting(ctx, "history", string(historyJson), false)
-	c.api.Log(ctx, fmt.Sprintf("save clipboard text history, count=%d", len(c.history)))
+	c.api.Log(ctx, fmt.Sprintf("save clipboard history, count:%d, cost:%dms", len(c.history), util.GetSystemTimestamp()-startTimestamp))
 }
 
 func (c *ClipboardPlugin) loadHistory(ctx context.Context) {
@@ -443,4 +514,60 @@ func (c *ClipboardPlugin) loadHistory(ctx context.Context) {
 
 func (c *ClipboardPlugin) getDefaultTextIcon() plugin.WoxImage {
 	return plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><path fill="#90CAF9" d="M40 45L8 45 8 3 30 3 40 13z"></path><path fill="#E1F5FE" d="M38.5 14L29 14 29 4.5z"></path><path fill="#1976D2" d="M16 21H33V23H16zM16 25H29V27H16zM16 29H33V31H16zM16 33H29V35H16z"></path></svg>`)
+}
+
+func (c *ClipboardPlugin) isKeepTextHistory(ctx context.Context) bool {
+	isKeepTextHistory := c.api.GetSetting(ctx, isKeepTextHistorySettingKey)
+	if isKeepTextHistory == "" {
+		return true
+	}
+
+	isKeepTextHistoryBool, err := strconv.ParseBool(isKeepTextHistory)
+	if err != nil {
+		return true
+	}
+
+	return isKeepTextHistoryBool
+}
+
+func (c *ClipboardPlugin) getTextHistoryDays(ctx context.Context) int {
+	textHistoryDays := c.api.GetSetting(ctx, textHistoryDaysSettingKey)
+	if textHistoryDays == "" {
+		return 90
+	}
+
+	textHistoryDaysInt, err := strconv.Atoi(textHistoryDays)
+	if err != nil {
+		return 90
+	}
+
+	return textHistoryDaysInt
+}
+
+func (c *ClipboardPlugin) isKeepImageHistory(ctx context.Context) bool {
+	isKeepImageHistory := c.api.GetSetting(ctx, isKeepImageHistorySettingKey)
+	if isKeepImageHistory == "" {
+		return true
+	}
+
+	isKeepImageHistoryBool, err := strconv.ParseBool(isKeepImageHistory)
+	if err != nil {
+		return true
+	}
+
+	return isKeepImageHistoryBool
+}
+
+func (c *ClipboardPlugin) getImageHistoryDays(ctx context.Context) int {
+	imageHistoryDays := c.api.GetSetting(ctx, imageHistoryDaysSettingKey)
+	if imageHistoryDays == "" {
+		return 3
+	}
+
+	imageHistoryDaysInt, err := strconv.Atoi(imageHistoryDays)
+	if err != nil {
+		return 3
+	}
+
+	return imageHistoryDaysInt
 }

@@ -117,6 +117,16 @@ func NewWoxImageBase64(data string) WoxImage {
 	}
 }
 
+func NewWoxImage(image image.Image) (WoxImage, error) {
+	buf := new(bytes.Buffer)
+	encodeErr := png.Encode(buf, image)
+	if encodeErr != nil {
+		return WoxImage{}, fmt.Errorf("failed to encode image: %s", encodeErr.Error())
+	}
+
+	return NewWoxImageBase64(fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(buf.Bytes()))), nil
+}
+
 func NewWoxImageUrl(url string) WoxImage {
 	return WoxImage{
 		ImageType: WoxImageTypeUrl,
