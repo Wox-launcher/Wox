@@ -68,59 +68,61 @@ export default (props: { plugins: StorePluginManifest[] | InstalledPluginManifes
             </List>
           </WoxScrollbar>
         </div>
-        <div className={"plugin-detail-container"}>
-          <div className={"plugin-detail-summary"}>
-            <div className={"detail-title"}>
-              <Typography variant="h4" gutterBottom display={"inline"}>
-                {plugins[selectedIndex].Name}
-              </Typography>
-              <Typography variant="subtitle2" display={"inline"} gutterBottom sx={{ paddingLeft: "10px" }}>
-                Version: {plugins[selectedIndex].Version}
-              </Typography>
+        {plugins && plugins.length > 0 && (
+          <div className={"plugin-detail-container"}>
+            <div className={"plugin-detail-summary"}>
+              <div className={"detail-title"}>
+                <Typography variant="h4" gutterBottom display={"inline"}>
+                  {plugins[selectedIndex].Name}
+                </Typography>
+                <Typography variant="subtitle2" display={"inline"} gutterBottom sx={{ paddingLeft: "10px" }}>
+                  Version: {plugins[selectedIndex].Version}
+                </Typography>
+              </div>
+
+              <div className={"detail-subtitle"}>
+                <Typography variant="subtitle1" sx={{ color: "#6f737a" }} display={"inline"} gutterBottom>
+                  {plugins[selectedIndex].Author} -{" "}
+                </Typography>
+                <Typography
+                  onClick={async () => {
+                    await openUrl(plugins[selectedIndex].Website)
+                  }}
+                  variant="subtitle1"
+                  display={"inline"}
+                  sx={{ color: "#6a99f6", cursor: "pointer" }}
+                  gutterBottom
+                >
+                  Plugin homepage
+                </Typography>
+              </div>
             </div>
 
-            <div className={"detail-subtitle"}>
-              <Typography variant="subtitle1" sx={{ color: "#6f737a" }} display={"inline"} gutterBottom>
-                {plugins[selectedIndex].Author} -{" "}
-              </Typography>
-              <Typography
-                onClick={async () => {
-                  await openUrl(plugins[selectedIndex].Website)
-                }}
-                variant="subtitle1"
-                display={"inline"}
-                sx={{ color: "#6a99f6", cursor: "pointer" }}
-                gutterBottom
-              >
-                Plugin homepage
+            <Tabs value={selectedTab} sx={{ borderBottom: "1px solid #23272d" }} onChange={handleChange}>
+              <Tab label="Description" sx={{ textTransform: "none" }} />
+              {!isStore && <Tab label="Setting" sx={{ textTransform: "none" }} />}
+            </Tabs>
+
+            <div className={"plugin-detail-description"} style={{ display: `${selectedTab === 0 ? "block" : "none"}` }}>
+              {isStore && plugins[selectedIndex].ScreenshotUrls && (
+                <ImageGallery
+                  showNav={false}
+                  showThumbnails={false}
+                  showFullscreenButton={false}
+                  showPlayButton={false}
+                  items={
+                    plugins[selectedIndex].ScreenshotUrls?.map(value => {
+                      return { original: value, thumbnail: value }
+                    }) || []
+                  }
+                />
+              )}
+              <Typography variant="body1" gutterBottom>
+                {plugins[selectedIndex].Description}
               </Typography>
             </div>
           </div>
-
-          <Tabs value={selectedTab} sx={{ borderBottom: "1px solid #23272d" }} onChange={handleChange}>
-            <Tab label="Description" sx={{ textTransform: "none" }} />
-            {!isStore && <Tab label="Setting" sx={{ textTransform: "none" }} />}
-          </Tabs>
-
-          <div className={"plugin-detail-description"} style={{ display: `${selectedTab === 0 ? "block" : "none"}` }}>
-            {isStore && plugins[selectedIndex].ScreenshotUrls && (
-              <ImageGallery
-                showNav={false}
-                showThumbnails={false}
-                showFullscreenButton={false}
-                showPlayButton={false}
-                items={
-                  plugins[selectedIndex].ScreenshotUrls?.map(value => {
-                    return { original: value, thumbnail: value }
-                  }) || []
-                }
-              />
-            )}
-            <Typography variant="body1" gutterBottom>
-              {plugins[selectedIndex].Description}
-            </Typography>
-          </div>
-        </div>
+        )}
       </Box>
     </Style>
   )
