@@ -258,7 +258,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   }))
 
   return (
-    <Style theme={WoxThemeHelper.getInstance().getTheme()} resultCount={resultList.length} itemHeight={getResultListHeight(_props.isPreview ? 3 : 10)}>
+    <Style theme={WoxThemeHelper.getInstance().getTheme()} itemHeight={getResultListHeight(_props.isPreview ? 3 : 10)}>
       <WoxScrollbar
         ref={currentResultScrollbarRef}
         className={"wox-result-scrollbars"}
@@ -360,7 +360,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   )
 })
 
-const Style = styled.div<{ theme: Theme; resultCount: number; itemHeight: number }>`
+const Style = styled.div<{ theme: Theme; itemHeight: number }>`
   display: flex;
   flex-direction: row;
   min-height: ${props => props.itemHeight}px;
