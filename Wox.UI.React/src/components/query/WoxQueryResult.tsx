@@ -48,8 +48,8 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   const [actionActiveIndex, setActionActiveIndex] = useState<number>(0)
   const [resultList, setResultList] = useState<WOXMESSAGE.WoxMessageResponseResult[]>(_props.initResultList ? _props.initResultList : [])
   const [hasPreview, setHasPreview] = useState<boolean>(false)
-  const [actionList, setActionList] = useState<WOXMESSAGE.WoxResultAction[]>([])
-  const [showActionList, setShowActionList] = useState<boolean>(false)
+  const [showActionList, setShowActionList] = useState<boolean>(!!_props.isPreview)
+  const [actionList, setActionList] = useState<WOXMESSAGE.WoxResultAction[]>(_props.isPreview ? (_props.initResultList ? _props.initResultList[0].Actions : []) : [])
   const filterInputRef = React.createRef<HTMLInputElement>()
 
   const resetResultList = (rsList: WOXMESSAGE.WoxMessageResponseResult[]) => {
@@ -258,7 +258,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
   }))
 
   return (
-    <Style theme={WoxThemeHelper.getInstance().getTheme()} itemHeight={getResultListHeight(_props.isPreview ? 3 : 10)}>
+    <Style theme={WoxThemeHelper.getInstance().getTheme()} itemHeight={getResultListHeight(_props.isPreview ? 6 : 10)}>
       <WoxScrollbar
         ref={currentResultScrollbarRef}
         className={"wox-result-scrollbars"}
@@ -340,6 +340,7 @@ export default React.forwardRef((_props: WoxQueryResultProps, ref: React.Ref<Wox
           })}
           <div className={"wox-action-list-filter"}>
             <input
+              disabled={_props.isPreview}
               ref={filterInputRef}
               className={"wox-action-list-filter-input mousetrap"}
               type="text"
@@ -364,6 +365,7 @@ const Style = styled.div<{ theme: Theme; itemHeight: number }>`
   display: flex;
   flex-direction: row;
   min-height: ${props => props.itemHeight}px;
+  position: relative;
 
   .wox-result-container {
     padding-top: ${props => props.theme.ResultContainerPaddingTop}px;
@@ -450,8 +452,8 @@ const Style = styled.div<{ theme: Theme; itemHeight: number }>`
     position: absolute;
     bottom: 10px;
     right: 20px;
-    background-color: ${props => props.theme.ActionContainerBackgroundColor};
     min-width: 300px;
+    background-color: ${props => props.theme.ActionContainerBackgroundColor};
     padding-left: ${props => props.theme.ActionContainerPaddingLeft}px;
     padding-right: ${props => props.theme.ActionContainerPaddingRight}px;
     padding-top: ${props => props.theme.ActionContainerPaddingTop}px;
@@ -469,6 +471,7 @@ const Style = styled.div<{ theme: Theme; itemHeight: number }>`
       align-items: center;
       padding: 5px 10px;
       color: ${props => props.theme.ActionItemFontColor};
+      cursor: pointer;
 
       .wox-image {
         margin-right: 8px;

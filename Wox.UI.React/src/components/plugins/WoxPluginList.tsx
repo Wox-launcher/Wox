@@ -2,13 +2,13 @@ import WoxScrollbar from "../tools/WoxScrollbar.tsx"
 import { Box, Button, Divider, List, ListItemAvatar, ListItemButton, ListItemText, Tab, Tabs, Typography } from "@mui/material"
 import ImageGallery from "react-image-gallery"
 import { useWindowSize } from "usehooks-ts"
-import { StorePluginManifest } from "../../entity/Plugin.typing"
+import { InstalledPluginManifest, StorePluginManifest } from "../../entity/Plugin.typing"
 import React, { useState } from "react"
 import styled from "styled-components"
 import { openUrl } from "../../api/WoxAPI.ts"
 import WoxImage from "../tools/WoxImage.tsx"
 
-export default (props: { plugins: StorePluginManifest[]; type: string }) => {
+export default (props: { plugins: StorePluginManifest[] | InstalledPluginManifest[]; type: string }) => {
   const { plugins } = props
   const [selectedTab, setSelectedTab] = useState(0)
   const [selectedIndex, setSelectedIndex] = useState(0)

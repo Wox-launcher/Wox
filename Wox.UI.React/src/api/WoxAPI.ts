@@ -15,6 +15,14 @@ export async function getStorePlugins() {
   return post<API.WoxRestResponse<StorePluginManifest[]>>(`/plugin/store`)
 }
 
+export async function getStoreThemes() {
+  return post<API.WoxRestResponse<Theme[]>>(`/theme/store`)
+}
+
+export async function getInstalledThemes() {
+  return post<API.WoxRestResponse<Theme[]>>(`/theme/installed`)
+}
+
 export async function getInstalledPlugins() {
   return post<API.WoxRestResponse<StorePluginManifest[]>>(`/plugin/installed`)
 }
