@@ -23,6 +23,7 @@ func (i *QueryHistoryPlugin) GetMetadata() plugin.Metadata {
 		Id:            "fa51ecc4-e491-4e4b-b1f3-70df8a3966d8",
 		Name:          "Wox Query History",
 		Author:        "Wox Launcher",
+		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",

@@ -31,6 +31,7 @@ func (c *BrowserBookmarkPlugin) GetMetadata() plugin.Metadata {
 		Id:            "95d041d3-be7e-4b20-8517-88dda2db280b",
 		Name:          "BrowserBookmark",
 		Author:        "Wox Launcher",
+		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",

@@ -35,6 +35,7 @@ func (r *SysPlugin) GetMetadata() plugin.Metadata {
 		Id:            "227f7d64-df08-4e35-ad05-98a26d540d06",
 		Name:          "System Commands",
 		Author:        "Wox Launcher",
+		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",

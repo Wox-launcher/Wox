@@ -39,6 +39,7 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 		Id:            "ea2b6859-14bc-4c89-9c88-627da7379141",
 		Name:          "App",
 		Author:        "Wox Launcher",
+		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",

@@ -23,6 +23,7 @@ func (i *SelectionPlugin) GetMetadata() plugin.Metadata {
 		Id:            "d9e557ed-89bd-4b8b-bd64-2a7632cf3483",
 		Name:          "Selection",
 		Author:        "Wox Launcher",
+		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",

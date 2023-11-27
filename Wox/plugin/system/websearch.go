@@ -32,6 +32,7 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 		Id:            "c1e350a7-c521-4dc3-b4ff-509f720fde86",
 		Name:          "WebSearch",
 		Author:        "Wox Launcher",
+		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",

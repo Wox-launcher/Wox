@@ -410,13 +410,14 @@ func serveAndWait(ctx context.Context, port int) {
 	})
 
 	mux.HandleFunc("/open/url", func(w http.ResponseWriter, r *http.Request) {
-		url := r.URL.Query().Get("url")
-		if url == "" {
-			writeErrorResponse(w, "url is empty")
+		body, _ := io.ReadAll(r.Body)
+		urlResult := gjson.GetBytes(body, "url")
+		if !urlResult.Exists() {
+			writeErrorResponse(w, "id is empty")
 			return
 		}
 
-		util.ShellOpen(url)
+		util.ShellOpen(urlResult.String())
 
 		writeSuccessResponse(w, "")
 	})

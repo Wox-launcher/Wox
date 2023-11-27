@@ -25,6 +25,7 @@ func (i *IndicatorPlugin) GetMetadata() plugin.Metadata {
 		Id:            "38564bf0-75ad-4b3e-8afe-a0e0a287c42e",
 		Name:          "System Plugin Indicator",
 		Author:        "Wox Launcher",
+		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",

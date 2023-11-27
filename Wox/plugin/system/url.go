@@ -23,6 +23,7 @@ func (r *UrlPlugin) GetMetadata() plugin.Metadata {
 		Id:            "1af58721-6c97-4901-b291-620daf08d9c9",
 		Name:          "Url",
 		Author:        "Wox Launcher",
+		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",

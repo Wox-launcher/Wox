@@ -27,6 +27,7 @@ func (c *ChatgptPlugin) GetMetadata() plugin.Metadata {
 		Id:            "c9910664-1c28-47ae-bad6-e7332a02d471",
 		Name:          "Chatgpt",
 		Author:        "Wox Launcher",
+		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",

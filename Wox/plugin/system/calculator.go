@@ -33,6 +33,7 @@ func (c *CalculatorPlugin) GetMetadata() plugin.Metadata {
 		Id:            "bd723c38-f28d-4152-8621-76fd21d6456e",
 		Name:          "Calculator",
 		Author:        "Wox Launcher",
+		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",

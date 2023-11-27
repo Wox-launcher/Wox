@@ -22,6 +22,7 @@ func (i *WPMPlugin) GetMetadata() plugin.Metadata {
 		Id:            "e2c5f005-6c73-43c8-bc53-ab04def265b2",
 		Name:          "Wox Plugin Manager",
 		Author:        "Wox Launcher",
+		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",

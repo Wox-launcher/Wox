@@ -128,6 +128,7 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 		Id:            "5f815d98-27f5-488d-a756-c317ea39935b",
 		Name:          "Clipboard History",
 		Author:        "Wox Launcher",
+		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",
