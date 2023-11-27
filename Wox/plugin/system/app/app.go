@@ -56,7 +56,7 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 		SettingDefinitions: []setting.PluginSettingDefinitionItem{
 			{
 				Type: setting.PluginSettingDefinitionTypeCheckBox,
-				Value: setting.PluginSettingValueCheckBox{
+				Value: &setting.PluginSettingValueCheckBox{
 					Key:          "UsePinYin",
 					Label:        "Use pinyin to search",
 					DefaultValue: "false",

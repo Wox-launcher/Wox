@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/jinzhu/copier"
 	"github.com/olahol/melody"
+	"github.com/rs/cors"
 	"github.com/samber/lo"
 	"net/http"
 	"os"
@@ -68,20 +69,18 @@ func writeErrorResponse(w http.ResponseWriter, errMsg string) {
 	w.Write(d)
 }
 
-func enableCors(w http.ResponseWriter) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-}
-
 func serveAndWait(ctx context.Context, port int) {
 	m = melody.New()
 	m.Config.MaxMessageSize = 1024 * 1024 * 10 // 10MB
 	m.Config.MessageBufferSize = 1024 * 1024   // 1MB
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeSuccessResponse(w, "Wox")
 	})
 
-	http.HandleFunc("/index.html", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/index.html", func(w http.ResponseWriter, r *http.Request) {
 		fileContent, err := resource.GetReactFile(util.NewTraceContext(), "index.html")
 		if err != nil {
 			writeErrorResponse(w, err.Error())
@@ -92,7 +91,7 @@ func serveAndWait(ctx context.Context, port int) {
 		w.Write(fileContent)
 	})
 
-	http.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/assets/")
 		fileContent, err := resource.GetReactFile(util.NewTraceContext(), "assets", path)
 		if err != nil {
@@ -112,7 +111,7 @@ func serveAndWait(ctx context.Context, port int) {
 		w.Write(fileContent)
 	})
 
-	http.HandleFunc("/image", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/image", func(w http.ResponseWriter, r *http.Request) {
 		id := r.URL.Query().Get("id")
 		if id == "" {
 			writeErrorResponse(w, "id is empty")
@@ -134,18 +133,16 @@ func serveAndWait(ctx context.Context, port int) {
 		http.ServeFile(w, r, imagePath)
 	})
 
-	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		m.HandleRequest(w, r)
 	})
 
-	http.HandleFunc("/theme", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
+	mux.HandleFunc("/theme", func(w http.ResponseWriter, r *http.Request) {
 		theme := GetUIManager().GetCurrentTheme(util.NewTraceContext())
 		writeSuccessResponse(w, theme)
 	})
 
-	http.HandleFunc("/plugin/store", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
+	mux.HandleFunc("/plugin/store", func(w http.ResponseWriter, r *http.Request) {
 		manifests := plugin.GetStoreManager().GetStorePluginManifests(util.NewTraceContext())
 		var plugins = make([]dto.StorePlugin, len(manifests))
 		copyErr := copier.Copy(&plugins, &manifests)
@@ -165,9 +162,8 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, plugins)
 	})
 
-	http.HandleFunc("/plugin/installed", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/plugin/installed", func(w http.ResponseWriter, r *http.Request) {
 		defer util.GoRecover(util.NewTraceContext(), "get installed plugins")
-		enableCors(w)
 
 		getCtx := util.NewTraceContext()
 		instances := plugin.GetPluginManager().GetPluginInstances()
@@ -182,6 +178,13 @@ func serveAndWait(ctx context.Context, port int) {
 
 			logger.Debug(getCtx, fmt.Sprintf("get plugin setting: %s", instance.Metadata.Name))
 			installedPlugin.SettingDefinitions = instance.Metadata.SettingDefinitions
+
+			//translate setting definition labels
+			for i := range installedPlugin.SettingDefinitions {
+				if installedPlugin.SettingDefinitions[i].Value != nil {
+					installedPlugin.SettingDefinitions[i].Value.Translate(instance.API.GetTranslation)
+				}
+			}
 
 			var definitionSettings = util.NewHashMap[string, string]()
 			for _, item := range instance.Metadata.SettingDefinitions {
@@ -207,9 +210,7 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, plugins)
 	})
 
-	http.HandleFunc("/plugin/install", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
-
+	mux.HandleFunc("/plugin/install", func(w http.ResponseWriter, r *http.Request) {
 		pluginId := r.URL.Query().Get("id")
 		if pluginId == "" {
 			writeErrorResponse(w, "plugin id is empty")
@@ -237,9 +238,7 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, "")
 	})
 
-	http.HandleFunc("/plugin/uninstall", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
-
+	mux.HandleFunc("/plugin/uninstall", func(w http.ResponseWriter, r *http.Request) {
 		pluginId := r.URL.Query().Get("id")
 		if pluginId == "" {
 			writeErrorResponse(w, "plugin id is empty")
@@ -267,8 +266,7 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, "")
 	})
 
-	http.HandleFunc("/theme/store", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
+	mux.HandleFunc("/theme/store", func(w http.ResponseWriter, r *http.Request) {
 		storeThemes := GetStoreManager().GetThemes()
 		var themes = make([]dto.Theme, len(storeThemes))
 		copyErr := copier.Copy(&themes, &storeThemes)
@@ -287,8 +285,7 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, themes)
 	})
 
-	http.HandleFunc("/theme/installed", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
+	mux.HandleFunc("/theme/installed", func(w http.ResponseWriter, r *http.Request) {
 		installedThemes := GetUIManager().GetAllThemes(ctx)
 		var themes = make([]dto.Theme, len(installedThemes))
 		copyErr := copier.Copy(&themes, &installedThemes)
@@ -300,9 +297,7 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, themes)
 	})
 
-	http.HandleFunc("/theme/install", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
-
+	mux.HandleFunc("/theme/install", func(w http.ResponseWriter, r *http.Request) {
 		themeId := r.URL.Query().Get("id")
 		if themeId == "" {
 			writeErrorResponse(w, "theme id is empty")
@@ -330,9 +325,7 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, "")
 	})
 
-	http.HandleFunc("/theme/uninstall", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
-
+	mux.HandleFunc("/theme/uninstall", func(w http.ResponseWriter, r *http.Request) {
 		themeId := r.URL.Query().Get("id")
 		if themeId == "" {
 			writeErrorResponse(w, "theme id is empty")
@@ -360,9 +353,7 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, "")
 	})
 
-	http.HandleFunc("/setting/wox", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
-
+	mux.HandleFunc("/setting/wox", func(w http.ResponseWriter, r *http.Request) {
 		woxSetting := setting.GetSettingManager().GetWoxSetting(util.NewTraceContext())
 
 		var settingDto dto.WoxSetting
@@ -379,9 +370,7 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, settingDto)
 	})
 
-	http.HandleFunc("/setting/wox/update", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
-
+	mux.HandleFunc("/setting/wox/update", func(w http.ResponseWriter, r *http.Request) {
 		type keyValuePair struct {
 			Key   string
 			Value string
@@ -406,9 +395,7 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, "")
 	})
 
-	http.HandleFunc("/open/url", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(w)
-
+	mux.HandleFunc("/open/url", func(w http.ResponseWriter, r *http.Request) {
 		url := r.URL.Query().Get("url")
 		if url == "" {
 			writeErrorResponse(w, "url is empty")
@@ -451,7 +438,8 @@ func serveAndWait(ctx context.Context, port int) {
 	})
 
 	logger.Info(ctx, fmt.Sprintf("websocket server start at：ws://localhost:%d", port))
-	err := http.ListenAndServe(fmt.Sprintf("localhost:%d", port), nil)
+	handler := cors.Default().Handler(mux)
+	err := http.ListenAndServe(fmt.Sprintf("localhost:%d", port), handler)
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to start server: %s", err.Error()))
 	}

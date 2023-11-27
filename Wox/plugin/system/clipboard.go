@@ -27,6 +27,9 @@ var isKeepTextHistorySettingKey = "is_keep_text_history"
 var textHistoryDaysSettingKey = "text_history_days"
 var isKeepImageHistorySettingKey = "is_keep_image_history"
 var imageHistoryDaysSettingKey = "image_history_days"
+var primaryActionSettingKey = "primary_action"
+var primaryActionValueCopy = "copy"
+var primaryActionValuePaste = "paste"
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ClipboardPlugin{
@@ -153,7 +156,7 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 		SettingDefinitions: []setting.PluginSettingDefinitionItem{
 			{
 				Type: setting.PluginSettingDefinitionTypeCheckBox,
-				Value: setting.PluginSettingValueCheckBox{
+				Value: &setting.PluginSettingValueCheckBox{
 					Key:          isKeepTextHistorySettingKey,
 					Label:        "i18n:plugin_clipboard_keep_text_history",
 					DefaultValue: "true",
@@ -161,7 +164,7 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 			},
 			{
 				Type: setting.PluginSettingDefinitionTypeTextBox,
-				Value: setting.PluginSettingValueTextBox{
+				Value: &setting.PluginSettingValueTextBox{
 					Key:          textHistoryDaysSettingKey,
 					Suffix:       "i18n:plugin_clipboard_days",
 					DefaultValue: "90",
@@ -172,7 +175,7 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 			},
 			{
 				Type: setting.PluginSettingDefinitionTypeCheckBox,
-				Value: setting.PluginSettingValueCheckBox{
+				Value: &setting.PluginSettingValueCheckBox{
 					Key:          isKeepImageHistorySettingKey,
 					Label:        "i18n:plugin_clipboard_keep_image_history",
 					DefaultValue: "true",
@@ -180,10 +183,22 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 			},
 			{
 				Type: setting.PluginSettingDefinitionTypeTextBox,
-				Value: setting.PluginSettingValueTextBox{
+				Value: &setting.PluginSettingValueTextBox{
 					Key:          imageHistoryDaysSettingKey,
 					Suffix:       "i18n:plugin_clipboard_days",
 					DefaultValue: "3",
+				},
+			},
+			{
+				Type: setting.PluginSettingDefinitionTypeSelect,
+				Value: &setting.PluginSettingValueSelect{
+					Key:          primaryActionSettingKey,
+					Label:        "i18n:plugin_clipboard_primary_action",
+					DefaultValue: primaryActionValuePaste,
+					Options: []setting.PluginSettingValueSelectOption{
+						{Label: "i18n:plugin_clipboard_primary_action_copy_to_clipboard", Value: primaryActionValueCopy},
+						{Label: "i18n:plugin_clipboard_primary_action_paste_to_active_app", Value: primaryActionValuePaste},
+					},
 				},
 			},
 		},
@@ -299,13 +314,23 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 			}
 		}
 
+		primaryActionCode := c.api.GetSetting(ctx, primaryActionSettingKey)
+
 		actions := []plugin.QueryResultAction{
 			{
-				Name: "Copy to clipboard",
+				Name:      "Copy to clipboard",
+				IsDefault: primaryActionValueCopy == primaryActionCode,
 				Action: func(actionContext plugin.ActionContext) {
 					c.moveHistoryToTop(ctx, history.Id)
 					clipboard.Write(history.Data)
-					//TODO: still buggy because we didn't return focus to frontmost app
+				},
+			},
+			{
+				Name:      "Paste to active app",
+				IsDefault: primaryActionValuePaste == primaryActionCode,
+				Action: func(actionContext plugin.ActionContext) {
+					c.moveHistoryToTop(ctx, history.Id)
+					clipboard.Write(history.Data)
 					util.Go(context.Background(), "clipboard history copy", func() {
 						time.Sleep(time.Millisecond * 100)
 						err := keyboard.SimulatePaste()

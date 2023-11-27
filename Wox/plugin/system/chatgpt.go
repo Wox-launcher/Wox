@@ -45,7 +45,7 @@ func (c *ChatgptPlugin) GetMetadata() plugin.Metadata {
 		SettingDefinitions: setting.PluginSettingDefinitions{
 			{
 				Type: setting.PluginSettingDefinitionTypeTextBox,
-				Value: setting.PluginSettingValueTextBox{
+				Value: &setting.PluginSettingValueTextBox{
 					Key:   "api_key",
 					Label: "API Key",
 				},

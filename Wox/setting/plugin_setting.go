@@ -1,6 +1,7 @@
 package setting
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
@@ -92,7 +93,7 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 		if unmarshalErr != nil {
 			return unmarshalErr
 		}
-		n.Value = v
+		n.Value = &v
 	case "textbox":
 		n.Type = PluginSettingDefinitionTypeTextBox
 		var v PluginSettingValueTextBox
@@ -100,7 +101,7 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 		if unmarshalErr != nil {
 			return unmarshalErr
 		}
-		n.Value = v
+		n.Value = &v
 	case "checkbox":
 		n.Type = PluginSettingDefinitionTypeCheckBox
 		var v PluginSettingValueCheckBox
@@ -108,7 +109,7 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 		if unmarshalErr != nil {
 			return unmarshalErr
 		}
-		n.Value = v
+		n.Value = &v
 	case "select":
 		n.Type = PluginSettingDefinitionTypeSelect
 		var v PluginSettingValueSelect
@@ -116,7 +117,7 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 		if unmarshalErr != nil {
 			return unmarshalErr
 		}
-		n.Value = v
+		n.Value = &v
 	case "label":
 		n.Type = PluginSettingDefinitionTypeLabel
 		var v PluginSettingValueLabel
@@ -124,10 +125,10 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 		if unmarshalErr != nil {
 			return unmarshalErr
 		}
-		n.Value = v
+		n.Value = &v
 	case "newline":
 		n.Type = PluginSettingDefinitionTypeNewLine
-		n.Value = PluginSettingValueNewLine{}
+		n.Value = &PluginSettingValueNewLine{}
 	default:
 		return errors.New("unknown setting type: " + value.String())
 	}
@@ -138,22 +139,27 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 type PluginSettingDefinitionValue interface {
 	GetKey() string
 	GetDefaultValue() string
+	Translate(translator func(ctx context.Context, key string) string)
 }
 
 type PluginSettingValueHead struct {
 	Content string
 }
 
-func (p PluginSettingValueHead) GetPluginSettingType() PluginSettingDefinitionType {
+func (p *PluginSettingValueHead) GetPluginSettingType() PluginSettingDefinitionType {
 	return PluginSettingDefinitionTypeHead
 }
 
-func (p PluginSettingValueHead) GetKey() string {
+func (p *PluginSettingValueHead) GetKey() string {
 	return uuid.NewString()
 }
 
-func (p PluginSettingValueHead) GetDefaultValue() string {
+func (p *PluginSettingValueHead) GetDefaultValue() string {
 	return ""
+}
+
+func (p *PluginSettingValueHead) Translate(translator func(ctx context.Context, key string) string) {
+	return
 }
 
 type PluginSettingValueTextBox struct {
@@ -163,16 +169,21 @@ type PluginSettingValueTextBox struct {
 	DefaultValue string
 }
 
-func (p PluginSettingValueTextBox) GetPluginSettingType() PluginSettingDefinitionType {
+func (p *PluginSettingValueTextBox) GetPluginSettingType() PluginSettingDefinitionType {
 	return PluginSettingDefinitionTypeTextBox
 }
 
-func (p PluginSettingValueTextBox) GetKey() string {
+func (p *PluginSettingValueTextBox) GetKey() string {
 	return p.Key
 }
 
-func (p PluginSettingValueTextBox) GetDefaultValue() string {
+func (p *PluginSettingValueTextBox) GetDefaultValue() string {
 	return p.DefaultValue
+}
+
+func (p *PluginSettingValueTextBox) Translate(translator func(ctx context.Context, key string) string) {
+	p.Label = translator(context.Background(), p.Label)
+	p.Suffix = translator(context.Background(), p.Suffix)
 }
 
 type PluginSettingValueCheckBox struct {
@@ -181,16 +192,20 @@ type PluginSettingValueCheckBox struct {
 	DefaultValue string
 }
 
-func (p PluginSettingValueCheckBox) GetPluginSettingType() PluginSettingDefinitionType {
+func (p *PluginSettingValueCheckBox) GetPluginSettingType() PluginSettingDefinitionType {
 	return PluginSettingDefinitionTypeCheckBox
 }
 
-func (p PluginSettingValueCheckBox) GetKey() string {
+func (p *PluginSettingValueCheckBox) GetKey() string {
 	return p.Key
 }
 
-func (p PluginSettingValueCheckBox) GetDefaultValue() string {
+func (p *PluginSettingValueCheckBox) GetDefaultValue() string {
 	return p.DefaultValue
+}
+
+func (p *PluginSettingValueCheckBox) Translate(translator func(ctx context.Context, key string) string) {
+	p.Label = translator(context.Background(), p.Label)
 }
 
 type PluginSettingValueSelect struct {
@@ -206,45 +221,60 @@ type PluginSettingValueSelectOption struct {
 	Value string
 }
 
-func (p PluginSettingValueSelect) GetPluginSettingType() PluginSettingDefinitionType {
+func (p *PluginSettingValueSelect) GetPluginSettingType() PluginSettingDefinitionType {
 	return PluginSettingDefinitionTypeSelect
 }
 
-func (p PluginSettingValueSelect) GetKey() string {
+func (p *PluginSettingValueSelect) GetKey() string {
 	return p.Key
 }
 
-func (p PluginSettingValueSelect) GetDefaultValue() string {
+func (p *PluginSettingValueSelect) GetDefaultValue() string {
 	return p.DefaultValue
+}
+
+func (p *PluginSettingValueSelect) Translate(translator func(ctx context.Context, key string) string) {
+	p.Label = translator(context.Background(), p.Label)
+	p.Suffix = translator(context.Background(), p.Suffix)
+	for i := range p.Options {
+		p.Options[i].Label = translator(context.Background(), p.Options[i].Label)
+	}
 }
 
 type PluginSettingValueLabel struct {
 	Content string
 }
 
-func (p PluginSettingValueLabel) GetPluginSettingType() PluginSettingDefinitionType {
+func (p *PluginSettingValueLabel) GetPluginSettingType() PluginSettingDefinitionType {
 	return PluginSettingDefinitionTypeLabel
 }
 
-func (p PluginSettingValueLabel) GetKey() string {
+func (p *PluginSettingValueLabel) GetKey() string {
 	return uuid.NewString()
 }
 
-func (p PluginSettingValueLabel) GetDefaultValue() string {
+func (p *PluginSettingValueLabel) GetDefaultValue() string {
 	return ""
+}
+
+func (p *PluginSettingValueLabel) Translate(translator func(ctx context.Context, key string) string) {
+	p.Content = translator(context.Background(), p.Content)
 }
 
 type PluginSettingValueNewLine struct {
 }
 
-func (p PluginSettingValueNewLine) GetPluginSettingType() PluginSettingDefinitionType {
+func (p *PluginSettingValueNewLine) GetPluginSettingType() PluginSettingDefinitionType {
 	return PluginSettingDefinitionTypeNewLine
 }
 
-func (p PluginSettingValueNewLine) GetKey() string {
+func (p *PluginSettingValueNewLine) GetKey() string {
 	return uuid.NewString()
 }
 
-func (p PluginSettingValueNewLine) GetDefaultValue() string {
+func (p *PluginSettingValueNewLine) GetDefaultValue() string {
 	return ""
+}
+
+func (p *PluginSettingValueNewLine) Translate(translator func(ctx context.Context, key string) string) {
 }

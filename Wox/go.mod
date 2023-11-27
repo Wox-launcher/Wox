@@ -48,6 +48,7 @@ require (
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/robotn/gohook v0.41.0 // indirect
+	github.com/rs/cors v1.10.1 // indirect
 	github.com/saracen/zipextra v0.0.0-20220303013732-0187cb0159ea // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect

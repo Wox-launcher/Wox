@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/samber/lo"
 	"path"
+	"wox/i18n"
 	"wox/setting"
 	"wox/share"
 	"wox/util"
@@ -51,8 +52,11 @@ func (a *APIImpl) Log(ctx context.Context, msg string) {
 }
 
 func (a *APIImpl) GetTranslation(ctx context.Context, key string) string {
-
-	return ""
+	if a.pluginInstance.IsSystemPlugin {
+		return i18n.GetI18nManager().TranslateWox(ctx, key)
+	} else {
+		return i18n.GetI18nManager().TranslatePlugin(ctx, key, a.pluginInstance.PluginDirectory)
+	}
 }
 
 func (a *APIImpl) GetSetting(ctx context.Context, key string) string {
