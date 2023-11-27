@@ -8,6 +8,8 @@ import (
 	"github.com/olahol/melody"
 	"github.com/rs/cors"
 	"github.com/samber/lo"
+	"github.com/tidwall/gjson"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -211,11 +213,14 @@ func serveAndWait(ctx context.Context, port int) {
 	})
 
 	mux.HandleFunc("/plugin/install", func(w http.ResponseWriter, r *http.Request) {
-		pluginId := r.URL.Query().Get("id")
-		if pluginId == "" {
-			writeErrorResponse(w, "plugin id is empty")
+		body, _ := io.ReadAll(r.Body)
+		idResult := gjson.GetBytes(body, "id")
+		if !idResult.Exists() {
+			writeErrorResponse(w, "id is empty")
 			return
 		}
+
+		pluginId := idResult.String()
 
 		plugins := plugin.GetStoreManager().GetStorePluginManifests(ctx)
 		findPlugin, exist := lo.Find(plugins, func(item plugin.StorePluginManifest) bool {
@@ -239,11 +244,14 @@ func serveAndWait(ctx context.Context, port int) {
 	})
 
 	mux.HandleFunc("/plugin/uninstall", func(w http.ResponseWriter, r *http.Request) {
-		pluginId := r.URL.Query().Get("id")
-		if pluginId == "" {
-			writeErrorResponse(w, "plugin id is empty")
+		body, _ := io.ReadAll(r.Body)
+		idResult := gjson.GetBytes(body, "id")
+		if !idResult.Exists() {
+			writeErrorResponse(w, "id is empty")
 			return
 		}
+
+		pluginId := idResult.String()
 
 		plugins := plugin.GetPluginManager().GetPluginInstances()
 		findPlugin, exist := lo.Find(plugins, func(item *plugin.Instance) bool {
@@ -298,11 +306,14 @@ func serveAndWait(ctx context.Context, port int) {
 	})
 
 	mux.HandleFunc("/theme/install", func(w http.ResponseWriter, r *http.Request) {
-		themeId := r.URL.Query().Get("id")
-		if themeId == "" {
-			writeErrorResponse(w, "theme id is empty")
+		body, _ := io.ReadAll(r.Body)
+		idResult := gjson.GetBytes(body, "id")
+		if !idResult.Exists() {
+			writeErrorResponse(w, "id is empty")
 			return
 		}
+
+		themeId := idResult.String()
 
 		storeThemes := GetStoreManager().GetThemes()
 		findTheme, exist := lo.Find(storeThemes, func(item Theme) bool {
@@ -326,11 +337,14 @@ func serveAndWait(ctx context.Context, port int) {
 	})
 
 	mux.HandleFunc("/theme/uninstall", func(w http.ResponseWriter, r *http.Request) {
-		themeId := r.URL.Query().Get("id")
-		if themeId == "" {
-			writeErrorResponse(w, "theme id is empty")
+		body, _ := io.ReadAll(r.Body)
+		idResult := gjson.GetBytes(body, "id")
+		if !idResult.Exists() {
+			writeErrorResponse(w, "id is empty")
 			return
 		}
+
+		themeId := idResult.String()
 
 		storeThemes := GetUIManager().GetAllThemes(ctx)
 		findTheme, exist := lo.Find(storeThemes, func(item Theme) bool {
