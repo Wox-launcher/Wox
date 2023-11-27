@@ -185,8 +185,10 @@ func serveAndWait(ctx context.Context, port int) {
 
 			var definitionSettings = util.NewHashMap[string, string]()
 			for _, item := range instance.Metadata.SettingDefinitions {
-				settingValue := instance.API.GetSetting(getCtx, item.Value.GetKey())
-				definitionSettings.Store(item.Value.GetKey(), settingValue)
+				if item.Value != nil {
+					settingValue := instance.API.GetSetting(getCtx, item.Value.GetKey())
+					definitionSettings.Store(item.Value.GetKey(), settingValue)
+				}
 			}
 			installedPlugin.Settings = *instance.Setting
 			//only return user pre-defined settings
