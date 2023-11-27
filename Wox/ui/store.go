@@ -119,7 +119,7 @@ func (s *Store) Install(ctx context.Context, theme Theme) error {
 }
 
 func (s *Store) Uninstall(ctx context.Context, theme Theme) error {
-	if theme.IsSystemTheme {
+	if GetUIManager().IsSystemTheme(theme.ThemeId) {
 		return fmt.Errorf("can't uninstall system theme")
 	}
 

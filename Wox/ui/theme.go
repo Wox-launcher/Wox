@@ -1,11 +1,12 @@
 package ui
 
 type Theme struct {
-	ThemeId                         string
-	ThemeName                       string
-	ThemeAuthor                     string
-	ThemeUrl                        string
-	IsSystemTheme                   bool
+	ThemeId     string
+	ThemeName   string
+	ThemeAuthor string
+	ThemeUrl    string
+	Version     string
+
 	AppBackgroundColor              string
 	AppPaddingLeft                  int
 	AppPaddingTop                   int

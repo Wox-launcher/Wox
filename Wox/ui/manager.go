@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 	"os"
 	"path"
 	"sync"
@@ -29,6 +30,7 @@ type Manager struct {
 	serverPort      int
 	uiProcess       *os.Process
 	themes          *util.HashMap[string, Theme]
+	systemThemeIds  []string
 }
 
 func GetUIManager() *Manager {
@@ -53,6 +55,7 @@ func (m *Manager) Start(ctx context.Context) error {
 			continue
 		}
 		m.themes.Store(theme.ThemeId, theme)
+		m.systemThemeIds = append(m.systemThemeIds, theme.ThemeId)
 	}
 
 	//load user themes
@@ -327,4 +330,8 @@ func (m *Manager) PostAppStart(ctx context.Context) {
 	if !woxSetting.HideOnStart {
 		m.ui.ShowApp(ctx, share.ShowContext{SelectAll: false})
 	}
+}
+
+func (m *Manager) IsSystemTheme(id string) bool {
+	return lo.Contains(m.systemThemeIds, id)
 }

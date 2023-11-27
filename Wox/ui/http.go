@@ -207,6 +207,66 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, plugins)
 	})
 
+	http.HandleFunc("/plugin/install", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(w)
+
+		pluginId := r.URL.Query().Get("id")
+		if pluginId == "" {
+			writeErrorResponse(w, "plugin id is empty")
+			return
+		}
+
+		plugins := plugin.GetStoreManager().GetStorePluginManifests(ctx)
+		findPlugin, exist := lo.Find(plugins, func(item plugin.StorePluginManifest) bool {
+			if item.Id == pluginId {
+				return true
+			}
+			return false
+		})
+		if !exist {
+			writeErrorResponse(w, "can't find plugin in the store")
+			return
+		}
+
+		installErr := plugin.GetStoreManager().Install(ctx, findPlugin)
+		if installErr != nil {
+			writeErrorResponse(w, "can't install plugin: "+installErr.Error())
+			return
+		}
+
+		writeSuccessResponse(w, "")
+	})
+
+	http.HandleFunc("/plugin/uninstall", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(w)
+
+		pluginId := r.URL.Query().Get("id")
+		if pluginId == "" {
+			writeErrorResponse(w, "plugin id is empty")
+			return
+		}
+
+		plugins := plugin.GetPluginManager().GetPluginInstances()
+		findPlugin, exist := lo.Find(plugins, func(item *plugin.Instance) bool {
+			if item.Metadata.Id == pluginId {
+				return true
+			}
+			return false
+		})
+		if !exist {
+			writeErrorResponse(w, "can't find plugin")
+			return
+		}
+
+		uninstallErr := plugin.GetStoreManager().Uninstall(ctx, findPlugin)
+		if uninstallErr != nil {
+			writeErrorResponse(w, "can't uninstall plugin: "+uninstallErr.Error())
+			return
+		}
+
+		writeSuccessResponse(w, "")
+	})
+
 	http.HandleFunc("/theme/store", func(w http.ResponseWriter, r *http.Request) {
 		enableCors(w)
 		storeThemes := GetStoreManager().GetThemes()
@@ -238,6 +298,66 @@ func serveAndWait(ctx context.Context, port int) {
 		}
 
 		writeSuccessResponse(w, themes)
+	})
+
+	http.HandleFunc("/theme/install", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(w)
+
+		themeId := r.URL.Query().Get("id")
+		if themeId == "" {
+			writeErrorResponse(w, "theme id is empty")
+			return
+		}
+
+		storeThemes := GetStoreManager().GetThemes()
+		findTheme, exist := lo.Find(storeThemes, func(item Theme) bool {
+			if item.ThemeId == themeId {
+				return true
+			}
+			return false
+		})
+		if !exist {
+			writeErrorResponse(w, "can't find theme in theme store")
+			return
+		}
+
+		installErr := GetStoreManager().Install(ctx, findTheme)
+		if installErr != nil {
+			writeErrorResponse(w, "can't install theme: "+installErr.Error())
+			return
+		}
+
+		writeSuccessResponse(w, "")
+	})
+
+	http.HandleFunc("/theme/uninstall", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(w)
+
+		themeId := r.URL.Query().Get("id")
+		if themeId == "" {
+			writeErrorResponse(w, "theme id is empty")
+			return
+		}
+
+		storeThemes := GetUIManager().GetAllThemes(ctx)
+		findTheme, exist := lo.Find(storeThemes, func(item Theme) bool {
+			if item.ThemeId == themeId {
+				return true
+			}
+			return false
+		})
+		if !exist {
+			writeErrorResponse(w, "can't find theme")
+			return
+		}
+
+		uninstallErr := GetStoreManager().Uninstall(ctx, findTheme)
+		if uninstallErr != nil {
+			writeErrorResponse(w, "can't uninstall theme: "+uninstallErr.Error())
+			return
+		}
+
+		writeSuccessResponse(w, "")
 	})
 
 	http.HandleFunc("/setting/wox", func(w http.ResponseWriter, r *http.Request) {

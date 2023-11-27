@@ -18,7 +18,7 @@ type storeManifest struct {
 	Url  string
 }
 
-type storePluginManifest struct {
+type StorePluginManifest struct {
 	Id             string
 	Name           string
 	Author         string
@@ -38,7 +38,7 @@ var storeInstance *Store
 var storeOnce sync.Once
 
 type Store struct {
-	pluginManifests []storePluginManifest
+	pluginManifests []StorePluginManifest
 }
 
 func GetStoreManager() *Store {
@@ -71,8 +71,8 @@ func (s *Store) Start(ctx context.Context) {
 	})
 }
 
-func (s *Store) GetStorePluginManifests(ctx context.Context) []storePluginManifest {
-	var storePluginManifests []storePluginManifest
+func (s *Store) GetStorePluginManifests(ctx context.Context) []StorePluginManifest {
+	var storePluginManifests []StorePluginManifest
 
 	for _, store := range s.getStoreManifests(ctx) {
 		pluginManifest, manifestErr := s.GetStorePluginManifest(ctx, store)
@@ -82,7 +82,7 @@ func (s *Store) GetStorePluginManifests(ctx context.Context) []storePluginManife
 		}
 
 		for _, manifest := range pluginManifest {
-			existingManifest, found := lo.Find(storePluginManifests, func(manifest storePluginManifest) bool {
+			existingManifest, found := lo.Find(storePluginManifests, func(manifest StorePluginManifest) bool {
 				return manifest.Id == manifest.Id
 			})
 			if found {
@@ -104,7 +104,7 @@ func (s *Store) GetStorePluginManifests(ctx context.Context) []storePluginManife
 	return storePluginManifests
 }
 
-func (s *Store) GetStorePluginManifest(ctx context.Context, store storeManifest) ([]storePluginManifest, error) {
+func (s *Store) GetStorePluginManifest(ctx context.Context, store storeManifest) ([]StorePluginManifest, error) {
 	logger.Info(ctx, fmt.Sprintf("start to get plugin manifest from %s(%s)", store.Name, store.Url))
 
 	response, getErr := util.HttpGet(ctx, store.Url)
@@ -112,7 +112,7 @@ func (s *Store) GetStorePluginManifest(ctx context.Context, store storeManifest)
 		return nil, getErr
 	}
 
-	var storePluginManifests []storePluginManifest
+	var storePluginManifests []StorePluginManifest
 	unmarshalErr := json.Unmarshal(response, &storePluginManifests)
 	if unmarshalErr != nil {
 		return nil, unmarshalErr
@@ -121,13 +121,13 @@ func (s *Store) GetStorePluginManifest(ctx context.Context, store storeManifest)
 	return storePluginManifests, nil
 }
 
-func (s *Store) Search(ctx context.Context, keyword string) []storePluginManifest {
-	return lo.Filter(s.pluginManifests, func(manifest storePluginManifest, _ int) bool {
+func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifest {
+	return lo.Filter(s.pluginManifests, func(manifest StorePluginManifest, _ int) bool {
 		return util.IsStringMatch(manifest.Name, keyword, false)
 	})
 }
 
-func (s *Store) Install(ctx context.Context, manifest storePluginManifest) {
+func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error {
 	logger.Info(ctx, fmt.Sprintf("start to install plugin %s(%s)", manifest.Name, manifest.Version))
 
 	// check if installed newer version
@@ -141,14 +141,14 @@ func (s *Store) Install(ctx context.Context, manifest storePluginManifest) {
 		if installedErr == nil && currentErr == nil {
 			if installedVersion.GreaterThan(currentVersion) {
 				logger.Info(ctx, fmt.Sprintf("skip %s(%s) from %s store, because it's already installed(%s)", manifest.Name, manifest.Version, manifest.Name, installedPlugin.Metadata.Version))
-				return
+				return fmt.Errorf("skip %s(%s) from %s store, because it's already installed(%s)", manifest.Name, manifest.Version, manifest.Name, installedPlugin.Metadata.Version)
 			}
 		}
 
 		uninstallErr := s.Uninstall(ctx, installedPlugin)
 		if uninstallErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version, uninstallErr.Error()))
-			return
+			return fmt.Errorf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version, uninstallErr.Error())
 		}
 	}
 
@@ -158,33 +158,39 @@ func (s *Store) Install(ctx context.Context, manifest storePluginManifest) {
 	directoryErr := util.GetLocation().EnsureDirectoryExist(pluginDirectory)
 	if directoryErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to create plugin directory %s: %s", pluginDirectory, directoryErr.Error()))
-		return
+		return fmt.Errorf("failed to create plugin directory %s: %s", pluginDirectory, directoryErr.Error())
 	}
 	pluginZipPath := path.Join(pluginDirectory, "plugin.zip")
 	downloadErr := util.HttpDownload(ctx, manifest.DownloadUrl, pluginZipPath)
 	if downloadErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to download plugin %s(%s): %s", manifest.Name, manifest.Version, downloadErr.Error()))
-		return
+		return fmt.Errorf("failed to download plugin %s(%s): %s", manifest.Name, manifest.Version, downloadErr.Error())
 	}
 
 	//unzip plugin
 	logger.Info(ctx, fmt.Sprintf("start to unzip plugin %s(%s)", manifest.Name, manifest.Version))
-	util.Unzip(pluginZipPath, pluginDirectory)
+	unzipErr := util.Unzip(pluginZipPath, pluginDirectory)
+	if unzipErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to unzip plugin %s(%s): %s", manifest.Name, manifest.Version, unzipErr.Error()))
+		return fmt.Errorf("failed to unzip plugin %s(%s): %s", manifest.Name, manifest.Version, unzipErr.Error())
+	}
 
 	//load plugin
 	logger.Info(ctx, fmt.Sprintf("start to load plugin %s(%s)", manifest.Name, manifest.Version))
 	loadErr := GetPluginManager().LoadPlugin(ctx, pluginDirectory)
 	if loadErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to load plugin %s(%s): %s", manifest.Name, manifest.Version, loadErr.Error()))
-		return
+		return fmt.Errorf("failed to load plugin %s(%s): %s", manifest.Name, manifest.Version, loadErr.Error())
 	}
 
 	//remove plugin zip
 	removeErr := os.Remove(pluginZipPath)
 	if removeErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to remove plugin zip %s: %s", pluginZipPath, removeErr.Error()))
-		return
+		return fmt.Errorf("failed to remove plugin zip %s: %s", pluginZipPath, removeErr.Error())
 	}
+
+	return nil
 }
 
 func (s *Store) Uninstall(ctx context.Context, plugin *Instance) error {

@@ -1,11 +1,15 @@
 package dto
 
 type Theme struct {
-	ThemeId                         string
-	ThemeName                       string
-	ThemeAuthor                     string
-	ThemeUrl                        string
-	IsSystemTheme                   bool
+	ThemeId      string
+	ThemeName    string
+	ThemeAuthor  string
+	ThemeUrl     string
+	Version      string
+	IsInstalled  bool
+	IsSystem     bool
+	IsUpgradable bool
+
 	AppBackgroundColor              string
 	AppPaddingLeft                  int
 	AppPaddingTop                   int
@@ -46,5 +50,4 @@ type Theme struct {
 	PreviewSplitLineColor           string
 	PreviewPropertyTitleColor       string
 	PreviewPropertyContentColor     string
-	IsInstalled                     bool
 }
