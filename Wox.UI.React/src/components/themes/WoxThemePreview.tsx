@@ -21,7 +21,7 @@ export default (props: { theme: Theme }) => {
         Actions: [
           {
             Id: "e5ec9374-facf-4733-9439-a3b9e067c4c1",
-            Name: "打开",
+            Name: "Open",
             Icon: {
               ImageType: "svg",
               ImageData:
@@ -32,7 +32,7 @@ export default (props: { theme: Theme }) => {
           },
           {
             Id: "115697fe-a395-4254-aaed-a8b570848df5",
-            Name: "打开所在文件夹",
+            Name: "Open Folder",
             Icon: {
               ImageType: "svg",
               ImageData:
@@ -43,7 +43,7 @@ export default (props: { theme: Theme }) => {
           },
           {
             Id: "ec482e87-099b-49fa-a9b7-8e1829abe1ce",
-            Name: "复制路径",
+            Name: "Copy Path",
             Icon: {
               ImageType: "base64",
               ImageData:
