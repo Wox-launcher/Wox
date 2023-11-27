@@ -10,19 +10,31 @@ export default () => {
   const [loading, setLoading] = useState(true)
   const [plugins, setPlugins] = useState<StorePluginManifest[]>([])
 
-  useEffect(() => {
+  const loadStorePlugins = () => {
     WoxPluginHelper.getInstance()
       .loadStorePlugins()
       .then(_ => {
         setPlugins(WoxPluginHelper.getInstance().getStorePlugins())
         setLoading(false)
       })
+  }
+
+  useEffect(() => {
+    loadStorePlugins()
   }, [])
 
   return (
     <Style>
       {loading && <CircularProgress />}
-      {!loading && <WoxPluginList plugins={plugins} type={"store"} />}
+      {!loading && (
+        <WoxPluginList
+          plugins={plugins}
+          type={"store"}
+          refreshCallback={() => {
+            loadStorePlugins()
+          }}
+        />
+      )}
     </Style>
   )
 }
