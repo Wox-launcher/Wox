@@ -5,7 +5,7 @@ import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/controller.dart';
-import 'package:wox/views/querybox_view.dart';
+import 'package:wox/view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,7 +34,7 @@ void main() async {
     await windowManager.setVisibleOnAllWorkspaces(true, visibleOnFullScreen: true);
   }
   await windowManager.setAsFrameless();
-  windowManager.waitUntilReadyToShow(windowOptions, () async {
+  await windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
     await windowManager.focus();
   });
@@ -63,12 +63,8 @@ class WoxApp extends StatefulWidget {
 class _WoxAppState extends State<WoxApp> {
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Column(
-        children: <Widget>[
-          QueryBoxView(),
-        ],
-      ),
+    return Scaffold(
+      body: WoxView(),
     );
   }
 }
