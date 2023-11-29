@@ -1,6 +1,6 @@
 import React, { useImperativeHandle, useRef, useState } from "react"
 import styled from "styled-components"
-import { Box, Checkbox, Skeleton } from "@mui/material"
+import { Box, Checkbox, FormControl, MenuItem, Select, Skeleton } from "@mui/material"
 import { WoxSettingHelper } from "../../utils/WoxSettingHelper"
 import { useHotkeys } from "react-hotkeys-hook"
 import { UpdateSetting } from "../../entity/Setting.typings"
@@ -21,6 +21,7 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
   const [hideOnLostFocus, setHideOnLostFocus] = useState(false)
   const [mainHotKeyFocus, setMainHotKeyFocus] = useState(false)
   const [selectionHotKeyFocus, setSelectionHotKeyFocus] = useState(false)
+  const [lastQueryMode, setLastQueryMode] = useState("empty")
   const updatingSetting = useRef(false)
   const hotKeyArray: string[] = ["control", "option", "shift", "command", "space"]
   const keyMap: { [key: string]: string } = {
@@ -37,8 +38,7 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
 
   useHotkeys(
     ["ctrl", "alt", "shift", "meta", "ctrl+alt", "ctrl+shift", "ctrl+meta", "ctrl+alt+shift", "ctrl+alt+meta", "ctrl+alt+shift+meta", "alt+shift", "alt+meta", "alt+shift+meta", "shift+meta"],
-    (keyboardEvent, handler) => {
-      console.log(keyboardEvent)
+    (_, handler) => {
       const hotKeyCombinations = ["space"]
       if (handler.ctrl) {
         hotKeyCombinations.push("control")
@@ -141,6 +141,28 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
             </div>
           </div>
           <div className={"wox-setting-item"}>
+            <div className={"setting-item-label"} style={{ paddingTop: "6px" }}>
+              Last Query Model:
+            </div>
+            <div className={"setting-item-content"}>
+              <div className={"setting-item-detail"}>
+                <FormControl sx={{ m: 1, minWidth: 220 }} size="small">
+                  <Select
+                    value={lastQueryMode}
+                    onChange={async event => {
+                      setLastQueryMode(event.target.value as string)
+                      await executeSettingUpdate({ Key: "LastQueryMode", Value: event.target.value })
+                    }}
+                  >
+                    <MenuItem value={"preserve"}>Preserve</MenuItem>
+                    <MenuItem value={"empty"}>Empty</MenuItem>
+                  </Select>
+                </FormControl>
+              </div>
+              <div className={"setting-item-intro"}>In 'Preserve' model, it will show last query result, when you reopen wox launcher.</div>
+            </div>
+          </div>
+          <div className={"wox-setting-item"}>
             <div className={"setting-item-label"}>Use PinYin:</div>
             <div className={"setting-item-content"}>
               <div className={"setting-item-detail"}>
@@ -183,6 +205,36 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
                 Hide Wox On Start
               </div>
               <div className={"setting-item-intro"}>If selected, When wox start, it will be hidden.</div>
+            </div>
+          </div>
+          <div className={"wox-setting-item"}>
+            <div className={"setting-item-label"}>Show Tray:</div>
+            <div className={"setting-item-content"}>
+              <div className={"setting-item-detail"}>
+                <Checkbox
+                  defaultChecked={hideOnLostFocus}
+                  onChange={async event => {
+                    await executeSettingUpdate({ Key: "ShowTray", Value: event.target.checked + "" })
+                  }}
+                />{" "}
+                Show Wox Tray Icon
+              </div>
+              <div className={"setting-item-intro"}>If selected, When wox start, icon will be shown on tray.</div>
+            </div>
+          </div>
+          <div className={"wox-setting-item"}>
+            <div className={"setting-item-label"}>Switch Input Method:</div>
+            <div className={"setting-item-content"}>
+              <div className={"setting-item-detail"}>
+                <Checkbox
+                  defaultChecked={hideOnLostFocus}
+                  onChange={async event => {
+                    await executeSettingUpdate({ Key: "SwitchInputMethodABC", Value: event.target.checked + "" })
+                  }}
+                />{" "}
+                Switch Input Method To English
+              </div>
+              <div className={"setting-item-intro"}>If selected, input method will be switched to english, when enter input field.</div>
             </div>
           </div>
         </>
@@ -259,6 +311,12 @@ const Style = styled.div`
 
       .MuiOutlinedInput-notchedOutline {
         border-color: #1976d2;
+      }
+
+      .MuiInputLabel-root,
+      .MuiSelect-select,
+      .MuiSelect-icon {
+        color: white;
       }
     }
   }
