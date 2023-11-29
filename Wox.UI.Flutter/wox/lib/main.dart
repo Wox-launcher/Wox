@@ -1,10 +1,11 @@
-import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:wox/controller.dart';
+import 'package:wox/views/querybox_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +17,10 @@ void main() async {
     dark: false,
   );
 
+  final woxController = WoxController();
+  woxController.connect();
+  Get.lazyPut(() => woxController);
+
   WindowOptions windowOptions = const WindowOptions(
     size: Size(800, 300),
     center: true,
@@ -25,7 +30,9 @@ void main() async {
     titleBarStyle: TitleBarStyle.hidden,
     windowButtonVisibility: false,
   );
-  await windowManager.setVisibleOnAllWorkspaces(true, visibleOnFullScreen: true);
+  if (Platform.isMacOS) {
+    await windowManager.setVisibleOnAllWorkspaces(true, visibleOnFullScreen: true);
+  }
   await windowManager.setAsFrameless();
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
@@ -40,106 +47,26 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      home: MyHomePage(),
+    return const MaterialApp(
+      home: WoxApp(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  MyHomePage({super.key});
+class WoxApp extends StatefulWidget {
+  const WoxApp({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<WoxApp> createState() => _WoxAppState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  final _controller = TextEditingController();
-  WebSocketChannel? channel;
-  List<dynamic> results = [];
-
-  @override
-  void initState() {
-    super.initState();
-    connect();
-  }
-
-  connect() {
-    final wsUrl = Uri.parse("ws://localhost:34987/ws");
-    channel = WebSocketChannel.connect(wsUrl);
-    channel?.stream.listen((message) async {
-      print(message);
-
-      var msg = jsonDecode(message);
-      switch (msg["Method"]) {
-        case "Query":
-          setState(() {
-            results = msg["Data"];
-          });
-          break;
-        case "ToggleApp":
-          var isVisible = await windowManager.isVisible();
-          if (isVisible) {
-            await windowManager.hide();
-          } else {
-            await windowManager.show();
-            await windowManager.focus();
-            _controller.selection = TextSelection(baseOffset: 0, extentOffset: _controller.text.length);
-          }
-        case "Result":
-          print("result: ${msg["Params"]["result"]}");
-          break;
-        default:
-          print("unknown method: ${msg["Method"]}");
-      }
-    });
-  }
-
+class _WoxAppState extends State<WoxApp> {
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return const Scaffold(
       body: Column(
         children: <Widget>[
-          RawKeyboardListener(
-            focusNode: FocusNode(),
-            onKey: (event) {
-              if (event.logicalKey == LogicalKeyboardKey.escape) {
-                windowManager.hide();
-              }
-            },
-            child: TextField(
-              controller: _controller,
-              onChanged: (value) {
-                setState(() {
-                  results = [];
-                });
-                channel?.sink.add(jsonEncode({
-                  "Id": "dfd",
-                  "Method": "Query",
-                  "Params": {
-                    "query": value,
-                  },
-                }));
-              },
-            ),
-          ),
-          //a alfred like result list
-          Expanded(
-            child: ListView.builder(
-              itemCount: results.length,
-              itemBuilder: (context, index) {
-                return ListTile(
-                  title: Text(results[index]["Title"]),
-                  subtitle: Text(results[index]["SubTitle"]),
-                );
-              },
-            ),
-          ),
+          QueryBoxView(),
         ],
       ),
     );
