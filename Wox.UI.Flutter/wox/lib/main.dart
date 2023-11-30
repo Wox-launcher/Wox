@@ -17,9 +17,7 @@ void main() async {
     dark: false,
   );
 
-  final woxController = WoxController();
-  woxController.connect();
-  Get.lazyPut(() => woxController);
+  Get.put(WoxController());
 
   WindowOptions windowOptions = const WindowOptions(
     size: Size(800, 300),
@@ -34,6 +32,7 @@ void main() async {
     await windowManager.setVisibleOnAllWorkspaces(true, visibleOnFullScreen: true);
   }
   await windowManager.setAsFrameless();
+  await windowManager.setResizable(false);
   await windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
     await windowManager.focus();

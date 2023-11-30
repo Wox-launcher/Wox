@@ -48,6 +48,7 @@ class WoxView extends GetView<WoxController> {
                 }),
                 child: TextField(
                   autofocus: true,
+                  focusNode: controller.queryFocusNode,
                   controller: controller.queryTextFieldController,
                   onChanged: (value) {
                     final query = ChangedQuery(queryId: const UuidV4().generate(), queryType: queryTypeInput, queryText: value, querySelection: Selection.empty());
@@ -63,7 +64,7 @@ class WoxView extends GetView<WoxController> {
           return ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: WoxController.maxHeight),
             child: Stack(
-              fit: controller.isShowActionList.value ? StackFit.expand : StackFit.loose,
+              fit: (controller.isShowActionPanel.value || controller.isShowPreviewPanel.value) ? StackFit.expand : StackFit.loose,
               children: [
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -79,10 +80,10 @@ class WoxView extends GetView<WoxController> {
                         },
                       ),
                     ),
-                    if (controller.currentPreview.value.previewData != "") Expanded(child: WoxPreviewView(woxPreview: controller.currentPreview.value)),
+                    if (controller.isShowPreviewPanel.value) Expanded(child: WoxPreviewView(woxPreview: controller.currentPreview.value)),
                   ],
                 ),
-                if (controller.isShowActionList.value) const Positioned(right: 10, bottom: 10, child: SizedBox(width: 100, height: 48, child: Text("Action List")))
+                if (controller.isShowActionPanel.value) const Positioned(right: 10, bottom: 10, child: SizedBox(width: 100, height: 48, child: Text("Action List")))
               ],
             ),
           );

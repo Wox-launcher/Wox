@@ -5,45 +5,54 @@ import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:logger/logger.dart';
 import 'package:uuid/v4.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:wox/utils/websocket.dart';
 
 import 'entity.dart';
 
 class WoxController extends GetxController {
   final query = ChangedQuery.empty().obs;
   final queryTextFieldController = TextEditingController();
+  final queryFocusNode = FocusNode();
   final queryResults = <QueryResult>[].obs;
   final currentPreview = WoxPreview.empty().obs;
   final activeResultIndex = 0.obs;
-  final isShowActionList = false.obs;
-  var onQueryChangeTimer = Timer(const Duration(milliseconds: 200), () => {});
-  var hasLastQueryResult = false;
-
+  final isShowActionPanel = false.obs;
+  final isShowPreviewPanel = false.obs;
+  var clearQueryResultsTimer = Timer(const Duration(milliseconds: 200), () => {});
+  late final WoxWebsocket ws;
   static const double maxHeight = 500;
 
-  late final WebSocketChannel channel;
+  @override
+  void onInit() {
+    super.onInit();
+    _setupWebSocket();
+  }
 
-  void connect() {
-    channel = WebSocketChannel.connect(Uri.parse("ws://localhost:34987/ws"));
-    channel.stream.listen((event) {
-      var msg = WebsocketMsg.fromJson(jsonDecode(event));
-      if (msg.method == "ToggleApp") {
-        toggleApp(ShowAppParams.fromJson(msg.data));
-      } else if (msg.method == "HideApp") {
-        hide();
-      } else if (msg.method == "ShowApp") {
-        hide();
-      } else if (msg.method == "ChangeQuery") {
-        onQueryChanged(ChangedQuery.fromJson(msg.data));
-      } else if (msg.method == "Query") {
-        var results = <QueryResult>[];
-        for (var item in msg.data) {
-          results.add(QueryResult.fromJson(item));
-        }
-        onReceiveQueryResults(results);
+  void _setupWebSocket() {
+    ws = WoxWebsocket(Uri.parse("ws://localhost:34987/ws"), onMessageReceived: _handleWebSocketMessage);
+    ws.connect();
+  }
+
+  void _handleWebSocketMessage(event) {
+    var msg = WebsocketMsg.fromJson(jsonDecode(event));
+    if (msg.method == "ToggleApp") {
+      toggleApp(ShowAppParams.fromJson(msg.data));
+    } else if (msg.method == "HideApp") {
+      hide();
+    } else if (msg.method == "ShowApp") {
+      show(ShowAppParams.fromJson(msg.data));
+    } else if (msg.method == "ChangeQuery") {
+      var changedQuery = ChangedQuery.fromJson(msg.data);
+      changedQuery.queryId = const UuidV4().generate();
+      onQueryChanged(changedQuery);
+    } else if (msg.method == "Query") {
+      var results = <QueryResult>[];
+      for (var item in msg.data) {
+        results.add(QueryResult.fromJson(item));
       }
-    });
+      onReceiveQueryResults(results);
+    }
   }
 
   Future<void> toggleApp(ShowAppParams params) async {
@@ -54,6 +63,19 @@ class WoxController extends GetxController {
     } else {
       show(params);
     }
+  }
+
+  Future<void> show(ShowAppParams params) async {
+    if (params.selectAll) {
+      selectAll();
+    }
+    if (params.position.type == positionTypeMouseScreen) {
+      await windowManager.setPosition(Offset(params.position.x.toDouble(), params.position.y.toDouble()));
+    }
+
+    await windowManager.show();
+    await windowManager.focus();
+    queryFocusNode.requestFocus();
   }
 
   Future<void> hide() async {
@@ -69,6 +91,7 @@ class WoxController extends GetxController {
     }
 
     currentPreview.value = queryResults[activeResultIndex.value].preview;
+    isShowPreviewPanel.value = currentPreview.value.previewData != "";
     queryResults.refresh();
   }
 
@@ -80,6 +103,7 @@ class WoxController extends GetxController {
     }
 
     currentPreview.value = queryResults[activeResultIndex.value].preview;
+    isShowPreviewPanel.value = currentPreview.value.previewData != "";
     queryResults.refresh();
   }
 
@@ -90,7 +114,7 @@ class WoxController extends GetxController {
       "resultId": result.id,
       "actionId": action.id,
     });
-    channel.sink.add(jsonEncode(msg));
+    ws.sendMessage(msg);
 
     if (!action.preventHideAfterAction) {
       await hide();
@@ -98,39 +122,29 @@ class WoxController extends GetxController {
   }
 
   void toggleActionList() {
-    isShowActionList.value = !isShowActionList.value;
+    isShowActionPanel.value = !isShowActionPanel.value;
     resizeHeight();
   }
 
-  void resetActiveResultIndex() {
+  void resetActiveResult() {
     activeResultIndex.value = 0;
+
+    //reset preview
     if (queryResults.isNotEmpty) {
       currentPreview.value = queryResults[activeResultIndex.value].preview;
     } else {
       currentPreview.value = WoxPreview.empty();
     }
+    isShowPreviewPanel.value = currentPreview.value.previewData != "";
   }
 
   void selectAll() {
     queryTextFieldController.selection = TextSelection(baseOffset: 0, extentOffset: queryTextFieldController.text.length);
   }
 
-  Future<void> show(ShowAppParams params) async {
-    if (params.selectAll) {
-      selectAll();
-    }
-    if (params.position.type == positionTypeMouseScreen) {
-      await windowManager.setPosition(Offset(params.position.x.toDouble(), params.position.y.toDouble()));
-    }
-
-    await windowManager.show();
-    await windowManager.focus();
-  }
-
   void onQueryChanged(ChangedQuery query) {
-    resetActiveResultIndex();
     this.query.value = query;
-    isShowActionList.value = false;
+    isShowActionPanel.value = false;
     if (query.queryType == queryTypeInput) {
       queryTextFieldController.text = query.queryText;
     } else {
@@ -141,17 +155,16 @@ class WoxController extends GetxController {
       resizeHeight();
       return;
     }
-    hasLastQueryResult = false;
-    onQueryChangeTimer.cancel();
 
-    onQueryChangeTimer = Timer(
-      const Duration(milliseconds: 200),
+    // delay clear results, otherwise windows height will shrink immediately,
+    // and then the query result is received which will expand the windows height. so it will causes window flicker
+    clearQueryResultsTimer.cancel();
+    clearQueryResultsTimer = Timer(
+      const Duration(milliseconds: 100),
       () {
-        if (!hasLastQueryResult) {
-          Logger().i("clear results");
-          queryResults.clear();
-          resizeHeight();
-        }
+        Logger().i("clear results");
+        queryResults.clear();
+        resizeHeight();
       },
     );
 
@@ -161,40 +174,36 @@ class WoxController extends GetxController {
       "queryText": query.queryText,
       "querySelection": query.querySelection.toJson(),
     });
-    channel.sink.add(jsonEncode(msg));
+    ws.sendMessage(msg);
   }
 
   void onReceiveQueryResults(List<QueryResult> results) {
-    if (results.isEmpty) {
-      return;
-    }
-    //not current query result
-    if (query.value.queryId != results.first.queryId) {
+    if (results.isEmpty || query.value.queryId != results.first.queryId) {
       return;
     }
 
-    hasLastQueryResult = true;
+    //cancel clear results timer
+    clearQueryResultsTimer.cancel();
 
-    final finalResults = <QueryResult>[];
-    queryResults.where((i) => i.queryId == query.value.queryId).forEach((element) {
-      finalResults.remove(element);
-    });
-    finalResults.addAll(results);
-
-    //sort by score desc
+    //merge and sort results
+    final currentQueryResults = queryResults.where((item) => item.queryId == query.value.queryId).toList();
+    final finalResults = List<QueryResult>.from(currentQueryResults)..addAll(results);
     finalResults.sort((a, b) => b.score.compareTo(a.score));
-
     queryResults.assignAll(finalResults);
+
+    //reset active result and preview
+    if (currentQueryResults.isEmpty) {
+      resetActiveResult();
+    }
 
     resizeHeight();
   }
 
   void resizeHeight() {
-    //based on current query result count
     const queryBoxHeight = 48;
     const resultItemHeight = 40;
     var resultHeight = queryResults.length * resultItemHeight;
-    if (resultHeight > maxHeight || isShowActionList.value) {
+    if (resultHeight > maxHeight || isShowActionPanel.value || isShowPreviewPanel.value) {
       resultHeight = maxHeight.toInt();
     }
     final totalHeight = queryBoxHeight + resultHeight;
