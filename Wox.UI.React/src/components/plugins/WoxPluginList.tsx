@@ -5,8 +5,9 @@ import { useWindowSize } from "usehooks-ts"
 import { InstalledPluginManifest, StorePluginManifest } from "../../entity/Plugin.typing"
 import React, { useState } from "react"
 import styled from "styled-components"
-import { installPlugin, openUrl } from "../../api/WoxAPI.ts"
+import { installPlugin, openUrl, unInstallPlugin } from "../../api/WoxAPI.ts"
 import WoxImage from "../tools/WoxImage.tsx"
+import WoxSettingItem from "../tools/WoxSettingItem.tsx"
 
 export default (props: { plugins: StorePluginManifest[] | InstalledPluginManifest[]; type: string; refreshCallback?: () => void }) => {
   const { plugins } = props
@@ -67,6 +68,21 @@ export default (props: { plugins: StorePluginManifest[] | InstalledPluginManifes
                             </Button>
                           )}
                         </>
+                      )}
+                      {!isStore && !plugin.IsSystem && (
+                        <Button
+                          variant="contained"
+                          sx={{ textTransform: "none", marginLeft: "5px" }}
+                          onClick={_ => {
+                            unInstallPlugin(plugin.Id).then(resp => {
+                              if (!resp.Success) {
+                                alert(resp.Message)
+                              }
+                            })
+                          }}
+                        >
+                          UnInstall
+                        </Button>
                       )}
                       {plugin.NeedUpdate && (
                         <Button variant="contained" sx={{ textTransform: "none", marginLeft: "5px" }}>
@@ -133,6 +149,9 @@ export default (props: { plugins: StorePluginManifest[] | InstalledPluginManifes
               <Typography variant="body1" gutterBottom>
                 {plugins[selectedIndex].Description}
               </Typography>
+            </div>
+            <div className={"plugin-detail-setting"} style={{ display: `${selectedTab === 1 ? "block" : "none"}` }}>
+              <WoxSettingItem pluginId={plugins[selectedIndex].Id} settingDefinitions={plugins[selectedIndex]?.SettingDefinitions || []} />
             </div>
           </div>
         )}

@@ -17,6 +17,8 @@ export interface StorePluginManifest {
   DateUpdated: string
   IsInstalled: boolean
   NeedUpdate: boolean
+  IsSystem: boolean
+  SettingDefinitions?: PluginSettingDefinitionItem[]
 }
 
 export interface MetadataCommand {
@@ -29,14 +31,22 @@ export interface PluginQueryCommand {
   Description: string
 }
 
+export interface LabelValuePair {
+  Label: string
+  Value: string
+}
+
 export interface PluginSettingDefinitionValue {
   Key: string
+  Label?: string
+  Suffix?: string
   DefaultValue: string
+  Options?: LabelValuePair[]
 }
 
 export interface PluginSettingDefinitionItem {
   Type: PluginSettingDefinitionType
-  Value: PluginSettingDefinitionValue
+  Value: PluginSettingDefinitionValue | null
 }
 
 export interface PluginSetting {
@@ -76,4 +86,5 @@ export interface InstalledPluginManifest {
   IsInstalled?: boolean
   NeedUpdate?: boolean
   ScreenshotUrls?: string[]
+  IsSystem?: boolean
 }

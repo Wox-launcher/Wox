@@ -1,6 +1,6 @@
 import React, { useImperativeHandle, useRef, useState } from "react"
 import styled from "styled-components"
-import { Box, Checkbox, FormControl, MenuItem, Select, Skeleton } from "@mui/material"
+import { Box, Checkbox, FormControl, FormControlLabel, MenuItem, Select, Skeleton } from "@mui/material"
 import { WoxSettingHelper } from "../../utils/WoxSettingHelper"
 import { useHotkeys } from "react-hotkeys-hook"
 import { UpdateSetting } from "../../entity/Setting.typings"
@@ -166,13 +166,18 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
             <div className={"setting-item-label"}>Use PinYin:</div>
             <div className={"setting-item-content"}>
               <div className={"setting-item-detail"}>
-                <Checkbox
-                  defaultChecked={usePinYin}
-                  onChange={async event => {
-                    await executeSettingUpdate({ Key: "UsePinYin", Value: event.target.checked + "" })
-                  }}
-                />{" "}
-                Use PinYin For Searching
+                <FormControlLabel
+                  sx={{ paddingLeft: "8px" }}
+                  control={
+                    <Checkbox
+                      defaultChecked={usePinYin}
+                      onChange={async event => {
+                        await executeSettingUpdate({ Key: "UsePinYin", Value: event.target.checked + "" })
+                      }}
+                    />
+                  }
+                  label="Use PinYin For Searching"
+                />
               </div>
               <div className={"setting-item-intro"}>If selected, When searching, it converts Chinese into Pinyin and matches it.</div>
             </div>
@@ -181,13 +186,18 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
             <div className={"setting-item-label"}>Hide On Lost Focus:</div>
             <div className={"setting-item-content"}>
               <div className={"setting-item-detail"}>
-                <Checkbox
-                  defaultChecked={hideOnLostFocus}
-                  onChange={async event => {
-                    await executeSettingUpdate({ Key: "HideOnLostFocus", Value: event.target.checked + "" })
-                  }}
-                />{" "}
-                Hide Wox On Lost Focus
+                <FormControlLabel
+                  sx={{ paddingLeft: "8px" }}
+                  control={
+                    <Checkbox
+                      defaultChecked={hideOnLostFocus}
+                      onChange={async event => {
+                        await executeSettingUpdate({ Key: "HideOnLostFocus", Value: event.target.checked + "" })
+                      }}
+                    />
+                  }
+                  label="Hide Wox On Lost Focus"
+                />
               </div>
               <div className={"setting-item-intro"}>If selected, When wox lost focus, it will be hidden.</div>
             </div>
@@ -196,13 +206,18 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
             <div className={"setting-item-label"}>Hide On Start:</div>
             <div className={"setting-item-content"}>
               <div className={"setting-item-detail"}>
-                <Checkbox
-                  defaultChecked={hideOnLostFocus}
-                  onChange={async event => {
-                    await executeSettingUpdate({ Key: "HideOnStart", Value: event.target.checked + "" })
-                  }}
-                />{" "}
-                Hide Wox On Start
+                <FormControlLabel
+                  sx={{ paddingLeft: "8px" }}
+                  control={
+                    <Checkbox
+                      defaultChecked={hideOnLostFocus}
+                      onChange={async event => {
+                        await executeSettingUpdate({ Key: "HideOnStart", Value: event.target.checked + "" })
+                      }}
+                    />
+                  }
+                  label="Hide Wox On Start"
+                />
               </div>
               <div className={"setting-item-intro"}>If selected, When wox start, it will be hidden.</div>
             </div>
@@ -211,13 +226,18 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
             <div className={"setting-item-label"}>Show Tray:</div>
             <div className={"setting-item-content"}>
               <div className={"setting-item-detail"}>
-                <Checkbox
-                  defaultChecked={hideOnLostFocus}
-                  onChange={async event => {
-                    await executeSettingUpdate({ Key: "ShowTray", Value: event.target.checked + "" })
-                  }}
-                />{" "}
-                Show Wox Tray Icon
+                <FormControlLabel
+                  sx={{ paddingLeft: "8px" }}
+                  control={
+                    <Checkbox
+                      defaultChecked={hideOnLostFocus}
+                      onChange={async event => {
+                        await executeSettingUpdate({ Key: "ShowTray", Value: event.target.checked + "" })
+                      }}
+                    />
+                  }
+                  label="Show Wox Tray Icon"
+                />
               </div>
               <div className={"setting-item-intro"}>If selected, When wox start, icon will be shown on tray.</div>
             </div>
@@ -226,13 +246,18 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
             <div className={"setting-item-label"}>Switch Input Method:</div>
             <div className={"setting-item-content"}>
               <div className={"setting-item-detail"}>
-                <Checkbox
-                  defaultChecked={hideOnLostFocus}
-                  onChange={async event => {
-                    await executeSettingUpdate({ Key: "SwitchInputMethodABC", Value: event.target.checked + "" })
-                  }}
-                />{" "}
-                Switch Input Method To English
+                <FormControlLabel
+                  sx={{ paddingLeft: "8px" }}
+                  control={
+                    <Checkbox
+                      defaultChecked={hideOnLostFocus}
+                      onChange={async event => {
+                        await executeSettingUpdate({ Key: "SwitchInputMethodABC", Value: event.target.checked + "" })
+                      }}
+                    />
+                  }
+                  label="Switch Input Method To English"
+                />
               </div>
               <div className={"setting-item-intro"}>If selected, input method will be switched to english, when enter input field.</div>
             </div>
@@ -310,7 +335,7 @@ const Style = styled.div`
       }
 
       .MuiOutlinedInput-notchedOutline {
-        border-color: #1976d2;
+        border: 1px solid white;
       }
 
       .MuiInputLabel-root,

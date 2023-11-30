@@ -38,4 +38,5 @@ type InstalledPlugin struct {
 	SupportedOS        []string
 	SettingDefinitions setting.PluginSettingDefinitions
 	Settings           setting.PluginSetting
+	IsSystem           bool
 }

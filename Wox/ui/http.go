@@ -178,6 +178,7 @@ func serveAndWait(ctx context.Context, port int) {
 				return
 			}
 
+			installedPlugin.IsSystem = instance.IsSystemPlugin
 			logger.Debug(getCtx, fmt.Sprintf("get plugin setting: %s", instance.Metadata.Name))
 			installedPlugin.SettingDefinitions = instance.Metadata.SettingDefinitions
 
