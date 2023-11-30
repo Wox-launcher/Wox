@@ -1,5 +1,3 @@
-import 'package:uuid/v4.dart';
-
 typedef SelectionType = String;
 typedef LastQueryMode = String;
 typedef QueryType = String;
@@ -133,10 +131,16 @@ class WoxPreview {
   late String previewData;
   late Map<String, String> previewProperties;
 
+  WoxPreview({required this.previewType, required this.previewData, required this.previewProperties});
+
   WoxPreview.fromJson(Map<String, dynamic> json) {
     previewType = json['PreviewType'];
     previewData = json['PreviewData'];
     previewProperties = Map<String, String>.from(json['PreviewProperties'] ?? {});
+  }
+
+  static WoxPreview empty() {
+    return WoxPreview(previewType: "", previewData: "", previewProperties: {});
   }
 }
 

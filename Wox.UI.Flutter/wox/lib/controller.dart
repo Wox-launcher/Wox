@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
@@ -13,7 +14,12 @@ class WoxController extends GetxController {
   final query = ChangedQuery.empty().obs;
   final queryTextFieldController = TextEditingController();
   final queryResults = <QueryResult>[].obs;
+  final currentPreview = WoxPreview.empty().obs;
   final activeResultIndex = 0.obs;
+  final isShowActionList = false.obs;
+  var onQueryChangeTimer = Timer(const Duration(milliseconds: 200), () => {});
+  var hasLastQueryResult = false;
+
   static const double maxHeight = 500;
 
   late final WebSocketChannel channel;
@@ -62,6 +68,7 @@ class WoxController extends GetxController {
       activeResultIndex.value++;
     }
 
+    currentPreview.value = queryResults[activeResultIndex.value].preview;
     queryResults.refresh();
   }
 
@@ -72,6 +79,7 @@ class WoxController extends GetxController {
       activeResultIndex.value--;
     }
 
+    currentPreview.value = queryResults[activeResultIndex.value].preview;
     queryResults.refresh();
   }
 
@@ -89,8 +97,18 @@ class WoxController extends GetxController {
     }
   }
 
+  void toggleActionList() {
+    isShowActionList.value = !isShowActionList.value;
+    resizeHeight();
+  }
+
   void resetActiveResultIndex() {
     activeResultIndex.value = 0;
+    if (queryResults.isNotEmpty) {
+      currentPreview.value = queryResults[activeResultIndex.value].preview;
+    } else {
+      currentPreview.value = WoxPreview.empty();
+    }
   }
 
   void selectAll() {
@@ -112,6 +130,7 @@ class WoxController extends GetxController {
   void onQueryChanged(ChangedQuery query) {
     resetActiveResultIndex();
     this.query.value = query;
+    isShowActionList.value = false;
     if (query.queryType == queryTypeInput) {
       queryTextFieldController.text = query.queryText;
     } else {
@@ -122,9 +141,19 @@ class WoxController extends GetxController {
       resizeHeight();
       return;
     }
+    hasLastQueryResult = false;
+    onQueryChangeTimer.cancel();
 
-    //clear results
-    queryResults.clear();
+    onQueryChangeTimer = Timer(
+      const Duration(milliseconds: 200),
+      () {
+        if (!hasLastQueryResult) {
+          Logger().i("clear results");
+          queryResults.clear();
+          resizeHeight();
+        }
+      },
+    );
 
     final msg = WebsocketMsg(id: const UuidV4().generate(), method: "Query", data: {
       "queryId": query.queryId,
@@ -132,7 +161,6 @@ class WoxController extends GetxController {
       "queryText": query.queryText,
       "querySelection": query.querySelection.toJson(),
     });
-
     channel.sink.add(jsonEncode(msg));
   }
 
@@ -145,13 +173,13 @@ class WoxController extends GetxController {
       return;
     }
 
+    hasLastQueryResult = true;
+
     final finalResults = <QueryResult>[];
-    for (var item in queryResults) {
-      finalResults.add(item);
-    }
-    for (var item in results) {
-      finalResults.add(item);
-    }
+    queryResults.where((i) => i.queryId == query.value.queryId).forEach((element) {
+      finalResults.remove(element);
+    });
+    finalResults.addAll(results);
 
     //sort by score desc
     finalResults.sort((a, b) => b.score.compareTo(a.score));
@@ -166,7 +194,7 @@ class WoxController extends GetxController {
     const queryBoxHeight = 48;
     const resultItemHeight = 40;
     var resultHeight = queryResults.length * resultItemHeight;
-    if (resultHeight > maxHeight) {
+    if (resultHeight > maxHeight || isShowActionList.value) {
       resultHeight = maxHeight.toInt();
     }
     final totalHeight = queryBoxHeight + resultHeight;
