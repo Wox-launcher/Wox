@@ -413,6 +413,47 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, "")
 	})
 
+	mux.HandleFunc("/setting/plugin/update", func(w http.ResponseWriter, r *http.Request) {
+		type keyValuePair struct {
+			PluginId string
+			Key      string
+			Value    string
+		}
+
+		decoder := json.NewDecoder(r.Body)
+		var kv keyValuePair
+		err := decoder.Decode(&kv)
+		if err != nil {
+			w.Header().Set("code", "500")
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		pluginInstance, exist := lo.Find(plugin.GetPluginManager().GetPluginInstances(), func(item *plugin.Instance) bool {
+			if item.Metadata.Id == kv.PluginId {
+				return true
+			}
+			return false
+		})
+		if !exist {
+			w.Header().Set("code", "500")
+			w.Write([]byte("can't find plugin"))
+			return
+		}
+
+		if kv.Key == "Disabled" {
+			pluginInstance.Setting.Disabled = kv.Value == "true"
+			pluginInstance.SaveSetting(ctx)
+		} else if kv.Key == "TriggerKeywords" {
+			pluginInstance.Setting.TriggerKeywords = strings.Split(kv.Value, ",")
+			pluginInstance.SaveSetting(ctx)
+		} else {
+			pluginInstance.API.SaveSetting(util.NewTraceContext(), kv.Key, kv.Value, false)
+		}
+
+		writeSuccessResponse(w, "")
+	})
+
 	mux.HandleFunc("/open/url", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		urlResult := gjson.GetBytes(body, "url")

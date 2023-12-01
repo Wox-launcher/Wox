@@ -22,7 +22,10 @@ type WoxSetting struct {
 	QueryHotkeys         PlatformSettingValue[[]QueryHotkey]
 	QueryShortcuts       []QueryShortcut
 	LastQueryMode        LastQueryMode
-	ThemeId              string
+
+	// UI related
+	AppWidth int
+	ThemeId  string
 }
 
 type LastQueryMode = string
@@ -77,6 +80,7 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 		HideOnLostFocus:      true,
 		LangCode:             langCode,
 		LastQueryMode:        LastQueryModeEmpty,
+		AppWidth:             800,
 		ThemeId:              "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03",
 	}
 }
