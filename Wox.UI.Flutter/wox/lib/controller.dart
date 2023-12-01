@@ -15,8 +15,12 @@ class WoxController extends GetxController {
   final queryTextFieldController = TextEditingController();
   final queryFocusNode = FocusNode();
   final queryResults = <QueryResult>[].obs;
+  final actionTextFieldController = TextEditingController();
+  final actionFocusNode = FocusNode();
+  final actionResults = <WoxResultAction>[].obs;
   final currentPreview = WoxPreview.empty().obs;
   final activeResultIndex = 0.obs;
+  final activeActionIndex = 0.obs;
   final isShowActionPanel = false.obs;
   final isShowPreviewPanel = false.obs;
   var clearQueryResultsTimer = Timer(const Duration(milliseconds: 200), () => {});
@@ -95,6 +99,16 @@ class WoxController extends GetxController {
     queryResults.refresh();
   }
 
+  void arrowDownAction() {
+    if (activeActionIndex.value == actionResults.length - 1) {
+      activeActionIndex.value = 0;
+    } else {
+      activeActionIndex.value++;
+    }
+
+    actionResults.refresh();
+  }
+
   void arrowUp() {
     if (activeResultIndex.value == 0) {
       activeResultIndex.value = queryResults.length - 1;
@@ -107,9 +121,27 @@ class WoxController extends GetxController {
     queryResults.refresh();
   }
 
+  void arrowUpAction() {
+    if (activeActionIndex.value == 0) {
+      activeActionIndex.value = actionResults.length - 1;
+    } else {
+      activeActionIndex.value--;
+    }
+
+    actionResults.refresh();
+  }
+
   Future<void> selectResult() async {
+    final defaultActionIndex = queryResults[activeResultIndex.value].actions.indexWhere((element) => element.isDefault);
+    if (defaultActionIndex != -1) {
+      activeActionIndex.value = defaultActionIndex;
+      selectAction();
+    }
+  }
+
+  void selectAction() {
     final result = queryResults[activeResultIndex.value];
-    final action = result.actions.first;
+    final action = result.actions[activeActionIndex.value];
     final msg = WebsocketMsg(id: const UuidV4().generate(), method: "Action", data: {
       "resultId": result.id,
       "actionId": action.id,
@@ -117,12 +149,22 @@ class WoxController extends GetxController {
     ws.sendMessage(msg);
 
     if (!action.preventHideAfterAction) {
-      await hide();
+      hide();
     }
   }
 
-  void toggleActionList() {
-    isShowActionPanel.value = !isShowActionPanel.value;
+  void toggleActionPanel() {
+    if (queryResults.isEmpty) {
+      return;
+    }
+
+    if (isShowActionPanel.value) {
+      isShowActionPanel.value = false;
+      queryFocusNode.requestFocus();
+    } else {
+      isShowActionPanel.value = true;
+      actionFocusNode.requestFocus();
+    }
     resizeHeight();
   }
 
@@ -197,6 +239,22 @@ class WoxController extends GetxController {
     }
 
     resizeHeight();
+  }
+
+  void onActionQueryChanged(String actionQuery) {
+    if (actionQuery.isEmpty) {
+      actionResults.value = queryResults[activeResultIndex.value].actions;
+      return;
+    }
+
+    final results = <WoxResultAction>[];
+    for (var action in queryResults[activeResultIndex.value].actions) {
+      if (action.name.toLowerCase().contains(actionQuery.toLowerCase())) {
+        results.add(action);
+      }
+    }
+    actionResults.value = results;
+    actionResults.refresh();
   }
 
   void resizeHeight() {

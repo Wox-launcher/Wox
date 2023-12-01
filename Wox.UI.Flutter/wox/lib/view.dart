@@ -39,7 +39,7 @@ class WoxView extends GetView<WoxController> {
                       return KeyEventResult.handled;
                     }
                     if (event.isMetaPressed && event.logicalKey == LogicalKeyboardKey.keyJ) {
-                      controller.toggleActionList();
+                      controller.toggleActionPanel();
                       return KeyEventResult.handled;
                     }
                   }
@@ -69,6 +69,7 @@ class WoxView extends GetView<WoxController> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Results
                     Expanded(
                       child: ListView.builder(
                         shrinkWrap: true,
@@ -80,10 +81,72 @@ class WoxView extends GetView<WoxController> {
                         },
                       ),
                     ),
+
+                    // Preview
                     if (controller.isShowPreviewPanel.value) Expanded(child: WoxPreviewView(woxPreview: controller.currentPreview.value)),
                   ],
                 ),
-                if (controller.isShowActionPanel.value) const Positioned(right: 10, bottom: 10, child: SizedBox(width: 100, height: 48, child: Text("Action List")))
+
+                // Action Panel
+                if (controller.isShowActionPanel.value)
+                  Positioned(
+                    right: 10,
+                    bottom: 10,
+                    child: Container(
+                      color: Colors.red,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 200, maxWidth: 200),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("Actions"),
+                            Divider(),
+                            for (var action in controller.actionResults)
+                              Row(
+                                children: [
+                                  Text(action.name),
+                                ],
+                              ),
+                            RawKeyboardListener(
+                              focusNode: FocusNode(onKey: (FocusNode node, RawKeyEvent event) {
+                                if (event is RawKeyDownEvent) {
+                                  if (event.logicalKey == LogicalKeyboardKey.escape) {
+                                    controller.toggleActionPanel();
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                                    controller.arrowDownAction();
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                                    controller.arrowUpAction();
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey == LogicalKeyboardKey.enter) {
+                                    controller.selectAction();
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.isMetaPressed && event.logicalKey == LogicalKeyboardKey.keyJ) {
+                                    controller.toggleActionPanel();
+                                    return KeyEventResult.handled;
+                                  }
+                                }
+                                return KeyEventResult.ignored;
+                              }),
+                              child: TextField(
+                                focusNode: controller.actionFocusNode,
+                                controller: controller.actionTextFieldController,
+                                onChanged: (value) {
+                                  controller.onActionQueryChanged(value);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           );

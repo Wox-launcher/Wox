@@ -14,7 +14,7 @@ void main() async {
 
   await Window.setEffect(
     effect: WindowEffect.popover,
-    dark: false,
+    dark: true,
   );
 
   Get.put(WoxController());
@@ -63,6 +63,7 @@ class _WoxAppState extends State<WoxApp> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       body: WoxView(),
     );
   }
