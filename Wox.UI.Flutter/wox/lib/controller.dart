@@ -78,12 +78,10 @@ class WoxController extends GetxController {
     }
 
     await windowManager.show();
-    await windowManager.focus();
     queryFocusNode.requestFocus();
   }
 
   Future<void> hide() async {
-    await windowManager.blur();
     await windowManager.hide();
   }
 

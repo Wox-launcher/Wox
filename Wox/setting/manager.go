@@ -242,6 +242,15 @@ func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, defaul
 		pluginSetting.Settings = defaultSettings.GetAllDefaults()
 	}
 
+	//check if all default settings are present in the plugin settings
+	//plugin author may add new definitions which are not in the user settings
+	defaultSettings.GetAllDefaults().Range(func(key string, value string) bool {
+		if _, exist := pluginSetting.Settings.Load(key); !exist {
+			pluginSetting.Settings.Store(key, value)
+		}
+		return true
+	})
+
 	return pluginSetting, nil
 }
 
