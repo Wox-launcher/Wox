@@ -35,10 +35,11 @@ dependencies:
   web_socket_channel: ^2.4.0
   flutter_acrylic: ^1.1.0
   get: ^4.6.6
-  logger: ^1.1.0
+  logger: ^2.0.2+1
   uuid: ^4.0.0
   flutter_svg: ^2.0.9
   flutter_markdown: ^0.6.18+2
+  path_provider: ^2.1.1
 
 dev_dependencies:
   flutter_test:

@@ -3,12 +3,27 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:get/get.dart';
+import 'package:logger/logger.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/controller.dart';
+import 'package:wox/modules/launcher/views/wox_launcher_view.dart';
+import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  initGetX();
+  initWindow();
+  runApp(const MyApp());
+}
+
+void initGetX() {
+  Get.put(Logger(printer: SimplePrinter()));
+  Get.put(WoxController());
+  Get.put(WoxLauncherController());
+}
+
+void initWindow() async {
   await windowManager.ensureInitialized();
   await Window.initialize();
 
@@ -16,8 +31,6 @@ void main() async {
     effect: WindowEffect.popover,
     dark: true,
   );
-
-  Get.put(WoxController());
 
   WindowOptions windowOptions = const WindowOptions(
     size: Size(800, 300),
@@ -28,6 +41,7 @@ void main() async {
     titleBarStyle: TitleBarStyle.hidden,
     windowButtonVisibility: false,
   );
+
   if (Platform.isMacOS) {
     await windowManager.setVisibleOnAllWorkspaces(true, visibleOnFullScreen: true);
   }
@@ -37,8 +51,6 @@ void main() async {
     await windowManager.show();
     await windowManager.focus();
   });
-
-  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
