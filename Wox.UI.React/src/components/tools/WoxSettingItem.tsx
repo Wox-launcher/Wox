@@ -23,6 +23,7 @@ export default (props: { pluginId: string; settingDefinitions: PluginSettingDefi
       case "checkbox":
         return (
           <FormControlLabel
+            sx={{ margin: "5px 0", paddingRight: "5px" }}
             control={
               <Checkbox
                 defaultChecked={stringToBoolean(settingDefinition.Value?.DefaultValue)}
@@ -36,31 +37,38 @@ export default (props: { pluginId: string; settingDefinitions: PluginSettingDefi
         )
       case "textbox":
         return (
-          <Box>
-            {settingDefinition.Value?.Label && <span style={{ paddingRight: "5px", display: "inline-block" }}>{settingDefinition.Value?.Label}</span>}
-            <TextField hiddenLabel defaultValue={settingDefinition.Value?.DefaultValue} size="small" />
-            {settingDefinition.Value?.Suffix && <span style={{ paddingLeft: "5px", display: "inline-block" }}>{settingDefinition.Value?.Suffix}</span>}
-          </Box>
+          <FormControl sx={{ m: 1, padding: 0, margin: "5px 0" }}>
+            <Box sx={{ padding: 0 }}>
+              {settingDefinition.Value?.Label && <span style={{ paddingLeft: "5px", paddingRight: "5px", lineHeight: "40px", display: "inline-block" }}>{settingDefinition.Value?.Label}</span>}
+              <TextField sx={{ width: "100px" }} hiddenLabel defaultValue={settingDefinition.Value?.DefaultValue} size="small" />
+              {settingDefinition.Value?.Suffix && <span style={{ paddingLeft: "5px", paddingRight: "5px", lineHeight: "40px", display: "inline-block" }}>{settingDefinition.Value?.Suffix}</span>}
+            </Box>
+          </FormControl>
         )
       case "newline":
-        return <br />
+        return <Box />
       case "select":
         return (
-          <FormControl sx={{ m: 1, minWidth: 220 }} size="small">
-            <Select
-              defaultValue={settingDefinition.Value?.DefaultValue}
-              onChange={async event => {
-                await executeSettingUpdate({ Key: settingDefinition.Value?.Key || "", Value: event.target.value })
-              }}
-            >
-              {settingDefinition.Value?.Options?.map((option, index) => {
-                return (
-                  <MenuItem key={`option-${index}`} value={option.Value}>
-                    {option.Label}
-                  </MenuItem>
-                )
-              })}
-            </Select>
+          <FormControl sx={{ m: 1, margin: "5px 0", padding: 0 }} size="small">
+            <Box sx={{ padding: 0 }}>
+              {settingDefinition.Value?.Label && <span style={{ paddingLeft: "5px", paddingRight: "5px", lineHeight: "40px", display: "inline-block" }}>{settingDefinition.Value?.Label}</span>}
+              <Select
+                sx={{ width: "100px" }}
+                defaultValue={settingDefinition.Value?.DefaultValue}
+                onChange={async event => {
+                  await executeSettingUpdate({ Key: settingDefinition.Value?.Key || "", Value: event.target.value })
+                }}
+              >
+                {settingDefinition.Value?.Options?.map((option, index) => {
+                  return (
+                    <MenuItem key={`option-${index}`} value={option.Value}>
+                      {option.Label}
+                    </MenuItem>
+                  )
+                })}
+              </Select>
+              {settingDefinition.Value?.Suffix && <span style={{ paddingLeft: "5px", paddingRight: "5px", lineHeight: "40px", display: "inline-block" }}>{settingDefinition.Value?.Suffix}</span>}
+            </Box>
           </FormControl>
         )
       default:
@@ -72,15 +80,31 @@ export default (props: { pluginId: string; settingDefinitions: PluginSettingDefi
     <Style id={pluginId}>
       {settingDefinitions.map((settingDefinition, index) => {
         return (
-          <div key={`setting-item-${index}`}>
-            <FormControl sx={{ m: 1 }} size="small">
-              {getSettingItem(settingDefinition)}
-            </FormControl>
-          </div>
+          <span className={"setting-item"} key={`setting-item-${index}`}>
+            {getSettingItem(settingDefinition)}
+          </span>
         )
       })}
     </Style>
   )
 }
 
-const Style = styled.div``
+const Style = styled.div`
+  padding: 10px;
+  .MuiCheckbox-root,
+  .Mui-disabled {
+    color: #1976d2;
+  }
+
+  .MuiOutlinedInput-notchedOutline,
+  .MuiOutlinedInput-notchedOutline:hover {
+    border: 1px solid white;
+  }
+
+  .MuiInputLabel-root,
+  .MuiSelect-select,
+  .MuiSelect-icon,
+  .MuiInputBase-input {
+    color: white;
+  }
+`
