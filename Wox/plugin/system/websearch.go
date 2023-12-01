@@ -6,8 +6,16 @@ import (
 	"fmt"
 	"strings"
 	"wox/plugin"
+	"wox/setting/definition"
 	"wox/util"
 )
+
+var webSearchesSettingKey = "web_searches"
+var webSearchesTableColumnTriggerKeywordSettingKey = "Keyword"
+var webSearchesTableColumnTitleSettingKey = "Title"
+var webSearchesTableColumnUrlSettingKey = "Url"
+var webSearchesTableColumnEnabledSettingKey = "Enabled"
+var webSearchesTableColumnIconSettingKey = "Icon"
 
 var websearchIcon = plugin.NewWoxImageSvg(`<svg t="1700799533400" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="8846" width="200" height="200"><path d="M869.484748 1024a96.009331 96.009331 0 0 1-76.327418-37.923686l-174.736982-228.982254a96.009331 96.009331 0 0 1 152.654836-116.651337l174.736982 228.982254a96.009331 96.009331 0 0 1-76.327418 154.094976z" fill="#D34233" p-id="8847"></path><path d="M770.595138 640.92277a96.009331 96.009331 0 0 0-100.809798-34.563359 240.023327 240.023327 0 0 1-57.605598 65.766391c-3.360327 2.400233-7.2007 4.32042-11.041074 6.720653a96.009331 96.009331 0 0 0 16.801633 79.687745l70.566859 92.649004a432.041989 432.041989 0 0 0 39.843872-26.882612A429.161709 429.161709 0 0 0 826.760596 715.810048z" fill="#C1211A" p-id="8848"></path><path d="M490.727938 864.144464a432.041989 432.041989 0 1 1 261.625427-88.328584A432.041989 432.041989 0 0 1 490.727938 864.144464zM490.727938 192.079148a240.023327 240.023327 0 1 0 192.018662 96.009331 240.023327 240.023327 0 0 0-192.018662-96.009331z" fill="#F16A54" p-id="8849"></path></svg>`)
 
@@ -19,7 +27,8 @@ type webSearch struct {
 	Url     string
 	Title   string
 	Keyword string
-	IconUrl string
+	Icon    plugin.WoxImage
+	Enabled bool
 }
 
 type WebSearchPlugin struct {
@@ -48,6 +57,45 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
+		SettingDefinitions: []definition.PluginSettingDefinitionItem{
+			{
+				Type: definition.PluginSettingDefinitionTypeTable,
+				Value: &definition.PluginSettingValueTable{
+					Key: webSearchesSettingKey,
+					Columns: []definition.PluginSettingValueTableColumn{
+						{
+							Key:   webSearchesTableColumnIconSettingKey,
+							Label: "i18n:plugin_websearch_icon",
+							Type:  definition.PluginSettingValueTableColumnTypeWoxImage,
+							Width: 80,
+						},
+						{
+							Key:   webSearchesTableColumnTriggerKeywordSettingKey,
+							Label: "i18n:plugin_websearch_trigger_keyword",
+							Type:  definition.PluginSettingValueTableColumnTypeText,
+							Width: 80,
+						},
+						{
+							Key:   webSearchesTableColumnTitleSettingKey,
+							Label: "i18n:plugin_websearch_title",
+							Type:  definition.PluginSettingValueTableColumnTypeText,
+							Width: 80,
+						},
+						{
+							Key:   webSearchesTableColumnUrlSettingKey,
+							Label: "i18n:plugin_websearch_url",
+							Type:  definition.PluginSettingValueTableColumnTypeText,
+						},
+						{
+							Key:   webSearchesTableColumnEnabledSettingKey,
+							Label: "i18n:plugin_websearch_enabled",
+							Type:  definition.PluginSettingValueTableColumnTypeCheckbox,
+							Width: 80,
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -58,7 +106,7 @@ func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams
 }
 
 func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []webSearch) {
-	webSearchesJson := r.api.GetSetting(ctx, "webSearches")
+	webSearchesJson := r.api.GetSetting(ctx, webSearchesSettingKey)
 	if webSearchesJson == "" {
 		return
 	}
@@ -84,8 +132,8 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 	for _, search := range r.webSearches {
 		if strings.ToLower(search.Keyword) == strings.ToLower(triggerKeyword) {
 			var icon = websearchIcon
-			if search.IconUrl != "" {
-				icon = plugin.NewWoxImageUrl(search.IconUrl)
+			if search.Icon.ImageData != "" {
+				icon = search.Icon
 			}
 
 			results = append(results, plugin.QueryResult{

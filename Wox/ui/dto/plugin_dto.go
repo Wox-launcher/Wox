@@ -3,6 +3,7 @@ package dto
 import (
 	"wox/plugin"
 	"wox/setting"
+	"wox/setting/definition"
 )
 
 type StorePlugin struct {
@@ -36,7 +37,7 @@ type InstalledPlugin struct {
 	TriggerKeywords    []string //User can add/update/delete trigger keywords
 	Commands           []plugin.MetadataCommand
 	SupportedOS        []string
-	SettingDefinitions setting.PluginSettingDefinitions
+	SettingDefinitions definition.PluginSettingDefinitions
 	Settings           setting.PluginSetting
 	IsSystem           bool
 }

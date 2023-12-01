@@ -6,7 +6,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"wox/setting"
+	"wox/setting/definition"
 )
 
 type MetadataFeatureName = string
@@ -41,7 +41,7 @@ type Metadata struct {
 	Commands           []MetadataCommand
 	SupportedOS        []string
 	Features           []MetadataFeature
-	SettingDefinitions setting.PluginSettingDefinitions
+	SettingDefinitions definition.PluginSettingDefinitions
 }
 
 func (m *Metadata) GetIconOrDefault(pluginDirectory string, defaultImage WoxImage) WoxImage {

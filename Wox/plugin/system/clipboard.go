@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 	"wox/plugin"
-	"wox/setting"
+	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/keyboard"
@@ -154,49 +154,52 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
-		SettingDefinitions: []setting.PluginSettingDefinitionItem{
+		SettingDefinitions: []definition.PluginSettingDefinitionItem{
 			{
-				Type: setting.PluginSettingDefinitionTypeCheckBox,
-				Value: &setting.PluginSettingValueCheckBox{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
 					Key:          isKeepTextHistorySettingKey,
 					Label:        "i18n:plugin_clipboard_keep_text_history",
 					DefaultValue: "true",
 				},
 			},
 			{
-				Type: setting.PluginSettingDefinitionTypeTextBox,
-				Value: &setting.PluginSettingValueTextBox{
+				Type: definition.PluginSettingDefinitionTypeTextBox,
+				Value: &definition.PluginSettingValueTextBox{
 					Key:          textHistoryDaysSettingKey,
 					Suffix:       "i18n:plugin_clipboard_days",
 					DefaultValue: "90",
 				},
 			},
 			{
-				Type: setting.PluginSettingDefinitionTypeNewLine,
+				Type: definition.PluginSettingDefinitionTypeNewLine,
 			},
 			{
-				Type: setting.PluginSettingDefinitionTypeCheckBox,
-				Value: &setting.PluginSettingValueCheckBox{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
 					Key:          isKeepImageHistorySettingKey,
 					Label:        "i18n:plugin_clipboard_keep_image_history",
 					DefaultValue: "true",
 				},
 			},
 			{
-				Type: setting.PluginSettingDefinitionTypeTextBox,
-				Value: &setting.PluginSettingValueTextBox{
+				Type: definition.PluginSettingDefinitionTypeTextBox,
+				Value: &definition.PluginSettingValueTextBox{
 					Key:          imageHistoryDaysSettingKey,
 					Suffix:       "i18n:plugin_clipboard_days",
 					DefaultValue: "3",
 				},
 			},
 			{
-				Type: setting.PluginSettingDefinitionTypeSelect,
-				Value: &setting.PluginSettingValueSelect{
+				Type: definition.PluginSettingDefinitionTypeNewLine,
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeSelect,
+				Value: &definition.PluginSettingValueSelect{
 					Key:          primaryActionSettingKey,
 					Label:        "i18n:plugin_clipboard_primary_action",
 					DefaultValue: primaryActionValuePaste,
-					Options: []setting.PluginSettingValueSelectOption{
+					Options: []definition.PluginSettingValueSelectOption{
 						{Label: "i18n:plugin_clipboard_primary_action_copy_to_clipboard", Value: primaryActionValueCopy},
 						{Label: "i18n:plugin_clipboard_primary_action_paste_to_active_app", Value: primaryActionValuePaste},
 					},

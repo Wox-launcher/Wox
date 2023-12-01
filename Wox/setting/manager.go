@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sync"
 	"wox/i18n"
+	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
 )
@@ -216,7 +217,7 @@ func (m *Manager) saveWoxAppData(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, defaultSettings PluginSettingDefinitions) (*PluginSetting, error) {
+func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, defaultSettings definition.PluginSettingDefinitions) (*PluginSetting, error) {
 	pluginSettingPath := path.Join(util.GetLocation().GetPluginSettingDirectory(), fmt.Sprintf("%s.json", pluginId))
 	if _, statErr := os.Stat(pluginSettingPath); os.IsNotExist(statErr) {
 		return &PluginSetting{

@@ -5,10 +5,12 @@ import (
 	"strings"
 )
 
+type Platform = string
+
 const (
-	PlatformWindows = "windows"
-	PlatformMacOS   = "darwin"
-	PlatformLinux   = "linux"
+	PlatformWindows Platform = "windows"
+	PlatformMacOS   Platform = "darwin"
+	PlatformLinux   Platform = "linux"
 )
 
 func IsWindows() bool {

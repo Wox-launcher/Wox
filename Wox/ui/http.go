@@ -17,6 +17,7 @@ import (
 	"wox/plugin"
 	"wox/resource"
 	"wox/setting"
+	"wox/setting/definition"
 	"wox/ui/dto"
 	"wox/util"
 )
@@ -180,7 +181,9 @@ func serveAndWait(ctx context.Context, port int) {
 
 			installedPlugin.IsSystem = instance.IsSystemPlugin
 			logger.Debug(getCtx, fmt.Sprintf("get plugin setting: %s", instance.Metadata.Name))
-			installedPlugin.SettingDefinitions = instance.Metadata.SettingDefinitions
+			installedPlugin.SettingDefinitions = lo.Filter(instance.Metadata.SettingDefinitions, func(item definition.PluginSettingDefinitionItem, _ int) bool {
+				return !lo.Contains(item.DisabledInPlatforms, util.GetCurrentPlatform())
+			})
 
 			//translate setting definition labels
 			for i := range installedPlugin.SettingDefinitions {

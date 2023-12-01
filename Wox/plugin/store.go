@@ -195,12 +195,13 @@ func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error
 
 func (s *Store) Uninstall(ctx context.Context, plugin *Instance) error {
 	logger.Info(ctx, fmt.Sprintf("start to uninstall plugin %s(%s)", plugin.Metadata.Name, plugin.Metadata.Version))
-	GetPluginManager().UnloadPlugin(ctx, plugin)
-	removeErr := os.Remove(plugin.PluginDirectory)
+
+	removeErr := os.RemoveAll(plugin.PluginDirectory)
 	if removeErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to remove plugin directory %s: %s", plugin.PluginDirectory, removeErr.Error()))
 		return removeErr
 	}
+	GetPluginManager().UnloadPlugin(ctx, plugin)
 
 	return nil
 }

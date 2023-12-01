@@ -19,5 +19,10 @@
   "plugin_sys_lock_computer": "Lock PC",
   "plugin_sys_execute": "Execute",
   "plugin_sys_quit_wox": "Exit",
-  "plugin_sys_open_wox_preferences": "Open Wox Preferences"
+  "plugin_sys_open_wox_preferences": "Open Wox Preferences",
+  "plugin_websearch_trigger_keyword": "Trigger keyword",
+  "plugin_websearch_title": "Title",
+  "plugin_websearch_url": "URL",
+  "plugin_websearch_enabled": "Enabled",
+  "plugin_websearch_icon": "Icon"
 }

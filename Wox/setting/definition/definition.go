@@ -1,0 +1,124 @@
+package definition
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"github.com/tidwall/gjson"
+	"wox/util"
+)
+
+type PluginSettingDefinitionType string
+
+const (
+	PluginSettingDefinitionTypeHead     PluginSettingDefinitionType = "head"
+	PluginSettingDefinitionTypeTextBox  PluginSettingDefinitionType = "textbox"
+	PluginSettingDefinitionTypeCheckBox PluginSettingDefinitionType = "checkbox"
+	PluginSettingDefinitionTypeSelect   PluginSettingDefinitionType = "select"
+	PluginSettingDefinitionTypeLabel    PluginSettingDefinitionType = "label"
+	PluginSettingDefinitionTypeNewLine  PluginSettingDefinitionType = "newline"
+	PluginSettingDefinitionTypeTable    PluginSettingDefinitionType = "table"
+)
+
+type PluginSettingDefinitionValue interface {
+	GetKey() string
+	GetDefaultValue() string
+	Translate(translator func(ctx context.Context, key string) string)
+}
+
+type PluginSettingDefinitionItem struct {
+	Type                PluginSettingDefinitionType
+	Value               PluginSettingDefinitionValue
+	DisabledInPlatforms []util.Platform
+}
+
+func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
+	value := gjson.GetBytes(b, "Type")
+	if !value.Exists() {
+		return errors.New("setting must have Type property")
+	}
+	contentResult := gjson.GetBytes(b, "Value")
+	if !contentResult.Exists() {
+		return errors.New("setting type must have Value property")
+	}
+
+	switch value.String() {
+	case "head":
+		n.Type = PluginSettingDefinitionTypeHead
+		var v PluginSettingValueHead
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
+	case "textbox":
+		n.Type = PluginSettingDefinitionTypeTextBox
+		var v PluginSettingValueTextBox
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
+	case "checkbox":
+		n.Type = PluginSettingDefinitionTypeCheckBox
+		var v PluginSettingValueCheckBox
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
+	case "select":
+		n.Type = PluginSettingDefinitionTypeSelect
+		var v PluginSettingValueSelect
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
+	case "label":
+		n.Type = PluginSettingDefinitionTypeLabel
+		var v PluginSettingValueLabel
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
+	case "newline":
+		n.Type = PluginSettingDefinitionTypeNewLine
+		n.Value = &PluginSettingValueNewLine{}
+	case "table":
+		n.Type = PluginSettingDefinitionTypeTable
+		var v PluginSettingValueTable
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
+	default:
+		return errors.New("unknown setting type: " + value.String())
+	}
+
+	return nil
+}
+
+type PluginSettingDefinitions []PluginSettingDefinitionItem
+
+func (c PluginSettingDefinitions) GetDefaultValue(key string) (string, bool) {
+	for _, item := range c {
+		if item.Value.GetKey() == key {
+			return item.Value.GetDefaultValue(), true
+		}
+	}
+
+	return "", false
+}
+
+func (c PluginSettingDefinitions) GetAllDefaults() (settings *util.HashMap[string, string]) {
+	settings = util.NewHashMap[string, string]()
+	for _, item := range c {
+		if item.Value != nil {
+			settings.Store(item.Value.GetKey(), item.Value.GetDefaultValue())
+		}
+	}
+	return
+}

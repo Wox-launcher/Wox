@@ -15,7 +15,7 @@ import (
 	"time"
 	"wox/plugin"
 	"wox/plugin/system"
-	"wox/setting"
+	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
 )
@@ -54,13 +54,29 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
-		SettingDefinitions: []setting.PluginSettingDefinitionItem{
+		SettingDefinitions: []definition.PluginSettingDefinitionItem{
 			{
-				Type: setting.PluginSettingDefinitionTypeCheckBox,
-				Value: &setting.PluginSettingValueCheckBox{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
 					Key:          "UsePinYin",
 					Label:        "Use pinyin to search",
 					DefaultValue: "false",
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeNewLine,
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeTable,
+				Value: &definition.PluginSettingValueTable{
+					Key: "AppDirectories",
+					Columns: []definition.PluginSettingValueTableColumn{
+						{
+							Key:   "Path",
+							Label: "Path",
+							Type:  definition.PluginSettingValueTableColumnTypeDirPath,
+						},
+					},
 				},
 			},
 		},

@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"wox/setting/definition"
 	"wox/util"
 )
 
 func TestUnMarshalPluginSettingItem(t *testing.T) {
 	type metadataForTest struct {
-		SettingDefinitions PluginSettingDefinitions
+		SettingDefinitions definition.PluginSettingDefinitions
 	}
 
 	jsonStr := `
@@ -72,13 +73,13 @@ func TestUnMarshalPluginSettingItem(t *testing.T) {
 
 	assert.Nil(t, err)
 	assert.Equal(t, len(metadata.SettingDefinitions), 6)
-	assert.Equal(t, metadata.SettingDefinitions[0].Type, PluginSettingDefinitionTypeHead)
-	assert.Equal(t, metadata.SettingDefinitions[1].Type, PluginSettingDefinitionTypeTextBox)
-	assert.Equal(t, metadata.SettingDefinitions[2].Type, PluginSettingDefinitionTypeCheckBox)
-	assert.Equal(t, metadata.SettingDefinitions[3].Type, PluginSettingDefinitionTypeSelect)
-	assert.Equal(t, metadata.SettingDefinitions[4].Type, PluginSettingDefinitionTypeNewLine)
-	assert.Equal(t, metadata.SettingDefinitions[5].Type, PluginSettingDefinitionTypeLabel)
-	assert.Equal(t, len(metadata.SettingDefinitions[3].Value.(PluginSettingValueSelect).Options), 2)
+	assert.Equal(t, metadata.SettingDefinitions[0].Type, definition.PluginSettingDefinitionTypeHead)
+	assert.Equal(t, metadata.SettingDefinitions[1].Type, definition.PluginSettingDefinitionTypeTextBox)
+	assert.Equal(t, metadata.SettingDefinitions[2].Type, definition.PluginSettingDefinitionTypeCheckBox)
+	assert.Equal(t, metadata.SettingDefinitions[3].Type, definition.PluginSettingDefinitionTypeSelect)
+	assert.Equal(t, metadata.SettingDefinitions[4].Type, definition.PluginSettingDefinitionTypeNewLine)
+	assert.Equal(t, metadata.SettingDefinitions[5].Type, definition.PluginSettingDefinitionTypeLabel)
+	assert.Equal(t, len(metadata.SettingDefinitions[3].Value.(*definition.PluginSettingValueSelect).Options), 2)
 
 	val, exist := metadata.SettingDefinitions.GetDefaultValue("IndexDirectories")
 	assert.True(t, exist)
