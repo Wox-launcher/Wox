@@ -6,24 +6,23 @@ import 'package:get/get.dart';
 import 'package:logger/logger.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/controller.dart';
-import 'package:wox/modules/launcher/views/wox_launcher_view.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
+import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  initGetX();
-  initWindow();
+  await loadSystemConfig();
+  await initWindow();
+  await initGetX();
   runApp(const MyApp());
 }
 
-void initGetX() {
-  Get.put(Logger(printer: SimplePrinter()));
-  Get.put(WoxController());
-  Get.put(WoxLauncherController());
+Future<void> loadSystemConfig() async {
+  WoxThemeUtil.instance.loadTheme();
 }
 
-void initWindow() async {
+Future<void> initWindow() async {
   await windowManager.ensureInitialized();
   await Window.initialize();
 
@@ -53,6 +52,12 @@ void initWindow() async {
   });
 }
 
+Future<void> initGetX() async {
+  Get.put(Logger(printer: SimplePrinter()));
+  Get.put(WoxController());
+  Get.put(WoxLauncherController());
+}
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -75,7 +80,7 @@ class WoxApp extends StatefulWidget {
 class _WoxAppState extends State<WoxApp> {
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return const Scaffold(
       backgroundColor: Colors.transparent,
       body: WoxView(),
     );

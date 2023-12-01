@@ -8,7 +8,8 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
 
   @override
   Widget build(BuildContext context) {
-    // TODO: implement build
-    throw UnimplementedError();
+    return Obx(() {
+      return Container(constraints: BoxConstraints(maxHeight: controller.getMaxHeight()));
+    });
   }
 }

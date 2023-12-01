@@ -18,4 +18,9 @@ class WoxLauncherController extends GetxController with GetSingleTickerProviderS
   void arrowDown() {}
 
   void toggleActionPanel() {}
+
+  double getMaxHeight(){
+    return 500;
+  }
+
 }

@@ -10,7 +10,7 @@ import 'components/wox_result_view.dart';
 import 'entity.dart';
 
 class WoxView extends GetView<WoxController> {
-  WoxView({super.key});
+  const WoxView({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -100,8 +100,8 @@ class WoxView extends GetView<WoxController> {
                           mainAxisAlignment: MainAxisAlignment.start,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text("Actions"),
-                            Divider(),
+                            const Text("Actions"),
+                            const Divider(),
                             for (var action in controller.actionResults)
                               Row(
                                 children: [

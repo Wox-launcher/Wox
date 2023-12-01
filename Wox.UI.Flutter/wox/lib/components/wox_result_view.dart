@@ -7,7 +7,7 @@ class WoxResultView extends StatelessWidget {
   final QueryResult result;
   final bool isActive;
 
-  WoxResultView({super.key, required this.result, required this.isActive});
+  const WoxResultView({super.key, required this.result, required this.isActive});
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +16,7 @@ class WoxResultView extends StatelessWidget {
       child: Row(
         children: [
           WoxImageView(woxImage: result.icon),
-          SizedBox(width: 8),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(
