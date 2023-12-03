@@ -1,3 +1,5 @@
+import 'entity/wox_query_result.dart';
+
 typedef SelectionType = String;
 typedef LastQueryMode = String;
 typedef QueryType = String;
@@ -113,16 +115,6 @@ class QueryHistory {
   QueryHistory.fromJson(Map<String, dynamic> json) {
     query = json['Query'] != null ? ChangedQuery.fromJson(json['Query']) : null;
     timestamp = json['Timestamp'];
-  }
-}
-
-class WoxImage {
-  late WoxImageType imageType;
-  late String imageData;
-
-  WoxImage.fromJson(Map<String, dynamic> json) {
-    imageType = json['ImageType'];
-    imageData = json['ImageData'];
   }
 }
 
