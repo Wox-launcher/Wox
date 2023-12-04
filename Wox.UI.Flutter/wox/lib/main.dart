@@ -70,10 +70,7 @@ Future<void> initWindow() async {
   }
   await windowManager.setAsFrameless();
   await windowManager.setResizable(false);
-  await windowManager.waitUntilReadyToShow(windowOptions, () async {
-    await windowManager.show();
-    await windowManager.focus();
-  });
+  await windowManager.waitUntilReadyToShow(windowOptions);
 }
 
 Future<void> initGetX() async {
@@ -101,7 +98,27 @@ class WoxApp extends StatefulWidget {
   State<WoxApp> createState() => _WoxAppState();
 }
 
-class _WoxAppState extends State<WoxApp> {
+class _WoxAppState extends State<WoxApp> with WindowListener {
+  @override
+  void initState() {
+    super.initState();
+    windowManager.addListener(this);
+  }
+
+  @override
+  void dispose() {
+    windowManager.removeListener(this);
+    super.dispose();
+  }
+
+  @override
+  void onWindowFocus() {
+    // https://pub.dev/packages/window_manager#hidden-at-launch
+    if (Platform.isWindows) {
+      setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
