@@ -102,12 +102,6 @@ func (l *Location) Init() error {
 	if directoryErr := l.EnsureDirectoryExist(l.GetImageCacheDirectory()); directoryErr != nil {
 		return directoryErr
 	}
-	if directoryErr := l.EnsureDirectoryExist(l.GetElectronDirectory()); directoryErr != nil {
-		return directoryErr
-	}
-	if directoryErr := l.EnsureDirectoryExist(l.GetElectronBinDirectory()); directoryErr != nil {
-		return directoryErr
-	}
 
 	return nil
 }
@@ -181,26 +175,10 @@ func (l *Location) GetImageCacheDirectory() string {
 
 func (l *Location) GetUIAppPath() string {
 	if IsWindows() {
-		return path.Join(l.GetElectronBinDirectory(), "electron.exe")
+		return path.Join(l.GetUIDirectory(), "flutter", "wox", "wox.exe")
 	}
 	if IsMacOS() {
-		return path.Join(l.GetElectronBinDirectory(), "Electron.app/Contents/MacOS/Electron")
+		return path.Join(l.GetUIDirectory(), "flutter", "wox.app", "Contents", "MacOS", "wox")
 	}
 	return ""
-}
-
-func (l *Location) GetElectronDirectory() string {
-	return path.Join(l.GetUIDirectory(), "electron")
-}
-
-func (l *Location) GetElectronBinDirectory() string {
-	return path.Join(l.GetElectronDirectory(), "bin")
-}
-
-func (l *Location) GetElectronMainJsPath() string {
-	return path.Join(l.GetElectronDirectory(), "main.js")
-}
-
-func (l *Location) GetElectronPreloadJsPath() string {
-	return path.Join(l.GetElectronDirectory(), "preload.js")
 }

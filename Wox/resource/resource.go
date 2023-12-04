@@ -28,9 +28,9 @@ func Extract(ctx context.Context) error {
 		return extractHostErr
 	}
 
-	extractElectronErr := extractFiles(ctx, UIFS, util.GetLocation().GetUIDirectory(), "ui/electron", false)
-	if extractElectronErr != nil {
-		return extractElectronErr
+	flutterErr := extractFiles(ctx, UIFS, util.GetLocation().GetUIDirectory(), "ui/flutter", true)
+	if flutterErr != nil {
+		return flutterErr
 	}
 
 	themeErr := parseThemes(ctx)

@@ -83,6 +83,10 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, "Wox")
 	})
 
+	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("pong"))
+	})
+
 	mux.HandleFunc("/index.html", func(w http.ResponseWriter, r *http.Request) {
 		fileContent, err := resource.GetReactFile(util.NewTraceContext(), "index.html")
 		if err != nil {

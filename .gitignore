@@ -13,6 +13,8 @@ Wox/resource/ui/wox
 Plugins/Wox.Plugin.Chatgpt/dist/
 Wox/resource/ui/react/
 Wox/resource/ui/electron/
+Wox/resource/ui/flutter/
 Wox.UI.React/dist/
 node_modules/
 __pycache__/
+Release/

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -7,15 +8,38 @@ import 'package:logger/logger.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/controller.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
+import 'package:wox/utils/env.dart';
+import 'package:wox/utils/heartbeat_checker.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/view.dart';
 
-void main() async {
+void main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await initArgs(arguments);
+  HeartbeatChecker().startChecking();
   await loadSystemConfig();
   await initWindow();
   await initGetX();
   runApp(const MyApp());
+}
+
+Future<void> initArgs(List<String> arguments) async {
+  if (arguments.isEmpty) {
+    // dev env
+    Env.isDev = true;
+    Env.serverPort = 34987;
+    Env.serverPid = -1;
+    return;
+  }
+
+  if (arguments.length != 3) {
+    throw Exception("Invalid arguments");
+  }
+
+  Env.serverPort = int.parse(arguments[0]);
+  Env.serverPid = int.parse(arguments[1]);
+  Env.isDev = arguments[2] == "true";
 }
 
 Future<void> loadSystemConfig() async {

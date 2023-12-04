@@ -7,8 +7,7 @@ default:
     lefthook install -f
 
     just _build_hosts
-    just _build_ui
-    #just plugins
+    just _build_flutter macos
 
 @precommit:
     cd Wox.UI.React && pnpm build && cd ..
@@ -26,19 +25,22 @@ default:
 @release target:
     rm -rf Release
     just _build_hosts
-    just _build_ui
 
     if [ "{{target}}" = "windows" ]; then \
+      just _build_flutter windows; \
       cd Wox && CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-windows-amd64.exe && cd ..; \
       upx --brute Release/wox-windows-amd64.exe; \
     elif [ "{{target}}" = "linux" ]; then \
+      just _build_flutter linux; \
       cd Wox && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-linux-amd64 && cd ..; \
       upx --brute Release/wox-linux-amd64; \
       chmod +x Release/wox-linux-amd64; \
     elif [ "{{target}}" = "darwin-arm64" ]; then \
+      just _build_flutter macos; \
       cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-arm64 && cd ..; \
       just _bundle_mac_app wox-mac-arm64; \
     elif [ "{{target}}" = "darwin-amd64" ]; then \
+      just _build_flutter macos; \
       cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-amd64 && cd ..; \
       just _bundle_mac_app wox-mac-amd64; \
     fi
@@ -85,7 +87,7 @@ default:
     just _build_nodejs_host Wox/resource/hosts
     just _build_python_host Wox/resource/hosts
 
-@_build_ui:
+@_build_electron:
     cd Wox.UI.React && pnpm install && pnpm build && cd ..
 
     # electron
@@ -93,6 +95,21 @@ default:
     mkdir -p Wox/resource/ui/electron
     cp Wox.UI.Electron/main.js Wox/resource/ui/electron/main.js
     cp Wox.UI.Electron/preload.js Wox/resource/ui/electron/preload.js
+
+@_build_flutter target:
+    # flutter
+    cd Wox.UI.Flutter/wox && flutter build {{target}} && cd ..
+    rm -rf Wox/resource/ui/flutter
+    mkdir -p Wox/resource/ui/flutter
+
+    if [ "{{target}}" = "windows" ]; then \
+      cp -r Wox.UI.Flutter/wox/build/{{target}}/Build/Products/Release/wox Wox/resource/ui/flutter; \
+    elif [ "{{target}}" = "linux" ]; then \
+      cp -r Wox.UI.Flutter/wox/build/{{target}}/Build/Products/Release/wox Wox/resource/ui/flutter; \
+    elif [ "{{target}}" = "macos" ]; then \
+      cp -r Wox.UI.Flutter/wox/build/{{target}}/Build/Products/Release/wox.app Wox/resource/ui/flutter; \
+      chmod +x Wox/resource/ui/flutter/wox.app/Contents/MacOS/wox; \
+    fi
 
 @_build_nodejs_host directory:
     cd Wox.Plugin.Host.Nodejs && pnpm install && pnpm run build && cd ..

@@ -3,12 +3,12 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"os"
-	"path"
 	"sync"
 	"wox/plugin"
 	"wox/resource"
@@ -186,54 +186,16 @@ func (m *Manager) StartWebsocketAndWait(ctx context.Context, port int) {
 
 func (m *Manager) StartUIApp(ctx context.Context, port int) error {
 	//check if electron exist
-	var electronExecutablePath = util.GetLocation().GetUIAppPath()
-	if _, statErr := os.Stat(electronExecutablePath); os.IsNotExist(statErr) {
-		logger.Info(ctx, "electron not exist, download it")
-		//download electron
-		isDownloaded := false
-		urls := m.getElectronDownloadUrl(ctx)
-		if len(urls) == 0 {
-			return fmt.Errorf("failed to get electron download urls")
-		}
-		for _, url := range urls {
-			downloadErr := util.HttpDownload(ctx, url, path.Join(util.GetLocation().GetElectronDirectory(), "electron.zip"))
-			if downloadErr != nil {
-				continue
-			}
-			isDownloaded = true
-		}
-		if !isDownloaded {
-			return fmt.Errorf("failed to download electron")
-		}
-
-		logger.Info(ctx, "unzip electron")
-		//unzip electron
-		unzipErr := util.Unzip(util.GetLocation().GetElectronDirectory()+"/electron.zip", path.Join(util.GetLocation().GetElectronBinDirectory()))
-		if unzipErr != nil {
-			return unzipErr
-		}
+	var appPath = util.GetLocation().GetUIAppPath()
+	if _, statErr := os.Stat(appPath); os.IsNotExist(statErr) {
+		logger.Info(ctx, "UI app not exist")
+		return errors.New("UI app not exist")
 	}
 
-	url := fmt.Sprintf("http://localhost:%d/index.html", port)
-	baseUrl := fmt.Sprintf("http://localhost:%d", port)
-	if util.IsDev() {
-		url = fmt.Sprintf("http://localhost:%d", 1420)
-		baseUrl = fmt.Sprintf("http://localhost:%d", 1420)
-	}
-	logger.Info(ctx, fmt.Sprintf("start ui app, path=%s", electronExecutablePath))
-	logger.Info(ctx, fmt.Sprintf("url: %s, port=%d, pid=%d", url, port, os.Getpid()))
-	logger.Info(ctx, fmt.Sprintf("main.js: %s", util.GetLocation().GetElectronMainJsPath()))
-	logger.Info(ctx, fmt.Sprintf("preload.js: %s", util.GetLocation().GetElectronPreloadJsPath()))
-	cmd, cmdErr := util.ShellRun(electronExecutablePath,
-		util.GetLocation().GetElectronMainJsPath(),
-		//below -- is necessary in windows, see https://stackoverflow.com/questions/75567967/electron-app-not-starting-with-command-line-arguments#:~:text=Well%2C%20because%20Electron%20can%20also%20take%20arguments
-		"--",
-		util.GetLocation().GetElectronPreloadJsPath(),
+	logger.Info(ctx, fmt.Sprintf("start ui, path=%s, port=%d, pid=%d", appPath, port, os.Getpid()))
+	cmd, cmdErr := util.ShellRun(appPath,
 		fmt.Sprintf("%d", port),
 		fmt.Sprintf("%d", os.Getpid()),
-		url,
-		baseUrl,
-		m.GetCurrentTheme(ctx).AppBackgroundColor,
 		fmt.Sprintf("%t", util.IsDev()),
 	)
 	if cmdErr != nil {
@@ -243,24 +205,6 @@ func (m *Manager) StartUIApp(ctx context.Context, port int) error {
 	m.uiProcess = cmd.Process
 	util.GetLogger().Info(ctx, fmt.Sprintf("ui app pid: %d", cmd.Process.Pid))
 	return nil
-}
-
-func (m *Manager) getElectronDownloadUrl(ctx context.Context) []string {
-	if util.IsMacOS() {
-		if util.IsArm64() {
-			return []string{"https://registry.npmmirror.com/-/binary/electron/27.1.0/electron-v27.1.0-darwin-arm64.zip"}
-		}
-		if util.IsAmd64() {
-			return []string{"https://registry.npmmirror.com/-/binary/electron/27.1.0/electron-v27.1.0-darwin-x64.zip"}
-		}
-	}
-	if util.IsWindows() {
-		if util.IsAmd64() {
-			return []string{"https://registry.npmmirror.com/-/binary/electron/27.1.0/electron-v27.1.0-win32-x64.zip"}
-		}
-	}
-
-	return []string{}
 }
 
 func (m *Manager) GetCurrentTheme(ctx context.Context) Theme {
