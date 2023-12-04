@@ -144,6 +144,10 @@ bool Win32Window::Create(const std::wstring& title,
     return false;
   }
 
+  // disable animations
+  BOOL disableAnimations = TRUE;
+  DwmSetWindowAttribute(window, DWMWA_TRANSITIONS_FORCEDISABLED, &disableAnimations, sizeof(disableAnimations));
+
   UpdateTheme(window);
 
   return OnCreate();

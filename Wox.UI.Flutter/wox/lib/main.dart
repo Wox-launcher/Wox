@@ -56,15 +56,9 @@ Future<void> initWindow() async {
   await windowManager.ensureInitialized();
   await Window.initialize();
 
-  await Window.setEffect(
-    effect: WindowEffect.popover,
-    dark: true,
-  );
-
   WindowOptions windowOptions = WindowOptions(
     size: Size(800, WoxThemeUtil.instance.getWoxBoxContainerHeight()),
     center: true,
-    backgroundColor: Colors.transparent,
     skipTaskbar: true,
     alwaysOnTop: true,
     titleBarStyle: TitleBarStyle.hidden,
@@ -72,10 +66,17 @@ Future<void> initWindow() async {
   );
 
   if (Platform.isMacOS) {
+    await windowManager.setBackgroundColor(Colors.transparent);
     await windowManager.setVisibleOnAllWorkspaces(true, visibleOnFullScreen: true);
+    await Window.setEffect(effect: WindowEffect.popover, dark: true);
+  }
+  if (Platform.isWindows) {
+    await Window.setEffect(effect: WindowEffect.acrylic,color: Colors.black.withOpacity(0.5));
   }
   await windowManager.setAsFrameless();
   await windowManager.setResizable(false);
+  await windowManager.setMaximizable(false);
+  await windowManager.setMinimizable(false);
   await windowManager.waitUntilReadyToShow(windowOptions);
 }
 

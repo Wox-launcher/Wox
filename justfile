@@ -1,3 +1,5 @@
+current_flutter_target := if os_family() == "windows" { "windows" } else if os_family() == "linux" { "linux" } else if os_family() == "macos" { "macos" } else { "unknown" }
+
 default:
     @just --list --unsorted
 
@@ -7,7 +9,7 @@ default:
     lefthook install -f
 
     just _build_hosts
-    just _build_flutter macos
+    just _build_flutter {{current_flutter_target}}
 
 @precommit:
     cd Wox.UI.React && pnpm build && cd ..
@@ -25,22 +27,19 @@ default:
 @release target:
     rm -rf Release
     just _build_hosts
+    just _build_flutter {{current_flutter_target}}
 
     if [ "{{target}}" = "windows" ]; then \
-      just _build_flutter windows; \
       cd Wox && CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-windows-amd64.exe && cd ..; \
       upx --brute Release/wox-windows-amd64.exe; \
     elif [ "{{target}}" = "linux" ]; then \
-      just _build_flutter linux; \
       cd Wox && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-linux-amd64 && cd ..; \
       upx --brute Release/wox-linux-amd64; \
       chmod +x Release/wox-linux-amd64; \
     elif [ "{{target}}" = "darwin-arm64" ]; then \
-      just _build_flutter macos; \
       cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-arm64 && cd ..; \
       just _bundle_mac_app wox-mac-arm64; \
     elif [ "{{target}}" = "darwin-amd64" ]; then \
-      just _build_flutter macos; \
       cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-amd64 && cd ..; \
       just _bundle_mac_app wox-mac-amd64; \
     fi
@@ -103,7 +102,7 @@ default:
     mkdir -p Wox/resource/ui/flutter
 
     if [ "{{target}}" = "windows" ]; then \
-      cp -r Wox.UI.Flutter/wox/build/{{target}}/Build/Products/Release/wox Wox/resource/ui/flutter; \
+      cp -r Wox.UI.Flutter/wox/build/{{target}}/x64/runner/Release Wox/resource/ui/flutter/wox; \
     elif [ "{{target}}" = "linux" ]; then \
       cp -r Wox.UI.Flutter/wox/build/{{target}}/Build/Products/Release/wox Wox/resource/ui/flutter; \
     elif [ "{{target}}" = "macos" ]; then \

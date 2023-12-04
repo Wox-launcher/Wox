@@ -64,7 +64,6 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> hide() async {
-    await windowManager.blur();
     await windowManager.hide();
   }
 
