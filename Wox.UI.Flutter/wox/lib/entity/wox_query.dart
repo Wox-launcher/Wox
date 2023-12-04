@@ -5,15 +5,15 @@ import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
 
-class WoxQuery {
+class WoxChangeQuery {
   late String queryId;
   late WoxQueryType queryType;
   late String queryText;
   late Selection querySelection;
 
-  WoxQuery({required this.queryId, required this.queryType, required this.queryText, required this.querySelection});
+  WoxChangeQuery({required this.queryId, required this.queryType, required this.queryText, required this.querySelection});
 
-  WoxQuery.fromJson(Map<String, dynamic> json) {
+  WoxChangeQuery.fromJson(Map<String, dynamic> json) {
     queryId = json['QueryId'] ?? "";
     queryType = json['QueryType'];
     queryText = json['QueryText'];
@@ -31,8 +31,8 @@ class WoxQuery {
 
   bool get isEmpty => queryText.isEmpty && querySelection.type.isEmpty;
 
-  static WoxQuery empty() {
-    return WoxQuery(queryId: "", queryType: "", queryText: "", querySelection: Selection.empty());
+  static WoxChangeQuery empty() {
+    return WoxChangeQuery(queryId: "", queryType: "", queryText: "", querySelection: Selection.empty());
   }
 }
 
@@ -67,11 +67,11 @@ class Selection {
 }
 
 class QueryHistory {
-  WoxQuery? query;
+  WoxChangeQuery? query;
   int? timestamp;
 
   QueryHistory.fromJson(Map<String, dynamic> json) {
-    query = json['Query'] != null ? WoxQuery.fromJson(json['Query']) : null;
+    query = json['Query'] != null ? WoxChangeQuery.fromJson(json['Query']) : null;
     timestamp = json['Timestamp'];
   }
 }

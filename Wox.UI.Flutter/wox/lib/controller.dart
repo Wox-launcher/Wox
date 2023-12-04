@@ -6,8 +6,8 @@ import 'package:get/get.dart';
 import 'package:logger/logger.dart';
 import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:wox/utils/env.dart';
 import 'package:wox/entity/wox_websocket_msg.dart';
+import 'package:wox/utils/env.dart';
 import 'package:wox/utils/websocket.dart';
 
 import 'entity.dart';
@@ -63,7 +63,6 @@ class WoxController extends GetxController {
   }
 
   Future<void> toggleApp(ShowAppParams params) async {
-    Logger().i("Toggle app");
     var isVisible = await windowManager.isVisible();
     if (isVisible) {
       hide();

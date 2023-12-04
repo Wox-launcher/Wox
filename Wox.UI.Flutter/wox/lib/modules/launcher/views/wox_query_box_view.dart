@@ -6,6 +6,7 @@ import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
+
 import '../wox_launcher_controller.dart';
 
 class WoxQueryBoxView extends GetView<WoxLauncherController> {
@@ -20,7 +21,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                 if (event is RawKeyDownEvent) {
                   switch (event.logicalKey) {
                     case LogicalKeyboardKey.escape:
-                      controller.hide();
+                      controller.hideApp();
                       break;
                     case LogicalKeyboardKey.arrowDown:
                       controller.arrowDown();
@@ -29,7 +30,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                       controller.arrowUp();
                       break;
                     case LogicalKeyboardKey.enter:
-                      controller.selectResult();
+                      controller.handleResultItemAction();
                       break;
                     case LogicalKeyboardKey.keyJ:
                       {
@@ -37,6 +38,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                           controller.toggleActionPanel();
                           break;
                         }
+                        return KeyEventResult.ignored;
                       }
                     default:
                       return KeyEventResult.ignored;
@@ -46,18 +48,16 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                 return KeyEventResult.ignored;
               }),
               child: SizedBox(
-                height: 55,
+                height: 55.0,
                 child: TextField(
                   style: TextStyle(
                     color: fromCssColor(controller.woxTheme.queryBoxFontColor),
                   ),
                   decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.only(left: 8, right: 8),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(controller.woxTheme.queryBoxBorderRadius.toDouble()),
-                      borderSide: const BorderSide(
-                        width: 0,
-                        style: BorderStyle.none,
-                      ),
+                      borderSide: BorderSide.none,
                     ),
                     filled: true,
                     fillColor: fromCssColor(controller.woxTheme.queryBoxBackgroundColor),
@@ -67,9 +67,9 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   focusNode: controller.queryBoxFocusNode,
                   controller: controller.queryBoxTextFieldController,
                   onChanged: (value) {
-                    WoxQuery woxQuery =
-                        WoxQuery(queryId: const UuidV4().generate(), queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code, queryText: value, querySelection: Selection.empty());
-                    controller.onQueryChanged(woxQuery);
+                    WoxChangeQuery woxChangeQuery = WoxChangeQuery(
+                        queryId: const UuidV4().generate(), queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code, queryText: value, querySelection: Selection.empty());
+                    controller.onQueryChanged(woxChangeQuery);
                   },
                 ),
               ))),
