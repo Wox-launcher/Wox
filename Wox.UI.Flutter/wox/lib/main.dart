@@ -15,6 +15,7 @@ import 'package:wox/utils/wox_theme_util.dart';
 void main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  await Logger.instance.initLogger();
   await initArgs(arguments);
   HeartbeatChecker().startChecking();
   await loadSystemConfig();
@@ -24,6 +25,7 @@ void main(List<String> arguments) async {
 }
 
 Future<void> initArgs(List<String> arguments) async {
+  Logger.instance.info("Arguments: $arguments");
   if (arguments.isEmpty) {
     // dev env
     Env.isDev = true;
@@ -70,8 +72,6 @@ Future<void> initWindow() async {
   await windowManager.setAsFrameless();
   await windowManager.setResizable(false);
   await windowManager.waitUntilReadyToShow(windowOptions);
-
-  Logger.instance.info("test");
 }
 
 Future<void> initGetX() async {

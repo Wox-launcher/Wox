@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:wox/entity/wox_response.dart';
 import 'package:wox/utils/entity_factory.dart';
 import 'package:wox/utils/env.dart';
+import 'package:wox/utils/log.dart';
 
 class WoxHttpUtil {
   final Dio _dio = Dio();
@@ -20,17 +21,20 @@ class WoxHttpUtil {
       if (woxResponse.success == false) throw Exception(woxResponse.message);
       return EntityFactory.generateOBJ<T>(woxResponse.data);
     } catch (e) {
+      Logger.instance.info('Failed to fetch data: $e');
       throw Exception('Failed to fetch data: $e');
     }
   }
 
   Future<T> postData<T>(String url, dynamic data) async {
+    Logger.instance.info(_baseUrl + url);
     try {
       final response = await _dio.post(_baseUrl + url, data: data);
       WoxResponse woxResponse = WoxResponse.fromJson(response.data);
       if (woxResponse.success == false) throw Exception(woxResponse.message);
       return EntityFactory.generateOBJ<T>(woxResponse.data);
     } catch (e) {
+      Logger.instance.info('Failed to post data: $e');
       throw Exception('Failed to post data: $e');
     }
   }

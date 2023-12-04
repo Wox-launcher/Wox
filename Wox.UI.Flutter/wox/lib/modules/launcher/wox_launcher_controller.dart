@@ -13,6 +13,7 @@ import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/enums/wox_web_socket_msg_type_enum.dart';
 import 'package:wox/utils/env.dart';
+import 'package:wox/utils/log.dart';
 import 'package:wox/utils/websocket.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
@@ -108,6 +109,7 @@ class WoxLauncherController extends GetxController {
 
   void _handleWebSocketMessage(event) {
     var msg = WoxWebsocketMsg.fromJson(jsonDecode(event));
+    Logger.instance.info("Received message: ${msg.toJson()}");
     if (msg.method == "ToggleApp") {
       toggleApp(ShowAppParams.fromJson(msg.data));
     } else if (msg.method == "HideApp") {

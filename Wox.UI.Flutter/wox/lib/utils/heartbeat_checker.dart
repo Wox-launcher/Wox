@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:wox/utils/env.dart';
+import 'package:wox/utils/log.dart';
 
 class HeartbeatChecker {
   int failedAttempts = 0;
@@ -31,7 +32,7 @@ class HeartbeatChecker {
         return true;
       }
     } catch (e) {
-      print("Failed to check heartbeat: $e");
+      Logger.instance.info("Failed to check heartbeat: $e");
       return false;
     }
 

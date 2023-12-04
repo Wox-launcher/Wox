@@ -1,11 +1,9 @@
-import 'dart:convert';
-
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
-import 'package:wox/enums/wox_query_type_enum.dart';
-import 'package:wox/enums/wox_selection_type_enum.dart';
 import 'package:wox/enums/wox_last_query_mode_enum.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
+import 'package:wox/enums/wox_query_type_enum.dart';
+import 'package:wox/enums/wox_selection_type_enum.dart';
 
 class WoxQuery {
   late String queryId;
@@ -16,18 +14,18 @@ class WoxQuery {
   WoxQuery({required this.queryId, required this.queryType, required this.queryText, required this.querySelection});
 
   WoxQuery.fromJson(Map<String, dynamic> json) {
-    queryId = json['queryId'];
-    queryType = json['queryType'];
-    queryText = json['queryText'];
-    querySelection = Selection.fromJson(json['querySelection']);
+    queryId = json['QueryId'] ?? "";
+    queryType = json['QueryType'];
+    queryText = json['QueryText'];
+    querySelection = Selection.fromJson(json['QuerySelection']);
   }
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
-    data['queryId'] = queryId;
-    data['queryType'] = queryType;
-    data['queryText'] = queryText;
-    data['querySelection'] = querySelection.toJson();
+    data['QueryId'] = queryId;
+    data['QueryType'] = queryType;
+    data['QueryText'] = queryText;
+    data['QuerySelection'] = querySelection.toJson();
     return data;
   }
 

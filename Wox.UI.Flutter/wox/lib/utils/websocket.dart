@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:wox/entity/wox_websocket_msg.dart';
+import 'package:wox/utils/log.dart';
 
 class WoxWebsocket {
   WebSocketChannel? channel;
@@ -32,7 +33,7 @@ class WoxWebsocket {
 
   void _reconnect() {
     Future.delayed(const Duration(seconds: 1), () {
-      print("Attempting to reconnect to WebSocket...");
+      Logger.instance.info("Attempting to reconnect to WebSocket...");
       connect();
     });
   }
