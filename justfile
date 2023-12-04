@@ -1,5 +1,3 @@
-current_flutter_target := if os_family() == "windows" { "windows" } else if os_family() == "linux" { "linux" } else if os_family() == "macos" { "macos" } else { "unknown" }
-
 default:
     @just --list --unsorted
 
@@ -9,7 +7,7 @@ default:
     lefthook install -f
 
     just _build_hosts
-    just _build_flutter {{current_flutter_target}}
+    just _build_flutter
 
 @precommit:
     cd Wox.UI.React && pnpm build && cd ..
@@ -27,7 +25,7 @@ default:
 @release target:
     rm -rf Release
     just _build_hosts
-    just _build_flutter {{current_flutter_target}}
+    just _build_flutter
 
     if [ "{{target}}" = "windows" ]; then \
       cd Wox && CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-windows-amd64.exe && cd ..; \
@@ -95,18 +93,20 @@ default:
     cp Wox.UI.Electron/main.js Wox/resource/ui/electron/main.js
     cp Wox.UI.Electron/preload.js Wox/resource/ui/electron/preload.js
 
-@_build_flutter target:
+@_build_flutter:
+    current_flutter_target := if os() == "windows" { "windows" } else if os() == "linux" { "linux" } else if os() == "macos" { "macos" } else { "unknown" }
+
     # flutter
-    cd Wox.UI.Flutter/wox && flutter build {{target}} && cd ..
+    cd Wox.UI.Flutter/wox && flutter build {{current_flutter_target}} && cd ..
     rm -rf Wox/resource/ui/flutter
     mkdir -p Wox/resource/ui/flutter
 
-    if [ "{{target}}" = "windows" ]; then \
-      cp -r Wox.UI.Flutter/wox/build/{{target}}/x64/runner/Release Wox/resource/ui/flutter/wox; \
-    elif [ "{{target}}" = "linux" ]; then \
-      cp -r Wox.UI.Flutter/wox/build/{{target}}/Build/Products/Release/wox Wox/resource/ui/flutter; \
-    elif [ "{{target}}" = "macos" ]; then \
-      cp -r Wox.UI.Flutter/wox/build/{{target}}/Build/Products/Release/wox.app Wox/resource/ui/flutter; \
+    if [ "{{current_flutter_target}}" = "windows" ]; then \
+      cp -r Wox.UI.Flutter/wox/build/{{current_flutter_target}}/x64/runner/Release Wox/resource/ui/flutter/wox; \
+    elif [ "{{current_flutter_target}}" = "linux" ]; then \
+      cp -r Wox.UI.Flutter/wox/build/{{current_flutter_target}}/Build/Products/Release/wox Wox/resource/ui/flutter; \
+    elif [ "{{current_flutter_target}}" = "macos" ]; then \
+      cp -r Wox.UI.Flutter/wox/build/{{current_flutter_target}}/Build/Products/Release/wox.app Wox/resource/ui/flutter; \
       chmod +x Wox/resource/ui/flutter/wox.app/Contents/MacOS/wox; \
     fi
 
