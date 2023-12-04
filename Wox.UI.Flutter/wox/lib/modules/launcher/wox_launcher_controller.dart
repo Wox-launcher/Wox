@@ -164,15 +164,15 @@ class WoxLauncherController extends GetxController {
   }
 
   void resizeHeight() {
-    print(queryResults.length);
+    Logger.instance.info("result length: ${queryResults.length}");
     var resultHeight = getResultHeightByCount(queryResults.length);
 
-    print(resultHeight);
+    Logger.instance.info("result height: $resultHeight");
     if (resultHeight > getMaxHeight() || isShowActionPanel.value || isShowPreviewPanel.value) {
       resultHeight = getMaxHeight();
     }
     final totalHeight = queryBoxContainerHeight() + resultHeight;
-    print(totalHeight);
+    Logger.instance.info("total height: $totalHeight");
     windowManager.setSize(Size(800, totalHeight.toDouble()));
   }
 

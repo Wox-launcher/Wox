@@ -17,6 +17,11 @@ void main(List<String> arguments) async {
 
   await Logger.instance.initLogger();
   await initArgs(arguments);
+  Logger.instance.info("---------------------");
+  Logger.instance.info("Server port: ${Env.serverPort}");
+  Logger.instance.info("Server pid: ${Env.serverPid}");
+  Logger.instance.info("Is dev: ${Env.isDev}");
+
   HeartbeatChecker().startChecking();
   await loadSystemConfig();
   await initWindow();

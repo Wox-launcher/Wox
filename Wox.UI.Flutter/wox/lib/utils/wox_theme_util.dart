@@ -11,9 +11,7 @@ class WoxThemeUtil {
   static WoxThemeUtil get instance => _instance;
 
   Future<void> loadTheme() async {
-    WoxApi.instance.loadTheme().then((value) {
-      _currentTheme = value;
-    });
+    _currentTheme = await WoxApi.instance.loadTheme();
   }
 
   WoxTheme get currentTheme => _currentTheme;

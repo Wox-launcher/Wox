@@ -27,7 +27,7 @@ class WoxHttpUtil {
   }
 
   Future<T> postData<T>(String url, dynamic data) async {
-    Logger.instance.info(_baseUrl + url);
+    Logger.instance.info('Posting data to $_baseUrl$url');
     try {
       final response = await _dio.post(_baseUrl + url, data: data);
       WoxResponse woxResponse = WoxResponse.fromJson(response.data);

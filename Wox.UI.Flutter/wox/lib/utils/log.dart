@@ -9,11 +9,9 @@ class Logger {
   Logger._privateConstructor();
 
   Future<void> initLogger() async {
-    var logPath = path.join(path.absolute(Platform.environment['HOME']!, ".wox", "log", "ui.log"));
-    var file = await File(logPath).create(recursive: true);
     _logger = xlogger.Logger(
-      printer: xlogger.SimplePrinter(),
-      output: xlogger.FileOutput(file: file),
+      printer: xlogger.SimplePrinter(printTime: true, colors: false),
+      output: WoxFileOutput(),
     );
   }
 
@@ -23,5 +21,34 @@ class Logger {
 
   void info(String msg) {
     _logger.i(msg);
+  }
+
+  void error(String msg) {
+    _logger.e(msg);
+  }
+}
+
+class WoxFileOutput extends xlogger.LogOutput {
+  late IOSink sink;
+
+  WoxFileOutput() {
+    var logFile = File(path.join(getHomeDir(), ".wox", "log", 'ui.log'));
+    logFile.createSync(recursive: true);
+    sink = logFile.openWrite(mode: FileMode.append);
+  }
+
+  String getHomeDir() {
+    if (Platform.isWindows) {
+      return Platform.environment['UserProfile']!;
+    } else {
+      return Platform.environment['HOME']!;
+    }
+  }
+
+  @override
+  void output(xlogger.OutputEvent event) {
+    for (var element in event.lines) {
+      sink.writeln(element);
+    }
   }
 }

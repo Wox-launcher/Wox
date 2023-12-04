@@ -16,6 +16,7 @@ class HeartbeatChecker {
       if (!isAlive) {
         failedAttempts++;
         if (failedAttempts >= maxFailedAttempts) {
+          Logger.instance.error("Server is not alive, exiting...");
           timer.cancel();
           exit(0);
         }
@@ -32,7 +33,7 @@ class HeartbeatChecker {
         return true;
       }
     } catch (e) {
-      Logger.instance.info("Failed to check heartbeat: $e");
+      Logger.instance.error("Failed to check heartbeat: $e");
       return false;
     }
 
