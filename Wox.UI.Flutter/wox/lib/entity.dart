@@ -1,4 +1,4 @@
-import 'entity/wox_query_result.dart';
+import 'package:wox/entity/wox_image.dart';
 
 typedef SelectionType = String;
 typedef LastQueryMode = String;

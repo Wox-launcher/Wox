@@ -6,12 +6,11 @@ import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:get/get.dart';
 import 'package:logger/logger.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:wox/controller.dart';
+import 'package:wox/modules/launcher/views/wox_launcher_view.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/heartbeat_checker.dart';
 import 'package:wox/utils/wox_theme_util.dart';
-import 'package:wox/view.dart';
 
 void main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,7 +42,7 @@ Future<void> initArgs(List<String> arguments) async {
 }
 
 Future<void> loadSystemConfig() async {
-  WoxThemeUtil.instance.loadTheme();
+  await WoxThemeUtil.instance.loadTheme();
 }
 
 Future<void> initWindow() async {
@@ -55,8 +54,8 @@ Future<void> initWindow() async {
     dark: true,
   );
 
-  WindowOptions windowOptions = const WindowOptions(
-    size: Size(800, 300),
+  WindowOptions windowOptions = WindowOptions(
+    size: Size(800, WoxThemeUtil.instance.getWoxBoxContainerHeight()),
     center: true,
     backgroundColor: Colors.transparent,
     skipTaskbar: true,
@@ -75,7 +74,7 @@ Future<void> initWindow() async {
 
 Future<void> initGetX() async {
   Get.put(Logger(printer: SimplePrinter()));
-  Get.put(WoxController());
+  // Get.put(WoxController());
   Get.put(WoxLauncherController());
 }
 
@@ -123,7 +122,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener {
   Widget build(BuildContext context) {
     return const Scaffold(
       backgroundColor: Colors.transparent,
-      body: WoxView(),
+      body: WoxLauncherView(),
     );
   }
 }

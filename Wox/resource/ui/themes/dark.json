@@ -26,7 +26,7 @@
   "ResultItemActiveSubTitleColor": "#f0f0f0",
   "ResultItemActiveBorderLeft": "0",
   "QueryBoxFontColor": "#e4e7e7",
-  "QueryBoxBackgroundColor": "rgb(24 25 26 / 40%)",
+  "QueryBoxBackgroundColor": "rgba(24, 25, 26, 0.4)",
   "QueryBoxBorderRadius": 8,
   "ActionContainerBackgroundColor": "#384449",
   "ActionContainerHeaderFontColor": "#e4e7e7",

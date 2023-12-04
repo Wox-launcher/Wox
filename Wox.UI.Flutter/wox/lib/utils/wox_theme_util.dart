@@ -17,4 +17,8 @@ class WoxThemeUtil {
   }
 
   WoxTheme get currentTheme => _currentTheme;
+
+  double getWoxBoxContainerHeight() {
+    return 55.0 + currentTheme.appPaddingTop + currentTheme.appPaddingBottom;
+  }
 }

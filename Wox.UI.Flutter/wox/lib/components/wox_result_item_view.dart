@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:wox/components/wox_image_view.dart';
-import 'package:wox/entity/wox_query_result.dart';
+import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_theme.dart';
 
 class WoxResultItemView extends StatelessWidget {
@@ -40,11 +40,19 @@ class WoxResultItemView extends StatelessWidget {
       ),
       child: Row(
         children: [
-          WoxImageView(woxImage: icon),
-          const SizedBox(width: 8),
+          Padding(
+              padding: const EdgeInsets.only(left: 5.0, right: 10.0),
+              child: WoxImageView(
+                woxImage: icon,
+                width: 30,
+                height: 30,
+              )),
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
               Text(
+                style: TextStyle(
+                  color: fromCssColor(woxTheme.resultItemTitleColor),
+                ),
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -52,14 +60,18 @@ class WoxResultItemView extends StatelessWidget {
                   forceStrutHeight: true,
                 ),
               ),
-              Text(
-                subTitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                strutStyle: const StrutStyle(
-                  forceStrutHeight: true,
+              if (subTitle.isNotEmpty)
+                Text(
+                  style: TextStyle(
+                    color: fromCssColor(woxTheme.resultItemSubTitleColor),
+                  ),
+                  subTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  strutStyle: const StrutStyle(
+                    forceStrutHeight: true,
+                  ),
                 ),
-              ),
             ]),
           ),
         ],

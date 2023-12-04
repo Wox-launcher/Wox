@@ -7,9 +7,11 @@ import 'package:logger/logger.dart';
 import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/utils/env.dart';
+import 'package:wox/entity/wox_websocket_msg.dart';
 import 'package:wox/utils/websocket.dart';
 
 import 'entity.dart';
+import 'enums/wox_web_socket_msg_type_enum.dart';
 
 class WoxController extends GetxController {
   final query = ChangedQuery.empty().obs;
@@ -141,7 +143,7 @@ class WoxController extends GetxController {
   void selectAction() {
     final result = queryResults[activeResultIndex.value];
     final action = result.actions[activeActionIndex.value];
-    final msg = WebsocketMsg(id: const UuidV4().generate(), method: "Action", data: {
+    final msg = WoxWebsocketMsg(id: const UuidV4().generate(), method: "Action", type: WoxWebsocketMsgTypeEnum.WOX_WEBSOCKET_MSG_TYPE_REQUEST.code, data: {
       "resultId": result.id,
       "actionId": action.id,
     });
@@ -209,7 +211,7 @@ class WoxController extends GetxController {
       },
     );
 
-    final msg = WebsocketMsg(id: const UuidV4().generate(), method: "Query", data: {
+    final msg = WoxWebsocketMsg(id: const UuidV4().generate(), type: WoxWebsocketMsgTypeEnum.WOX_WEBSOCKET_MSG_TYPE_REQUEST.code, method: "Query", data: {
       "queryId": query.queryId,
       "queryType": query.queryType,
       "queryText": query.queryText,

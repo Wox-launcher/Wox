@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:wox/entity.dart';
+import 'package:wox/entity/wox_websocket_msg.dart';
 
 class WoxWebsocket {
   WebSocketChannel? channel;
@@ -26,7 +26,7 @@ class WoxWebsocket {
     );
   }
 
-  void sendMessage(WebsocketMsg msg) {
+  void sendMessage(WoxWebsocketMsg msg) {
     channel?.sink.add(jsonEncode(msg));
   }
 
