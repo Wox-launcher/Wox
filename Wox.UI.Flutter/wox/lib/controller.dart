@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:logger/logger.dart';
 import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:wox/utils/env.dart';
 import 'package:wox/utils/websocket.dart';
 
 import 'entity.dart';
@@ -34,7 +35,7 @@ class WoxController extends GetxController {
   }
 
   void _setupWebSocket() {
-    ws = WoxWebsocket(Uri.parse("ws://localhost:34987/ws"), onMessageReceived: _handleWebSocketMessage);
+    ws = WoxWebsocket(Uri.parse("ws://localhost:${Env.serverPort}/ws"), onMessageReceived: _handleWebSocketMessage);
     ws.connect();
   }
 

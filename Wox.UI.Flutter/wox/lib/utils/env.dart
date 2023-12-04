@@ -1,5 +1,5 @@
 class Env {
-  static int serverPort = 34987;
-  static int serverPid = -1;
-  static bool isDev = true;
+  static late int serverPort;
+  static late int serverPid;
+  static late bool isDev;
 }

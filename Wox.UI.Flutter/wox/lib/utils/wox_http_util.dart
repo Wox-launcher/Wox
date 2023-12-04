@@ -1,10 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:wox/entity/wox_response.dart';
 import 'package:wox/utils/entity_factory.dart';
+import 'package:wox/utils/env.dart';
 
 class WoxHttpUtil {
   final Dio _dio = Dio();
-  final String _baseUrl = 'http://localhost:34987';
+  final String _baseUrl = 'http://localhost:${Env.serverPort}';
 
   WoxHttpUtil._privateConstructor();
 
