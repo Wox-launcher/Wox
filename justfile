@@ -104,7 +104,7 @@ default:
     if [ "{{current_flutter_target}}" = "windows" ]; then \
       cp -r Wox.UI.Flutter/wox/build/{{current_flutter_target}}/x64/runner/Release Wox/resource/ui/flutter/wox; \
     elif [ "{{current_flutter_target}}" = "linux" ]; then \
-      cp -r Wox.UI.Flutter/wox/build/{{current_flutter_target}}/Build/Products/Release/wox Wox/resource/ui/flutter; \
+      cp -r Wox.UI.Flutter/wox/build/{{current_flutter_target}}/x64/release/bundle Wox/resource/ui/flutter/wox; \
     elif [ "{{current_flutter_target}}" = "macos" ]; then \
       cp -r Wox.UI.Flutter/wox/build/{{current_flutter_target}}/Build/Products/Release/wox.app Wox/resource/ui/flutter; \
       chmod +x Wox/resource/ui/flutter/wox.app/Contents/MacOS/wox; \

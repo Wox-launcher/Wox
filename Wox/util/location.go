@@ -177,6 +177,9 @@ func (l *Location) GetUIAppPath() string {
 	if IsWindows() {
 		return path.Join(l.GetUIDirectory(), "flutter", "wox", "wox.exe")
 	}
+	if IsLinux() {
+		return path.Join(l.GetUIDirectory(), "flutter", "wox", "wox")
+	}
 	if IsMacOS() {
 		return path.Join(l.GetUIDirectory(), "flutter", "wox.app", "Contents", "MacOS", "wox")
 	}
