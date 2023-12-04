@@ -1,3 +1,5 @@
+current_flutter_target := if os() == "windows" { "windows" } else if os() == "linux" { "linux" } else if os() == "macos" { "macos" } else { "unknown" }
+
 default:
     @just --list --unsorted
 
@@ -94,8 +96,6 @@ default:
     cp Wox.UI.Electron/preload.js Wox/resource/ui/electron/preload.js
 
 @_build_flutter:
-    current_flutter_target := if os() == "windows" { "windows" } else if os() == "linux" { "linux" } else if os() == "macos" { "macos" } else { "unknown" }
-
     # flutter
     cd Wox.UI.Flutter/wox && flutter build {{current_flutter_target}} && cd ..
     rm -rf Wox/resource/ui/flutter
