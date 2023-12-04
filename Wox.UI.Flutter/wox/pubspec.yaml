@@ -45,6 +45,7 @@ dependencies:
   path_provider: ^2.1.1
   dio: ^5.4.0
   from_css_color: ^2.0.0
+  path: ^1.8.3
 
 dev_dependencies:
   flutter_test:

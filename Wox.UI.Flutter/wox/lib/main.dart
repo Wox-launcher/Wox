@@ -4,12 +4,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:get/get.dart';
-import 'package:logger/logger.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/modules/launcher/views/wox_launcher_view.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/heartbeat_checker.dart';
+import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
 void main(List<String> arguments) async {
@@ -70,11 +70,11 @@ Future<void> initWindow() async {
   await windowManager.setAsFrameless();
   await windowManager.setResizable(false);
   await windowManager.waitUntilReadyToShow(windowOptions);
+
+  Logger.instance.info("test");
 }
 
 Future<void> initGetX() async {
-  Get.put(Logger(printer: SimplePrinter()));
-  // Get.put(WoxController());
   Get.put(WoxLauncherController());
 }
 
