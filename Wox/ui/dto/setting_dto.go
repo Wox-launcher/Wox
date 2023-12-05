@@ -17,5 +17,8 @@ type WoxSetting struct {
 	QueryHotkeys         []setting.QueryHotkey
 	QueryShortcuts       []setting.QueryShortcut
 	LastQueryMode        setting.LastQueryMode
-	ThemeId              string
+
+	// UI related
+	AppWidth int
+	ThemeId  string
 }

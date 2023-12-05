@@ -30,6 +30,7 @@ type PluginSettingDefinitionItem struct {
 	Type                PluginSettingDefinitionType
 	Value               PluginSettingDefinitionValue
 	DisabledInPlatforms []util.Platform
+	IsPlatformSpecific  bool // if true, this setting may be different in different platforms
 }
 
 func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {

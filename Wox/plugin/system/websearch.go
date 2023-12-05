@@ -59,7 +59,8 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
 			{
-				Type: definition.PluginSettingDefinitionTypeTable,
+				Type:               definition.PluginSettingDefinitionTypeTable,
+				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
 					Key: webSearchesSettingKey,
 					Columns: []definition.PluginSettingValueTableColumn{

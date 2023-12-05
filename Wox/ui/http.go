@@ -452,7 +452,14 @@ func serveAndWait(ctx context.Context, port int) {
 			pluginInstance.Setting.TriggerKeywords = strings.Split(kv.Value, ",")
 			pluginInstance.SaveSetting(ctx)
 		} else {
-			pluginInstance.API.SaveSetting(util.NewTraceContext(), kv.Key, kv.Value, false)
+			var isPlatformSpecific = false
+			for _, settingDefinition := range pluginInstance.Metadata.SettingDefinitions {
+				if settingDefinition.Value.GetKey() == kv.Key {
+					isPlatformSpecific = settingDefinition.IsPlatformSpecific
+					break
+				}
+			}
+			pluginInstance.API.SaveSetting(util.NewTraceContext(), kv.Key, kv.Value, isPlatformSpecific)
 		}
 
 		writeSuccessResponse(w, "")
