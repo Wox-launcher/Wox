@@ -1,0 +1,1 @@
+const int MAX_LIST_VIEW_ITEM_COUNT = 10;

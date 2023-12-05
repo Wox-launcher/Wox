@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
+import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/modules/launcher/views/wox_launcher_view.dart';
@@ -82,9 +83,15 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
+      theme: ThemeData(
+        textSelectionTheme: TextSelectionThemeData(
+          cursorColor: Colors.white,
+          selectionColor: fromCssColor(WoxThemeUtil.instance.currentTheme.resultItemActiveBackgroundColor),
+        ),
+      ),
       debugShowCheckedModeBanner: false,
-      home: WoxApp(),
+      home: const WoxApp(),
     );
   }
 }

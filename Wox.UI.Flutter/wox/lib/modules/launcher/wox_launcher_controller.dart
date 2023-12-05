@@ -12,6 +12,7 @@ import 'package:wox/entity/wox_websocket_msg.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/enums/wox_web_socket_msg_type_enum.dart';
+import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
@@ -32,6 +33,7 @@ class WoxLauncherController extends GetxController {
   var clearQueryResultsTimer = Timer(const Duration(milliseconds: 200), () => {});
   int currentScrollDownStep = 1;
   int currentScrollUpStep = 1;
+  String currentScrollDirection = "down";
 
   Future<void> toggleApp(ShowAppParams params) async {
     var isVisible = await windowManager.isVisible();
@@ -44,7 +46,7 @@ class WoxLauncherController extends GetxController {
 
   Future<void> showApp(ShowAppParams params) async {
     if (params.selectAll) {
-      selectQueryBoxAllText();
+      _selectQueryBoxAllText();
     }
     if (params.position.type == PositionTypeEnum.POSITION_TYPE_MOUSE_SCREEN.code) {
       await windowManager.setPosition(Offset(params.position.x.toDouble(), params.position.y.toDouble()));
@@ -56,11 +58,6 @@ class WoxLauncherController extends GetxController {
   Future<void> hideApp() async {
     await windowManager.blur();
     await windowManager.hide();
-  }
-
-  // select all text in query box
-  void selectQueryBoxAllText() {
-    queryBoxTextFieldController.selection = TextSelection(baseOffset: 0, extentOffset: queryBoxTextFieldController.text.length);
   }
 
   // execute action provided by result item
@@ -93,7 +90,7 @@ class WoxLauncherController extends GetxController {
     }
     if (query.isEmpty) {
       queryResults.clear();
-      resizeHeight();
+      _resizeHeight();
       return;
     }
     // delay clear results, otherwise windows height will shrink immediately,
@@ -103,7 +100,7 @@ class WoxLauncherController extends GetxController {
       const Duration(milliseconds: 100),
       () {
         queryResults.clear();
-        resizeHeight();
+        _resizeHeight();
       },
     );
 
@@ -134,11 +131,39 @@ class WoxLauncherController extends GetxController {
       for (var item in msg.data) {
         results.add(WoxQueryResult.fromJson(item));
       }
-      onReceiveQueryResults(results);
+      _onReceivedQueryResults(results);
     }
   }
 
-  void onReceiveQueryResults(List<WoxQueryResult> results) {
+  void arrowUp() {
+    currentScrollDirection = "up";
+    _resetActiveResultIndex();
+    _resetArrowDirectionChangeParams();
+    _arrowMoveScrollbar();
+  }
+
+  void arrowDown() {
+    currentScrollDirection = "down";
+    _resetActiveResultIndex();
+    _resetArrowDirectionChangeParams();
+    _arrowMoveScrollbar();
+  }
+
+  void mouseWheelScrollUp() {
+    currentScrollDirection = "up";
+    _resetActiveResultIndex();
+    _resetArrowDirectionChangeParams();
+    _mouseWheelMoveScrollbar();
+  }
+
+  void mouseWheelScrollDown() {
+    currentScrollDirection = "down";
+    _resetActiveResultIndex();
+    _resetArrowDirectionChangeParams();
+    _mouseWheelMoveScrollbar();
+  }
+
+  void _onReceivedQueryResults(List<WoxQueryResult> results) {
     if (results.isEmpty || query.value.queryId != results.first.queryId) {
       return;
     }
@@ -154,12 +179,17 @@ class WoxLauncherController extends GetxController {
 
     //reset active result and preview
     if (currentQueryResults.isEmpty) {
-      resetActiveResult();
+      _resetActiveResult();
     }
-    resizeHeight();
+    _resizeHeight();
   }
 
-  void resetActiveResult() {
+  // select all text in query box
+  void _selectQueryBoxAllText() {
+    queryBoxTextFieldController.selection = TextSelection(baseOffset: 0, extentOffset: queryBoxTextFieldController.text.length);
+  }
+
+  void _resetActiveResult() {
     activeResultIndex.value = 0;
 
     //reset preview
@@ -171,7 +201,7 @@ class WoxLauncherController extends GetxController {
     isShowPreviewPanel.value = currentPreview.value.previewData != "";
   }
 
-  void resizeHeight() {
+  void _resizeHeight() {
     double resultHeight = getResultHeightByCount(queryResults.length > 10 ? 10 : queryResults.length);
     if (isShowActionPanel.value || isShowPreviewPanel.value) {
       resultHeight = getMaxHeight();
@@ -180,66 +210,84 @@ class WoxLauncherController extends GetxController {
     windowManager.setSize(Size(800, totalHeight.toDouble()));
   }
 
-  void moveScrollbar(bool isDown) {
-    if (isDown) {
+  void _arrowMoveScrollbar() {
+    if (queryResults.length <= MAX_LIST_VIEW_ITEM_COUNT) {
+      return;
+    }
+    if (currentScrollDirection == "down") {
       if (activeResultIndex.value == 0) {
         currentScrollDownStep = 1;
-        scrollController.animateTo(
-          .0,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.ease,
-        );
-      } else if (currentScrollDownStep > 10) {
-        scrollController.animateTo(
-          scrollController.offset + getResultHeightByCount(1),
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.ease,
-        );
+        scrollController.jumpTo(0);
+      } else if (currentScrollDownStep > MAX_LIST_VIEW_ITEM_COUNT) {
+        scrollController.jumpTo(scrollController.offset + getResultHeightByCount(1));
       }
     } else {
       if (activeResultIndex.value == queryResults.length - 1) {
         currentScrollUpStep = 1;
-        scrollController.animateTo(
-          getResultHeightByCount(queryResults.length - 10),
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.ease,
-        );
-      } else if (currentScrollUpStep > 10) {
-        scrollController.animateTo(
-          scrollController.offset - getResultHeightByCount(1),
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.ease,
-        );
+        scrollController.jumpTo(getResultHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
+      } else if (currentScrollUpStep > MAX_LIST_VIEW_ITEM_COUNT) {
+        scrollController.jumpTo(scrollController.offset - getResultHeightByCount(1));
+      }
+    }
+    queryResults.refresh();
+  }
+
+  void _mouseWheelMoveScrollbar() {
+    if (currentScrollDirection == "down") {
+      if (activeResultIndex.value == 0) {
+        currentScrollDownStep = 1;
+        scrollController.jumpTo(0);
+      } else {
+        if (currentScrollDownStep > queryResults.length - MAX_LIST_VIEW_ITEM_COUNT) {
+          scrollController.jumpTo(getResultHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
+        } else {
+          scrollController.jumpTo(getResultHeightByCount(currentScrollDownStep - 1));
+        }
+      }
+    } else {
+      if (activeResultIndex.value == queryResults.length - 1) {
+        currentScrollUpStep = queryResults.length;
+        scrollController.jumpTo(getResultHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
+      } else {
+        if (activeResultIndex.value < queryResults.length - MAX_LIST_VIEW_ITEM_COUNT) {
+          scrollController.jumpTo(getResultHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT - 1));
+        } else {
+          scrollController.jumpTo(getResultHeightByCount(currentScrollUpStep - 1));
+        }
+      }
+    }
+    queryResults.refresh();
+  }
+
+  void _resetActiveResultIndex() {
+    if (queryResults.isEmpty) {
+      return;
+    }
+    if (currentScrollDirection == "down") {
+      if (activeResultIndex.value == queryResults.length - 1) {
+        activeResultIndex.value = 0;
+      } else {
+        activeResultIndex.value++;
+      }
+    } else {
+      if (activeResultIndex.value == 0) {
+        activeResultIndex.value = queryResults.length - 1;
+      } else {
+        activeResultIndex.value--;
       }
     }
   }
 
-  void arrowUp() {
-    if (activeResultIndex.value == 0) {
-      activeResultIndex.value = queryResults.length - 1;
-    } else {
-      activeResultIndex.value--;
-    }
-    currentScrollDownStep = 1;
-    currentScrollUpStep++;
+  void _resetArrowDirectionChangeParams() {
     currentPreview.value = queryResults[activeResultIndex.value].preview;
     isShowPreviewPanel.value = currentPreview.value.previewData != "";
-    moveScrollbar(false);
-    queryResults.refresh();
-  }
-
-  void arrowDown() {
-    if (activeResultIndex.value == queryResults.length - 1) {
-      activeResultIndex.value = 0;
+    if (currentScrollDirection == "up") {
+      currentScrollDownStep = 1;
+      currentScrollUpStep++;
     } else {
-      activeResultIndex.value++;
+      currentScrollUpStep = 1;
+      currentScrollDownStep++;
     }
-    currentScrollUpStep = 1;
-    currentScrollDownStep++;
-    currentPreview.value = queryResults[activeResultIndex.value].preview;
-    isShowPreviewPanel.value = currentPreview.value.previewData != "";
-    moveScrollbar(true);
-    queryResults.refresh();
   }
 
   void toggleActionPanel() {}
@@ -262,7 +310,7 @@ class WoxLauncherController extends GetxController {
   }
 
   double getMaxHeight() {
-    return getResultHeightByCount(10) + woxTheme.resultContainerPaddingTop + woxTheme.resultContainerPaddingBottom;
+    return getResultHeightByCount(MAX_LIST_VIEW_ITEM_COUNT) + woxTheme.resultContainerPaddingTop + woxTheme.resultContainerPaddingBottom;
   }
 
   WoxQueryResult getQueryResultByIndex(int index) {
