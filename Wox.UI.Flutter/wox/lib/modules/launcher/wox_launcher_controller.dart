@@ -21,7 +21,7 @@ class WoxLauncherController extends GetxController {
   final query = WoxChangeQuery.empty().obs;
   final queryBoxFocusNode = FocusNode();
   final queryBoxTextFieldController = TextEditingController();
-  final scrollController = ScrollController();
+  final scrollController = ScrollController(initialScrollOffset: 0.0);
   final currentPreview = WoxPreview.empty().obs;
   final WoxTheme woxTheme = WoxThemeUtil.instance.currentTheme.obs();
   final int baseItemHeight = 50;
@@ -31,8 +31,6 @@ class WoxLauncherController extends GetxController {
   final isShowPreviewPanel = false.obs;
   final queryResults = <WoxQueryResult>[].obs;
   var clearQueryResultsTimer = Timer(const Duration(milliseconds: 200), () => {});
-  int currentScrollDownStep = 1;
-  int currentScrollUpStep = 1;
   String currentScrollDirection = "down";
 
   Future<void> toggleApp(ShowAppParams params) async {
@@ -79,8 +77,6 @@ class WoxLauncherController extends GetxController {
   }
 
   void onQueryChanged(WoxChangeQuery query) {
-    currentScrollDownStep = 1;
-    currentScrollUpStep = 1;
     this.query.value = query;
     isShowActionPanel.value = false;
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
@@ -138,28 +134,28 @@ class WoxLauncherController extends GetxController {
   void arrowUp() {
     currentScrollDirection = "up";
     _resetActiveResultIndex();
-    _resetArrowDirectionChangeParams();
+    _resetResultPreview();
     _arrowMoveScrollbar();
   }
 
   void arrowDown() {
     currentScrollDirection = "down";
     _resetActiveResultIndex();
-    _resetArrowDirectionChangeParams();
+    _resetResultPreview();
     _arrowMoveScrollbar();
   }
 
   void mouseWheelScrollUp() {
     currentScrollDirection = "up";
     _resetActiveResultIndex();
-    _resetArrowDirectionChangeParams();
+    _resetResultPreview();
     _mouseWheelMoveScrollbar();
   }
 
   void mouseWheelScrollDown() {
     currentScrollDirection = "down";
     _resetActiveResultIndex();
-    _resetArrowDirectionChangeParams();
+    _resetResultPreview();
     _mouseWheelMoveScrollbar();
   }
 
@@ -189,6 +185,32 @@ class WoxLauncherController extends GetxController {
     queryBoxTextFieldController.selection = TextSelection(baseOffset: 0, extentOffset: queryBoxTextFieldController.text.length);
   }
 
+  // check if item exists in bottom of list view
+  bool _isBottomItemExists() {
+    if (currentScrollDirection == "down") {
+      if (activeResultIndex.value > queryResults.length - MAX_LIST_VIEW_ITEM_COUNT) {
+        return true;
+      }
+    }
+    if (currentScrollDirection == "up") {
+      if (activeResultIndex.value > queryResults.length - 1 - MAX_LIST_VIEW_ITEM_COUNT) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // check if item exists in top of list view
+  bool _isOffsetOverFlowBoundary(double offset) {
+    if (offset < 0) {
+      return true;
+    }
+    if (offset > scrollController.position.maxScrollExtent) {
+      return true;
+    }
+    return false;
+  }
+
   void _resetActiveResult() {
     activeResultIndex.value = 0;
 
@@ -212,48 +234,45 @@ class WoxLauncherController extends GetxController {
 
   void _arrowMoveScrollbar() {
     if (queryResults.length <= MAX_LIST_VIEW_ITEM_COUNT) {
+      queryResults.refresh();
       return;
     }
     if (currentScrollDirection == "down") {
       if (activeResultIndex.value == 0) {
-        currentScrollDownStep = 1;
         scrollController.jumpTo(0);
-      } else if (currentScrollDownStep > MAX_LIST_VIEW_ITEM_COUNT) {
-        scrollController.jumpTo(scrollController.offset + getResultHeightByCount(1));
+      } else if (activeResultIndex.value >= MAX_LIST_VIEW_ITEM_COUNT && !_isOffsetOverFlowBoundary(scrollController.offset.ceil() + getResultHeightByCount(1))) {
+        scrollController.jumpTo(scrollController.offset.ceil() + getResultHeightByCount(1));
       }
-    } else {
+    }
+
+    if (currentScrollDirection == "up") {
       if (activeResultIndex.value == queryResults.length - 1) {
-        currentScrollUpStep = 1;
         scrollController.jumpTo(getResultHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
-      } else if (currentScrollUpStep > MAX_LIST_VIEW_ITEM_COUNT) {
-        scrollController.jumpTo(scrollController.offset - getResultHeightByCount(1));
+      } else if (activeResultIndex.value <= queryResults.length - 1 - MAX_LIST_VIEW_ITEM_COUNT &&
+          !_isOffsetOverFlowBoundary(scrollController.offset.ceil() - getResultHeightByCount(1))) {
+        scrollController.jumpTo(scrollController.offset.ceil() - getResultHeightByCount(1));
       }
     }
     queryResults.refresh();
   }
 
   void _mouseWheelMoveScrollbar() {
+    if (queryResults.length <= MAX_LIST_VIEW_ITEM_COUNT) {
+      queryResults.refresh();
+      return;
+    }
     if (currentScrollDirection == "down") {
       if (activeResultIndex.value == 0) {
-        currentScrollDownStep = 1;
         scrollController.jumpTo(0);
-      } else {
-        if (currentScrollDownStep > queryResults.length - MAX_LIST_VIEW_ITEM_COUNT) {
-          scrollController.jumpTo(getResultHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
-        } else {
-          scrollController.jumpTo(getResultHeightByCount(currentScrollDownStep - 1));
-        }
+      } else if (!_isBottomItemExists()) {
+        scrollController.jumpTo(scrollController.offset.ceil() + getResultHeightByCount(1));
       }
-    } else {
+    }
+    if (currentScrollDirection == "up") {
       if (activeResultIndex.value == queryResults.length - 1) {
-        currentScrollUpStep = queryResults.length;
         scrollController.jumpTo(getResultHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
-      } else {
-        if (activeResultIndex.value < queryResults.length - MAX_LIST_VIEW_ITEM_COUNT) {
-          scrollController.jumpTo(getResultHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT - 1));
-        } else {
-          scrollController.jumpTo(getResultHeightByCount(currentScrollUpStep - 1));
-        }
+      } else if (!_isBottomItemExists()) {
+        scrollController.jumpTo(scrollController.offset.ceil() - getResultHeightByCount(1));
       }
     }
     queryResults.refresh();
@@ -278,16 +297,9 @@ class WoxLauncherController extends GetxController {
     }
   }
 
-  void _resetArrowDirectionChangeParams() {
+  void _resetResultPreview() {
     currentPreview.value = queryResults[activeResultIndex.value].preview;
     isShowPreviewPanel.value = currentPreview.value.previewData != "";
-    if (currentScrollDirection == "up") {
-      currentScrollDownStep = 1;
-      currentScrollUpStep++;
-    } else {
-      currentScrollUpStep = 1;
-      currentScrollDownStep++;
-    }
   }
 
   void toggleActionPanel() {}

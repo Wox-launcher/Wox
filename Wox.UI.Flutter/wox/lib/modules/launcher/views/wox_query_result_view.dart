@@ -33,15 +33,15 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                               onPointerSignal: (event) {
                                 if (event is PointerScrollEvent) {
                                   if (event.scrollDelta.dy > 0) {
-                                    // controller.mouseWheelScrollDown();
+                                    controller.mouseWheelScrollDown();
                                   } else {
-                                    // controller.mouseWheelScrollUp();
+                                    controller.mouseWheelScrollUp();
                                   }
                                 }
                               },
                               child: ListView.builder(
                                 shrinkWrap: true,
-                                physics: const ClampingScrollPhysics(),
+                                physics: const NeverScrollableScrollPhysics(),
                                 controller: controller.scrollController,
                                 itemCount: controller.queryResults.length,
                                 itemExtent: controller.getResultHeightByCount(1),
