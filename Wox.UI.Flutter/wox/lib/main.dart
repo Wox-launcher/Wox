@@ -69,7 +69,7 @@ Future<void> initWindow() async {
     await Window.setEffect(effect: WindowEffect.popover, dark: true);
   }
   if (Platform.isWindows) {
-    await Window.setEffect(effect: WindowEffect.acrylic, color: Colors.black.withOpacity(0.5));
+    await Window.setEffect(effect: WindowEffect.mica);
   }
   await windowManager.setAsFrameless();
   await windowManager.setResizable(false);
@@ -126,9 +126,6 @@ class _WoxAppState extends State<WoxApp> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Colors.transparent,
-      body: WoxLauncherView(),
-    );
+    return const WoxLauncherView();
   }
 }

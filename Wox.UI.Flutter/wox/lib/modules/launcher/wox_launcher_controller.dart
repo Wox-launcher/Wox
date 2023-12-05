@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -50,11 +52,11 @@ class WoxLauncherController extends GetxController {
       await windowManager.setPosition(Offset(params.position.x.toDouble(), params.position.y.toDouble()));
     }
     await windowManager.show();
+    await windowManager.focus();
     queryBoxFocusNode.requestFocus();
   }
 
   Future<void> hideApp() async {
-    await windowManager.blur();
     await windowManager.hide();
   }
 
@@ -229,7 +231,25 @@ class WoxLauncherController extends GetxController {
       resultHeight = getMaxHeight();
     }
     final totalHeight = queryBoxContainerHeight() + resultHeight + (queryResults.isNotEmpty ? woxTheme.resultContainerPaddingTop + woxTheme.resultContainerPaddingBottom : 0);
-    windowManager.setSize(Size(800, totalHeight.toDouble()));
+    if (Platform.isWindows) {
+      // on windows, if I set screen ratio to 2.0, then the window height should add more 4.5 pixel, otherwise it will show render error
+      // still don't know why. here is the test result: ratio -> additional window height
+      // 1.0 -> 9
+      // 1.25-> 7.8
+      // 1.5-> 6.3
+      // 1.75-> 5.3
+      // 2.0-> 4.5
+      // 2.25-> 4.3
+      // 2.5-> 3.8
+      // 3.0-> 3
+
+      final totalHeightFinal = totalHeight.toDouble() +  (10 / window.devicePixelRatio).ceil();
+      Logger.instance.info("Resize window height to $totalHeightFinal");
+      windowManager.setSize(Size(800,totalHeightFinal));
+    } else {
+      Logger.instance.info("Resize window height to $totalHeight");
+      windowManager.setSize(Size(800, totalHeight.toDouble()));
+    }
   }
 
   void _arrowMoveScrollbar() {
