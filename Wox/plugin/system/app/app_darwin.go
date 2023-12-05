@@ -28,6 +28,8 @@ import (
 	"wox/util"
 )
 
+var appRetriever = &MacRetriever{}
+
 type MacRetriever struct {
 	api plugin.API
 }

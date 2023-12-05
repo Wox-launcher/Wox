@@ -9,6 +9,8 @@ import (
 	"wox/util"
 )
 
+var appRetriever = &WindowsRetriever{}
+
 type WindowsRetriever struct {
 	api plugin.API
 }

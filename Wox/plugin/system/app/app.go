@@ -157,14 +157,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 }
 
 func (a *ApplicationPlugin) getRetriever(ctx context.Context) Retriever {
-	if util.IsMacOS() {
-		return &MacRetriever{api: a.api}
-	}
-	if util.IsWindows() {
-		return &WindowsRetriever{api: a.api}
-	}
-
-	return nil
+	return appRetriever
 }
 
 func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
