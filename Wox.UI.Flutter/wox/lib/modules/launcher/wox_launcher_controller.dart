@@ -33,13 +33,6 @@ class WoxLauncherController extends GetxController {
   int currentScrollDownStep = 1;
   int currentScrollUpStep = 1;
 
-  @override
-  void onReady() {
-    scrollController.addListener(() {
-      print(scrollController.offset); //打印滚动位置
-    });
-  }
-
   Future<void> toggleApp(ShowAppParams params) async {
     var isVisible = await windowManager.isVisible();
     if (isVisible) {
@@ -183,8 +176,7 @@ class WoxLauncherController extends GetxController {
     if (isShowActionPanel.value || isShowPreviewPanel.value) {
       resultHeight = getMaxHeight();
     }
-    final totalHeight = queryBoxContainerHeight() + resultHeight + woxTheme.resultContainerPaddingTop + woxTheme.resultContainerPaddingBottom;
-
+    final totalHeight = queryBoxContainerHeight() + resultHeight + (queryResults.isNotEmpty ? woxTheme.resultContainerPaddingTop + woxTheme.resultContainerPaddingBottom : 0);
     windowManager.setSize(Size(800, totalHeight.toDouble()));
   }
 

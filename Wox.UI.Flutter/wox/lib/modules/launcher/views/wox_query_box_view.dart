@@ -51,10 +51,17 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                 height: 55.0,
                 child: TextField(
                   style: TextStyle(
+                    fontSize: 24.0,
                     color: fromCssColor(controller.woxTheme.queryBoxFontColor),
                   ),
                   decoration: InputDecoration(
-                    contentPadding: const EdgeInsets.only(left: 8, right: 8),
+                    isCollapsed: true,
+                    contentPadding: const EdgeInsets.only(
+                      left: 8,
+                      right: 8,
+                      top: 20,
+                      bottom: 20,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(controller.woxTheme.queryBoxBorderRadius.toDouble()),
                       borderSide: BorderSide.none,
