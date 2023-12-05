@@ -11,9 +11,14 @@ type appInfo struct {
 	Icon plugin.WoxImage
 }
 
+type appDirectory struct {
+	Path      string
+	Recursive bool
+}
+
 type Retriever interface {
 	GetPlatform() string
-	GetAppDirectories(ctx context.Context) []string
+	GetAppDirectories(ctx context.Context) []appDirectory
 	GetAppExtensions(ctx context.Context) []string
 	ParseAppInfo(ctx context.Context, path string) (appInfo, error)
 }

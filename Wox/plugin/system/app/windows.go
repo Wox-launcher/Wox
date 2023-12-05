@@ -17,9 +17,12 @@ func (a *WindowsRetriever) GetPlatform() string {
 	return util.PlatformWindows
 }
 
-func (a *WindowsRetriever) GetAppDirectories(ctx context.Context) []string {
-	return []string{
-		"C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs",
+func (a *WindowsRetriever) GetAppDirectories(ctx context.Context) []appDirectory {
+	return []appDirectory{
+		{
+			Path:      "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs",
+			Recursive: false,
+		},
 	}
 }
 

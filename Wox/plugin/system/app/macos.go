@@ -1,17 +1,29 @@
 package app
 
+/*
+#cgo CFLAGS: -x objective-c
+#cgo LDFLAGS: -framework Foundation -framework Cocoa
+#include <stdlib.h>
+
+const unsigned char *GetPrefPaneIcon(const char *prefPanePath, size_t *length);
+*/
+import "C"
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"github.com/disintegration/imaging"
 	"github.com/mitchellh/go-homedir"
 	"howett.net/plist"
+	"image"
 	"io"
 	"os"
 	"os/exec"
 	"path"
 	"strings"
+	"unsafe"
 	"wox/plugin"
 	"wox/util"
 )
@@ -24,20 +36,32 @@ func (a *MacRetriever) GetPlatform() string {
 	return util.PlatformMacOS
 }
 
-func (a *MacRetriever) GetAppDirectories(ctx context.Context) []string {
+func (a *MacRetriever) GetAppDirectories(ctx context.Context) []appDirectory {
 	userHomeApps, _ := homedir.Expand("~/Applications")
-	return []string{
-		userHomeApps,
-		"/Applications",
-		"/Applications/Utilities",
-		"/System/Applications",
-		"/System/Library/PreferencePanes",
-		"/System/Library/CoreServices",
+	return []appDirectory{
+		{
+			Path: userHomeApps, Recursive: false,
+		},
+		{
+			Path: "/Applications", Recursive: false,
+		},
+		{
+			Path: "/Applications/Utilities", Recursive: false,
+		},
+		{
+			Path: "/System/Applications", Recursive: false,
+		},
+		{
+			Path: "/System/Library/PreferencePanes", Recursive: false,
+		},
+		{
+			Path: "/System/Library/CoreServices", Recursive: false,
+		},
 	}
 }
 
 func (a *MacRetriever) GetAppExtensions(ctx context.Context) []string {
-	return []string{"app"}
+	return []string{"app", "prefPane"}
 }
 
 func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, error) {
@@ -52,8 +76,10 @@ func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, 
 	}
 
 	appName := strings.TrimSpace(string(out))
-	if strings.HasSuffix(appName, ".app") {
-		appName = appName[:len(appName)-4]
+	for _, extension := range a.GetAppExtensions(ctx) {
+		if strings.HasSuffix(appName, "."+extension) {
+			appName = appName[:len(appName)-len(extension)-1]
+		}
 	}
 
 	info := appInfo{
@@ -126,7 +152,14 @@ func (a *MacRetriever) getMacAppIconImagePath(ctx context.Context, appPath strin
 	if infoPlistErr == nil {
 		return iconPath, nil
 	}
-	a.api.Log(ctx, fmt.Sprintf("get icon from info.plist fail, path=%s, err=%s", appPath, infoPlistErr.Error()))
+	a.api.Log(ctx, fmt.Sprintf("get icon from info.plist fail, try to parse with cgo path=%s, err=%s", appPath, infoPlistErr.Error()))
+
+	iconPath2, cgoErr := a.parseMacAppIconFromCgo(ctx, appPath)
+	if cgoErr == nil {
+		return iconPath2, nil
+	} else {
+		a.api.Log(ctx, fmt.Sprintf("get icon from cgo fail, return default icon path=%s, err=%s", appPath, cgoErr.Error()))
+	}
 
 	//return default icon
 	return "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns", nil
@@ -164,4 +197,32 @@ func (a *MacRetriever) parseMacAppIconFromInfoPlist(ctx context.Context, appPath
 	} else {
 		return "", fmt.Errorf("info plist doesnt have CFBundleIconFile property")
 	}
+}
+
+func (a *MacRetriever) parseMacAppIconFromCgo(ctx context.Context, appPath string) (string, error) {
+	cPath := C.CString(appPath)
+	defer C.free(unsafe.Pointer(cPath))
+
+	var length C.size_t
+	cIcon := C.GetPrefPaneIcon(cPath, &length)
+	if cIcon != nil {
+		defer C.free(unsafe.Pointer(cIcon))
+		pngBytes := C.GoBytes(unsafe.Pointer(cIcon), C.int(length))
+		imgReader := bytes.NewReader(pngBytes)
+		img, _, err := image.Decode(imgReader)
+		if err != nil {
+			return "", fmt.Errorf("failed to decode icon image with system api: %v", err)
+		}
+
+		iconPathMd5 := fmt.Sprintf("%x", md5.Sum([]byte(appPath)))
+		iconCachePath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("app_cgo_%s.png", iconPathMd5))
+		saveErr := imaging.Save(img, iconCachePath)
+		if saveErr != nil {
+			return "", saveErr
+		}
+
+		return iconCachePath, nil
+	}
+
+	return "", errors.New("no icon found with system api")
 }

@@ -27,6 +27,10 @@ class HeartbeatChecker {
   }
 
   Future<bool> checkHeartbeat() async {
+    if (Env.isDev) {
+      return true;
+    }
+
     try {
       var res = await Dio().get("http://localhost:${Env.serverPort}/ping");
       if (res.statusCode == 200) {

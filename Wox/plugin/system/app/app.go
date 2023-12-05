@@ -172,7 +172,7 @@ func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
 	var appExtensions = a.retriever.GetAppExtensions(ctx)
 	for _, d := range appDirectories {
 		var directory = d
-		util.WatchDirectories(ctx, directory, func(e fsnotify.Event) {
+		util.WatchDirectories(ctx, directory.Path, func(e fsnotify.Event) {
 			var appPath = e.Name
 			var isExtensionMatch = lo.ContainsBy(appExtensions, func(ext string) bool {
 				return strings.HasSuffix(e.Name, fmt.Sprintf(".%s", ext))
@@ -220,7 +220,8 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 	startTimestamp := util.GetSystemTimestamp()
 	a.api.Log(ctx, "start to get apps")
 
-	appPaths := a.getAppPaths(ctx)
+	appDirectories := a.getRetriever(ctx).GetAppDirectories(ctx)
+	appPaths := a.getAppPaths(ctx, appDirectories)
 
 	// split into groups, so we can index apps in parallel
 	var appPathGroups [][]string
@@ -271,13 +272,12 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 	a.api.Log(ctx, fmt.Sprintf("indexed %d apps, cost %d ms", len(a.apps), util.GetSystemTimestamp()-startTimestamp))
 }
 
-func (a *ApplicationPlugin) getAppPaths(ctx context.Context) (appPaths []string) {
-	var appDirectories = a.retriever.GetAppDirectories(ctx)
+func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []appDirectory) (appPaths []string) {
 	var appExtensions = a.retriever.GetAppExtensions(ctx)
-	for _, appDirectory := range appDirectories {
-		appPath, readErr := os.ReadDir(appDirectory)
+	for _, dir := range appDirectories {
+		appPath, readErr := os.ReadDir(dir.Path)
 		if readErr != nil {
-			a.api.Log(ctx, fmt.Sprintf("error reading directory %s: %s", appDirectory, readErr.Error()))
+			a.api.Log(ctx, fmt.Sprintf("error reading directory %s: %s", dir.Path, readErr.Error()))
 			continue
 		}
 
@@ -286,20 +286,25 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context) (appPaths []string)
 				return strings.HasSuffix(entry.Name(), fmt.Sprintf(".%s", ext))
 			})
 			if isExtensionMatch {
-				appPaths = append(appPaths, path.Join(appDirectory, entry.Name()))
+				appPaths = append(appPaths, path.Join(dir.Path, entry.Name()))
 				continue
 			}
 
 			// check if it's a directory
-			subDir := path.Join(appDirectory, entry.Name())
+			subDir := path.Join(dir.Path, entry.Name())
 			isDirectory, dirErr := util.IsDirectory(subDir)
 			if dirErr != nil || !isDirectory {
 				continue
 			}
 
+			if dir.Recursive {
+				appPaths = append(appPaths, a.getAppPaths(ctx, []appDirectory{{Path: subDir, Recursive: true}})...)
+				continue
+			}
+
 			appSubDir, readSubDirErr := os.ReadDir(subDir)
 			if readSubDirErr != nil {
-				a.api.Log(ctx, fmt.Sprintf("error reading sub directory %s: %s", appDirectory, readSubDirErr.Error()))
+				a.api.Log(ctx, fmt.Sprintf("error reading sub directory %s: %s", subDir, readSubDirErr.Error()))
 				continue
 			}
 
@@ -308,7 +313,7 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context) (appPaths []string)
 					return strings.HasSuffix(subEntry.Name(), fmt.Sprintf(".%s", ext))
 				})
 				if isExtensionMatch {
-					appPaths = append(appPaths, path.Join(appDirectory, entry.Name(), subEntry.Name()))
+					appPaths = append(appPaths, path.Join(dir.Path, entry.Name(), subEntry.Name()))
 					continue
 				}
 			}
