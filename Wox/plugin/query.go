@@ -78,7 +78,7 @@ type QueryResult struct {
 	SubTitle string
 	Icon     WoxImage
 	Preview  WoxPreview
-	Score    int
+	Score    int64
 	// Additional data associate with this result, can be retrieved in Action function
 	ContextData string
 	Actions     []QueryResultAction
@@ -138,7 +138,7 @@ type QueryResultUI struct {
 	SubTitle        string
 	Icon            WoxImage
 	Preview         WoxPreview
-	Score           int
+	Score           int64
 	ContextData     string
 	Actions         []QueryResultActionUI
 	RefreshInterval int

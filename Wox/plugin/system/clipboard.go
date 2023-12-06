@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/cdfmlr/ellipsis"
 	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
 	"image/png"
@@ -388,7 +389,7 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 		}
 
 		return plugin.QueryResult{
-			Title: historyData.Text,
+			Title: ellipsis.Centering(historyData.Text, 80),
 			Icon:  history.Icon,
 			Preview: plugin.WoxPreview{
 				PreviewType: plugin.WoxPreviewTypeText,
@@ -398,7 +399,7 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 					"i18n:plugin_clipboard_copy_characters": fmt.Sprintf("%d", len(historyData.Text)),
 				},
 			},
-			Score:   0,
+			Score:   history.Timestamp,
 			Actions: actions,
 		}
 	}
@@ -428,7 +429,7 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 					"i18n:plugin_clipboard_image_height": fmt.Sprintf("%d", historyData.Image.Bounds().Dy()),
 				},
 			},
-			Score: 0,
+			Score: history.Timestamp,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Copy to clipboard",

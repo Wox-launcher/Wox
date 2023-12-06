@@ -19,11 +19,11 @@ func IsStringMatch(term string, subTerm string, usePinYin bool) bool {
 	return isMatch
 }
 
-func IsStringMatchScore(term string, subTerm string, usePinYin bool) (isMatch bool, score int) {
-	minMatchScore := 0
+func IsStringMatchScore(term string, subTerm string, usePinYin bool) (isMatch bool, score int64) {
+	var minMatchScore int64 = 0
 
 	if usePinYin {
-		matchScore := -100000000
+		var matchScore int64 = -100000000
 		pyTerms := getPinYin(term)
 		for _, newTerm := range pyTerms {
 			matches := fuzzy.Find(subTerm, []string{newTerm})
@@ -31,8 +31,8 @@ func IsStringMatchScore(term string, subTerm string, usePinYin bool) (isMatch bo
 				continue
 			}
 
-			if matches[0].Score > matchScore {
-				matchScore = matches[0].Score
+			if int64(matches[0].Score) > matchScore {
+				matchScore = int64(matches[0].Score)
 			}
 		}
 
@@ -46,6 +46,6 @@ func IsStringMatchScore(term string, subTerm string, usePinYin bool) (isMatch bo
 		if len(matches) == 0 {
 			return false, 0
 		}
-		return matches[0].Score >= minMatchScore, matches[0].Score
+		return int64(matches[0].Score) >= minMatchScore, int64(matches[0].Score)
 	}
 }

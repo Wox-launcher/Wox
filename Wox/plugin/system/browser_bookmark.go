@@ -66,9 +66,9 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 	for _, b := range c.bookmarks {
 		var bookmark = b
 		var isMatch bool
-		var matchScore int
+		var matchScore int64
 
-		var minMatchScore = 10 // bookmark plugin has strict match score to avoid too many unrelated results
+		var minMatchScore int64 = 10 // bookmark plugin has strict match score to avoid too many unrelated results
 		isNameMatch, nameScore := IsStringMatchScore(ctx, bookmark.Name, query.Search)
 		if isNameMatch && nameScore >= minMatchScore {
 			isMatch = true

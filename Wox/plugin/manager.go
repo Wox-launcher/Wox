@@ -424,7 +424,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	return result
 }
 
-func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string) int {
+func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string) int64 {
 	resultHash := setting.NewResultHash(pluginId, title, subTitle)
 	woxAppData := setting.GetSettingManager().GetWoxAppData(ctx)
 	actionResults, ok := woxAppData.ActionedResults.Load(resultHash)
@@ -438,9 +438,9 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, sub
 	// that means, actions in day one, we will add weight 89, day two, we will add weight 55, day three, we will add weight 34, and so on
 	// E.g. if actioned 3 times in day one, 2 times in day two, 1 time in day three, the score will be: 89*3 + 55*2 + 34*1 = 450
 
-	var score = 0
+	var score int64 = 0
 	for _, actionResult := range actionResults {
-		weight := 2
+		var weight int64 = 2
 
 		actionedTime := util.ParseTimeStamp(actionResult.Timestamp)
 		hours := util.GetSystemTime().Sub(actionedTime).Hours()
@@ -452,7 +452,7 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, sub
 			if fibonacciIndex < 1 {
 				fibonacciIndex = 1
 			}
-			fibonacci := []int{5, 8, 13, 21, 34, 55, 89}
+			fibonacci := []int64{5, 8, 13, 21, 34, 55, 89}
 			score += fibonacci[7-fibonacciIndex]
 		}
 

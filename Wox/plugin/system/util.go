@@ -8,12 +8,12 @@ import (
 
 type cacheResult struct {
 	match bool
-	score int
+	score int64
 }
 
 var pinyinMatchCache = util.NewHashMap[string, cacheResult]()
 
-func IsStringMatchScore(ctx context.Context, term string, subTerm string) (bool, int) {
+func IsStringMatchScore(ctx context.Context, term string, subTerm string) (bool, int64) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if woxSetting.UsePinYin {
 		key := term + subTerm
@@ -30,7 +30,7 @@ func IsStringMatchScore(ctx context.Context, term string, subTerm string) (bool,
 	return match, score
 }
 
-func IsStringMatchScoreNoPinYin(ctx context.Context, term string, subTerm string) (bool, int) {
+func IsStringMatchScoreNoPinYin(ctx context.Context, term string, subTerm string) (bool, int64) {
 	return util.IsStringMatchScore(term, subTerm, false)
 }
 
