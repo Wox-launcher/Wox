@@ -48,6 +48,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                                 itemBuilder: (context, index) {
                                   WoxQueryResult queryResult = controller.getQueryResultByIndex(index);
                                   return WoxResultItemView(
+                                      key: controller.getQueryResultGlobalKeyByIndex(index),
                                       woxTheme: controller.woxTheme,
                                       icon: queryResult.icon,
                                       title: queryResult.title,

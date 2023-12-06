@@ -32,6 +32,7 @@ class WoxLauncherController extends GetxController {
   final isShowActionPanel = false.obs;
   final isShowPreviewPanel = false.obs;
   final queryResults = <WoxQueryResult>[].obs;
+  final globalKeys = <GlobalKey>[];
   var clearQueryResultsTimer = Timer(const Duration(milliseconds: 200), () => {});
   String currentScrollDirection = "down";
 
@@ -87,8 +88,7 @@ class WoxLauncherController extends GetxController {
       queryBoxTextFieldController.text = query.toString();
     }
     if (query.isEmpty) {
-      queryResults.clear();
-      _resizeHeight();
+      _clearQueryResults();
       return;
     }
     // delay clear results, otherwise windows height will shrink immediately,
@@ -97,8 +97,7 @@ class WoxLauncherController extends GetxController {
     clearQueryResultsTimer = Timer(
       const Duration(milliseconds: 100),
       () {
-        queryResults.clear();
-        _resizeHeight();
+        _clearQueryResults();
       },
     );
 
@@ -158,7 +157,17 @@ class WoxLauncherController extends GetxController {
     currentScrollDirection = "down";
     _resetActiveResultIndex();
     _resetResultPreview();
+    RenderBox? renderBox = globalKeys[activeResultIndex.value].currentContext?.findRenderObject() as RenderBox?;
+    print(globalKeys.length);
+    print(activeResultIndex.value);
+    print(renderBox?.localToGlobal(Offset.zero).dy);
     _mouseWheelMoveScrollbar();
+  }
+
+  void _clearQueryResults() {
+    queryResults.clear();
+    globalKeys.clear();
+    _resizeHeight();
   }
 
   void _onReceivedQueryResults(List<WoxQueryResult> results) {
@@ -174,6 +183,9 @@ class WoxLauncherController extends GetxController {
     final finalResults = List<WoxQueryResult>.from(currentQueryResults)..addAll(results);
     finalResults.sort((a, b) => b.score.compareTo(a.score));
     queryResults.assignAll(finalResults);
+    for (var _ in queryResults) {
+      globalKeys.add(GlobalKey());
+    }
 
     //reset active result and preview
     if (currentQueryResults.isEmpty) {
@@ -200,6 +212,10 @@ class WoxLauncherController extends GetxController {
       }
     }
     return false;
+  }
+
+  bool _isResultActiveCursorAtEnd() {
+    return queryBoxTextFieldController.selection.baseOffset == queryBoxTextFieldController.text.length;
   }
 
   // check if item exists in top of list view
@@ -243,9 +259,9 @@ class WoxLauncherController extends GetxController {
       // 2.5-> 3.8
       // 3.0-> 3
 
-      final totalHeightFinal = totalHeight.toDouble() +  (10 / window.devicePixelRatio).ceil();
+      final totalHeightFinal = totalHeight.toDouble() + (10 / window.devicePixelRatio).ceil();
       Logger.instance.info("Resize window height to $totalHeightFinal");
-      windowManager.setSize(Size(800,totalHeightFinal));
+      windowManager.setSize(Size(800, totalHeightFinal));
     } else {
       Logger.instance.info("Resize window height to $totalHeight");
       windowManager.setSize(Size(800, totalHeight.toDouble()));
@@ -347,6 +363,10 @@ class WoxLauncherController extends GetxController {
 
   WoxQueryResult getQueryResultByIndex(int index) {
     return queryResults[index];
+  }
+
+  GlobalKey getQueryResultGlobalKeyByIndex(int index) {
+    return globalKeys[index];
   }
 
   @override
