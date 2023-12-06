@@ -97,7 +97,7 @@ default:
 
 @_build_flutter:
     # flutter
-    cd Wox.UI.Flutter/wox && flutter build {{current_flutter_target}} && cd ..
+    cd Wox.UI.Flutter/wox && flutter clean && flutter build {{current_flutter_target}} && cd ..
     rm -rf Wox/resource/ui/flutter
     mkdir -p Wox/resource/ui/flutter
 
