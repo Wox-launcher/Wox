@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mat/besticon/besticon"
 	"strings"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
 )
 
-var webSearchesSettingKey = "web_searches"
+var webSearchesSettingKey = "webSearches"
 var webSearchesTableColumnTriggerKeywordSettingKey = "Keyword"
 var webSearchesTableColumnTitleSettingKey = "Title"
 var webSearchesTableColumnUrlSettingKey = "Url"
@@ -104,6 +105,44 @@ func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	r.api = initParams.API
 	r.webSearches = r.loadWebSearches(ctx)
 	r.api.Log(ctx, fmt.Sprintf("loaded %d web searches", len(r.webSearches)))
+
+	util.Go(ctx, "parse websearch icons", func() {
+		r.indexIcons(ctx)
+	})
+}
+
+func (r *WebSearchPlugin) indexIcons(ctx context.Context) {
+	for i, search := range r.webSearches {
+		r.webSearches[i].Icon = r.indexWebSearchIcon(ctx, search)
+	}
+}
+
+func (r *WebSearchPlugin) indexWebSearchIcon(ctx context.Context, search webSearch) plugin.WoxImage {
+	iconFinder := besticon.New().NewIconFinder()
+	icons, err := iconFinder.FetchIcons(search.Url)
+	if err != nil {
+		r.api.Log(ctx, fmt.Sprintf("failed to fetch icons for %s: %s", search.Url, err.Error()))
+		return websearchIcon
+	}
+
+	if len(icons) == 0 {
+		r.api.Log(ctx, fmt.Sprintf("no icons found for %s", search.Url))
+		return websearchIcon
+	}
+
+	image, imageEr := icons[0].Image()
+	if imageEr != nil {
+		r.api.Log(ctx, fmt.Sprintf("failed to get image for %s: %s", search.Url, imageEr.Error()))
+		return websearchIcon
+	}
+
+	woxImage, woxImageErr := plugin.NewWoxImage(*image)
+	if woxImageErr != nil {
+		r.api.Log(ctx, fmt.Sprintf("failed to convert image for %s: %s", search.Url, woxImageErr.Error()))
+		return websearchIcon
+	}
+
+	return woxImage
 }
 
 func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []webSearch) {
@@ -133,10 +172,6 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 	for _, search := range r.webSearches {
 		if strings.ToLower(search.Keyword) == strings.ToLower(triggerKeyword) {
 			var icon = websearchIcon
-			if search.Icon.ImageData != "" {
-				icon = search.Icon
-			}
-
 			results = append(results, plugin.QueryResult{
 				Title:       strings.ReplaceAll(search.Title, "{query}", otherQuery),
 				Score:       100,
