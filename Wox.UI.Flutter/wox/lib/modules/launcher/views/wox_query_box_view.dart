@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:from_css_color/from_css_color.dart';
@@ -7,6 +5,8 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/entity/wox_query.dart';
+import 'package:wox/enums/wox_direction_enum.dart';
+import 'package:wox/enums/wox_event_device_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
 
 import '../wox_launcher_controller.dart';
@@ -26,13 +26,13 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                       controller.hideApp();
                       break;
                     case LogicalKeyboardKey.arrowDown:
-                      controller.arrowDown();
+                      controller.changeScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
                       break;
                     case LogicalKeyboardKey.arrowUp:
-                      controller.arrowUp();
+                      controller.changeScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
                       break;
                     case LogicalKeyboardKey.enter:
-                      controller.handleResultItemAction();
+                      controller.executeResultAction();
                       break;
                     case LogicalKeyboardKey.keyJ:
                       {
