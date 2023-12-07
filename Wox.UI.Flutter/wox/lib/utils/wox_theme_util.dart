@@ -17,22 +17,22 @@ class WoxThemeUtil {
 
   WoxTheme get currentTheme => _currentTheme;
 
-  double getWoxQueryBoxHeight() {
+  double getQueryBoxHeight() {
     return QUERY_BOX_BASE_HEIGHT + currentTheme.appPaddingTop + currentTheme.appPaddingBottom;
   }
 
-  double getWoxResultItemHeight() {
+  double getResultItemHeight() {
     return RESULT_ITEM_BASE_HEIGHT + currentTheme.resultItemPaddingTop + currentTheme.resultItemPaddingBottom;
   }
 
-  double getResultHeightByCount(int count) {
+  double getResultListViewHeightByCount(int count) {
     if (count == 0) {
       return 0;
     }
-    return getWoxResultItemHeight() * count;
+    return getResultItemHeight() * count;
   }
 
-  double getResultListViewMaxHeight() {
-    return getResultHeightByCount(MAX_LIST_VIEW_ITEM_COUNT) + currentTheme.resultContainerPaddingTop + currentTheme.resultContainerPaddingBottom;
+  double getResultContainerMaxHeight() {
+    return getResultListViewHeightByCount(MAX_LIST_VIEW_ITEM_COUNT) + currentTheme.resultContainerPaddingTop + currentTheme.resultContainerPaddingBottom;
   }
 }

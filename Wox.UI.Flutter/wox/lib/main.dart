@@ -56,7 +56,7 @@ Future<void> initWindow() async {
   await Window.initialize();
 
   WindowOptions windowOptions = WindowOptions(
-    size: Size(800, WoxThemeUtil.instance.getWoxQueryBoxHeight()),
+    size: Size(800, WoxThemeUtil.instance.getQueryBoxHeight()),
     center: true,
     skipTaskbar: true,
     alwaysOnTop: true,

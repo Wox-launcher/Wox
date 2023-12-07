@@ -25,7 +25,9 @@ import 'package:wox/utils/wox_websocket_msg_util.dart';
 class WoxLauncherController extends GetxController implements WoxLauncherInterface {
   final query = WoxChangeQuery.empty().obs;
   final queryBoxFocusNode = FocusNode();
+  final resultActionFocusNode = FocusNode();
   final queryBoxTextFieldController = TextEditingController();
+  final resultActionTextFieldController = TextEditingController();
   final scrollController = ScrollController(initialScrollOffset: 0.0);
   final currentPreview = WoxPreview.empty().obs;
   final WoxTheme woxTheme = WoxThemeUtil.instance.currentTheme.obs();
@@ -34,6 +36,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   final isShowActionPanel = false.obs;
   final isShowPreviewPanel = false.obs;
   final queryResults = <WoxQueryResult>[].obs;
+  final resultActions = <WoxResultAction>[].obs;
   final resultItemGlobalKeys = <GlobalKey>[];
   var _clearQueryResultsTimer = Timer(const Duration(milliseconds: 200), () => {});
 
@@ -52,7 +55,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     if (params.selectAll) {
       _selectQueryBoxAllText();
     }
-    if (params.position.type == PositionTypeEnum.POSITION_TYPE_MOUSE_SCREEN.code) {
+    if (params.position.type == WoxPositionTypeEnum.POSITION_TYPE_MOUSE_SCREEN.code) {
       await windowManager.setPosition(Offset(params.position.x.toDouble(), params.position.y.toDouble()));
     }
     await windowManager.show();
@@ -66,7 +69,19 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   @override
-  Future<void> toggleActionPanel() async {}
+  Future<void> toggleActionPanel() async {
+    if (queryResults.isEmpty) {
+      return;
+    }
+    if (isShowActionPanel.value) {
+      isShowActionPanel.value = false;
+      queryBoxFocusNode.requestFocus();
+    } else {
+      isShowActionPanel.value = true;
+      resultActionFocusNode.requestFocus();
+    }
+    _resizeHeight();
+  }
 
   @override
   Future<void> executeResultAction() async {
@@ -131,16 +146,16 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
           scrollController.jumpTo(0);
         } else {
           if (_isResultItemAtBottom(activeResultIndex.value - 1)) {
-            scrollController.jumpTo(scrollController.offset.ceil() + WoxThemeUtil.instance.getResultHeightByCount(1));
+            scrollController.jumpTo(scrollController.offset.ceil() + WoxThemeUtil.instance.getResultListViewHeightByCount(1));
           }
         }
       }
       if (direction == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
         if (activeResultIndex.value == queryResults.length - 1) {
-          scrollController.jumpTo(WoxThemeUtil.instance.getResultHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
+          scrollController.jumpTo(WoxThemeUtil.instance.getResultListViewHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
         } else {
           if (_isResultItemAtTop(activeResultIndex.value + 1)) {
-            scrollController.jumpTo(scrollController.offset.ceil() - WoxThemeUtil.instance.getResultHeightByCount(1));
+            scrollController.jumpTo(scrollController.offset.ceil() - WoxThemeUtil.instance.getResultListViewHeightByCount(1));
           }
         }
       }
@@ -151,16 +166,16 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
           scrollController.jumpTo(0);
         } else {
           if (!_isResultItemAtBottom(queryResults.length - 1)) {
-            scrollController.jumpTo(scrollController.offset.ceil() + WoxThemeUtil.instance.getResultHeightByCount(1));
+            scrollController.jumpTo(scrollController.offset.ceil() + WoxThemeUtil.instance.getResultListViewHeightByCount(1));
           }
         }
       }
       if (direction == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
         if (activeResultIndex.value == queryResults.length - 1) {
-          scrollController.jumpTo(WoxThemeUtil.instance.getResultHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
+          scrollController.jumpTo(WoxThemeUtil.instance.getResultListViewHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
         } else {
           if (!_isResultItemAtTop(0)) {
-            scrollController.jumpTo(scrollController.offset.ceil() - WoxThemeUtil.instance.getResultHeightByCount(1));
+            scrollController.jumpTo(scrollController.offset.ceil() - WoxThemeUtil.instance.getResultListViewHeightByCount(1));
           }
         }
       }
@@ -193,7 +208,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   bool _isResultItemAtBottom(int index) {
     RenderBox? renderBox = resultItemGlobalKeys[index].currentContext?.findRenderObject() as RenderBox?;
     if (renderBox?.localToGlobal(Offset.zero).dy.ceil() ==
-        WoxThemeUtil.instance.getWoxQueryBoxHeight() + WoxThemeUtil.instance.getResultHeightByCount(MAX_LIST_VIEW_ITEM_COUNT - 1)) {
+        WoxThemeUtil.instance.getQueryBoxHeight() + WoxThemeUtil.instance.getResultListViewHeightByCount(MAX_LIST_VIEW_ITEM_COUNT - 1)) {
       return true;
     }
     return false;
@@ -204,7 +219,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       return false;
     }
     RenderBox? renderBox = resultItemGlobalKeys[index].currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox?.localToGlobal(Offset.zero).dy.ceil() == WoxThemeUtil.instance.getWoxQueryBoxHeight()) {
+    if (renderBox?.localToGlobal(Offset.zero).dy.ceil() == WoxThemeUtil.instance.getQueryBoxHeight()) {
       return true;
     }
     return false;
@@ -258,12 +273,12 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   void _resizeHeight() {
-    double resultHeight = WoxThemeUtil.instance.getResultHeightByCount(queryResults.length > 10 ? 10 : queryResults.length);
+    double resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(queryResults.length > 10 ? 10 : queryResults.length);
     if (isShowActionPanel.value || isShowPreviewPanel.value) {
-      resultHeight = WoxThemeUtil.instance.getResultListViewMaxHeight();
+      resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(10);
     }
     final totalHeight =
-        WoxThemeUtil.instance.getWoxQueryBoxHeight() + resultHeight + (queryResults.isNotEmpty ? woxTheme.resultContainerPaddingTop + woxTheme.resultContainerPaddingBottom : 0);
+        WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight + (queryResults.isNotEmpty ? woxTheme.resultContainerPaddingTop + woxTheme.resultContainerPaddingBottom : 0);
     if (Platform.isWindows) {
       // on windows, if I set screen ratio to 2.0, then the window height should add more 4.5 pixel, otherwise it will show render error
       // still don't know why. here is the test result: ratio -> additional window height

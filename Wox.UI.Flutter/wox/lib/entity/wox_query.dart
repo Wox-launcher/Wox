@@ -85,7 +85,7 @@ class WoxQueryResult {
   late WoxPreview preview;
   late int score;
   late String contextData;
-  late List<Actions> actions;
+  late List<WoxResultAction> actions;
   late int refreshInterval;
 
   WoxQueryResult(
@@ -110,9 +110,9 @@ class WoxQueryResult {
     score = json['Score'];
     contextData = json['ContextData'];
     if (json['Actions'] != null) {
-      actions = <Actions>[];
+      actions = <WoxResultAction>[];
       json['Actions'].forEach((v) {
-        actions.add(Actions.fromJson(v));
+        actions.add(WoxResultAction.fromJson(v));
       });
     }
     refreshInterval = json['RefreshInterval'];
@@ -134,16 +134,16 @@ class WoxQueryResult {
   }
 }
 
-class Actions {
+class WoxResultAction {
   late String id;
   late String name;
   late WoxImage icon;
   late bool isDefault;
   late bool preventHideAfterAction;
 
-  Actions({required this.id, required this.name, required this.icon, required this.isDefault, required this.preventHideAfterAction});
+  WoxResultAction({required this.id, required this.name, required this.icon, required this.isDefault, required this.preventHideAfterAction});
 
-  Actions.fromJson(Map<String, dynamic> json) {
+  WoxResultAction.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
     name = json['Name'];
     icon = (json['Icon'] != null ? WoxImage.fromJson(json['Icon']) : null)!;
@@ -163,7 +163,7 @@ class Actions {
 }
 
 class Position {
-  late PositionType type;
+  late WoxPositionType type;
   late int x;
   late int y;
 

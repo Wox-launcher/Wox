@@ -1,7 +1,9 @@
 import 'dart:convert';
 
+import 'package:wox/enums/wox_preview_type_enum.dart';
+
 class WoxPreview {
-  late String previewType;
+  late WoxPreviewType previewType;
   late String previewData;
   late Map<String, String> previewProperties;
 
