@@ -1,5 +1,6 @@
 import 'dart:core';
 
+import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/utils/wox_http_util.dart';
 
@@ -12,5 +13,9 @@ class WoxApi {
 
   Future<WoxTheme> loadTheme() async {
     return await WoxHttpUtil.instance.postData<WoxTheme>("/theme", null);
+  }
+
+  Future<WoxSetting> loadSetting() async {
+    return await WoxHttpUtil.instance.postData<WoxSetting>("/setting/wox", null);
   }
 }

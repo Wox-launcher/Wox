@@ -13,9 +13,10 @@ import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_websocket_msg.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_event_device_type_enum.dart';
+import 'package:wox/enums/wox_msg_method_enum.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
-import 'package:wox/enums/wox_web_socket_msg_type_enum.dart';
+import 'package:wox/enums/wox_msg_type_enum.dart';
 import 'package:wox/interfaces/wox_launcher_interface.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/log.dart';
@@ -90,7 +91,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       activeActionIndex.value = defaultActionIndex;
       final result = queryResults[activeResultIndex.value];
       final action = result.actions[activeActionIndex.value];
-      final msg = WoxWebsocketMsg(id: const UuidV4().generate(), method: "Action", type: WoxWebsocketMsgTypeEnum.WOX_WEBSOCKET_MSG_TYPE_REQUEST.code, data: {
+      final msg = WoxWebsocketMsg(id: const UuidV4().generate(), type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code, method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code, data: {
         "resultId": result.id,
         "actionId": action.id,
       });
@@ -124,7 +125,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       },
     );
 
-    final msg = WoxWebsocketMsg(id: const UuidV4().generate(), type: WoxWebsocketMsgTypeEnum.WOX_WEBSOCKET_MSG_TYPE_REQUEST.code, method: "Query", data: {
+    final msg = WoxWebsocketMsg(id: const UuidV4().generate(), type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code, method: WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code, data: {
       "queryId": query.queryId,
       "queryType": query.queryType,
       "queryText": query.queryText,

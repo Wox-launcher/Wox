@@ -12,6 +12,7 @@ import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/heartbeat_checker.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 
@@ -45,6 +46,7 @@ Future<void> initialServices(List<String> arguments) async {
   await Logger.instance.initLogger();
   await initArgs(arguments);
   await WoxThemeUtil.instance.loadTheme();
+  await WoxSettingUtil.instance.loadSetting();
   var controller = WoxLauncherController();
   await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://localhost:${Env.serverPort}/ws"), onMessageReceived: controller.handleWebSocketMessage);
   HeartbeatChecker().startChecking();
@@ -56,7 +58,7 @@ Future<void> initWindow() async {
   await Window.initialize();
 
   WindowOptions windowOptions = WindowOptions(
-    size: Size(800, WoxThemeUtil.instance.getQueryBoxHeight()),
+    size: Size(WoxSettingUtil.instance.currentSetting.appWidth.toDouble(), WoxThemeUtil.instance.getQueryBoxHeight()),
     center: true,
     skipTaskbar: true,
     alwaysOnTop: true,

@@ -28,6 +28,7 @@
   "QueryBoxFontColor": "black",
   "QueryBoxBackgroundColor": "rgba(255,255,255,0.5)",
   "QueryBoxBorderRadius": 8,
+  "QueryBoxCursorColor": "black",
   "ActionContainerBackgroundColor": "rgba(236, 240, 240, 1)",
   "ActionContainerHeaderFontColor": "#454545",
   "ActionContainerPaddingLeft": 14,
