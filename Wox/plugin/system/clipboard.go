@@ -9,6 +9,7 @@ import (
 	"github.com/cdfmlr/ellipsis"
 	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
+	"image"
 	"image/png"
 	"os"
 	"slices"
@@ -34,7 +35,8 @@ var primaryActionValuePaste = "paste"
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ClipboardPlugin{
-		maxHistoryCount: 5000,
+		maxHistoryCount:   5000,
+		historyImageCache: util.NewHashMap[string, clipboardImageCache](),
 	})
 }
 
@@ -118,10 +120,16 @@ func (c *ClipboardHistory) UnmarshalJSON(data []byte) error {
 
 }
 
+type clipboardImageCache struct {
+	preview plugin.WoxImage
+	icon    plugin.WoxImage
+}
+
 type ClipboardPlugin struct {
-	api             plugin.API
-	history         []ClipboardHistory
-	maxHistoryCount int
+	api               plugin.API
+	history           []ClipboardHistory
+	historyImageCache *util.HashMap[string, clipboardImageCache]
+	maxHistoryCount   int
 }
 
 func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
@@ -237,20 +245,34 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 			if strings.TrimSpace(textData.Text) == "" {
 				return
 			}
-			// if last history is text and current changed text is same with last one, ignore it
-			if len(c.history) > 0 {
-				lastHistory := c.history[len(c.history)-1]
-				if lastHistory.Data.GetType() == clipboard.ClipboardTypeText {
+
+			if iconImage, iconErr := c.getActiveWindowIcon(ctx); iconErr == nil {
+				icon = iconImage
+			}
+		}
+
+		// if last history is same with current changed one, ignore it
+		if len(c.history) > 0 {
+			lastHistory := c.history[len(c.history)-1]
+			if lastHistory.Data.GetType() == data.GetType() {
+				if data.GetType() == clipboard.ClipboardTypeText {
+					changedTextData := data.(*clipboard.TextData)
 					lastTextData := lastHistory.Data.(*clipboard.TextData)
-					if lastTextData.Text == textData.Text {
+					if lastTextData.Text == changedTextData.Text {
 						c.history[len(c.history)-1].Timestamp = util.GetSystemTimestamp()
 						return
 					}
 				}
-			}
 
-			if iconImage, iconErr := c.getActiveWindowIcon(ctx); iconErr == nil {
-				icon = iconImage
+				if data.GetType() == clipboard.ClipboardTypeImage {
+					changedImageData := data.(*clipboard.ImageData)
+					lastImageData := lastHistory.Data.(*clipboard.ImageData)
+					// if image size is same, ignore it
+					if lastImageData.Image.Bounds().Eq(changedImageData.Image.Bounds()) {
+						c.history[len(c.history)-1].Timestamp = util.GetSystemTimestamp()
+						return
+					}
+				}
 			}
 		}
 
@@ -284,7 +306,9 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 		var count = 0
 		for i := len(c.history) - 1; i >= 0; i-- {
 			history := c.history[i]
+			startTimestamp := util.GetSystemTimestamp()
 			results = append(results, c.convertClipboardData(ctx, history))
+			c.api.Log(ctx, fmt.Sprintf("convert clipboard data cost %d ms", util.GetSystemTimestamp()-startTimestamp))
 			count++
 
 			if count >= 50 {
@@ -406,23 +430,37 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 
 	if history.Data.GetType() == clipboard.ClipboardTypeImage {
 		historyData := history.Data.(*clipboard.ImageData)
-		compressedPreviewImg := imaging.Resize(historyData.Image, 400, 0, imaging.Lanczos)
-		compressedIconImg := imaging.Resize(historyData.Image, 40, 0, imaging.Lanczos)
-		previewImage, err := plugin.NewWoxImage(compressedPreviewImg)
-		if err != nil {
-			previewImage = c.getDefaultTextIcon()
-		}
-		iconImage, iconErr := plugin.NewWoxImage(compressedIconImg)
-		if iconErr != nil {
-			iconImage = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAACi0lEQVR4nO3U/0sTcRzH8f0calFmmvltc04jixLcyvwhKsgstv6hfllQWhSSVGLfZOlEHSJhRBRBy775Uz8Ytem8brvb5mat7eYtmnvFHUrFduFtt7sb3Bue3E8b9/jc3Vun00YbbbRR5VwIotdGI2CjASWz0vDbaPSIBmz8ECqJFA1QwU3j7zSATXsC4A/hUiQJL0OBZZf5qz2SLJ1XiLt5pHxZXY4mSwPAnXgugIehSgOwxhI5AWssURqAkn8CdoFvwL6FD1kVgE0Ed+IsS/BXxbfQiY8sOl7E0PEyhpMLqaKgbcUAWCmg0/0DLa7wP3W9Z9QPsFIZ/sSNk6GcHX2TUC/ASmVw5Pl3NE+E/ptFYoROCoDVn8Ghp6swjAe3lGUunvUfpxZSsLjjMLvjOP3pp3yA8+Q62mcj0I/RojK/3kBQQPc8wx/AwSeraJ+N4sDjKLrnZdhC54h1tM1E0DhK51WnO47jHxgcfvYtC7B/JoKud0zxAL2+NExTYTQ4qIJqnV4RBLRNr+DYW0Z6wNmlNL9V6kcCkmRyhQUBrS4OkZAOcMbzC3pnEHUPA5JmnAwLAkxTYcEVLBrAPfba+/6iZJwICQJauBU8lygcsPcuiWJmcAYFAc3jIVg2t1e+gJphEsVO7wwKAgxjQZhfxfMHVA99hRw1jdKCAP2jPwjRgD13CMhVgyMgCGhy0PzrJBqw+xYBOavn1qwAoHGEEg+oHFyG3NU9CEgH2HXTByXad4+UBrBzwAelqh0mCwfsuLEEJasZIgsDbL++CKWr5tZsvoCKa4tQQ1W3ifwA5f1ef3m/F2qoapCIiQZsu/K5p6zvi7+szwMlq7jqTVcO+C6KBmijjTba6OSY31QFs+h9sYumAAAAAElFTkSuQmCC`)
+
+		var previewWoxImage, iconWoxImage plugin.WoxImage
+		if v, ok := c.historyImageCache.Load(history.Id); ok {
+			previewWoxImage = v.preview
+			iconWoxImage = v.icon
+		} else {
+			compressedPreviewImg := imaging.Resize(historyData.Image, 400, 0, imaging.NearestNeighbor)
+			compressedIconImg := imaging.Resize(historyData.Image, 40, 0, imaging.NearestNeighbor)
+			previewImage, err := plugin.NewWoxImage(compressedPreviewImg)
+			if err != nil {
+				previewImage = c.getDefaultTextIcon()
+			}
+			iconImage, iconErr := plugin.NewWoxImage(compressedIconImg)
+			if iconErr != nil {
+				iconImage = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAACi0lEQVR4nO3U/0sTcRzH8f0calFmmvltc04jixLcyvwhKsgstv6hfllQWhSSVGLfZOlEHSJhRBRBy775Uz8Ytem8brvb5mat7eYtmnvFHUrFduFtt7sb3Bue3E8b9/jc3Vun00YbbbRR5VwIotdGI2CjASWz0vDbaPSIBmz8ECqJFA1QwU3j7zSATXsC4A/hUiQJL0OBZZf5qz2SLJ1XiLt5pHxZXY4mSwPAnXgugIehSgOwxhI5AWssURqAkn8CdoFvwL6FD1kVgE0Ed+IsS/BXxbfQiY8sOl7E0PEyhpMLqaKgbcUAWCmg0/0DLa7wP3W9Z9QPsFIZ/sSNk6GcHX2TUC/ASmVw5Pl3NE+E/ptFYoROCoDVn8Ghp6swjAe3lGUunvUfpxZSsLjjMLvjOP3pp3yA8+Q62mcj0I/RojK/3kBQQPc8wx/AwSeraJ+N4sDjKLrnZdhC54h1tM1E0DhK51WnO47jHxgcfvYtC7B/JoKud0zxAL2+NExTYTQ4qIJqnV4RBLRNr+DYW0Z6wNmlNL9V6kcCkmRyhQUBrS4OkZAOcMbzC3pnEHUPA5JmnAwLAkxTYcEVLBrAPfba+/6iZJwICQJauBU8lygcsPcuiWJmcAYFAc3jIVg2t1e+gJphEsVO7wwKAgxjQZhfxfMHVA99hRw1jdKCAP2jPwjRgD13CMhVgyMgCGhy0PzrJBqw+xYBOavn1qwAoHGEEg+oHFyG3NU9CEgH2HXTByXad4+UBrBzwAelqh0mCwfsuLEEJasZIgsDbL++CKWr5tZsvoCKa4tQQ1W3ifwA5f1ef3m/F2qoapCIiQZsu/K5p6zvi7+szwMlq7jqTVcO+C6KBmijjTba6OSY31QFs+h9sYumAAAAAElFTkSuQmCC`)
+			}
+
+			previewWoxImage = previewImage
+			iconWoxImage = iconImage
+			c.historyImageCache.Store(history.Id, clipboardImageCache{
+				preview: previewWoxImage,
+				icon:    iconWoxImage,
+			})
 		}
 
 		return plugin.QueryResult{
-			Title: fmt.Sprintf("Image (%d*%d)", historyData.Image.Bounds().Dx(), historyData.Image.Bounds().Dy()),
-			Icon:  iconImage,
+			Title: fmt.Sprintf("Image (%d*%d) (%s)", historyData.Image.Bounds().Dx(), historyData.Image.Bounds().Dy(), c.getImageSize(ctx, historyData.Image)),
+			Icon:  iconWoxImage,
 			Preview: plugin.WoxPreview{
 				PreviewType: plugin.WoxPreviewTypeImage,
-				PreviewData: previewImage.String(),
+				PreviewData: previewWoxImage.String(),
 				PreviewProperties: map[string]string{
 					"i18n:plugin_clipboard_copy_date":    util.FormatTimestamp(history.Timestamp),
 					"i18n:plugin_clipboard_image_width":  fmt.Sprintf("%d", historyData.Image.Bounds().Dx()),
@@ -444,6 +482,12 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 	return plugin.QueryResult{
 		Title: "ERR: Unknown history data type",
 	}
+}
+
+func (c *ClipboardPlugin) getImageSize(ctx context.Context, image image.Image) string {
+	bounds := image.Bounds()
+	sizeMb := float64(bounds.Dx()*bounds.Dy()) * 24 / 8 / 1024 / 1024
+	return fmt.Sprintf("%.2f MB", sizeMb)
 }
 
 func (c *ClipboardPlugin) moveHistoryToTop(ctx context.Context, id string) {
@@ -527,6 +571,7 @@ func (c *ClipboardPlugin) loadHistory(ctx context.Context) {
 		return
 	}
 
+	startTimestamp := util.GetSystemTimestamp()
 	var history []ClipboardHistory
 	unmarshalErr := json.Unmarshal([]byte(historyJson), &history)
 	if unmarshalErr != nil {
@@ -538,7 +583,7 @@ func (c *ClipboardPlugin) loadHistory(ctx context.Context) {
 		return int(i.Timestamp - j.Timestamp)
 	})
 
-	c.api.Log(ctx, fmt.Sprintf("load clipboard history, count=%d", len(history)))
+	c.api.Log(ctx, fmt.Sprintf("load clipboard history, count=%d, cost=%dms", len(history), util.GetSystemTimestamp()-startTimestamp))
 	c.history = history
 }
 

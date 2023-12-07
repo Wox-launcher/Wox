@@ -182,7 +182,7 @@ func ConvertIcon(ctx context.Context, image WoxImage, pluginDirectory string) (n
 	newImage = convertRelativePathToAbsolutePath(ctx, image, pluginDirectory)
 	newImage = cropPngTransparentPaddings(ctx, newImage)
 	newImage = resizeImage(ctx, newImage, 40)
-	newImage = convertLocalImageToUrl(ctx, newImage)
+	newImage = ConvertLocalImageToUrl(ctx, newImage)
 	return
 }
 
@@ -285,7 +285,7 @@ func convertRelativePathToAbsolutePath(ctx context.Context, image WoxImage, plug
 	return newImage
 }
 
-func convertLocalImageToUrl(ctx context.Context, image WoxImage) (newImage WoxImage) {
+func ConvertLocalImageToUrl(ctx context.Context, image WoxImage) (newImage WoxImage) {
 	newImage = image
 
 	if image.ImageType == WoxImageTypeAbsolutePath {
