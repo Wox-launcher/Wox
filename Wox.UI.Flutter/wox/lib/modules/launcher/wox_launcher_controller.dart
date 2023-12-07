@@ -120,10 +120,11 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   @override
   void changeScrollPosition(WoxEventDeviceType deviceType, WoxDirection direction) {
+    _resetActiveResultIndex(direction);
     if (queryResults.length < MAX_LIST_VIEW_ITEM_COUNT) {
+      queryResults.refresh();
       return;
     }
-    _resetActiveResultIndex(direction);
     if (deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code) {
       if (direction == WoxDirectionEnum.WOX_DIRECTION_DOWN.code) {
         if (activeResultIndex.value == 0) {
