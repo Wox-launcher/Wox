@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/mat/besticon/besticon"
+	"io"
 	"strings"
 	"wox/plugin"
 	"wox/setting/definition"
@@ -118,7 +119,8 @@ func (r *WebSearchPlugin) indexIcons(ctx context.Context) {
 }
 
 func (r *WebSearchPlugin) indexWebSearchIcon(ctx context.Context, search webSearch) plugin.WoxImage {
-	iconFinder := besticon.New().NewIconFinder()
+	option := besticon.WithLogger(besticon.NewDefaultLogger(io.Discard))
+	iconFinder := besticon.New(option).NewIconFinder()
 	icons, err := iconFinder.FetchIcons(search.Url)
 	if err != nil {
 		r.api.Log(ctx, fmt.Sprintf("failed to fetch icons for %s: %s", search.Url, err.Error()))
@@ -171,11 +173,10 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 
 	for _, search := range r.webSearches {
 		if strings.ToLower(search.Keyword) == strings.ToLower(triggerKeyword) {
-			var icon = websearchIcon
 			results = append(results, plugin.QueryResult{
 				Title:       strings.ReplaceAll(search.Title, "{query}", otherQuery),
 				Score:       100,
-				Icon:        icon,
+				Icon:        search.Icon,
 				ContextData: search.Url,
 				Actions: []plugin.QueryResultAction{
 					{

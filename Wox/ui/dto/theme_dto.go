@@ -34,6 +34,7 @@ type Theme struct {
 	QueryBoxFontColor               string
 	QueryBoxBackgroundColor         string
 	QueryBoxBorderRadius            int
+	QueryBoxCursorColor             string
 	ActionContainerBackgroundColor  string
 	ActionContainerHeaderFontColor  string
 	ActionContainerPaddingLeft      int

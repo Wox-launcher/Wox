@@ -28,6 +28,7 @@ class WoxTheme {
   late String queryBoxFontColor;
   late String queryBoxBackgroundColor;
   late int queryBoxBorderRadius;
+  late String queryBoxCursorColor;
   late String actionContainerBackgroundColor;
   late String actionContainerHeaderFontColor;
   late int actionContainerPaddingLeft;
@@ -75,6 +76,7 @@ class WoxTheme {
       queryBoxFontColor,
       queryBoxBackgroundColor,
       queryBoxBorderRadius,
+      queryBoxCursorColor,
       actionContainerBackgroundColor,
       actionContainerHeaderFontColor,
       actionContainerPaddingLeft,
@@ -122,6 +124,7 @@ class WoxTheme {
     queryBoxFontColor = json['QueryBoxFontColor'];
     queryBoxBackgroundColor = json['QueryBoxBackgroundColor'];
     queryBoxBorderRadius = json['QueryBoxBorderRadius'];
+    queryBoxCursorColor = json['QueryBoxCursorColor'];
     actionContainerBackgroundColor = json['ActionContainerBackgroundColor'];
     actionContainerHeaderFontColor = json['ActionContainerHeaderFontColor'];
     actionContainerPaddingLeft = json['ActionContainerPaddingLeft'];
@@ -171,6 +174,7 @@ class WoxTheme {
     data['QueryBoxFontColor'] = queryBoxFontColor;
     data['QueryBoxBackgroundColor'] = queryBoxBackgroundColor;
     data['QueryBoxBorderRadius'] = queryBoxBorderRadius;
+    data['QueryBoxCursorColor'] = queryBoxCursorColor;
     data['ActionContainerBackgroundColor'] = actionContainerBackgroundColor;
     data['ActionContainerHeaderFontColor'] = actionContainerHeaderFontColor;
     data['ActionContainerPaddingLeft'] = actionContainerPaddingLeft;

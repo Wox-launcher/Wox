@@ -17,7 +17,7 @@ class WoxImageView extends StatelessWidget {
     if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_URL.code) {
       return Image.network(woxImage.imageData, width: width, height: height);
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code) {
-      SvgPicture.string(woxImage.imageData, width: width, height: height);
+      return SvgPicture.string(woxImage.imageData, width: width, height: height);
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code) {
       return Image.memory(base64Decode(woxImage.imageData), width: width, height: height);
     }
