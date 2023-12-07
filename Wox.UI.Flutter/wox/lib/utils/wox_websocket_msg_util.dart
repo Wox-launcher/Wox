@@ -13,17 +13,11 @@ class WoxWebsocketMsgUtil {
 
   WebSocketChannel? _channel;
 
-  bool connecting = false;
-
   late Uri uri;
 
   late Function onMessageReceived;
 
   int connectionAttempts = 1;
-
-  bool _isConnected() {
-    return _channel != null && _channel!.closeCode == null;
-  }
 
   void _connect() {
     _channel?.sink.close();
@@ -35,16 +29,12 @@ class WoxWebsocketMsgUtil {
         onMessageReceived(event);
       },
       onDone: () {
-        if (!connecting && !_isConnected()) {
-          _reconnect();
-        }
+        _reconnect();
       },
     );
-    connecting = false;
   }
 
   void _reconnect() {
-    connecting = true;
     Future.delayed(Duration(milliseconds: 200 * (connectionAttempts > 5 ? 5 : connectionAttempts)), () {
       Logger.instance.info("Attempting to reconnect to WebSocket... $connectionAttempts");
       connectionAttempts++;
