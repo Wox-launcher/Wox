@@ -51,7 +51,7 @@ class WoxResultItemView extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
               Text(
                 style: TextStyle(
-                  color: fromCssColor(woxTheme.resultItemTitleColor),
+                  color: fromCssColor(isActive ? woxTheme.resultItemActiveTitleColor : woxTheme.resultItemTitleColor),
                 ),
                 title,
                 maxLines: 1,
@@ -63,7 +63,7 @@ class WoxResultItemView extends StatelessWidget {
               if (subTitle.isNotEmpty)
                 Text(
                   style: TextStyle(
-                    color: fromCssColor(woxTheme.resultItemSubTitleColor),
+                    color: fromCssColor(isActive ? woxTheme.resultItemActiveSubTitleColor : woxTheme.resultItemSubTitleColor),
                   ),
                   subTitle,
                   maxLines: 1,
