@@ -161,6 +161,7 @@ type QueryResultCache struct {
 	Refresh        func(RefreshableResult) RefreshableResult
 	PluginInstance *Instance
 	Query          Query
+	Preview        WoxPreview
 	Actions        *util.HashMap[string, func(actionContext ActionContext)]
 }
 

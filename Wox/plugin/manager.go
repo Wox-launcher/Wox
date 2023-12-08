@@ -401,6 +401,16 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		}
 	}
 
+	// store preview for ui invoke later
+	// because preview may contain some heavy data (E.g. image or large text), we will store preview in cache and only send preview to ui when user select the result
+	if result.Preview.PreviewType != "" && result.Preview.PreviewType != WoxPreviewTypeRemote {
+		resultCache.Preview = result.Preview
+		result.Preview = WoxPreview{
+			PreviewType: WoxPreviewTypeRemote,
+			PreviewData: fmt.Sprintf("/preview?id=%s", result.Id),
+		}
+	}
+
 	if result.RefreshInterval > 0 && result.OnRefresh != nil {
 		newInterval := int(math.Floor(float64(result.RefreshInterval)/100) * 100)
 		if result.RefreshInterval != newInterval {
@@ -663,6 +673,16 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, resultId string, refreshab
 	newResult = m.PolishRefreshableResult(ctx, resultCache.PluginInstance, newResult)
 
 	return newResult, nil
+}
+
+func (m *Manager) GetResultPreview(ctx context.Context, resultId string) (WoxPreview, error) {
+	resultCache, found := m.resultCache.Load(resultId)
+	if !found {
+		logger.Error(ctx, fmt.Sprintf("result cache not found for result id: %s", resultId))
+		return WoxPreview{}, errors.New("result cache not found")
+	}
+
+	return resultCache.Preview, nil
 }
 
 func (m *Manager) ReplaceQueryVariable(ctx context.Context, query string) string {

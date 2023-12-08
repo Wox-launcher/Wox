@@ -59,7 +59,12 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                                 },
                               )))),
                 ),
-              if (controller.isShowPreviewPanel.value) Expanded(child: WoxPreviewView(woxPreview: controller.currentPreview.value)),
+              if (controller.isShowPreviewPanel.value)
+                Expanded(
+                    child: WoxPreviewView(
+                  woxPreview: controller.currentPreview.value,
+                  woxTheme: controller.woxTheme,
+                )),
             ],
           ),
           if (controller.isShowActionPanel.value)

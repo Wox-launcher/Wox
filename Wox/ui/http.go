@@ -140,6 +140,22 @@ func serveAndWait(ctx context.Context, port int) {
 		http.ServeFile(w, r, imagePath)
 	})
 
+	mux.HandleFunc("/preview", func(w http.ResponseWriter, r *http.Request) {
+		id := r.URL.Query().Get("id")
+		if id == "" {
+			writeErrorResponse(w, "id is empty")
+			return
+		}
+
+		preview, err := plugin.GetPluginManager().GetResultPreview(util.NewTraceContext(), id)
+		if err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+
+		writeSuccessResponse(w, preview)
+	})
+
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		m.HandleRequest(w, r)
 	})
