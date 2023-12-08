@@ -38,11 +38,11 @@ class WoxPreviewView extends StatelessWidget {
     if (woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MARKDOWN.code) {
       contentWidget = Markdown(data: woxPreview.previewData, padding: EdgeInsets.zero);
     } else if (woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TEXT.code) {
-      contentWidget = Text(woxPreview.previewData, style: TextStyle(color: fromCssColor(woxTheme.previewFontColor)));
+      contentWidget = SelectableText(woxPreview.previewData, style: TextStyle(color: fromCssColor(woxTheme.previewFontColor)));
     } else if (woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_IMAGE.code) {
       final parsedWoxImage = WoxImage.parse(woxPreview.previewData);
       if (parsedWoxImage == null) {
-        contentWidget = Text("Invalid image data: ${woxPreview.previewData}", style: const TextStyle(color: Colors.red));
+        contentWidget = SelectableText("Invalid image data: ${woxPreview.previewData}", style: const TextStyle(color: Colors.red));
       } else {
         contentWidget = Center(
           child: WoxImageView(woxImage: parsedWoxImage),
@@ -53,6 +53,7 @@ class WoxPreviewView extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(10.0),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(child: contentWidget),
           //show previewProperties

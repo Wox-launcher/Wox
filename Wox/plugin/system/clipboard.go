@@ -413,7 +413,7 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 		}
 
 		return plugin.QueryResult{
-			Title: ellipsis.Centering(historyData.Text, 80),
+			Title: strings.TrimSpace(ellipsis.Centering(historyData.Text, 80)),
 			Icon:  history.Icon,
 			Preview: plugin.WoxPreview{
 				PreviewType: plugin.WoxPreviewTypeText,
