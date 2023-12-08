@@ -7,8 +7,8 @@ class WoxSetting {
   late bool hideOnLostFocus;
   late bool showTray;
   late String langCode;
-  late String queryHotkeys;
-  late String queryShortcuts;
+  late List<QueryHotkey> queryHotkeys;
+  late List<QueryShortcut> queryShortcuts;
   late String lastQueryMode;
   late int appWidth;
   late String themeId;
@@ -37,8 +37,18 @@ class WoxSetting {
     hideOnLostFocus = json['HideOnLostFocus'];
     showTray = json['ShowTray'];
     langCode = json['LangCode'];
-    queryHotkeys = json['QueryHotkeys']?.isEmpty ?? '';
-    queryShortcuts = json['QueryShortcuts']?.isEmpty ?? '';
+    if (json['QueryHotkeys'] != null) {
+      queryHotkeys = <QueryHotkey>[];
+      json['QueryHotkeys'].forEach((v) {
+        queryHotkeys!.add(QueryHotkey.fromJson(v));
+      });
+    }
+    if (json['QueryShortcuts'] != null) {
+      queryShortcuts = <QueryShortcut>[];
+      json['QueryShortcuts'].forEach((v) {
+        queryShortcuts!.add(QueryShortcut.fromJson(v));
+      });
+    }
     lastQueryMode = json['LastQueryMode'];
     appWidth = json['AppWidth'];
     themeId = json['ThemeId'];
@@ -59,6 +69,46 @@ class WoxSetting {
     data['LastQueryMode'] = lastQueryMode;
     data['AppWidth'] = appWidth;
     data['ThemeId'] = themeId;
+    return data;
+  }
+}
+
+class QueryHotkey {
+  late String hotkey;
+
+  late String query; // Support plugin.QueryVariable
+
+  QueryHotkey({required this.hotkey, required this.query});
+
+  QueryHotkey.fromJson(Map<String, dynamic> json) {
+    hotkey = json['Hotkey'];
+    query = json['Query'];
+  }
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['Hotkey'] = hotkey;
+    data['Query'] = query;
+    return data;
+  }
+}
+
+class QueryShortcut {
+  late String shortcut;
+
+  late String query;
+
+  QueryShortcut({required this.shortcut, required this.query});
+
+  QueryShortcut.fromJson(Map<String, dynamic> json) {
+    shortcut = json['Shortcut'];
+    query = json['Query'];
+  }
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['Shortcut'] = shortcut;
+    data['Query'] = query;
     return data;
   }
 }
