@@ -12,7 +12,12 @@ class WoxThemeUtil {
   static WoxThemeUtil get instance => _instance;
 
   Future<void> loadTheme() async {
-    _currentTheme = await WoxApi.instance.loadTheme();
+    final theme = await WoxApi.instance.loadTheme();
+    changeTheme(theme);
+  }
+
+  changeTheme(WoxTheme theme) {
+    _currentTheme = theme;
   }
 
   WoxTheme get currentTheme => _currentTheme;

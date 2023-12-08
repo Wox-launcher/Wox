@@ -10,18 +10,20 @@ class WoxLauncherView extends GetView<WoxLauncherController> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: fromCssColor(controller.woxTheme.appBackgroundColor),
-      body: Padding(
-          padding: EdgeInsets.only(
-            top: controller.woxTheme.appPaddingTop.toDouble(),
-            right: controller.woxTheme.appPaddingRight.toDouble(),
-            bottom: controller.woxTheme.appPaddingBottom.toDouble(),
-            left: controller.woxTheme.appPaddingLeft.toDouble(),
-          ),
-          child: const Column(
-            children: [WoxQueryBoxView(), WoxQueryResultView()],
-          )),
-    );
+    return Obx(() {
+      return Scaffold(
+        backgroundColor: fromCssColor(controller.woxTheme.value.appBackgroundColor),
+        body: Padding(
+            padding: EdgeInsets.only(
+              top: controller.woxTheme.value.appPaddingTop.toDouble(),
+              right: controller.woxTheme.value.appPaddingRight.toDouble(),
+              bottom: controller.woxTheme.value.appPaddingBottom.toDouble(),
+              left: controller.woxTheme.value.appPaddingLeft.toDouble(),
+            ),
+            child: const Column(
+              children: [WoxQueryBoxView(), WoxQueryResultView()],
+            )),
+      );
+    });
   }
 }

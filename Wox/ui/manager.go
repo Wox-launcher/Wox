@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"os"
+	"path"
+	"strings"
 	"sync"
 	"wox/plugin"
 	"wox/resource"
@@ -84,35 +86,51 @@ func (m *Manager) Start(ctx context.Context) error {
 	}
 
 	if util.IsDev() {
-		//watch user themes folder and reload themes
-		util.Go(ctx, "watch user themes", func() {
-			watchErr := util.WatchDirectories(ctx, userThemesDirectory, func(e fsnotify.Event) {
-				var themePath = e.Name
-				if e.Op == fsnotify.Write || e.Op == fsnotify.Chmod {
-					logger.Info(ctx, fmt.Sprintf("user theme changed: %s", themePath))
-					themeData, readThemeErr := os.ReadFile(themePath)
-					if readThemeErr != nil {
-						logger.Error(ctx, fmt.Sprintf("failed to read user theme: %s, %s", themePath, readThemeErr.Error()))
-						return
-					}
+		var onThemeChange = func(e fsnotify.Event) {
+			var themePath = e.Name
 
-					changedTheme, themeErr := m.parseTheme(string(themeData))
-					if themeErr != nil {
-						logger.Error(ctx, fmt.Sprintf("failed to parse user theme: %s, %s", themePath, themeErr.Error()))
-						return
-					}
+			//skip temp file
+			if strings.HasSuffix(themePath, ".json~") {
+				return
+			}
 
-					//replace theme
-					if _, ok := m.themes.Load(changedTheme.ThemeId); ok {
-						m.themes.Store(changedTheme.ThemeId, changedTheme)
-						logger.Info(ctx, fmt.Sprintf("replaced theme: %s", changedTheme.ThemeName))
+			if e.Op == fsnotify.Write {
+				logger.Info(ctx, fmt.Sprintf("user theme changed: %s", themePath))
+				themeData, readThemeErr := os.ReadFile(themePath)
+				if readThemeErr != nil {
+					logger.Error(ctx, fmt.Sprintf("failed to read user theme: %s, %s", themePath, readThemeErr.Error()))
+					return
+				}
+
+				changedTheme, themeErr := m.parseTheme(string(themeData))
+				if themeErr != nil {
+					logger.Error(ctx, fmt.Sprintf("failed to parse user theme: %s, %s", themePath, themeErr.Error()))
+					return
+				}
+
+				//replace theme
+				if _, ok := m.themes.Load(changedTheme.ThemeId); ok {
+					m.themes.Store(changedTheme.ThemeId, changedTheme)
+					logger.Info(ctx, fmt.Sprintf("theme updated: %s", changedTheme.ThemeName))
+
+					if m.GetCurrentTheme(ctx).ThemeId == changedTheme.ThemeId {
 						m.ChangeTheme(ctx, changedTheme)
 					}
 				}
-			})
-			if watchErr != nil {
-				logger.Error(ctx, fmt.Sprintf("failed to watch user themes: %s", watchErr.Error()))
 			}
+		}
+
+		//watch embed themes folder
+		util.Go(ctx, "watch embed themes", func() {
+			workingDirectory, wdErr := os.Getwd()
+			if wdErr == nil {
+				util.WatchDirectories(ctx, path.Join(workingDirectory, "resource", "ui", "themes"), onThemeChange)
+			}
+		})
+
+		//watch user themes folder and reload themes
+		util.Go(ctx, "watch user themes", func() {
+			util.WatchDirectories(ctx, userThemesDirectory, onThemeChange)
 		})
 	}
 
@@ -247,6 +265,8 @@ func (m *Manager) parseTheme(themeJson string) (Theme, error) {
 }
 
 func (m *Manager) ChangeTheme(ctx context.Context, theme Theme) {
+	logger.Info(ctx, fmt.Sprintf("change theme: %s", theme.ThemeName))
+
 	themeJson, marshalErr := json.Marshal(theme)
 	if marshalErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to marshal theme and send to ui: %s", marshalErr.Error()))

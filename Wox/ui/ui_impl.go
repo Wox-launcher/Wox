@@ -49,7 +49,14 @@ func (u *uiImpl) GetServerPort(ctx context.Context) int {
 	return GetUIManager().serverPort
 }
 
-func (u *uiImpl) ChangeTheme(ctx context.Context, theme string) {
+func (u *uiImpl) ChangeTheme(ctx context.Context, themeJson string) {
+	var theme Theme
+	unmarshalErr := json.Unmarshal([]byte(themeJson), &theme)
+	if unmarshalErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to parse theme: %s", unmarshalErr.Error()))
+		return
+	}
+
 	u.send(ctx, "ChangeTheme", theme)
 }
 

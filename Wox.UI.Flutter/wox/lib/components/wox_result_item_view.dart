@@ -50,28 +50,30 @@ class WoxResultItemView extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
               Text(
+                title,
                 style: TextStyle(
                   color: fromCssColor(isActive ? woxTheme.resultItemActiveTitleColor : woxTheme.resultItemTitleColor),
+                  fontSize: 16,
                 ),
-                title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 strutStyle: const StrutStyle(
                   forceStrutHeight: true,
                 ),
               ),
-              if (subTitle.isNotEmpty)
-                Text(
-                  style: TextStyle(
-                    color: fromCssColor(isActive ? woxTheme.resultItemActiveSubTitleColor : woxTheme.resultItemSubTitleColor),
-                  ),
-                  subTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  strutStyle: const StrutStyle(
-                    forceStrutHeight: true,
-                  ),
+              if (subTitle.isNotEmpty) const SizedBox(height: 2),
+              Text(
+                subTitle,
+                style: TextStyle(
+                  color: fromCssColor(isActive ? woxTheme.resultItemActiveSubTitleColor : woxTheme.resultItemSubTitleColor),
+                  fontSize: 13,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                strutStyle: const StrutStyle(
+                  forceStrutHeight: true,
+                ),
+              ),
             ]),
           ),
         ],

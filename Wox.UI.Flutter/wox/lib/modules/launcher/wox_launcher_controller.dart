@@ -31,7 +31,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   final resultActionTextFieldController = TextEditingController();
   final scrollController = ScrollController(initialScrollOffset: 0.0);
   final currentPreview = WoxPreview.empty().obs;
-  final WoxTheme woxTheme = WoxThemeUtil.instance.currentTheme.obs();
+  final Rx<WoxTheme> woxTheme = WoxThemeUtil.instance.currentTheme.obs;
   final activeResultIndex = 0.obs;
   final activeActionIndex = 0.obs;
   final isShowActionPanel = false.obs;
@@ -203,6 +203,10 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
         results.add(WoxQueryResult.fromJson(item));
       }
       _onReceivedQueryResults(results);
+    } else if (msg.method == "ChangeTheme") {
+      final theme = WoxTheme.fromJson(msg.data);
+      WoxThemeUtil.instance.changeTheme(theme);
+      woxTheme.value = theme;
     }
   }
 
@@ -228,6 +232,8 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   void _clearQueryResults() {
     queryResults.clear();
+    isShowPreviewPanel.value = false;
+    isShowActionPanel.value = false;
     resultItemGlobalKeys.clear();
     _resizeHeight();
   }
@@ -278,8 +284,9 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     if (isShowActionPanel.value || isShowPreviewPanel.value) {
       resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(10);
     }
-    final totalHeight =
-        WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight + (queryResults.isNotEmpty ? woxTheme.resultContainerPaddingTop + woxTheme.resultContainerPaddingBottom : 0);
+    final totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() +
+        resultHeight +
+        (queryResults.isNotEmpty ? woxTheme.value.resultContainerPaddingTop + woxTheme.value.resultContainerPaddingBottom : 0);
     if (Platform.isWindows) {
       // on windows, if I set screen ratio to 2.0, then the window height should add more 4.5 pixel, otherwise it will show render error
       // still don't know why. here is the test result: ratio -> additional window height

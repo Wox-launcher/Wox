@@ -27,10 +27,10 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                 Expanded(
                   child: Container(
                       padding: EdgeInsets.only(
-                        top: controller.woxTheme.resultContainerPaddingTop.toDouble(),
-                        right: controller.woxTheme.resultContainerPaddingRight.toDouble(),
-                        bottom: controller.woxTheme.resultContainerPaddingBottom.toDouble(),
-                        left: controller.woxTheme.resultContainerPaddingLeft.toDouble(),
+                        top: controller.woxTheme.value.resultContainerPaddingTop.toDouble(),
+                        right: controller.woxTheme.value.resultContainerPaddingRight.toDouble(),
+                        bottom: controller.woxTheme.value.resultContainerPaddingBottom.toDouble(),
+                        left: controller.woxTheme.value.resultContainerPaddingLeft.toDouble(),
                       ),
                       child: Scrollbar(
                           controller: controller.scrollController,
@@ -51,7 +51,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                                   WoxQueryResult queryResult = controller.getQueryResultByIndex(index);
                                   return WoxResultItemView(
                                       key: controller.getResultItemGlobalKeyByIndex(index),
-                                      woxTheme: controller.woxTheme,
+                                      woxTheme: controller.woxTheme.value,
                                       icon: queryResult.icon,
                                       title: queryResult.title,
                                       subTitle: queryResult.subTitle,
@@ -63,7 +63,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                 Expanded(
                     child: WoxPreviewView(
                   woxPreview: controller.currentPreview.value,
-                  woxTheme: controller.woxTheme,
+                  woxTheme: controller.woxTheme.value,
                 )),
             ],
           ),
