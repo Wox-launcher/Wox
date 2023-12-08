@@ -67,14 +67,13 @@ Future<void> initWindow() async {
   );
 
   if (Platform.isMacOS) {
-    await windowManager.setBackgroundColor(Colors.transparent);
     await windowManager.setVisibleOnAllWorkspaces(true, visibleOnFullScreen: true);
-    await Window.setEffect(effect: WindowEffect.popover, dark: true);
+    await Window.setBlurViewState(MacOSBlurViewState.active);
+    await Window.setEffect(effect: WindowEffect.popover, dark: false);
   }
   if (Platform.isWindows) {
     await Window.setEffect(effect: WindowEffect.mica);
   }
-  await windowManager.setAsFrameless();
   await windowManager.setResizable(false);
   await windowManager.setMaximizable(false);
   await windowManager.setMinimizable(false);

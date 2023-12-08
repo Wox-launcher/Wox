@@ -11,6 +11,9 @@ class MainFlutterWindow: NSPanel {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
+    // force appearance to light mode, otherwise borderless window will have a dark border line
+    NSApp.appearance = NSAppearance(named: .aqua)
+
     super.awakeFromNib()
   }
 
