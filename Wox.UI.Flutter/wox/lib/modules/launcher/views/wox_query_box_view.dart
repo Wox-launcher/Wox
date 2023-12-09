@@ -76,15 +76,19 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                     focusNode: controller.queryBoxFocusNode,
                     controller: controller.queryBoxTextFieldController,
                     onChanged: (value) {
-                      // if the composing range is valid, which means the text is changed by IME and the query is not finished yet,
-                      // we should not trigger the query until the composing is finished.
-                      if (controller.queryBoxTextFieldController.value.isComposingRangeValid) {
-                        return;
-                      }
+                      // isComposingRangeValid is not reliable on Windows, we need to use inside post frame callback to check the value
+                      // see https://github.com/flutter/flutter/issues/128565#issuecomment-1772016743
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        // if the composing range is valid, which means the text is changed by IME and the query is not finished yet,
+                        // we should not trigger the query until the composing is finished.
+                        if (controller.queryBoxTextFieldController.value.isComposingRangeValid) {
+                          return;
+                        }
 
-                      WoxChangeQuery woxChangeQuery = WoxChangeQuery(
-                          queryId: const UuidV4().generate(), queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code, queryText: value, querySelection: Selection.empty());
-                      controller.onQueryChanged(woxChangeQuery);
+                        WoxChangeQuery woxChangeQuery = WoxChangeQuery(
+                            queryId: const UuidV4().generate(), queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code, queryText: value, querySelection: Selection.empty());
+                        controller.onQueryChanged(woxChangeQuery);
+                      });
                     },
                   ),
                 ))),
