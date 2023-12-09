@@ -74,19 +74,22 @@ class WoxListItemView extends StatelessWidget {
                   forceStrutHeight: true,
                 ),
               ),
-              if (subTitle.isNotEmpty) const SizedBox(height: 2),
-              Text(
-                subTitle,
-                style: TextStyle(
-                  color: fromCssColor(isActive ? woxTheme.resultItemActiveSubTitleColor : woxTheme.resultItemSubTitleColor),
-                  fontSize: 13,
+              if (subTitle.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2.0),
+                  child: Text(
+                    subTitle,
+                    style: TextStyle(
+                      color: fromCssColor(isActive ? woxTheme.resultItemActiveSubTitleColor : woxTheme.resultItemSubTitleColor),
+                      fontSize: 13,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    strutStyle: const StrutStyle(
+                      forceStrutHeight: true,
+                    ),
+                  ),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                strutStyle: const StrutStyle(
-                  forceStrutHeight: true,
-                ),
-              ),
             ]),
           ),
         ],
