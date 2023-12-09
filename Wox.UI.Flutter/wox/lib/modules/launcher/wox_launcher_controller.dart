@@ -98,10 +98,16 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   @override
   Future<void> executeResultAction() async {
+    if (queryResults.isEmpty) {
+      return;
+    }
+
     WoxQueryResult woxQueryResult = queryResults[_activeResultIndex.value];
     WoxResultAction woxResultAction = WoxResultAction.empty();
     if (isShowActionPanel.value) {
-      woxResultAction = filterResultActions[_activeActionIndex.value];
+      if (filterResultActions.isNotEmpty) {
+        woxResultAction = filterResultActions[_activeActionIndex.value];
+      }
     } else {
       final defaultActionIndex = woxQueryResult.actions.indexWhere((element) => element.isDefault);
       if (defaultActionIndex != -1) {

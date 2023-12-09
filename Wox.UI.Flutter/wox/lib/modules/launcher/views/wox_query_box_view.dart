@@ -73,6 +73,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                     ),
                     cursorColor: fromCssColor(controller.woxTheme.value.queryBoxCursorColor),
                     autofocus: true,
+                    textInputAction: TextInputAction.none,
                     focusNode: controller.queryBoxFocusNode,
                     controller: controller.queryBoxTextFieldController,
                     onChanged: (value) {
