@@ -93,6 +93,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
               return KeyEventResult.handled;
             }
           }
+
           return KeyEventResult.ignored;
         }),
         child: Padding(

@@ -25,28 +25,27 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                     switch (event.logicalKey) {
                       case LogicalKeyboardKey.escape:
                         controller.hideApp();
-                        break;
+                        return KeyEventResult.handled;
                       case LogicalKeyboardKey.arrowDown:
                         controller.changeResultScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
-                        break;
+                        return KeyEventResult.handled;
                       case LogicalKeyboardKey.arrowUp:
                         controller.changeResultScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
-                        break;
+                        return KeyEventResult.handled;
                       case LogicalKeyboardKey.enter:
                         controller.executeResultAction();
-                        break;
+                        return KeyEventResult.handled;
+                      case LogicalKeyboardKey.tab:
+                        controller.autoCompleteQuery();
+                        return KeyEventResult.handled;
                       case LogicalKeyboardKey.keyJ:
-                        {
-                          if (event.isMetaPressed) {
-                            controller.toggleActionPanel();
-                            break;
-                          }
-                          return KeyEventResult.ignored;
+                        if (event.isMetaPressed || event.isAltPressed) {
+                          controller.toggleActionPanel();
+                          return KeyEventResult.handled;
                         }
-                      default:
-                        return KeyEventResult.ignored;
                     }
                   }
+
                   return KeyEventResult.ignored;
                 }),
                 child: SizedBox(
@@ -73,7 +72,6 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                     ),
                     cursorColor: fromCssColor(controller.woxTheme.value.queryBoxCursorColor),
                     autofocus: true,
-                    textInputAction: TextInputAction.none,
                     focusNode: controller.queryBoxFocusNode,
                     controller: controller.queryBoxTextFieldController,
                     onChanged: (value) {
@@ -87,7 +85,11 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         }
 
                         WoxChangeQuery woxChangeQuery = WoxChangeQuery(
-                            queryId: const UuidV4().generate(), queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code, queryText: value, querySelection: Selection.empty());
+                          queryId: const UuidV4().generate(),
+                          queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
+                          queryText: value,
+                          querySelection: Selection.empty(),
+                        );
                         controller.onQueryChanged(woxChangeQuery);
                       });
                     },

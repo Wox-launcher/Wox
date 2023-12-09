@@ -22,6 +22,9 @@ abstract class WoxLauncherInterface {
   /// When key enter is pressed, call this method to execute the result action.
   Future<void> executeResultAction() async {}
 
+  /// When key tab is pressed, call this method to auto complete the query.
+  Future<void> autoCompleteQuery() async {}
+
   /// When the query is changed, this method will be called.
   /// [query] is the changed query.
   void onQueryChanged(WoxChangeQuery query) {}

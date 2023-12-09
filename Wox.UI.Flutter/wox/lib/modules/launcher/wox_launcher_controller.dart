@@ -127,6 +127,21 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   @override
+  Future<void> autoCompleteQuery() async {
+    if (queryResults.isEmpty) {
+      return;
+    }
+
+    final queryText = queryResults[_activeResultIndex.value].title;
+    onQueryChanged(WoxChangeQuery(
+      queryId: const UuidV4().generate(),
+      queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
+      queryText: queryText,
+      querySelection: Selection.empty(),
+    ));
+  }
+
+  @override
   void onQueryChanged(WoxChangeQuery query) {
     _query.value = query;
     isShowActionPanel.value = false;
