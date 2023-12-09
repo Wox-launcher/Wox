@@ -41,4 +41,8 @@ class WoxImage {
       return null;
     }
   }
+
+  static WoxImage empty() {
+    return WoxImage(imageType: "", imageData: "");
+  }
 }

@@ -160,6 +160,10 @@ class WoxResultAction {
     data['PreventHideAfterAction'] = preventHideAfterAction;
     return data;
   }
+
+  static WoxResultAction empty() {
+    return WoxResultAction(id: "", name: "", icon: WoxImage.empty(), isDefault: false, preventHideAfterAction: false);
+  }
 }
 
 class Position {
@@ -188,5 +192,17 @@ class ShowAppParams {
       queryHistories.add(QueryHistory.fromJson(v));
     });
     lastQueryMode = json['LastQueryMode'];
+  }
+}
+
+class WoxListViewItemParams {
+  late String title;
+  late String subTitle;
+  late WoxImage icon;
+
+  WoxListViewItemParams.fromJson(Map<String, dynamic> json) {
+    title = json['Title'];
+    subTitle = json['SubTitle'] ?? "";
+    icon = json['Icon'];
   }
 }

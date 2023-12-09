@@ -14,9 +14,9 @@ import 'package:wox/entity/wox_websocket_msg.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_event_device_type_enum.dart';
 import 'package:wox/enums/wox_msg_method_enum.dart';
+import 'package:wox/enums/wox_msg_type_enum.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
-import 'package:wox/enums/wox_msg_type_enum.dart';
 import 'package:wox/interfaces/wox_launcher_interface.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/log.dart';
@@ -24,12 +24,17 @@ import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 
 class WoxLauncherController extends GetxController implements WoxLauncherInterface {
-  final query = WoxChangeQuery.empty().obs;
+  final _query = WoxChangeQuery.empty().obs;
+  final _activeResultIndex = 0.obs;
+  final _activeActionIndex = 0.obs;
+  final _resultItemGlobalKeys = <GlobalKey>[];
+  final _resultActionItemGlobalKeys = <GlobalKey>[];
   final queryBoxFocusNode = FocusNode();
   final resultActionFocusNode = FocusNode();
   final queryBoxTextFieldController = TextEditingController();
   final resultActionTextFieldController = TextEditingController();
-  final scrollController = ScrollController(initialScrollOffset: 0.0);
+  final resultListViewScrollController = ScrollController(initialScrollOffset: 0.0);
+  final resultActionListViewScrollController = ScrollController(initialScrollOffset: 0.0);
   final currentPreview = WoxPreview.empty().obs;
   final Rx<WoxTheme> woxTheme = WoxThemeUtil.instance.currentTheme.obs;
   final activeResultIndex = 0.obs;
@@ -37,8 +42,8 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   final isShowActionPanel = false.obs;
   final isShowPreviewPanel = false.obs;
   final queryResults = <WoxQueryResult>[].obs;
-  final resultActions = <WoxResultAction>[].obs;
-  final resultItemGlobalKeys = <GlobalKey>[];
+  final _resultActions = <WoxResultAction>[].obs;
+  final filterResultActions = <WoxResultAction>[].obs;
   var _clearQueryResultsTimer = Timer(const Duration(milliseconds: 200), () => {});
 
   @override
@@ -66,6 +71,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   @override
   Future<void> hideApp() async {
+    isShowActionPanel.value = false;
     await windowManager.hide();
   }
 
@@ -78,6 +84,12 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       isShowActionPanel.value = false;
       queryBoxFocusNode.requestFocus();
     } else {
+      _activeActionIndex.value = 0;
+      _resultActions.value = queryResults[_activeResultIndex.value].actions;
+      filterResultActions.value = _resultActions;
+      for (var _ in filterResultActions) {
+        _resultActionItemGlobalKeys.add(GlobalKey());
+      }
       isShowActionPanel.value = true;
       resultActionFocusNode.requestFocus();
     }
@@ -86,17 +98,23 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   @override
   Future<void> executeResultAction() async {
-    final defaultActionIndex = queryResults[activeResultIndex.value].actions.indexWhere((element) => element.isDefault);
-    if (defaultActionIndex != -1) {
-      activeActionIndex.value = defaultActionIndex;
-      final result = queryResults[activeResultIndex.value];
-      final action = result.actions[activeActionIndex.value];
+    WoxQueryResult woxQueryResult = queryResults[_activeResultIndex.value];
+    WoxResultAction woxResultAction = WoxResultAction.empty();
+    if (isShowActionPanel.value) {
+      woxResultAction = filterResultActions[_activeActionIndex.value];
+    } else {
+      final defaultActionIndex = woxQueryResult.actions.indexWhere((element) => element.isDefault);
+      if (defaultActionIndex != -1) {
+        woxResultAction = woxQueryResult.actions[defaultActionIndex];
+      }
+    }
+    if (woxResultAction.id.isNotEmpty) {
       final msg = WoxWebsocketMsg(id: const UuidV4().generate(), type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code, method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code, data: {
-        "resultId": result.id,
-        "actionId": action.id,
+        "resultId": woxQueryResult.id,
+        "actionId": woxResultAction.id,
       });
       WoxWebsocketMsgUtil.instance.sendMessage(msg);
-      if (!action.preventHideAfterAction) {
+      if (!woxResultAction.preventHideAfterAction) {
         hideApp();
       }
     }
@@ -104,7 +122,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   @override
   void onQueryChanged(WoxChangeQuery query) {
-    this.query.value = query;
+    _query.value = query;
     isShowActionPanel.value = false;
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
       queryBoxTextFieldController.text = query.queryText;
@@ -135,53 +153,48 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   @override
-  void changeScrollPosition(WoxEventDeviceType deviceType, WoxDirection direction) {
+  void onQueryActionChanged(String queryAction) {
+    filterResultActions.value = _resultActions.where((element) => element.name.toLowerCase().contains(queryAction.toLowerCase())).toList().obs();
+    filterResultActions.refresh();
+  }
+
+  @override
+  void changeResultScrollPosition(WoxEventDeviceType deviceType, WoxDirection direction) {
     _resetActiveResultIndex(direction);
     if (queryResults.length < MAX_LIST_VIEW_ITEM_COUNT) {
       queryResults.refresh();
       return;
     }
-    if (deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code) {
-      if (direction == WoxDirectionEnum.WOX_DIRECTION_DOWN.code) {
-        if (activeResultIndex.value == 0) {
-          scrollController.jumpTo(0);
-        } else {
-          if (_isResultItemAtBottom(activeResultIndex.value - 1)) {
-            scrollController.jumpTo(scrollController.offset.ceil() + WoxThemeUtil.instance.getResultListViewHeightByCount(1));
-          }
-        }
-      }
-      if (direction == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
-        if (activeResultIndex.value == queryResults.length - 1) {
-          scrollController.jumpTo(WoxThemeUtil.instance.getResultListViewHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
-        } else {
-          if (_isResultItemAtTop(activeResultIndex.value + 1)) {
-            scrollController.jumpTo(scrollController.offset.ceil() - WoxThemeUtil.instance.getResultListViewHeightByCount(1));
-          }
+
+    if (direction == WoxDirectionEnum.WOX_DIRECTION_DOWN.code) {
+      if (_activeResultIndex.value == 0) {
+        resultListViewScrollController.jumpTo(0);
+      } else {
+        bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code
+            ? _isResultItemAtBottom(_activeResultIndex.value - 1)
+            : !_isResultItemAtBottom(queryResults.length - 1);
+        if (shouldJump) {
+          resultListViewScrollController.jumpTo(resultListViewScrollController.offset.ceil() + WoxThemeUtil.instance.getResultListViewHeightByCount(1));
         }
       }
     }
-    if (deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_MOUSE.code) {
-      if (direction == WoxDirectionEnum.WOX_DIRECTION_DOWN.code) {
-        if (activeResultIndex.value == 0) {
-          scrollController.jumpTo(0);
-        } else {
-          if (!_isResultItemAtBottom(queryResults.length - 1)) {
-            scrollController.jumpTo(scrollController.offset.ceil() + WoxThemeUtil.instance.getResultListViewHeightByCount(1));
-          }
-        }
-      }
-      if (direction == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
-        if (activeResultIndex.value == queryResults.length - 1) {
-          scrollController.jumpTo(WoxThemeUtil.instance.getResultListViewHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
-        } else {
-          if (!_isResultItemAtTop(0)) {
-            scrollController.jumpTo(scrollController.offset.ceil() - WoxThemeUtil.instance.getResultListViewHeightByCount(1));
-          }
+    if (direction == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
+      if (_activeResultIndex.value == queryResults.length - 1) {
+        resultListViewScrollController.jumpTo(WoxThemeUtil.instance.getResultListViewHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
+      } else {
+        bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code ? _isResultItemAtTop(_activeResultIndex.value + 1) : !_isResultItemAtTop(0);
+        if (shouldJump) {
+          resultListViewScrollController.jumpTo(resultListViewScrollController.offset.ceil() - WoxThemeUtil.instance.getResultListViewHeightByCount(1));
         }
       }
     }
     queryResults.refresh();
+  }
+
+  @override
+  void changeResultActionScrollPosition(WoxEventDeviceType deviceType, WoxDirection direction) {
+    _resetActiveResultActionIndex(direction);
+    filterResultActions.refresh();
   }
 
   void handleWebSocketMessage(event) {
@@ -211,7 +224,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   bool _isResultItemAtBottom(int index) {
-    RenderBox? renderBox = resultItemGlobalKeys[index].currentContext?.findRenderObject() as RenderBox?;
+    RenderBox? renderBox = _resultItemGlobalKeys[index].currentContext?.findRenderObject() as RenderBox?;
     if (renderBox?.localToGlobal(Offset.zero).dy.ceil() ==
         WoxThemeUtil.instance.getQueryBoxHeight() + WoxThemeUtil.instance.getResultListViewHeightByCount(MAX_LIST_VIEW_ITEM_COUNT - 1)) {
       return true;
@@ -223,7 +236,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     if (index < 0) {
       return false;
     }
-    RenderBox? renderBox = resultItemGlobalKeys[index].currentContext?.findRenderObject() as RenderBox?;
+    RenderBox? renderBox = _resultItemGlobalKeys[index].currentContext?.findRenderObject() as RenderBox?;
     if (renderBox?.localToGlobal(Offset.zero).dy.ceil() == WoxThemeUtil.instance.getQueryBoxHeight()) {
       return true;
     }
@@ -234,12 +247,12 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     queryResults.clear();
     isShowPreviewPanel.value = false;
     isShowActionPanel.value = false;
-    resultItemGlobalKeys.clear();
+    _resultItemGlobalKeys.clear();
     _resizeHeight();
   }
 
   void _onReceivedQueryResults(List<WoxQueryResult> results) {
-    if (results.isEmpty || query.value.queryId != results.first.queryId) {
+    if (results.isEmpty || _query.value.queryId != results.first.queryId) {
       return;
     }
 
@@ -247,12 +260,12 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     _clearQueryResultsTimer.cancel();
 
     //merge and sort results
-    final currentQueryResults = queryResults.where((item) => item.queryId == query.value.queryId).toList();
+    final currentQueryResults = queryResults.where((item) => item.queryId == _query.value.queryId).toList();
     final finalResults = List<WoxQueryResult>.from(currentQueryResults)..addAll(results);
     finalResults.sort((a, b) => b.score.compareTo(a.score));
     queryResults.assignAll(finalResults);
     for (var _ in queryResults) {
-      resultItemGlobalKeys.add(GlobalKey());
+      _resultItemGlobalKeys.add(GlobalKey());
     }
 
     //reset active result and preview
@@ -268,11 +281,11 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   void _resetActiveResult() {
-    activeResultIndex.value = 0;
+    _activeResultIndex.value = 0;
 
     //reset preview
     if (queryResults.isNotEmpty) {
-      currentPreview.value = queryResults[activeResultIndex.value].preview;
+      currentPreview.value = queryResults[_activeResultIndex.value].preview;
     } else {
       currentPreview.value = WoxPreview.empty();
     }
@@ -313,36 +326,72 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       return;
     }
     if (woxDirection == WoxDirectionEnum.WOX_DIRECTION_DOWN.code) {
-      if (activeResultIndex.value == queryResults.length - 1) {
-        activeResultIndex.value = 0;
+      if (_activeResultIndex.value == queryResults.length - 1) {
+        _activeResultIndex.value = 0;
       } else {
-        activeResultIndex.value++;
+        _activeResultIndex.value++;
       }
     }
     if (woxDirection == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
-      if (activeResultIndex.value == 0) {
-        activeResultIndex.value = queryResults.length - 1;
+      if (_activeResultIndex.value == 0) {
+        _activeResultIndex.value = queryResults.length - 1;
       } else {
-        activeResultIndex.value--;
+        _activeResultIndex.value--;
       }
     }
-    currentPreview.value = queryResults[activeResultIndex.value].preview;
+    currentPreview.value = queryResults[_activeResultIndex.value].preview;
     isShowPreviewPanel.value = currentPreview.value.previewData != "";
+  }
+
+  void _resetActiveResultActionIndex(WoxDirection woxDirection) {
+    if (filterResultActions.isEmpty) {
+      return;
+    }
+    if (woxDirection == WoxDirectionEnum.WOX_DIRECTION_DOWN.code) {
+      if (_activeActionIndex.value == filterResultActions.length - 1) {
+        _activeActionIndex.value = 0;
+      } else {
+        _activeActionIndex.value++;
+      }
+    }
+    if (woxDirection == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
+      if (_activeActionIndex.value == 0) {
+        _activeActionIndex.value = filterResultActions.length - 1;
+      } else {
+        _activeActionIndex.value--;
+      }
+    }
   }
 
   WoxQueryResult getQueryResultByIndex(int index) {
     return queryResults[index];
   }
 
+  WoxResultAction getQueryResultActionByIndex(int index) {
+    return filterResultActions[index];
+  }
+
   GlobalKey getResultItemGlobalKeyByIndex(int index) {
-    return resultItemGlobalKeys[index];
+    return _resultItemGlobalKeys[index];
+  }
+
+  GlobalKey getResultActionItemGlobalKeyByIndex(int index) {
+    return _resultActionItemGlobalKeys[index];
+  }
+
+  bool isQueryResultActiveByIndex(int index) {
+    return _activeResultIndex.value == index;
+  }
+
+  bool isResultActionActiveByIndex(int index) {
+    return _activeActionIndex.value == index;
   }
 
   @override
   void dispose() {
     queryBoxFocusNode.dispose();
     queryBoxTextFieldController.dispose();
-    scrollController.dispose();
+    resultListViewScrollController.dispose();
     super.dispose();
   }
 }

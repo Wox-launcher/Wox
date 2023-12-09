@@ -27,10 +27,10 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         controller.hideApp();
                         break;
                       case LogicalKeyboardKey.arrowDown:
-                        controller.changeScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+                        controller.changeResultScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
                         break;
                       case LogicalKeyboardKey.arrowUp:
-                        controller.changeScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
+                        controller.changeResultScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
                         break;
                       case LogicalKeyboardKey.enter:
                         controller.executeResultAction();
@@ -46,7 +46,6 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                       default:
                         return KeyEventResult.ignored;
                     }
-                    return KeyEventResult.handled;
                   }
                   return KeyEventResult.ignored;
                 }),
@@ -62,7 +61,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                       contentPadding: const EdgeInsets.only(
                         left: 8,
                         right: 8,
-                        top: 20,
+                        top: 10,
                         bottom: 20,
                       ),
                       border: OutlineInputBorder(

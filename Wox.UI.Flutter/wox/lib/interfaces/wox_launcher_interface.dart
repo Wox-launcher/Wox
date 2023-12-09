@@ -26,9 +26,15 @@ abstract class WoxLauncherInterface {
   /// [query] is the changed query.
   void onQueryChanged(WoxChangeQuery query) {}
 
+  /// When the query box on action panel is changed, this method will be called.
+  /// [queryAction] is the changed query action.
+  void onQueryActionChanged(String queryAction) {}
+
   /// When arrow down/up is pressed, or mouse wheel down/up is changed, this method will be called.
   /// And this method will change the active result index and scroll the result list.
   /// [direction] is the direction of the change.
   /// [deviceType] is the device type of the change.
-  void changeScrollPosition(WoxEventDeviceType deviceType, WoxDirection direction) {}
+  void changeResultScrollPosition(WoxEventDeviceType deviceType, WoxDirection direction) {}
+
+  void changeResultActionScrollPosition(WoxEventDeviceType deviceType, WoxDirection direction) {}
 }
