@@ -20,11 +20,27 @@ func IsStringMatch(term string, subTerm string, usePinYin bool) bool {
 }
 
 func IsStringMatchScore(term string, subTerm string, usePinYin bool) (isMatch bool, score int64) {
+	match, s := isStringMatchScoreFuzzy(term, subTerm, usePinYin)
+	if match {
+		return true, s
+	}
+
+	// fuzzy match is not good enough, E.g. term = 我爱摄影, subTerm = 摄, isStringMatchScoreFuzzy will return negative score
+	// So we need to check if subTerm is a substring of term if fuzzy match failed
+	if strings.Contains(term, subTerm) {
+		return true, int64(len(subTerm))
+	}
+
+	return false, 0
+}
+
+func isStringMatchScoreFuzzy(term string, subTerm string, usePinYin bool) (isMatch bool, score int64) {
 	var minMatchScore int64 = 0
 
 	if usePinYin {
 		var matchScore int64 = -100000000
 		pyTerms := getPinYin(term)
+		pyTerms = append(pyTerms, term) // add original term
 		for _, newTerm := range pyTerms {
 			matches := fuzzy.Find(subTerm, []string{newTerm})
 			if len(matches) == 0 {

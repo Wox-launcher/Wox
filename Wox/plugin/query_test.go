@@ -26,27 +26,27 @@ func getFakePluginInstances() []*Instance {
 }
 
 func Test_NewQuery(t *testing.T) {
-	q := newQueryInputWithPlugins("wpm", QueryTypeInput, getFakePluginInstances())
+	q := newQueryInputWithPlugins("wpm", getFakePluginInstances())
 	assert.Equal(t, q.TriggerKeyword, "")
 	assert.Equal(t, q.Command, "")
 	assert.Equal(t, q.Search, "wpm")
 
-	q = newQueryInputWithPlugins("wpm install", QueryTypeInput, getFakePluginInstances())
+	q = newQueryInputWithPlugins("wpm install", getFakePluginInstances())
 	assert.Equal(t, q.TriggerKeyword, "wpm")
 	assert.Equal(t, q.Command, "")
 	assert.Equal(t, q.Search, "install")
 
-	q = newQueryInputWithPlugins("wpm install ", QueryTypeInput, getFakePluginInstances())
+	q = newQueryInputWithPlugins("wpm install ", getFakePluginInstances())
 	assert.Equal(t, q.TriggerKeyword, "wpm")
 	assert.Equal(t, q.Command, "install")
 	assert.Equal(t, q.Search, "")
 
-	q = newQueryInputWithPlugins("wpm install q q1", QueryTypeInput, getFakePluginInstances())
+	q = newQueryInputWithPlugins("wpm install q q1", getFakePluginInstances())
 	assert.Equal(t, q.TriggerKeyword, "wpm")
 	assert.Equal(t, q.Command, "install")
 	assert.Equal(t, q.Search, "q q1")
 
-	q = newQueryInputWithPlugins("other install q q1", QueryTypeInput, getFakePluginInstances())
+	q = newQueryInputWithPlugins("other install q q1", getFakePluginInstances())
 	assert.Equal(t, q.TriggerKeyword, "")
 	assert.Equal(t, q.Command, "")
 	assert.Equal(t, q.Search, "other install q q1")

@@ -34,3 +34,9 @@ func TestGetPinYin(t *testing.T) {
 	assert.Equal(t, []string{"Q Q yin le", "Q Q yin yue", "Q Q y l", "Q Q y y"}, getPinYin("QQ音乐"))
 	assert.Equal(t, []string{"Microsoft Remote Desktop"}, getPinYin("Microsoft Remote Desktop"))
 }
+
+func TestIsStringMatchScore(t *testing.T) {
+	match, score := IsStringMatchScore("有道词典", "有", true)
+	assert.True(t, match)
+	assert.GreaterOrEqual(t, score, int64(1))
+}
