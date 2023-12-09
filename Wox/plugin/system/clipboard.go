@@ -276,14 +276,19 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 			}
 		}
 
-		c.history = append(c.history, ClipboardHistory{
+		history := ClipboardHistory{
 			Id:         uuid.NewString(),
 			Data:       data,
 			Timestamp:  util.GetSystemTimestamp(),
 			Icon:       icon,
 			IsFavorite: false,
-		})
+		}
 
+		if data.GetType() == clipboard.ClipboardTypeImage {
+			c.generateHistoryImageCache(ctx, history)
+		}
+
+		c.history = append(c.history, history)
 		c.saveHistory(ctx)
 	})
 }
@@ -436,23 +441,7 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 			previewWoxImage = v.preview
 			iconWoxImage = v.icon
 		} else {
-			compressedPreviewImg := imaging.Resize(historyData.Image, 400, 0, imaging.NearestNeighbor)
-			compressedIconImg := imaging.Resize(historyData.Image, 40, 0, imaging.NearestNeighbor)
-			previewImage, err := plugin.NewWoxImage(compressedPreviewImg)
-			if err != nil {
-				previewImage = c.getDefaultTextIcon()
-			}
-			iconImage, iconErr := plugin.NewWoxImage(compressedIconImg)
-			if iconErr != nil {
-				iconImage = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAACi0lEQVR4nO3U/0sTcRzH8f0calFmmvltc04jixLcyvwhKsgstv6hfllQWhSSVGLfZOlEHSJhRBRBy775Uz8Ytem8brvb5mat7eYtmnvFHUrFduFtt7sb3Bue3E8b9/jc3Vun00YbbbRR5VwIotdGI2CjASWz0vDbaPSIBmz8ECqJFA1QwU3j7zSATXsC4A/hUiQJL0OBZZf5qz2SLJ1XiLt5pHxZXY4mSwPAnXgugIehSgOwxhI5AWssURqAkn8CdoFvwL6FD1kVgE0Ed+IsS/BXxbfQiY8sOl7E0PEyhpMLqaKgbcUAWCmg0/0DLa7wP3W9Z9QPsFIZ/sSNk6GcHX2TUC/ASmVw5Pl3NE+E/ptFYoROCoDVn8Ghp6swjAe3lGUunvUfpxZSsLjjMLvjOP3pp3yA8+Q62mcj0I/RojK/3kBQQPc8wx/AwSeraJ+N4sDjKLrnZdhC54h1tM1E0DhK51WnO47jHxgcfvYtC7B/JoKud0zxAL2+NExTYTQ4qIJqnV4RBLRNr+DYW0Z6wNmlNL9V6kcCkmRyhQUBrS4OkZAOcMbzC3pnEHUPA5JmnAwLAkxTYcEVLBrAPfba+/6iZJwICQJauBU8lygcsPcuiWJmcAYFAc3jIVg2t1e+gJphEsVO7wwKAgxjQZhfxfMHVA99hRw1jdKCAP2jPwjRgD13CMhVgyMgCGhy0PzrJBqw+xYBOavn1qwAoHGEEg+oHFyG3NU9CEgH2HXTByXad4+UBrBzwAelqh0mCwfsuLEEJasZIgsDbL++CKWr5tZsvoCKa4tQQ1W3ifwA5f1ef3m/F2qoapCIiQZsu/K5p6zvi7+szwMlq7jqTVcO+C6KBmijjTba6OSY31QFs+h9sYumAAAAAElFTkSuQmCC`)
-			}
-
-			previewWoxImage = previewImage
-			iconWoxImage = iconImage
-			c.historyImageCache.Store(history.Id, clipboardImageCache{
-				preview: previewWoxImage,
-				icon:    iconWoxImage,
-			})
+			previewWoxImage, iconWoxImage = c.generateHistoryImageCache(ctx, history)
 		}
 
 		return plugin.QueryResult{
@@ -482,6 +471,29 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 	return plugin.QueryResult{
 		Title: "ERR: Unknown history data type",
 	}
+}
+
+func (c *ClipboardPlugin) generateHistoryImageCache(ctx context.Context, history ClipboardHistory) (previewImg, iconImg plugin.WoxImage) {
+	historyData := history.Data.(*clipboard.ImageData)
+
+	compressedPreviewImg := imaging.Resize(historyData.Image, 400, 0, imaging.Lanczos)
+	compressedIconImg := imaging.Resize(historyData.Image, 40, 0, imaging.Lanczos)
+	previewImage, err := plugin.NewWoxImage(compressedPreviewImg)
+	if err != nil {
+		previewImage = c.getDefaultTextIcon()
+	}
+	iconImage, iconErr := plugin.NewWoxImage(compressedIconImg)
+	if iconErr != nil {
+		iconImage = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAACi0lEQVR4nO3U/0sTcRzH8f0calFmmvltc04jixLcyvwhKsgstv6hfllQWhSSVGLfZOlEHSJhRBRBy775Uz8Ytem8brvb5mat7eYtmnvFHUrFduFtt7sb3Bue3E8b9/jc3Vun00YbbbRR5VwIotdGI2CjASWz0vDbaPSIBmz8ECqJFA1QwU3j7zSATXsC4A/hUiQJL0OBZZf5qz2SLJ1XiLt5pHxZXY4mSwPAnXgugIehSgOwxhI5AWssURqAkn8CdoFvwL6FD1kVgE0Ed+IsS/BXxbfQiY8sOl7E0PEyhpMLqaKgbcUAWCmg0/0DLa7wP3W9Z9QPsFIZ/sSNk6GcHX2TUC/ASmVw5Pl3NE+E/ptFYoROCoDVn8Ghp6swjAe3lGUunvUfpxZSsLjjMLvjOP3pp3yA8+Q62mcj0I/RojK/3kBQQPc8wx/AwSeraJ+N4sDjKLrnZdhC54h1tM1E0DhK51WnO47jHxgcfvYtC7B/JoKud0zxAL2+NExTYTQ4qIJqnV4RBLRNr+DYW0Z6wNmlNL9V6kcCkmRyhQUBrS4OkZAOcMbzC3pnEHUPA5JmnAwLAkxTYcEVLBrAPfba+/6iZJwICQJauBU8lygcsPcuiWJmcAYFAc3jIVg2t1e+gJphEsVO7wwKAgxjQZhfxfMHVA99hRw1jdKCAP2jPwjRgD13CMhVgyMgCGhy0PzrJBqw+xYBOavn1qwAoHGEEg+oHFyG3NU9CEgH2HXTByXad4+UBrBzwAelqh0mCwfsuLEEJasZIgsDbL++CKWr5tZsvoCKa4tQQ1W3ifwA5f1ef3m/F2qoapCIiQZsu/K5p6zvi7+szwMlq7jqTVcO+C6KBmijjTba6OSY31QFs+h9sYumAAAAAElFTkSuQmCC`)
+	}
+
+	c.historyImageCache.Store(history.Id, clipboardImageCache{
+		preview: previewImage,
+		icon:    iconImage,
+	})
+
+	c.api.Log(ctx, fmt.Sprintf("generate history image preview and icon cache, id=%s", history.Id))
+	return previewImage, iconImage
 }
 
 func (c *ClipboardPlugin) getImageSize(ctx context.Context, image image.Image) string {
