@@ -238,14 +238,8 @@ func handleRefresh(ctx context.Context, request WebsocketMsg) {
 		responseUIError(ctx, request, resultErr.Error())
 		return
 	}
-	resultId, resultIdErr := getWebsocketMsgParameter(ctx, request, "resultId")
-	if resultIdErr != nil {
-		logger.Error(ctx, resultIdErr.Error())
-		responseUIError(ctx, request, resultIdErr.Error())
-		return
-	}
 
-	var result plugin.RefreshableResult
+	var result plugin.RefreshableResultWithResultId
 	unmarshalErr := json.Unmarshal([]byte(resultStr), &result)
 	if unmarshalErr != nil {
 		logger.Error(ctx, unmarshalErr.Error())
@@ -253,7 +247,7 @@ func handleRefresh(ctx context.Context, request WebsocketMsg) {
 		return
 	}
 
-	newResult, refreshErr := plugin.GetPluginManager().ExecuteRefresh(ctx, resultId, result)
+	newResult, refreshErr := plugin.GetPluginManager().ExecuteRefresh(ctx, result)
 	if refreshErr != nil {
 		logger.Error(ctx, refreshErr.Error())
 		responseUIError(ctx, request, refreshErr.Error())

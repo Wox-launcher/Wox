@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
+	"github.com/jinzhu/copier"
 	"github.com/samber/lo"
 	"github.com/wissance/stringFormatter"
 	"math"
@@ -662,17 +663,31 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 	setting.GetSettingManager().AddActionedResult(ctx, resultCache.PluginInstance.Metadata.Id, resultCache.ResultTitle, resultCache.ResultSubTitle)
 }
 
-func (m *Manager) ExecuteRefresh(ctx context.Context, resultId string, refreshableResult RefreshableResult) (RefreshableResult, error) {
-	resultCache, found := m.resultCache.Load(resultId)
+func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId RefreshableResultWithResultId) (RefreshableResultWithResultId, error) {
+	var refreshableResult RefreshableResult
+	copyErr := copier.Copy(&refreshableResult, &refreshableResultWithId)
+	if copyErr != nil {
+		return RefreshableResultWithResultId{}, fmt.Errorf("failed to copy refreshable result: %w", copyErr)
+	}
+
+	resultCache, found := m.resultCache.Load(refreshableResultWithId.ResultId)
 	if !found {
-		logger.Error(ctx, fmt.Sprintf("result cache not found for result id: %s", resultId))
-		return refreshableResult, errors.New("result cache not found")
+		logger.Error(ctx, fmt.Sprintf("result cache not found for result id: %s", refreshableResultWithId.ResultId))
+		return refreshableResultWithId, errors.New("result cache not found")
 	}
 
 	newResult := resultCache.Refresh(refreshableResult)
 	newResult = m.PolishRefreshableResult(ctx, resultCache.PluginInstance, newResult)
 
-	return newResult, nil
+	return RefreshableResultWithResultId{
+		ResultId:        refreshableResultWithId.ResultId,
+		Title:           newResult.Title,
+		SubTitle:        newResult.SubTitle,
+		Icon:            newResult.Icon,
+		Preview:         newResult.Preview,
+		ContextData:     newResult.ContextData,
+		RefreshInterval: newResult.RefreshInterval,
+	}, nil
 }
 
 func (m *Manager) GetResultPreview(ctx context.Context, resultId string) (WoxPreview, error) {

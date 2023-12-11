@@ -47,7 +47,7 @@ Future<void> initialServices(List<String> arguments) async {
   await initArgs(arguments);
   await WoxThemeUtil.instance.loadTheme();
   await WoxSettingUtil.instance.loadSetting();
-  var controller = WoxLauncherController();
+  var controller = WoxLauncherController()..startRefreshSchedule();
   await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://localhost:${Env.serverPort}/ws"), onMessageReceived: controller.handleWebSocketMessage);
   HeartbeatChecker().startChecking();
   Get.put(controller);

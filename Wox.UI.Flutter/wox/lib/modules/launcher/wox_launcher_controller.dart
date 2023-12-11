@@ -45,6 +45,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   final _resultActions = <WoxResultAction>[].obs;
   final filterResultActions = <WoxResultAction>[].obs;
   var _clearQueryResultsTimer = Timer(const Duration(milliseconds: 200), () => {});
+  var refreshCounter = 0;
 
   @override
   Future<void> toggleApp(ShowAppParams params) async {
@@ -241,6 +242,9 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       final theme = WoxTheme.fromJson(msg.data);
       WoxThemeUtil.instance.changeTheme(theme);
       woxTheme.value = theme;
+    } else if (msg.method == "Refresh") {
+      final result = WoxRefreshableResult.fromJson(msg.data);
+      onRefreshResult(result);
     }
   }
 
@@ -406,6 +410,47 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   bool isResultActionActiveByIndex(int index) {
     return _activeActionIndex.value == index;
+  }
+
+  startRefreshSchedule() {
+    Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      refreshResults();
+    });
+  }
+
+  Future<void> refreshResults() async {
+    refreshCounter = refreshCounter + 100;
+    for (var result in queryResults) {
+      if (result.refreshInterval > 0 && refreshCounter % result.refreshInterval == 0) {
+        var msg = WoxWebsocketMsg(id: const UuidV4().generate(), type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code, method: WoxMsgMethodEnum.WOX_MSG_METHOD_REFRESH.code, data: {
+          "refreshableResult": WoxRefreshableResult(
+            resultId: result.id,
+            title: result.title,
+            subTitle: result.subTitle,
+            icon: result.icon,
+            preview: result.preview,
+            contextData: result.contextData,
+            refreshInterval: result.refreshInterval,
+          ).toJson(),
+        });
+        WoxWebsocketMsgUtil.instance.sendMessage(msg);
+      }
+    }
+  }
+
+  void onRefreshResult(WoxRefreshableResult result) {
+    Logger.instance.info("Refresh result: ${result.toJson()}");
+    for (var i = 0; i < queryResults.length; i++) {
+      if (queryResults[i].id == result.resultId) {
+        queryResults[i].title = result.title;
+        queryResults[i].subTitle = result.subTitle;
+        queryResults[i].icon = result.icon;
+        queryResults[i].preview = result.preview;
+        queryResults[i].contextData = result.contextData;
+        queryResults[i].refreshInterval = result.refreshInterval;
+        break;
+      }
+    }
   }
 
   @override

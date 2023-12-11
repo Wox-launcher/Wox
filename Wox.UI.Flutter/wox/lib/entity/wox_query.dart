@@ -206,3 +206,38 @@ class WoxListViewItemParams {
     icon = json['Icon'];
   }
 }
+
+class WoxRefreshableResult {
+  late String resultId;
+  late String title;
+  late String subTitle;
+  late WoxImage icon;
+  late WoxPreview preview;
+  late String contextData;
+  late int refreshInterval;
+
+  WoxRefreshableResult(
+      {required this.resultId, required this.title, required this.subTitle, required this.icon, required this.preview, required this.contextData, required this.refreshInterval});
+
+  WoxRefreshableResult.fromJson(Map<String, dynamic> json) {
+    resultId = json['ResultId'];
+    title = json['Title'];
+    subTitle = json['SubTitle'] ?? "";
+    icon = json['Icon'];
+    preview = json['Preview'];
+    contextData = json['ContextData'];
+    refreshInterval = json['RefreshInterval'];
+  }
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['ResultId'] = resultId;
+    data['Title'] = title;
+    data['SubTitle'] = subTitle;
+    data['Icon'] = icon.toJson();
+    data['Preview'] = preview.toJson();
+    data['ContextData'] = contextData;
+    data['RefreshInterval'] = refreshInterval;
+    return data;
+  }
+}
