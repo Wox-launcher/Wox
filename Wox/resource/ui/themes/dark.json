@@ -29,7 +29,7 @@
   "QueryBoxBackgroundColor": "rgba(24, 25, 26, 0.4)",
   "QueryBoxBorderRadius": 8,
   "QueryBoxCursorColor": "#e4e7e7",
-  "ActionContainerBackgroundColor": "#1d2a2f",
+  "ActionContainerBackgroundColor": "#373839",
   "ActionContainerHeaderFontColor": "#e4e7e7",
   "ActionContainerPaddingLeft": 14,
   "ActionContainerPaddingTop": 10,

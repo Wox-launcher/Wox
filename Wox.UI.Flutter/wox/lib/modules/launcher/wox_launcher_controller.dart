@@ -81,8 +81,10 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     if (queryResults.isEmpty) {
       return;
     }
+
     if (isShowActionPanel.value) {
       isShowActionPanel.value = false;
+      resultActionTextFieldController.text = "";
       queryBoxFocusNode.requestFocus();
     } else {
       _activeActionIndex.value = 0;
@@ -312,6 +314,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   void _resetActiveResult() {
     _activeResultIndex.value = 0;
+    resultListViewScrollController.jumpTo(0);
 
     //reset preview
     if (queryResults.isNotEmpty) {
@@ -419,32 +422,32 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   startRefreshSchedule() {
     Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      refreshResults();
+      refreshCounter = refreshCounter + 100;
+      for (var result in queryResults) {
+        if (result.refreshInterval > 0 && refreshCounter % result.refreshInterval == 0) {
+          var msg = WoxWebsocketMsg(
+            id: const UuidV4().generate(),
+            type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+            method: WoxMsgMethodEnum.WOX_MSG_METHOD_REFRESH.code,
+            data: {
+              "refreshableResult": WoxRefreshableResult(
+                resultId: result.id,
+                title: result.title,
+                subTitle: result.subTitle,
+                icon: result.icon,
+                preview: result.preview,
+                contextData: result.contextData,
+                refreshInterval: result.refreshInterval,
+              ).toJson(),
+            },
+          );
+          WoxWebsocketMsgUtil.instance.sendMessage(msg);
+        }
+      }
     });
   }
 
-  Future<void> refreshResults() async {
-    refreshCounter = refreshCounter + 100;
-    for (var result in queryResults) {
-      if (result.refreshInterval > 0 && refreshCounter % result.refreshInterval == 0) {
-        var msg = WoxWebsocketMsg(id: const UuidV4().generate(), type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code, method: WoxMsgMethodEnum.WOX_MSG_METHOD_REFRESH.code, data: {
-          "refreshableResult": WoxRefreshableResult(
-            resultId: result.id,
-            title: result.title,
-            subTitle: result.subTitle,
-            icon: result.icon,
-            preview: result.preview,
-            contextData: result.contextData,
-            refreshInterval: result.refreshInterval,
-          ).toJson(),
-        });
-        WoxWebsocketMsgUtil.instance.sendMessage(msg);
-      }
-    }
-  }
-
   void onRefreshResult(WoxRefreshableResult result) {
-    Logger.instance.info("Refresh result: ${result.toJson()}");
     for (var i = 0; i < queryResults.length; i++) {
       if (queryResults[i].id == result.resultId) {
         queryResults[i].title = result.title;
