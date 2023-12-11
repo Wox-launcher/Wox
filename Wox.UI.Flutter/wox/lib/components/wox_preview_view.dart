@@ -37,10 +37,12 @@ class WoxPreviewView extends StatelessWidget {
     Widget contentWidget = const SizedBox();
     if (woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MARKDOWN.code) {
       var styleTheme = Theme.of(context).copyWith(
-          textTheme: Theme.of(context).textTheme.apply(
-                bodyColor: fromCssColor(woxTheme.previewFontColor),
-                displayColor: fromCssColor(woxTheme.previewFontColor),
-              ));
+        textTheme: Theme.of(context).textTheme.apply(
+              bodyColor: fromCssColor(woxTheme.previewFontColor),
+              displayColor: fromCssColor(woxTheme.previewFontColor),
+            ),
+        cardColor: Colors.transparent,
+      );
       contentWidget = Markdown(
         data: woxPreview.previewData,
         padding: EdgeInsets.zero,

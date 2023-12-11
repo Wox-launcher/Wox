@@ -314,7 +314,9 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   void _resetActiveResult() {
     _activeResultIndex.value = 0;
-    resultListViewScrollController.jumpTo(0);
+    if (resultListViewScrollController.hasClients) {
+      resultListViewScrollController.jumpTo(0);
+    }
 
     //reset preview
     if (queryResults.isNotEmpty) {
