@@ -473,7 +473,7 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, sub
 	return score
 }
 
-func (m *Manager) PolishRefreshableResult(ctx context.Context, pluginInstance *Instance, result RefreshableResult) RefreshableResult {
+func (m *Manager) PolishRefreshableResult(ctx context.Context, pluginInstance *Instance, resultId string, result RefreshableResult) RefreshableResult {
 	// convert icon
 	result.Icon = ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
 	// translate title
@@ -487,6 +487,22 @@ func (m *Manager) PolishRefreshableResult(ctx context.Context, pluginInstance *I
 		previewProperties[translatedKey] = value
 	}
 	result.Preview.PreviewProperties = previewProperties
+
+	// store preview for ui invoke later
+	// because preview may contain some heavy data (E.g. image or large text), we will store preview in cache and only send preview to ui when user select the result
+	if result.Preview.PreviewType != "" && result.Preview.PreviewType != WoxPreviewTypeRemote {
+		// update preview in cache
+		if v, ok := m.resultCache.Load(resultId); ok {
+			v.Preview = result.Preview
+			m.resultCache.Store(resultId, v)
+		}
+
+		result.Preview = WoxPreview{
+			PreviewType: WoxPreviewTypeRemote,
+			PreviewData: fmt.Sprintf("/preview?id=%s", resultId),
+		}
+	}
+
 	return result
 }
 
@@ -677,7 +693,7 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 	}
 
 	newResult := resultCache.Refresh(refreshableResult)
-	newResult = m.PolishRefreshableResult(ctx, resultCache.PluginInstance, newResult)
+	newResult = m.PolishRefreshableResult(ctx, resultCache.PluginInstance, refreshableResultWithId.ResultId, newResult)
 
 	return RefreshableResultWithResultId{
 		ResultId:        refreshableResultWithId.ResultId,

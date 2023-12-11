@@ -534,6 +534,7 @@ func serveAndWait(ctx context.Context, port int) {
 
 func requestUI(ctx context.Context, request WebsocketMsg) {
 	request.Type = WebsocketMsgTypeRequest
+	request.Success = true
 	marshalData, marshalErr := json.Marshal(request)
 	if marshalErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to marshal websocket request: %s", marshalErr.Error()))

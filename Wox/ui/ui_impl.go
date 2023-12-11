@@ -247,6 +247,17 @@ func handleRefresh(ctx context.Context, request WebsocketMsg) {
 		return
 	}
 
+	// replace remote preview with local preview
+	if result.Preview.PreviewType == plugin.WoxPreviewTypeRemote {
+		preview, err := plugin.GetPluginManager().GetResultPreview(util.NewTraceContext(), result.ResultId)
+		if err != nil {
+			logger.Error(ctx, err.Error())
+			responseUIError(ctx, request, err.Error())
+			return
+		}
+		result.Preview = preview
+	}
+
 	newResult, refreshErr := plugin.GetPluginManager().ExecuteRefresh(ctx, result)
 	if refreshErr != nil {
 		logger.Error(ctx, refreshErr.Error())

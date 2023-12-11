@@ -223,8 +223,8 @@ class WoxRefreshableResult {
     resultId = json['ResultId'];
     title = json['Title'];
     subTitle = json['SubTitle'] ?? "";
-    icon = json['Icon'];
-    preview = json['Preview'];
+    icon = WoxImage.fromJson(json['Icon']);
+    preview = WoxPreview.fromJson(json['Preview']);
     contextData = json['ContextData'];
     refreshInterval = json['RefreshInterval'];
   }

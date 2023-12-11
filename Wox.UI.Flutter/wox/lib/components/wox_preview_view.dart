@@ -36,7 +36,17 @@ class WoxPreviewView extends StatelessWidget {
 
     Widget contentWidget = const SizedBox();
     if (woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MARKDOWN.code) {
-      contentWidget = Markdown(data: woxPreview.previewData, padding: EdgeInsets.zero);
+      var styleTheme = Theme.of(context).copyWith(
+          textTheme: Theme.of(context).textTheme.apply(
+                bodyColor: fromCssColor(woxTheme.previewFontColor),
+                displayColor: fromCssColor(woxTheme.previewFontColor),
+              ));
+      contentWidget = Markdown(
+        data: woxPreview.previewData,
+        padding: EdgeInsets.zero,
+        selectable: true,
+        styleSheet: MarkdownStyleSheet.fromTheme(styleTheme),
+      );
     } else if (woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TEXT.code) {
       contentWidget = SelectableText(woxPreview.previewData, style: TextStyle(color: fromCssColor(woxTheme.previewFontColor)));
     } else if (woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_IMAGE.code) {

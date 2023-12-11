@@ -19,7 +19,7 @@ class WoxPreview {
     final Map<String, dynamic> data = <String, dynamic>{};
     data['PreviewType'] = previewType;
     data['PreviewData'] = previewData;
-    data['PreviewProperties'] = const JsonEncoder().convert(previewProperties);
+    data['PreviewProperties'] = previewProperties;
     return data;
   }
 

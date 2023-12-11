@@ -221,6 +221,11 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   void handleWebSocketMessage(event) {
     var msg = WoxWebsocketMsg.fromJson(jsonDecode(event));
+    if (msg.success == false) {
+      Logger.instance.error("Received error message: ${msg.toJson()}");
+      return;
+    }
+
     Logger.instance.info("Received message: ${msg.toJson()}");
     if (msg.method == "ToggleApp") {
       toggleApp(ShowAppParams.fromJson(msg.data));
@@ -448,6 +453,10 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
         queryResults[i].preview = result.preview;
         queryResults[i].contextData = result.contextData;
         queryResults[i].refreshInterval = result.refreshInterval;
+
+        currentPreview.value = result.preview;
+
+        queryResults.refresh();
         break;
       }
     }
