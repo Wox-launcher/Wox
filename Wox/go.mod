@@ -59,6 +59,7 @@ require (
 	github.com/saracen/zipextra v0.0.0-20220303013732-0187cb0159ea // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/vcaesar/keycode v0.10.1 // indirect
+	github.com/xeonx/timeago v1.0.0-rc5 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.design/x/mainthread v0.3.0 // indirect
 	golang.org/x/exp v0.0.0-20220303212507-bbda1eaf7a17 // indirect

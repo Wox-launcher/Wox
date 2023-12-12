@@ -58,6 +58,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 				Id:       uuid.NewString(),
 				Title:    triggerKeyword,
 				SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), pluginInstance.Metadata.Name),
+				Score:    10,
 				Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
 				Actions: []plugin.QueryResultAction{
 					{
@@ -79,6 +80,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 					Id:       uuid.NewString(),
 					Title:    fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command),
 					SubTitle: metadataCommand.Description,
+					Score:    10,
 					Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
 					Actions: []plugin.QueryResultAction{
 						{

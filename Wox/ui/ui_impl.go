@@ -179,7 +179,7 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 
 	var totalResultCount int
 	var startTimestamp = util.GetSystemTimestamp()
-	var resultDebouncer = util.NewDebouncer(30, func(results []plugin.QueryResultUI, reason string) {
+	var resultDebouncer = util.NewDebouncer(24, func(results []plugin.QueryResultUI, reason string) {
 		logger.Info(ctx, fmt.Sprintf("query %s: %s, result flushed (reason: %s), total results: %d", query.Type, query.String(), reason, totalResultCount))
 		responseUISuccessWithData(ctx, request, results)
 	})

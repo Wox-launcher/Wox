@@ -157,25 +157,27 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 	}
 	loadFinishTimestamp := util.GetSystemTimestamp()
 
-	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Metadata.Id, metadata.Metadata.SettingDefinitions)
-	if settingErr != nil {
-		return settingErr
-	}
-
 	instance := &Instance{
 		Metadata:              metadata.Metadata,
 		PluginDirectory:       metadata.Directory,
 		Plugin:                plugin,
 		Host:                  host,
-		Setting:               pluginSetting,
 		LoadStartTimestamp:    loadStartTimestamp,
 		LoadFinishedTimestamp: loadFinishTimestamp,
 	}
 	instance.API = NewAPI(instance)
+	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Metadata.Id, metadata.Metadata.SettingDefinitions)
+	if settingErr != nil {
+		instance.API.Log(ctx, fmt.Errorf("[SYS] failed to load plugin[%s] setting: %w", metadata.Metadata.Name, settingErr).Error())
+		return settingErr
+	}
+	instance.Setting = pluginSetting
+
 	m.instances = append(m.instances, instance)
 
 	if pluginSetting.Disabled {
 		logger.Info(ctx, fmt.Errorf("[%s HOST] plugin is disabled by user, skip init: %s", host.GetRuntime(ctx), metadata.Metadata.Name).Error())
+		instance.API.Log(ctx, fmt.Sprintf("[SYS] plugin is disabled by user, skip init: %s", metadata.Metadata.Name))
 		return nil
 	}
 
@@ -224,24 +226,27 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 
 	for _, plugin := range AllSystemPlugin {
 		metadata := plugin.GetMetadata()
-		pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.SettingDefinitions)
-		if settingErr != nil {
-			logger.Error(ctx, fmt.Errorf("failed to load system plugin[%s] setting, use default plugin setting: %w", metadata.Name, settingErr).Error())
-			pluginSetting = &setting.PluginSetting{
-				Settings: util.NewHashMap[string, string](),
-			}
-		}
-
 		instance := &Instance{
-			Metadata:              plugin.GetMetadata(),
+			Metadata:              metadata,
 			Plugin:                plugin,
 			Host:                  nil,
-			Setting:               pluginSetting,
 			IsSystemPlugin:        true,
 			LoadStartTimestamp:    util.GetSystemTimestamp(),
 			LoadFinishedTimestamp: util.GetSystemTimestamp(),
 		}
 		instance.API = NewAPI(instance)
+
+		pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.SettingDefinitions)
+		if settingErr != nil {
+			errMsg := fmt.Sprintf("failed to load system plugin[%s] setting, use default plugin setting. err: %s", metadata.Name, settingErr.Error())
+			logger.Error(ctx, errMsg)
+			instance.API.Log(ctx, fmt.Sprintf("[SYS] %s", errMsg))
+			pluginSetting = &setting.PluginSetting{
+				Settings: util.NewHashMap[string, string](),
+			}
+		}
+		instance.Setting = pluginSetting
+
 		m.instances = append(m.instances, instance)
 
 		util.Go(ctx, fmt.Sprintf("[%s] init system plugin", plugin.GetMetadata().Name), func() {
@@ -252,6 +257,7 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 
 func (m *Manager) initPlugin(ctx context.Context, instance *Instance) {
 	logger.Info(ctx, fmt.Sprintf("[%s] init plugin", instance.Metadata.Name))
+	instance.API.Log(ctx, fmt.Sprintf("[SYS] init plugin"))
 	instance.InitStartTimestamp = util.GetSystemTimestamp()
 	instance.Plugin.Init(ctx, InitParams{
 		API:             instance.API,
@@ -259,6 +265,7 @@ func (m *Manager) initPlugin(ctx context.Context, instance *Instance) {
 	})
 	instance.InitFinishedTimestamp = util.GetSystemTimestamp()
 	logger.Info(ctx, fmt.Sprintf("[%s] init plugin finished, cost %d ms", instance.Metadata.Name, instance.InitFinishedTimestamp-instance.InitStartTimestamp))
+	instance.API.Log(ctx, fmt.Sprintf("[SYS] init plugin finished, cost %d ms", instance.InitFinishedTimestamp-instance.InitStartTimestamp))
 }
 
 func (m *Manager) parseMetadata(ctx context.Context, pluginDirectory string) (Metadata, error) {

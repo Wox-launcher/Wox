@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/sashabaranov/go-openai"
+	"github.com/xeonx/timeago"
 	"io"
 	"sort"
 	"strings"
@@ -26,7 +27,10 @@ type ChatgptPlugin struct {
 	api            plugin.API
 	client         *openai.Client
 	nonActiveChats []*Chat
-	activeChat     *Chat
+
+	activeChat       *Chat
+	activeChatResult *plugin.QueryResult
+	activeChatAnswer string
 }
 
 type Chat struct {
@@ -34,12 +38,25 @@ type Chat struct {
 	Title            string
 	Conversations    []Conversation
 	CreatedTimestamp int64
-	isActive         bool
+}
+
+func (c *Chat) Format() string {
+	var result string
+	for _, conversation := range c.Conversations {
+		nick := "You"
+		if conversation.Role == openai.ChatMessageRoleSystem {
+			nick = "ChatGPT"
+		}
+		result += fmt.Sprintf("%s: %s\n\n", nick, conversation.Text)
+	}
+
+	return result
 }
 
 type Conversation struct {
-	Role string
-	Text string
+	Role      string
+	Text      string
+	Timestamp int64
 }
 
 func (c *ChatgptPlugin) GetMetadata() plugin.Metadata {
@@ -57,12 +74,6 @@ func (c *ChatgptPlugin) GetMetadata() plugin.Metadata {
 		TriggerKeywords: []string{
 			"gpt", "chat",
 		},
-		Commands: []plugin.MetadataCommand{
-			{
-				Command:     "new",
-				Description: "Start a new chat",
-			},
-		},
 		SupportedOS: []string{
 			"Windows",
 			"Macos",
@@ -78,12 +89,6 @@ func (c *ChatgptPlugin) GetMetadata() plugin.Metadata {
 			},
 		},
 		Features: []plugin.MetadataFeature{
-			{
-				Name: plugin.MetadataFeatureDebounce,
-				Params: map[string]string{
-					"intervalMs": "500",
-				},
-			},
 			{
 				Name: plugin.MetadataFeatureIgnoreAutoScore,
 			},
@@ -123,86 +128,194 @@ func (c *ChatgptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.
 
 func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
 	if c.activeChat != nil {
+		if c.activeChatResult == nil {
+			c.activeChatResult = &plugin.QueryResult{
+				Title:    c.activeChat.Title,
+				SubTitle: "Current active chat",
+				Icon:     chatgptIcon,
+			}
+		}
+
+		chatHistory := c.activeChat.Format()
+		if chatHistory == "" && query.Search == "" {
+			chatHistory = "Please ask anything to continue..."
+		}
+		if query.Search != "" {
+			chatHistory += fmt.Sprintf("You: %s\n", query.Search)
+		}
+		c.activeChatResult.Preview = plugin.WoxPreview{
+			PreviewType: plugin.WoxPreviewTypeText,
+			PreviewData: chatHistory,
+		}
+		c.api.Log(ctx, fmt.Sprintf("active chat refresh interval: %d", c.activeChatResult.RefreshInterval))
+		c.activeChatResult.Actions = []plugin.QueryResultAction{
+			{
+				Name:                   "Send chat",
+				IsDefault:              true,
+				PreventHideAfterAction: true,
+				Action: func(actionContext plugin.ActionContext) {
+					if query.Search == "" {
+						return
+					}
+
+					c.activeChat.Conversations = append(c.activeChat.Conversations, Conversation{
+						Role:      openai.ChatMessageRoleUser,
+						Text:      query.Search,
+						Timestamp: util.GetSystemTimestamp(),
+					})
+					c.saveActiveChat(ctx)
+
+					var chatMessages []openai.ChatCompletionMessage
+					for _, conversation := range c.activeChat.Conversations {
+						chatMessages = append(chatMessages, openai.ChatCompletionMessage{
+							Role:    conversation.Role,
+							Content: conversation.Text,
+						})
+					}
+
+					onAnswering := func(current plugin.RefreshableResult, deltaAnswer string) plugin.RefreshableResult {
+						if c.activeChatAnswer == "" {
+							//first response
+							deltaAnswer = fmt.Sprintf("ChatGPT: %s", deltaAnswer)
+						}
+
+						current.Preview.PreviewData += deltaAnswer
+						c.activeChatAnswer += deltaAnswer
+						return current
+					}
+					onAnswerErr := func(current plugin.RefreshableResult, err error) plugin.RefreshableResult {
+						current.Preview.PreviewData += fmt.Sprintf("Error: %s", err.Error())
+						current.RefreshInterval = 0 // stop refreshing
+						c.activeChatResult.RefreshInterval = 0
+						c.activeChatAnswer = ""
+						return current
+					}
+					onAnswerFinished := func(current plugin.RefreshableResult) plugin.RefreshableResult {
+						c.api.Log(ctx, "active chat finished")
+						current.RefreshInterval = 0 // stop refreshing
+						c.activeChatResult.RefreshInterval = 0
+						c.activeChat.Conversations = append(c.activeChat.Conversations, Conversation{
+							Role:      openai.ChatMessageRoleSystem,
+							Text:      c.activeChatAnswer,
+							Timestamp: util.GetSystemTimestamp(),
+						})
+						c.activeChatAnswer = ""
+						c.saveActiveChat(ctx)
+						return current
+					}
+					c.activeChatResult.RefreshInterval = 100
+					c.activeChatAnswer = ""
+					c.activeChatResult.OnRefresh = c.generateGptResultRefresh(ctx, chatMessages, onAnswering, onAnswerErr, onAnswerFinished)
+
+					c.api.ChangeQuery(ctx, share.ChangedQuery{
+						QueryType: plugin.QueryTypeInput,
+						QueryText: query.TriggerKeyword + " ",
+					})
+
+					c.saveChats(ctx)
+				},
+			},
+			{
+				Name:                   "Delete chat",
+				PreventHideAfterAction: true,
+				Action: func(actionContext plugin.ActionContext) {
+					c.deleteChat(ctx, c.activeChat.Id, true)
+					c.api.ChangeQuery(ctx, share.ChangedQuery{
+						QueryType: plugin.QueryTypeInput,
+						QueryText: query.TriggerKeyword + " ",
+					})
+				},
+			},
+		}
+
+		results = append(results, *c.activeChatResult)
+	}
+
+	newChatPreviewData := "Please input conversation title to continue..."
+	if query.Search != "" {
+		newChatPreviewData = fmt.Sprintf("Please input conversation title to continue\n\nTitle: %s", query.Search)
+	}
+	results = append(results, plugin.QueryResult{
+		Title: "Start a new chat",
+		Preview: plugin.WoxPreview{
+			PreviewType: plugin.WoxPreviewTypeText,
+			PreviewData: newChatPreviewData,
+		},
+		Icon: chatgptIcon,
+		Actions: []plugin.QueryResultAction{
+			{
+				Name:                   "Start",
+				PreventHideAfterAction: true,
+				Action: func(actionContext plugin.ActionContext) {
+					if query.Search == "" {
+						return
+					}
+
+					newChat := &Chat{
+						Id:               uuid.NewString(),
+						Title:            query.Search,
+						CreatedTimestamp: util.GetSystemTimestamp(),
+					}
+					c.nonActiveChats = append(c.nonActiveChats, newChat)
+					c.changeActiveChat(ctx, newChat.Id)
+					c.api.ChangeQuery(ctx, share.ChangedQuery{
+						QueryType: plugin.QueryTypeInput,
+						QueryText: query.TriggerKeyword + " ",
+					})
+				},
+			},
+		},
+	})
+
+	for _, chat := range c.nonActiveChats {
+		chatHistory := chat.Format()
+		if chatHistory == "" {
+			chatHistory = "No conversation"
+		}
 		results = append(results, plugin.QueryResult{
-			Title:    c.activeChat.Title,
+			Title:    chat.Title,
+			SubTitle: timeago.English.Format(util.ParseTimeStamp(chat.CreatedTimestamp)),
 			Icon:     chatgptIcon,
-			SubTitle: "Input question to chat with this one",
+			Preview: plugin.WoxPreview{
+				PreviewType: plugin.WoxPreviewTypeMarkdown,
+				PreviewData: chatHistory,
+			},
 			Actions: []plugin.QueryResultAction{
 				{
-					Name:      "Send chat",
-					IsDefault: true,
+					Name:                   "Activate",
+					PreventHideAfterAction: true,
 					Action: func(actionContext plugin.ActionContext) {
-						if query.Search == "" {
-							return
-						}
-
-						c.activeChat.Conversations = append(c.activeChat.Conversations, Conversation{
-							Role: openai.ChatMessageRoleUser,
-							Text: query.Search,
-						})
-
-						var chatMessages []openai.ChatCompletionMessage
-						for _, conversation := range c.activeChat.Conversations {
-							chatMessages = append(chatMessages, openai.ChatCompletionMessage{
-								Role:    conversation.Role,
-								Content: conversation.Text,
-							})
-						}
-
+						c.changeActiveChat(ctx, chat.Id)
 						c.api.ChangeQuery(ctx, share.ChangedQuery{
 							QueryType: plugin.QueryTypeInput,
 							QueryText: query.TriggerKeyword + " ",
 						})
-
-						c.saveChats(ctx)
+					},
+				},
+				{
+					Name:                   "Delete chat",
+					PreventHideAfterAction: true,
+					Action: func(actionContext plugin.ActionContext) {
+						c.deleteChat(ctx, chat.Id, true)
+						c.api.ChangeQuery(ctx, share.ChangedQuery{
+							QueryType: plugin.QueryTypeInput,
+							QueryText: query.TriggerKeyword + " ",
+						})
 					},
 				},
 			},
 		})
 	}
 
+	// sort by score desc
+	for i := range results {
+		results[i].Score = int64(len(results) - i)
+	}
+
 	return results
 }
 
 func (c *ChatgptPlugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	if query.Command == "new" {
-		if query.Search == "" {
-			return []plugin.QueryResult{
-				{
-					Title: "Please input chat title to continue",
-					Icon:  chatgptIcon,
-				},
-			}
-		}
-
-		return []plugin.QueryResult{
-			{
-				Title: "Start chat...",
-				Icon:  chatgptIcon,
-				Actions: []plugin.QueryResultAction{
-					{
-						Name:                   "Start",
-						PreventHideAfterAction: true,
-						Action: func(actionContext plugin.ActionContext) {
-							newChat := &Chat{
-								Id:               uuid.NewString(),
-								Title:            query.Search,
-								CreatedTimestamp: util.GetSystemTimestamp(),
-							}
-							c.nonActiveChats = append(c.nonActiveChats, newChat)
-							c.changeActiveChat(ctx, newChat.Id)
-							c.api.ChangeQuery(ctx, share.ChangedQuery{
-								QueryType: plugin.QueryTypeInput,
-								QueryText: query.TriggerKeyword + " ",
-							})
-						},
-					},
-				},
-			},
-		}
-	}
-
-	// other user defined commands
 	if query.Search == "" {
 		return []plugin.QueryResult{
 			{
@@ -235,126 +348,165 @@ func (c *ChatgptPlugin) queryCommand(ctx context.Context, query plugin.Query) []
 				})
 			}
 		}
-		return []plugin.QueryResult{c.generateGptCommandAnswer(ctx, chatMessages, nil)}
+
+		onAnswering := func(current plugin.RefreshableResult, deltaAnswer string) plugin.RefreshableResult {
+			current.Preview.PreviewData += deltaAnswer
+			return current
+		}
+		onAnswerErr := func(current plugin.RefreshableResult, err error) plugin.RefreshableResult {
+			current.Preview.PreviewData += fmt.Sprintf("Error: %s", err.Error())
+			current.RefreshInterval = 0 // stop refreshing
+			return current
+		}
+		onAnswerFinished := func(current plugin.RefreshableResult) plugin.RefreshableResult {
+			current.Preview.PreviewData += "\n\nChat finished"
+			current.RefreshInterval = 0 // stop refreshing
+			return current
+		}
+
+		return []plugin.QueryResult{{
+			Title:           fmt.Sprintf("Chat with %s", query.Command),
+			RefreshInterval: 100,
+			OnRefresh:       c.generateGptResultRefresh(ctx, chatMessages, onAnswering, onAnswerErr, onAnswerFinished),
+		}}
 	}
 
 	return []plugin.QueryResult{}
 }
 
-func (c *ChatgptPlugin) generateGptCommandAnswer(ctx context.Context, messages []openai.ChatCompletionMessage, action func(actionContext plugin.ActionContext)) plugin.QueryResult {
+// generate a result which will send chat messages to openai and show the result automatically
+func (c *ChatgptPlugin) generateGptResultRefresh(ctx context.Context, messages []openai.ChatCompletionMessage,
+	onAnswering func(plugin.RefreshableResult, string) plugin.RefreshableResult,
+	onAnswerErr func(plugin.RefreshableResult, error) plugin.RefreshableResult,
+	onAnswerFinished func(plugin.RefreshableResult) plugin.RefreshableResult) func(current plugin.RefreshableResult) plugin.RefreshableResult {
+
 	var stream *openai.ChatCompletionStream
 	var creatingStream bool
-	return plugin.QueryResult{
-		Title: "Answering...",
-		Icon:  chatgptIcon,
-		Preview: plugin.WoxPreview{
-			PreviewType: plugin.WoxPreviewTypeMarkdown,
-			PreviewData: "",
-		},
-		RefreshInterval: 100,
-		OnRefresh: func(current plugin.RefreshableResult) plugin.RefreshableResult {
-			if stream == nil {
-				if creatingStream {
-					c.api.Log(ctx, "Already creating stream, waiting create finish")
-					return current
-				}
-
-				c.api.Log(ctx, "Creating stream")
-				creatingStream = true
-				createdStream, createErr := c.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
-					Stream:   true,
-					Model:    openai.GPT3Dot5Turbo,
-					Messages: messages,
-				})
-				creatingStream = false
-				c.api.Log(ctx, "Created stream")
-				if createErr != nil {
-					current.Title = "Answer error"
-					current.Preview.PreviewData = createErr.Error()
-					current.RefreshInterval = 0 // stop refreshing
-					return current
-				}
-				stream = createdStream
-			}
-
-			c.api.Log(ctx, "Reading stream")
-			response, streamErr := stream.Recv()
-			if errors.Is(streamErr, io.EOF) {
-				stream.Close()
-				current.Title = "Answer finished"
-				current.RefreshInterval = 0 // stop refreshing
+	return func(current plugin.RefreshableResult) plugin.RefreshableResult {
+		if stream == nil {
+			if creatingStream {
+				c.api.Log(ctx, "Already creating stream, waiting create finish")
 				return current
 			}
 
-			if streamErr != nil {
-				stream.Close()
-				current.Title = "Answer error"
-				current.Preview.PreviewData = streamErr.Error()
+			c.api.Log(ctx, "Creating stream")
+			creatingStream = true
+			createdStream, createErr := c.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
+				Stream:   true,
+				Model:    openai.GPT3Dot5Turbo,
+				Messages: messages,
+			})
+			creatingStream = false
+			c.api.Log(ctx, "Created stream")
+			if createErr != nil {
+				if onAnswerErr != nil {
+					current = onAnswerErr(current, createErr)
+				}
 				current.RefreshInterval = 0 // stop refreshing
 				return current
 			}
+			stream = createdStream
+		}
 
-			current.Preview.PreviewData += response.Choices[0].Delta.Content
+		c.api.Log(ctx, "Reading stream")
+		response, streamErr := stream.Recv()
+		if errors.Is(streamErr, io.EOF) {
+			stream.Close()
+			if onAnswerFinished != nil {
+				current = onAnswerFinished(current)
+			}
+			current.RefreshInterval = 0 // stop refreshing
 			return current
-		},
-		Actions: []plugin.QueryResultAction{
-			{
-				Name: "Copy",
-				Action: func(actionContext plugin.ActionContext) {
-					if action != nil {
-						action(actionContext)
-					}
-				},
-			},
-		},
+		}
+
+		if streamErr != nil {
+			stream.Close()
+			if onAnswerErr != nil {
+				current = onAnswerErr(current, streamErr)
+			}
+			current.RefreshInterval = 0 // stop refreshing
+			return current
+		}
+
+		if onAnswering != nil {
+			current = onAnswering(current, response.Choices[0].Delta.Content)
+		}
+
+		return current
 	}
 }
 
 func (c *ChatgptPlugin) loadChats(ctx context.Context) {
-	chatStr := c.api.GetSetting(ctx, "nonActiveChats")
-	if chatStr == "" {
-		c.api.Log(ctx, "No nonActiveChats to load")
+	nonActiveChatStr := c.api.GetSetting(ctx, "non_active_chats")
+	if nonActiveChatStr == "" {
+		c.api.Log(ctx, "No non-active chats to load")
 		c.nonActiveChats = []*Chat{}
-		return
+	} else {
+		unmarshalErr := json.Unmarshal([]byte(nonActiveChatStr), &c.nonActiveChats)
+		if unmarshalErr != nil {
+			c.api.Log(ctx, fmt.Sprintf("Failed to load nonActiveChats: %s", unmarshalErr.Error()))
+		}
+
+		//sort nonactive chats by created timestamp desc
+		sort.Slice(c.nonActiveChats, func(i, j int) bool {
+			return c.nonActiveChats[i].CreatedTimestamp > c.nonActiveChats[j].CreatedTimestamp
+		})
 	}
 
-	var chats []*Chat
-	unmarshalErr := json.Unmarshal([]byte(chatStr), &chats)
-	if unmarshalErr != nil {
-		c.api.Log(ctx, fmt.Sprintf("Failed to load nonActiveChats: %s", unmarshalErr.Error()))
-		return
-	}
+	activeChatStr := c.api.GetSetting(ctx, "active_chat")
+	if activeChatStr == "" {
+		c.api.Log(ctx, "No active chat to load")
+		c.activeChat = nil
+	} else {
+		var activeChat *Chat
+		unmarshalErr := json.Unmarshal([]byte(activeChatStr), &activeChat)
+		if unmarshalErr != nil {
+			c.api.Log(ctx, fmt.Sprintf("Failed to load activeChat: %s", unmarshalErr.Error()))
+		}
+		c.activeChat = activeChat
 
-	for _, chat := range chats {
-		chatDummy := chat
-		if chat.isActive {
-			c.activeChat = chatDummy
-		} else {
-			c.nonActiveChats = append(c.nonActiveChats, chatDummy)
+		if c.activeChat != nil {
+			//sort active chat conversations by timestamp asc
+			sort.Slice(c.activeChat.Conversations, func(i, j int) bool {
+				return c.activeChat.Conversations[i].Timestamp < c.activeChat.Conversations[j].Timestamp
+			})
 		}
 	}
-
-	//sort nonactive chats by created timestamp desc
-	sort.Slice(c.nonActiveChats, func(i, j int) bool {
-		return c.nonActiveChats[i].CreatedTimestamp > c.nonActiveChats[j].CreatedTimestamp
-	})
 
 	c.api.Log(ctx, fmt.Sprintf("Loaded %d nonactive chats, has active chat: %t", len(c.nonActiveChats), c.activeChat != nil))
 }
 
 func (c *ChatgptPlugin) saveChats(ctx context.Context) {
-	chatStr, marshalErr := json.Marshal(c.nonActiveChats)
-	if marshalErr != nil {
-		c.api.Log(ctx, fmt.Sprintf("Failed to save nonActiveChats: %s", marshalErr.Error()))
-		return
-	}
+	c.saveActiveChat(ctx)
+	c.saveNonActiveChats(ctx)
+}
 
-	c.api.SaveSetting(ctx, "nonActiveChats", string(chatStr), false)
+func (c *ChatgptPlugin) saveActiveChat(ctx context.Context) {
+	if c.activeChat != nil {
+		activeChatStr, marshalErr := json.Marshal(c.activeChat)
+		if marshalErr != nil {
+			c.api.Log(ctx, fmt.Sprintf("Failed to marshal activeChats: %s", marshalErr.Error()))
+		}
+		c.api.SaveSetting(ctx, "active_chat", string(activeChatStr), false)
+	} else {
+		c.api.SaveSetting(ctx, "active_chat", "", false)
+	}
+}
+
+func (c *ChatgptPlugin) saveNonActiveChats(ctx context.Context) {
+	if len(c.nonActiveChats) > 0 {
+		nonActiveChatStr, marshalErr := json.Marshal(c.nonActiveChats)
+		if marshalErr != nil {
+			c.api.Log(ctx, fmt.Sprintf("Failed to marshal nonActiveChats: %s", marshalErr.Error()))
+		}
+		c.api.SaveSetting(ctx, "non_active_chats", string(nonActiveChatStr), false)
+	} else {
+		c.api.SaveSetting(ctx, "non_active_chats", "", false)
+	}
 }
 
 func (c *ChatgptPlugin) changeActiveChat(ctx context.Context, newActiveChatId string) {
 	if c.activeChat != nil {
-		c.activeChat.isActive = false
 		c.nonActiveChats = append(c.nonActiveChats, c.activeChat)
 	}
 
@@ -372,6 +524,31 @@ func (c *ChatgptPlugin) changeActiveChat(ctx context.Context, newActiveChatId st
 	sort.Slice(c.nonActiveChats, func(i, j int) bool {
 		return c.nonActiveChats[i].CreatedTimestamp > c.nonActiveChats[j].CreatedTimestamp
 	})
+
+	c.saveChats(ctx)
+}
+
+func (c *ChatgptPlugin) deleteChat(ctx context.Context, chatId string, isActive bool) {
+	if isActive {
+		if len(c.nonActiveChats) > 0 {
+			c.activeChat = c.nonActiveChats[0]
+			c.nonActiveChats = c.nonActiveChats[1:]
+			c.activeChatResult = nil
+			c.activeChatAnswer = ""
+		} else {
+			c.activeChat = nil
+			c.activeChatResult = nil
+			c.activeChatAnswer = ""
+		}
+	} else {
+		var newNonActiveChats []*Chat
+		for _, chat := range c.nonActiveChats {
+			if chat.Id != chatId {
+				newNonActiveChats = append(newNonActiveChats, chat)
+			}
+		}
+		c.nonActiveChats = newNonActiveChats
+	}
 
 	c.saveChats(ctx)
 }
