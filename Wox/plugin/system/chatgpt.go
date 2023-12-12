@@ -2,13 +2,18 @@ package system
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/sashabaranov/go-openai"
 	"io"
+	"sort"
 	"strings"
 	"wox/plugin"
 	"wox/setting/definition"
+	"wox/share"
+	"wox/util"
 )
 
 var chatgptIcon = plugin.NewWoxImageBase64(`data:image/png;base64,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`)
@@ -18,8 +23,23 @@ func init() {
 }
 
 type ChatgptPlugin struct {
-	api    plugin.API
-	client *openai.Client
+	api            plugin.API
+	client         *openai.Client
+	nonActiveChats []*Chat
+	activeChat     *Chat
+}
+
+type Chat struct {
+	Id               string
+	Title            string
+	Conversations    []Conversation
+	CreatedTimestamp int64
+	isActive         bool
+}
+
+type Conversation struct {
+	Role string
+	Text string
 }
 
 func (c *ChatgptPlugin) GetMetadata() plugin.Metadata {
@@ -35,9 +55,14 @@ func (c *ChatgptPlugin) GetMetadata() plugin.Metadata {
 		Icon:          chatgptIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
-			"gpt",
+			"gpt", "chat",
 		},
-		Commands: []plugin.MetadataCommand{},
+		Commands: []plugin.MetadataCommand{
+			{
+				Command:     "new",
+				Description: "Start a new chat",
+			},
+		},
 		SupportedOS: []string{
 			"Windows",
 			"Macos",
@@ -59,6 +84,9 @@ func (c *ChatgptPlugin) GetMetadata() plugin.Metadata {
 					"intervalMs": "500",
 				},
 			},
+			{
+				Name: plugin.MetadataFeatureIgnoreAutoScore,
+			},
 		},
 	}
 }
@@ -69,6 +97,8 @@ func (c *ChatgptPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 	if apiKey != "" {
 		c.client = openai.NewClient(apiKey)
 	}
+
+	c.loadChats(ctx)
 }
 
 func (c *ChatgptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -82,47 +112,136 @@ func (c *ChatgptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.
 		}
 	}
 
-	if query.Command != "" {
+	if query.Command == "" {
+		// chat conversation
+		return c.queryConversation(ctx, query)
+	} else {
+		// chat with command
+		return c.queryCommand(ctx, query)
+	}
+}
+
+func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
+	if c.activeChat != nil {
+		results = append(results, plugin.QueryResult{
+			Title:    c.activeChat.Title,
+			Icon:     chatgptIcon,
+			SubTitle: "Input question to chat with this one",
+			Actions: []plugin.QueryResultAction{
+				{
+					Name:      "Send chat",
+					IsDefault: true,
+					Action: func(actionContext plugin.ActionContext) {
+						if query.Search == "" {
+							return
+						}
+
+						c.activeChat.Conversations = append(c.activeChat.Conversations, Conversation{
+							Role: openai.ChatMessageRoleUser,
+							Text: query.Search,
+						})
+
+						var chatMessages []openai.ChatCompletionMessage
+						for _, conversation := range c.activeChat.Conversations {
+							chatMessages = append(chatMessages, openai.ChatCompletionMessage{
+								Role:    conversation.Role,
+								Content: conversation.Text,
+							})
+						}
+
+						c.api.ChangeQuery(ctx, share.ChangedQuery{
+							QueryType: plugin.QueryTypeInput,
+							QueryText: query.TriggerKeyword + " ",
+						})
+
+						c.saveChats(ctx)
+					},
+				},
+			},
+		})
+	}
+
+	return results
+}
+
+func (c *ChatgptPlugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	if query.Command == "new" {
 		if query.Search == "" {
 			return []plugin.QueryResult{
 				{
-					Title: "Please input something",
+					Title: "Please input chat title to continue",
 					Icon:  chatgptIcon,
 				},
 			}
 		}
 
-		//TODO: need a simple way to read user settings
-		var prompts []string
-		commandContent := c.api.GetSetting(ctx, fmt.Sprintf("command_key_%s", query.Command))
-		if commandContent != "" {
-			prompts = strings.Split(commandContent, "|")
+		return []plugin.QueryResult{
+			{
+				Title: "Start chat...",
+				Icon:  chatgptIcon,
+				Actions: []plugin.QueryResultAction{
+					{
+						Name:                   "Start",
+						PreventHideAfterAction: true,
+						Action: func(actionContext plugin.ActionContext) {
+							newChat := &Chat{
+								Id:               uuid.NewString(),
+								Title:            query.Search,
+								CreatedTimestamp: util.GetSystemTimestamp(),
+							}
+							c.nonActiveChats = append(c.nonActiveChats, newChat)
+							c.changeActiveChat(ctx, newChat.Id)
+							c.api.ChangeQuery(ctx, share.ChangedQuery{
+								QueryType: plugin.QueryTypeInput,
+								QueryText: query.TriggerKeyword + " ",
+							})
+						},
+					},
+				},
+			},
 		}
+	}
 
-		if len(prompts) > 0 {
-			var chatMessages []openai.ChatCompletionMessage
-			for index, message := range prompts {
-				msg := fmt.Sprintf(message, query.Search)
-				if index%2 == 0 {
-					chatMessages = append(chatMessages, openai.ChatCompletionMessage{
-						Role:    openai.ChatMessageRoleUser,
-						Content: msg,
-					})
-				} else {
-					chatMessages = append(chatMessages, openai.ChatCompletionMessage{
-						Role:    openai.ChatMessageRoleSystem,
-						Content: msg,
-					})
-				}
-			}
-			return []plugin.QueryResult{c.generateGptAnswer(ctx, chatMessages, nil)}
+	// other user defined commands
+	if query.Search == "" {
+		return []plugin.QueryResult{
+			{
+				Title: "Please input something",
+				Icon:  chatgptIcon,
+			},
 		}
+	}
+
+	//TODO: need a simple way to read user settings
+	var prompts []string
+	commandContent := c.api.GetSetting(ctx, fmt.Sprintf("command_key_%s", query.Command))
+	if commandContent != "" {
+		prompts = strings.Split(commandContent, "|")
+	}
+
+	if len(prompts) > 0 {
+		var chatMessages []openai.ChatCompletionMessage
+		for index, message := range prompts {
+			msg := fmt.Sprintf(message, query.Search)
+			if index%2 == 0 {
+				chatMessages = append(chatMessages, openai.ChatCompletionMessage{
+					Role:    openai.ChatMessageRoleUser,
+					Content: msg,
+				})
+			} else {
+				chatMessages = append(chatMessages, openai.ChatCompletionMessage{
+					Role:    openai.ChatMessageRoleSystem,
+					Content: msg,
+				})
+			}
+		}
+		return []plugin.QueryResult{c.generateGptCommandAnswer(ctx, chatMessages, nil)}
 	}
 
 	return []plugin.QueryResult{}
 }
 
-func (c *ChatgptPlugin) generateGptAnswer(ctx context.Context, messages []openai.ChatCompletionMessage, action func(actionContext plugin.ActionContext)) plugin.QueryResult {
+func (c *ChatgptPlugin) generateGptCommandAnswer(ctx context.Context, messages []openai.ChatCompletionMessage, action func(actionContext plugin.ActionContext)) plugin.QueryResult {
 	var stream *openai.ChatCompletionStream
 	var creatingStream bool
 	return plugin.QueryResult{
@@ -189,4 +308,70 @@ func (c *ChatgptPlugin) generateGptAnswer(ctx context.Context, messages []openai
 			},
 		},
 	}
+}
+
+func (c *ChatgptPlugin) loadChats(ctx context.Context) {
+	chatStr := c.api.GetSetting(ctx, "nonActiveChats")
+	if chatStr == "" {
+		c.api.Log(ctx, "No nonActiveChats to load")
+		c.nonActiveChats = []*Chat{}
+		return
+	}
+
+	var chats []*Chat
+	unmarshalErr := json.Unmarshal([]byte(chatStr), &chats)
+	if unmarshalErr != nil {
+		c.api.Log(ctx, fmt.Sprintf("Failed to load nonActiveChats: %s", unmarshalErr.Error()))
+		return
+	}
+
+	for _, chat := range chats {
+		chatDummy := chat
+		if chat.isActive {
+			c.activeChat = chatDummy
+		} else {
+			c.nonActiveChats = append(c.nonActiveChats, chatDummy)
+		}
+	}
+
+	//sort nonactive chats by created timestamp desc
+	sort.Slice(c.nonActiveChats, func(i, j int) bool {
+		return c.nonActiveChats[i].CreatedTimestamp > c.nonActiveChats[j].CreatedTimestamp
+	})
+
+	c.api.Log(ctx, fmt.Sprintf("Loaded %d nonactive chats, has active chat: %t", len(c.nonActiveChats), c.activeChat != nil))
+}
+
+func (c *ChatgptPlugin) saveChats(ctx context.Context) {
+	chatStr, marshalErr := json.Marshal(c.nonActiveChats)
+	if marshalErr != nil {
+		c.api.Log(ctx, fmt.Sprintf("Failed to save nonActiveChats: %s", marshalErr.Error()))
+		return
+	}
+
+	c.api.SaveSetting(ctx, "nonActiveChats", string(chatStr), false)
+}
+
+func (c *ChatgptPlugin) changeActiveChat(ctx context.Context, newActiveChatId string) {
+	if c.activeChat != nil {
+		c.activeChat.isActive = false
+		c.nonActiveChats = append(c.nonActiveChats, c.activeChat)
+	}
+
+	var newNonActiveChats []*Chat
+	for _, chat := range c.nonActiveChats {
+		if chat.Id == newActiveChatId {
+			c.activeChat = chat
+		} else {
+			newNonActiveChats = append(newNonActiveChats, chat)
+		}
+	}
+	c.nonActiveChats = newNonActiveChats
+
+	//sort nonactive chats by created timestamp desc
+	sort.Slice(c.nonActiveChats, func(i, j int) bool {
+		return c.nonActiveChats[i].CreatedTimestamp > c.nonActiveChats[j].CreatedTimestamp
+	})
+
+	c.saveChats(ctx)
 }
