@@ -1,7 +1,9 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
+import 'package:wox/components/wox_list_item_view.dart';
 import 'package:wox/components/wox_list_view.dart';
 import 'package:wox/components/wox_preview_view.dart';
 import 'package:wox/entity/wox_query.dart';
@@ -17,54 +19,60 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
 
   // Result List View
   Widget getResultListView() {
-    return WoxListView(
-      woxTheme: controller.woxTheme.value,
-      scrollController: controller.resultListViewScrollController,
-      itemCount: controller.queryResults.length,
-      itemExtent: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
-      listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code,
-      listViewItemParamsGetter: (index) {
-        WoxQueryResult woxQueryResult = controller.getQueryResultByIndex(index);
-        return WoxListViewItemParams.fromJson({
-          "Icon": woxQueryResult.icon,
-          "Title": woxQueryResult.title,
-          "SubTitle": woxQueryResult.subTitle,
-        });
-      },
-      listViewItemGlobalKeyGetter: (index) {
-        return controller.getResultItemGlobalKeyByIndex(index);
-      },
-      listViewItemIsActiveGetter: (index) {
-        return controller.isQueryResultActiveByIndex(index);
-      },
-      onMouseWheelScroll: (event) {
-        controller.changeResultScrollPosition(
-            WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_MOUSE.code, event.scrollDelta.dy > 0 ? WoxDirectionEnum.WOX_DIRECTION_DOWN.code : WoxDirectionEnum.WOX_DIRECTION_UP.code);
-      },
-    );
+    return Scrollbar(
+        controller: controller.resultListViewScrollController,
+        child: Listener(
+            onPointerSignal: (event) {
+              if (event is PointerScrollEvent) {
+                controller.changeResultScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_MOUSE.code,
+                    event.scrollDelta.dy > 0 ? WoxDirectionEnum.WOX_DIRECTION_DOWN.code : WoxDirectionEnum.WOX_DIRECTION_UP.code);
+              }
+            },
+            child: ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              controller: controller.resultListViewScrollController,
+              itemCount: controller.queryResults.length,
+              itemExtent: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
+              itemBuilder: (context, index) {
+                WoxQueryResult woxQueryResult = controller.getQueryResultByIndex(index);
+                return WoxListItemView(
+                    key: controller.getResultItemGlobalKeyByIndex(index),
+                    woxTheme: controller.woxTheme.value,
+                    icon: woxQueryResult.icon,
+                    title: woxQueryResult.title,
+                    subTitle: woxQueryResult.subTitle,
+                    isActive: controller.isQueryResultActiveByIndex(index),
+                    listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code);
+              },
+            )));
   }
 
   Widget getResultActionListView() {
-    return WoxListView(
-      woxTheme: controller.woxTheme.value,
-      scrollController: controller.resultActionListViewScrollController,
-      itemCount: controller.filterResultActions.length,
-      itemExtent: 40,
-      listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code,
-      listViewItemParamsGetter: (index) {
-        WoxResultAction woxResultAction = controller.getQueryResultActionByIndex(index);
-        return WoxListViewItemParams.fromJson({
-          "Icon": woxResultAction.icon,
-          "Title": woxResultAction.name,
-        });
-      },
-      listViewItemGlobalKeyGetter: (index) {
-        return controller.getResultActionItemGlobalKeyByIndex(index);
-      },
-      listViewItemIsActiveGetter: (index) {
-        return controller.isResultActionActiveByIndex(index);
-      },
-    );
+    return Scrollbar(
+        controller: controller.resultActionListViewScrollController,
+        child: Listener(
+            onPointerSignal: (event) {
+              if (event is PointerScrollEvent) {}
+            },
+            child: ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              controller: controller.resultActionListViewScrollController,
+              itemCount: controller.filterResultActions.length,
+              itemExtent: 40,
+              itemBuilder: (context, index) {
+                WoxResultAction woxResultAction = controller.getQueryResultActionByIndex(index);
+                return WoxListItemView(
+                    key: controller.getResultActionItemGlobalKeyByIndex(index),
+                    woxTheme: controller.woxTheme.value,
+                    icon: woxResultAction.icon,
+                    title: woxResultAction.name,
+                    subTitle: "",
+                    isActive: controller.isResultActionActiveByIndex(index),
+                    listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code);
+              },
+            )));
   }
 
   // Action Query Box
