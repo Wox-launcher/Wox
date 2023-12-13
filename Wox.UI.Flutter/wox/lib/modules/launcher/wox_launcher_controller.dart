@@ -452,16 +452,37 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   void onRefreshResult(WoxRefreshableResult result) {
     for (var i = 0; i < queryResults.length; i++) {
       if (queryResults[i].id == result.resultId) {
-        queryResults[i].title = result.title;
-        queryResults[i].subTitle = result.subTitle;
-        queryResults[i].icon = result.icon;
-        queryResults[i].preview = result.preview;
-        queryResults[i].contextData = result.contextData;
-        queryResults[i].refreshInterval = result.refreshInterval;
+        var hasAnyChange = false;
+        if (queryResults[i].title != result.title) {
+          queryResults[i].title = result.title;
+          hasAnyChange = true;
+        }
+        if (queryResults[i].subTitle != result.subTitle) {
+          queryResults[i].subTitle = result.subTitle;
+          hasAnyChange = true;
+        }
+        if (queryResults[i].icon != result.icon) {
+          queryResults[i].icon = result.icon;
+          hasAnyChange = true;
+        }
+        if (queryResults[i].preview != result.preview) {
+          queryResults[i].preview = result.preview;
+          currentPreview.value = result.preview;
+          hasAnyChange = false;
+        }
+        if (queryResults[i].contextData != result.contextData) {
+          queryResults[i].contextData = result.contextData;
+          hasAnyChange = true;
+        }
+        if (queryResults[i].refreshInterval != result.refreshInterval) {
+          queryResults[i].refreshInterval = result.refreshInterval;
+          hasAnyChange = true;
+        }
 
-        currentPreview.value = result.preview;
+        if (hasAnyChange) {
+          queryResults.refresh();
+        }
 
-        queryResults.refresh();
         break;
       }
     }

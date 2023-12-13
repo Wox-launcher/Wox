@@ -18,6 +18,15 @@ class WoxImage {
     return data;
   }
 
+  @override
+  int get hashCode => imageType.hashCode ^ imageData.hashCode;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is WoxImage && other.imageType == imageType && other.imageData == imageData;
+  }
+
   static WoxImage? parse(String imageData) {
     //split image data with : to get image type, only get first part
     final List<String> imageDataList = imageData.split(':');
