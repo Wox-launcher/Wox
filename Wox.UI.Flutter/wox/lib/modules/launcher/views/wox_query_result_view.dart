@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/wox_list_item_view.dart';
-import 'package:wox/components/wox_list_view.dart';
 import 'package:wox/components/wox_preview_view.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
@@ -21,31 +20,31 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   Widget getResultListView() {
     return Scrollbar(
         controller: controller.resultListViewScrollController,
-        child: Listener(
-            onPointerSignal: (event) {
-              if (event is PointerScrollEvent) {
-                controller.changeResultScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_MOUSE.code,
-                    event.scrollDelta.dy > 0 ? WoxDirectionEnum.WOX_DIRECTION_DOWN.code : WoxDirectionEnum.WOX_DIRECTION_UP.code);
-              }
+        child: Listener(onPointerSignal: (event) {
+          if (event is PointerScrollEvent) {
+            controller.changeResultScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_MOUSE.code,
+                event.scrollDelta.dy > 0 ? WoxDirectionEnum.WOX_DIRECTION_DOWN.code : WoxDirectionEnum.WOX_DIRECTION_UP.code);
+          }
+        }, child: Obx(() {
+          return ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            controller: controller.resultListViewScrollController,
+            itemCount: controller.queryResults.length,
+            itemExtent: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
+            itemBuilder: (context, index) {
+              WoxQueryResult woxQueryResult = controller.getQueryResultByIndex(index);
+              return WoxListItemView(
+                  key: controller.getResultItemGlobalKeyByIndex(index),
+                  woxTheme: controller.woxTheme.value,
+                  icon: woxQueryResult.icon,
+                  title: woxQueryResult.title,
+                  subTitle: woxQueryResult.subTitle,
+                  isActive: controller.isQueryResultActiveByIndex(index),
+                  listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code);
             },
-            child: ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              controller: controller.resultListViewScrollController,
-              itemCount: controller.queryResults.length,
-              itemExtent: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
-              itemBuilder: (context, index) {
-                WoxQueryResult woxQueryResult = controller.getQueryResultByIndex(index);
-                return WoxListItemView(
-                    key: controller.getResultItemGlobalKeyByIndex(index),
-                    woxTheme: controller.woxTheme.value,
-                    icon: woxQueryResult.icon,
-                    title: woxQueryResult.title,
-                    subTitle: woxQueryResult.subTitle,
-                    isActive: controller.isQueryResultActiveByIndex(index),
-                    listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code);
-              },
-            )));
+          );
+        })));
   }
 
   Widget getResultActionListView() {
@@ -142,64 +141,63 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() {
-      return ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: WoxThemeUtil.instance.getResultContainerMaxHeight()),
-        child: Stack(fit: (controller.isShowActionPanel.value || controller.isShowPreviewPanel.value) ? StackFit.expand : StackFit.loose, children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (controller.queryResults.isNotEmpty)
-                Expanded(
-                  child: Container(
-                      padding: EdgeInsets.only(
-                        top: controller.woxTheme.value.resultContainerPaddingTop.toDouble(),
-                        right: controller.woxTheme.value.resultContainerPaddingRight.toDouble(),
-                        bottom: controller.woxTheme.value.resultContainerPaddingBottom.toDouble(),
-                        left: controller.woxTheme.value.resultContainerPaddingLeft.toDouble(),
-                      ),
-                      child: getResultListView()),
-                ),
-              if (controller.isShowPreviewPanel.value)
-                Expanded(
-                    child: WoxPreviewView(
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: WoxThemeUtil.instance.getResultContainerMaxHeight()),
+      child: Stack(fit: (controller.isShowActionPanel.value || controller.isShowPreviewPanel.value) ? StackFit.expand : StackFit.loose, children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (controller.queryResults.isNotEmpty)
+              Expanded(
+                child: Container(
+                    padding: EdgeInsets.only(
+                      top: controller.woxTheme.value.resultContainerPaddingTop.toDouble(),
+                      right: controller.woxTheme.value.resultContainerPaddingRight.toDouble(),
+                      bottom: controller.woxTheme.value.resultContainerPaddingBottom.toDouble(),
+                      left: controller.woxTheme.value.resultContainerPaddingLeft.toDouble(),
+                    ),
+                    child: getResultListView()),
+              ),
+            if (controller.isShowPreviewPanel.value)
+              Expanded(child: Obx(() {
+                return WoxPreviewView(
                   woxPreview: controller.currentPreview.value,
                   woxTheme: controller.woxTheme.value,
-                )),
-            ],
-          ),
-          if (controller.isShowActionPanel.value)
-            Positioned(
-              right: 10,
-              bottom: 10,
-              child: Container(
-                padding: EdgeInsets.only(
-                  top: controller.woxTheme.value.actionContainerPaddingTop.toDouble(),
-                  bottom: controller.woxTheme.value.actionContainerPaddingBottom.toDouble(),
-                  left: controller.woxTheme.value.actionContainerPaddingLeft.toDouble(),
-                  right: controller.woxTheme.value.actionContainerPaddingRight.toDouble(),
-                ),
-                decoration: BoxDecoration(
-                  color: fromCssColor(controller.woxTheme.value.actionContainerBackgroundColor),
-                  borderRadius: BorderRadius.circular(controller.woxTheme.value.actionQueryBoxBorderRadius.toDouble()),
-                ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 320),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("Actions", style: TextStyle(color: fromCssColor(controller.woxTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
-                      const Divider(),
-                      getResultActionListView(),
-                      getActionQueryBox(),
-                    ],
-                  ),
+                );
+              })),
+          ],
+        ),
+        if (controller.isShowActionPanel.value)
+          Positioned(
+            right: 10,
+            bottom: 10,
+            child: Container(
+              padding: EdgeInsets.only(
+                top: controller.woxTheme.value.actionContainerPaddingTop.toDouble(),
+                bottom: controller.woxTheme.value.actionContainerPaddingBottom.toDouble(),
+                left: controller.woxTheme.value.actionContainerPaddingLeft.toDouble(),
+                right: controller.woxTheme.value.actionContainerPaddingRight.toDouble(),
+              ),
+              decoration: BoxDecoration(
+                color: fromCssColor(controller.woxTheme.value.actionContainerBackgroundColor),
+                borderRadius: BorderRadius.circular(controller.woxTheme.value.actionQueryBoxBorderRadius.toDouble()),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Actions", style: TextStyle(color: fromCssColor(controller.woxTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
+                    const Divider(),
+                    getResultActionListView(),
+                    getActionQueryBox(),
+                  ],
                 ),
               ),
             ),
-        ]),
-      );
-    });
+          ),
+      ]),
+    );
   }
 }

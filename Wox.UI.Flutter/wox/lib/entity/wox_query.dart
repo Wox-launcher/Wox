@@ -1,3 +1,4 @@
+import 'package:get/get.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/enums/wox_last_query_mode_enum.dart';
@@ -81,7 +82,7 @@ class WoxQueryResult {
   late String id;
   late String title;
   late String subTitle;
-  late WoxImage icon;
+  late Rx<WoxImage> icon;
   late WoxPreview preview;
   late int score;
   late String contextData;
@@ -105,7 +106,7 @@ class WoxQueryResult {
     id = json['Id'];
     title = json['Title'];
     subTitle = json['SubTitle'];
-    icon = (json['Icon'] != null ? WoxImage.fromJson(json['Icon']) : null)!;
+    icon = (json['Icon'] != null ? WoxImage.fromJson(json['Icon']).obs : null)!;
     preview = (json['Preview'] != null ? WoxPreview.fromJson(json['Preview']) : null)!;
     score = json['Score'];
     contextData = json['ContextData'];
@@ -137,7 +138,7 @@ class WoxQueryResult {
 class WoxResultAction {
   late String id;
   late String name;
-  late WoxImage icon;
+  late Rx<WoxImage> icon;
   late bool isDefault;
   late bool preventHideAfterAction;
 
@@ -146,7 +147,7 @@ class WoxResultAction {
   WoxResultAction.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
     name = json['Name'];
-    icon = (json['Icon'] != null ? WoxImage.fromJson(json['Icon']) : null)!;
+    icon = (json['Icon'] != null ? WoxImage.fromJson(json['Icon']).obs : null)!;
     isDefault = json['IsDefault'];
     preventHideAfterAction = json['PreventHideAfterAction'];
   }
@@ -162,7 +163,7 @@ class WoxResultAction {
   }
 
   static WoxResultAction empty() {
-    return WoxResultAction(id: "", name: "", icon: WoxImage.empty(), isDefault: false, preventHideAfterAction: false);
+    return WoxResultAction(id: "", name: "", icon: WoxImage.empty().obs, isDefault: false, preventHideAfterAction: false);
   }
 }
 

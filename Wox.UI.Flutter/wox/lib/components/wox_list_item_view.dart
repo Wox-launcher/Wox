@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:from_css_color/from_css_color.dart';
+import 'package:get/get.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_theme.dart';
@@ -7,7 +8,7 @@ import 'package:wox/enums/wox_list_view_type_enum.dart';
 
 class WoxListItemView extends StatelessWidget {
   final bool isActive;
-  final WoxImage icon;
+  final Rx<WoxImage> icon;
   final String title;
   final String subTitle;
   final WoxTheme woxTheme;
@@ -53,11 +54,13 @@ class WoxListItemView extends StatelessWidget {
         children: [
           Padding(
               padding: const EdgeInsets.only(left: 5.0, right: 10.0),
-              child: WoxImageView(
-                woxImage: icon,
-                width: 30,
-                height: 30,
-              )),
+              child: Obx(() {
+                return WoxImageView(
+                  woxImage: icon.value,
+                  width: 30,
+                  height: 30,
+                );
+              })),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
               Text(

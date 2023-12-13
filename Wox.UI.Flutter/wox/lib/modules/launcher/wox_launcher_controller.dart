@@ -436,7 +436,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
                 resultId: result.id,
                 title: result.title,
                 subTitle: result.subTitle,
-                icon: result.icon,
+                icon: result.icon.value,
                 preview: result.preview,
                 contextData: result.contextData,
                 refreshInterval: result.refreshInterval,
@@ -461,8 +461,8 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
           queryResults[i].subTitle = result.subTitle;
           hasAnyChange = true;
         }
-        if (queryResults[i].icon != result.icon) {
-          queryResults[i].icon = result.icon;
+        if (queryResults[i].icon.value != result.icon) {
+          queryResults[i].icon.value = result.icon;
           hasAnyChange = true;
         }
         if (queryResults[i].preview != result.preview) {
@@ -477,10 +477,6 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
         if (queryResults[i].refreshInterval != result.refreshInterval) {
           queryResults[i].refreshInterval = result.refreshInterval;
           hasAnyChange = true;
-        }
-
-        if (hasAnyChange) {
-          queryResults.refresh();
         }
 
         break;
