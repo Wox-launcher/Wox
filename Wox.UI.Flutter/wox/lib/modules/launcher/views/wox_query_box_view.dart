@@ -8,6 +8,7 @@ import 'package:wox/entity/wox_query.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_event_device_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
+import 'package:wox/utils/log.dart';
 
 import '../wox_launcher_controller.dart';
 
@@ -16,6 +17,8 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
 
   @override
   Widget build(BuildContext context) {
+    Logger.instance.info("repaint: query box view");
+
     return Obx(() {
       return Stack(children: [
         Positioned(

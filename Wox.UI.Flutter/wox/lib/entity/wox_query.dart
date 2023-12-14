@@ -80,8 +80,8 @@ class QueryHistory {
 class WoxQueryResult {
   late String queryId;
   late String id;
-  late String title;
-  late String subTitle;
+  late Rx<String> title;
+  late Rx<String> subTitle;
   late Rx<WoxImage> icon;
   late WoxPreview preview;
   late int score;
@@ -104,8 +104,8 @@ class WoxQueryResult {
   WoxQueryResult.fromJson(Map<String, dynamic> json) {
     queryId = json['QueryId'];
     id = json['Id'];
-    title = json['Title'];
-    subTitle = json['SubTitle'];
+    title = RxString(json['Title']);
+    subTitle = RxString(json['SubTitle']);
     icon = (json['Icon'] != null ? WoxImage.fromJson(json['Icon']).obs : null)!;
     preview = (json['Preview'] != null ? WoxPreview.fromJson(json['Preview']) : null)!;
     score = json['Score'];
@@ -137,7 +137,7 @@ class WoxQueryResult {
 
 class WoxResultAction {
   late String id;
-  late String name;
+  late Rx<String> name;
   late Rx<WoxImage> icon;
   late bool isDefault;
   late bool preventHideAfterAction;
@@ -146,7 +146,7 @@ class WoxResultAction {
 
   WoxResultAction.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
-    name = json['Name'];
+    name = RxString(json['Name']);
     icon = (json['Icon'] != null ? WoxImage.fromJson(json['Icon']).obs : null)!;
     isDefault = json['IsDefault'];
     preventHideAfterAction = json['PreventHideAfterAction'];
@@ -163,7 +163,7 @@ class WoxResultAction {
   }
 
   static WoxResultAction empty() {
-    return WoxResultAction(id: "", name: "", icon: WoxImage.empty().obs, isDefault: false, preventHideAfterAction: false);
+    return WoxResultAction(id: "", name: "".obs, icon: WoxImage.empty().obs, isDefault: false, preventHideAfterAction: false);
   }
 }
 

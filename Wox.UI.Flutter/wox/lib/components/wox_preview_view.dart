@@ -6,6 +6,7 @@ import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
+import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_http_util.dart';
 
 class WoxPreviewView extends StatelessWidget {
@@ -16,6 +17,8 @@ class WoxPreviewView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Logger.instance.info("repaint: preview view data");
+
     if (woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_REMOTE.code) {
       return FutureBuilder<WoxPreview>(
         future: WoxHttpUtil.instance.getData<WoxPreview>(woxPreview.previewData),

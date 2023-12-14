@@ -59,6 +59,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 			RefreshInterval: 100,
 			OnRefresh: func(result plugin.RefreshableResult) plugin.RefreshableResult {
 				result.Title = util.GetSystemTimestampStr()
+				result.SubTitle = util.GetSystemTimestampStr()
 				return result
 			},
 			Actions: []plugin.QueryResultAction{

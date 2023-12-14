@@ -139,7 +139,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     onQueryChanged(WoxChangeQuery(
       queryId: const UuidV4().generate(),
       queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
-      queryText: queryText,
+      queryText: queryText.value,
       querySelection: Selection.empty(),
     ));
   }
@@ -434,8 +434,8 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
             data: {
               "refreshableResult": WoxRefreshableResult(
                 resultId: result.id,
-                title: result.title,
-                subTitle: result.subTitle,
+                title: result.title.value,
+                subTitle: result.subTitle.value,
                 icon: result.icon.value,
                 preview: result.preview,
                 contextData: result.contextData,
@@ -452,33 +452,13 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   void onRefreshResult(WoxRefreshableResult result) {
     for (var i = 0; i < queryResults.length; i++) {
       if (queryResults[i].id == result.resultId) {
-        var hasAnyChange = false;
-        if (queryResults[i].title != result.title) {
-          queryResults[i].title = result.title;
-          hasAnyChange = true;
-        }
-        if (queryResults[i].subTitle != result.subTitle) {
-          queryResults[i].subTitle = result.subTitle;
-          hasAnyChange = true;
-        }
-        if (queryResults[i].icon.value != result.icon) {
-          queryResults[i].icon.value = result.icon;
-          hasAnyChange = true;
-        }
-        if (queryResults[i].preview != result.preview) {
-          queryResults[i].preview = result.preview;
-          currentPreview.value = result.preview;
-          hasAnyChange = false;
-        }
-        if (queryResults[i].contextData != result.contextData) {
-          queryResults[i].contextData = result.contextData;
-          hasAnyChange = true;
-        }
-        if (queryResults[i].refreshInterval != result.refreshInterval) {
-          queryResults[i].refreshInterval = result.refreshInterval;
-          hasAnyChange = true;
-        }
-
+        queryResults[i].title.value = result.title;
+        queryResults[i].subTitle.value = result.subTitle;
+        queryResults[i].icon.value = result.icon;
+        queryResults[i].preview = result.preview;
+        currentPreview.value = result.preview;
+        queryResults[i].contextData = result.contextData;
+        queryResults[i].refreshInterval = result.refreshInterval;
         break;
       }
     }

@@ -9,6 +9,16 @@ class WoxPreview {
 
   WoxPreview({required this.previewType, required this.previewData, required this.previewProperties});
 
+  @override
+  int get hashCode => previewType.hashCode ^ previewData.hashCode ^ previewProperties.hashCode;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    return other is WoxPreview && other.previewType == previewType && other.previewData == previewData && other.previewProperties == previewProperties;
+  }
+
   WoxPreview.fromJson(Map<String, dynamic> json) {
     previewType = json['PreviewType'];
     previewData = json['PreviewData'];

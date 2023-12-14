@@ -5,12 +5,13 @@ import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
+import 'package:wox/utils/log.dart';
 
 class WoxListItemView extends StatelessWidget {
   final bool isActive;
   final Rx<WoxImage> icon;
-  final String title;
-  final String subTitle;
+  final Rx<String> title;
+  final Rx<String> subTitle;
   final WoxTheme woxTheme;
   final WoxListViewType listViewType;
 
@@ -30,6 +31,8 @@ class WoxListItemView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Logger.instance.info("repaint: list item view $title");
+
     return Container(
       decoration: BoxDecoration(
         color: isActive ? fromCssColor(isAction() ? woxTheme.actionItemActiveBackgroundColor : woxTheme.resultItemActiveBackgroundColor) : Colors.transparent,
@@ -55,6 +58,8 @@ class WoxListItemView extends StatelessWidget {
           Padding(
               padding: const EdgeInsets.only(left: 5.0, right: 10.0),
               child: Obx(() {
+                Logger.instance.info("repaint: list item view $title - icon");
+
                 return WoxImageView(
                   woxImage: icon.value,
                   width: 30,
@@ -63,36 +68,45 @@ class WoxListItemView extends StatelessWidget {
               })),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: isAction()
-                      ? fromCssColor(isActive ? woxTheme.actionItemActiveFontColor : woxTheme.actionItemFontColor)
-                      : fromCssColor(isActive ? woxTheme.resultItemActiveTitleColor : woxTheme.resultItemTitleColor),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                strutStyle: const StrutStyle(
-                  forceStrutHeight: true,
-                ),
-              ),
-              if (subTitle.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2.0),
-                  child: Text(
-                    subTitle,
-                    style: TextStyle(
-                      color: fromCssColor(isActive ? woxTheme.resultItemActiveSubTitleColor : woxTheme.resultItemSubTitleColor),
-                      fontSize: 13,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    strutStyle: const StrutStyle(
-                      forceStrutHeight: true,
-                    ),
+              Obx(() {
+                Logger.instance.info("repaint: list item view $title - title");
+
+                return Text(
+                  title.value,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: isAction()
+                        ? fromCssColor(isActive ? woxTheme.actionItemActiveFontColor : woxTheme.actionItemFontColor)
+                        : fromCssColor(isActive ? woxTheme.resultItemActiveTitleColor : woxTheme.resultItemTitleColor),
                   ),
-                ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  strutStyle: const StrutStyle(
+                    forceStrutHeight: true,
+                  ),
+                );
+              }),
+              Obx(() {
+                Logger.instance.info("repaint: list item view $title - subtitle");
+
+                return subTitle.isNotEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 2.0),
+                        child: Text(
+                          subTitle.value,
+                          style: TextStyle(
+                            color: fromCssColor(isActive ? woxTheme.resultItemActiveSubTitleColor : woxTheme.resultItemSubTitleColor),
+                            fontSize: 13,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          strutStyle: const StrutStyle(
+                            forceStrutHeight: true,
+                          ),
+                        ),
+                      )
+                    : const SizedBox();
+              }),
             ]),
           ),
         ],
