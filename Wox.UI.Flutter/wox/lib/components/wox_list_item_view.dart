@@ -31,7 +31,7 @@ class WoxListItemView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Logger.instance.info("repaint: list item view $title");
+    Logger.instance.info("repaint: list item view $key - container");
 
     return Container(
       decoration: BoxDecoration(
@@ -58,7 +58,7 @@ class WoxListItemView extends StatelessWidget {
           Padding(
               padding: const EdgeInsets.only(left: 5.0, right: 10.0),
               child: Obx(() {
-                Logger.instance.info("repaint: list item view $title - icon");
+                Logger.instance.info("repaint: list item view $key - icon");
 
                 return WoxImageView(
                   woxImage: icon.value,
@@ -69,7 +69,7 @@ class WoxListItemView extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
               Obx(() {
-                Logger.instance.info("repaint: list item view $title - title");
+                Logger.instance.info("repaint: list item view $key - title");
 
                 return Text(
                   title.value,
@@ -87,7 +87,7 @@ class WoxListItemView extends StatelessWidget {
                 );
               }),
               Obx(() {
-                Logger.instance.info("repaint: list item view $title - subtitle");
+                Logger.instance.info("repaint: list item view $key - subtitle");
 
                 return subTitle.isNotEmpty
                     ? Padding(
