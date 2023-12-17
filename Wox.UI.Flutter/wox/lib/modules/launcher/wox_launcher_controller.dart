@@ -228,7 +228,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       return;
     }
 
-    Logger.instance.info("Received message: ${msg.toJson()}");
+    Logger.instance.info("Received message: ${msg.method}");
     if (msg.method == "ToggleApp") {
       toggleApp(ShowAppParams.fromJson(msg.data));
     } else if (msg.method == "HideApp") {

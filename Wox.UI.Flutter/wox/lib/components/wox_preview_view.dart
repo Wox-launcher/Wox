@@ -47,11 +47,23 @@ class WoxPreviewView extends StatelessWidget {
         cardColor: Colors.transparent,
       );
       contentWidget = Markdown(
-        data: woxPreview.previewData,
-        padding: EdgeInsets.zero,
-        selectable: true,
-        styleSheet: MarkdownStyleSheet.fromTheme(styleTheme),
-      );
+          data: woxPreview.previewData,
+          padding: EdgeInsets.zero,
+          selectable: true,
+          styleSheet: MarkdownStyleSheet.fromTheme(styleTheme).copyWith(
+            horizontalRuleDecoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(
+                  color: fromCssColor(woxTheme.previewFontColor).withOpacity(0.6),
+                  width: 1,
+                ),
+                bottom: const BorderSide(
+                  color: Colors.transparent,
+                  width: 10,
+                ),
+              ),
+            ),
+          ));
     } else if (woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TEXT.code) {
       contentWidget = SelectableText(woxPreview.previewData, style: TextStyle(color: fromCssColor(woxTheme.previewFontColor)));
     } else if (woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_IMAGE.code) {

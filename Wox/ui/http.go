@@ -494,6 +494,44 @@ func serveAndWait(ctx context.Context, port int) {
 		writeSuccessResponse(w, "")
 	})
 
+	mux.HandleFunc("/backup/now", func(w http.ResponseWriter, r *http.Request) {
+		backupErr := setting.GetSettingManager().Backup(util.NewTraceContext(), setting.BackupTypeManual)
+		if backupErr != nil {
+			writeErrorResponse(w, backupErr.Error())
+			return
+		}
+
+		writeSuccessResponse(w, "")
+	})
+
+	mux.HandleFunc("/backup/restore", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		idResult := gjson.GetBytes(body, "id")
+		if !idResult.Exists() {
+			writeErrorResponse(w, "id is empty")
+			return
+		}
+
+		backupId := idResult.String()
+		restoreErr := setting.GetSettingManager().Restore(util.NewTraceContext(), backupId)
+		if restoreErr != nil {
+			writeErrorResponse(w, restoreErr.Error())
+			return
+		}
+
+		writeSuccessResponse(w, "")
+	})
+
+	mux.HandleFunc("/backup/get/all", func(w http.ResponseWriter, r *http.Request) {
+		backups, err := setting.GetSettingManager().FindAllBackups(util.NewTraceContext())
+		if err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+
+		writeSuccessResponse(w, backups)
+	})
+
 	m.HandleConnect(func(s *melody.Session) {
 		if !uiConnected {
 			uiConnected = true

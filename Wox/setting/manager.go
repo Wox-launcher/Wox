@@ -49,6 +49,8 @@ func (m *Manager) Init(ctx context.Context) error {
 		m.woxAppData = &defaultWoxAppData
 	}
 
+	m.StartAutoBackup(ctx)
+
 	return nil
 }
 

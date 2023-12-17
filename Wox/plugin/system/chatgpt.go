@@ -44,11 +44,18 @@ type Chat struct {
 func (c *Chat) Format() string {
 	var result string
 	for _, conversation := range c.Conversations {
+		if strings.HasPrefix(conversation.Text, "GPT:") {
+			conversation.Text = strings.TrimPrefix(conversation.Text, "GPT:")
+		}
+
+		lines := "\n\n"
 		nick := "You"
 		if conversation.Role == openai.ChatMessageRoleSystem {
-			nick = "ChatGPT"
+			nick = "GPT"
+			lines = "\n\n***\n\n"
 		}
-		result += fmt.Sprintf("%s: %s\n\n", nick, conversation.Text)
+
+		result += fmt.Sprintf("**%s**: %s %s", nick, conversation.Text, lines)
 	}
 
 	return result
@@ -145,7 +152,7 @@ func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Quer
 			chatHistory += fmt.Sprintf("You: %s\n", query.Search)
 		}
 		c.activeChatResult.Preview = plugin.WoxPreview{
-			PreviewType: plugin.WoxPreviewTypeText,
+			PreviewType: plugin.WoxPreviewTypeMarkdown,
 			PreviewData: chatHistory,
 		}
 		c.api.Log(ctx, fmt.Sprintf("active chat refresh interval: %d", c.activeChatResult.RefreshInterval))
@@ -175,12 +182,17 @@ func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Quer
 					}
 
 					onAnswering := func(current plugin.RefreshableResult, deltaAnswer string) plugin.RefreshableResult {
-						if c.activeChatAnswer == "" {
-							//first response
-							deltaAnswer = fmt.Sprintf("ChatGPT: %s", deltaAnswer)
+						if deltaAnswer == "" {
+							return current
 						}
 
-						current.Preview.PreviewData += deltaAnswer
+						if c.activeChatAnswer == "" {
+							//first response
+							current.Preview.PreviewData += fmt.Sprintf("GPT: %s", deltaAnswer)
+						} else {
+							current.Preview.PreviewData += deltaAnswer
+						}
+
 						c.activeChatAnswer += deltaAnswer
 						return current
 					}
@@ -239,7 +251,7 @@ func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Quer
 	results = append(results, plugin.QueryResult{
 		Title: "Start a new chat",
 		Preview: plugin.WoxPreview{
-			PreviewType: plugin.WoxPreviewTypeText,
+			PreviewType: plugin.WoxPreviewTypeMarkdown,
 			PreviewData: newChatPreviewData,
 		},
 		Icon: chatgptIcon,
@@ -369,7 +381,7 @@ func (c *ChatgptPlugin) queryCommand(ctx context.Context, query plugin.Query) []
 
 		return []plugin.QueryResult{{
 			Title:           fmt.Sprintf("Chat with %s", query.Command),
-			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeText, PreviewData: ""},
+			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
 			Icon:            chatgptIcon,
 			RefreshInterval: 100,
 			OnRefresh:       c.generateGptResultRefresh(ctx, chatMessages, onAnswering, onAnswerErr, onAnswerFinished),
