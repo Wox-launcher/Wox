@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"github.com/mat/besticon/besticon"
 	"io"
+	"slices"
 	"strings"
+	"time"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
@@ -19,14 +21,14 @@ var webSearchesTableColumnUrlSettingKey = "Url"
 var webSearchesTableColumnEnabledSettingKey = "Enabled"
 var webSearchesTableColumnIconSettingKey = "Icon"
 
-var websearchIcon = plugin.NewWoxImageSvg(`<svg t="1700799533400" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="8846" width="200" height="200"><path d="M869.484748 1024a96.009331 96.009331 0 0 1-76.327418-37.923686l-174.736982-228.982254a96.009331 96.009331 0 0 1 152.654836-116.651337l174.736982 228.982254a96.009331 96.009331 0 0 1-76.327418 154.094976z" fill="#D34233" p-id="8847"></path><path d="M770.595138 640.92277a96.009331 96.009331 0 0 0-100.809798-34.563359 240.023327 240.023327 0 0 1-57.605598 65.766391c-3.360327 2.400233-7.2007 4.32042-11.041074 6.720653a96.009331 96.009331 0 0 0 16.801633 79.687745l70.566859 92.649004a432.041989 432.041989 0 0 0 39.843872-26.882612A429.161709 429.161709 0 0 0 826.760596 715.810048z" fill="#C1211A" p-id="8848"></path><path d="M490.727938 864.144464a432.041989 432.041989 0 1 1 261.625427-88.328584A432.041989 432.041989 0 0 1 490.727938 864.144464zM490.727938 192.079148a240.023327 240.023327 0 1 0 192.018662 96.009331 240.023327 240.023327 0 0 0-192.018662-96.009331z" fill="#F16A54" p-id="8849"></path></svg>`)
+var webSearchIcon = plugin.NewWoxImageSvg(`<svg t="1700799533400" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="8846" width="200" height="200"><path d="M869.484748 1024a96.009331 96.009331 0 0 1-76.327418-37.923686l-174.736982-228.982254a96.009331 96.009331 0 0 1 152.654836-116.651337l174.736982 228.982254a96.009331 96.009331 0 0 1-76.327418 154.094976z" fill="#D34233" p-id="8847"></path><path d="M770.595138 640.92277a96.009331 96.009331 0 0 0-100.809798-34.563359 240.023327 240.023327 0 0 1-57.605598 65.766391c-3.360327 2.400233-7.2007 4.32042-11.041074 6.720653a96.009331 96.009331 0 0 0 16.801633 79.687745l70.566859 92.649004a432.041989 432.041989 0 0 0 39.843872-26.882612A429.161709 429.161709 0 0 0 826.760596 715.810048z" fill="#C1211A" p-id="8848"></path><path d="M490.727938 864.144464a432.041989 432.041989 0 1 1 261.625427-88.328584A432.041989 432.041989 0 0 1 490.727938 864.144464zM490.727938 192.079148a240.023327 240.023327 0 1 0 192.018662 96.009331 240.023327 240.023327 0 0 0-192.018662-96.009331z" fill="#F16A54" p-id="8849"></path></svg>`)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &WebSearchPlugin{})
 }
 
 type webSearch struct {
-	Url     string
+	Urls    []string
 	Title   string
 	Keyword string
 	Icon    plugin.WoxImage
@@ -48,7 +50,7 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Nodejs",
 		Description:   "Provide the web search ability",
-		Icon:          websearchIcon.String(),
+		Icon:          webSearchIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
 			"*",
@@ -119,29 +121,33 @@ func (r *WebSearchPlugin) indexIcons(ctx context.Context) {
 }
 
 func (r *WebSearchPlugin) indexWebSearchIcon(ctx context.Context, search webSearch) plugin.WoxImage {
+	//sort urls, so that we can get the same icon between different runs
+	slices.Sort(search.Urls)
+	iconUrl := search.Urls[0]
+
 	option := besticon.WithLogger(besticon.NewDefaultLogger(io.Discard))
 	iconFinder := besticon.New(option).NewIconFinder()
-	icons, err := iconFinder.FetchIcons(search.Url)
+	icons, err := iconFinder.FetchIcons(iconUrl)
 	if err != nil {
-		r.api.Log(ctx, fmt.Sprintf("failed to fetch icons for %s: %s", search.Url, err.Error()))
-		return websearchIcon
+		r.api.Log(ctx, fmt.Sprintf("failed to fetch icons for %s: %s", search.Urls, err.Error()))
+		return webSearchIcon
 	}
 
 	if len(icons) == 0 {
-		r.api.Log(ctx, fmt.Sprintf("no icons found for %s", search.Url))
-		return websearchIcon
+		r.api.Log(ctx, fmt.Sprintf("no icons found for %s", search.Urls))
+		return webSearchIcon
 	}
 
 	image, imageEr := icons[0].Image()
 	if imageEr != nil {
-		r.api.Log(ctx, fmt.Sprintf("failed to get image for %s: %s", search.Url, imageEr.Error()))
-		return websearchIcon
+		r.api.Log(ctx, fmt.Sprintf("failed to get image for %s: %s", search.Urls, imageEr.Error()))
+		return webSearchIcon
 	}
 
 	woxImage, woxImageErr := plugin.NewWoxImage(*image)
 	if woxImageErr != nil {
-		r.api.Log(ctx, fmt.Sprintf("failed to convert image for %s: %s", search.Url, woxImageErr.Error()))
-		return websearchIcon
+		r.api.Log(ctx, fmt.Sprintf("failed to convert image for %s: %s", search.Urls, woxImageErr.Error()))
+		return webSearchIcon
 	}
 
 	return woxImage
@@ -172,17 +178,20 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 	otherQuery := strings.Join(queries[1:], " ")
 
 	for _, search := range r.webSearches {
-		if strings.ToLower(search.Keyword) == strings.ToLower(triggerKeyword) {
+		searchDummy := search
+		if strings.ToLower(searchDummy.Keyword) == strings.ToLower(triggerKeyword) {
 			results = append(results, plugin.QueryResult{
-				Title:       strings.ReplaceAll(search.Title, "{query}", otherQuery),
-				Score:       100,
-				Icon:        search.Icon,
-				ContextData: search.Url,
+				Title: strings.ReplaceAll(searchDummy.Title, "{query}", otherQuery),
+				Score: 100,
+				Icon:  searchDummy.Icon,
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "Search",
 						Action: func(actionContext plugin.ActionContext) {
-							util.ShellOpen(strings.ReplaceAll(actionContext.ContextData, "{query}", otherQuery))
+							for _, url := range searchDummy.Urls {
+								util.ShellOpen(strings.ReplaceAll(url, "{query}", otherQuery))
+								time.Sleep(time.Millisecond * 100)
+							}
 						},
 					},
 				},
