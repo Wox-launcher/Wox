@@ -23,7 +23,7 @@ class WoxImageView extends StatelessWidget {
         return Text("Invalid image data: ${woxImage.imageData}", style: const TextStyle(color: Colors.red));
       }
       final imageData = woxImage.imageData.split(";base64,")[1];
-      return Image.memory(base64Decode(imageData), width: width, height: height);
+      return Image.memory(base64Decode(imageData), width: width, height: height, fit: BoxFit.fill);
     }
     return const SizedBox(width: 24, height: 24);
   }

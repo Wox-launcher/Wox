@@ -41,6 +41,12 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                       case LogicalKeyboardKey.tab:
                         controller.autoCompleteQuery();
                         return KeyEventResult.handled;
+                      case LogicalKeyboardKey.home:
+                        controller.moveQueryBoxCursorToStart();
+                        return KeyEventResult.handled;
+                      case LogicalKeyboardKey.end:
+                        controller.moveQueryBoxCursorToEnd();
+                        return KeyEventResult.handled;
                       case LogicalKeyboardKey.keyJ:
                         if (event.isMetaPressed || event.isAltPressed) {
                           controller.toggleActionPanel();
@@ -55,7 +61,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   height: 55.0,
                   child: TextField(
                     style: TextStyle(
-                      fontSize: 24.0,
+                      fontSize: 28.0,
                       color: fromCssColor(controller.woxTheme.value.queryBoxFontColor),
                     ),
                     decoration: InputDecoration(
@@ -64,7 +70,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         left: 8,
                         right: 8,
                         top: 10,
-                        bottom: 20,
+                        bottom: 18,
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(controller.woxTheme.value.queryBoxBorderRadius.toDouble()),
@@ -77,6 +83,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                     autofocus: true,
                     focusNode: controller.queryBoxFocusNode,
                     controller: controller.queryBoxTextFieldController,
+                    scrollController: controller.queryBoxScrollController,
                     onChanged: (value) {
                       // isComposingRangeValid is not reliable on Windows, we need to use inside post frame callback to check the value
                       // see https://github.com/flutter/flutter/issues/128565#issuecomment-1772016743

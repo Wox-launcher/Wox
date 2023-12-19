@@ -32,6 +32,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   final queryBoxFocusNode = FocusNode();
   final resultActionFocusNode = FocusNode();
   final queryBoxTextFieldController = TextEditingController();
+  final queryBoxScrollController = ScrollController(initialScrollOffset: 0.0);
   final resultActionTextFieldController = TextEditingController();
   final resultListViewScrollController = ScrollController(initialScrollOffset: 0.0);
   final resultActionListViewScrollController = ScrollController(initialScrollOffset: 0.0);
@@ -148,8 +149,13 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   void onQueryChanged(WoxChangeQuery query) {
     _query.value = query;
     isShowActionPanel.value = false;
+
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
+      // save the cursor position
+      final cursorPosition = queryBoxTextFieldController.selection.baseOffset;
       queryBoxTextFieldController.text = query.queryText;
+      // try to restore the cursor position after set text, which will reset the cursor position
+      queryBoxTextFieldController.selection = TextSelection(baseOffset: cursorPosition, extentOffset: cursorPosition);
     } else {
       queryBoxTextFieldController.text = query.toString();
     }
@@ -347,7 +353,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       // 2.5-> 3.8
       // 3.0-> 3
 
-      final totalHeightFinal = totalHeight.toDouble() + (10 / window.devicePixelRatio).ceil();
+      final totalHeightFinal = totalHeight.toDouble() + (10 / PlatformDispatcher.instance.views.first.devicePixelRatio).ceil();
       Logger.instance.info("Resize window height to $totalHeightFinal");
       windowManager.setSize(Size(800, totalHeightFinal));
     } else {
@@ -470,5 +476,15 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     queryBoxTextFieldController.dispose();
     resultListViewScrollController.dispose();
     super.dispose();
+  }
+
+  void moveQueryBoxCursorToStart() {
+    queryBoxTextFieldController.selection = TextSelection.fromPosition(const TextPosition(offset: 0));
+    queryBoxScrollController.jumpTo(0);
+  }
+
+  void moveQueryBoxCursorToEnd() {
+    queryBoxTextFieldController.selection = TextSelection.collapsed(offset: queryBoxTextFieldController.text.length);
+    queryBoxScrollController.jumpTo(queryBoxScrollController.position.maxScrollExtent);
   }
 }
