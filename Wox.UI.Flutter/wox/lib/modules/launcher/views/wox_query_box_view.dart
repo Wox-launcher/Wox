@@ -5,8 +5,6 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/entity/wox_query.dart';
-import 'package:wox/enums/wox_direction_enum.dart';
-import 'package:wox/enums/wox_event_device_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/utils/log.dart';
 
@@ -17,7 +15,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
 
   @override
   Widget build(BuildContext context) {
-    Logger.instance.info("repaint: query box view");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.info("repaint: query box view");
 
     return Obx(() {
       return Stack(children: [
@@ -30,10 +28,10 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         controller.hideApp();
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.arrowDown:
-                        controller.changeResultScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+                        controller.handleQueryBoxArrowDown();
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.arrowUp:
-                        controller.changeResultScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
+                        controller.handleQueryBoxArrowUp();
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.enter:
                         controller.executeResultAction();
@@ -94,6 +92,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                           return;
                         }
 
+                        controller.canArrowUpHistory = false;
                         WoxChangeQuery woxChangeQuery = WoxChangeQuery(
                           queryId: const UuidV4().generate(),
                           queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,

@@ -17,7 +17,7 @@ class WoxPreviewView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Logger.instance.info("repaint: preview view data");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.info("repaint: preview view data");
 
     if (woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_REMOTE.code) {
       return FutureBuilder<WoxPreview>(

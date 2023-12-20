@@ -45,7 +45,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   }
 
   Widget getActionPanelView() {
-    Logger.instance.info("repaint: action panel view container");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.info("repaint: action panel view container");
 
     return Obx(
       () => controller.isShowActionPanel.value
@@ -83,7 +83,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   }
 
   Widget getResultView() {
-    Logger.instance.info("repaint: result view container");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.info("repaint: result view container");
 
     return Obx(
       () => controller.queryResults.isNotEmpty
@@ -131,7 +131,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   }
 
   Widget getPreviewView() {
-    Logger.instance.info("repaint: preview view container");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.info("repaint: preview view container");
 
     return Obx(
       () => controller.isShowPreviewPanel.value

@@ -13,6 +13,7 @@ import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_websocket_msg.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_event_device_type_enum.dart';
+import 'package:wox/enums/wox_last_query_mode_enum.dart';
 import 'package:wox/enums/wox_msg_method_enum.dart';
 import 'package:wox/enums/wox_msg_type_enum.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
@@ -47,6 +48,10 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   final filterResultActions = <WoxResultAction>[].obs;
   var _clearQueryResultsTimer = Timer(const Duration(milliseconds: 200), () => {});
   var refreshCounter = 0;
+  final latestQueryHistories = <QueryHistory>[];
+  var selectedQueryHistoryIndex = 0;
+  var lastQueryMode = WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_PRESERVE.code;
+  var canArrowUpHistory = true;
 
   @override
   Future<void> toggleApp(ShowAppParams params) async {
@@ -60,6 +65,10 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   @override
   Future<void> showApp(ShowAppParams params) async {
+    canArrowUpHistory = true;
+    latestQueryHistories.assignAll(params.queryHistories);
+    lastQueryMode = params.lastQueryMode;
+
     if (params.selectAll) {
       _selectQueryBoxAllText();
     }
@@ -69,12 +78,37 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     await windowManager.show();
     await windowManager.focus();
     queryBoxFocusNode.requestFocus();
+
+    WoxWebsocketMsgUtil.instance.sendMessage(
+      WoxWebsocketMsg(
+        id: const UuidV4().generate(),
+        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+        method: WoxMsgMethodEnum.WOX_MSG_METHOD_VISIBILITY_CHANGED.code,
+        data: {"isVisible": "true", "query": _query.value.toJson()},
+      ),
+    );
   }
 
   @override
   Future<void> hideApp() async {
     isShowActionPanel.value = false;
     await windowManager.hide();
+
+    if (lastQueryMode == WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_PRESERVE.code) {
+      //skip the first one, because it's the current query
+      selectedQueryHistoryIndex = 0;
+    } else {
+      selectedQueryHistoryIndex = -1;
+    }
+
+    WoxWebsocketMsgUtil.instance.sendMessage(
+      WoxWebsocketMsg(
+        id: const UuidV4().generate(),
+        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+        method: WoxMsgMethodEnum.WOX_MSG_METHOD_VISIBILITY_CHANGED.code,
+        data: {"isVisible": "false", "query": _query.value.toJson()},
+      ),
+    );
   }
 
   @override
@@ -137,16 +171,23 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     }
 
     final queryText = queryResults[_activeResultIndex.value].title;
-    onQueryChanged(WoxChangeQuery(
-      queryId: const UuidV4().generate(),
-      queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
-      queryText: queryText.value,
-      querySelection: Selection.empty(),
-    ));
+    onQueryChanged(
+      WoxChangeQuery(
+        queryId: const UuidV4().generate(),
+        queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
+        queryText: queryText.value,
+        querySelection: Selection.empty(),
+      ),
+      moveCursorToEnd: true,
+    );
   }
 
   @override
-  void onQueryChanged(WoxChangeQuery query) {
+  void onQueryChanged(WoxChangeQuery query, {bool moveCursorToEnd = false}) {
+    if (query.queryId == "") {
+      query.queryId = const UuidV4().generate();
+    }
+
     _query.value = query;
     isShowActionPanel.value = false;
 
@@ -154,8 +195,13 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       // save the cursor position
       final cursorPosition = queryBoxTextFieldController.selection.baseOffset;
       queryBoxTextFieldController.text = query.queryText;
-      // try to restore the cursor position after set text, which will reset the cursor position
-      queryBoxTextFieldController.selection = TextSelection(baseOffset: cursorPosition, extentOffset: cursorPosition);
+
+      if (moveCursorToEnd) {
+        moveQueryBoxCursorToEnd();
+      } else {
+        // try to restore the cursor position after set text, which will reset the cursor position
+        queryBoxTextFieldController.selection = TextSelection(baseOffset: cursorPosition, extentOffset: cursorPosition);
+      }
     } else {
       queryBoxTextFieldController.text = query.toString();
     }
@@ -234,7 +280,10 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       return;
     }
 
-    Logger.instance.info("Received message: ${msg.method}");
+    if (msg.method != "Query") {
+      Logger.instance.info("Received message: ${msg.method}");
+    }
+
     if (msg.method == "ToggleApp") {
       toggleApp(ShowAppParams.fromJson(msg.data));
     } else if (msg.method == "HideApp") {
@@ -242,14 +291,14 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     } else if (msg.method == "ShowApp") {
       showApp(ShowAppParams.fromJson(msg.data));
     } else if (msg.method == "ChangeQuery") {
-      var changedQuery = WoxChangeQuery.fromJson(msg.data);
-      changedQuery.queryId = const UuidV4().generate();
-      onQueryChanged(changedQuery);
+      onQueryChanged(WoxChangeQuery.fromJson(msg.data), moveCursorToEnd: true);
     } else if (msg.method == "Query") {
       var results = <WoxQueryResult>[];
       for (var item in msg.data) {
         results.add(WoxQueryResult.fromJson(item));
       }
+      Logger.instance.info("Received message: ${msg.method}, results count: ${results.length}");
+
       _onReceivedQueryResults(results);
     } else if (msg.method == "ChangeTheme") {
       final theme = WoxTheme.fromJson(msg.data);
@@ -354,10 +403,10 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       // 3.0-> 3
 
       final totalHeightFinal = totalHeight.toDouble() + (10 / PlatformDispatcher.instance.views.first.devicePixelRatio).ceil();
-      Logger.instance.info("Resize window height to $totalHeightFinal");
+      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info("Resize window height to $totalHeightFinal");
       windowManager.setSize(Size(800, totalHeightFinal));
     } else {
-      Logger.instance.info("Resize window height to $totalHeight");
+      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info("Resize window height to $totalHeight");
       windowManager.setSize(Size(800, totalHeight.toDouble()));
     }
   }
@@ -486,5 +535,26 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   void moveQueryBoxCursorToEnd() {
     queryBoxTextFieldController.selection = TextSelection.collapsed(offset: queryBoxTextFieldController.text.length);
     queryBoxScrollController.jumpTo(queryBoxScrollController.position.maxScrollExtent);
+  }
+
+  void handleQueryBoxArrowUp() {
+    if (canArrowUpHistory) {
+      if (selectedQueryHistoryIndex < latestQueryHistories.length - 1) {
+        selectedQueryHistoryIndex = selectedQueryHistoryIndex + 1;
+        var changedQuery = latestQueryHistories[selectedQueryHistoryIndex].query;
+        if (changedQuery != null) {
+          onQueryChanged(changedQuery);
+          _selectQueryBoxAllText();
+        }
+      }
+      return;
+    }
+
+    changeResultScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
+  }
+
+  void handleQueryBoxArrowDown() {
+    canArrowUpHistory = false;
+    changeResultScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
   }
 }

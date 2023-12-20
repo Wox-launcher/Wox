@@ -28,6 +28,11 @@ class Logger {
   }
 }
 
+class LoggerSwitch {
+  static bool enablePaintLog = false;
+  static bool enableSizeAndPositionLog = false;
+}
+
 class WoxFileOutput extends xlogger.LogOutput {
   late IOSink sink;
 
