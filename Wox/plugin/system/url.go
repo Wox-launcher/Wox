@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"regexp"
+	"time"
 	"wox/plugin"
 	"wox/util"
 )
@@ -51,6 +52,27 @@ func (r *UrlPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 
 func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
 	if len(r.reg.FindStringIndex(query.Search)) > 0 {
+		results = append(results, plugin.QueryResult{
+			Title:           query.Search,
+			SubTitle:        "Open the typed URL from Wox",
+			Score:           100,
+			Icon:            urlIcon,
+			RefreshInterval: 100,
+			OnRefresh: func(result plugin.RefreshableResult) plugin.RefreshableResult {
+				time.Sleep(time.Second)
+				result.Title = util.GetSystemTimestampStr()
+				result.SubTitle = util.GetSystemTimestampStr()
+				return result
+			},
+			Actions: []plugin.QueryResultAction{
+				{
+					Name: "Open in browser",
+					Action: func(actionContext plugin.ActionContext) {
+						util.ShellOpen(query.Search)
+					},
+				},
+			},
+		})
 		results = append(results, plugin.QueryResult{
 			Title:           query.Search,
 			SubTitle:        "Open the typed URL from Wox",

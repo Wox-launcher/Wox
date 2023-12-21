@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 
@@ -193,13 +192,14 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
       // save the cursor position
-      final cursorPosition = queryBoxTextFieldController.selection.baseOffset;
+      var cursorPosition = queryBoxTextFieldController.selection.baseOffset;
       queryBoxTextFieldController.text = query.queryText;
 
       if (moveCursorToEnd) {
         moveQueryBoxCursorToEnd();
       } else {
         // try to restore the cursor position after set text, which will reset the cursor position
+        cursorPosition = cursorPosition > queryBoxTextFieldController.text.length ? queryBoxTextFieldController.text.length : cursorPosition;
         queryBoxTextFieldController.selection = TextSelection(baseOffset: cursorPosition, extentOffset: cursorPosition);
       }
     } else {
@@ -273,13 +273,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     filterResultActions.refresh();
   }
 
-  void handleWebSocketMessage(event) {
-    var msg = WoxWebsocketMsg.fromJson(jsonDecode(event));
-    if (msg.success == false) {
-      Logger.instance.error("Received error message: ${msg.toJson()}");
-      return;
-    }
-
+  void handleWebSocketMessage(WoxWebsocketMsg msg) {
     if (msg.method != "Query") {
       Logger.instance.info("Received message: ${msg.method}");
     }
@@ -304,9 +298,6 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       final theme = WoxTheme.fromJson(msg.data);
       WoxThemeUtil.instance.changeTheme(theme);
       woxTheme.value = theme;
-    } else if (msg.method == "Refresh") {
-      final result = WoxRefreshableResult.fromJson(msg.data);
-      onRefreshResult(result);
     }
   }
 
@@ -478,11 +469,23 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   startRefreshSchedule() {
-    Timer.periodic(const Duration(milliseconds: 100), (timer) {
+    var isRequesting = <String, bool>{};
+    Timer.periodic(const Duration(milliseconds: 100), (timer) async {
+      var isVisible = await windowManager.isVisible();
+      if (!isVisible) {
+        return;
+      }
+
       refreshCounter = refreshCounter + 100;
       for (var result in queryResults) {
         if (result.refreshInterval > 0 && refreshCounter % result.refreshInterval == 0) {
-          var msg = WoxWebsocketMsg(
+          if (isRequesting.containsKey(result.id)) {
+            continue;
+          } else {
+            isRequesting[result.id] = true;
+          }
+
+          final msg = WoxWebsocketMsg(
             id: const UuidV4().generate(),
             type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
             method: WoxMsgMethodEnum.WOX_MSG_METHOD_REFRESH.code,
@@ -498,25 +501,20 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
               ).toJson(),
             },
           );
-          WoxWebsocketMsgUtil.instance.sendMessage(msg);
+          WoxWebsocketMsgUtil.instance.sendMessage(msg).then((resp) {
+            final refreshResult = WoxRefreshableResult.fromJson(resp);
+            result.title.value = refreshResult.title;
+            result.subTitle.value = refreshResult.subTitle;
+            result.icon.value = refreshResult.icon;
+            result.preview = refreshResult.preview;
+            currentPreview.value = refreshResult.preview;
+            result.contextData = refreshResult.contextData;
+            result.refreshInterval = refreshResult.refreshInterval;
+            isRequesting.remove(result.id);
+          });
         }
       }
     });
-  }
-
-  void onRefreshResult(WoxRefreshableResult result) {
-    for (var i = 0; i < queryResults.length; i++) {
-      if (queryResults[i].id == result.resultId) {
-        queryResults[i].title.value = result.title;
-        queryResults[i].subTitle.value = result.subTitle;
-        queryResults[i].icon.value = result.icon;
-        queryResults[i].preview = result.preview;
-        currentPreview.value = result.preview;
-        queryResults[i].contextData = result.contextData;
-        queryResults[i].refreshInterval = result.refreshInterval;
-        break;
-      }
-    }
   }
 
   @override
