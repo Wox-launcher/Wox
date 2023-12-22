@@ -30,9 +30,10 @@ type UI interface {
 	ToggleApp(ctx context.Context)
 	ShowMsg(ctx context.Context, title string, description string, icon string)
 	GetServerPort(ctx context.Context) int
-	ChangeTheme(ctx context.Context, theme string)
+	ChangeTheme(ctx context.Context, theme Theme)
 	OpenSettingWindow(ctx context.Context)
 	OpenDevTools(ctx context.Context)
+	GetAllThemes(ctx context.Context) []Theme
 }
 
 type ShowContext struct {

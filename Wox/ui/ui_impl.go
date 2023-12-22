@@ -49,14 +49,11 @@ func (u *uiImpl) GetServerPort(ctx context.Context) int {
 	return GetUIManager().serverPort
 }
 
-func (u *uiImpl) ChangeTheme(ctx context.Context, themeJson string) {
-	var theme Theme
-	unmarshalErr := json.Unmarshal([]byte(themeJson), &theme)
-	if unmarshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to parse theme: %s", unmarshalErr.Error()))
-		return
-	}
-
+func (u *uiImpl) ChangeTheme(ctx context.Context, theme share.Theme) {
+	logger.Info(ctx, fmt.Sprintf("change theme: %s", theme.ThemeName))
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	woxSetting.ThemeId = theme.ThemeId
+	setting.GetSettingManager().SaveWoxSetting(ctx)
 	u.send(ctx, "ChangeTheme", theme)
 }
 
@@ -70,6 +67,10 @@ func (u *uiImpl) OpenSettingWindow(ctx context.Context) {
 
 func (u *uiImpl) OpenDevTools(ctx context.Context) {
 	u.send(ctx, "OpenDevTools", nil)
+}
+
+func (u *uiImpl) GetAllThemes(ctx context.Context) []share.Theme {
+	return GetUIManager().GetAllThemes(ctx)
 }
 
 func (u *uiImpl) send(ctx context.Context, method string, data any) {

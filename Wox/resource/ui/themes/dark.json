@@ -29,6 +29,7 @@
   "QueryBoxBackgroundColor": "rgba(24, 25, 26, 0.4)",
   "QueryBoxBorderRadius": 8,
   "QueryBoxCursorColor": "#e4e7e7",
+  "QueryBoxTextSelectionColor": "rgba(31, 118, 124, 0.8)",
   "ActionContainerBackgroundColor": "#373839",
   "ActionContainerHeaderFontColor": "#e4e7e7",
   "ActionContainerPaddingLeft": 14,
@@ -44,5 +45,6 @@
   "PreviewFontColor": "#f0f0f0",
   "PreviewSplitLineColor": "#3a474e",
   "PreviewPropertyTitleColor": "#b0b3b5",
-  "PreviewPropertyContentColor": "#f0f0f0"
+  "PreviewPropertyContentColor": "#f0f0f0",
+  "PreviewTextSelectionColor": "rgba(31, 118, 124, 0.8)"
 }

@@ -57,51 +57,58 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                 }),
                 child: SizedBox(
                   height: 55.0,
-                  child: TextField(
-                    style: TextStyle(
-                      fontSize: 28.0,
-                      color: fromCssColor(controller.woxTheme.value.queryBoxFontColor),
-                    ),
-                    decoration: InputDecoration(
-                      isCollapsed: true,
-                      contentPadding: const EdgeInsets.only(
-                        left: 8,
-                        right: 8,
-                        top: 10,
-                        bottom: 18,
+                  child: Theme(
+                    data: ThemeData(
+                      textSelectionTheme: TextSelectionThemeData(
+                        selectionColor: fromCssColor(controller.woxTheme.value.queryBoxTextSelectionColor),
                       ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(controller.woxTheme.value.queryBoxBorderRadius.toDouble()),
-                        borderSide: BorderSide.none,
-                      ),
-                      filled: true,
-                      fillColor: fromCssColor(controller.woxTheme.value.queryBoxBackgroundColor),
                     ),
-                    cursorColor: fromCssColor(controller.woxTheme.value.queryBoxCursorColor),
-                    autofocus: true,
-                    focusNode: controller.queryBoxFocusNode,
-                    controller: controller.queryBoxTextFieldController,
-                    scrollController: controller.queryBoxScrollController,
-                    onChanged: (value) {
-                      // isComposingRangeValid is not reliable on Windows, we need to use inside post frame callback to check the value
-                      // see https://github.com/flutter/flutter/issues/128565#issuecomment-1772016743
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        // if the composing range is valid, which means the text is changed by IME and the query is not finished yet,
-                        // we should not trigger the query until the composing is finished.
-                        if (controller.queryBoxTextFieldController.value.isComposingRangeValid) {
-                          return;
-                        }
+                    child: TextField(
+                      style: TextStyle(
+                        fontSize: 28.0,
+                        color: fromCssColor(controller.woxTheme.value.queryBoxFontColor),
+                      ),
+                      decoration: InputDecoration(
+                        isCollapsed: true,
+                        contentPadding: const EdgeInsets.only(
+                          left: 8,
+                          right: 8,
+                          top: 10,
+                          bottom: 18,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(controller.woxTheme.value.queryBoxBorderRadius.toDouble()),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: fromCssColor(controller.woxTheme.value.queryBoxBackgroundColor),
+                      ),
+                      cursorColor: fromCssColor(controller.woxTheme.value.queryBoxCursorColor),
+                      autofocus: true,
+                      focusNode: controller.queryBoxFocusNode,
+                      controller: controller.queryBoxTextFieldController,
+                      scrollController: controller.queryBoxScrollController,
+                      onChanged: (value) {
+                        // isComposingRangeValid is not reliable on Windows, we need to use inside post frame callback to check the value
+                        // see https://github.com/flutter/flutter/issues/128565#issuecomment-1772016743
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          // if the composing range is valid, which means the text is changed by IME and the query is not finished yet,
+                          // we should not trigger the query until the composing is finished.
+                          if (controller.queryBoxTextFieldController.value.isComposingRangeValid) {
+                            return;
+                          }
 
-                        controller.canArrowUpHistory = false;
-                        WoxChangeQuery woxChangeQuery = WoxChangeQuery(
-                          queryId: const UuidV4().generate(),
-                          queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
-                          queryText: value,
-                          querySelection: Selection.empty(),
-                        );
-                        controller.onQueryChanged(woxChangeQuery);
-                      });
-                    },
+                          controller.canArrowUpHistory = false;
+                          WoxChangeQuery woxChangeQuery = WoxChangeQuery(
+                            queryId: const UuidV4().generate(),
+                            queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
+                            queryText: value,
+                            querySelection: Selection.empty(),
+                          );
+                          controller.onQueryChanged(woxChangeQuery);
+                        });
+                      },
+                    ),
                   ),
                 ))),
         Positioned(

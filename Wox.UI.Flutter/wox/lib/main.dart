@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
-import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/modules/launcher/views/wox_launcher_view.dart';
@@ -87,9 +86,6 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       theme: ThemeData(
-        textSelectionTheme: TextSelectionThemeData(
-          selectionColor: fromCssColor(WoxThemeUtil.instance.currentTheme.resultItemActiveBackgroundColor),
-        ),
         textTheme: SystemChineseFont.textTheme(Brightness.light),
       ),
       debugShowCheckedModeBanner: false,

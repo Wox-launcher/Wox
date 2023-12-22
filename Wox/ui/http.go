@@ -18,6 +18,7 @@ import (
 	"wox/resource"
 	"wox/setting"
 	"wox/setting/definition"
+	"wox/share"
 	"wox/ui/dto"
 	"wox/util"
 )
@@ -308,7 +309,7 @@ func serveAndWait(ctx context.Context, port int) {
 		}
 
 		for i, storeTheme := range themes {
-			isInstalled := lo.ContainsBy(GetUIManager().GetAllThemes(ctx), func(item Theme) bool {
+			isInstalled := lo.ContainsBy(GetUIManager().GetAllThemes(ctx), func(item share.Theme) bool {
 				return item.ThemeId == storeTheme.ThemeId
 			})
 			themes[i].IsInstalled = isInstalled
@@ -340,7 +341,7 @@ func serveAndWait(ctx context.Context, port int) {
 		themeId := idResult.String()
 
 		storeThemes := GetStoreManager().GetThemes()
-		findTheme, exist := lo.Find(storeThemes, func(item Theme) bool {
+		findTheme, exist := lo.Find(storeThemes, func(item share.Theme) bool {
 			if item.ThemeId == themeId {
 				return true
 			}
@@ -371,7 +372,7 @@ func serveAndWait(ctx context.Context, port int) {
 		themeId := idResult.String()
 
 		storeThemes := GetUIManager().GetAllThemes(ctx)
-		findTheme, exist := lo.Find(storeThemes, func(item Theme) bool {
+		findTheme, exist := lo.Find(storeThemes, func(item share.Theme) bool {
 			if item.ThemeId == themeId {
 				return true
 			}

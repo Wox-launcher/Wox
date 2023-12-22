@@ -31,7 +31,7 @@ type Manager struct {
 	ui              share.UI
 	serverPort      int
 	uiProcess       *os.Process
-	themes          *util.HashMap[string, Theme]
+	themes          *util.HashMap[string, share.Theme]
 	systemThemeIds  []string
 }
 
@@ -41,7 +41,7 @@ func GetUIManager() *Manager {
 		managerInstance.mainHotkey = &hotkey.Hotkey{}
 		managerInstance.selectionHotkey = &hotkey.Hotkey{}
 		managerInstance.ui = &uiImpl{}
-		managerInstance.themes = util.NewHashMap[string, Theme]()
+		managerInstance.themes = util.NewHashMap[string, share.Theme]()
 		logger = util.GetLogger()
 	})
 	return managerInstance
@@ -225,55 +225,47 @@ func (m *Manager) StartUIApp(ctx context.Context, port int) error {
 	return nil
 }
 
-func (m *Manager) GetCurrentTheme(ctx context.Context) Theme {
+func (m *Manager) GetCurrentTheme(ctx context.Context) share.Theme {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if v, ok := m.themes.Load(woxSetting.ThemeId); ok {
 		return v
 	}
 
-	return Theme{}
+	return share.Theme{}
 }
 
-func (m *Manager) GetAllThemes(ctx context.Context) []Theme {
-	var themes []Theme
-	m.themes.Range(func(key string, value Theme) bool {
+func (m *Manager) GetAllThemes(ctx context.Context) []share.Theme {
+	var themes []share.Theme
+	m.themes.Range(func(key string, value share.Theme) bool {
 		themes = append(themes, value)
 		return true
 	})
 	return themes
 }
 
-func (m *Manager) AddTheme(ctx context.Context, theme Theme) {
+func (m *Manager) AddTheme(ctx context.Context, theme share.Theme) {
 	m.themes.Store(theme.ThemeId, theme)
 	m.ChangeTheme(ctx, theme)
 }
 
-func (m *Manager) RemoveTheme(ctx context.Context, theme Theme) {
+func (m *Manager) RemoveTheme(ctx context.Context, theme share.Theme) {
 	m.themes.Delete(theme.ThemeId)
 	if v, ok := m.themes.Load("53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03"); ok {
 		m.ChangeTheme(ctx, v)
 	}
 }
 
-func (m *Manager) parseTheme(themeJson string) (Theme, error) {
-	var theme Theme
+func (m *Manager) parseTheme(themeJson string) (share.Theme, error) {
+	var theme share.Theme
 	parseErr := json.Unmarshal([]byte(themeJson), &theme)
 	if parseErr != nil {
-		return Theme{}, parseErr
+		return share.Theme{}, parseErr
 	}
 	return theme, nil
 }
 
-func (m *Manager) ChangeTheme(ctx context.Context, theme Theme) {
-	logger.Info(ctx, fmt.Sprintf("change theme: %s", theme.ThemeName))
-
-	themeJson, marshalErr := json.Marshal(theme)
-	if marshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to marshal theme and send to ui: %s", marshalErr.Error()))
-		return
-	}
-
-	m.GetUI(ctx).ChangeTheme(ctx, string(themeJson))
+func (m *Manager) ChangeTheme(ctx context.Context, theme share.Theme) {
+	m.GetUI(ctx).ChangeTheme(ctx, theme)
 }
 
 func (m *Manager) ToggleWindow() {

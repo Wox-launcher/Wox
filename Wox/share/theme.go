@@ -1,4 +1,4 @@
-package ui
+package share
 
 type Theme struct {
 	ThemeId     string
@@ -32,6 +32,7 @@ type Theme struct {
 	QueryBoxBackgroundColor         string
 	QueryBoxBorderRadius            int
 	QueryBoxCursorColor             string
+	QueryBoxTextSelectionColor      string
 	ActionContainerBackgroundColor  string
 	ActionContainerHeaderFontColor  string
 	ActionContainerPaddingLeft      int
@@ -48,4 +49,5 @@ type Theme struct {
 	PreviewSplitLineColor           string
 	PreviewPropertyTitleColor       string
 	PreviewPropertyContentColor     string
+	PreviewTextSelectionColor       string
 }

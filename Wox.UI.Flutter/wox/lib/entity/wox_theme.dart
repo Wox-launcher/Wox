@@ -29,6 +29,7 @@ class WoxTheme {
   late String queryBoxBackgroundColor;
   late int queryBoxBorderRadius;
   late String queryBoxCursorColor;
+  late String queryBoxTextSelectionColor;
   late String actionContainerBackgroundColor;
   late String actionContainerHeaderFontColor;
   late int actionContainerPaddingLeft;
@@ -45,6 +46,7 @@ class WoxTheme {
   late String previewSplitLineColor;
   late String previewPropertyTitleColor;
   late String previewPropertyContentColor;
+  late String previewTextSelectionColor;
 
   WoxTheme(
       {themeId,
@@ -77,6 +79,7 @@ class WoxTheme {
       queryBoxBackgroundColor,
       queryBoxBorderRadius,
       queryBoxCursorColor,
+      queryBoxTextSelectionColor,
       actionContainerBackgroundColor,
       actionContainerHeaderFontColor,
       actionContainerPaddingLeft,
@@ -92,7 +95,8 @@ class WoxTheme {
       previewFontColor,
       previewSplitLineColor,
       previewPropertyTitleColor,
-      previewPropertyContentColor});
+      previewPropertyContentColor,
+      previewTextSelectionColor});
 
   WoxTheme.fromJson(Map<String, dynamic> json) {
     themeId = json['ThemeId'];
@@ -125,6 +129,7 @@ class WoxTheme {
     queryBoxBackgroundColor = json['QueryBoxBackgroundColor'];
     queryBoxBorderRadius = json['QueryBoxBorderRadius'];
     queryBoxCursorColor = json['QueryBoxCursorColor'];
+    queryBoxTextSelectionColor = json['QueryBoxTextSelectionColor'];
     actionContainerBackgroundColor = json['ActionContainerBackgroundColor'];
     actionContainerHeaderFontColor = json['ActionContainerHeaderFontColor'];
     actionContainerPaddingLeft = json['ActionContainerPaddingLeft'];
@@ -141,6 +146,7 @@ class WoxTheme {
     previewSplitLineColor = json['PreviewSplitLineColor'];
     previewPropertyTitleColor = json['PreviewPropertyTitleColor'];
     previewPropertyContentColor = json['PreviewPropertyContentColor'];
+    previewTextSelectionColor = json['PreviewTextSelectionColor'];
   }
 
   Map<String, dynamic> toJson() {
@@ -175,6 +181,7 @@ class WoxTheme {
     data['QueryBoxBackgroundColor'] = queryBoxBackgroundColor;
     data['QueryBoxBorderRadius'] = queryBoxBorderRadius;
     data['QueryBoxCursorColor'] = queryBoxCursorColor;
+    data['QueryBoxTextSelectionColor'] = queryBoxTextSelectionColor;
     data['ActionContainerBackgroundColor'] = actionContainerBackgroundColor;
     data['ActionContainerHeaderFontColor'] = actionContainerHeaderFontColor;
     data['ActionContainerPaddingLeft'] = actionContainerPaddingLeft;
@@ -191,6 +198,7 @@ class WoxTheme {
     data['PreviewSplitLineColor'] = previewSplitLineColor;
     data['PreviewPropertyTitleColor'] = previewPropertyTitleColor;
     data['PreviewPropertyContentColor'] = previewPropertyContentColor;
+    data['PreviewTextSelectionColor'] = previewTextSelectionColor;
     return data;
   }
 }

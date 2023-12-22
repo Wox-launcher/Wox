@@ -82,7 +82,15 @@ class WoxPreviewView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: contentWidget),
+          Expanded(
+            child: Theme(
+                data: ThemeData(
+                  textSelectionTheme: TextSelectionThemeData(
+                    selectionColor: fromCssColor(woxTheme.previewTextSelectionColor),
+                  ),
+                ),
+                child: contentWidget),
+          ),
           //show previewProperties
           if (woxPreview.previewProperties.isNotEmpty)
             Container(
