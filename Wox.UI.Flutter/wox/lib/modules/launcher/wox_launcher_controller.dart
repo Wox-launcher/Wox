@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:lpinyin/lpinyin.dart';
 import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/entity/wox_preview.dart';
@@ -229,7 +230,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   @override
   void onQueryActionChanged(String queryAction) {
-    filterResultActions.value = _resultActions.where((element) => element.name.toLowerCase().contains(queryAction.toLowerCase())).toList().obs();
+    filterResultActions.value = _resultActions.where((element) => transferChineseToPinYin(element.name.toLowerCase()).contains(queryAction.toLowerCase())).toList().obs();
     filterResultActions.refresh();
   }
 
@@ -553,5 +554,13 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   void handleQueryBoxArrowDown() {
     canArrowUpHistory = false;
     changeResultScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+  }
+
+  String transferChineseToPinYin(String str) {
+    RegExp regExp = RegExp(r'[\u4e00-\u9fa5]');
+    if (regExp.hasMatch(str)) {
+      return PinyinHelper.getPinyin(str, separator: "", format: PinyinFormat.WITHOUT_TONE);
+    }
+    return str;
   }
 }
