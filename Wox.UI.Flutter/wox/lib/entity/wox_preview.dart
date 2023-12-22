@@ -1,13 +1,13 @@
-import 'dart:convert';
-
+import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
 
 class WoxPreview {
   late WoxPreviewType previewType;
   late String previewData;
   late Map<String, String> previewProperties;
+  late WoxPreviewScrollPosition scrollPosition;
 
-  WoxPreview({required this.previewType, required this.previewData, required this.previewProperties});
+  WoxPreview({required this.previewType, required this.previewData, required this.previewProperties, required this.scrollPosition});
 
   @override
   int get hashCode => previewType.hashCode ^ previewData.hashCode ^ previewProperties.hashCode;
@@ -23,6 +23,7 @@ class WoxPreview {
     previewType = json['PreviewType'];
     previewData = json['PreviewData'];
     previewProperties = Map<String, String>.from(json['PreviewProperties'] ?? {});
+    scrollPosition = json['ScrollPosition'];
   }
 
   Map<String, dynamic> toJson() {
@@ -30,10 +31,11 @@ class WoxPreview {
     data['PreviewType'] = previewType;
     data['PreviewData'] = previewData;
     data['PreviewProperties'] = previewProperties;
+    data['ScrollPosition'] = scrollPosition;
     return data;
   }
 
   static WoxPreview empty() {
-    return WoxPreview(previewType: "", previewData: "", previewProperties: {});
+    return WoxPreview(previewType: "", previewData: "", previewProperties: {}, scrollPosition: "");
   }
 }

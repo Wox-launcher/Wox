@@ -5,28 +5,36 @@ import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
+import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_http_util.dart';
 
-class WoxPreviewView extends StatelessWidget {
+class WoxPreviewView extends StatefulWidget {
   final WoxPreview woxPreview;
   final WoxTheme woxTheme;
 
   const WoxPreviewView({super.key, required this.woxPreview, required this.woxTheme});
 
   @override
+  State<WoxPreviewView> createState() => _WoxPreviewViewState();
+}
+
+class _WoxPreviewViewState extends State<WoxPreviewView> {
+  final scrollController = ScrollController();
+
+  @override
   Widget build(BuildContext context) {
     if (LoggerSwitch.enablePaintLog) Logger.instance.info("repaint: preview view data");
 
-    if (woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_REMOTE.code) {
+    if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_REMOTE.code) {
       return FutureBuilder<WoxPreview>(
-        future: WoxHttpUtil.instance.getData<WoxPreview>(woxPreview.previewData),
+        future: WoxHttpUtil.instance.getData<WoxPreview>(widget.woxPreview.previewData),
         builder: (context, snapshot) {
           if (snapshot.hasData) {
             return WoxPreviewView(
               woxPreview: snapshot.data!,
-              woxTheme: woxTheme,
+              woxTheme: widget.woxTheme,
             );
           } else if (snapshot.hasError) {
             return Text("${snapshot.error}");
@@ -37,24 +45,33 @@ class WoxPreviewView extends StatelessWidget {
       );
     }
 
+    if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (scrollController.hasClients) {
+          scrollController.jumpTo(scrollController.position.maxScrollExtent);
+        }
+      });
+    }
+
     Widget contentWidget = const SizedBox();
-    if (woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MARKDOWN.code) {
+    if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MARKDOWN.code) {
       var styleTheme = Theme.of(context).copyWith(
         textTheme: Theme.of(context).textTheme.apply(
-              bodyColor: fromCssColor(woxTheme.previewFontColor),
-              displayColor: fromCssColor(woxTheme.previewFontColor),
+              bodyColor: fromCssColor(widget.woxTheme.previewFontColor),
+              displayColor: fromCssColor(widget.woxTheme.previewFontColor),
             ),
         cardColor: Colors.transparent,
       );
       contentWidget = Markdown(
-          data: woxPreview.previewData,
+          controller: scrollController,
+          data: widget.woxPreview.previewData,
           padding: EdgeInsets.zero,
           selectable: true,
           styleSheet: MarkdownStyleSheet.fromTheme(styleTheme).copyWith(
             horizontalRuleDecoration: BoxDecoration(
               border: Border(
                 top: BorderSide(
-                  color: fromCssColor(woxTheme.previewFontColor).withOpacity(0.6),
+                  color: fromCssColor(widget.woxTheme.previewFontColor).withOpacity(0.6),
                   width: 1,
                 ),
                 bottom: const BorderSide(
@@ -64,12 +81,21 @@ class WoxPreviewView extends StatelessWidget {
               ),
             ),
           ));
-    } else if (woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TEXT.code) {
-      contentWidget = SelectableText(woxPreview.previewData, style: TextStyle(color: fromCssColor(woxTheme.previewFontColor)));
-    } else if (woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_IMAGE.code) {
-      final parsedWoxImage = WoxImage.parse(woxPreview.previewData);
+    } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_TEXT.code) {
+      contentWidget = SingleChildScrollView(
+        controller: scrollController,
+        child: SelectableText(
+          widget.woxPreview.previewData,
+          style: TextStyle(color: fromCssColor(widget.woxTheme.previewFontColor)),
+        ),
+      );
+    } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_IMAGE.code) {
+      final parsedWoxImage = WoxImage.parse(widget.woxPreview.previewData);
       if (parsedWoxImage == null) {
-        contentWidget = SelectableText("Invalid image data: ${woxPreview.previewData}", style: const TextStyle(color: Colors.red));
+        contentWidget = SelectableText(
+          "Invalid image data: ${widget.woxPreview.previewData}",
+          style: const TextStyle(color: Colors.red),
+        );
       } else {
         contentWidget = Center(
           child: WoxImageView(woxImage: parsedWoxImage),
@@ -84,27 +110,28 @@ class WoxPreviewView extends StatelessWidget {
         children: [
           Expanded(
             child: Theme(
-                data: ThemeData(
-                  textSelectionTheme: TextSelectionThemeData(
-                    selectionColor: fromCssColor(woxTheme.previewTextSelectionColor),
-                  ),
+              data: ThemeData(
+                textSelectionTheme: TextSelectionThemeData(
+                  selectionColor: fromCssColor(widget.woxTheme.previewTextSelectionColor),
                 ),
-                child: contentWidget),
+              ),
+              child: contentWidget,
+            ),
           ),
           //show previewProperties
-          if (woxPreview.previewProperties.isNotEmpty)
+          if (widget.woxPreview.previewProperties.isNotEmpty)
             Container(
               padding: const EdgeInsets.only(top: 10.0),
               child: Column(
                 children: [
-                  ...woxPreview.previewProperties.entries.map((e) => Column(
+                  ...widget.woxPreview.previewProperties.entries.map((e) => Column(
                         children: [
-                          Divider(color: fromCssColor(woxTheme.previewSplitLineColor)),
+                          Divider(color: fromCssColor(widget.woxTheme.previewSplitLineColor)),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(e.key, style: TextStyle(color: fromCssColor(woxTheme.previewPropertyTitleColor))),
-                              Text(e.value, style: TextStyle(color: fromCssColor(woxTheme.previewPropertyContentColor))),
+                              Text(e.key, style: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor))),
+                              Text(e.value, style: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyContentColor))),
                             ],
                           ),
                         ],

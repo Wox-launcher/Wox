@@ -347,10 +347,6 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	// convert icon
 	result.Icon = ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
 
-	// if query is input and trigger keyword is global, disable preview
-	if query.IsGlobalQuery() {
-		result.Preview = WoxPreview{}
-	}
 	// if query is selection, replace preview with selection
 	if query.Type == QueryTypeSelection {
 		if query.Selection.Type == util.SelectionTypeText {
@@ -407,6 +403,11 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		if action.Action != nil {
 			resultCache.Actions.Store(action.Id, action.Action)
 		}
+	}
+
+	// if query is input and trigger keyword is global, disable preview
+	if query.IsGlobalQuery() {
+		result.Preview = WoxPreview{}
 	}
 
 	// store preview for ui invoke later

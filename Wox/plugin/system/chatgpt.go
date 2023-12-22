@@ -158,8 +158,9 @@ func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Quer
 			chatHistory += fmt.Sprintf("You: %s\n", query.Search)
 		}
 		c.activeChatResult.Preview = plugin.WoxPreview{
-			PreviewType: plugin.WoxPreviewTypeMarkdown,
-			PreviewData: chatHistory,
+			PreviewType:    plugin.WoxPreviewTypeMarkdown,
+			PreviewData:    chatHistory,
+			ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 		}
 		c.api.Log(ctx, fmt.Sprintf("active chat refresh interval: %d", c.activeChatResult.RefreshInterval))
 		c.activeChatResult.Actions = []plugin.QueryResultAction{
@@ -198,6 +199,7 @@ func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Quer
 						} else {
 							current.Preview.PreviewData += deltaAnswer
 						}
+						current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
 
 						c.activeChatAnswer += deltaAnswer
 						return current
@@ -313,8 +315,9 @@ func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Quer
 			SubTitle: timeago.English.Format(util.ParseTimeStamp(chat.CreatedTimestamp)),
 			Icon:     chatgptIcon,
 			Preview: plugin.WoxPreview{
-				PreviewType: plugin.WoxPreviewTypeMarkdown,
-				PreviewData: chatHistory,
+				PreviewType:    plugin.WoxPreviewTypeMarkdown,
+				PreviewData:    chatHistory,
+				ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 			},
 			Actions: []plugin.QueryResultAction{
 				{
