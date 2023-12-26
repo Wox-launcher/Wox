@@ -87,7 +87,7 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 	var metaDataList []MetadataWithDirectory
 	for _, entry := range pluginDirectories {
 		pluginDirectory := path.Join(basePluginDirectory, entry.Name())
-		metadata, metadataErr := m.parseMetadata(ctx, pluginDirectory)
+		metadata, metadataErr := m.ParseMetadata(ctx, pluginDirectory)
 		if metadataErr != nil {
 			logger.Error(ctx, metadataErr.Error())
 			continue
@@ -189,7 +189,7 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 }
 
 func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error {
-	metadata, parseErr := m.parseMetadata(ctx, pluginDirectory)
+	metadata, parseErr := m.ParseMetadata(ctx, pluginDirectory)
 	if parseErr != nil {
 		return parseErr
 	}
@@ -268,7 +268,7 @@ func (m *Manager) initPlugin(ctx context.Context, instance *Instance) {
 	instance.API.Log(ctx, fmt.Sprintf("[SYS] init plugin finished, cost %d ms", instance.InitFinishedTimestamp-instance.InitStartTimestamp))
 }
 
-func (m *Manager) parseMetadata(ctx context.Context, pluginDirectory string) (Metadata, error) {
+func (m *Manager) ParseMetadata(ctx context.Context, pluginDirectory string) (Metadata, error) {
 	configPath := path.Join(pluginDirectory, "plugin.json")
 	if _, statErr := os.Stat(configPath); statErr != nil {
 		return Metadata{}, fmt.Errorf("missing plugin.json file in %s", configPath)

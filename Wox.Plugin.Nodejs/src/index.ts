@@ -58,14 +58,14 @@ export interface Result {
   Icon: WoxImage
   Preview?: WoxPreview
   Score?: number
-  ContextData: string
-  Actions: ResultAction[]
+  ContextData?: string
+  Actions?: ResultAction[]
   // refresh result after specified interval, in milliseconds. If this value is 0, Wox will not refresh this result
   // interval can only divisible by 100, if not, Wox will use the nearest number which is divisible by 100
   // E.g. if you set 123, Wox will use 200, if you set 1234, Wox will use 1300
-  RefreshInterval: number
+  RefreshInterval?: number
   // refresh result by calling OnRefresh function
-  OnRefresh: (current: RefreshableResult) => Promise<RefreshableResult>
+  OnRefresh?: (current: RefreshableResult) => Promise<RefreshableResult>
 }
 
 export interface RefreshableResult {
@@ -83,7 +83,7 @@ export interface ResultAction {
    */
   Id?: string
   Name: string
-  Icon: WoxImage
+  Icon?: WoxImage
   /**
    * If true, Wox will use this action as default action. There can be only one default action in results
    * This can be omitted, if you don't set it, Wox will use the first action as default action
@@ -107,8 +107,8 @@ export interface PluginInitContext {
 
 export interface ChangeQueryParam {
   QueryType: "input" | "selection"
-  QueryText: string
-  QuerySelection: Selection
+  QueryText?: string
+  QuerySelection?: Selection
 }
 
 export interface PublicAPI {
