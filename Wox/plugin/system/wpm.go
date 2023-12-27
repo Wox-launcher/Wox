@@ -9,6 +9,7 @@ import (
 	"github.com/samber/lo"
 	"os"
 	"path"
+	"strings"
 	"wox/plugin"
 	"wox/share"
 	"wox/util"
@@ -96,7 +97,19 @@ func (i *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			i.api.Log(ctx, fmt.Sprintf("Failed to unmarshal local plugin directories: %s", unmarshalErr.Error()))
 		}
 	}
-	i.loadLocalPlugins(ctx)
+
+	// remove invalid directories
+	i.localPluginDirectories = lo.Filter(i.localPluginDirectories, func(directory string, _ int) bool {
+		_, statErr := os.Stat(directory)
+		if statErr != nil {
+			i.api.Log(ctx, fmt.Sprintf("Failed to stat local plugin directory, remove it: %s", statErr.Error()))
+			return false
+		}
+
+		return true
+	})
+
+	i.saveLocalPluginDirectories(ctx)
 }
 
 func (i *WPMPlugin) loadLocalPlugins(ctx context.Context) {
@@ -332,6 +345,49 @@ func (i *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 		i.api.Log(ctx, fmt.Sprintf("Failed to copy template: %s", cpErr.Error()))
 		i.creatingProcess = fmt.Sprintf("Failed to copy template: %s", cpErr.Error())
 		return
+	}
+
+	// replace variables in plugin.json
+	pluginJsonPath := path.Join(pluginDirectory, "plugin.json")
+	pluginJson, readErr := os.ReadFile(pluginJsonPath)
+	if readErr != nil {
+		i.api.Log(ctx, fmt.Sprintf("Failed to read plugin.json: %s", readErr.Error()))
+		i.creatingProcess = fmt.Sprintf("Failed to read plugin.json: %s", readErr.Error())
+		return
+	}
+
+	pluginJsonString := string(pluginJson)
+	pluginJsonString = strings.ReplaceAll(pluginJsonString, "[Id]", uuid.NewString())
+	pluginJsonString = strings.ReplaceAll(pluginJsonString, "[Name]", pluginName)
+	pluginJsonString = strings.ReplaceAll(pluginJsonString, "[Runtime]", strings.ToLower(string(template.Runtime)))
+	pluginJsonString = strings.ReplaceAll(pluginJsonString, "[Trigger Keyword]", "np")
+
+	writeErr := os.WriteFile(pluginJsonPath, []byte(pluginJsonString), 0644)
+	if writeErr != nil {
+		i.api.Log(ctx, fmt.Sprintf("Failed to write plugin.json: %s", writeErr.Error()))
+		i.creatingProcess = fmt.Sprintf("Failed to write plugin.json: %s", writeErr.Error())
+		return
+	}
+
+	// replace variables in package.json
+	if template.Runtime == plugin.PLUGIN_RUNTIME_NODEJS {
+		packageJsonPath := path.Join(pluginDirectory, "package.json")
+		packageJson, readPackageErr := os.ReadFile(packageJsonPath)
+		if readPackageErr != nil {
+			i.api.Log(ctx, fmt.Sprintf("Failed to read package.json: %s", readPackageErr.Error()))
+			i.creatingProcess = fmt.Sprintf("Failed to read package.json: %s", readPackageErr.Error())
+			return
+		}
+
+		packageJsonString := string(packageJson)
+		packageJsonString = strings.ReplaceAll(packageJsonString, "replace_me_with_name", pluginName)
+
+		writePackageErr := os.WriteFile(packageJsonPath, []byte(packageJsonString), 0644)
+		if writePackageErr != nil {
+			i.api.Log(ctx, fmt.Sprintf("Failed to write package.json: %s", writePackageErr.Error()))
+			i.creatingProcess = fmt.Sprintf("Failed to write package.json: %s", writePackageErr.Error())
+			return
+		}
 	}
 
 	i.creatingProcess = ""
