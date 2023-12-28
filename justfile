@@ -9,7 +9,7 @@ default:
     lefthook install -f
 
     just _build_hosts
-    just _build_flutter
+    # just _build_flutter
 
 @precommit:
     cd Wox.UI.React && pnpm build && cd ..

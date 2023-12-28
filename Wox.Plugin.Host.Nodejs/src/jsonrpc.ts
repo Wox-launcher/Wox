@@ -5,13 +5,18 @@ import { Plugin, PluginInitContext, Query, RefreshableResult, Result, ResultActi
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 
-const pluginMap = new Map<string, Plugin>()
-const actionCacheByPlugin = new Map<PluginJsonRpcRequest["PluginId"], Map<Result["Id"], ResultAction["Action"]>>()
-const refreshCacheByPlugin = new Map<PluginJsonRpcRequest["PluginId"], Map<Result["Id"], Result["OnRefresh"]>>()
-const pluginApiMap = new Map<PluginJsonRpcRequest["PluginId"], PluginAPI>()
+const pluginInstances = new Map<PluginJsonRpcRequest["PluginId"], PluginInstance>()
 
 export const PluginJsonRpcTypeRequest: string = "WOX_JSONRPC_REQUEST"
 export const PluginJsonRpcTypeResponse: string = "WOX_JSONRPC_RESPONSE"
+
+export interface PluginInstance {
+  Plugin: Plugin
+  API: PluginAPI
+  ModulePath: string
+  Actions: Map<Result["Id"], ResultAction["Action"]>
+  Refreshes: Map<Result["Id"], Result["OnRefresh"]>
+}
 
 export interface PluginJsonRpcRequest {
   Id: string
@@ -70,23 +75,36 @@ async function loadPlugin(request: PluginJsonRpcRequest) {
   }
 
   logger.info(`[${request.PluginName}] load plugin successfully`)
-  pluginMap.set(request.PluginId, module["plugin"] as Plugin)
+  pluginInstances.set(request.PluginId, {
+    Plugin: module["plugin"] as Plugin,
+    API: {} as PluginAPI,
+    ModulePath: modulePath,
+    Actions: new Map<Result["Id"], ResultAction["Action"]>(),
+    Refreshes: new Map<Result["Id"], Result["OnRefresh"]>()
+  })
 }
 
 function unloadPlugin(request: PluginJsonRpcRequest) {
-  pluginMap.delete(request.PluginId)
-  actionCacheByPlugin.delete(request.PluginId)
+  let pluginInstance = pluginInstances.get(request.PluginId)
+  if (pluginInstance === undefined || pluginInstance === null) {
+    logger.error(`[${request.PluginName}] plugin instance not found: ${request.PluginName}`)
+    throw new Error(`plugin instance not found: ${request.PluginName}`)
+  }
+
+  delete require.cache[require.resolve(pluginInstance.ModulePath)]
+  pluginInstances.delete(request.PluginId)
+
   logger.info(`[${request.PluginName}] unload plugin successfully`)
 }
 
 function getMethod<M extends keyof Plugin>(request: PluginJsonRpcRequest, methodName: M): Plugin[M] {
-  const plugin = pluginMap.get(request.PluginId)
+  const plugin = pluginInstances.get(request.PluginId)
   if (plugin === undefined || plugin === null) {
     logger.error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
     throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
   }
 
-  const method = plugin[methodName]
+  const method = plugin.Plugin[methodName]
   if (method === undefined) {
     logger.info(`plugin method not found: ${request.PluginName}`)
     throw new Error(`plugin method not found: ${request.PluginName}`)
@@ -96,28 +114,43 @@ function getMethod<M extends keyof Plugin>(request: PluginJsonRpcRequest, method
 }
 
 async function initPlugin(request: PluginJsonRpcRequest, ws: WebSocket) {
+  const plugin = pluginInstances.get(request.PluginId)
+  if (plugin === undefined || plugin === null) {
+    logger.error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+  }
+
   const init = getMethod(request, "init")
   const pluginApi = new PluginAPI(ws, request.PluginId, request.PluginName)
-  pluginApiMap.set(request.PluginId, pluginApi)
+  plugin.API = pluginApi
   return init({ API: pluginApi, PluginDirectory: request.Params.PluginDirectory } as PluginInitContext)
 }
 
 async function onPluginSettingChange(request: PluginJsonRpcRequest) {
+  const plugin = pluginInstances.get(request.PluginId)
+  if (plugin === undefined || plugin === null) {
+    logger.error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+  }
+
   const settingKey = request.Params.Key
   const settingValue = request.Params.Value
   const callbackId = request.Params.CallbackId
-  pluginApiMap.get(request.PluginId)?.settingChangeCallbacks.get(callbackId)?.(settingKey, settingValue)
+  plugin.API.settingChangeCallbacks.get(callbackId)?.(settingKey, settingValue)
 }
 
 async function query(request: PluginJsonRpcRequest) {
+  const plugin = pluginInstances.get(request.PluginId)
+  if (plugin === undefined || plugin === null) {
+    logger.error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+  }
+
   const query = getMethod(request, "query")
 
   //clean action cache for current plugin
-  actionCacheByPlugin.set(request.PluginId, new Map<Result["Id"], ResultAction["Action"]>())
-  refreshCacheByPlugin.set(request.PluginId, new Map<Result["Id"], Result["OnRefresh"]>())
-
-  const actionCache = actionCacheByPlugin.get(request.PluginId)!
-  const refreshCache = refreshCacheByPlugin.get(request.PluginId)!
+  plugin.Actions.clear()
+  plugin.Refreshes.clear()
 
   const results = await query({
     Type: request.Params.Type,
@@ -143,7 +176,7 @@ async function query(request: PluginJsonRpcRequest) {
         if (action.Id === undefined || action.Id === null) {
           action.Id = crypto.randomUUID()
         }
-        actionCache.set(action.Id, action.Action)
+        plugin.Actions.set(action.Id, action.Action)
       })
     }
     if (result.RefreshInterval === undefined || result.RefreshInterval === null) {
@@ -151,7 +184,7 @@ async function query(request: PluginJsonRpcRequest) {
     }
     if (result.RefreshInterval > 0) {
       if (result.OnRefresh !== undefined && result.OnRefresh !== null) {
-        refreshCache.set(result.Id, result.OnRefresh)
+        plugin.Refreshes.set(result.Id, result.OnRefresh)
       }
     }
   })
@@ -160,13 +193,13 @@ async function query(request: PluginJsonRpcRequest) {
 }
 
 async function action(request: PluginJsonRpcRequest) {
-  const pluginActionCache = actionCacheByPlugin.get(request.PluginId)
-  if (pluginActionCache === undefined || pluginActionCache === null) {
-    logger.error(`[${request.PluginName}] plugin action cache not found: ${request.PluginName}`)
-    return
+  const plugin = pluginInstances.get(request.PluginId)
+  if (plugin === undefined || plugin === null) {
+    logger.error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
   }
 
-  const pluginAction = pluginActionCache.get(request.Params.ActionId)
+  const pluginAction = plugin.Actions.get(request.Params.ActionId)
   if (pluginAction === undefined || pluginAction === null) {
     logger.error(`[${request.PluginName}] plugin action not found: ${request.PluginName}`)
     return
@@ -178,19 +211,18 @@ async function action(request: PluginJsonRpcRequest) {
 }
 
 async function refresh(request: PluginJsonRpcRequest) {
-  const pluginRefreshCache = refreshCacheByPlugin.get(request.PluginId)
-  if (pluginRefreshCache === undefined || pluginRefreshCache === null) {
-    logger.error(`[${request.PluginName}] plugin refresh cache not found: ${request.PluginName}`)
-    return
+  const plugin = pluginInstances.get(request.PluginId)
+  if (plugin === undefined || plugin === null) {
+    logger.error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
   }
 
-  const result = JSON.parse(request.Params.RefreshableResult) as RefreshableResult
-
-  const pluginRefresh = pluginRefreshCache.get(request.Params.ResultId)
+  const pluginRefresh = plugin.Refreshes.get(request.Params.ResultId)
   if (pluginRefresh === undefined || pluginRefresh === null) {
     logger.error(`[${request.PluginName}] plugin refresh not found: ${request.PluginName}`)
     return
   }
 
+  const result = JSON.parse(request.Params.RefreshableResult) as RefreshableResult
   return await pluginRefresh(result)
 }

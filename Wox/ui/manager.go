@@ -124,13 +124,13 @@ func (m *Manager) Start(ctx context.Context) error {
 		util.Go(ctx, "watch embed themes", func() {
 			workingDirectory, wdErr := os.Getwd()
 			if wdErr == nil {
-				util.WatchDirectories(ctx, path.Join(workingDirectory, "resource", "ui", "themes"), onThemeChange)
+				util.WatchDirectoryChanges(ctx, path.Join(workingDirectory, "resource", "ui", "themes"), onThemeChange)
 			}
 		})
 
 		//watch user themes folder and reload themes
 		util.Go(ctx, "watch user themes", func() {
-			util.WatchDirectories(ctx, userThemesDirectory, onThemeChange)
+			util.WatchDirectoryChanges(ctx, userThemesDirectory, onThemeChange)
 		})
 	}
 

@@ -6,17 +6,18 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-func WatchDirectories(ctx context.Context, filePath string, callback func(event fsnotify.Event)) error {
+func WatchDirectoryChanges(ctx context.Context, directory string, callback func(event fsnotify.Event)) (*fsnotify.Watcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		GetLogger().Error(ctx, fmt.Sprintf("failed to create directory watcher: %s", err.Error()))
-		return err
+		return nil, err
 	}
 
-	err = watcher.Add(filePath)
+	err = watcher.Add(directory)
 	if err != nil {
 		GetLogger().Error(ctx, fmt.Sprintf("failed to add directory to watcher: %s", err.Error()))
-		return err
+		watcher.Close()
+		return nil, err
 	}
 
 	Go(ctx, "watch directory change", func() {
@@ -24,12 +25,17 @@ func WatchDirectories(ctx context.Context, filePath string, callback func(event 
 			select {
 			case event, ok := <-watcher.Events:
 				if !ok {
+					GetLogger().Error(ctx, "watch directory closed: not receive event")
 					watcher.Close()
 					return
 				}
 				callback(event)
+			case <-ctx.Done():
+				watcher.Close()
+				return
 			case watchErr, ok := <-watcher.Errors:
 				if !ok {
+					GetLogger().Error(ctx, "watch directory closed: not receive error")
 					watcher.Close()
 					return
 				}
@@ -41,5 +47,5 @@ func WatchDirectories(ctx context.Context, filePath string, callback func(event 
 		watcher.Close()
 	})
 
-	return nil
+	return watcher, nil
 }

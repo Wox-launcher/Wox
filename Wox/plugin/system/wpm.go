@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 	"os"
 	"path"
 	"strings"
+	"time"
 	"wox/plugin"
 	"wox/share"
 	"wox/util"
@@ -25,14 +27,17 @@ var pluginTemplates = []pluginTemplate{
 }
 
 func init() {
-	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &WPMPlugin{})
+	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &WPMPlugin{
+		reloadPluginTimers: util.NewHashMap[string, *time.Timer](),
+	})
 }
 
 type WPMPlugin struct {
 	api                    plugin.API
 	creatingProcess        string
 	localPluginDirectories []string
-	localPlugins           []plugin.MetadataWithDirectory
+	localPlugins           []localPlugin
+	reloadPluginTimers     *util.HashMap[string, *time.Timer]
 }
 
 type pluginTemplate struct {
@@ -41,7 +46,12 @@ type pluginTemplate struct {
 	Url     string
 }
 
-func (i *WPMPlugin) GetMetadata() plugin.Metadata {
+type localPlugin struct {
+	metadata plugin.MetadataWithDirectory
+	watcher  *fsnotify.Watcher
+}
+
+func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "e2c5f005-6c73-43c8-bc53-ab04def265b2",
 		Name:          "Wox Plugin Manager",
@@ -75,8 +85,8 @@ func (i *WPMPlugin) GetMetadata() plugin.Metadata {
 				Description: "Create Wox plugin",
 			},
 			{
-				Command:     "local",
-				Description: "List local Wox plugins",
+				Command:     "dev",
+				Description: "Develop Wox plugins",
 			},
 		},
 		SupportedOS: []string{
@@ -87,46 +97,73 @@ func (i *WPMPlugin) GetMetadata() plugin.Metadata {
 	}
 }
 
-func (i *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
-	i.api = initParams.API
+func (w *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
+	w.api = initParams.API
 
-	localPluginDirs := i.api.GetSetting(ctx, "localPluginDirectories")
+	localPluginDirs := w.api.GetSetting(ctx, "localPluginDirectories")
 	if localPluginDirs != "" {
-		unmarshalErr := json.Unmarshal([]byte(localPluginDirs), &i.localPluginDirectories)
+		unmarshalErr := json.Unmarshal([]byte(localPluginDirs), &w.localPluginDirectories)
 		if unmarshalErr != nil {
-			i.api.Log(ctx, fmt.Sprintf("Failed to unmarshal local plugin directories: %s", unmarshalErr.Error()))
+			w.api.Log(ctx, fmt.Sprintf("Failed to unmarshal local plugin directories: %s", unmarshalErr.Error()))
 		}
 	}
 
 	// remove invalid directories
-	i.localPluginDirectories = lo.Filter(i.localPluginDirectories, func(directory string, _ int) bool {
+	w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
 		_, statErr := os.Stat(directory)
 		if statErr != nil {
-			i.api.Log(ctx, fmt.Sprintf("Failed to stat local plugin directory, remove it: %s", statErr.Error()))
+			w.api.Log(ctx, fmt.Sprintf("Failed to stat local plugin directory, remove it: %s", statErr.Error()))
 			return false
 		}
 
 		return true
 	})
 
-	i.saveLocalPluginDirectories(ctx)
+	w.saveLocalPluginDirectories(ctx)
 }
 
-func (i *WPMPlugin) loadLocalPlugins(ctx context.Context) {
-	i.localPlugins = nil
-	for _, localPluginDirectory := range i.localPluginDirectories {
-		p, err := i.loadLocalPluginsFromDirectory(ctx, localPluginDirectory)
+func (w *WPMPlugin) loadLocalPlugins(ctx context.Context) {
+	w.localPlugins = nil
+	for _, localPluginDirectory := range w.localPluginDirectories {
+		p, err := w.loadLocalPluginsFromDirectory(ctx, localPluginDirectory)
 		if err != nil {
-			i.api.Log(ctx, err.Error())
+			w.api.Log(ctx, err.Error())
 			continue
 		}
 
-		i.api.Log(ctx, fmt.Sprintf("Loaded local plugin: %s", p.Metadata.Name))
-		i.localPlugins = append(i.localPlugins, p)
+		w.api.Log(ctx, fmt.Sprintf("Loaded local plugin: %s", p.Metadata.Name))
+
+		lp := localPlugin{
+			metadata: p,
+		}
+
+		// watch dist directory changes and auto reload plugin
+		distDirectory := path.Join(localPluginDirectory, "dist")
+		if _, statErr := os.Stat(distDirectory); statErr == nil {
+			w.api.Log(ctx, fmt.Sprintf("Watching dist directory: %s", distDirectory))
+			watcher, watchErr := util.WatchDirectoryChanges(ctx, distDirectory, func(e fsnotify.Event) {
+				if e.Op != fsnotify.Chmod {
+					// debounce reload plugin to avoid reload multiple times in a short time
+					if t, ok := w.reloadPluginTimers.Load(p.Metadata.Id); ok {
+						t.Stop()
+					}
+					w.reloadPluginTimers.Store(p.Metadata.Id, time.AfterFunc(time.Second*2, func() {
+						w.reloadLocalPlugins(ctx, p)
+					}))
+				}
+			})
+			if watchErr != nil {
+				w.api.Log(ctx, fmt.Sprintf("Failed to watch dist directory: %s", watchErr.Error()))
+			} else {
+				lp.watcher = watcher
+			}
+		}
+
+		w.localPlugins = append(w.localPlugins, lp)
 	}
 }
 
-func (i *WPMPlugin) loadLocalPluginsFromDirectory(ctx context.Context, directory string) (plugin.MetadataWithDirectory, error) {
+func (w *WPMPlugin) loadLocalPluginsFromDirectory(ctx context.Context, directory string) (plugin.MetadataWithDirectory, error) {
 	// parse plugin.json in directory
 	metadata, metadataErr := plugin.GetPluginManager().ParseMetadata(ctx, directory)
 	if metadataErr != nil {
@@ -138,19 +175,19 @@ func (i *WPMPlugin) loadLocalPluginsFromDirectory(ctx context.Context, directory
 	}, nil
 }
 
-func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
 
 	if query.Command == "create" {
-		if i.creatingProcess != "" {
+		if w.creatingProcess != "" {
 			results = append(results, plugin.QueryResult{
 				Id:              uuid.NewString(),
-				Title:           i.creatingProcess,
+				Title:           w.creatingProcess,
 				SubTitle:        "Please wait...",
 				Icon:            wpmIcon,
 				RefreshInterval: 300,
 				OnRefresh: func(current plugin.RefreshableResult) plugin.RefreshableResult {
-					current.Title = i.creatingProcess
+					current.Title = w.creatingProcess
 					return current
 				},
 			})
@@ -172,9 +209,9 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 						Action: func(actionContext plugin.ActionContext) {
 							pluginName := query.Search
 							util.Go(ctx, "create plugin", func() {
-								i.createPlugin(ctx, pluginTemplateDummy, pluginName, query)
+								w.createPlugin(ctx, pluginTemplateDummy, pluginName, query)
 							})
-							i.api.ChangeQuery(ctx, share.ChangedQuery{
+							w.api.ChangeQuery(ctx, share.ChangedQuery{
 								QueryType: plugin.QueryTypeInput,
 								QueryText: fmt.Sprintf("%s create ", query.TriggerKeyword),
 							})
@@ -184,16 +221,16 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 		}
 	}
 
-	if query.Command == "local" {
+	if query.Command == "dev" {
 		//list all local plugins
-		return lo.Map(i.localPlugins, func(metadataWithDirectory plugin.MetadataWithDirectory, _ int) plugin.QueryResult {
-			iconImage := plugin.ParseWoxImageOrDefault(metadataWithDirectory.Metadata.Icon, wpmIcon)
-			iconImage = plugin.ConvertIcon(ctx, iconImage, metadataWithDirectory.Directory)
+		return lo.Map(w.localPlugins, func(lp localPlugin, _ int) plugin.QueryResult {
+			iconImage := plugin.ParseWoxImageOrDefault(lp.metadata.Metadata.Icon, wpmIcon)
+			iconImage = plugin.ConvertIcon(ctx, iconImage, lp.metadata.Directory)
 
 			return plugin.QueryResult{
 				Id:       uuid.NewString(),
-				Title:    metadataWithDirectory.Metadata.Name,
-				SubTitle: metadataWithDirectory.Metadata.Description,
+				Title:    lp.metadata.Metadata.Name,
+				SubTitle: lp.metadata.Metadata.Description,
 				Icon:     iconImage,
 				Preview: plugin.WoxPreview{
 					PreviewType: plugin.WoxPreviewTypeMarkdown,
@@ -210,43 +247,50 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 - **Commands**: %s
 - **SupportedOS**: %s
 - **Features**: %s
-`, metadataWithDirectory.Metadata.Name, metadataWithDirectory.Metadata.Description, metadataWithDirectory.Metadata.Author,
-						metadataWithDirectory.Metadata.Website, metadataWithDirectory.Metadata.Version, metadataWithDirectory.Metadata.MinWoxVersion,
-						metadataWithDirectory.Metadata.Runtime, metadataWithDirectory.Metadata.Entry, metadataWithDirectory.Metadata.TriggerKeywords,
-						metadataWithDirectory.Metadata.Commands, metadataWithDirectory.Metadata.SupportedOS, metadataWithDirectory.Metadata.Features),
+`, lp.metadata.Metadata.Name, lp.metadata.Metadata.Description, lp.metadata.Metadata.Author,
+						lp.metadata.Metadata.Website, lp.metadata.Metadata.Version, lp.metadata.Metadata.MinWoxVersion,
+						lp.metadata.Metadata.Runtime, lp.metadata.Metadata.Entry, lp.metadata.Metadata.TriggerKeywords,
+						lp.metadata.Metadata.Commands, lp.metadata.Metadata.SupportedOS, lp.metadata.Metadata.Features),
 				},
 				Actions: []plugin.QueryResultAction{
 					{
-						Name: "open",
+						Name:      "Reload",
+						IsDefault: true,
 						Action: func(actionContext plugin.ActionContext) {
-							openErr := util.ShellOpen(metadataWithDirectory.Directory)
+							w.reloadLocalPlugins(ctx, lp.metadata)
+						},
+					},
+					{
+						Name: "Open plugin directory",
+						Action: func(actionContext plugin.ActionContext) {
+							openErr := util.ShellOpen(lp.metadata.Directory)
 							if openErr != nil {
-								i.api.ShowMsg(ctx, "Failed to open plugin directory", openErr.Error(), wpmIcon.String())
+								w.api.ShowMsg(ctx, "Failed to open plugin directory", openErr.Error(), wpmIcon.String())
 							}
 						},
 					},
 					{
 						Name: "Remove",
 						Action: func(actionContext plugin.ActionContext) {
-							i.localPluginDirectories = lo.Filter(i.localPluginDirectories, func(directory string, _ int) bool {
-								return directory != metadataWithDirectory.Directory
+							w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
+								return directory != lp.metadata.Directory
 							})
-							i.saveLocalPluginDirectories(ctx)
+							w.saveLocalPluginDirectories(ctx)
 						},
 					},
 					{
 						Name: "Remove and delete plugin directory",
 						Action: func(actionContext plugin.ActionContext) {
-							deleteErr := os.RemoveAll(metadataWithDirectory.Directory)
+							deleteErr := os.RemoveAll(lp.metadata.Directory)
 							if deleteErr != nil {
-								i.api.Log(ctx, fmt.Sprintf("Failed to delete plugin directory: %s", deleteErr.Error()))
+								w.api.Log(ctx, fmt.Sprintf("Failed to delete plugin directory: %s", deleteErr.Error()))
 								return
 							}
 
-							i.localPluginDirectories = lo.Filter(i.localPluginDirectories, func(directory string, _ int) bool {
-								return directory != metadataWithDirectory.Directory
+							w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
+								return directory != lp.metadata.Directory
 							})
-							i.saveLocalPluginDirectories(ctx)
+							w.saveLocalPluginDirectories(ctx)
 						},
 					},
 				},
@@ -311,30 +355,30 @@ func (i *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 	return results
 }
 
-func (i *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, pluginName string, query plugin.Query) {
-	i.creatingProcess = "Downloading template..."
+func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, pluginName string, query plugin.Query) {
+	w.creatingProcess = "Downloading template..."
 
 	tempPluginDirectory := path.Join(os.TempDir(), uuid.NewString())
 	if err := util.GetLocation().EnsureDirectoryExist(tempPluginDirectory); err != nil {
-		i.api.Log(ctx, fmt.Sprintf("Failed to create temp plugin directory: %s", err.Error()))
-		i.creatingProcess = fmt.Sprintf("Failed to create temp plugin directory: %s", err.Error())
+		w.api.Log(ctx, fmt.Sprintf("Failed to create temp plugin directory: %s", err.Error()))
+		w.creatingProcess = fmt.Sprintf("Failed to create temp plugin directory: %s", err.Error())
 		return
 	}
 
-	i.creatingProcess = fmt.Sprintf("Downloading %s template to %s", template.Runtime, tempPluginDirectory)
+	w.creatingProcess = fmt.Sprintf("Downloading %s template to %s", template.Runtime, tempPluginDirectory)
 	tempZipPath := path.Join(tempPluginDirectory, "template.zip")
 	err := util.HttpDownload(ctx, template.Url, tempZipPath)
 	if err != nil {
-		i.api.Log(ctx, fmt.Sprintf("Failed to download template: %s", err.Error()))
-		i.creatingProcess = fmt.Sprintf("Failed to download template: %s", err.Error())
+		w.api.Log(ctx, fmt.Sprintf("Failed to download template: %s", err.Error()))
+		w.creatingProcess = fmt.Sprintf("Failed to download template: %s", err.Error())
 		return
 	}
 
-	i.creatingProcess = "Extracting template..."
+	w.creatingProcess = "Extracting template..."
 	err = util.Unzip(tempZipPath, tempPluginDirectory)
 	if err != nil {
-		i.api.Log(ctx, fmt.Sprintf("Failed to extract template: %s", err.Error()))
-		i.creatingProcess = fmt.Sprintf("Failed to extract template: %s", err.Error())
+		w.api.Log(ctx, fmt.Sprintf("Failed to extract template: %s", err.Error()))
+		w.creatingProcess = fmt.Sprintf("Failed to extract template: %s", err.Error())
 		return
 	}
 
@@ -342,8 +386,8 @@ func (i *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 	pluginDirectory := path.Join(util.GetLocation().GetPluginDirectory(), pluginName)
 	cpErr := cp.Copy(path.Join(tempPluginDirectory, template.Name+"-main"), pluginDirectory)
 	if cpErr != nil {
-		i.api.Log(ctx, fmt.Sprintf("Failed to copy template: %s", cpErr.Error()))
-		i.creatingProcess = fmt.Sprintf("Failed to copy template: %s", cpErr.Error())
+		w.api.Log(ctx, fmt.Sprintf("Failed to copy template: %s", cpErr.Error()))
+		w.creatingProcess = fmt.Sprintf("Failed to copy template: %s", cpErr.Error())
 		return
 	}
 
@@ -351,8 +395,8 @@ func (i *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 	pluginJsonPath := path.Join(pluginDirectory, "plugin.json")
 	pluginJson, readErr := os.ReadFile(pluginJsonPath)
 	if readErr != nil {
-		i.api.Log(ctx, fmt.Sprintf("Failed to read plugin.json: %s", readErr.Error()))
-		i.creatingProcess = fmt.Sprintf("Failed to read plugin.json: %s", readErr.Error())
+		w.api.Log(ctx, fmt.Sprintf("Failed to read plugin.json: %s", readErr.Error()))
+		w.creatingProcess = fmt.Sprintf("Failed to read plugin.json: %s", readErr.Error())
 		return
 	}
 
@@ -364,8 +408,8 @@ func (i *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 
 	writeErr := os.WriteFile(pluginJsonPath, []byte(pluginJsonString), 0644)
 	if writeErr != nil {
-		i.api.Log(ctx, fmt.Sprintf("Failed to write plugin.json: %s", writeErr.Error()))
-		i.creatingProcess = fmt.Sprintf("Failed to write plugin.json: %s", writeErr.Error())
+		w.api.Log(ctx, fmt.Sprintf("Failed to write plugin.json: %s", writeErr.Error()))
+		w.creatingProcess = fmt.Sprintf("Failed to write plugin.json: %s", writeErr.Error())
 		return
 	}
 
@@ -374,8 +418,8 @@ func (i *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 		packageJsonPath := path.Join(pluginDirectory, "package.json")
 		packageJson, readPackageErr := os.ReadFile(packageJsonPath)
 		if readPackageErr != nil {
-			i.api.Log(ctx, fmt.Sprintf("Failed to read package.json: %s", readPackageErr.Error()))
-			i.creatingProcess = fmt.Sprintf("Failed to read package.json: %s", readPackageErr.Error())
+			w.api.Log(ctx, fmt.Sprintf("Failed to read package.json: %s", readPackageErr.Error()))
+			w.creatingProcess = fmt.Sprintf("Failed to read package.json: %s", readPackageErr.Error())
 			return
 		}
 
@@ -384,27 +428,53 @@ func (i *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 
 		writePackageErr := os.WriteFile(packageJsonPath, []byte(packageJsonString), 0644)
 		if writePackageErr != nil {
-			i.api.Log(ctx, fmt.Sprintf("Failed to write package.json: %s", writePackageErr.Error()))
-			i.creatingProcess = fmt.Sprintf("Failed to write package.json: %s", writePackageErr.Error())
+			w.api.Log(ctx, fmt.Sprintf("Failed to write package.json: %s", writePackageErr.Error()))
+			w.creatingProcess = fmt.Sprintf("Failed to write package.json: %s", writePackageErr.Error())
 			return
 		}
 	}
 
-	i.creatingProcess = ""
-	i.localPluginDirectories = append(i.localPluginDirectories, pluginDirectory)
-	i.saveLocalPluginDirectories(ctx)
-	i.api.ChangeQuery(ctx, share.ChangedQuery{
+	w.creatingProcess = ""
+	w.localPluginDirectories = append(w.localPluginDirectories, pluginDirectory)
+	w.saveLocalPluginDirectories(ctx)
+	w.api.ChangeQuery(ctx, share.ChangedQuery{
 		QueryType: plugin.QueryTypeInput,
-		QueryText: fmt.Sprintf("%s local ", query.TriggerKeyword),
+		QueryText: fmt.Sprintf("%s dev ", query.TriggerKeyword),
 	})
 }
 
-func (i *WPMPlugin) saveLocalPluginDirectories(ctx context.Context) {
-	data, marshalErr := json.Marshal(i.localPluginDirectories)
+func (w *WPMPlugin) saveLocalPluginDirectories(ctx context.Context) {
+	data, marshalErr := json.Marshal(w.localPluginDirectories)
 	if marshalErr != nil {
-		i.api.Log(ctx, fmt.Sprintf("Failed to marshal local plugin directories: %s", marshalErr.Error()))
+		w.api.Log(ctx, fmt.Sprintf("Failed to marshal local plugin directories: %s", marshalErr.Error()))
 		return
 	}
-	i.api.SaveSetting(ctx, "localPluginDirectories", string(data), false)
-	i.loadLocalPlugins(ctx)
+	w.api.SaveSetting(ctx, "localPluginDirectories", string(data), false)
+	w.loadLocalPlugins(ctx)
+}
+
+func (w *WPMPlugin) reloadLocalPlugins(ctx context.Context, localPlugin plugin.MetadataWithDirectory) {
+	w.api.Log(ctx, fmt.Sprintf("Reloading plugin: %s", localPlugin.Metadata.Name))
+
+	// find dist directory, if not exist, prompt user to build it
+	distDirectory := path.Join(localPlugin.Directory, "dist")
+	_, statErr := os.Stat(distDirectory)
+	if statErr != nil {
+		w.api.Log(ctx, fmt.Sprintf("Failed to stat dist directory: %s", statErr.Error()))
+		return
+	}
+
+	distPluginMetadata, err := w.loadLocalPluginsFromDirectory(ctx, distDirectory)
+	if err != nil {
+		w.api.Log(ctx, fmt.Sprintf("Failed to load local plugin: %s", err.Error()))
+		return
+	}
+
+	reloadErr := plugin.GetPluginManager().ReloadPlugin(ctx, distPluginMetadata)
+	if reloadErr != nil {
+		w.api.Log(ctx, fmt.Sprintf("Failed to reload plugin: %s", reloadErr.Error()))
+		return
+	} else {
+		w.api.Log(ctx, fmt.Sprintf("Reloaded plugin: %s", localPlugin.Metadata.Name))
+	}
 }

@@ -148,6 +148,34 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 	return nil
 }
 
+func (m *Manager) ReloadPlugin(ctx context.Context, metadata MetadataWithDirectory) error {
+	logger.Info(ctx, fmt.Sprintf("start reloading plugin: %s", metadata.Metadata.Name))
+
+	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
+		return strings.ToLower(string(item.GetRuntime(ctx))) == strings.ToLower(metadata.Metadata.Runtime)
+	})
+	if !exist {
+		return fmt.Errorf("unsupported runtime: %s", metadata.Metadata.Runtime)
+	}
+
+	pluginInstance, pluginInstanceExist := lo.Find(m.instances, func(item *Instance) bool {
+		return item.Metadata.Id == metadata.Metadata.Id
+	})
+	if pluginInstanceExist {
+		logger.Info(ctx, fmt.Sprintf("plugin(%s) is loaded, unload first", metadata.Metadata.Name))
+		m.UnloadPlugin(ctx, pluginInstance)
+	} else {
+		logger.Info(ctx, fmt.Sprintf("plugin(%s) is not loaded, skip unload", metadata.Metadata.Name))
+	}
+
+	loadErr := m.loadHostPlugin(ctx, pluginHost, metadata)
+	if loadErr != nil {
+		return loadErr
+	}
+
+	return nil
+}
+
 func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata MetadataWithDirectory) error {
 	loadStartTimestamp := util.GetSystemTimestamp()
 	plugin, loadErr := host.LoadPlugin(ctx, metadata.Metadata, metadata.Directory)

@@ -165,7 +165,7 @@ func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
 	var appExtensions = a.retriever.GetAppExtensions(ctx)
 	for _, d := range appDirectories {
 		var directory = d
-		util.WatchDirectories(ctx, directory.Path, func(e fsnotify.Event) {
+		util.WatchDirectoryChanges(ctx, directory.Path, func(e fsnotify.Event) {
 			var appPath = e.Name
 			var isExtensionMatch = lo.ContainsBy(appExtensions, func(ext string) bool {
 				return strings.HasSuffix(e.Name, fmt.Sprintf(".%s", ext))

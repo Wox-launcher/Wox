@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"fmt"
 	"github.com/samber/lo"
 	"path"
 	"wox/i18n"
@@ -49,6 +50,7 @@ func (a *APIImpl) ShowMsg(ctx context.Context, title string, description string,
 
 func (a *APIImpl) Log(ctx context.Context, msg string) {
 	a.logger.Info(ctx, msg)
+	logger.Info(ctx, fmt.Sprintf("[%s] %s", a.pluginInstance.Metadata.Name, msg))
 }
 
 func (a *APIImpl) GetTranslation(ctx context.Context, key string) string {
