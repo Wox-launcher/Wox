@@ -16,9 +16,12 @@ import (
 	"wox/util/hotkey"
 )
 
-import _ "wox/plugin/host"   // import all hosts
-import _ "wox/plugin/system" // import all system plugins
+import _ "wox/plugin/host" // import all hosts
+
+// import all system plugins
+import _ "wox/plugin/system"
 import _ "wox/plugin/system/app"
+import _ "wox/plugin/system/calculator"
 
 func main() {
 	// logger depends on location, so location must be initialized first

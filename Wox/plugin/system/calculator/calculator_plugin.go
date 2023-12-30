@@ -1,9 +1,7 @@
-package system
+package calculator
 
 import (
 	"context"
-	"github.com/mnogu/go-calculator"
-	"strconv"
 	"strings"
 	"wox/plugin"
 	"wox/share"
@@ -66,11 +64,11 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 			return []plugin.QueryResult{}
 		}
 
-		val, err := calculator.Calculate(query.Search)
+		val, err := Calculate(query.Search)
 		if err != nil {
 			return []plugin.QueryResult{}
 		}
-		result := strconv.FormatFloat(val, 'f', -1, 64)
+		result := val.String()
 
 		results = append(results, plugin.QueryResult{
 			Title: result,
@@ -92,9 +90,9 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 
 	// only show history if query has trigger keyword
 	if query.TriggerKeyword != "" {
-		val, err := calculator.Calculate(query.Search)
+		val, err := Calculate(query.Search)
 		if err == nil {
-			result := strconv.FormatFloat(val, 'f', -1, 64)
+			result := val.String()
 			results = append(results, plugin.QueryResult{
 				Title: result,
 				Icon:  calculatorIcon,

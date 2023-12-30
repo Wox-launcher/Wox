@@ -193,11 +193,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
       if (queryBoxTextFieldController.text != query.queryText) {
-        // save the cursor position and then restore it after set text
-        var cursorPosition = queryBoxTextFieldController.selection.baseOffset;
         queryBoxTextFieldController.text = query.queryText;
-        cursorPosition = cursorPosition > queryBoxTextFieldController.text.length ? queryBoxTextFieldController.text.length : cursorPosition;
-        queryBoxTextFieldController.selection = TextSelection(baseOffset: cursorPosition, extentOffset: cursorPosition);
       }
       if (moveCursorToEnd) {
         moveQueryBoxCursorToEnd();
