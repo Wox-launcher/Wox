@@ -235,6 +235,7 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				Preview: plugin.WoxPreview{
 					PreviewType: plugin.WoxPreviewTypeMarkdown,
 					PreviewData: fmt.Sprintf(`
+- **Directory**: %s
 - **Name**: %s  
 - **Description**: %s
 - **Author**: %s
@@ -247,7 +248,7 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 - **Commands**: %s
 - **SupportedOS**: %s
 - **Features**: %s
-`, lp.metadata.Metadata.Name, lp.metadata.Metadata.Description, lp.metadata.Metadata.Author,
+`, lp.metadata.Directory, lp.metadata.Metadata.Name, lp.metadata.Metadata.Description, lp.metadata.Metadata.Author,
 						lp.metadata.Metadata.Website, lp.metadata.Metadata.Version, lp.metadata.Metadata.MinWoxVersion,
 						lp.metadata.Metadata.Runtime, lp.metadata.Metadata.Entry, lp.metadata.Metadata.TriggerKeywords,
 						lp.metadata.Metadata.Commands, lp.metadata.Metadata.SupportedOS, lp.metadata.Metadata.Features),
@@ -265,7 +266,7 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 						Action: func(actionContext plugin.ActionContext) {
 							openErr := util.ShellOpen(lp.metadata.Directory)
 							if openErr != nil {
-								w.api.ShowMsg(ctx, "Failed to open plugin directory", openErr.Error(), wpmIcon.String())
+								w.api.Notify(ctx, "Failed to open plugin directory", openErr.Error())
 							}
 						},
 					},
@@ -453,7 +454,7 @@ func (w *WPMPlugin) saveLocalPluginDirectories(ctx context.Context) {
 	w.loadLocalPlugins(ctx)
 }
 
-func (w *WPMPlugin) reloadLocalPlugins(ctx context.Context, localPlugin plugin.MetadataWithDirectory) {
+func (w *WPMPlugin) reloadLocalPlugins(ctx context.Context, localPlugin plugin.MetadataWithDirectory) error {
 	w.api.Log(ctx, fmt.Sprintf("Reloading plugin: %s", localPlugin.Metadata.Name))
 
 	// find dist directory, if not exist, prompt user to build it
@@ -461,20 +462,23 @@ func (w *WPMPlugin) reloadLocalPlugins(ctx context.Context, localPlugin plugin.M
 	_, statErr := os.Stat(distDirectory)
 	if statErr != nil {
 		w.api.Log(ctx, fmt.Sprintf("Failed to stat dist directory: %s", statErr.Error()))
-		return
+		return statErr
 	}
 
 	distPluginMetadata, err := w.loadLocalPluginsFromDirectory(ctx, distDirectory)
 	if err != nil {
 		w.api.Log(ctx, fmt.Sprintf("Failed to load local plugin: %s", err.Error()))
-		return
+		return err
 	}
 
 	reloadErr := plugin.GetPluginManager().ReloadPlugin(ctx, distPluginMetadata)
 	if reloadErr != nil {
 		w.api.Log(ctx, fmt.Sprintf("Failed to reload plugin: %s", reloadErr.Error()))
-		return
+		return reloadErr
 	} else {
 		w.api.Log(ctx, fmt.Sprintf("Reloaded plugin: %s", localPlugin.Metadata.Name))
 	}
+
+	w.api.Notify(ctx, "Reloaded dev plugin", localPlugin.Metadata.Name)
+	return nil
 }

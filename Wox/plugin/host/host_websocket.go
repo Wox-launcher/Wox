@@ -222,15 +222,14 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, data string
 		}
 
 		w.sendResponse(ctx, request, "")
-	case "ShowMsg":
+	case "Notify":
 		title, exist := request.Params["title"]
 		if !exist {
-			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] ShowMsg method must have a title parameter", request.PluginName))
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] Notify method must have a title parameter", request.PluginName))
 			return
 		}
 		description := request.Params["description"]
-		iconPath := request.Params["iconPath"]
-		pluginInstance.API.ShowMsg(ctx, title, description, iconPath)
+		pluginInstance.API.Notify(ctx, title, description)
 		w.sendResponse(ctx, request, "")
 	case "Log":
 		msg, exist := request.Params["msg"]

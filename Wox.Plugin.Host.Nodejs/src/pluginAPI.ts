@@ -47,7 +47,7 @@ export class PluginAPI implements PublicAPI {
   async ChangeQuery(query: ChangeQueryParam): Promise<void> {
     await this.invokeMethod("ChangeQuery", {
       queryType: query.QueryType,
-      queryText: query.QueryText,
+      queryText: query.QueryText === undefined ? "" : query.QueryText,
       querySelection: JSON.stringify(query.QuerySelection)
     })
   }
@@ -64,11 +64,10 @@ export class PluginAPI implements PublicAPI {
     await this.invokeMethod("ShowApp", {})
   }
 
-  async ShowMsg(title: string, description: string | undefined, iconPath: string | undefined): Promise<void> {
-    await this.invokeMethod("ShowMsg", {
+  async Notify(title: string, description: string | undefined): Promise<void> {
+    await this.invokeMethod("Notify", {
       title,
-      description: description === undefined ? "" : description,
-      iconPath: iconPath === undefined ? "" : iconPath
+      description: description === undefined ? "" : description
     })
   }
 

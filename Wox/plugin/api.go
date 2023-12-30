@@ -15,7 +15,7 @@ type API interface {
 	ChangeQuery(ctx context.Context, query share.ChangedQuery)
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context)
-	ShowMsg(ctx context.Context, title string, description string, icon string)
+	Notify(ctx context.Context, title string, description string)
 	Log(ctx context.Context, msg string)
 	GetTranslation(ctx context.Context, key string) string
 	GetSetting(ctx context.Context, key string) string
@@ -44,8 +44,8 @@ func (a *APIImpl) ShowApp(ctx context.Context) {
 	})
 }
 
-func (a *APIImpl) ShowMsg(ctx context.Context, title string, description string, icon string) {
-	GetPluginManager().GetUI().ShowMsg(ctx, title, description, icon)
+func (a *APIImpl) Notify(ctx context.Context, title string, description string) {
+	GetPluginManager().GetUI().Notify(ctx, title, description)
 }
 
 func (a *APIImpl) Log(ctx context.Context, msg string) {

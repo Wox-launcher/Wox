@@ -28,7 +28,7 @@ type UI interface {
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context, showContext ShowContext)
 	ToggleApp(ctx context.Context)
-	ShowMsg(ctx context.Context, title string, description string, icon string)
+	Notify(ctx context.Context, title string, description string)
 	GetServerPort(ctx context.Context) int
 	ChangeTheme(ctx context.Context, theme Theme)
 	OpenSettingWindow(ctx context.Context)

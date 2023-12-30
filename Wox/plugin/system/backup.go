@@ -68,9 +68,9 @@ func (c *BackupPlugin) backup(ctx context.Context, query plugin.Query) []plugin.
 					Action: func(actionContext plugin.ActionContext) {
 						backupErr := setting.GetSettingManager().Backup(ctx, setting.BackupTypeManual)
 						if backupErr != nil {
-							c.api.ShowMsg(ctx, "Error", backupErr.Error(), "")
+							c.api.Notify(ctx, "Error", backupErr.Error())
 						} else {
-							c.api.ShowMsg(ctx, "Success", "Wox settings backed up", "")
+							c.api.Notify(ctx, "Success", "Wox settings backed up")
 						}
 					},
 				},
@@ -109,9 +109,9 @@ func (c *BackupPlugin) restore(ctx context.Context, query plugin.Query) []plugin
 					Action: func(actionContext plugin.ActionContext) {
 						restoreErr := setting.GetSettingManager().Restore(ctx, backupDummy.Id)
 						if restoreErr != nil {
-							c.api.ShowMsg(ctx, "Error", restoreErr.Error(), "")
+							c.api.Notify(ctx, "Error", restoreErr.Error())
 						} else {
-							c.api.ShowMsg(ctx, "Success", "Wox settings restored", "")
+							c.api.Notify(ctx, "Success", "Wox settings restored")
 						}
 					},
 				},

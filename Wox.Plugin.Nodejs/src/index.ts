@@ -128,9 +128,9 @@ export interface PublicAPI {
   ShowApp: () => Promise<void>
 
   /**
-   * Show message box
+   * Notify message
    */
-  ShowMsg: (title: string, description?: string, iconPath?: string) => Promise<void>
+  Notify: (title: string, description?: string) => Promise<void>
 
   /**
    * Write log

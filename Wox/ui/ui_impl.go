@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/gen2brain/beeep"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
@@ -37,12 +38,11 @@ func (u *uiImpl) ToggleApp(ctx context.Context) {
 	u.send(ctx, "ToggleApp", getShowAppParams(ctx, true))
 }
 
-func (u *uiImpl) ShowMsg(ctx context.Context, title string, description string, icon string) {
-	u.send(ctx, "ShowMsg", map[string]any{
-		"Title":       title,
-		"Description": description,
-		"Icon":        icon,
-	})
+func (u *uiImpl) Notify(ctx context.Context, title string, description string) {
+	err := beeep.Notify(title, description, "")
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("notify error: %s", err.Error()))
+	}
 }
 
 func (u *uiImpl) GetServerPort(ctx context.Context) int {
