@@ -74,6 +74,10 @@ func (l *Log) Debug(context context.Context, msg string) {
 	l.logger.Debug(formatMsg(context, msg, "DBG"))
 }
 
+func (l *Log) Warn(context context.Context, msg string) {
+	l.logger.Warn(formatMsg(context, msg, "WRN"))
+}
+
 func (l *Log) Info(context context.Context, msg string) {
 	l.logger.Info(formatMsg(context, msg, "INF"))
 }

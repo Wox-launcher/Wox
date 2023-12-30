@@ -135,7 +135,7 @@ export interface PublicAPI {
   /**
    * Write log
    */
-  Log: (msg: string) => Promise<void>
+  Log: (level: "Info" | "Error" | "Debug" | "Warning", msg: string) => Promise<void>
 
   /**
    * Get translation of current language

@@ -222,7 +222,7 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	c.api = initParams.API
 	c.loadHistory(ctx)
 	clipboard.Watch(func(data clipboard.Data) {
-		c.api.Log(ctx, fmt.Sprintf("clipboard data changed, type=%s", data.GetType()))
+		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("clipboard data changed, type=%s", data.GetType()))
 		// ignore file type
 		if data.GetType() == clipboard.ClipboardTypeFile {
 			return
@@ -313,7 +313,7 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			history := c.history[i]
 			startTimestamp := util.GetSystemTimestamp()
 			results = append(results, c.convertClipboardData(ctx, history))
-			c.api.Log(ctx, fmt.Sprintf("convert clipboard data cost %d ms", util.GetSystemTimestamp()-startTimestamp))
+			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("convert clipboard data cost %d ms", util.GetSystemTimestamp()-startTimestamp))
 			count++
 
 			if count >= 50 {
@@ -369,9 +369,9 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 						time.Sleep(time.Millisecond * 100)
 						err := keyboard.SimulatePaste()
 						if err != nil {
-							c.api.Log(ctx, fmt.Sprintf("simulate paste clipboard failed, err=%s", err.Error()))
+							c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("simulate paste clipboard failed, err=%s", err.Error()))
 						} else {
-							c.api.Log(ctx, "simulate paste clipboard success")
+							c.api.Log(ctx, plugin.LogLevelInfo, "simulate paste clipboard success")
 						}
 					})
 				},
@@ -391,7 +391,7 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 						}
 					}
 					if needSave {
-						c.api.Log(ctx, fmt.Sprintf("save history as favorite, id=%s", history.Id))
+						c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("save history as favorite, id=%s", history.Id))
 						c.saveHistory(ctx)
 					}
 				},
@@ -410,7 +410,7 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 						}
 					}
 					if needSave {
-						c.api.Log(ctx, fmt.Sprintf("cancel history favorite, id=%s", history.Id))
+						c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("cancel history favorite, id=%s", history.Id))
 						c.saveHistory(ctx)
 					}
 				},
@@ -492,7 +492,7 @@ func (c *ClipboardPlugin) generateHistoryImageCache(ctx context.Context, history
 		icon:    iconImage,
 	})
 
-	c.api.Log(ctx, fmt.Sprintf("generate history image preview and icon cache, id=%s", history.Id))
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("generate history image preview and icon cache, id=%s", history.Id))
 	return previewImage, iconImage
 }
 
@@ -569,12 +569,12 @@ func (c *ClipboardPlugin) saveHistory(ctx context.Context) {
 
 	historyJson, marshalErr := json.Marshal(histories)
 	if marshalErr != nil {
-		c.api.Log(ctx, fmt.Sprintf("marshal clipboard text history failed, err=%s", marshalErr.Error()))
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("marshal clipboard text history failed, err=%s", marshalErr.Error()))
 		return
 	}
 
 	c.api.SaveSetting(ctx, "history", string(historyJson), false)
-	c.api.Log(ctx, fmt.Sprintf("save clipboard history, count:%d, cost:%dms", len(c.history), util.GetSystemTimestamp()-startTimestamp))
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("save clipboard history, count:%d, cost:%dms", len(c.history), util.GetSystemTimestamp()-startTimestamp))
 }
 
 func (c *ClipboardPlugin) loadHistory(ctx context.Context) {
@@ -587,7 +587,7 @@ func (c *ClipboardPlugin) loadHistory(ctx context.Context) {
 	var history []ClipboardHistory
 	unmarshalErr := json.Unmarshal([]byte(historyJson), &history)
 	if unmarshalErr != nil {
-		c.api.Log(ctx, fmt.Sprintf("unmarshal clipboard text history failed, err=%s", unmarshalErr.Error()))
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("unmarshal clipboard text history failed, err=%s", unmarshalErr.Error()))
 	}
 
 	//sort history by timestamp asc
@@ -595,7 +595,7 @@ func (c *ClipboardPlugin) loadHistory(ctx context.Context) {
 		return int(i.Timestamp - j.Timestamp)
 	})
 
-	c.api.Log(ctx, fmt.Sprintf("load clipboard history, count=%d, cost=%dms", len(history), util.GetSystemTimestamp()-startTimestamp))
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("load clipboard history, count=%d, cost=%dms", len(history), util.GetSystemTimestamp()-startTimestamp))
 	c.history = history
 }
 

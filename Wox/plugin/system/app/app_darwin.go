@@ -90,7 +90,7 @@ func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, 
 	}
 	icon, iconErr := a.getMacAppIcon(ctx, path)
 	if iconErr != nil {
-		a.api.Log(ctx, iconErr.Error())
+		a.api.Log(ctx, plugin.LogLevelError, iconErr.Error())
 	}
 	info.Icon = icon
 
@@ -146,7 +146,7 @@ func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (plugi
 		}
 	}
 
-	a.api.Log(ctx, fmt.Sprintf("app icon cache created: %s", iconCachePath))
+	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("app icon cache created: %s", iconCachePath))
 	return plugin.WoxImage{
 		ImageType: plugin.WoxImageTypeAbsolutePath,
 		ImageData: iconCachePath,
@@ -158,13 +158,13 @@ func (a *MacRetriever) getMacAppIconImagePath(ctx context.Context, appPath strin
 	if infoPlistErr == nil {
 		return iconPath, nil
 	}
-	a.api.Log(ctx, fmt.Sprintf("get icon from info.plist fail, try to parse with cgo path=%s, err=%s", appPath, infoPlistErr.Error()))
+	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("get icon from info.plist fail, try to parse with cgo path=%s, err=%s", appPath, infoPlistErr.Error()))
 
 	iconPath2, cgoErr := a.parseMacAppIconFromCgo(ctx, appPath)
 	if cgoErr == nil {
 		return iconPath2, nil
 	} else {
-		a.api.Log(ctx, fmt.Sprintf("get icon from cgo fail, return default icon path=%s, err=%s", appPath, cgoErr.Error()))
+		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("get icon from cgo fail, return default icon path=%s, err=%s", appPath, cgoErr.Error()))
 	}
 
 	//return default icon

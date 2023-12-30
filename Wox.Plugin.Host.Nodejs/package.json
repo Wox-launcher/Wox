@@ -10,7 +10,8 @@
     "build": "pnpm clean && ncc build src/index.ts -o dist && babel dist --out-dir dist",
     "clean": "node -e \"var { rmdirSync, existsSync } = require('fs'), path = require('path'); ['./dist'].forEach(fPath => {if (existsSync(path.join(__dirname, fPath))) rmdirSync(path.join(__dirname, fPath), { recursive: true })}); process.exit(0);\"",
     "clean:all": "npm run clean && (rm -r ./node_modules || true)",
-    "lint": "eslint --ext .ts --fix src/**/*.ts"
+    "lint": "eslint --ext .ts --fix src/**/*.ts",
+    "reinstall": "pnpm clean:all && pnpm install"
   },
   "devDependencies": {
     "@babel/cli": "^7.22.15",
@@ -31,7 +32,7 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@wox-launcher/wox-plugin": "^0.0.54",
+    "@wox-launcher/wox-plugin": "^0.0.55",
     "dayjs": "^1.11.9",
     "promise-deferred": "^2.0.4",
     "winston": "^3.10.0",

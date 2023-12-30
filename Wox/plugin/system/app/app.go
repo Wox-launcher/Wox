@@ -127,7 +127,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							runErr := util.ShellOpen(info.Path)
 							if runErr != nil {
-								a.api.Log(ctx, fmt.Sprintf("error openning app %s: %s", info.Path, runErr.Error()))
+								a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error openning app %s: %s", info.Path, runErr.Error()))
 							}
 						},
 					},
@@ -137,7 +137,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							runErr := util.ShellOpen(path.Dir(info.Path))
 							if runErr != nil {
-								a.api.Log(ctx, fmt.Sprintf("error openning app %s: %s", info.Path, runErr.Error()))
+								a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error openning app %s: %s", info.Path, runErr.Error()))
 							}
 						},
 					},
@@ -174,12 +174,12 @@ func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
 				return
 			}
 
-			a.api.Log(ctx, fmt.Sprintf("app %s changed (%s)", appPath, e.Op))
+			a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("app %s changed (%s)", appPath, e.Op))
 			if e.Op == fsnotify.Remove || e.Op == fsnotify.Rename {
 				for i, app := range a.apps {
 					if app.Path == appPath {
 						a.apps = append(a.apps[:i], a.apps[i+1:]...)
-						a.api.Log(ctx, fmt.Sprintf("app %s removed", appPath))
+						a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("app %s removed", appPath))
 						a.saveAppToCache(ctx)
 						break
 					}
@@ -197,11 +197,11 @@ func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
 
 				info, getErr := a.retriever.ParseAppInfo(ctx, appPath)
 				if getErr != nil {
-					a.api.Log(ctx, fmt.Sprintf("error getting app info for %s: %s", e.Name, getErr.Error()))
+					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error getting app info for %s: %s", e.Name, getErr.Error()))
 					return
 				}
 
-				a.api.Log(ctx, fmt.Sprintf("app %s added", e.Name))
+				a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("app %s added", e.Name))
 				a.apps = append(a.apps, info)
 				a.saveAppToCache(ctx)
 			}
@@ -211,7 +211,7 @@ func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
 
 func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 	startTimestamp := util.GetSystemTimestamp()
-	a.api.Log(ctx, "start to get apps")
+	a.api.Log(ctx, plugin.LogLevelInfo, "start to get apps")
 
 	appDirectories := a.getRetriever(ctx).GetAppDirectories(ctx)
 	appPaths := a.getAppPaths(ctx, appDirectories)
@@ -226,7 +226,7 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 		}
 		appPathGroups = append(appPathGroups, appPaths[i:end])
 	}
-	a.api.Log(ctx, fmt.Sprintf("found %d apps in %d groups", len(appPaths), len(appPathGroups)))
+	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("found %d apps in %d groups", len(appPaths), len(appPathGroups)))
 
 	var appInfos []appInfo
 	var waitGroup sync.WaitGroup
@@ -238,7 +238,7 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 			for _, appPath := range appPathGroup {
 				info, getErr := a.retriever.ParseAppInfo(ctx, appPath)
 				if getErr != nil {
-					a.api.Log(ctx, fmt.Sprintf("error getting app info for %s: %s", appPath, getErr.Error()))
+					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error getting app info for %s: %s", appPath, getErr.Error()))
 					continue
 				}
 
@@ -262,7 +262,7 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 		a.saveAppToCache(ctx)
 	}
 
-	a.api.Log(ctx, fmt.Sprintf("indexed %d apps, cost %d ms", len(a.apps), util.GetSystemTimestamp()-startTimestamp))
+	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("indexed %d apps, cost %d ms", len(a.apps), util.GetSystemTimestamp()-startTimestamp))
 }
 
 func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []appDirectory) (appPaths []string) {
@@ -270,7 +270,7 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []ap
 	for _, dir := range appDirectories {
 		appPath, readErr := os.ReadDir(dir.Path)
 		if readErr != nil {
-			a.api.Log(ctx, fmt.Sprintf("error reading directory %s: %s", dir.Path, readErr.Error()))
+			a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error reading directory %s: %s", dir.Path, readErr.Error()))
 			continue
 		}
 
@@ -297,7 +297,7 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []ap
 
 			appSubDir, readSubDirErr := os.ReadDir(subDir)
 			if readSubDirErr != nil {
-				a.api.Log(ctx, fmt.Sprintf("error reading sub directory %s: %s", subDir, readSubDirErr.Error()))
+				a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error reading sub directory %s: %s", subDir, readSubDirErr.Error()))
 				continue
 			}
 
@@ -324,15 +324,15 @@ func (a *ApplicationPlugin) saveAppToCache(ctx context.Context) {
 	var cachePath = a.getAppCachePath()
 	cacheContent, marshalErr := json.Marshal(a.apps)
 	if marshalErr != nil {
-		a.api.Log(ctx, fmt.Sprintf("error marshalling app cache: %s", marshalErr.Error()))
+		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error marshalling app cache: %s", marshalErr.Error()))
 		return
 	}
 	writeErr := os.WriteFile(cachePath, pretty.Pretty(cacheContent), 0644)
 	if writeErr != nil {
-		a.api.Log(ctx, fmt.Sprintf("error writing app cache: %s", writeErr.Error()))
+		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error writing app cache: %s", writeErr.Error()))
 		return
 	}
-	a.api.Log(ctx, fmt.Sprintf("wrote app cache to %s", cachePath))
+	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("wrote app cache to %s", cachePath))
 }
 
 func (a *ApplicationPlugin) getAppCachePath() string {
@@ -341,26 +341,26 @@ func (a *ApplicationPlugin) getAppCachePath() string {
 
 func (a *ApplicationPlugin) loadAppCache(ctx context.Context) ([]appInfo, error) {
 	startTimestamp := util.GetSystemTimestamp()
-	a.api.Log(ctx, "start to load app cache")
+	a.api.Log(ctx, plugin.LogLevelInfo, "start to load app cache")
 	var cachePath = a.getAppCachePath()
 	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
-		a.api.Log(ctx, "app cache file not found")
+		a.api.Log(ctx, plugin.LogLevelWarning, "app cache file not found")
 		return nil, err
 	}
 
 	cacheContent, readErr := os.ReadFile(cachePath)
 	if readErr != nil {
-		a.api.Log(ctx, fmt.Sprintf("error reading app cache file: %s", readErr.Error()))
+		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error reading app cache file: %s", readErr.Error()))
 		return nil, readErr
 	}
 
 	var apps []appInfo
 	unmarshalErr := json.Unmarshal(cacheContent, &apps)
 	if unmarshalErr != nil {
-		a.api.Log(ctx, fmt.Sprintf("error unmarshalling app cache file: %s", unmarshalErr.Error()))
+		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error unmarshalling app cache file: %s", unmarshalErr.Error()))
 		return nil, unmarshalErr
 	}
 
-	a.api.Log(ctx, fmt.Sprintf("loaded %d apps from cache, cost %d ms", len(apps), util.GetSystemTimestamp()-startTimestamp))
+	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("loaded %d apps from cache, cost %d ms", len(apps), util.GetSystemTimestamp()-startTimestamp))
 	return apps, nil
 }

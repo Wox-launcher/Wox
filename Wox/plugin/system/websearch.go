@@ -107,7 +107,7 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.api = initParams.API
 	r.webSearches = r.loadWebSearches(ctx)
-	r.api.Log(ctx, fmt.Sprintf("loaded %d web searches", len(r.webSearches)))
+	r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("loaded %d web searches", len(r.webSearches)))
 
 	util.Go(ctx, "parse websearch icons", func() {
 		r.indexIcons(ctx)
@@ -129,24 +129,24 @@ func (r *WebSearchPlugin) indexWebSearchIcon(ctx context.Context, search webSear
 	iconFinder := besticon.New(option).NewIconFinder()
 	icons, err := iconFinder.FetchIcons(iconUrl)
 	if err != nil {
-		r.api.Log(ctx, fmt.Sprintf("failed to fetch icons for %s: %s", search.Urls, err.Error()))
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to fetch icons for %s: %s", search.Urls, err.Error()))
 		return webSearchIcon
 	}
 
 	if len(icons) == 0 {
-		r.api.Log(ctx, fmt.Sprintf("no icons found for %s", search.Urls))
+		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("no icons found for %s", search.Urls))
 		return webSearchIcon
 	}
 
 	image, imageEr := icons[0].Image()
 	if imageEr != nil {
-		r.api.Log(ctx, fmt.Sprintf("failed to get image for %s: %s", search.Urls, imageEr.Error()))
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get image for %s: %s", search.Urls, imageEr.Error()))
 		return webSearchIcon
 	}
 
 	woxImage, woxImageErr := plugin.NewWoxImage(*image)
 	if woxImageErr != nil {
-		r.api.Log(ctx, fmt.Sprintf("failed to convert image for %s: %s", search.Urls, woxImageErr.Error()))
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to convert image for %s: %s", search.Urls, woxImageErr.Error()))
 		return webSearchIcon
 	}
 
@@ -161,7 +161,7 @@ func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []we
 
 	unmarshalErr := json.Unmarshal([]byte(webSearchesJson), &webSearches)
 	if unmarshalErr != nil {
-		r.api.Log(ctx, fmt.Sprintf("failed to unmarshal web searches: %s", unmarshalErr.Error()))
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to unmarshal web searches: %s", unmarshalErr.Error()))
 		return
 	}
 

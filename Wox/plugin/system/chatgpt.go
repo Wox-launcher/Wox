@@ -162,7 +162,7 @@ func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Quer
 			PreviewData:    chatHistory,
 			ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 		}
-		c.api.Log(ctx, fmt.Sprintf("active chat refresh interval: %d", c.activeChatResult.RefreshInterval))
+		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("active chat refresh interval: %d", c.activeChatResult.RefreshInterval))
 		c.activeChatResult.Actions = []plugin.QueryResultAction{
 			{
 				Name:                   "Send chat",
@@ -212,7 +212,7 @@ func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Quer
 						return current
 					}
 					onAnswerFinished := func(current plugin.RefreshableResult) plugin.RefreshableResult {
-						c.api.Log(ctx, "active chat finished")
+						c.api.Log(ctx, plugin.LogLevelInfo, "active chat finished")
 						current.RefreshInterval = 0 // stop refreshing
 						c.activeChatResult.RefreshInterval = 0
 						c.activeChat.Conversations = append(c.activeChat.Conversations, Conversation{
@@ -222,7 +222,7 @@ func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Quer
 						})
 
 						if c.activeChat.Title == "New chat" && len(c.activeChat.Conversations) >= 4 && !c.isSummaryActiveChatTitle {
-							c.api.Log(ctx, "start to summary chat title")
+							c.api.Log(ctx, plugin.LogLevelInfo, "start to summary chat title")
 							c.isSummaryActiveChatTitle = true
 							if title, titleErr := c.summaryChatTitle(ctx, c.activeChat.Conversations); titleErr == nil {
 								c.activeChat.Title = title
@@ -429,11 +429,11 @@ func (c *ChatgptPlugin) generateGptResultRefresh(ctx context.Context, messages [
 	return func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
 		if stream == nil {
 			if creatingStream {
-				c.api.Log(ctx, "Already creating stream, waiting create finish")
+				c.api.Log(ctx, plugin.LogLevelInfo, "Already creating stream, waiting create finish")
 				return current
 			}
 
-			c.api.Log(ctx, "Creating stream")
+			c.api.Log(ctx, plugin.LogLevelInfo, "Creating stream")
 			creatingStream = true
 			createdStream, createErr := c.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
 				Stream:   true,
@@ -441,7 +441,7 @@ func (c *ChatgptPlugin) generateGptResultRefresh(ctx context.Context, messages [
 				Messages: messages,
 			})
 			creatingStream = false
-			c.api.Log(ctx, "Created stream")
+			c.api.Log(ctx, plugin.LogLevelInfo, "Created stream")
 			if createErr != nil {
 				if onAnswerErr != nil {
 					current = onAnswerErr(current, createErr)
@@ -452,7 +452,7 @@ func (c *ChatgptPlugin) generateGptResultRefresh(ctx context.Context, messages [
 			stream = createdStream
 		}
 
-		c.api.Log(ctx, "Reading stream")
+		c.api.Log(ctx, plugin.LogLevelInfo, "Reading stream")
 		response, streamErr := stream.Recv()
 		if errors.Is(streamErr, io.EOF) {
 			stream.Close()
@@ -483,12 +483,12 @@ func (c *ChatgptPlugin) generateGptResultRefresh(ctx context.Context, messages [
 func (c *ChatgptPlugin) loadChats(ctx context.Context) {
 	nonActiveChatStr := c.api.GetSetting(ctx, "non_active_chats")
 	if nonActiveChatStr == "" {
-		c.api.Log(ctx, "No non-active chats to load")
+		c.api.Log(ctx, plugin.LogLevelInfo, "No non-active chats to load")
 		c.nonActiveChats = []*Chat{}
 	} else {
 		unmarshalErr := json.Unmarshal([]byte(nonActiveChatStr), &c.nonActiveChats)
 		if unmarshalErr != nil {
-			c.api.Log(ctx, fmt.Sprintf("Failed to load nonActiveChats: %s", unmarshalErr.Error()))
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to load nonActiveChats: %s", unmarshalErr.Error()))
 		}
 
 		//sort nonactive chats by created timestamp desc
@@ -499,13 +499,13 @@ func (c *ChatgptPlugin) loadChats(ctx context.Context) {
 
 	activeChatStr := c.api.GetSetting(ctx, "active_chat")
 	if activeChatStr == "" {
-		c.api.Log(ctx, "No active chat to load")
+		c.api.Log(ctx, plugin.LogLevelInfo, "No active chat to load")
 		c.activeChat = nil
 	} else {
 		var activeChat *Chat
 		unmarshalErr := json.Unmarshal([]byte(activeChatStr), &activeChat)
 		if unmarshalErr != nil {
-			c.api.Log(ctx, fmt.Sprintf("Failed to load activeChat: %s", unmarshalErr.Error()))
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to load activeChat: %s", unmarshalErr.Error()))
 		}
 		c.activeChat = activeChat
 
@@ -517,7 +517,7 @@ func (c *ChatgptPlugin) loadChats(ctx context.Context) {
 		}
 	}
 
-	c.api.Log(ctx, fmt.Sprintf("Loaded %d nonactive chats, has active chat: %t", len(c.nonActiveChats), c.activeChat != nil))
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Loaded %d nonactive chats, has active chat: %t", len(c.nonActiveChats), c.activeChat != nil))
 }
 
 func (c *ChatgptPlugin) saveChats(ctx context.Context) {
@@ -529,7 +529,7 @@ func (c *ChatgptPlugin) saveActiveChat(ctx context.Context) {
 	if c.activeChat != nil {
 		activeChatStr, marshalErr := json.Marshal(c.activeChat)
 		if marshalErr != nil {
-			c.api.Log(ctx, fmt.Sprintf("Failed to marshal activeChats: %s", marshalErr.Error()))
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to marshal activeChats: %s", marshalErr.Error()))
 		}
 		c.api.SaveSetting(ctx, "active_chat", string(activeChatStr), false)
 	} else {
@@ -541,7 +541,7 @@ func (c *ChatgptPlugin) saveNonActiveChats(ctx context.Context) {
 	if len(c.nonActiveChats) > 0 {
 		nonActiveChatStr, marshalErr := json.Marshal(c.nonActiveChats)
 		if marshalErr != nil {
-			c.api.Log(ctx, fmt.Sprintf("Failed to marshal nonActiveChats: %s", marshalErr.Error()))
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to marshal nonActiveChats: %s", marshalErr.Error()))
 		}
 		c.api.SaveSetting(ctx, "non_active_chats", string(nonActiveChatStr), false)
 	} else {
@@ -619,7 +619,7 @@ func (c *ChatgptPlugin) summaryChatTitle(ctx context.Context, conversations []Co
 		},
 	)
 	if err != nil {
-		c.api.Log(ctx, fmt.Sprintf("Failed to summary chat title: %s", err.Error()))
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to summary chat title: %s", err.Error()))
 		return "", err
 	}
 

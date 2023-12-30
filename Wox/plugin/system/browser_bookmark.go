@@ -109,7 +109,7 @@ func (c *BrowserBookmarkPlugin) loadChromeBookmarkInMacos(ctx context.Context, p
 	bookmarkLocation, _ := homedir.Expand(fmt.Sprintf("~/Library/Application Support/Google/Chrome/%s/Bookmarks", profile))
 	file, readErr := os.ReadFile(bookmarkLocation)
 	if readErr != nil {
-		c.api.Log(ctx, fmt.Sprintf("error reading chrome bookmark file: %s", readErr.Error()))
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error reading chrome bookmark file: %s", readErr.Error()))
 		return
 	}
 

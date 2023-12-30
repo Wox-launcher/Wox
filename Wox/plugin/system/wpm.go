@@ -100,70 +100,76 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 func (w *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	w.api = initParams.API
 
-	localPluginDirs := w.api.GetSetting(ctx, "localPluginDirectories")
-	if localPluginDirs != "" {
-		unmarshalErr := json.Unmarshal([]byte(localPluginDirs), &w.localPluginDirectories)
-		if unmarshalErr != nil {
-			w.api.Log(ctx, fmt.Sprintf("Failed to unmarshal local plugin directories: %s", unmarshalErr.Error()))
-		}
+	var localPluginDirs []string
+	unmarshalErr := json.Unmarshal([]byte(w.api.GetSetting(ctx, "localPluginDirectories")), &localPluginDirs)
+	if unmarshalErr != nil {
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to unmarshal local plugin directories: %s", unmarshalErr.Error()))
+		return
 	}
 
 	// remove invalid directories
-	w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
+	w.localPluginDirectories = lo.Filter(localPluginDirs, func(directory string, _ int) bool {
 		_, statErr := os.Stat(directory)
 		if statErr != nil {
-			w.api.Log(ctx, fmt.Sprintf("Failed to stat local plugin directory, remove it: %s", statErr.Error()))
+			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to stat local plugin directory, remove it: %s", statErr.Error()))
 			return false
 		}
-
 		return true
 	})
 
-	w.saveLocalPluginDirectories(ctx)
-}
-
-func (w *WPMPlugin) loadLocalPlugins(ctx context.Context) {
-	w.localPlugins = nil
-	for _, localPluginDirectory := range w.localPluginDirectories {
-		p, err := w.loadLocalPluginsFromDirectory(ctx, localPluginDirectory)
-		if err != nil {
-			w.api.Log(ctx, err.Error())
-			continue
-		}
-
-		w.api.Log(ctx, fmt.Sprintf("Loaded local plugin: %s", p.Metadata.Name))
-
-		lp := localPlugin{
-			metadata: p,
-		}
-
-		// watch dist directory changes and auto reload plugin
-		distDirectory := path.Join(localPluginDirectory, "dist")
-		if _, statErr := os.Stat(distDirectory); statErr == nil {
-			w.api.Log(ctx, fmt.Sprintf("Watching dist directory: %s", distDirectory))
-			watcher, watchErr := util.WatchDirectoryChanges(ctx, distDirectory, func(e fsnotify.Event) {
-				if e.Op != fsnotify.Chmod {
-					// debounce reload plugin to avoid reload multiple times in a short time
-					if t, ok := w.reloadPluginTimers.Load(p.Metadata.Id); ok {
-						t.Stop()
-					}
-					w.reloadPluginTimers.Store(p.Metadata.Id, time.AfterFunc(time.Second*2, func() {
-						w.reloadLocalPlugins(ctx, p)
-					}))
-				}
-			})
-			if watchErr != nil {
-				w.api.Log(ctx, fmt.Sprintf("Failed to watch dist directory: %s", watchErr.Error()))
-			} else {
-				lp.watcher = watcher
-			}
-		}
-
-		w.localPlugins = append(w.localPlugins, lp)
+	for _, directory := range w.localPluginDirectories {
+		w.loadDevPlugin(ctx, directory)
 	}
+
+	util.Go(ctx, "load dev plugins in dist", func() {
+		// must delay reload, because host env is not ready when system plugin init
+		time.Sleep(time.Second * 2)
+		newCtx := util.NewTraceContext()
+		for _, lp := range w.localPlugins {
+			w.reloadLocalDistPlugin(newCtx, lp.metadata, "reload after startup")
+		}
+	})
 }
 
-func (w *WPMPlugin) loadLocalPluginsFromDirectory(ctx context.Context, directory string) (plugin.MetadataWithDirectory, error) {
+func (w *WPMPlugin) loadDevPlugin(ctx context.Context, pluginDirectory string) {
+	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("start to load dev plugin: %s", pluginDirectory))
+
+	metadata, err := w.parseMetadata(ctx, pluginDirectory)
+	if err != nil {
+		w.api.Log(ctx, plugin.LogLevelError, err.Error())
+		return
+	}
+
+	lp := localPlugin{
+		metadata: metadata,
+	}
+
+	// watch dist directory changes and auto reload plugin
+	distDirectory := path.Join(pluginDirectory, "dist")
+	if _, statErr := os.Stat(distDirectory); statErr == nil {
+		watcher, watchErr := util.WatchDirectoryChanges(ctx, distDirectory, func(e fsnotify.Event) {
+			if e.Op != fsnotify.Chmod {
+				// debounce reload plugin to avoid reload multiple times in a short time
+				if t, ok := w.reloadPluginTimers.Load(metadata.Metadata.Id); ok {
+					t.Stop()
+				}
+				w.reloadPluginTimers.Store(metadata.Metadata.Id, time.AfterFunc(time.Second*2, func() {
+					w.reloadLocalDistPlugin(ctx, metadata, "dist directory changed")
+				}))
+			}
+		})
+		if watchErr != nil {
+			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to watch dist directory: %s", watchErr.Error()))
+		} else {
+			w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Watching dist directory: %s", distDirectory))
+			lp.watcher = watcher
+		}
+	}
+
+	w.localPlugins = append(w.localPlugins, lp)
+}
+
+func (w *WPMPlugin) parseMetadata(ctx context.Context, directory string) (plugin.MetadataWithDirectory, error) {
 	// parse plugin.json in directory
 	metadata, metadataErr := plugin.GetPluginManager().ParseMetadata(ctx, directory)
 	if metadataErr != nil {
@@ -258,7 +264,7 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 						Name:      "Reload",
 						IsDefault: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							w.reloadLocalPlugins(ctx, lp.metadata)
+							w.reloadLocalDistPlugin(ctx, lp.metadata, "reload by user")
 						},
 					},
 					{
@@ -284,7 +290,7 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							deleteErr := os.RemoveAll(lp.metadata.Directory)
 							if deleteErr != nil {
-								w.api.Log(ctx, fmt.Sprintf("Failed to delete plugin directory: %s", deleteErr.Error()))
+								w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to delete plugin directory: %s", deleteErr.Error()))
 								return
 							}
 
@@ -327,6 +333,9 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 
 	if query.Command == "uninstall" {
 		plugins := plugin.GetPluginManager().GetPluginInstances()
+		plugins = lo.Filter(plugins, func(pluginInstance *plugin.Instance, _ int) bool {
+			return pluginInstance.IsSystemPlugin == false
+		})
 		if query.Search != "" {
 			plugins = lo.Filter(plugins, func(pluginInstance *plugin.Instance, _ int) bool {
 				return IsStringMatchNoPinYin(ctx, pluginInstance.Metadata.Name, query.Search)
@@ -361,7 +370,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 
 	tempPluginDirectory := path.Join(os.TempDir(), uuid.NewString())
 	if err := util.GetLocation().EnsureDirectoryExist(tempPluginDirectory); err != nil {
-		w.api.Log(ctx, fmt.Sprintf("Failed to create temp plugin directory: %s", err.Error()))
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create temp plugin directory: %s", err.Error()))
 		w.creatingProcess = fmt.Sprintf("Failed to create temp plugin directory: %s", err.Error())
 		return
 	}
@@ -370,7 +379,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 	tempZipPath := path.Join(tempPluginDirectory, "template.zip")
 	err := util.HttpDownload(ctx, template.Url, tempZipPath)
 	if err != nil {
-		w.api.Log(ctx, fmt.Sprintf("Failed to download template: %s", err.Error()))
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to download template: %s", err.Error()))
 		w.creatingProcess = fmt.Sprintf("Failed to download template: %s", err.Error())
 		return
 	}
@@ -378,7 +387,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 	w.creatingProcess = "Extracting template..."
 	err = util.Unzip(tempZipPath, tempPluginDirectory)
 	if err != nil {
-		w.api.Log(ctx, fmt.Sprintf("Failed to extract template: %s", err.Error()))
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to extract template: %s", err.Error()))
 		w.creatingProcess = fmt.Sprintf("Failed to extract template: %s", err.Error())
 		return
 	}
@@ -387,7 +396,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 	pluginDirectory := path.Join(util.GetLocation().GetPluginDirectory(), pluginName)
 	cpErr := cp.Copy(path.Join(tempPluginDirectory, template.Name+"-main"), pluginDirectory)
 	if cpErr != nil {
-		w.api.Log(ctx, fmt.Sprintf("Failed to copy template: %s", cpErr.Error()))
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to copy template: %s", cpErr.Error()))
 		w.creatingProcess = fmt.Sprintf("Failed to copy template: %s", cpErr.Error())
 		return
 	}
@@ -396,7 +405,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 	pluginJsonPath := path.Join(pluginDirectory, "plugin.json")
 	pluginJson, readErr := os.ReadFile(pluginJsonPath)
 	if readErr != nil {
-		w.api.Log(ctx, fmt.Sprintf("Failed to read plugin.json: %s", readErr.Error()))
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read plugin.json: %s", readErr.Error()))
 		w.creatingProcess = fmt.Sprintf("Failed to read plugin.json: %s", readErr.Error())
 		return
 	}
@@ -409,7 +418,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 
 	writeErr := os.WriteFile(pluginJsonPath, []byte(pluginJsonString), 0644)
 	if writeErr != nil {
-		w.api.Log(ctx, fmt.Sprintf("Failed to write plugin.json: %s", writeErr.Error()))
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to write plugin.json: %s", writeErr.Error()))
 		w.creatingProcess = fmt.Sprintf("Failed to write plugin.json: %s", writeErr.Error())
 		return
 	}
@@ -419,7 +428,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 		packageJsonPath := path.Join(pluginDirectory, "package.json")
 		packageJson, readPackageErr := os.ReadFile(packageJsonPath)
 		if readPackageErr != nil {
-			w.api.Log(ctx, fmt.Sprintf("Failed to read package.json: %s", readPackageErr.Error()))
+			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read package.json: %s", readPackageErr.Error()))
 			w.creatingProcess = fmt.Sprintf("Failed to read package.json: %s", readPackageErr.Error())
 			return
 		}
@@ -429,7 +438,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 
 		writePackageErr := os.WriteFile(packageJsonPath, []byte(packageJsonString), 0644)
 		if writePackageErr != nil {
-			w.api.Log(ctx, fmt.Sprintf("Failed to write package.json: %s", writePackageErr.Error()))
+			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to write package.json: %s", writePackageErr.Error()))
 			w.creatingProcess = fmt.Sprintf("Failed to write package.json: %s", writePackageErr.Error())
 			return
 		}
@@ -447,36 +456,35 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 func (w *WPMPlugin) saveLocalPluginDirectories(ctx context.Context) {
 	data, marshalErr := json.Marshal(w.localPluginDirectories)
 	if marshalErr != nil {
-		w.api.Log(ctx, fmt.Sprintf("Failed to marshal local plugin directories: %s", marshalErr.Error()))
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to marshal local plugin directories: %s", marshalErr.Error()))
 		return
 	}
 	w.api.SaveSetting(ctx, "localPluginDirectories", string(data), false)
-	w.loadLocalPlugins(ctx)
 }
 
-func (w *WPMPlugin) reloadLocalPlugins(ctx context.Context, localPlugin plugin.MetadataWithDirectory) error {
-	w.api.Log(ctx, fmt.Sprintf("Reloading plugin: %s", localPlugin.Metadata.Name))
+func (w *WPMPlugin) reloadLocalDistPlugin(ctx context.Context, localPlugin plugin.MetadataWithDirectory, reason string) error {
+	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Reloading plugin: %s, reason: %s", localPlugin.Metadata.Name, reason))
 
 	// find dist directory, if not exist, prompt user to build it
 	distDirectory := path.Join(localPlugin.Directory, "dist")
 	_, statErr := os.Stat(distDirectory)
 	if statErr != nil {
-		w.api.Log(ctx, fmt.Sprintf("Failed to stat dist directory: %s", statErr.Error()))
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to stat dist directory: %s", statErr.Error()))
 		return statErr
 	}
 
-	distPluginMetadata, err := w.loadLocalPluginsFromDirectory(ctx, distDirectory)
+	distPluginMetadata, err := w.parseMetadata(ctx, distDirectory)
 	if err != nil {
-		w.api.Log(ctx, fmt.Sprintf("Failed to load local plugin: %s", err.Error()))
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to load local plugin: %s", err.Error()))
 		return err
 	}
 
 	reloadErr := plugin.GetPluginManager().ReloadPlugin(ctx, distPluginMetadata)
 	if reloadErr != nil {
-		w.api.Log(ctx, fmt.Sprintf("Failed to reload plugin: %s", reloadErr.Error()))
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to reload plugin: %s", reloadErr.Error()))
 		return reloadErr
 	} else {
-		w.api.Log(ctx, fmt.Sprintf("Reloaded plugin: %s", localPlugin.Metadata.Name))
+		w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Reloaded plugin: %s", localPlugin.Metadata.Name))
 	}
 
 	w.api.Notify(ctx, "Reloaded dev plugin", localPlugin.Metadata.Name)

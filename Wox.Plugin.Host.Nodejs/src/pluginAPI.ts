@@ -58,8 +58,8 @@ export class PluginAPI implements PublicAPI {
     await this.invokeMethod("HideApp", {})
   }
 
-  async Log(msg: string): Promise<void> {
-    await this.invokeMethod("Log", { msg })
+  async Log(level: "Info" | "Error" | "Debug" | "Warning", msg: string): Promise<void> {
+    await this.invokeMethod("Log", { msg, level })
   }
 
   async ShowApp(): Promise<void> {

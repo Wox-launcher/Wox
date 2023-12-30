@@ -11,12 +11,21 @@ import (
 	"wox/util"
 )
 
+type LogLevel = string
+
+const (
+	LogLevelInfo    LogLevel = "Info"
+	LogLevelError   LogLevel = "Error"
+	LogLevelDebug   LogLevel = "Debug"
+	LogLevelWarning LogLevel = "Warning"
+)
+
 type API interface {
 	ChangeQuery(ctx context.Context, query share.ChangedQuery)
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context)
 	Notify(ctx context.Context, title string, description string)
-	Log(ctx context.Context, msg string)
+	Log(ctx context.Context, level LogLevel, msg string)
 	GetTranslation(ctx context.Context, key string) string
 	GetSetting(ctx context.Context, key string) string
 	SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool)
@@ -48,9 +57,31 @@ func (a *APIImpl) Notify(ctx context.Context, title string, description string) 
 	GetPluginManager().GetUI().Notify(ctx, title, description)
 }
 
-func (a *APIImpl) Log(ctx context.Context, msg string) {
-	a.logger.Info(ctx, msg)
-	logger.Info(ctx, fmt.Sprintf("[%s] %s", a.pluginInstance.Metadata.Name, msg))
+func (a *APIImpl) Log(ctx context.Context, level LogLevel, msg string) {
+	formMsg := fmt.Sprintf("[%s] %s", a.pluginInstance.Metadata.Name, msg)
+	if level == LogLevelError {
+		a.logger.Error(ctx, msg)
+		logger.Error(ctx, formMsg)
+		return
+	}
+
+	if level == LogLevelInfo {
+		a.logger.Info(ctx, msg)
+		logger.Info(ctx, formMsg)
+		return
+	}
+
+	if level == LogLevelDebug {
+		a.logger.Debug(ctx, msg)
+		logger.Debug(ctx, formMsg)
+		return
+	}
+
+	if level == LogLevelWarning {
+		a.logger.Warn(ctx, msg)
+		logger.Warn(ctx, formMsg)
+		return
+	}
 }
 
 func (a *APIImpl) GetTranslation(ctx context.Context, key string) string {

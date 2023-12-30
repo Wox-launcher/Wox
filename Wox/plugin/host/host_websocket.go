@@ -122,7 +122,7 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 		util.GetLogger().Error(ctx, fmt.Sprintf("invoke %s response timeout, response time: %dms", metadata.Name, util.GetSystemTimestamp()-startTimestamp))
 		return "", fmt.Errorf("request timeout, request id: %s", request.Id)
 	case response := <-resultChan:
-		util.GetLogger().Debug(ctx, fmt.Sprintf("<Host -> Wox> inovke plugin %s method: %s finished, response time: %dms", metadata.Name, method, util.GetSystemTimestamp()-startTimestamp))
+		util.GetLogger().Debug(ctx, fmt.Sprintf("inovke plugin %s method: %s finished, response time: %dms", metadata.Name, method, util.GetSystemTimestamp()-startTimestamp))
 		if response.Error != "" {
 			return "", fmt.Errorf(response.Error)
 		} else {
@@ -148,8 +148,27 @@ func (w *WebsocketHost) startWebsocketServer(ctx context.Context, port int) {
 func (w *WebsocketHost) onMessage(data string) {
 	ctx := util.NewTraceContext()
 
-	//util.GetLogger().Debug(ctx, fmt.Sprintf("%s received message: %s", w.logIdentity(ctx), data))
-	if strings.Contains(data, string(JsonRpcTypeRequest)) {
+	if !strings.Contains(data, string(JsonRpcTypeSystemLog)) {
+		util.GetLogger().Debug(ctx, fmt.Sprintf("[Host -> Wox] %s received message: %s", w.logIdentity(ctx), data))
+	}
+
+	if strings.Contains(data, string(JsonRpcTypeSystemLog)) {
+		traceId := gjson.Get(data, "TraceId").String()
+		level := gjson.Get(data, "Level").String()
+		msg := gjson.Get(data, "Message").String()
+
+		newCtx := util.NewTraceContextWith(traceId)
+		logMsg := fmt.Sprintf("[%s HOST] %s", w.host.GetRuntime(ctx), msg)
+		if level == "error" {
+			util.GetLogger().Error(newCtx, logMsg)
+		}
+		if level == "info" {
+			util.GetLogger().Info(newCtx, logMsg)
+		}
+		if level == "debug" {
+			util.GetLogger().Debug(newCtx, logMsg)
+		}
+	} else if strings.Contains(data, string(JsonRpcTypeRequest)) {
 		var request JsonRpcRequest
 		unmarshalErr := json.Unmarshal([]byte(data), &request)
 		if unmarshalErr != nil {
@@ -167,22 +186,6 @@ func (w *WebsocketHost) onMessage(data string) {
 		}
 
 		w.handleResponseFromPlugin(util.NewTraceContextWith(response.TraceId), response)
-	} else if strings.Contains(data, string(JsonRpcTypeSystemLog)) {
-		traceId := gjson.Get(data, "TraceId").String()
-		level := gjson.Get(data, "Level").String()
-		msg := gjson.Get(data, "Message").String()
-
-		newCtx := util.NewTraceContextWith(traceId)
-		logMsg := fmt.Sprintf("[%s HOST] %s", w.host.GetRuntime(ctx), msg)
-		if level == "error" {
-			util.GetLogger().Error(newCtx, logMsg)
-		}
-		if level == "info" {
-			util.GetLogger().Info(newCtx, logMsg)
-		}
-		if level == "debug" {
-			util.GetLogger().Debug(newCtx, logMsg)
-		}
 	} else {
 		util.GetLogger().Error(ctx, fmt.Sprintf("%s unknown message type: %s", w.logIdentity(ctx), data))
 	}
@@ -198,7 +201,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			break
 		}
 	}
-	if pluginInstance.Plugin == nil {
+	if pluginInstance == nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to find plugin instance", request.PluginName))
 		return
 	}
@@ -264,7 +267,13 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] Log method must have a msg parameter", request.PluginName))
 			return
 		}
-		pluginInstance.API.Log(ctx, msg)
+		level, exist := request.Params["level"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] Log method must have a level parameter", request.PluginName))
+			return
+		}
+
+		pluginInstance.API.Log(ctx, level, msg)
 		w.sendResponseToHost(ctx, request, "")
 	case "GetTranslation":
 		key, exist := request.Params["key"]

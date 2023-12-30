@@ -86,6 +86,10 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 
 	var metaDataList []MetadataWithDirectory
 	for _, entry := range pluginDirectories {
+		if entry.Name() == ".DS_Store" {
+			continue
+		}
+
 		pluginDirectory := path.Join(basePluginDirectory, entry.Name())
 		metadata, metadataErr := m.ParseMetadata(ctx, pluginDirectory)
 		if metadataErr != nil {
@@ -196,7 +200,7 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 	instance.API = NewAPI(instance)
 	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Metadata.Id, metadata.Metadata.SettingDefinitions)
 	if settingErr != nil {
-		instance.API.Log(ctx, fmt.Errorf("[SYS] failed to load plugin[%s] setting: %w", metadata.Metadata.Name, settingErr).Error())
+		instance.API.Log(ctx, LogLevelError, fmt.Errorf("[SYS] failed to load plugin[%s] setting: %w", metadata.Metadata.Name, settingErr).Error())
 		return settingErr
 	}
 	instance.Setting = pluginSetting
@@ -205,7 +209,7 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 
 	if pluginSetting.Disabled {
 		logger.Info(ctx, fmt.Errorf("[%s HOST] plugin is disabled by user, skip init: %s", host.GetRuntime(ctx), metadata.Metadata.Name).Error())
-		instance.API.Log(ctx, fmt.Sprintf("[SYS] plugin is disabled by user, skip init: %s", metadata.Metadata.Name))
+		instance.API.Log(ctx, LogLevelWarning, fmt.Sprintf("[SYS] plugin is disabled by user, skip init: %s", metadata.Metadata.Name))
 		return nil
 	}
 
@@ -268,7 +272,7 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 		if settingErr != nil {
 			errMsg := fmt.Sprintf("failed to load system plugin[%s] setting, use default plugin setting. err: %s", metadata.Name, settingErr.Error())
 			logger.Error(ctx, errMsg)
-			instance.API.Log(ctx, fmt.Sprintf("[SYS] %s", errMsg))
+			instance.API.Log(ctx, LogLevelError, fmt.Sprintf("[SYS] %s", errMsg))
 			pluginSetting = &setting.PluginSetting{
 				Settings: util.NewHashMap[string, string](),
 			}
@@ -277,7 +281,7 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 
 		m.instances = append(m.instances, instance)
 
-		util.Go(ctx, fmt.Sprintf("[%s] init system plugin", plugin.GetMetadata().Name), func() {
+		util.Go(ctx, fmt.Sprintf("init system plugin <%s>", plugin.GetMetadata().Name), func() {
 			m.initPlugin(util.NewTraceContext(), instance)
 		})
 	}
