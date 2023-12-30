@@ -22,11 +22,13 @@ export class PluginAPI implements PublicAPI {
   async invokeMethod(method: string, params: { [key: string]: string }): Promise<unknown> {
     const startTime = Date.now()
     const requestId = crypto.randomUUID()
+    const traceId = crypto.randomUUID()
 
-    logger.info(`[${this.pluginName}] start invoke method to Wox: ${method}, id: ${requestId} parameters: ${JSON.stringify(params)}`)
+    logger.info(traceId, `[${this.pluginName}] start invoke method to Wox: ${method}, id: ${requestId} parameters: ${JSON.stringify(params)}`)
 
     this.ws.send(
       JSON.stringify({
+        TraceId: traceId,
         Id: requestId,
         Method: method,
         Type: PluginJsonRpcTypeRequest,
@@ -40,7 +42,7 @@ export class PluginAPI implements PublicAPI {
 
     const result = await deferred.promise
     const endTime = Date.now()
-    logger.info(`[${this.pluginName}] invoke method to Wox finished: ${method}, time: ${endTime - startTime}ms`)
+    logger.info(traceId, `[${this.pluginName}] invoke method to Wox finished: ${method}, time: ${endTime - startTime}ms`)
     return result
   }
 

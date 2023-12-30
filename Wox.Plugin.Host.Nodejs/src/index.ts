@@ -14,17 +14,18 @@ const port = process.argv[2]
 const woxPid = process.argv[4]
 const hostId = `node-${crypto.randomUUID()}`
 
-logger.info("----------------------------------------")
-logger.info(`Start nodejs host: ${hostId}`)
-logger.info(`port: ${port}`)
-logger.info(`wox pid: ${woxPid}`)
+const startupTraceId = crypto.randomUUID()
+logger.info(startupTraceId, "----------------------------------------")
+logger.info(startupTraceId, `Start nodejs host: ${hostId}`)
+logger.info(startupTraceId, `port: ${port}`)
+logger.info(startupTraceId, `wox pid: ${woxPid}`)
 
 //check wox process is alive, otherwise exit
 setInterval(() => {
   try {
     process.kill(Number.parseInt(woxPid), 0)
   } catch (e) {
-    logger.error(`wox process is not alive, exit`)
+    logger.error(startupTraceId, `wox process is not alive, exit`)
     process.exit(1)
   }
 }, 1000)
@@ -35,12 +36,16 @@ export const waitingForResponse: {
 
 const wss = new WebSocketServer({ port: Number.parseInt(port) })
 wss.on("connection", function connection(ws) {
+  logger.updateWebSocket(ws)
+
   ws.on("error", function (error) {
-    logger.error(`[${hostId}] connection error: ${error.message}`)
+    logger.updateWebSocket(undefined)
+    logger.error(startupTraceId, `[${hostId}] connection error: ${error.message}`)
   })
 
   ws.on("close", function close(code, reason) {
-    logger.info(`[${hostId}] connection closed, code: ${code}, reason: ${reason}`)
+    logger.updateWebSocket(undefined)
+    logger.info(startupTraceId, `[${hostId}] connection closed, code: ${code}, reason: ${reason}`)
   })
 
   ws.on("ping", function ping() {
@@ -50,17 +55,17 @@ wss.on("connection", function connection(ws) {
   ws.on("message", function message(data) {
     try {
       const msg = `${data}`
-      //logger.info(`receive message: ${msg}`)
+      // logger.debug(crypto.randomUUID(), `receive message: ${msg}`)
 
       if (msg.indexOf(PluginJsonRpcTypeResponse) >= 0) {
         handleResponseFromWox(msg)
       } else if (msg.indexOf(PluginJsonRpcTypeRequest) >= 0) {
         handleRequest(msg)
       } else {
-        logger.error(`unknown message type: ${msg}`)
+        logger.error(crypto.randomUUID(), `unknown message type: ${msg}`)
       }
     } catch (e) {
-      logger.error(`receive and handle msg error: ${data}, err: ${e}`)
+      logger.error(crypto.randomUUID(), `receive and handle msg error: ${data}, err: ${e}`)
     }
   })
 
@@ -69,20 +74,23 @@ wss.on("connection", function connection(ws) {
     try {
       jsonRpcRequest = JSON.parse(msg) as PluginJsonRpcRequest
     } catch (e) {
-      logger.error(`error parsing json: ${e}, data: ${msg}`)
+      logger.error("", `error parsing json: ${e}, data: ${msg}`)
       return
     }
 
     if (jsonRpcRequest === undefined) {
-      logger.error(`jsonRpcRequest is undefined`)
+      logger.error("", `jsonRpcRequest is undefined`)
       return
     }
+
+    logger.debug(jsonRpcRequest.TraceId, `receive request from wox: ${JSON.stringify(jsonRpcRequest)}`)
 
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     handleRequestFromWox(jsonRpcRequest, ws)
       .then((result: unknown) => {
         const response: PluginJsonRpcResponse = {
+          TraceId: jsonRpcRequest.TraceId,
           Id: jsonRpcRequest.Id,
           Method: jsonRpcRequest.Method,
           Type: PluginJsonRpcTypeResponse,
@@ -91,21 +99,22 @@ wss.on("connection", function connection(ws) {
         //logger.info(`[${jsonRpcRequest.PluginName}] handle request successfully: ${JSON.stringify(response)}, ${ws.readyState}`)
         ws.send(JSON.stringify(response), (error?: Error) => {
           if (error) {
-            logger.error(`[${jsonRpcRequest.PluginName}] send response failed: ${error.message}`)
+            logger.error(jsonRpcRequest.TraceId, `[${jsonRpcRequest.PluginName}] send response failed: ${error.message}`)
           }
         })
       })
       .catch((error: Error) => {
         const response: PluginJsonRpcResponse = {
+          TraceId: jsonRpcRequest.TraceId,
           Id: jsonRpcRequest.Id,
           Method: jsonRpcRequest.Method,
           Type: PluginJsonRpcTypeResponse,
           Error: error.message
         }
-        logger.error(`[${jsonRpcRequest.PluginName}] handle request failed: ${error.message}, stack: ${error.stack}`)
+        logger.error(jsonRpcRequest.TraceId, `[${jsonRpcRequest.PluginName}] handle request failed: ${error.message}, stack: ${error.stack}`)
         ws.send(JSON.stringify(response), (error?: Error) => {
           if (error) {
-            logger.error(`[${jsonRpcRequest.PluginName}] send response failed: ${error.message}, stack: ${error.stack}`)
+            logger.error(jsonRpcRequest.TraceId, `[${jsonRpcRequest.PluginName}] send response failed: ${error.message}, stack: ${error.stack}`)
           }
         })
       })
@@ -116,23 +125,23 @@ wss.on("connection", function connection(ws) {
     try {
       pluginJsonRpcResponse = JSON.parse(msg) as PluginJsonRpcResponse
     } catch (e) {
-      logger.error(`error parsing response json: ${e}, data: ${msg}`)
+      logger.error("", `error parsing response json: ${e}, data: ${msg}`)
       return
     }
 
     if (pluginJsonRpcResponse === undefined) {
-      logger.error(`pluginJsonRpcResponse is undefined`)
+      logger.error("", `pluginJsonRpcResponse is undefined`)
       return
     }
 
     if (pluginJsonRpcResponse.Id === undefined) {
-      logger.error(`pluginJsonRpcResponse.Id is undefined`)
+      logger.error(pluginJsonRpcResponse.TraceId, `pluginJsonRpcResponse.Id is undefined`)
       return
     }
 
     const promiseInstance = waitingForResponse[pluginJsonRpcResponse.Id]
     if (promiseInstance === undefined) {
-      logger.error(`waitingForResponse[${pluginJsonRpcResponse.Id}] is undefined`)
+      logger.error(pluginJsonRpcResponse.TraceId, `waitingForResponse[${pluginJsonRpcResponse.Id}] is undefined`)
       return
     }
 

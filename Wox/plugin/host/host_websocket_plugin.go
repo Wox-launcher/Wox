@@ -61,7 +61,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 	for i, r := range results {
 		result := r
 		for j, action := range result.Actions {
-			result.Actions[j].Action = func(actionContext plugin.ActionContext) {
+			result.Actions[j].Action = func(ctx context.Context, actionContext plugin.ActionContext) {
 				_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "action", map[string]string{
 					"ActionId":    action.Id,
 					"ContextData": actionContext.ContextData,
@@ -72,7 +72,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			}
 		}
 
-		results[i].OnRefresh = func(refreshableResult plugin.RefreshableResult) plugin.RefreshableResult {
+		results[i].OnRefresh = func(ctx context.Context, refreshableResult plugin.RefreshableResult) plugin.RefreshableResult {
 			refreshableJson, marshalErr2 := json.Marshal(refreshableResult)
 			if marshalErr2 != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal refreshable query results: %s", w.metadata.Name, marshalErr2.Error()))

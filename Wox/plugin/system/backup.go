@@ -65,7 +65,7 @@ func (c *BackupPlugin) backup(ctx context.Context, query plugin.Query) []plugin.
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Backup",
-					Action: func(actionContext plugin.ActionContext) {
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						backupErr := setting.GetSettingManager().Backup(ctx, setting.BackupTypeManual)
 						if backupErr != nil {
 							c.api.Notify(ctx, "Error", backupErr.Error())
@@ -106,7 +106,7 @@ func (c *BackupPlugin) restore(ctx context.Context, query plugin.Query) []plugin
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Restore",
-					Action: func(actionContext plugin.ActionContext) {
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						restoreErr := setting.GetSettingManager().Restore(ctx, backupDummy.Id)
 						if restoreErr != nil {
 							c.api.Notify(ctx, "Error", restoreErr.Error())

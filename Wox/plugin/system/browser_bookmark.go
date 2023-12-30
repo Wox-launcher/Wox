@@ -93,7 +93,7 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_browser_bookmark_open_in_browser",
-						Action: func(actionContext plugin.ActionContext) {
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							util.ShellOpen(bookmark.Url)
 						},
 					},
@@ -115,7 +115,6 @@ func (c *BrowserBookmarkPlugin) loadChromeBookmarkInMacos(ctx context.Context, p
 
 	groups := util.FindRegexGroups(`(?ms)name": "(?P<name>.*?)",.*?type": "url",.*?"url": "(?P<url>.*?)".*?}, {`, string(file))
 	for _, group := range groups {
-		c.api.Log(ctx, fmt.Sprintf("name: %v, url: %s", group["name"], group["url"]))
 		results = append(results, Bookmark{
 			Name: group["name"],
 			Url:  group["url"],

@@ -57,7 +57,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 					{
 						Name:                   "Change theme",
 						PreventHideAfterAction: true,
-						Action: func(actionContext plugin.ActionContext) {
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							ui.ChangeTheme(ctx, theme)
 						},
 					},

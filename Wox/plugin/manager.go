@@ -284,16 +284,14 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 }
 
 func (m *Manager) initPlugin(ctx context.Context, instance *Instance) {
-	logger.Info(ctx, fmt.Sprintf("[%s] init plugin", instance.Metadata.Name))
-	instance.API.Log(ctx, fmt.Sprintf("[SYS] init plugin"))
+	logger.Info(ctx, fmt.Sprintf("start init plugin: %s", instance.Metadata.Name))
 	instance.InitStartTimestamp = util.GetSystemTimestamp()
 	instance.Plugin.Init(ctx, InitParams{
 		API:             instance.API,
 		PluginDirectory: instance.PluginDirectory,
 	})
 	instance.InitFinishedTimestamp = util.GetSystemTimestamp()
-	logger.Info(ctx, fmt.Sprintf("[%s] init plugin finished, cost %d ms", instance.Metadata.Name, instance.InitFinishedTimestamp-instance.InitStartTimestamp))
-	instance.API.Log(ctx, fmt.Sprintf("[SYS] init plugin finished, cost %d ms", instance.InitFinishedTimestamp-instance.InitStartTimestamp))
+	logger.Info(ctx, fmt.Sprintf("init plugin %s finished, cost %d ms", instance.Metadata.Name, instance.InitFinishedTimestamp-instance.InitStartTimestamp))
 }
 
 func (m *Manager) ParseMetadata(ctx context.Context, pluginDirectory string) (Metadata, error) {
@@ -422,7 +420,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		ContextData:    result.ContextData,
 		PluginInstance: pluginInstance,
 		Query:          query,
-		Actions:        util.NewHashMap[string, func(actionContext ActionContext)](),
+		Actions:        util.NewHashMap[string, func(ctx context.Context, actionContext ActionContext)](),
 	}
 
 	// store actions for ui invoke later
@@ -708,7 +706,7 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 		return
 	}
 
-	action(ActionContext{
+	action(ctx, ActionContext{
 		ContextData: resultCache.ContextData,
 	})
 
@@ -728,7 +726,7 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 		return refreshableResultWithId, errors.New("result cache not found")
 	}
 
-	newResult := resultCache.Refresh(refreshableResult)
+	newResult := resultCache.Refresh(ctx, refreshableResult)
 	newResult = m.PolishRefreshableResult(ctx, resultCache.PluginInstance, refreshableResultWithId.ResultId, newResult)
 
 	return RefreshableResultWithResultId{

@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"github.com/samber/lo"
 	"strings"
 	"wox/util"
@@ -87,7 +88,7 @@ type QueryResult struct {
 	// E.g. if you set 123, Wox will use 200, if you set 1234, Wox will use 1300
 	RefreshInterval int
 	// refresh result by calling OnRefresh function
-	OnRefresh func(current RefreshableResult) RefreshableResult
+	OnRefresh func(ctx context.Context, current RefreshableResult) RefreshableResult
 }
 
 type QueryResultAction struct {
@@ -101,7 +102,7 @@ type QueryResultAction struct {
 	IsDefault bool
 	// If true, Wox will not hide after user select this result
 	PreventHideAfterAction bool
-	Action                 func(actionContext ActionContext)
+	Action                 func(ctx context.Context, actionContext ActionContext)
 }
 
 type ActionContext struct {
@@ -158,11 +159,11 @@ type QueryResultCache struct {
 	ResultTitle    string
 	ResultSubTitle string
 	ContextData    string
-	Refresh        func(RefreshableResult) RefreshableResult
+	Refresh        func(context.Context, RefreshableResult) RefreshableResult
 	PluginInstance *Instance
 	Query          Query
 	Preview        WoxPreview
-	Actions        *util.HashMap[string, func(actionContext ActionContext)]
+	Actions        *util.HashMap[string, func(ctx context.Context, actionContext ActionContext)]
 }
 
 func newQueryInputWithPlugins(query string, pluginInstances []*Instance) Query {

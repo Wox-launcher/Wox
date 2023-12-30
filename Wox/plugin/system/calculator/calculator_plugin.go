@@ -75,7 +75,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 			Icon:  calculatorIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Action: func(actionContext plugin.ActionContext) {
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						c.histories = append(c.histories, CalculatorHistory{
 							Expression: query.Search,
 							Result:     result,
@@ -98,7 +98,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 				Icon:  calculatorIcon,
 				Actions: []plugin.QueryResultAction{
 					{
-						Action: func(actionContext plugin.ActionContext) {
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							c.histories = append(c.histories, CalculatorHistory{
 								Expression: query.Search,
 								Result:     result,
@@ -130,13 +130,13 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 						{
 							Name:      "Copy result",
 							IsDefault: true,
-							Action: func(actionContext plugin.ActionContext) {
+							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								clipboard.WriteText(h.Result)
 							},
 						},
 						{
 							Name: "Recalculate",
-							Action: func(actionContext plugin.ActionContext) {
+							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								c.api.ChangeQuery(ctx, share.ChangedQuery{
 									QueryType: plugin.QueryTypeInput,
 									QueryText: h.Expression,

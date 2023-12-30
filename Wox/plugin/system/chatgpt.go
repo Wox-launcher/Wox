@@ -168,7 +168,7 @@ func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Quer
 				Name:                   "Send chat",
 				IsDefault:              true,
 				PreventHideAfterAction: true,
-				Action: func(actionContext plugin.ActionContext) {
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					if query.Search == "" {
 						return
 					}
@@ -252,7 +252,7 @@ func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Quer
 				Name:                   "Delete chat",
 				PreventHideAfterAction: true,
 				Icon:                   chatgptDeleteIcon,
-				Action: func(actionContext plugin.ActionContext) {
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					c.deleteChat(ctx, c.activeChat.Id, true)
 					c.api.ChangeQuery(ctx, share.ChangedQuery{
 						QueryType: plugin.QueryTypeInput,
@@ -264,7 +264,7 @@ func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Quer
 				Name:                   "Rename chat",
 				PreventHideAfterAction: true,
 				Icon:                   chatgptRenameIcon,
-				Action: func(actionContext plugin.ActionContext) {
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					//TODO:
 					c.api.ChangeQuery(ctx, share.ChangedQuery{
 						QueryType: plugin.QueryTypeInput,
@@ -288,7 +288,7 @@ func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Quer
 			{
 				Name:                   "Start",
 				PreventHideAfterAction: true,
-				Action: func(actionContext plugin.ActionContext) {
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					newChat := &Chat{
 						Id:               uuid.NewString(),
 						Title:            "New chat",
@@ -323,7 +323,7 @@ func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Quer
 				{
 					Name:                   "Activate",
 					PreventHideAfterAction: true,
-					Action: func(actionContext plugin.ActionContext) {
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						c.changeActiveChat(ctx, chat.Id)
 						c.api.ChangeQuery(ctx, share.ChangedQuery{
 							QueryType: plugin.QueryTypeInput,
@@ -335,7 +335,7 @@ func (c *ChatgptPlugin) queryConversation(ctx context.Context, query plugin.Quer
 					Name:                   "Delete chat",
 					PreventHideAfterAction: true,
 					Icon:                   chatgptDeleteIcon,
-					Action: func(actionContext plugin.ActionContext) {
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						c.deleteChat(ctx, chat.Id, true)
 						c.api.ChangeQuery(ctx, share.ChangedQuery{
 							QueryType: plugin.QueryTypeInput,
@@ -422,11 +422,11 @@ func (c *ChatgptPlugin) queryCommand(ctx context.Context, query plugin.Query) []
 func (c *ChatgptPlugin) generateGptResultRefresh(ctx context.Context, messages []openai.ChatCompletionMessage,
 	onAnswering func(plugin.RefreshableResult, string) plugin.RefreshableResult,
 	onAnswerErr func(plugin.RefreshableResult, error) plugin.RefreshableResult,
-	onAnswerFinished func(plugin.RefreshableResult) plugin.RefreshableResult) func(current plugin.RefreshableResult) plugin.RefreshableResult {
+	onAnswerFinished func(plugin.RefreshableResult) plugin.RefreshableResult) func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
 
 	var stream *openai.ChatCompletionStream
 	var creatingStream bool
-	return func(current plugin.RefreshableResult) plugin.RefreshableResult {
+	return func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
 		if stream == nil {
 			if creatingStream {
 				c.api.Log(ctx, "Already creating stream, waiting create finish")

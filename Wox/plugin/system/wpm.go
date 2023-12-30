@@ -186,7 +186,7 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				SubTitle:        "Please wait...",
 				Icon:            wpmIcon,
 				RefreshInterval: 300,
-				OnRefresh: func(current plugin.RefreshableResult) plugin.RefreshableResult {
+				OnRefresh: func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
 					current.Title = w.creatingProcess
 					return current
 				},
@@ -206,7 +206,7 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 					{
 						Name:                   "create",
 						PreventHideAfterAction: true,
-						Action: func(actionContext plugin.ActionContext) {
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							pluginName := query.Search
 							util.Go(ctx, "create plugin", func() {
 								w.createPlugin(ctx, pluginTemplateDummy, pluginName, query)
@@ -257,13 +257,13 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 					{
 						Name:      "Reload",
 						IsDefault: true,
-						Action: func(actionContext plugin.ActionContext) {
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							w.reloadLocalPlugins(ctx, lp.metadata)
 						},
 					},
 					{
 						Name: "Open plugin directory",
-						Action: func(actionContext plugin.ActionContext) {
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							openErr := util.ShellOpen(lp.metadata.Directory)
 							if openErr != nil {
 								w.api.Notify(ctx, "Failed to open plugin directory", openErr.Error())
@@ -272,7 +272,7 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 					},
 					{
 						Name: "Remove",
-						Action: func(actionContext plugin.ActionContext) {
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
 								return directory != lp.metadata.Directory
 							})
@@ -281,7 +281,7 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 					},
 					{
 						Name: "Remove and delete plugin directory",
-						Action: func(actionContext plugin.ActionContext) {
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							deleteErr := os.RemoveAll(lp.metadata.Directory)
 							if deleteErr != nil {
 								w.api.Log(ctx, fmt.Sprintf("Failed to delete plugin directory: %s", deleteErr.Error()))
@@ -317,7 +317,7 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "install",
-						Action: func(actionContext plugin.ActionContext) {
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							plugin.GetStoreManager().Install(ctx, pluginManifest)
 						},
 					},
@@ -344,7 +344,7 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "uninstall",
-						Action: func(actionContext plugin.ActionContext) {
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							plugin.GetStoreManager().Uninstall(ctx, pluginInstance)
 						},
 					},

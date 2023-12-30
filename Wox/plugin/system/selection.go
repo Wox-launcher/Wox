@@ -73,7 +73,7 @@ func (i *SelectionPlugin) queryForSelectionText(ctx context.Context, text string
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: "Copy to clipboard",
-				Action: func(actionContext plugin.ActionContext) {
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					clipboard.WriteText(text)
 				},
 			},
@@ -90,7 +90,7 @@ func (i *SelectionPlugin) queryForSelectionFile(ctx context.Context, filePaths [
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: "Copy to clipboard",
-				Action: func(actionContext plugin.ActionContext) {
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					clipboard.WriteText(strings.Join(filePaths, "\n"))
 				},
 			},

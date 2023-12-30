@@ -187,7 +187,7 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "Search",
-						Action: func(actionContext plugin.ActionContext) {
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							for _, url := range searchDummy.Urls {
 								util.ShellOpen(strings.ReplaceAll(url, "{query}", otherQuery))
 								time.Sleep(time.Millisecond * 100)

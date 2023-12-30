@@ -58,7 +58,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 			Score:           100,
 			Icon:            urlIcon,
 			RefreshInterval: 100,
-			OnRefresh: func(result plugin.RefreshableResult) plugin.RefreshableResult {
+			OnRefresh: func(ctx context.Context, result plugin.RefreshableResult) plugin.RefreshableResult {
 				time.Sleep(time.Second)
 				result.Title = util.GetSystemTimestampStr()
 				result.SubTitle = util.GetSystemTimestampStr()
@@ -67,7 +67,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Open in browser",
-					Action: func(actionContext plugin.ActionContext) {
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						util.ShellOpen(query.Search)
 					},
 				},
@@ -79,7 +79,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 			Score:           100,
 			Icon:            urlIcon,
 			RefreshInterval: 100,
-			OnRefresh: func(result plugin.RefreshableResult) plugin.RefreshableResult {
+			OnRefresh: func(ctx context.Context, result plugin.RefreshableResult) plugin.RefreshableResult {
 				result.Title = util.GetSystemTimestampStr()
 				result.SubTitle = util.GetSystemTimestampStr()
 				return result
@@ -87,7 +87,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Open in browser",
-					Action: func(actionContext plugin.ActionContext) {
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						util.ShellOpen(query.Search)
 					},
 				},

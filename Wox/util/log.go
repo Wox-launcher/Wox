@@ -46,6 +46,14 @@ func (l *Log) GetWriter() io.Writer {
 	return logInstance.writer
 }
 
+func GetContextTraceId(ctx context.Context) string {
+	if traceId, ok := ctx.Value("trace").(string); ok {
+		return traceId
+	}
+
+	return ""
+}
+
 func formatMsg(context context.Context, msg string, level string) string {
 	var builder strings.Builder
 	builder.Grow(256)
@@ -53,7 +61,7 @@ func formatMsg(context context.Context, msg string, level string) string {
 	builder.WriteString(" G")
 	builder.WriteString(LeftPad(strconv.FormatInt(GetGID(), 10), 7, '0'))
 	builder.WriteString(" ")
-	if traceId, ok := context.Value("trace").(string); ok {
+	if traceId := GetContextTraceId(context); traceId != "" {
 		builder.WriteString(traceId)
 		builder.WriteString(" ")
 	}
