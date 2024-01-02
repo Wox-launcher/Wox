@@ -751,7 +751,29 @@ func (m *Manager) GetResultPreview(ctx context.Context, resultId string) (WoxPre
 		return WoxPreview{}, errors.New("result cache not found")
 	}
 
-	return resultCache.Preview, nil
+	preview := m.polishPreview(ctx, resultCache.Preview)
+	return preview, nil
+}
+
+func (m *Manager) polishPreview(ctx context.Context, preview WoxPreview) WoxPreview {
+	if preview.PreviewType == WoxPreviewTypeImage {
+		woxImage, err := ParseWoxImage(preview.PreviewData)
+		if err != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to parse wox image for preview: %s", err.Error()))
+			return preview
+		}
+
+		if woxImage.ImageType == WoxImageTypeAbsolutePath {
+			newWoxImage := convertLocalImageToUrl(ctx, woxImage)
+			return WoxPreview{
+				PreviewType:       WoxPreviewTypeImage,
+				PreviewData:       newWoxImage.String(),
+				PreviewProperties: preview.PreviewProperties,
+			}
+		}
+	}
+
+	return preview
 }
 
 func (m *Manager) ReplaceQueryVariable(ctx context.Context, query string) string {

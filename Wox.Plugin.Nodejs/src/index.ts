@@ -169,7 +169,7 @@ export interface WoxImage {
   ImageData: string
 }
 
-export type WoxPreviewType = "markdown" | "text" | "image" | "url"
+export type WoxPreviewType = "markdown" | "text" | "image" | "url" | "pdf"
 
 export interface WoxPreview {
   PreviewType: WoxPreviewType

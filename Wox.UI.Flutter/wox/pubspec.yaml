@@ -48,6 +48,7 @@ dependencies:
   path: ^1.8.3
   chinese_font_library: ^1.1.0
   lpinyin: ^2.0.3
+  syncfusion_flutter_pdfviewer: ^24.1.43
 
 dev_dependencies:
   flutter_test:

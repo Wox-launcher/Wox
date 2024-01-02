@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:from_css_color/from_css_color.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
@@ -89,13 +92,22 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
           style: TextStyle(color: fromCssColor(widget.woxTheme.previewFontColor)),
         ),
       );
+    } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_PDF.code) {
+      if (widget.woxPreview.previewData.isEmpty) {
+        contentWidget = SelectableText("Invalid pdf data: ${widget.woxPreview.previewData}", style: const TextStyle(color: Colors.red));
+      } else {
+        if (widget.woxPreview.previewData.startsWith("http")) {
+          contentWidget = SfPdfViewer.network(
+            widget.woxPreview.previewData,
+          );
+        } else {
+          contentWidget = SfPdfViewer.file(File(widget.woxPreview.previewData));
+        }
+      }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_IMAGE.code) {
       final parsedWoxImage = WoxImage.parse(widget.woxPreview.previewData);
       if (parsedWoxImage == null) {
-        contentWidget = SelectableText(
-          "Invalid image data: ${widget.woxPreview.previewData}",
-          style: const TextStyle(color: Colors.red),
-        );
+        contentWidget = SelectableText("Invalid image data: ${widget.woxPreview.previewData}", style: const TextStyle(color: Colors.red));
       } else {
         contentWidget = Center(
           child: WoxImageView(woxImage: parsedWoxImage),

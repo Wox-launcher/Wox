@@ -5,6 +5,7 @@ enum WoxPreviewTypeEnum {
   WOX_PREVIEW_TYPE_TEXT("text", "text"),
   WOX_PREVIEW_TYPE_IMAGE("image", "image"),
   WOX_PREVIEW_TYPE_URL("url", "url"),
+  WOX_PREVIEW_TYPE_PDF("pdf", "pdf"),
   WOX_PREVIEW_TYPE_REMOTE("remote", "remote");
 
   final String code;
