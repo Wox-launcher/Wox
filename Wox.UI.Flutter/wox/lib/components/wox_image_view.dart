@@ -18,6 +18,8 @@ class WoxImageView extends StatelessWidget {
       return Image.network(woxImage.imageData, width: width, height: height);
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code) {
       return SvgPicture.string(woxImage.imageData, width: width, height: height);
+    } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
+      return Text(woxImage.imageData, style: const TextStyle(fontSize: 30));
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code) {
       if (!woxImage.imageData.contains(";base64,")) {
         return Text("Invalid image data: ${woxImage.imageData}", style: const TextStyle(color: Colors.red));

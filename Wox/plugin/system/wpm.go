@@ -487,6 +487,6 @@ func (w *WPMPlugin) reloadLocalDistPlugin(ctx context.Context, localPlugin plugi
 		w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Reloaded plugin: %s", localPlugin.Metadata.Name))
 	}
 
-	w.api.Notify(ctx, "Reloaded dev plugin", localPlugin.Metadata.Name)
+	w.api.Notify(ctx, "Reloaded dev plugin", fmt.Sprintf("%s(%s)", localPlugin.Metadata.Name, reason))
 	return nil
 }

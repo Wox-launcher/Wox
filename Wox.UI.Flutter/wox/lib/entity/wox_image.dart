@@ -46,6 +46,8 @@ class WoxImage {
       return WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code, imageData: imageDataString);
     } else if (imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_RELATIVE_PATH.code) {
       return WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_RELATIVE_PATH.code, imageData: imageDataString);
+    } else if (imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
+      return WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: imageDataString);
     } else {
       return null;
     }

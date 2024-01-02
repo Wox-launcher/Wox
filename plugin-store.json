@@ -5,7 +5,7 @@
     "Author": "qianlifeng",
     "Version": "0.0.2",
     "MinWoxVersion": "2.0.0",
-    "Runtime": "dotnet",
+    "Runtime": "nodejs",
     "Description": "Wox plugin to manage obsidian vault notes",
     "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Obsidian/main/images/app.png",
     "Website": "https://github.com/qianlifeng/Wox.Plugin.Obsidian",
@@ -13,7 +13,24 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Obsidian/main/images/app.png"
     ],
-    "DateCreated": "2021-08-29 00:00:00",
+    "DateCreated": "2023-08-29 00:00:00",
     "DateUpdated": "2023-11-24 15:51:03"
+  },
+  {
+    "Id": "72a6fc3b-2915-4d50-b4ee-54968c174aba",
+    "Name": "Emoji",
+    "Author": "Wox-launcher",
+    "Version": "0.0.1",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "nodejs",
+    "Description": "Search emojis",
+    "IconUrl": "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Emoji/main/images/app.png",
+    "Website": "https://github.com/Wox-launcher/Wox.Plugin.Emoji",
+    "DownloadUrl": "https://github.com/Wox-launcher/Wox.Plugin.Emoji/releases/latest/download/Wox.Plugin.Emoji.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Emoji/main/snapshot/snapshot.png"
+    ],
+    "DateCreated": "2024-01-02 20:00:00",
+    "DateUpdated": "2024-01-02 20:00:00"
   }
 ]

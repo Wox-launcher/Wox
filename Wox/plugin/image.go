@@ -26,6 +26,7 @@ const (
 	WoxImageTypeRelativePath = "relative"
 	WoxImageTypeBase64       = "base64"
 	WoxImageTypeSvg          = "svg"
+	WoxImageTypeEmoji        = "emoji"
 	WoxImageTypeUrl          = "url"
 )
 
@@ -134,6 +135,13 @@ func NewWoxImageUrl(url string) WoxImage {
 	}
 }
 
+func NewWoxImageEmoji(emoji string) WoxImage {
+	return WoxImage{
+		ImageType: WoxImageTypeEmoji,
+		ImageData: emoji,
+	}
+}
+
 func ParseWoxImageOrDefault(image string, defaultImage WoxImage) WoxImage {
 	if image == "" {
 		return defaultImage
@@ -173,6 +181,9 @@ func ParseWoxImage(image string) (WoxImage, error) {
 	}
 	if imageType == WoxImageTypeUrl {
 		return NewWoxImageUrl(imageData), nil
+	}
+	if imageType == WoxImageTypeEmoji {
+		return NewWoxImageEmoji(imageData), nil
 	}
 
 	return WoxImage{}, fmt.Errorf("unsupported image type: %s", imageType)

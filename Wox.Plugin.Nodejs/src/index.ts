@@ -162,7 +162,7 @@ export interface PublicAPI {
   OnSettingChanged: (callback: (key: string, value: string) => void) => Promise<void>
 }
 
-export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url"
+export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url" | "emoji"
 
 export interface WoxImage {
   ImageType: WoxImageType
