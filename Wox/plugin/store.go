@@ -61,6 +61,13 @@ func (s *Store) getStoreManifests(ctx context.Context) []storeManifest {
 func (s *Store) Start(ctx context.Context) {
 	s.pluginManifests = s.GetStorePluginManifests(ctx)
 
+	util.Go(ctx, "load store plugins immediately", func() {
+		pluginManifests := s.GetStorePluginManifests(util.NewTraceContext())
+		if len(pluginManifests) > 0 {
+			s.pluginManifests = pluginManifests
+		}
+	})
+
 	util.Go(ctx, "load store plugins", func() {
 		for range time.NewTicker(time.Minute * 10).C {
 			pluginManifests := s.GetStorePluginManifests(util.NewTraceContext())
@@ -123,6 +130,10 @@ func (s *Store) GetStorePluginManifest(ctx context.Context, store storeManifest)
 
 func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifest {
 	return lo.Filter(s.pluginManifests, func(manifest StorePluginManifest, _ int) bool {
+		if keyword == "" {
+			return true
+		}
+
 		return util.IsStringMatch(manifest.Name, keyword, false)
 	})
 }

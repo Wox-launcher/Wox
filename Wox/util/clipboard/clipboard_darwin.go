@@ -9,6 +9,7 @@ const char* GetClipboardText();
 char* GetAllClipboardFilePaths();
 unsigned char *GetClipboardImage(size_t *length);
 void WriteClipboardText(const char *text);
+void WriteClipboardImage(const char *imageData, int length);
 _Bool hasClipboardChanged();
 */
 import "C"
@@ -17,6 +18,7 @@ import (
 	"fmt"
 	"github.com/samber/lo"
 	"image"
+	"image/png"
 	"strings"
 	"unsafe"
 )
@@ -66,6 +68,18 @@ func writeTextData(text string) error {
 	defer C.free(unsafe.Pointer(cText))
 	C.WriteClipboardText(cText)
 
+	return nil
+}
+
+func writeImageData(img image.Image) error {
+	buf := new(bytes.Buffer)
+	err := png.Encode(buf, img)
+	if err != nil {
+		return err
+	}
+
+	data := buf.Bytes()
+	C.WriteClipboardImage((*C.char)(unsafe.Pointer(&data[0])), C.int(len(data)))
 	return nil
 }
 

@@ -66,6 +66,9 @@ func Write(data Data) error {
 	if data.GetType() == ClipboardTypeText {
 		return writeTextData(data.String())
 	}
+	if data.GetType() == ClipboardTypeImage {
+		return writeImageData(data.(*ImageData).Image)
+	}
 
 	return errors.New("not implemented")
 }

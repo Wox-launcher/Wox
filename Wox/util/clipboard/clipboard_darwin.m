@@ -74,3 +74,11 @@ void WriteClipboardText(const char *text) {
     NSString *string = [NSString stringWithUTF8String:text];
     [pasteboard setString:string forType:NSPasteboardTypeString];
 }
+
+void WriteClipboardImage(const char *imageData, int length) {
+    NSData *data = [NSData dataWithBytes:imageData length:length];
+    NSImage *image = [[NSImage alloc] initWithData:data];
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard clearContents];
+    [pasteboard writeObjects:@[image]];
+}

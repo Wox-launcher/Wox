@@ -165,6 +165,47 @@ func writeTextData(text string) error {
 	return nil
 }
 
+func writeImageData(img image.Image) error {
+	r, _, err := openClipboard.Call(0)
+	if r == 0 {
+		return fmt.Errorf("failed to open clipboard: %w", err)
+	}
+	defer closeClipboard.Call()
+
+	r, _, err = emptyClipboard.Call()
+	if r == 0 {
+		return fmt.Errorf("failed to clear clipboard: %w", err)
+	}
+
+	buf := new(bytes.Buffer)
+	err = bmp.Encode(buf, img)
+	if err != nil {
+		return fmt.Errorf("failed to encode image: %w", err)
+	}
+
+	hMem, _, err := gAlloc.Call(gmemMoveable, uintptr(buf.Len()))
+	if hMem == 0 {
+		return fmt.Errorf("failed to allocate global memory: %w", err)
+	}
+
+	pMem, _, err := gLock.Call(hMem)
+	if pMem == 0 {
+		gFree.Call(hMem)
+		return fmt.Errorf("failed to lock global memory: %w", err)
+	}
+	defer gUnlock.Call(hMem)
+
+	memMove.Call(pMem, uintptr(unsafe.Pointer(&buf.Bytes()[0])), uintptr(buf.Len()))
+
+	_, _, err = setClipboardData.Call(cFmtDIB, hMem)
+	if err != nil {
+		gFree.Call(hMem)
+		return fmt.Errorf("failed to set clipboard data: %w", err)
+	}
+
+	return nil
+}
+
 func readFilePaths() ([]string, error) {
 	var fileNames []string
 

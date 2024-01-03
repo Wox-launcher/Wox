@@ -306,11 +306,6 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 	}
 
 	if query.Command == "install" {
-		if query.Search == "" {
-			//TODO: return featured plugins
-			return results
-		}
-
 		pluginManifests := plugin.GetStoreManager().Search(ctx, query.Search)
 		for _, pluginManifestShadow := range pluginManifests {
 			// action will be executed in another go routine, so we need to copy the variable
