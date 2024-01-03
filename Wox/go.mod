@@ -27,6 +27,7 @@ require (
 	github.com/samber/lo v1.38.1
 	github.com/saracen/fastzip v0.1.11
 	github.com/sashabaranov/go-openai v1.17.5
+	github.com/shopspring/decimal v1.3.1
 	github.com/stretchr/testify v1.8.4
 	github.com/tidwall/gjson v1.17.0
 	github.com/tidwall/pretty v1.2.1
@@ -62,7 +63,6 @@ require (
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/saracen/zipextra v0.0.0-20220303013732-0187cb0159ea // indirect
-	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/tadvi/systray v0.0.0-20190226123456-11a2b8fa57af // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/vcaesar/keycode v0.10.1 // indirect

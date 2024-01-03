@@ -166,6 +166,10 @@ func writeTextData(text string) error {
 }
 
 func writeImageData(img image.Image) error {
+	const (
+		cFmtDIB = 8
+	)
+
 	r, _, err := openClipboard.Call(0)
 	if r == 0 {
 		return fmt.Errorf("failed to open clipboard: %w", err)
