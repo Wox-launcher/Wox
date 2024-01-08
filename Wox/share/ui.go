@@ -32,7 +32,6 @@ type UI interface {
 	GetServerPort(ctx context.Context) int
 	ChangeTheme(ctx context.Context, theme Theme)
 	OpenSettingWindow(ctx context.Context)
-	OpenDevTools(ctx context.Context)
 	GetAllThemes(ctx context.Context) []Theme
 }
 

@@ -66,10 +66,6 @@ func (u *uiImpl) OpenSettingWindow(ctx context.Context) {
 	})
 }
 
-func (u *uiImpl) OpenDevTools(ctx context.Context) {
-	u.send(ctx, "OpenDevTools", nil)
-}
-
 func (u *uiImpl) GetAllThemes(ctx context.Context) []share.Theme {
 	return GetUIManager().GetAllThemes(ctx)
 }

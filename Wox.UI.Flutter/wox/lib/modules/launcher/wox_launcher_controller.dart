@@ -198,8 +198,6 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       if (moveCursorToEnd) {
         moveQueryBoxCursorToEnd();
       }
-    } else {
-      queryBoxTextFieldController.text = query.toString();
     }
     if (query.isEmpty) {
       _clearQueryResults();
