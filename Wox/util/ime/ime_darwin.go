@@ -13,15 +13,17 @@ import (
 	"unsafe"
 )
 
-func SwitchInputMethodABC() {
+func SwitchInputMethodABC() error {
 	abcInputMethodID := "com.apple.keylayout.ABC"
 
 	inputMethod := C.GoString(C.getCurrentInputMethod())
 	if inputMethod == abcInputMethodID {
-		return
+		return nil
 	}
 
 	inputMethodIDStr := C.CString(abcInputMethodID)
 	defer C.free(unsafe.Pointer(inputMethodIDStr))
 	C.switchInputMethod(inputMethodIDStr)
+
+	return nil
 }

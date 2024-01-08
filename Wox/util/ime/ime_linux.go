@@ -1,5 +1,5 @@
 package ime
 
-func SwitchInputMethodABC() {
-	return
+func SwitchInputMethodABC() error {
+	return nil
 }
