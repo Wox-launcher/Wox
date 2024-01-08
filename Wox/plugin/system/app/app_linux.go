@@ -13,6 +13,10 @@ type LinuxRetriever struct {
 	api plugin.API
 }
 
+func (a *LinuxRetriever) UpdateAPI(api plugin.API) {
+	a.api = api
+}
+
 func (a *LinuxRetriever) GetPlatform() string {
 	return util.PlatformLinux
 }

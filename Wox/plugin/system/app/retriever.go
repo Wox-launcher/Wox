@@ -17,6 +17,7 @@ type appDirectory struct {
 }
 
 type Retriever interface {
+	UpdateAPI(api plugin.API)
 	GetPlatform() string
 	GetAppDirectories(ctx context.Context) []appDirectory
 	GetAppExtensions(ctx context.Context) []string

@@ -1,4 +1,4 @@
-package util
+package ime
 
 func SwitchInputMethodABC() {
 	return

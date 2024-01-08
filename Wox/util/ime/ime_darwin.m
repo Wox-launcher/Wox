@@ -1,9 +1,3 @@
-package util
-
-/*
-#cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Cocoa
-
 #import <Cocoa/Cocoa.h>
 #include <Carbon/Carbon.h>
 #include <stdio.h>
@@ -35,22 +29,4 @@ void switchInputMethod(const char *inputMethodID) {
     }
 
     CFRelease(inputMethodIDString);
-}
-*/
-import "C"
-import (
-	"unsafe"
-)
-
-func SwitchInputMethodABC() {
-	abcInputMethodID := "com.apple.keylayout.ABC"
-
-	inputMethod := C.GoString(C.getCurrentInputMethod())
-	if inputMethod == abcInputMethodID {
-		return
-	}
-
-	inputMethodIDStr := C.CString(abcInputMethodID)
-	defer C.free(unsafe.Pointer(inputMethodIDStr))
-	C.switchInputMethod(inputMethodIDStr)
 }

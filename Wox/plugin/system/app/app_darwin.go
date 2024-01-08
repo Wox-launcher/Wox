@@ -34,6 +34,10 @@ type MacRetriever struct {
 	api plugin.API
 }
 
+func (a *MacRetriever) UpdateAPI(api plugin.API) {
+	a.api = api
+}
+
 func (a *MacRetriever) GetPlatform() string {
 	return util.PlatformMacOS
 }
@@ -189,6 +193,8 @@ func (a *MacRetriever) parseMacAppIconFromInfoPlist(ctx context.Context, appPath
 	if decodeErr != nil {
 		return "", fmt.Errorf("failed to decode Info.plist: %s", decodeErr.Error())
 	}
+
+	// handle CFBundleIconFile
 	iconName, exist := plistData["CFBundleIconFile"].(string)
 	if exist {
 		if !strings.HasSuffix(iconName, ".icns") {
@@ -200,9 +206,34 @@ func (a *MacRetriever) parseMacAppIconFromInfoPlist(ctx context.Context, appPath
 		}
 
 		return iconPath, nil
-	} else {
-		return "", fmt.Errorf("info plist doesnt have CFBundleIconFile property")
 	}
+
+	// handle CFBundleIcons if not found above
+	icons, cfBundleIconsExist := plistData["CFBundleIcons"].(map[string]any)
+	if cfBundleIconsExist {
+		primaryIcon, cfBundlePrimaryIconExist := icons["CFBundlePrimaryIcon"].(map[string]any)
+		if cfBundlePrimaryIconExist {
+			iconFiles, cfBundleIconFilesExist := primaryIcon["CFBundleIconFiles"].([]any)
+			if cfBundleIconFilesExist {
+				lastIconName := iconFiles[len(iconFiles)-1].(string)
+				iconPath := ""
+				files, readDirErr := os.ReadDir(path.Dir(plistPath))
+				if readDirErr == nil {
+					for _, file := range files {
+						if strings.HasPrefix(file.Name(), lastIconName) {
+							iconPath = path.Join(path.Dir(plistPath), file.Name())
+							break
+						}
+					}
+				}
+				if iconPath != "" {
+					return iconPath, nil
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf("info plist doesnt have CFBundleIconFile property")
 }
 
 func (a *MacRetriever) parseMacAppIconFromCgo(ctx context.Context, appPath string) (string, error) {

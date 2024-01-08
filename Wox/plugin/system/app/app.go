@@ -87,6 +87,7 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 	a.api = initParams.API
 	a.pluginDirectory = initParams.PluginDirectory
 	a.retriever = a.getRetriever(ctx)
+	a.retriever.UpdateAPI(a.api)
 
 	appCache, cacheErr := a.loadAppCache(ctx)
 	if cacheErr == nil {

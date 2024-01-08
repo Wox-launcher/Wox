@@ -16,6 +16,7 @@ import (
 	"wox/share"
 	"wox/util"
 	"wox/util/hotkey"
+	"wox/util/ime"
 	"wox/util/screen"
 )
 
@@ -360,7 +361,7 @@ func onAppShow(ctx context.Context) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if woxSetting.SwitchInputMethodABC {
 		util.GetLogger().Info(ctx, "switch input method to ABC")
-		util.SwitchInputMethodABC()
+		ime.SwitchInputMethodABC()
 	}
 }
 

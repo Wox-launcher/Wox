@@ -15,6 +15,10 @@ type WindowsRetriever struct {
 	api plugin.API
 }
 
+func (a *WindowsRetriever) UpdateAPI(api plugin.API) {
+	a.api = api
+}
+
 func (a *WindowsRetriever) GetPlatform() string {
 	return util.PlatformWindows
 }
