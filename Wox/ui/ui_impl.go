@@ -151,6 +151,7 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 	} else if queryType == plugin.QueryTypeSelection {
 		changedQuery = share.ChangedQuery{
 			QueryType:      plugin.QueryTypeSelection,
+			QueryText:      queryText,
 			QuerySelection: querySelection,
 		}
 	} else {
@@ -195,7 +196,6 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 			})
 			totalResultCount += len(results)
 			resultDebouncer.Add(ctx, results)
-			//responseUISuccessWithData(ctx, request, results)
 		case <-doneChan:
 			logger.Info(ctx, fmt.Sprintf("query done, total results: %d, cost %d ms", totalResultCount, util.GetSystemTimestamp()-startTimestamp))
 			resultDebouncer.Done(ctx)

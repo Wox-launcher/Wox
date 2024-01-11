@@ -27,8 +27,6 @@ type Query struct {
 
 	// Raw query, this includes trigger keyword if it has.
 	// We didn't recommend use this property directly. You should always use Search property.
-	//
-	// NOTE: Only available when query type is QueryTypeInput
 	RawQuery string
 
 	// Trigger keyword of a query. It can be empty if user is using global trigger keyword.
@@ -45,8 +43,6 @@ type Query struct {
 
 	// Search part of a query.
 	// Empty search means this query doesn't have a search part.
-	//
-	// NOTE: Only available when query type is QueryTypeInput
 	Search string
 
 	// User selected or drag-drop data, can be text or file or image etc

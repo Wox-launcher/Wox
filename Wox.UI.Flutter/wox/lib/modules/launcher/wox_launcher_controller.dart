@@ -101,6 +101,11 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       selectedQueryHistoryIndex = -1;
     }
 
+    //clear query box text if query type is selection
+    if (getCurrentQuery().queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
+      onQueryChanged(WoxChangeQuery.emptyInput());
+    }
+
     WoxWebsocketMsgUtil.instance.sendMessage(
       WoxWebsocketMsg(
         id: const UuidV4().generate(),
@@ -109,6 +114,10 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
         data: {"isVisible": "false", "query": _query.value.toJson()},
       ),
     );
+  }
+
+  WoxChangeQuery getCurrentQuery() {
+    return _query.value;
   }
 
   @override
@@ -182,6 +191,25 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     );
   }
 
+  void onQueryBoxTextChanged(String value) {
+    canArrowUpHistory = false;
+
+    WoxChangeQuery woxChangeQuery = WoxChangeQuery(
+      queryId: const UuidV4().generate(),
+      queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
+      queryText: value,
+      querySelection: Selection.empty(),
+    );
+
+    // do filter if query type is selection
+    if (_query.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
+      woxChangeQuery.queryType = WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code;
+      woxChangeQuery.querySelection = _query.value.querySelection;
+    }
+
+    onQueryChanged(woxChangeQuery);
+  }
+
   @override
   void onQueryChanged(WoxChangeQuery query, {bool moveCursorToEnd = false}) {
     if (query.queryId == "") {
@@ -191,18 +219,17 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     _query.value = query;
     isShowActionPanel.value = false;
 
-    if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
-      if (queryBoxTextFieldController.text != query.queryText) {
-        queryBoxTextFieldController.text = query.queryText;
-      }
-      if (moveCursorToEnd) {
-        moveQueryBoxCursorToEnd();
-      }
+    if (queryBoxTextFieldController.text != query.queryText) {
+      queryBoxTextFieldController.text = query.queryText;
+    }
+    if (moveCursorToEnd) {
+      moveQueryBoxCursorToEnd();
     }
     if (query.isEmpty) {
       _clearQueryResults();
       return;
     }
+
     // delay clear results, otherwise windows height will shrink immediately,
     // and then the query result is received which will expand the windows height. so it will causes window flicker
     _clearQueryResultsTimer.cancel();

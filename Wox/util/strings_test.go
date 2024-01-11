@@ -39,4 +39,8 @@ func TestIsStringMatchScore(t *testing.T) {
 	match, score := IsStringMatchScore("有道词典", "有", true)
 	assert.True(t, match)
 	assert.GreaterOrEqual(t, score, int64(1))
+
+	match, score = IsStringMatchScore("Share with AirDrop", "air", true)
+	assert.True(t, match)
+	assert.GreaterOrEqual(t, score, int64(1))
 }

@@ -35,6 +35,10 @@ class WoxChangeQuery {
   static WoxChangeQuery empty() {
     return WoxChangeQuery(queryId: "", queryType: "", queryText: "", querySelection: Selection.empty());
   }
+
+  static WoxChangeQuery emptyInput() {
+    return WoxChangeQuery(queryId: "", queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code, queryText: "", querySelection: Selection.empty());
+  }
 }
 
 class Selection {

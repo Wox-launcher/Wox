@@ -357,6 +357,15 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	for i := range results {
 		results[i] = m.PolishResult(ctx, pluginInstance, query, results[i])
 	}
+
+	if query.Type == QueryTypeSelection && query.Search != "" {
+		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+		results = lo.Filter(results, func(item QueryResult, _ int) bool {
+			match, _ := util.IsStringMatchScore(item.Title, query.Search, woxSetting.UsePinYin)
+			return match
+		})
+	}
+
 	return results
 }
 
@@ -652,6 +661,8 @@ func (m *Manager) NewQuery(ctx context.Context, changedQuery share.ChangedQuery)
 	if changedQuery.QueryType == QueryTypeSelection {
 		return Query{
 			Type:      QueryTypeSelection,
+			RawQuery:  changedQuery.QueryText,
+			Search:    changedQuery.QueryText,
 			Selection: changedQuery.QuerySelection,
 		}, nil
 	}

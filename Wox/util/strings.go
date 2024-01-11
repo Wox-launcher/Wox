@@ -20,6 +20,9 @@ func IsStringMatch(term string, subTerm string, usePinYin bool) bool {
 }
 
 func IsStringMatchScore(term string, subTerm string, usePinYin bool) (isMatch bool, score int64) {
+	term = strings.ToLower(term)
+	subTerm = strings.ToLower(subTerm)
+
 	match, s := isStringMatchScoreFuzzy(term, subTerm, usePinYin)
 	if match {
 		return true, s
