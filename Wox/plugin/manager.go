@@ -602,6 +602,10 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 }
 
 func (m *Manager) QueryFallback(ctx context.Context, query Query) (results []QueryResultUI) {
+	if !query.IsGlobalQuery() {
+		return
+	}
+
 	for _, instance := range m.instances {
 		pluginInstance := instance
 		if v, ok := pluginInstance.Plugin.(FallbackPlugin); ok {

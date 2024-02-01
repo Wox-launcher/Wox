@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"github.com/getlantern/systray"
-	"github.com/getlantern/systray/example/icon"
 	"os"
 	"wox/plugin"
 	"wox/ui"
@@ -15,10 +14,9 @@ func startTray(ctx context.Context) {
 }
 
 func onReady() {
-	systray.SetIcon(icon.Data)
+	systray.SetIcon(IconData)
 	systray.SetTooltip("Wox")
 	mQuit := systray.AddMenuItem("Quit", "Quit the whole app")
-	mQuit.SetIcon(icon.Data)
 
 	for range mQuit.ClickedCh {
 		ExitApp(util.NewTraceContext())
