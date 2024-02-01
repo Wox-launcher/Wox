@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:lpinyin/lpinyin.dart';
@@ -18,6 +19,7 @@ import 'package:wox/enums/wox_msg_method_enum.dart';
 import 'package:wox/enums/wox_msg_type_enum.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
+import 'package:wox/enums/wox_selection_type_enum.dart';
 import 'package:wox/interfaces/wox_launcher_interface.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/log.dart';
@@ -583,5 +585,23 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       return PinyinHelper.getPinyin(str, separator: "", format: PinyinFormat.WITHOUT_TONE);
     }
     return str;
+  }
+
+  Future<void> handleDropFiles(DropDoneDetails details) async {
+    Logger.instance.info("Received drop files: $details");
+
+    await windowManager.focus();
+    queryBoxFocusNode.requestFocus();
+
+    canArrowUpHistory = false;
+
+    WoxChangeQuery woxChangeQuery = WoxChangeQuery(
+      queryId: const UuidV4().generate(),
+      queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code,
+      queryText: "",
+      querySelection: Selection(type: WoxSelectionTypeEnum.WOX_SELECTION_TYPE_FILE.code, text: "", filePaths: details.files.map((e) => e.path).toList()),
+    );
+
+    onQueryChanged(woxChangeQuery);
   }
 }
