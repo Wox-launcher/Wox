@@ -28,11 +28,12 @@ func init() {
 }
 
 type webSearch struct {
-	Urls    []string
-	Title   string
-	Keyword string
-	Icon    plugin.WoxImage
-	Enabled bool
+	Urls       []string
+	Title      string
+	Keyword    string
+	IsFallback bool //if true, this search will be used when no other search is matched
+	Icon       plugin.WoxImage
+	Enabled    bool
 }
 
 type WebSearchPlugin struct {
@@ -179,6 +180,9 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 
 	for _, search := range r.webSearches {
 		searchDummy := search
+		if searchDummy.IsFallback {
+			continue
+		}
 		if strings.ToLower(searchDummy.Keyword) == strings.ToLower(triggerKeyword) {
 			results = append(results, plugin.QueryResult{
 				Title: strings.ReplaceAll(searchDummy.Title, "{query}", otherQuery),
@@ -200,4 +204,32 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 	}
 
 	return
+}
+
+func (r *WebSearchPlugin) QueryFallback(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
+	for _, search := range r.webSearches {
+		searchDummy := search
+		if !searchDummy.IsFallback {
+			continue
+		}
+
+		results = append(results, plugin.QueryResult{
+			Title: strings.ReplaceAll(searchDummy.Title, "{query}", query.RawQuery),
+			Score: 100,
+			Icon:  searchDummy.Icon,
+			Actions: []plugin.QueryResultAction{
+				{
+					Name: "Search",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						for _, url := range searchDummy.Urls {
+							util.ShellOpen(strings.ReplaceAll(url, "{query}", query.RawQuery))
+							time.Sleep(time.Millisecond * 100)
+						}
+					},
+				},
+			},
+		})
+	}
+
+	return results
 }

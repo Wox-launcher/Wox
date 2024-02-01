@@ -198,6 +198,21 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 			resultDebouncer.Add(ctx, results)
 		case <-doneChan:
 			logger.Info(ctx, fmt.Sprintf("query done, total results: %d, cost %d ms", totalResultCount, util.GetSystemTimestamp()-startTimestamp))
+
+			// if there is no result, show fallback websearch
+			if totalResultCount == 0 {
+				fallbackResults := plugin.GetPluginManager().QueryFallback(ctx, query)
+				if len(fallbackResults) > 0 {
+					lo.ForEach(fallbackResults, func(_ plugin.QueryResultUI, index int) {
+						fallbackResults[index].QueryId = queryId
+					})
+					resultDebouncer.Add(ctx, fallbackResults)
+					logger.Info(ctx, fmt.Sprintf("no result, show %d fallback results", len(fallbackResults)))
+				} else {
+					logger.Info(ctx, "no result, no fallback results")
+				}
+			}
+
 			resultDebouncer.Done(ctx)
 			return
 		case <-time.After(time.Second * 10):

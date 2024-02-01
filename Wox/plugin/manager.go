@@ -601,6 +601,24 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 	return
 }
 
+func (m *Manager) QueryFallback(ctx context.Context, query Query) (results []QueryResultUI) {
+	for _, instance := range m.instances {
+		pluginInstance := instance
+		if v, ok := pluginInstance.Plugin.(FallbackPlugin); ok {
+			queryResults := v.QueryFallback(ctx, query)
+			for i := range queryResults {
+				queryResults[i] = m.PolishResult(ctx, pluginInstance, query, queryResults[i])
+			}
+			queryResultsUI := lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
+				return item.ToUI()
+			})
+			results = append(results, queryResultsUI...)
+		}
+	}
+
+	return results
+}
+
 func (m *Manager) queryParallel(ctx context.Context, pluginInstance *Instance, query Query, results chan []QueryResultUI, done chan bool, counter *atomic.Int32) {
 	util.Go(ctx, fmt.Sprintf("[%s] parallel query", pluginInstance.Metadata.Name), func() {
 		if !m.canOperateQuery(ctx, pluginInstance, query) {

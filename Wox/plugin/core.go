@@ -14,6 +14,10 @@ type SystemPlugin interface {
 	GetMetadata() Metadata
 }
 
+type FallbackPlugin interface {
+	QueryFallback(ctx context.Context, query Query) []QueryResult
+}
+
 type InitParams struct {
 	API             API
 	PluginDirectory string
