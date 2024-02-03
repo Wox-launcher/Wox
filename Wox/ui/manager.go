@@ -177,7 +177,7 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 			QueryType:      plugin.QueryTypeSelection,
 			QuerySelection: selection,
 		})
-		m.ui.ToggleApp(ctx)
+		m.ui.ShowApp(ctx, share.ShowContext{SelectAll: false})
 	})
 }
 

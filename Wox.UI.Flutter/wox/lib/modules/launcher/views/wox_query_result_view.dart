@@ -64,17 +64,14 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                   borderRadius: BorderRadius.circular(controller.woxTheme.value.actionQueryBoxBorderRadius.toDouble()),
                 ),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 320, minHeight: 210),
+                  constraints: const BoxConstraints(maxWidth: 320),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text("Actions", style: TextStyle(color: fromCssColor(controller.woxTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
                       const Divider(),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 120),
-                        child: getActionListView(),
-                      ),
+                      getActionListView(),
                       getActionQueryBox()
                     ],
                   ),
