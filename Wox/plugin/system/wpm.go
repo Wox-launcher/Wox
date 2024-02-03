@@ -387,8 +387,15 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 		return
 	}
 
-	// TODO: let user choose the directory
-	pluginDirectory := path.Join(util.GetLocation().GetPluginDirectory(), pluginName)
+	w.creatingProcess = "Please choose a directory..."
+	pluginDirectories := plugin.GetPluginManager().GetUI().PickFiles(ctx, share.PickFilesParams{IsDirectory: true})
+	if len(pluginDirectories) == 0 {
+		w.api.Notify(ctx, "Please choose a directory", "You need to choose a directory to create the plugin")
+		return
+	}
+	pluginDirectory := path.Join(pluginDirectories[0], pluginName)
+	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Creating plugin in directory: %s", pluginDirectory))
+
 	cpErr := cp.Copy(path.Join(tempPluginDirectory, template.Name+"-main"), pluginDirectory)
 	if cpErr != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to copy template: %s", cpErr.Error()))
@@ -443,6 +450,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 	w.creatingProcess = ""
 	w.localPluginDirectories = append(w.localPluginDirectories, pluginDirectory)
 	w.saveLocalPluginDirectories(ctx)
+	w.loadDevPlugin(ctx, pluginDirectory)
 	w.api.ChangeQuery(ctx, share.ChangedQuery{
 		QueryType: plugin.QueryTypeInput,
 		QueryText: fmt.Sprintf("%s dev ", query.TriggerKeyword),

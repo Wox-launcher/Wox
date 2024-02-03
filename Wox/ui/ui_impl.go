@@ -21,6 +21,7 @@ import (
 )
 
 type uiImpl struct {
+	requestMap *util.HashMap[string, chan WebsocketMsg]
 }
 
 func (u *uiImpl) ChangeQuery(ctx context.Context, query share.ChangedQuery) {
@@ -70,12 +71,52 @@ func (u *uiImpl) GetAllThemes(ctx context.Context) []share.Theme {
 	return GetUIManager().GetAllThemes(ctx)
 }
 
-func (u *uiImpl) send(ctx context.Context, method string, data any) {
-	requestUI(ctx, WebsocketMsg{
-		Id:     uuid.NewString(),
+func (u *uiImpl) send(ctx context.Context, method string, data any) (responseData any, responseErr error) {
+	requestID := uuid.NewString()
+	resultChan := make(chan WebsocketMsg)
+	u.requestMap.Store(requestID, resultChan)
+	defer u.requestMap.Delete(requestID)
+
+	startTimestamp := util.GetSystemTimestamp()
+	err := requestUI(ctx, WebsocketMsg{
+		Id:     requestID,
 		Method: method,
 		Data:   data,
 	})
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("send message to UI error: %s", err.Error()))
+		return "", err
+	}
+
+	select {
+	case <-time.NewTimer(time.Second * 60).C:
+		logger.Error(ctx, fmt.Sprintf("invoke ui method %s response timeout, response time: %dms", method, util.GetSystemTimestamp()-startTimestamp))
+		return "", fmt.Errorf("request timeout, request id: %s", requestID)
+	case response := <-resultChan:
+		util.GetLogger().Debug(ctx, fmt.Sprintf("invoke ui method %s response time: %dms", method, util.GetSystemTimestamp()-startTimestamp))
+		if !response.Success {
+			return response.Data, errors.New("ui method response error")
+		} else {
+			return response.Data, nil
+		}
+	}
+}
+
+func (u *uiImpl) PickFiles(ctx context.Context, params share.PickFilesParams) []string {
+	respData, err := u.send(ctx, "PickFiles", params)
+	if err != nil {
+		return nil
+	}
+	if _, ok := respData.([]any); !ok {
+		logger.Error(ctx, fmt.Sprintf("pick files response data type error: %T", respData))
+		return nil
+	}
+
+	var result []string
+	lo.ForEach(respData.([]any), func(file any, _ int) {
+		result = append(result, file.(string))
+	})
+	return result
 }
 
 func getShowAppParams(ctx context.Context, selectAll bool) map[string]any {
@@ -112,6 +153,22 @@ func onUIRequest(ctx context.Context, request WebsocketMsg) {
 	case "GetQueryHistories":
 		handleGetQueryHistories(ctx, request)
 	}
+}
+
+func onUIResponse(ctx context.Context, response WebsocketMsg) {
+	requestID := response.Id
+	if requestID == "" {
+		logger.Error(ctx, "response id not found")
+		return
+	}
+
+	resultChan, exist := GetUIManager().GetUI(ctx).(*uiImpl).requestMap.Load(requestID)
+	if !exist {
+		logger.Error(ctx, fmt.Sprintf("response id not found: %s", requestID))
+		return
+	}
+
+	resultChan <- response
 }
 
 func handleQuery(ctx context.Context, request WebsocketMsg) {

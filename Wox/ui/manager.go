@@ -40,7 +40,9 @@ func GetUIManager() *Manager {
 		managerInstance = &Manager{}
 		managerInstance.mainHotkey = &hotkey.Hotkey{}
 		managerInstance.selectionHotkey = &hotkey.Hotkey{}
-		managerInstance.ui = &uiImpl{}
+		managerInstance.ui = &uiImpl{
+			requestMap: util.NewHashMap[string, chan WebsocketMsg](),
+		}
 		managerInstance.themes = util.NewHashMap[string, share.Theme]()
 		logger = util.GetLogger()
 	})

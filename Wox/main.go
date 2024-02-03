@@ -102,7 +102,8 @@ func main() {
 
 		t := hotkey.Hotkey{}
 		t.Register(ctx, "ctrl+ctrl", func() {
-			ui.GetUIManager().GetUI(ctx).Notify(ctx, "Wox", "Wox is running")
+			files := plugin.GetPluginManager().GetUI().PickFiles(ctx, share.PickFilesParams{IsDirectory: true})
+			ui.GetUIManager().GetUI(ctx).Notify(ctx, "Picked files", fmt.Sprintf("%v", files))
 		})
 
 		if util.IsProd() {

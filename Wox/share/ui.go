@@ -33,10 +33,15 @@ type UI interface {
 	ChangeTheme(ctx context.Context, theme Theme)
 	OpenSettingWindow(ctx context.Context)
 	GetAllThemes(ctx context.Context) []Theme
+	PickFiles(ctx context.Context, params PickFilesParams) []string
 }
 
 type ShowContext struct {
 	SelectAll bool
+}
+
+type PickFilesParams struct {
+	IsDirectory bool
 }
 
 var ExitApp func(ctx context.Context)

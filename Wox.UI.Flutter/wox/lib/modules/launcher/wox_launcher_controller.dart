@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:lpinyin/lpinyin.dart';
@@ -252,6 +253,18 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   @override
+  Future<List<String>> pickFiles(PickFilesParams params) async {
+    if (params.isDirectory) {
+      String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      if (selectedDirectory != null) {
+        return [selectedDirectory];
+      }
+    }
+
+    return [];
+  }
+
+  @override
   void onQueryActionChanged(String queryAction) {
     filterResultActions.value = _resultActions.where((element) => transferChineseToPinYin(element.name.toLowerCase()).contains(queryAction.toLowerCase())).toList().obs();
     filterResultActions.refresh();
@@ -296,20 +309,45 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     filterResultActions.refresh();
   }
 
-  void handleWebSocketMessage(WoxWebsocketMsg msg) {
-    if (msg.method != "Query") {
+  Future<void> handleWebSocketMessage(WoxWebsocketMsg msg) async {
+    if (msg.method != WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code) {
       Logger.instance.info("Received message: ${msg.method}");
     }
 
+    if (msg.type == WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code) {
+      return handleWebSocketRequestMessage(msg);
+    } else if (msg.type == WoxMsgTypeEnum.WOX_MSG_TYPE_RESPONSE.code) {
+      return handleWebSocketResponseMessage(msg);
+    }
+  }
+
+  Future<void> handleWebSocketRequestMessage(WoxWebsocketMsg msg) async {
     if (msg.method == "ToggleApp") {
       toggleApp(ShowAppParams.fromJson(msg.data));
+      responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "HideApp") {
       hideApp();
+      responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ShowApp") {
       showApp(ShowAppParams.fromJson(msg.data));
+      responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ChangeQuery") {
       onQueryChanged(WoxChangeQuery.fromJson(msg.data), moveCursorToEnd: true);
-    } else if (msg.method == "Query") {
+      responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "ChangeTheme") {
+      final theme = WoxTheme.fromJson(msg.data);
+      WoxThemeUtil.instance.changeTheme(theme);
+      woxTheme.value = theme;
+      responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "PickFiles") {
+      final pickFilesParams = PickFilesParams.fromJson(msg.data);
+      final files = await pickFiles(pickFilesParams);
+      responseWoxWebsocketRequest(msg, true, files);
+    }
+  }
+
+  Future<void> handleWebSocketResponseMessage(WoxWebsocketMsg msg) async {
+    if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code) {
       var results = <WoxQueryResult>[];
       for (var item in msg.data) {
         results.add(WoxQueryResult.fromJson(item));
@@ -317,11 +355,19 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       Logger.instance.info("Received message: ${msg.method}, results count: ${results.length}");
 
       _onReceivedQueryResults(results);
-    } else if (msg.method == "ChangeTheme") {
-      final theme = WoxTheme.fromJson(msg.data);
-      WoxThemeUtil.instance.changeTheme(theme);
-      woxTheme.value = theme;
     }
+  }
+
+  void responseWoxWebsocketRequest(WoxWebsocketMsg request, bool success, dynamic data) {
+    WoxWebsocketMsgUtil.instance.sendMessage(
+      WoxWebsocketMsg(
+        id: request.id,
+        type: WoxMsgTypeEnum.WOX_MSG_TYPE_RESPONSE.code,
+        method: request.method,
+        data: data,
+        success: success,
+      ),
+    );
   }
 
   bool _isResultItemAtBottom(int index) {
