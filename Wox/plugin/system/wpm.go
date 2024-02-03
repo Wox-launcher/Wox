@@ -429,7 +429,8 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 		}
 
 		packageJsonString := string(packageJson)
-		packageJsonString = strings.ReplaceAll(packageJsonString, "replace_me_with_name", pluginName)
+		packageName := strings.ReplaceAll(strings.ToLower(pluginName), ".", "_")
+		packageJsonString = strings.ReplaceAll(packageJsonString, "replace_me_with_name", packageName)
 
 		writePackageErr := os.WriteFile(packageJsonPath, []byte(packageJsonString), 0644)
 		if writePackageErr != nil {

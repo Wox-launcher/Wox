@@ -41,6 +41,10 @@ func (i *Instance) GetQueryCommands() []MetadataCommand {
 	return commands
 }
 
+func (i *Instance) String() string {
+	return i.Metadata.Name
+}
+
 func (i *Instance) SaveSetting(ctx context.Context) error {
 	return setting.GetSettingManager().SavePluginSetting(ctx, i.Metadata.Id, i.Setting)
 }
