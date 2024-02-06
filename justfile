@@ -37,10 +37,10 @@ default:
       upx --brute Release/wox-linux-amd64; \
       chmod +x Release/wox-linux-amd64; \
     elif [ "{{target}}" = "darwin-arm64" ]; then \
-      cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-arm64 && cd ..; \
+      cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 CGO_CFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="-mmacosx-version-min=10.15" go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-arm64 && cd ..; \
       just _bundle_mac_app wox-mac-arm64; \
     elif [ "{{target}}" = "darwin-amd64" ]; then \
-      cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-amd64 && cd ..; \
+      cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 CGO_CFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="-mmacosx-version-min=10.15" go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-amd64 && cd ..; \
       just _bundle_mac_app wox-mac-amd64; \
     fi
 
