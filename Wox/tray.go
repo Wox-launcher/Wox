@@ -14,12 +14,19 @@ func startTray(ctx context.Context) {
 }
 
 func onReady() {
+	ctx := util.NewTraceContext()
 	systray.SetIcon(IconData)
 	systray.SetTooltip("Wox")
-	mQuit := systray.AddMenuItem("Quit", "Quit the whole app")
+	mToggle := systray.AddMenuItem("Toggle Wox", "")
+	mQuit := systray.AddMenuItem("Quit", "")
 
-	for range mQuit.ClickedCh {
-		ExitApp(util.NewTraceContext())
+	for {
+		select {
+		case <-mToggle.ClickedCh:
+			ui.GetUIManager().GetUI(ctx).ToggleApp(ctx)
+		case <-mQuit.ClickedCh:
+			ExitApp(util.NewTraceContext())
+		}
 	}
 }
 
