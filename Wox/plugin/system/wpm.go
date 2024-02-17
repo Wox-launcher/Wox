@@ -310,11 +310,37 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 		for _, pluginManifestShadow := range pluginManifests {
 			// action will be executed in another go routine, so we need to copy the variable
 			pluginManifest := pluginManifestShadow
+
+			screenShotsMarkdown := lo.Map(pluginManifest.ScreenshotUrls, func(screenshot string, _ int) string {
+				return fmt.Sprintf("![screenshot](%s)", screenshot)
+			})
+
 			results = append(results, plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    pluginManifest.Name,
 				SubTitle: pluginManifest.Description,
 				Icon:     plugin.NewWoxImageUrl(pluginManifest.IconUrl),
+				Preview: plugin.WoxPreview{
+					PreviewType: plugin.WoxPreviewTypeMarkdown,
+					PreviewData: fmt.Sprintf(`
+### Description
+
+%s
+
+### Website
+
+%s
+
+### Screenshots
+
+%s
+`, pluginManifest.Description, pluginManifest.Website, strings.Join(screenShotsMarkdown, "\n")),
+					PreviewProperties: map[string]string{
+						"Author":  pluginManifest.Author,
+						"Version": pluginManifest.Version,
+						"Website": pluginManifest.Website,
+					},
+				},
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "install",

@@ -2,22 +2,21 @@ import asyncio
 import sys
 import uuid
 
-from loguru import logger
+import logger
+from host import start_websocket
 
-from wox import start_websocket
-
-if len(sys.argv) != 3:
-    print('Usage: wox.py <port> <logDirectory>')
+if len(sys.argv) != 4:
+    print('Usage: python python-host.pyz <port> <logDirectory>')
     sys.exit(1)
 
 port = int(sys.argv[1])
 log_directory = (sys.argv[2])
 
-logger.remove()
-logger.add(f"{log_directory}/python.log", format="{time:YYYY-MM-DD HH:mm:ss.SSS} [{level}] {message}", rotation="100 MB", retention="3 days")
-
-logger.info("----------------------------------------")
-logger.info(f"Start python host: {uuid.uuid4()}")
-logger.info(f"port: {port}")
+trace_id = f"{uuid.uuid4()}"
+host_id = f"python-{uuid.uuid4()}"
+logger.update_log_directory(log_directory)
+logger.info(trace_id, "----------------------------------------")
+logger.info(trace_id, f"start python host: {host_id}")
+logger.info(trace_id, f"port: {port}")
 
 asyncio.run(start_websocket(port))

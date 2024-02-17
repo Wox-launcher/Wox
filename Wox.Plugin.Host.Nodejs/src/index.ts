@@ -16,7 +16,7 @@ const hostId = `node-${crypto.randomUUID()}`
 
 const startupTraceId = crypto.randomUUID()
 logger.info(startupTraceId, "----------------------------------------")
-logger.info(startupTraceId, `Start nodejs host: ${hostId}`)
+logger.info(startupTraceId, `start nodejs host: ${hostId}`)
 logger.info(startupTraceId, `port: ${port}`)
 logger.info(startupTraceId, `wox pid: ${woxPid}`)
 

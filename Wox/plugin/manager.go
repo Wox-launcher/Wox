@@ -89,6 +89,9 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 		if entry.Name() == ".DS_Store" {
 			continue
 		}
+		if !entry.IsDir() {
+			continue
+		}
 
 		pluginDirectory := path.Join(basePluginDirectory, entry.Name())
 		metadata, metadataErr := m.ParseMetadata(ctx, pluginDirectory)
