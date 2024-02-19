@@ -205,11 +205,21 @@ func (m *Manager) StartWebsocketAndWait(ctx context.Context, port int) {
 }
 
 func (m *Manager) StartUIApp(ctx context.Context, port int) error {
-	//check if electron exist
 	var appPath = util.GetLocation().GetUIAppPath()
-	if _, statErr := os.Stat(appPath); os.IsNotExist(statErr) {
+	if fileInfo, statErr := os.Stat(appPath); os.IsNotExist(statErr) {
 		logger.Info(ctx, "UI app not exist")
 		return errors.New("UI app not exist")
+	} else {
+		if !util.IsFileExecAny(fileInfo.Mode()) {
+			// add execute permission
+			chmodErr := os.Chmod(appPath, 0755)
+			if chmodErr != nil {
+				logger.Error(ctx, fmt.Sprintf("failed to add execute permission to ui app: %s", chmodErr.Error()))
+				return chmodErr
+			} else {
+				logger.Info(ctx, "added execute permission to ui app")
+			}
+		}
 	}
 
 	logger.Info(ctx, fmt.Sprintf("start ui, path=%s, port=%d, pid=%d", appPath, port, os.Getpid()))
