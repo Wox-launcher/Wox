@@ -3,6 +3,7 @@ package plugin
 import (
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"wox/setting"
 )
 
 func getFakePluginInstances() []*Instance {
@@ -21,6 +22,7 @@ func getFakePluginInstances() []*Instance {
 					},
 				},
 			},
+			Setting: &setting.PluginSetting{},
 		},
 	}
 }

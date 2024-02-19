@@ -10,7 +10,7 @@ func TestStringMatcherPinyin(t *testing.T) {
 	assert.True(t, IsStringMatch("网易云音乐", "yyy", true))
 	assert.True(t, IsStringMatch("腾讯qq", "tx", true))
 	assert.True(t, IsStringMatch("QQ音乐.app", "yinyue", true))
-	assert.True(t, IsStringMatch("Microsoft Remote Desktop", "test", true))
+	assert.False(t, IsStringMatch("Microsoft Remote Desktop", "test", true))
 }
 
 func TestStringMatcher(t *testing.T) {

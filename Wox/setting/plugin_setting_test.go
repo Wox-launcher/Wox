@@ -26,7 +26,7 @@ func TestUnMarshalPluginSettingItem(t *testing.T) {
             "Type":"textbox",
             "Value":{
                 "Key":"IndexDirectories",
-                "Value":"test;test1",
+                "DefaultValue":"test;test1",
                 "Label":"Index Directories: ",
                 "Suffix":" (separate by ';')"
             }
@@ -35,7 +35,7 @@ func TestUnMarshalPluginSettingItem(t *testing.T) {
             "Type":"checkbox",
             "Value":{
                 "Key":"OnlyIndexTxt",
-				"Value": "true",
+				"DefaultValue": "true",
                 "Label":", Only Index Txt"
             }
         },
@@ -43,7 +43,7 @@ func TestUnMarshalPluginSettingItem(t *testing.T) {
 					"Type":"select",
 					"Value":{	
 						"Key":"IndexPrograms",	
-						"Value":"true",		
+						"DefaultValue":"true",		
 						"Label":"Index Programs: ",	
 						"Options":[
 							{"Label":"true", "Value":"true"},
@@ -85,20 +85,19 @@ func TestUnMarshalPluginSettingItem(t *testing.T) {
 	assert.True(t, exist)
 	assert.Equal(t, val, "test;test1")
 
-	marshalData, marshalErr := json.Marshal(metadata)
+	_, marshalErr := json.Marshal(metadata)
 	assert.Nil(t, marshalErr)
-	t.Log(string(marshalData))
 }
 
 func TestMarshalPluginSetting(t *testing.T) {
-	var h util.HashMap[string, string]
+	var h = util.NewHashMap[string, string]()
 	h.Store("test", "test")
 	h.Store("test1", "test")
 
 	ps := PluginSetting{
 		Disabled:        true,
 		TriggerKeywords: nil,
-		Settings:        &h,
+		Settings:        h,
 	}
 
 	marshalData, marshalErr := json.Marshal(ps)
@@ -109,5 +108,5 @@ func TestMarshalPluginSetting(t *testing.T) {
 	err := json.Unmarshal(marshalData, &ps1)
 	assert.Nil(t, err)
 	assert.Equal(t, ps.Disabled, ps1.Disabled)
-	assert.Equal(t, ps1.Settings.Len(), int64(2))
+	assert.Equal(t, ps1.Settings.Len(), 2)
 }

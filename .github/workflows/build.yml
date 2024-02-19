@@ -6,7 +6,14 @@ on:
       - v2
 
 jobs:
+  test:
+    runs-on: [ self-hosted, macOS, ARM64 ]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Test
+        run: just test
   build-macos-amd64:
+    needs: test
     runs-on: [ self-hosted, macOS, X64 ]
     steps:
       - uses: actions/checkout@v3
@@ -22,6 +29,7 @@ jobs:
           asset_content_type: application/x-elf # required by GitHub API
           max_releases: 1
   build-macos-arm64:
+    needs: test
     runs-on: [ self-hosted, macOS, ARM64 ]
     steps:
       - uses: actions/checkout@v3
@@ -37,6 +45,7 @@ jobs:
           asset_content_type: application/x-elf # required by GitHub API
           max_releases: 1
   build-windows:
+    needs: test
     runs-on: [ self-hosted, Windows ]
     steps:
       - uses: pnpm/action-setup@v2
@@ -55,6 +64,7 @@ jobs:
           asset_content_type: application/x-msdownload # required by GitHub API
           max_releases: 1
   build-linux:
+    needs: test
     runs-on: [ self-hosted, Linux ]
     steps:
       - uses: actions/checkout@v3

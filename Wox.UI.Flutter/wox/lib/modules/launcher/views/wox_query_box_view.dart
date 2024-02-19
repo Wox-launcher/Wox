@@ -97,8 +97,8 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         contentPadding: const EdgeInsets.only(
                           left: 8,
                           right: 8,
-                          top: 10,
-                          bottom: 18,
+                          top: 6,
+                          bottom: 14,
                         ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(controller.woxTheme.value.queryBoxBorderRadius.toDouble()),

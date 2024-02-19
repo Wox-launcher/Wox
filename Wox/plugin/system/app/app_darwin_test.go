@@ -6,6 +6,7 @@ import (
 	"testing"
 	"wox/plugin"
 	"wox/share"
+	"wox/util"
 )
 
 type emptyAPIImpl struct {
@@ -44,7 +45,9 @@ func (e emptyAPIImpl) RegisterQueryCommands(ctx context.Context, commands []plug
 }
 
 func TestMacRetriever_ParseAppInfo(t *testing.T) {
-	appRetriever.UpdateAPI(emptyAPIImpl{})
-	_, err := appRetriever.ParseAppInfo(nil, "/Applications/Pages.app")
-	require.NoError(t, err)
+	if util.IsMacOS() {
+		appRetriever.UpdateAPI(emptyAPIImpl{})
+		_, err := appRetriever.ParseAppInfo(nil, "/System/Applications/Siri.app")
+		require.NoError(t, err)
+	}
 }
