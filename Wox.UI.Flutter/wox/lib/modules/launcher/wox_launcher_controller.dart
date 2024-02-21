@@ -23,9 +23,11 @@ import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
 import 'package:wox/interfaces/wox_launcher_interface.dart';
 import 'package:wox/utils/consts.dart';
+import 'package:wox/utils/env.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
+import 'package:wox/utils/wox_window_util.dart';
 
 class WoxLauncherController extends GetxController implements WoxLauncherInterface {
   final _query = WoxChangeQuery.empty().obs;
@@ -361,6 +363,8 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       final pickFilesParams = PickFilesParams.fromJson(msg.data);
       final files = await pickFiles(msg.traceId, pickFilesParams);
       responseWoxWebsocketRequest(msg, true, files);
+    } else if (msg.method == "OpenSettingWindow") {
+      WoxWindowUtil.instance.showWindow("setting", "WoxSetting", const Size(1280, 720));
     }
   }
 

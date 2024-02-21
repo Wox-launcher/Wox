@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:chinese_font_library/chinese_font_library.dart';
@@ -15,15 +16,26 @@ import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
+import 'package:wox/utils/wox_window_util.dart';
 
 void main(List<String> arguments) async {
   await initialServices(arguments);
-  await initWindow();
-  runApp(const MyApp());
+  if (WoxWindowUtil.instance.isMultiWindow(arguments)) {
+  } else {
+    await initWindow();
+    runApp(const MyApp());
+  }
 }
 
 Future<void> initArgs(List<String> arguments) async {
   Logger.instance.info(const UuidV4().generate(), "Arguments: $arguments");
+  if (WoxWindowUtil.instance.isMultiWindow(arguments)) {
+    var parsArguments = json.decode(arguments[2]);
+    Env.serverPort = parsArguments["serverPort"];
+    Env.serverPid = parsArguments["serverPid"];
+    Env.isDev = parsArguments["isDev"];
+    return;
+  }
   if (arguments.isEmpty) {
     // dev env
     Env.isDev = true;
@@ -47,10 +59,12 @@ Future<void> initialServices(List<String> arguments) async {
   await initArgs(arguments);
   await WoxThemeUtil.instance.loadTheme();
   await WoxSettingUtil.instance.loadSetting();
-  var controller = WoxLauncherController()..startRefreshSchedule();
-  await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://localhost:${Env.serverPort}/ws"), onMessageReceived: controller.handleWebSocketMessage);
-  HeartbeatChecker().startChecking();
-  Get.put(controller);
+  if (!WoxWindowUtil.instance.isMultiWindow(arguments)) {
+    var controller = WoxLauncherController()..startRefreshSchedule();
+    await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://localhost:${Env.serverPort}/ws"), onMessageReceived: controller.handleWebSocketMessage);
+    HeartbeatChecker().startChecking();
+    Get.put(controller);
+  }
 }
 
 Future<void> initWindow() async {
@@ -78,6 +92,8 @@ Future<void> initWindow() async {
   await windowManager.setMaximizable(false);
   await windowManager.setMinimizable(false);
   await windowManager.waitUntilReadyToShow(windowOptions);
+  //Create Other Multi Windows
+  WoxWindowUtil.instance.createWindow("setting", {});
 }
 
 class MyApp extends StatelessWidget {
