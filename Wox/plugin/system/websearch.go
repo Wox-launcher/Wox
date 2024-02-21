@@ -184,8 +184,7 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 			continue
 		}
 		if strings.ToLower(searchDummy.Keyword) == strings.ToLower(triggerKeyword) {
-			results = append(results, plugin.QueryResult{
-				Title: strings.ReplaceAll(searchDummy.Title, "{query}", otherQuery),
+			results = append(results, plugin.QueryResult{Title: r.replaceVariables(ctx, searchDummy.Title, otherQuery),
 				Score: 100,
 				Icon:  searchDummy.Icon,
 				Actions: []plugin.QueryResultAction{
@@ -193,7 +192,7 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 						Name: "Search",
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							for _, url := range searchDummy.Urls {
-								util.ShellOpen(strings.ReplaceAll(url, "{query}", otherQuery))
+								util.ShellOpen(r.replaceVariables(ctx, url, otherQuery))
 								time.Sleep(time.Millisecond * 100)
 							}
 						},
@@ -214,7 +213,7 @@ func (r *WebSearchPlugin) QueryFallback(ctx context.Context, query plugin.Query)
 		}
 
 		results = append(results, plugin.QueryResult{
-			Title: strings.ReplaceAll(searchDummy.Title, "{query}", query.RawQuery),
+			Title: r.replaceVariables(ctx, searchDummy.Title, query.RawQuery),
 			Score: 100,
 			Icon:  searchDummy.Icon,
 			Actions: []plugin.QueryResultAction{
@@ -222,7 +221,7 @@ func (r *WebSearchPlugin) QueryFallback(ctx context.Context, query plugin.Query)
 					Name: "Search",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						for _, url := range searchDummy.Urls {
-							util.ShellOpen(strings.ReplaceAll(url, "{query}", query.RawQuery))
+							util.ShellOpen(r.replaceVariables(ctx, url, query.RawQuery))
 							time.Sleep(time.Millisecond * 100)
 						}
 					},
@@ -232,4 +231,11 @@ func (r *WebSearchPlugin) QueryFallback(ctx context.Context, query plugin.Query)
 	}
 
 	return results
+}
+
+func (r *WebSearchPlugin) replaceVariables(ctx context.Context, text string, query string) string {
+	result := strings.ReplaceAll(text, "{query}", query)
+	result = strings.ReplaceAll(result, "{lower_query}", strings.ToLower(query))
+	result = strings.ReplaceAll(result, "{upper_query}", strings.ToUpper(query))
+	return result
 }
