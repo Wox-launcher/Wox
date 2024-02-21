@@ -5,6 +5,7 @@ import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:get/get.dart';
+import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/modules/launcher/views/wox_launcher_view.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
@@ -22,7 +23,7 @@ void main(List<String> arguments) async {
 }
 
 Future<void> initArgs(List<String> arguments) async {
-  Logger.instance.info("Arguments: $arguments");
+  Logger.instance.info(const UuidV4().generate(), "Arguments: $arguments");
   if (arguments.isEmpty) {
     // dev env
     Env.isDev = true;

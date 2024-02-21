@@ -77,11 +77,13 @@ func (u *uiImpl) send(ctx context.Context, method string, data any) (responseDat
 	u.requestMap.Store(requestID, resultChan)
 	defer u.requestMap.Delete(requestID)
 
-	startTimestamp := util.GetSystemTimestamp()
+	traceId := util.GetContextTraceId(ctx)
+
 	err := requestUI(ctx, WebsocketMsg{
-		Id:     requestID,
-		Method: method,
-		Data:   data,
+		RequestId: requestID,
+		TraceId:   traceId,
+		Method:    method,
+		Data:      data,
 	})
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("send message to UI error: %s", err.Error()))
@@ -90,10 +92,9 @@ func (u *uiImpl) send(ctx context.Context, method string, data any) (responseDat
 
 	select {
 	case <-time.NewTimer(time.Second * 60).C:
-		logger.Error(ctx, fmt.Sprintf("invoke ui method %s response timeout, response time: %dms", method, util.GetSystemTimestamp()-startTimestamp))
+		logger.Error(ctx, fmt.Sprintf("invoke ui method %s response timeout", method))
 		return "", fmt.Errorf("request timeout, request id: %s", requestID)
 	case response := <-resultChan:
-		util.GetLogger().Debug(ctx, fmt.Sprintf("invoke ui method %s response time: %dms", method, util.GetSystemTimestamp()-startTimestamp))
 		if !response.Success {
 			return response.Data, errors.New("ui method response error")
 		} else {
@@ -129,9 +130,15 @@ func getShowAppParams(ctx context.Context, selectAll bool) map[string]any {
 }
 
 func onUIRequest(ctx context.Context, request WebsocketMsg) {
+	if request.Method != "Log" {
+		logger.Debug(ctx, fmt.Sprintf("got <%s> request from ui", request.Method))
+	}
+
 	switch request.Method {
 	case "Ping":
 		responseUISuccessWithData(ctx, request, "Pong")
+	case "Log":
+		handleUILog(ctx, request)
 	case "Query":
 		handleQuery(ctx, request)
 	case "Action":
@@ -156,7 +163,9 @@ func onUIRequest(ctx context.Context, request WebsocketMsg) {
 }
 
 func onUIResponse(ctx context.Context, response WebsocketMsg) {
-	requestID := response.Id
+	logger.Debug(ctx, fmt.Sprintf("got <%s> response from ui", response.Method))
+
+	requestID := response.RequestId
 	if requestID == "" {
 		logger.Error(ctx, "response id not found")
 		return
@@ -169,6 +178,44 @@ func onUIResponse(ctx context.Context, response WebsocketMsg) {
 	}
 
 	resultChan <- response
+}
+
+func handleUILog(ctx context.Context, request WebsocketMsg) {
+	traceId, traceIdErr := getWebsocketMsgParameter(ctx, request, "traceId")
+	if traceIdErr != nil {
+		logger.Error(ctx, traceIdErr.Error())
+		responseUIError(ctx, request, traceIdErr.Error())
+		return
+	}
+	level, levelErr := getWebsocketMsgParameter(ctx, request, "level")
+	if levelErr != nil {
+		logger.Error(ctx, levelErr.Error())
+		responseUIError(ctx, request, levelErr.Error())
+		return
+	}
+	message, messageErr := getWebsocketMsgParameter(ctx, request, "message")
+	if messageErr != nil {
+		logger.Error(ctx, messageErr.Error())
+		responseUIError(ctx, request, messageErr.Error())
+		return
+	}
+
+	logCtx := util.NewComponentContext(util.NewTraceContextWith(traceId), " UI")
+
+	switch level {
+	case "debug":
+		logger.Debug(logCtx, message)
+	case "info":
+		logger.Info(logCtx, message)
+	case "warn":
+		logger.Warn(logCtx, message)
+	case "error":
+		logger.Error(logCtx, message)
+	default:
+		logger.Error(ctx, fmt.Sprintf("unsupported log level: %s", level))
+		responseUIError(ctx, request, fmt.Sprintf("unsupported log level: %s", level))
+	}
+	responseUISuccess(ctx, request)
 }
 
 func handleQuery(ctx context.Context, request WebsocketMsg) {
@@ -216,6 +263,8 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 		responseUIError(ctx, request, fmt.Sprintf("unsupported query type: %s", queryType))
 		return
 	}
+
+	logger.Info(ctx, fmt.Sprintf("start to handle query changed: %s, queryId: %s", changedQuery.String(), queryId))
 
 	if changedQuery.QueryType == plugin.QueryTypeInput && changedQuery.QueryText == "" {
 		responseUISuccessWithData(ctx, request, []string{})
@@ -273,9 +322,9 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 			resultDebouncer.Done(ctx)
 			return
 		case <-time.After(time.Second * 10):
-			logger.Info(ctx, fmt.Sprintf("query timeout, query: %s, request id: %s", query, request.Id))
+			logger.Info(ctx, fmt.Sprintf("query timeout, query: %s, request id: %s", query, request.RequestId))
 			resultDebouncer.Done(ctx)
-			responseUIError(ctx, request, fmt.Sprintf("query timeout, query: %s, request id: %s", query, request.Id))
+			responseUIError(ctx, request, fmt.Sprintf("query timeout, query: %s, request id: %s", query, request.RequestId))
 			return
 		}
 	}
@@ -309,6 +358,13 @@ func handleRefresh(ctx context.Context, request WebsocketMsg) {
 		return
 	}
 
+	queryId, queryIdErr := getWebsocketMsgParameter(ctx, request, "queryId")
+	if queryIdErr != nil {
+		logger.Error(ctx, queryIdErr.Error())
+		responseUIError(ctx, request, queryIdErr.Error())
+		return
+	}
+
 	var result plugin.RefreshableResultWithResultId
 	unmarshalErr := json.Unmarshal([]byte(resultStr), &result)
 	if unmarshalErr != nil {
@@ -316,6 +372,9 @@ func handleRefresh(ctx context.Context, request WebsocketMsg) {
 		responseUIError(ctx, request, unmarshalErr.Error())
 		return
 	}
+
+	startTime := util.GetSystemTimestamp()
+	logger.Debug(ctx, fmt.Sprintf("start executing refresh for result: %s (resultId:%s, queryId:%s)", result.Title, result.ResultId, queryId))
 
 	// replace remote preview with local preview
 	if result.Preview.PreviewType == plugin.WoxPreviewTypeRemote {
@@ -329,6 +388,7 @@ func handleRefresh(ctx context.Context, request WebsocketMsg) {
 	}
 
 	newResult, refreshErr := plugin.GetPluginManager().ExecuteRefresh(ctx, result)
+	logger.Debug(ctx, fmt.Sprintf("finished refresh %s, cost: %dms", result.ResultId, util.GetSystemTimestamp()-startTime))
 	if refreshErr != nil {
 		logger.Error(ctx, refreshErr.Error())
 		responseUIError(ctx, request, refreshErr.Error())

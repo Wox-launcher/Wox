@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_list_item_view.dart';
 import 'package:wox/components/wox_preview_view.dart';
 import 'package:wox/entity/wox_query.dart';
@@ -45,7 +46,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   }
 
   Widget getActionPanelView() {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.info("repaint: action panel view container");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: action panel view container");
 
     return Obx(
       () => controller.isShowActionPanel.value
@@ -83,7 +84,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   }
 
   Widget getResultView() {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.info("repaint: result view container");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: result view container");
 
     return Obx(
       () => controller.queryResults.isNotEmpty
@@ -100,8 +101,11 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                   child: Listener(
                     onPointerSignal: (event) {
                       if (event is PointerScrollEvent) {
-                        controller.changeResultScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_MOUSE.code,
-                            event.scrollDelta.dy > 0 ? WoxDirectionEnum.WOX_DIRECTION_DOWN.code : WoxDirectionEnum.WOX_DIRECTION_UP.code);
+                        controller.changeResultScrollPosition(
+                          const UuidV4().generate(),
+                          WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_MOUSE.code,
+                          event.scrollDelta.dy > 0 ? WoxDirectionEnum.WOX_DIRECTION_DOWN.code : WoxDirectionEnum.WOX_DIRECTION_UP.code,
+                        );
                       }
                     },
                     child: ListView.builder(
@@ -131,7 +135,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   }
 
   Widget getPreviewView() {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.info("repaint: preview view container");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: preview view container");
 
     return Obx(
       () => controller.isShowPreviewPanel.value
@@ -151,23 +155,25 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
         focusNode: FocusNode(onKey: (FocusNode node, RawKeyEvent event) {
           if (event is RawKeyDownEvent) {
             if (event.logicalKey == LogicalKeyboardKey.escape) {
-              controller.toggleActionPanel();
+              controller.toggleActionPanel(const UuidV4().generate());
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-              controller.changeResultActionScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+              controller.changeResultActionScrollPosition(
+                  const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-              controller.changeResultActionScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
+              controller.changeResultActionScrollPosition(
+                  const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.enter) {
-              controller.executeResultAction();
+              controller.executeResultAction(const UuidV4().generate());
               return KeyEventResult.handled;
             }
             if (event.isMetaPressed && event.logicalKey == LogicalKeyboardKey.keyJ) {
-              controller.toggleActionPanel();
+              controller.toggleActionPanel(const UuidV4().generate());
               return KeyEventResult.handled;
             }
           }
@@ -203,7 +209,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
               focusNode: controller.resultActionFocusNode,
               controller: controller.resultActionTextFieldController,
               onChanged: (value) {
-                controller.onQueryActionChanged(value);
+                controller.onQueryActionChanged(const UuidV4().generate(), value);
               },
             ),
           ),

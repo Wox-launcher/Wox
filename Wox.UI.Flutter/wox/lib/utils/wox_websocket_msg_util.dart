@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:uuid/v4.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:wox/entity/wox_websocket_msg.dart';
 import 'package:wox/enums/wox_msg_method_enum.dart';
@@ -21,6 +22,8 @@ class WoxWebsocketMsgUtil {
 
   int connectionAttempts = 1;
 
+  bool isConnecting = false;
+
   final Map<String, Completer> _completers = {};
 
   void _connect() {
@@ -30,15 +33,16 @@ class WoxWebsocketMsgUtil {
     _channel = WebSocketChannel.connect(uri);
     _channel!.stream.listen(
       (event) {
+        isConnecting = false;
         var msg = WoxWebsocketMsg.fromJson(jsonDecode(event));
         if (msg.success == false) {
-          Logger.instance.error("Received error message: ${msg.toJson()}");
+          Logger.instance.error(const UuidV4().generate(), "Received error message: ${msg.toJson()}");
           return;
         }
 
-        if (_completers.containsKey(msg.id)) {
-          _completers[msg.id]!.complete(msg);
-          _completers.remove(msg.id);
+        if (_completers.containsKey(msg.requestId)) {
+          _completers[msg.requestId]!.complete(msg);
+          _completers.remove(msg.requestId);
           return;
         }
 
@@ -52,7 +56,8 @@ class WoxWebsocketMsgUtil {
 
   void _reconnect() {
     Future.delayed(Duration(milliseconds: 200 * (connectionAttempts > 5 ? 5 : connectionAttempts)), () {
-      Logger.instance.info("Attempting to reconnect to WebSocket... $connectionAttempts");
+      Logger.instance.info(const UuidV4().generate(), "Attempting to reconnect to WebSocket... $connectionAttempts");
+      isConnecting = true;
       connectionAttempts++;
       _connect();
     });
@@ -65,6 +70,10 @@ class WoxWebsocketMsgUtil {
     _connect();
   }
 
+  bool isConnected() {
+    return _channel != null && isConnecting == false;
+  }
+
   // send message to websocket server
   Future<dynamic> sendMessage(WoxWebsocketMsg msg) async {
     // if query message, send it directly, no need to wait for response
@@ -75,7 +84,7 @@ class WoxWebsocketMsgUtil {
     }
 
     Completer completer = Completer();
-    _completers[msg.id] = completer;
+    _completers[msg.requestId] = completer;
     _channel?.sink.add(jsonEncode(msg));
     var responseMsg = await completer.future as WoxWebsocketMsg;
     return responseMsg.data;

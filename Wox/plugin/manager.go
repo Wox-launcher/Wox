@@ -352,10 +352,10 @@ func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance,
 }
 
 func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) []QueryResult {
-	logger.Info(ctx, fmt.Sprintf("[%s] start query: %s", pluginInstance.Metadata.Name, query.RawQuery))
+	logger.Info(ctx, fmt.Sprintf("<%s> start query: %s", pluginInstance.Metadata.Name, query.RawQuery))
 	start := util.GetSystemTimestamp()
 	results := pluginInstance.Plugin.Query(ctx, query)
-	logger.Debug(ctx, fmt.Sprintf("[%s] finish query, result count: %d, cost: %dms", pluginInstance.Metadata.Name, len(results), util.GetSystemTimestamp()-start))
+	logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms", pluginInstance.Metadata.Name, len(results), util.GetSystemTimestamp()-start))
 
 	for i := range results {
 		results[i] = m.PolishResult(ctx, pluginInstance, query, results[i])
@@ -475,7 +475,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	if !ignoreAutoScore {
 		score := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
 		if score > 0 {
-			logger.Info(ctx, fmt.Sprintf("[%s] result(%s) add score: %d", pluginInstance.Metadata.Name, result.Title, score))
+			logger.Info(ctx, fmt.Sprintf("<%s> result(%s) add score: %d", pluginInstance.Metadata.Name, result.Title, score))
 			result.Score += score
 		}
 	}
@@ -676,7 +676,7 @@ func (m *Manager) NewQuery(ctx context.Context, changedQuery share.ChangedQuery)
 			originQuery := changedQuery.QueryText
 			expandedQuery := m.expandQueryShortcut(ctx, changedQuery.QueryText, woxSetting.QueryShortcuts)
 			if originQuery != expandedQuery {
-				logger.Info(ctx, fmt.Sprintf("expand query shortcut: %s -> %s", originQuery, changedQuery))
+				logger.Info(ctx, fmt.Sprintf("expand query shortcut: %s -> %s", originQuery, expandedQuery))
 				newQuery = expandedQuery
 			}
 		}
@@ -737,7 +737,7 @@ func (m *Manager) expandQueryShortcut(ctx context.Context, query string, querySh
 func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId string) {
 	resultCache, found := m.resultCache.Load(resultId)
 	if !found {
-		logger.Error(ctx, fmt.Sprintf("result cache not found for result id: %s", resultId))
+		logger.Error(ctx, fmt.Sprintf("result cache not found for result id (execute action): %s", resultId))
 		return
 	}
 	action, exist := resultCache.Actions.Load(actionId)
@@ -762,7 +762,7 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 
 	resultCache, found := m.resultCache.Load(refreshableResultWithId.ResultId)
 	if !found {
-		logger.Error(ctx, fmt.Sprintf("result cache not found for result id: %s", refreshableResultWithId.ResultId))
+		logger.Error(ctx, fmt.Sprintf("result cache not found for result id (execute refresh): %s", refreshableResultWithId.ResultId))
 		return refreshableResultWithId, errors.New("result cache not found")
 	}
 
@@ -783,7 +783,7 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 func (m *Manager) GetResultPreview(ctx context.Context, resultId string) (WoxPreview, error) {
 	resultCache, found := m.resultCache.Load(resultId)
 	if !found {
-		logger.Error(ctx, fmt.Sprintf("result cache not found for result id: %s", resultId))
+		logger.Error(ctx, fmt.Sprintf("result cache not found for result id (get preview): %s", resultId))
 		return WoxPreview{}, errors.New("result cache not found")
 	}
 

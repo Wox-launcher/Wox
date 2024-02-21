@@ -161,35 +161,37 @@ func (m *Manager) Stop(ctx context.Context) {
 
 func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) error {
 	return m.mainHotkey.Register(ctx, combineKey, func() {
-		m.ui.ToggleApp(ctx)
+		m.ui.ToggleApp(util.NewTraceContext())
 	})
 }
 
 func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string) error {
 	return m.selectionHotkey.Register(ctx, combineKey, func() {
+		newCtx := util.NewTraceContext()
 		selection, err := util.GetSelected()
 		if err != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to get selected: %s", err.Error()))
+			logger.Error(newCtx, fmt.Sprintf("failed to get selected: %s", err.Error()))
 			return
 		}
 
-		m.ui.ChangeQuery(ctx, share.ChangedQuery{
+		m.ui.ChangeQuery(newCtx, share.ChangedQuery{
 			QueryType:      plugin.QueryTypeSelection,
 			QuerySelection: selection,
 		})
-		m.ui.ShowApp(ctx, share.ShowContext{SelectAll: false})
+		m.ui.ShowApp(newCtx, share.ShowContext{SelectAll: false})
 	})
 }
 
 func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.QueryHotkey) error {
 	hk := &hotkey.Hotkey{}
 	err := hk.Register(ctx, queryHotkey.Hotkey, func() {
-		query := plugin.GetPluginManager().ReplaceQueryVariable(ctx, queryHotkey.Query)
-		m.ui.ChangeQuery(ctx, share.ChangedQuery{
+		newCtx := util.NewTraceContext()
+		query := plugin.GetPluginManager().ReplaceQueryVariable(newCtx, queryHotkey.Query)
+		m.ui.ChangeQuery(newCtx, share.ChangedQuery{
 			QueryType: plugin.QueryTypeInput,
 			QueryText: query,
 		})
-		m.ui.ShowApp(ctx, share.ShowContext{SelectAll: false})
+		m.ui.ShowApp(newCtx, share.ShowContext{SelectAll: false})
 	})
 	if err != nil {
 		return err
@@ -284,8 +286,8 @@ func (m *Manager) ToggleWindow() {
 	ctx := util.NewTraceContext()
 	logger.Info(ctx, "[UI] toggle window")
 	requestUI(ctx, WebsocketMsg{
-		Id:     uuid.NewString(),
-		Method: "toggleWindow",
+		RequestId: uuid.NewString(),
+		Method:    "toggleWindow",
 	})
 }
 

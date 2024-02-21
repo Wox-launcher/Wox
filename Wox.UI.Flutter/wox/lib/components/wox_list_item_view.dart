@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_theme.dart';
@@ -31,7 +32,7 @@ class WoxListItemView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.info("repaint: list item view $key - container");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view $key - container");
 
     return Container(
       decoration: BoxDecoration(
@@ -58,7 +59,7 @@ class WoxListItemView extends StatelessWidget {
           Padding(
               padding: const EdgeInsets.only(left: 5.0, right: 10.0),
               child: Obx(() {
-                if (LoggerSwitch.enablePaintLog) Logger.instance.info("repaint: list item view $key - icon");
+                if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view $key - icon");
 
                 return WoxImageView(
                   woxImage: icon.value,
@@ -69,7 +70,7 @@ class WoxListItemView extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
               Obx(() {
-                if (LoggerSwitch.enablePaintLog) Logger.instance.info("repaint: list item view $key - title");
+                if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view $key - title");
 
                 return Text(
                   title.value,
@@ -87,7 +88,7 @@ class WoxListItemView extends StatelessWidget {
                 );
               }),
               Obx(() {
-                if (LoggerSwitch.enablePaintLog) Logger.instance.info("repaint: list item view $key - subtitle");
+                if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view $key - subtitle");
 
                 return subTitle.isNotEmpty
                     ? Padding(

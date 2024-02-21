@@ -57,17 +57,17 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   var canArrowUpHistory = true;
 
   @override
-  Future<void> toggleApp(ShowAppParams params) async {
+  Future<void> toggleApp(String traceId, ShowAppParams params) async {
     var isVisible = await windowManager.isVisible();
     if (isVisible) {
-      hideApp();
+      hideApp(traceId);
     } else {
-      showApp(params);
+      showApp(traceId, params);
     }
   }
 
   @override
-  Future<void> showApp(ShowAppParams params) async {
+  Future<void> showApp(String traceId, ShowAppParams params) async {
     canArrowUpHistory = true;
     latestQueryHistories.assignAll(params.queryHistories);
     lastQueryMode = params.lastQueryMode;
@@ -84,7 +84,8 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
     WoxWebsocketMsgUtil.instance.sendMessage(
       WoxWebsocketMsg(
-        id: const UuidV4().generate(),
+        requestId: const UuidV4().generate(),
+        traceId: traceId,
         type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
         method: WoxMsgMethodEnum.WOX_MSG_METHOD_VISIBILITY_CHANGED.code,
         data: {"isVisible": "true", "query": _query.value.toJson()},
@@ -93,7 +94,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   @override
-  Future<void> hideApp() async {
+  Future<void> hideApp(String traceId) async {
     isShowActionPanel.value = false;
     await windowManager.hide();
 
@@ -106,12 +107,13 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
     //clear query box text if query type is selection
     if (getCurrentQuery().queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
-      onQueryChanged(WoxChangeQuery.emptyInput());
+      onQueryChanged(traceId, WoxChangeQuery.emptyInput(), "clear input after hide app");
     }
 
     WoxWebsocketMsgUtil.instance.sendMessage(
       WoxWebsocketMsg(
-        id: const UuidV4().generate(),
+        requestId: const UuidV4().generate(),
+        traceId: traceId,
         type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
         method: WoxMsgMethodEnum.WOX_MSG_METHOD_VISIBILITY_CHANGED.code,
         data: {"isVisible": "false", "query": _query.value.toJson()},
@@ -124,7 +126,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   @override
-  Future<void> toggleActionPanel() async {
+  Future<void> toggleActionPanel(String traceId) async {
     if (queryResults.isEmpty) {
       return;
     }
@@ -147,11 +149,12 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   @override
-  Future<void> executeResultAction() async {
+  Future<void> executeResultAction(String traceId) async {
     if (queryResults.isEmpty) {
       return;
     }
 
+    Logger.instance.debug(traceId, "user execute result action");
     WoxQueryResult woxQueryResult = queryResults[_activeResultIndex.value];
     WoxResultAction woxResultAction = WoxResultAction.empty();
     if (isShowActionPanel.value) {
@@ -165,31 +168,38 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       }
     }
     if (woxResultAction.id.isNotEmpty) {
-      final msg = WoxWebsocketMsg(id: const UuidV4().generate(), type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code, method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code, data: {
-        "resultId": woxQueryResult.id,
-        "actionId": woxResultAction.id,
-      });
+      final msg = WoxWebsocketMsg(
+          requestId: const UuidV4().generate(),
+          traceId: traceId,
+          type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+          method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
+          data: {
+            "resultId": woxQueryResult.id,
+            "actionId": woxResultAction.id,
+          });
       WoxWebsocketMsgUtil.instance.sendMessage(msg);
       if (!woxResultAction.preventHideAfterAction) {
-        hideApp();
+        hideApp(traceId);
       }
     }
   }
 
   @override
-  Future<void> autoCompleteQuery() async {
+  Future<void> autoCompleteQuery(String traceId) async {
     if (queryResults.isEmpty) {
       return;
     }
 
     final queryText = queryResults[_activeResultIndex.value].title;
     onQueryChanged(
+      traceId,
       WoxChangeQuery(
         queryId: const UuidV4().generate(),
         queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
         queryText: queryText.value,
         querySelection: Selection.empty(),
       ),
+      "auto complete query",
       moveCursorToEnd: true,
     );
   }
@@ -210,11 +220,13 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       woxChangeQuery.querySelection = _query.value.querySelection;
     }
 
-    onQueryChanged(woxChangeQuery);
+    onQueryChanged(const UuidV4().generate(), woxChangeQuery, "user input changed");
   }
 
   @override
-  void onQueryChanged(WoxChangeQuery query, {bool moveCursorToEnd = false}) {
+  void onQueryChanged(String traceId, WoxChangeQuery query, String changeReason, {bool moveCursorToEnd = false}) {
+    Logger.instance.debug(traceId, "query changed: ${query.queryText}, reason: $changeReason");
+
     if (query.queryId == "") {
       query.queryId = const UuidV4().generate();
     }
@@ -243,17 +255,23 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       },
     );
 
-    final msg = WoxWebsocketMsg(id: const UuidV4().generate(), type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code, method: WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code, data: {
-      "queryId": query.queryId,
-      "queryType": query.queryType,
-      "queryText": query.queryText,
-      "querySelection": query.querySelection.toJson(),
-    });
+    final msg = WoxWebsocketMsg(
+      requestId: const UuidV4().generate(),
+      traceId: traceId,
+      type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+      method: WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code,
+      data: {
+        "queryId": query.queryId,
+        "queryType": query.queryType,
+        "queryText": query.queryText,
+        "querySelection": query.querySelection.toJson(),
+      },
+    );
     WoxWebsocketMsgUtil.instance.sendMessage(msg);
   }
 
   @override
-  Future<List<String>> pickFiles(PickFilesParams params) async {
+  Future<List<String>> pickFiles(String traceId, PickFilesParams params) async {
     if (params.isDirectory) {
       String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
       if (selectedDirectory != null) {
@@ -265,13 +283,13 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   @override
-  void onQueryActionChanged(String queryAction) {
+  void onQueryActionChanged(String traceId, String queryAction) {
     filterResultActions.value = _resultActions.where((element) => transferChineseToPinYin(element.name.toLowerCase()).contains(queryAction.toLowerCase())).toList().obs();
     filterResultActions.refresh();
   }
 
   @override
-  void changeResultScrollPosition(WoxEventDeviceType deviceType, WoxDirection direction) {
+  void changeResultScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
     _resetActiveResultIndex(direction);
     if (queryResults.length < MAX_LIST_VIEW_ITEM_COUNT) {
       queryResults.refresh();
@@ -304,14 +322,14 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   @override
-  void changeResultActionScrollPosition(WoxEventDeviceType deviceType, WoxDirection direction) {
+  void changeResultActionScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
     _resetActiveResultActionIndex(direction);
     filterResultActions.refresh();
   }
 
   Future<void> handleWebSocketMessage(WoxWebsocketMsg msg) async {
     if (msg.method != WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code) {
-      Logger.instance.info("Received message: ${msg.method}");
+      Logger.instance.info(msg.traceId, "Received message: ${msg.method}");
     }
 
     if (msg.type == WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code) {
@@ -323,16 +341,16 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   Future<void> handleWebSocketRequestMessage(WoxWebsocketMsg msg) async {
     if (msg.method == "ToggleApp") {
-      toggleApp(ShowAppParams.fromJson(msg.data));
+      toggleApp(msg.traceId, ShowAppParams.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "HideApp") {
-      hideApp();
+      hideApp(msg.traceId);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ShowApp") {
-      showApp(ShowAppParams.fromJson(msg.data));
+      showApp(msg.traceId, ShowAppParams.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ChangeQuery") {
-      onQueryChanged(WoxChangeQuery.fromJson(msg.data), moveCursorToEnd: true);
+      onQueryChanged(msg.traceId, WoxChangeQuery.fromJson(msg.data), "receive change query from wox", moveCursorToEnd: true);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ChangeTheme") {
       final theme = WoxTheme.fromJson(msg.data);
@@ -341,7 +359,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "PickFiles") {
       final pickFilesParams = PickFilesParams.fromJson(msg.data);
-      final files = await pickFiles(pickFilesParams);
+      final files = await pickFiles(msg.traceId, pickFilesParams);
       responseWoxWebsocketRequest(msg, true, files);
     }
   }
@@ -352,7 +370,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       for (var item in msg.data) {
         results.add(WoxQueryResult.fromJson(item));
       }
-      Logger.instance.info("Received message: ${msg.method}, results count: ${results.length}");
+      Logger.instance.info(msg.traceId, "Received message: ${msg.method}, results count: ${results.length}");
 
       _onReceivedQueryResults(results);
     }
@@ -361,7 +379,8 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   void responseWoxWebsocketRequest(WoxWebsocketMsg request, bool success, dynamic data) {
     WoxWebsocketMsgUtil.instance.sendMessage(
       WoxWebsocketMsg(
-        id: request.id,
+        requestId: request.requestId,
+        traceId: request.traceId,
         type: WoxMsgTypeEnum.WOX_MSG_TYPE_RESPONSE.code,
         method: request.method,
         data: data,
@@ -463,10 +482,10 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       // 3.0-> 3
 
       final totalHeightFinal = totalHeight.toDouble() + (10 / PlatformDispatcher.instance.views.first.devicePixelRatio).ceil();
-      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info("Resize window height to $totalHeightFinal");
+      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize window height to $totalHeightFinal");
       windowManager.setSize(Size(800, totalHeightFinal));
     } else {
-      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info("Resize window height to $totalHeight");
+      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize window height to $totalHeight");
       windowManager.setSize(Size(800, totalHeight.toDouble()));
     }
   }
@@ -554,11 +573,14 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
             isRequesting[result.id] = true;
           }
 
+          final traceId = const UuidV4().generate();
           final msg = WoxWebsocketMsg(
-            id: const UuidV4().generate(),
+            requestId: const UuidV4().generate(),
+            traceId: traceId,
             type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
             method: WoxMsgMethodEnum.WOX_MSG_METHOD_REFRESH.code,
             data: {
+              "queryId": result.queryId,
               "refreshableResult": WoxRefreshableResult(
                 resultId: result.id,
                 title: result.title.value,
@@ -570,7 +592,20 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
               ).toJson(),
             },
           );
+          final startTime = DateTime.now().millisecondsSinceEpoch;
           WoxWebsocketMsgUtil.instance.sendMessage(msg).then((resp) {
+            final endTime = DateTime.now().millisecondsSinceEpoch;
+            if (endTime - startTime > 100) {
+              Logger.instance.warn(traceId, "refresh result <${result.title}> (resultId: ${result.id}) too slow, cost ${endTime - startTime} ms");
+            }
+
+            // check result id, because the result may be removed during the refresh
+            if (!queryResults.any((element) => element.id == result.id)) {
+              isRequesting.remove(result.id);
+              Logger.instance.info(traceId, "result <${result.title}> (resultId: ${result.id}) is removed (maybe caused by new query) during refresh, skip update result");
+              return;
+            }
+
             final refreshResult = WoxRefreshableResult.fromJson(resp);
             result.title.value = refreshResult.title;
             result.subTitle.value = refreshResult.subTitle;
@@ -610,19 +645,19 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
         selectedQueryHistoryIndex = selectedQueryHistoryIndex + 1;
         var changedQuery = latestQueryHistories[selectedQueryHistoryIndex].query;
         if (changedQuery != null) {
-          onQueryChanged(changedQuery);
+          onQueryChanged(const UuidV4().generate(), changedQuery, "user arrow up history");
           _selectQueryBoxAllText();
         }
       }
       return;
     }
 
-    changeResultScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
+    changeResultScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
   }
 
   void handleQueryBoxArrowDown() {
     canArrowUpHistory = false;
-    changeResultScrollPosition(WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+    changeResultScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
   }
 
   String transferChineseToPinYin(String str) {
@@ -634,7 +669,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   Future<void> handleDropFiles(DropDoneDetails details) async {
-    Logger.instance.info("Received drop files: $details");
+    Logger.instance.info(const UuidV4().generate(), "Received drop files: $details");
 
     await windowManager.focus();
     queryBoxFocusNode.requestFocus();
@@ -648,6 +683,6 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       querySelection: Selection(type: WoxSelectionTypeEnum.WOX_SELECTION_TYPE_FILE.code, text: "", filePaths: details.files.map((e) => e.path).toList()),
     );
 
-    onQueryChanged(woxChangeQuery);
+    onQueryChanged(const UuidV4().generate(), woxChangeQuery, "user drop files");
   }
 }

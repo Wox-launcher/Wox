@@ -157,16 +157,15 @@ func (w *WebsocketHost) onMessage(data string) {
 		level := gjson.Get(data, "Level").String()
 		msg := gjson.Get(data, "Message").String()
 
-		newCtx := util.NewTraceContextWith(traceId)
-		logMsg := fmt.Sprintf("[%s HOST] %s", w.host.GetRuntime(ctx), msg)
+		logCtx := util.NewComponentContext(util.NewTraceContextWith(traceId), fmt.Sprintf("%s HOST", w.host.GetRuntime(ctx)))
 		if level == "error" {
-			util.GetLogger().Error(newCtx, logMsg)
+			util.GetLogger().Error(logCtx, msg)
 		}
 		if level == "info" {
-			util.GetLogger().Info(newCtx, logMsg)
+			util.GetLogger().Info(logCtx, msg)
 		}
 		if level == "debug" {
-			util.GetLogger().Debug(newCtx, logMsg)
+			util.GetLogger().Debug(logCtx, msg)
 		}
 	} else if strings.Contains(data, string(JsonRpcTypeRequest)) {
 		var request JsonRpcRequest

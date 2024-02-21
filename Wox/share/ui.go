@@ -11,11 +11,11 @@ type ChangedQuery struct {
 	QuerySelection util.Selection
 }
 
-func (c *ChangedQuery) IsEmpty() bool {
+func (c ChangedQuery) IsEmpty() bool {
 	return c.QueryText == "" && c.QuerySelection.String() == ""
 }
 
-func (c *ChangedQuery) String() string {
+func (c ChangedQuery) String() string {
 	if c.QueryText != "" {
 		return c.QueryText
 	}

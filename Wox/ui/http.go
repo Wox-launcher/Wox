@@ -34,11 +34,12 @@ const (
 )
 
 type WebsocketMsg struct {
-	Id      string
-	Type    websocketMsgType
-	Method  string
-	Success bool
-	Data    any
+	RequestId string // unique id for each request
+	TraceId   string // trace id between ui and wox, used for logging
+	Type      websocketMsgType
+	Method    string
+	Success   bool
+	Data      any
 }
 
 type RestResponse struct {
@@ -548,8 +549,6 @@ func serveAndWait(ctx context.Context, port int) {
 	m.HandleMessage(func(s *melody.Session, msg []byte) {
 		ctxNew := util.NewTraceContext()
 
-		logger.Debug(ctxNew, fmt.Sprintf("<UI -> Wox> got msg from ui: %s", string(msg)))
-
 		if strings.Contains(string(msg), string(WebsocketMsgTypeRequest)) {
 			var request WebsocketMsg
 			unmarshalErr := json.Unmarshal(msg, &request)
@@ -558,7 +557,8 @@ func serveAndWait(ctx context.Context, port int) {
 				return
 			}
 			util.Go(ctxNew, "handle ui query", func() {
-				onUIRequest(ctxNew, request)
+				traceCtx := context.WithValue(ctxNew, util.ContextKeyTraceId, request.TraceId)
+				onUIRequest(traceCtx, request)
 			})
 		} else if strings.Contains(string(msg), string(WebsocketMsgTypeResponse)) {
 			var response WebsocketMsg
@@ -568,8 +568,11 @@ func serveAndWait(ctx context.Context, port int) {
 				return
 			}
 			util.Go(ctxNew, "handle ui response", func() {
-				onUIResponse(ctxNew, response)
+				traceCtx := context.WithValue(ctxNew, util.ContextKeyTraceId, response.TraceId)
+				onUIResponse(traceCtx, response)
 			})
+		} else {
+			logger.Error(ctxNew, fmt.Sprintf("unknown websocket msg: %s", string(msg)))
 		}
 	})
 
@@ -607,11 +610,12 @@ func responseUI(ctx context.Context, response WebsocketMsg) {
 
 func responseUISuccessWithData(ctx context.Context, request WebsocketMsg, data any) {
 	responseUI(ctx, WebsocketMsg{
-		Id:      request.Id,
-		Type:    WebsocketMsgTypeResponse,
-		Method:  request.Method,
-		Success: true,
-		Data:    data,
+		RequestId: request.RequestId,
+		TraceId:   util.GetContextTraceId(ctx),
+		Type:      WebsocketMsgTypeResponse,
+		Method:    request.Method,
+		Success:   true,
+		Data:      data,
 	})
 }
 
@@ -621,10 +625,10 @@ func responseUISuccess(ctx context.Context, request WebsocketMsg) {
 
 func responseUIError(ctx context.Context, request WebsocketMsg, errMsg string) {
 	responseUI(ctx, WebsocketMsg{
-		Id:      request.Id,
-		Type:    WebsocketMsgTypeResponse,
-		Method:  request.Method,
-		Success: false,
-		Data:    errMsg,
+		RequestId: request.RequestId,
+		Type:      WebsocketMsgTypeResponse,
+		Method:    request.Method,
+		Success:   false,
+		Data:      errMsg,
 	})
 }

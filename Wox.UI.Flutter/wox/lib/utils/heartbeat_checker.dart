@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/log.dart';
 
@@ -10,13 +11,14 @@ class HeartbeatChecker {
   static const int maxFailedAttempts = 3;
 
   void startChecking() {
+    final traceId = const UuidV4().generate();
     Timer.periodic(const Duration(seconds: 1), (Timer timer) async {
-      bool isAlive = await checkHeartbeat();
+      bool isAlive = await checkHeartbeat(traceId);
 
       if (!isAlive) {
         failedAttempts++;
         if (failedAttempts >= maxFailedAttempts) {
-          Logger.instance.error("Server is not alive, exiting...");
+          Logger.instance.error(traceId, "Server is not alive, exiting...");
           timer.cancel();
           exit(0);
         }
@@ -26,7 +28,7 @@ class HeartbeatChecker {
     });
   }
 
-  Future<bool> checkHeartbeat() async {
+  Future<bool> checkHeartbeat(String traceId) async {
     if (Env.isDev) {
       return true;
     }
@@ -37,7 +39,7 @@ class HeartbeatChecker {
         return true;
       }
     } catch (e) {
-      Logger.instance.error("Failed to check heartbeat: $e");
+      Logger.instance.error(traceId, "Failed to check heartbeat: $e");
       return false;
     }
 

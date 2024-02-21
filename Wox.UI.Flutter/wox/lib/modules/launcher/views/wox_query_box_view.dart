@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
+import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
@@ -39,7 +40,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
 
   @override
   Widget build(BuildContext context) {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.info("repaint: query box view");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: query box view");
 
     return Obx(() {
       return Stack(children: [
@@ -49,7 +50,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   if (event is RawKeyDownEvent) {
                     switch (event.logicalKey) {
                       case LogicalKeyboardKey.escape:
-                        controller.hideApp();
+                        controller.hideApp(const UuidV4().generate());
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.arrowDown:
                         controller.handleQueryBoxArrowDown();
@@ -58,10 +59,10 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         controller.handleQueryBoxArrowUp();
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.enter:
-                        controller.executeResultAction();
+                        controller.executeResultAction(const UuidV4().generate());
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.tab:
-                        controller.autoCompleteQuery();
+                        controller.autoCompleteQuery(const UuidV4().generate());
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.home:
                         controller.moveQueryBoxCursorToStart();
@@ -71,7 +72,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.keyJ:
                         if (event.isMetaPressed || event.isAltPressed) {
-                          controller.toggleActionPanel();
+                          controller.toggleActionPanel(const UuidV4().generate());
                           return KeyEventResult.handled;
                         }
                     }

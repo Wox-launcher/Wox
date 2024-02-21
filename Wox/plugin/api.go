@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"context"
-	"fmt"
 	"github.com/samber/lo"
 	"path"
 	"wox/i18n"
@@ -58,28 +57,28 @@ func (a *APIImpl) Notify(ctx context.Context, title string, description string) 
 }
 
 func (a *APIImpl) Log(ctx context.Context, level LogLevel, msg string) {
-	formMsg := fmt.Sprintf("[%s] %s", a.pluginInstance.Metadata.Name, msg)
+	logCtx := util.NewComponentContext(ctx, a.pluginInstance.Metadata.Name)
 	if level == LogLevelError {
-		a.logger.Error(ctx, msg)
-		logger.Error(ctx, formMsg)
+		a.logger.Error(logCtx, msg)
+		logger.Error(logCtx, msg)
 		return
 	}
 
 	if level == LogLevelInfo {
-		a.logger.Info(ctx, msg)
-		logger.Info(ctx, formMsg)
+		a.logger.Info(logCtx, msg)
+		logger.Info(logCtx, msg)
 		return
 	}
 
 	if level == LogLevelDebug {
-		a.logger.Debug(ctx, msg)
-		logger.Debug(ctx, formMsg)
+		a.logger.Debug(logCtx, msg)
+		logger.Debug(logCtx, msg)
 		return
 	}
 
 	if level == LogLevelWarning {
-		a.logger.Warn(ctx, msg)
-		logger.Warn(ctx, formMsg)
+		a.logger.Warn(logCtx, msg)
+		logger.Warn(logCtx, msg)
 		return
 	}
 }

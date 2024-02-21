@@ -204,7 +204,7 @@ func (m *Manager) SaveWoxSetting(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) saveWoxAppData(ctx context.Context) error {
+func (m *Manager) saveWoxAppData(ctx context.Context, reason string) error {
 	woxAppDataPath := util.GetLocation().GetWoxAppDataPath()
 	settingJson, marshalErr := json.Marshal(m.woxAppData)
 	if marshalErr != nil {
@@ -218,7 +218,7 @@ func (m *Manager) saveWoxAppData(ctx context.Context) error {
 		return writeErr
 	}
 
-	logger.Info(ctx, "Wox setting saved")
+	logger.Info(ctx, fmt.Sprintf("Wox setting saved, reason: %s", reason))
 	return nil
 }
 
@@ -290,7 +290,7 @@ func (m *Manager) AddQueryHistory(ctx context.Context, query share.ChangedQuery)
 		m.woxAppData.QueryHistories = m.woxAppData.QueryHistories[len(m.woxAppData.QueryHistories)-100:]
 	}
 
-	m.saveWoxAppData(ctx)
+	m.saveWoxAppData(ctx, "add query history")
 }
 
 func (m *Manager) GetLatestQueryHistory(ctx context.Context, n int) []QueryHistory {
@@ -327,5 +327,5 @@ func (m *Manager) AddActionedResult(ctx context.Context, pluginId string, result
 		m.woxAppData.ActionedResults.Store(resultHash, []ActionedResult{actionedResult})
 	}
 
-	m.saveWoxAppData(ctx)
+	m.saveWoxAppData(ctx, "add actioned result")
 }

@@ -2,6 +2,12 @@ import 'dart:io';
 
 import 'package:logger/logger.dart' as xlogger;
 import 'package:path/path.dart' as path;
+import 'package:uuid/v4.dart';
+import 'package:wox/entity/wox_websocket_msg.dart';
+import 'package:wox/enums/wox_msg_method_enum.dart';
+import 'package:wox/enums/wox_msg_type_enum.dart';
+
+import 'wox_websocket_msg_util.dart';
 
 class Logger {
   late xlogger.Logger _logger;
@@ -19,12 +25,47 @@ class Logger {
 
   static Logger get instance => _instance;
 
-  void info(String msg) {
-    _logger.i(msg);
+  void info(String traceId, String msg) {
+    log(traceId, "info", msg);
   }
 
-  void error(String msg) {
-    _logger.e(msg);
+  void error(String traceId, String msg) {
+    log(traceId, "error", msg);
+  }
+
+  void warn(String traceId, String msg) {
+    log(traceId, "warn", msg);
+  }
+
+  void debug(String traceId, String msg) {
+    log(traceId, "debug", msg);
+  }
+
+  void log(String traceId, String level, String message) {
+    _logger.i("$traceId [$level] $message");
+
+    try {
+      sendLog(traceId, level, message);
+    } catch (e) {
+      _logger.e("$traceId [$level] Failed to send log: $e");
+    }
+  }
+
+  void sendLog(String traceId, String level, String message) {
+    if (WoxWebsocketMsgUtil.instance.isConnected()) {
+      final msg = WoxWebsocketMsg(
+        requestId: const UuidV4().generate(),
+        traceId: traceId,
+        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+        method: WoxMsgMethodEnum.WOX_MSG_METHOD_Log.code,
+        data: {
+          "traceId": traceId,
+          "level": level,
+          "message": message,
+        },
+      );
+      WoxWebsocketMsgUtil.instance.sendMessage(msg);
+    }
   }
 }
 

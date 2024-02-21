@@ -500,11 +500,12 @@ func (c *Plugin) generateGptResultRefresh(ctx context.Context, conversations []C
 				return current
 			}
 
-			c.api.Log(ctx, plugin.LogLevelInfo, "Creating stream")
+			startTime := util.GetSystemTimestamp()
+			c.api.Log(ctx, plugin.LogLevelInfo, "creating stream")
 			creatingStream = true
 			createdStream, createErr := c.client.ChatStream(ctx, c.model, conversations)
 			creatingStream = false
-			c.api.Log(ctx, plugin.LogLevelInfo, "Created stream")
+			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("created stream (cost %d ms)", util.GetSystemTimestamp()-startTime))
 			if createErr != nil {
 				if onAnswerErr != nil {
 					current = onAnswerErr(current, createErr)
@@ -515,10 +516,10 @@ func (c *Plugin) generateGptResultRefresh(ctx context.Context, conversations []C
 			stream = createdStream
 		}
 
-		c.api.Log(ctx, plugin.LogLevelInfo, "Reading stream")
+		c.api.Log(ctx, plugin.LogLevelInfo, "reading stream")
 		response, streamErr := stream.Receive()
 		if errors.Is(streamErr, io.EOF) {
-			c.api.Log(ctx, plugin.LogLevelInfo, "Read stream completed")
+			c.api.Log(ctx, plugin.LogLevelInfo, "read stream completed")
 			stream.Close()
 			if onAnswerFinished != nil {
 				current = onAnswerFinished(current)
@@ -528,7 +529,7 @@ func (c *Plugin) generateGptResultRefresh(ctx context.Context, conversations []C
 		}
 
 		if streamErr != nil {
-			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read stream: %s", streamErr.Error()))
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to read stream: %s", streamErr.Error()))
 			stream.Close()
 			if onAnswerErr != nil {
 				current = onAnswerErr(current, streamErr)
@@ -538,7 +539,7 @@ func (c *Plugin) generateGptResultRefresh(ctx context.Context, conversations []C
 		}
 
 		if onAnswering != nil {
-			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Streamed %d text", len(response)))
+			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("streamed %d text", len(response)))
 			current = onAnswering(current, response)
 		}
 
@@ -549,7 +550,7 @@ func (c *Plugin) generateGptResultRefresh(ctx context.Context, conversations []C
 func (c *Plugin) loadChats(ctx context.Context) {
 	nonActiveChatStr := c.api.GetSetting(ctx, "non_active_chats")
 	if nonActiveChatStr == "" {
-		c.api.Log(ctx, plugin.LogLevelInfo, "No non-active chats to load")
+		c.api.Log(ctx, plugin.LogLevelInfo, "no non-active chats to load")
 		c.nonActiveChats = []*Chat{}
 	} else {
 		unmarshalErr := json.Unmarshal([]byte(nonActiveChatStr), &c.nonActiveChats)
@@ -565,13 +566,13 @@ func (c *Plugin) loadChats(ctx context.Context) {
 
 	activeChatStr := c.api.GetSetting(ctx, "active_chat")
 	if activeChatStr == "" {
-		c.api.Log(ctx, plugin.LogLevelInfo, "No active chat to load")
+		c.api.Log(ctx, plugin.LogLevelInfo, "no active chat to load")
 		c.activeChat = nil
 	} else {
 		var activeChat *Chat
 		unmarshalErr := json.Unmarshal([]byte(activeChatStr), &activeChat)
 		if unmarshalErr != nil {
-			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to load activeChat: %s", unmarshalErr.Error()))
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to load activeChat: %s", unmarshalErr.Error()))
 		}
 		c.activeChat = activeChat
 
@@ -583,7 +584,7 @@ func (c *Plugin) loadChats(ctx context.Context) {
 		}
 	}
 
-	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Loaded %d nonactive chats, has active chat: %t", len(c.nonActiveChats), c.activeChat != nil))
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("loaded %d nonactive chats, has active chat: %t", len(c.nonActiveChats), c.activeChat != nil))
 }
 
 func (c *Plugin) saveChats(ctx context.Context) {
@@ -595,7 +596,7 @@ func (c *Plugin) saveActiveChat(ctx context.Context) {
 	if c.activeChat != nil {
 		activeChatStr, marshalErr := json.Marshal(c.activeChat)
 		if marshalErr != nil {
-			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to marshal activeChats: %s", marshalErr.Error()))
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to marshal activeChats: %s", marshalErr.Error()))
 		}
 		c.api.SaveSetting(ctx, "active_chat", string(activeChatStr), false)
 	} else {
@@ -607,7 +608,7 @@ func (c *Plugin) saveNonActiveChats(ctx context.Context) {
 	if len(c.nonActiveChats) > 0 {
 		nonActiveChatStr, marshalErr := json.Marshal(c.nonActiveChats)
 		if marshalErr != nil {
-			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to marshal nonActiveChats: %s", marshalErr.Error()))
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to marshal nonActiveChats: %s", marshalErr.Error()))
 		}
 		c.api.SaveSetting(ctx, "non_active_chats", string(nonActiveChatStr), false)
 	} else {
@@ -679,7 +680,7 @@ func (c *Plugin) summaryChatTitle(ctx context.Context, conversations []Conversat
 
 	resp, err := c.client.Chat(ctx, c.model, finalConversations)
 	if err != nil {
-		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to summary chat title: %s", err.Error()))
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to summary chat title: %s", err.Error()))
 		return "", err
 	}
 

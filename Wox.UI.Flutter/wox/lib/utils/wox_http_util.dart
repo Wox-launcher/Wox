@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/entity/wox_response.dart';
 import 'package:wox/utils/entity_factory.dart';
 import 'package:wox/utils/env.dart';
@@ -21,20 +22,20 @@ class WoxHttpUtil {
       if (woxResponse.success == false) throw Exception(woxResponse.message);
       return EntityFactory.generateOBJ<T>(woxResponse.data);
     } catch (e) {
-      Logger.instance.info('Failed to fetch data: $e');
+      Logger.instance.error(const UuidV4().generate(), 'Failed to fetch data: $e');
       throw Exception('Failed to fetch data: $e');
     }
   }
 
   Future<T> postData<T>(String url, dynamic data) async {
-    Logger.instance.info('Posting data to $_baseUrl$url');
+    Logger.instance.info(const UuidV4().generate(), 'Posting data to $_baseUrl$url');
     try {
       final response = await _dio.post(_baseUrl + url, data: data);
       WoxResponse woxResponse = WoxResponse.fromJson(response.data);
       if (woxResponse.success == false) throw Exception(woxResponse.message);
       return EntityFactory.generateOBJ<T>(woxResponse.data);
     } catch (e) {
-      Logger.instance.info('Failed to post data: $e');
+      Logger.instance.error(const UuidV4().generate(), 'Failed to post data: $e');
       throw Exception('Failed to post data: $e');
     }
   }
