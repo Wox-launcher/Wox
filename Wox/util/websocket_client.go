@@ -44,6 +44,10 @@ func (w *WebsocketClient) Connect(ctx context.Context) error {
 	return nil
 }
 
+func (w *WebsocketClient) IsConnected() bool {
+	return w.isConnected
+}
+
 func (w *WebsocketClient) ping(ctx context.Context) {
 	for {
 		select {

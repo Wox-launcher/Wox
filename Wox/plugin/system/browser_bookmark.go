@@ -34,7 +34,7 @@ func (c *BrowserBookmarkPlugin) GetMetadata() plugin.Metadata {
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
-		Runtime:       "Nodejs",
+		Runtime:       "Go",
 		Description:   "Search browser bookmarks",
 		Icon:          browserIcon.String(),
 		Entry:         "",

@@ -27,7 +27,7 @@ func (c *BackupPlugin) GetMetadata() plugin.Metadata {
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
-		Runtime:       "Nodejs",
+		Runtime:       "Go",
 		Description:   "Backup and restore Wox settings",
 		Icon:          backupIcon.String(),
 		Entry:         "",

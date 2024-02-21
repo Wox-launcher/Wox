@@ -26,7 +26,7 @@ func (i *QueryHistoryPlugin) GetMetadata() plugin.Metadata {
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
-		Runtime:       "Nodejs",
+		Runtime:       "Go",
 		Description:   "Query histories for Wox",
 		Icon:          queryHistoryIcon.String(),
 		Entry:         "",

@@ -25,7 +25,19 @@ func (n *NodejsHost) GetRuntime(ctx context.Context) plugin.Runtime {
 }
 
 func (n *NodejsHost) Start(ctx context.Context) error {
-	return n.websocketHost.StartHost(ctx, "node", path.Join(util.GetLocation().GetHostDirectory(), "node-host.js"))
+	return n.websocketHost.StartHost(ctx, n.findNodejsPath(ctx), path.Join(util.GetLocation().GetHostDirectory(), "node-host.js"))
+}
+
+func (n *NodejsHost) findNodejsPath(ctx context.Context) string {
+	if output, err := util.ShellRunOutput("which", "node"); err == nil {
+		return string(output)
+	}
+
+	return "node"
+}
+
+func (n *NodejsHost) IsStarted(ctx context.Context) bool {
+	return n.websocketHost.IsHostStarted(ctx)
 }
 
 func (n *NodejsHost) Stop(ctx context.Context) {

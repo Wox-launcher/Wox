@@ -116,7 +116,7 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
-		Runtime:       "Nodejs",
+		Runtime:       "Go",
 		Description:   "Chatgpt for Wox",
 		Icon:          chatgptIcon.String(),
 		Entry:         "",

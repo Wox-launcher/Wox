@@ -141,6 +141,12 @@ func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifes
 func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error {
 	logger.Info(ctx, fmt.Sprintf("start to install plugin %s(%s)", manifest.Name, manifest.Version))
 
+	// check if plugin's runtime is started
+	if !GetPluginManager().IsHostStarted(ctx, manifest.Runtime) {
+		logger.Error(ctx, fmt.Sprintf("%s runtime is not started, please start first", manifest.Runtime))
+		return fmt.Errorf("%s runtime is not started, please start first", manifest.Runtime)
+	}
+
 	// check if installed newer version
 	installedPlugin, exist := lo.Find(GetPluginManager().GetPluginInstances(), func(item *Instance) bool {
 		return item.Metadata.Id == manifest.Id
@@ -175,6 +181,10 @@ func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error
 	downloadErr := util.HttpDownload(ctx, manifest.DownloadUrl, pluginZipPath)
 	if downloadErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to download plugin %s(%s): %s", manifest.Name, manifest.Version, downloadErr.Error()))
+		removeErr := os.Remove(pluginZipPath)
+		if removeErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to remove plugin zip %s: %s", pluginZipPath, removeErr.Error()))
+		}
 		return fmt.Errorf("failed to download plugin %s(%s): %s", manifest.Name, manifest.Version, downloadErr.Error())
 	}
 
@@ -183,6 +193,10 @@ func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error
 	unzipErr := util.Unzip(pluginZipPath, pluginDirectory)
 	if unzipErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to unzip plugin %s(%s): %s", manifest.Name, manifest.Version, unzipErr.Error()))
+		removeErr := os.Remove(pluginZipPath)
+		if removeErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to remove plugin zip %s: %s", pluginZipPath, removeErr.Error()))
+		}
 		return fmt.Errorf("failed to unzip plugin %s(%s): %s", manifest.Name, manifest.Version, unzipErr.Error())
 	}
 
@@ -191,6 +205,17 @@ func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error
 	loadErr := GetPluginManager().LoadPlugin(ctx, pluginDirectory)
 	if loadErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to load plugin %s(%s): %s", manifest.Name, manifest.Version, loadErr.Error()))
+
+		// remove plugin zip and directory
+		removeErr := os.RemoveAll(pluginDirectory)
+		if removeErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to remove plugin directory %s: %s", pluginDirectory, removeErr.Error()))
+		}
+		removeErr = os.Remove(pluginZipPath)
+		if removeErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to remove plugin zip %s: %s", pluginZipPath, removeErr.Error()))
+		}
+
 		return fmt.Errorf("failed to load plugin %s(%s): %s", manifest.Name, manifest.Version, loadErr.Error())
 	}
 

@@ -828,3 +828,17 @@ func (m *Manager) ReplaceQueryVariable(ctx context.Context, query string) string
 
 	return query
 }
+
+func (m *Manager) IsHostStarted(ctx context.Context, runtime Runtime) bool {
+	if runtime == PLUGIN_RUNTIME_GO {
+		return true
+	}
+
+	for _, host := range AllHosts {
+		if host.GetRuntime(ctx) == runtime {
+			return host.IsStarted(ctx)
+		}
+	}
+
+	return false
+}

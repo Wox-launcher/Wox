@@ -49,7 +49,7 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
-		Runtime:       "Nodejs",
+		Runtime:       "Go",
 		Description:   "Provide the web search ability",
 		Icon:          webSearchIcon.String(),
 		Entry:         "",

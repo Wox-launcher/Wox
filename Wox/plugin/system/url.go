@@ -27,7 +27,7 @@ func (r *UrlPlugin) GetMetadata() plugin.Metadata {
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
-		Runtime:       "Nodejs",
+		Runtime:       "Go",
 		Description:   "Open the typed URL from Wox",
 		Icon:          urlIcon.String(),
 		Entry:         "",

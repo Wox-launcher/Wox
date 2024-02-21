@@ -1,6 +1,8 @@
 package util
 
-import "os/exec"
+import (
+	"os/exec"
+)
 
 func ShellOpen(path string) error {
 	return exec.Command("open", path).Start()
@@ -20,5 +22,10 @@ func ShellRun(name string, arg ...string) (*exec.Cmd, error) {
 
 func ShellRunOutput(name string, arg ...string) ([]byte, error) {
 	cmd := exec.Command(name, arg...)
-	return cmd.Output()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, err
+	} else {
+		return output, nil
+	}
 }

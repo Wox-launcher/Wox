@@ -42,7 +42,7 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
-		Runtime:       "Nodejs",
+		Runtime:       "Go",
 		Description:   "Search app installed on your computer",
 		Icon:          appIcon.String(),
 		Entry:         "",

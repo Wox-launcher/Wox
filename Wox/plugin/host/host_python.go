@@ -28,6 +28,10 @@ func (n *PythonHost) Start(ctx context.Context) error {
 	return n.websocketHost.StartHost(ctx, "python", path.Join(util.GetLocation().GetHostDirectory(), "python-host.pyz"))
 }
 
+func (n *PythonHost) IsStarted(ctx context.Context) bool {
+	return n.websocketHost.IsHostStarted(ctx)
+}
+
 func (n *PythonHost) Stop(ctx context.Context) {
 	n.websocketHost.StopHost(ctx)
 }

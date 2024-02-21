@@ -67,6 +67,10 @@ func (w *WebsocketHost) StopHost(ctx context.Context) {
 	}
 }
 
+func (w *WebsocketHost) IsHostStarted(ctx context.Context) bool {
+	return w.ws != nil && w.ws.IsConnected()
+}
+
 func (w *WebsocketHost) LoadPlugin(ctx context.Context, metadata plugin.Metadata, pluginDirectory string) (plugin.Plugin, error) {
 	util.GetLogger().Info(ctx, fmt.Sprintf("start loading %s plugin, directory: %s", metadata.Name, pluginDirectory))
 	_, loadPluginErr := w.invokeMethod(ctx, metadata, "loadPlugin", map[string]string{

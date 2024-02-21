@@ -59,7 +59,7 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 		Website:       "https://github.com/Wox-launcher/Wox",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
-		Runtime:       "Nodejs",
+		Runtime:       "Go",
 		Description:   "Plugin manager for Wox",
 		Icon:          wpmIcon.String(),
 		Entry:         "",
@@ -345,7 +345,10 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 					{
 						Name: "install",
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							plugin.GetStoreManager().Install(ctx, pluginManifest)
+							installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
+							if installErr != nil {
+								w.api.Notify(ctx, "Failed to install plugin", installErr.Error())
+							}
 						},
 					},
 				}})
