@@ -94,12 +94,11 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         color: fromCssColor(controller.woxTheme.value.queryBoxFontColor),
                       ),
                       decoration: InputDecoration(
-                        isCollapsed: true,
                         contentPadding: const EdgeInsets.only(
                           left: 8,
                           right: 8,
-                          top: 6,
-                          bottom: 14,
+                          top: 4,
+                          bottom: 17,
                         ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(controller.woxTheme.value.queryBoxBorderRadius.toDouble()),

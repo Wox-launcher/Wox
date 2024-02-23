@@ -123,7 +123,7 @@ func (w *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 
 	util.Go(ctx, "load dev plugins in dist", func() {
 		// must delay reload, because host env is not ready when system plugin init
-		time.Sleep(time.Second * 2)
+		time.Sleep(time.Second * 5)
 		newCtx := util.NewTraceContext()
 		for _, lp := range w.localPlugins {
 			w.reloadLocalDistPlugin(newCtx, lp.metadata, "reload after startup")
