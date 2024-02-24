@@ -190,7 +190,7 @@ func ParseWoxImage(image string) (WoxImage, error) {
 }
 
 func ConvertIcon(ctx context.Context, image WoxImage, pluginDirectory string) (newImage WoxImage) {
-	newImage = convertRelativePathToAbsolutePath(ctx, image, pluginDirectory)
+	newImage = ConvertRelativePathToAbsolutePath(ctx, image, pluginDirectory)
 	newImage = cropPngTransparentPaddings(ctx, newImage)
 	newImage = resizeImage(ctx, newImage, 40)
 	newImage = convertLocalImageToUrl(ctx, newImage)
@@ -285,7 +285,7 @@ func cropPngTransparentPaddings(ctx context.Context, woxImage WoxImage) (newImag
 	return NewWoxImageAbsolutePath(cropImgPath)
 }
 
-func convertRelativePathToAbsolutePath(ctx context.Context, image WoxImage, pluginDirectory string) (newImage WoxImage) {
+func ConvertRelativePathToAbsolutePath(ctx context.Context, image WoxImage, pluginDirectory string) (newImage WoxImage) {
 	newImage = image
 
 	if image.ImageType == WoxImageTypeRelativePath {

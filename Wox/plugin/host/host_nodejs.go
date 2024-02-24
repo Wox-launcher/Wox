@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"path"
+	"strings"
 	"wox/plugin"
 	"wox/util"
 )
@@ -30,7 +31,7 @@ func (n *NodejsHost) Start(ctx context.Context) error {
 
 func (n *NodejsHost) findNodejsPath(ctx context.Context) string {
 	if output, err := util.ShellRunOutput("which", "node"); err == nil {
-		return string(output)
+		return strings.ReplaceAll(string(output), "\n", "")
 	}
 
 	return "node"

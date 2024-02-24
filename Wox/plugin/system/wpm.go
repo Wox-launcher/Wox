@@ -369,11 +369,15 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 		results = lo.Map(plugins, func(pluginInstanceShadow *plugin.Instance, _ int) plugin.QueryResult {
 			// action will be executed in another go routine, so we need to copy the variable
 			pluginInstance := pluginInstanceShadow
+
+			icon := plugin.ParseWoxImageOrDefault(pluginInstance.Metadata.Icon, wpmIcon)
+			icon = plugin.ConvertRelativePathToAbsolutePath(ctx, icon, pluginInstance.PluginDirectory)
+
 			return plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    pluginInstance.Metadata.Name,
 				SubTitle: pluginInstance.Metadata.Description,
-				Icon:     plugin.ParseWoxImageOrDefault(pluginInstance.Metadata.Icon, wpmIcon),
+				Icon:     icon,
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "uninstall",

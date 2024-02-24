@@ -8,6 +8,7 @@ import (
 	"github.com/samber/lo"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"time"
 	"wox/util"
@@ -123,6 +124,14 @@ func (s *Store) GetStorePluginManifest(ctx context.Context, store storeManifest)
 	unmarshalErr := json.Unmarshal(response, &storePluginManifests)
 	if unmarshalErr != nil {
 		return nil, unmarshalErr
+	}
+
+	var finalStorePluginManifests []StorePluginManifest
+	for i := range storePluginManifests {
+		if IsSupportedRuntime(string(storePluginManifests[i].Runtime)) {
+			storePluginManifests[i].Runtime = Runtime(strings.ToUpper(string(storePluginManifests[i].Runtime)))
+			finalStorePluginManifests = append(finalStorePluginManifests, storePluginManifests[i])
+		}
 	}
 
 	return storePluginManifests, nil

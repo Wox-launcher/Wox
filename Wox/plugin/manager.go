@@ -78,6 +78,7 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 	// load system plugin first
 	m.loadSystemPlugins(ctx)
 
+	logger.Debug(ctx, "start loading user plugin metadata")
 	basePluginDirectory := util.GetLocation().GetPluginDirectory()
 	pluginDirectories, readErr := os.ReadDir(basePluginDirectory)
 	if readErr != nil {
@@ -257,37 +258,45 @@ func (m *Manager) UnloadPlugin(ctx context.Context, pluginInstance *Instance) {
 }
 
 func (m *Manager) loadSystemPlugins(ctx context.Context) {
+	start := util.GetSystemTimestamp()
 	logger.Info(ctx, fmt.Sprintf("start loading system plugins, found %d system plugins", len(AllSystemPlugin)))
 
-	for _, plugin := range AllSystemPlugin {
-		metadata := plugin.GetMetadata()
-		instance := &Instance{
-			Metadata:              metadata,
-			Plugin:                plugin,
-			Host:                  nil,
-			IsSystemPlugin:        true,
-			LoadStartTimestamp:    util.GetSystemTimestamp(),
-			LoadFinishedTimestamp: util.GetSystemTimestamp(),
-		}
-		instance.API = NewAPI(instance)
-
-		pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.SettingDefinitions)
-		if settingErr != nil {
-			errMsg := fmt.Sprintf("failed to load system plugin[%s] setting, use default plugin setting. err: %s", metadata.Name, settingErr.Error())
-			logger.Error(ctx, errMsg)
-			instance.API.Log(ctx, LogLevelError, fmt.Sprintf("[SYS] %s", errMsg))
-			pluginSetting = &setting.PluginSetting{
-				Settings: util.NewHashMap[string, string](),
+	for _, pluginDummy := range AllSystemPlugin {
+		plugin := pluginDummy
+		util.Go(ctx, fmt.Sprintf("load system plugin <%s>", plugin.GetMetadata().Name), func() {
+			metadata := plugin.GetMetadata()
+			instance := &Instance{
+				Metadata:              metadata,
+				Plugin:                plugin,
+				Host:                  nil,
+				IsSystemPlugin:        true,
+				LoadStartTimestamp:    util.GetSystemTimestamp(),
+				LoadFinishedTimestamp: util.GetSystemTimestamp(),
 			}
-		}
-		instance.Setting = pluginSetting
+			instance.API = NewAPI(instance)
 
-		m.instances = append(m.instances, instance)
+			startTimestamp := util.GetSystemTimestamp()
+			pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.SettingDefinitions)
+			if settingErr != nil {
+				errMsg := fmt.Sprintf("failed to load system plugin[%s] setting, use default plugin setting. err: %s", metadata.Name, settingErr.Error())
+				logger.Error(ctx, errMsg)
+				instance.API.Log(ctx, LogLevelError, fmt.Sprintf("[SYS] %s", errMsg))
+				pluginSetting = &setting.PluginSetting{
+					Settings: util.NewHashMap[string, string](),
+				}
+			}
+			instance.Setting = pluginSetting
+			if util.GetSystemTimestamp()-startTimestamp > 100 {
+				logger.Warn(ctx, fmt.Sprintf("load system plugin[%s] setting too slow, cost %d ms", metadata.Name, util.GetSystemTimestamp()-startTimestamp))
+			}
 
-		util.Go(ctx, fmt.Sprintf("init system plugin <%s>", plugin.GetMetadata().Name), func() {
+			m.instances = append(m.instances, instance)
+
 			m.initPlugin(util.NewTraceContext(), instance)
 		})
 	}
+
+	logger.Debug(ctx, fmt.Sprintf("finish loading system plugins, cost %d ms", util.GetSystemTimestamp()-start))
 }
 
 func (m *Manager) initPlugin(ctx context.Context, instance *Instance) {
