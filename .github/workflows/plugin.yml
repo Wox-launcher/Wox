@@ -18,7 +18,7 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           title: "[Bot] Update plugin store manifests"
-          commit-message: [Bot] Update plugin store manifests
+          commit-message: "[Bot] Update plugin store manifests"
           branch: update-plugin-store
           add-paths: plugin-store.json
           reviewers: qianlifeng
