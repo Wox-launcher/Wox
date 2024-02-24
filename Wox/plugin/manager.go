@@ -202,7 +202,7 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 		LoadFinishedTimestamp: loadFinishTimestamp,
 	}
 	instance.API = NewAPI(instance)
-	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Metadata.Id, metadata.Metadata.SettingDefinitions)
+	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Metadata.Id, metadata.Metadata.Name, metadata.Metadata.SettingDefinitions)
 	if settingErr != nil {
 		instance.API.Log(ctx, LogLevelError, fmt.Errorf("[SYS] failed to load plugin[%s] setting: %w", metadata.Metadata.Name, settingErr).Error())
 		return settingErr
@@ -276,7 +276,7 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 			instance.API = NewAPI(instance)
 
 			startTimestamp := util.GetSystemTimestamp()
-			pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.SettingDefinitions)
+			pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.Name, metadata.SettingDefinitions)
 			if settingErr != nil {
 				errMsg := fmt.Sprintf("failed to load system plugin[%s] setting, use default plugin setting. err: %s", metadata.Name, settingErr.Error())
 				logger.Error(ctx, errMsg)

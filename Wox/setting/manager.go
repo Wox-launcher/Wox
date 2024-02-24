@@ -222,10 +222,11 @@ func (m *Manager) saveWoxAppData(ctx context.Context, reason string) error {
 	return nil
 }
 
-func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, defaultSettings definition.PluginSettingDefinitions) (*PluginSetting, error) {
+func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, pluginName string, defaultSettings definition.PluginSettingDefinitions) (*PluginSetting, error) {
 	pluginSettingPath := path.Join(util.GetLocation().GetPluginSettingDirectory(), fmt.Sprintf("%s.json", pluginId))
 	if _, statErr := os.Stat(pluginSettingPath); os.IsNotExist(statErr) {
 		return &PluginSetting{
+			Name:     pluginName,
 			Settings: defaultSettings.GetAllDefaults(),
 		}, nil
 	}
@@ -252,6 +253,8 @@ func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, defaul
 		}
 		return true
 	})
+
+	pluginSetting.Name = pluginName
 
 	return pluginSetting, nil
 }
