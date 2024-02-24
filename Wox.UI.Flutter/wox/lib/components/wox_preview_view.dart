@@ -143,8 +143,14 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(e.key, style: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor))),
-                              Text(e.value, style: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyContentColor))),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 80),
+                                child: Text(e.key, overflow: TextOverflow.ellipsis, style: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor))),
+                              ),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 260),
+                                child: Text(e.value, overflow: TextOverflow.ellipsis, style: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyContentColor))),
+                              ),
                             ],
                           ),
                         ],

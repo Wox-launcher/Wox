@@ -15,8 +15,10 @@ jobs:
       - name: Check plugin updates
         run: just ci_plugin
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v6
         with:
-          title: "[Plugin Store] Update plugins version"
-          branch: update-plugin-store-version
+          title: "[Bot] Update plugin store manifests"
+          commit-message: [Bot] Update plugin store manifests
+          branch: update-plugin-store
           add-paths: plugin-store.json
+          reviewers: qianlifeng
