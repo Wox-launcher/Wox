@@ -54,11 +54,7 @@ Documentation
 
 - [Wiki](https://github.com/Wox-launcher/Wox/wiki)
 
-Contributors
+Project Activity
 ------
 
-<a href="https://github.com/wox-launcher/wox/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=wox-launcher/wox" />
-</a>
-
-Made with [contrib.rocks](https://contrib.rocks).
+![Alt](https://repobeats.axiom.co/api/embed/426a758ebe040d1931da135e5011b6c5c9058041.svg "Repobeats analytics image")
