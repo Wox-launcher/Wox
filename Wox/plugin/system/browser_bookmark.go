@@ -107,6 +107,9 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 
 func (c *BrowserBookmarkPlugin) loadChromeBookmarkInMacos(ctx context.Context, profile string) (results []Bookmark) {
 	bookmarkLocation, _ := homedir.Expand(fmt.Sprintf("~/Library/Application Support/Google/Chrome/%s/Bookmarks", profile))
+	if _, err := os.Stat(bookmarkLocation); os.IsNotExist(err) {
+		return
+	}
 	file, readErr := os.ReadFile(bookmarkLocation)
 	if readErr != nil {
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error reading chrome bookmark file: %s", readErr.Error()))

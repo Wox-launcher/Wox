@@ -21,8 +21,8 @@ type WebsocketHost struct {
 	hostProcess *os.Process
 }
 
-func (w *WebsocketHost) logIdentity(ctx context.Context) string {
-	return fmt.Sprintf("<Wox %s Host Impl>", w.host.GetRuntime(ctx))
+func (w *WebsocketHost) getHostName(ctx context.Context) string {
+	return fmt.Sprintf("%s Host Impl", w.host.GetRuntime(ctx))
 }
 
 func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, entry string, executableArgs ...string) error {
@@ -31,11 +31,11 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 		return fmt.Errorf("failed to get available port: %w", portErr)
 	}
 
-	util.GetLogger().Info(ctx, fmt.Sprintf("%s starting host on port %d", w.logIdentity(ctx), port))
-	util.GetLogger().Info(ctx, fmt.Sprintf("%s host path: %s", w.logIdentity(ctx), executablePath))
-	util.GetLogger().Info(ctx, fmt.Sprintf("%s host entry: %s", w.logIdentity(ctx), entry))
-	util.GetLogger().Info(ctx, fmt.Sprintf("%s host args: %s", w.logIdentity(ctx), strings.Join(executableArgs, " ")))
-	util.GetLogger().Info(ctx, fmt.Sprintf("%s host log directory: %s", w.logIdentity(ctx), util.GetLocation().GetLogHostsDirectory()))
+	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> starting host on port %d", w.getHostName(ctx), port))
+	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> host path: %s", w.getHostName(ctx), executablePath))
+	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> host entry: %s", w.getHostName(ctx), entry))
+	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> host args: %s", w.getHostName(ctx), strings.Join(executableArgs, " ")))
+	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> host log directory: %s", w.getHostName(ctx), util.GetLocation().GetLogHostsDirectory()))
 
 	var args []string
 	args = append(args, executableArgs...)
@@ -45,7 +45,7 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 	if err != nil {
 		return fmt.Errorf("failed to start host: %w", err)
 	}
-	util.GetLogger().Info(ctx, fmt.Sprintf("%s host pid: %d", w.logIdentity(ctx), cmd.Process.Pid))
+	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> host pid: %d", w.getHostName(ctx), cmd.Process.Pid))
 
 	time.Sleep(time.Second) // wait for host to start
 	w.startWebsocketServer(ctx, port)
@@ -55,14 +55,14 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 }
 
 func (w *WebsocketHost) StopHost(ctx context.Context) {
-	util.GetLogger().Info(ctx, fmt.Sprintf("%s stopping host", w.logIdentity(ctx)))
+	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> stopping host", w.getHostName(ctx)))
 	if w.hostProcess != nil {
 		var pid = w.hostProcess.Pid
 		killErr := w.hostProcess.Kill()
 		if killErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("%s failed to kill host process(%d): %s", w.logIdentity(ctx), pid, killErr))
+			util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed to kill host process(%d): %s", w.getHostName(ctx), pid, killErr))
 		} else {
-			util.GetLogger().Info(ctx, fmt.Sprintf("%s killed host process(%d)", w.logIdentity(ctx), pid))
+			util.GetLogger().Info(ctx, fmt.Sprintf("<%s> killed host process(%d)", w.getHostName(ctx), pid))
 		}
 	}
 }
@@ -104,7 +104,7 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 		Type:       JsonRpcTypeRequest,
 		Params:     params,
 	}
-	util.GetLogger().Debug(ctx, fmt.Sprintf("<Wox -> Host> inovke plugin %s method: %s, request id: %s", metadata.Name, method, request.Id))
+	util.GetLogger().Debug(ctx, fmt.Sprintf("<Wox -> %s> inovke plugin <%s> method: %s, request id: %s", w.getHostName(ctx), metadata.Name, method, request.Id))
 
 	jsonData, marshalErr := json.Marshal(request)
 	if marshalErr != nil {
@@ -138,13 +138,13 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 func (w *WebsocketHost) startWebsocketServer(ctx context.Context, port int) {
 	w.ws = util.NewWebsocketClient(fmt.Sprintf("ws://localhost:%d", port))
 	w.ws.OnMessage(ctx, func(data []byte) {
-		util.Go(ctx, fmt.Sprintf("%s onMessage", w.logIdentity(ctx)), func() {
+		util.Go(ctx, fmt.Sprintf("<%s> onMessage", w.getHostName(ctx)), func() {
 			w.onMessage(string(data))
 		})
 	})
 	connErr := w.ws.Connect(ctx)
 	if connErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("%s failed to connect to host: %s", w.logIdentity(ctx), connErr))
+		util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed to connect to host: %s", w.getHostName(ctx), connErr))
 		return
 	}
 }
@@ -153,7 +153,7 @@ func (w *WebsocketHost) onMessage(data string) {
 	ctx := util.NewTraceContext()
 
 	if !strings.Contains(data, string(JsonRpcTypeSystemLog)) {
-		util.GetLogger().Debug(ctx, fmt.Sprintf("[Host -> Wox] %s received message: %s", w.logIdentity(ctx), data))
+		util.GetLogger().Debug(ctx, fmt.Sprintf("[%s -> Wox] received message: %s", w.getHostName(ctx), data))
 	}
 
 	if strings.Contains(data, string(JsonRpcTypeSystemLog)) {
@@ -175,7 +175,7 @@ func (w *WebsocketHost) onMessage(data string) {
 		var request JsonRpcRequest
 		unmarshalErr := json.Unmarshal([]byte(data), &request)
 		if unmarshalErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("%s failed to unmarshal request: %s", w.logIdentity(ctx), unmarshalErr))
+			util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed to unmarshal request: %s", w.getHostName(ctx), unmarshalErr))
 			return
 		}
 
@@ -184,13 +184,13 @@ func (w *WebsocketHost) onMessage(data string) {
 		var response JsonRpcResponse
 		unmarshalErr := json.Unmarshal([]byte(data), &response)
 		if unmarshalErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("%s failed to unmarshal response: %s", w.logIdentity(ctx), unmarshalErr))
+			util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed to unmarshal response: %s", w.getHostName(ctx), unmarshalErr))
 			return
 		}
 
 		w.handleResponseFromPlugin(util.NewTraceContextWith(response.TraceId), response)
 	} else {
-		util.GetLogger().Error(ctx, fmt.Sprintf("%s unknown message type: %s", w.logIdentity(ctx), data))
+		util.GetLogger().Error(ctx, fmt.Sprintf("<%s> unknown message type: %s", w.getHostName(ctx), data))
 	}
 }
 
@@ -336,7 +336,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 func (w *WebsocketHost) handleResponseFromPlugin(ctx context.Context, response JsonRpcResponse) {
 	resultChan, exist := w.requestMap.Load(response.Id)
 	if !exist {
-		util.GetLogger().Error(ctx, fmt.Sprintf("%s failed to find request id: %s", w.logIdentity(ctx), response.Id))
+		util.GetLogger().Error(ctx, fmt.Sprintf("%s failed to find request id: %s", w.getHostName(ctx), response.Id))
 		return
 	}
 

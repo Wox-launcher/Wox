@@ -111,7 +111,8 @@ func (w *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	w.localPluginDirectories = lo.Filter(localPluginDirs, func(directory string, _ int) bool {
 		_, statErr := os.Stat(directory)
 		if statErr != nil {
-			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to stat local plugin directory, remove it: %s", statErr.Error()))
+			w.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Failed to stat local plugin directory, remove it: %s", statErr.Error()))
+			os.RemoveAll(directory)
 			return false
 		}
 		return true
