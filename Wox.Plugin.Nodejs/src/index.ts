@@ -1,3 +1,5 @@
+import { Context } from "./context"
+
 export interface Plugin {
   init: (context: PluginInitContext) => Promise<void>
   query: (query: Query) => Promise<Result[]>
@@ -115,51 +117,51 @@ export interface PublicAPI {
   /**
    * Change Wox query
    */
-  ChangeQuery: (query: ChangeQueryParam) => Promise<void>
+  ChangeQuery: (ctx: Context, query: ChangeQueryParam) => Promise<void>
 
   /**
    * Hide Wox
    */
-  HideApp: () => Promise<void>
+  HideApp: (ctx: Context) => Promise<void>
 
   /**
    * Show Wox
    */
-  ShowApp: () => Promise<void>
+  ShowApp: (ctx: Context) => Promise<void>
 
   /**
    * Notify message
    */
-  Notify: (title: string, description?: string) => Promise<void>
+  Notify: (ctx: Context, title: string, description?: string) => Promise<void>
 
   /**
    * Write log
    */
-  Log: (level: "Info" | "Error" | "Debug" | "Warning", msg: string) => Promise<void>
+  Log: (ctx: Context, level: "Info" | "Error" | "Debug" | "Warning", msg: string) => Promise<void>
 
   /**
    * Get translation of current language
    */
-  GetTranslation: (key: string) => Promise<string>
+  GetTranslation: (ctx: Context, key: string) => Promise<string>
 
   /**
    * Get customized setting
    *
    * will try to get platform specific setting first, if not found, will try to get global setting
    */
-  GetSetting: (key: string) => Promise<string>
+  GetSetting: (ctx: Context, key: string) => Promise<string>
 
   /**
    * Save customized setting
    *
    * @isPlatformSpecific If true, setting will be only saved in current platform. If false, setting will be available in all platforms
    */
-  SaveSetting: (key: string, value: string, isPlatformSpecific: boolean) => Promise<void>
+  SaveSetting: (ctx: Context, key: string, value: string, isPlatformSpecific: boolean) => Promise<void>
 
   /**
    * Register setting changed callback
    */
-  OnSettingChanged: (callback: (key: string, value: string) => void) => Promise<void>
+  OnSettingChanged: (ctx: Context, callback: (key: string, value: string) => void) => Promise<void>
 }
 
 export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url" | "emoji"
