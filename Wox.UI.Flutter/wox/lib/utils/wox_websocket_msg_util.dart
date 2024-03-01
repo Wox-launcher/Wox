@@ -36,7 +36,7 @@ class WoxWebsocketMsgUtil {
         isConnecting = false;
         var msg = WoxWebsocketMsg.fromJson(jsonDecode(event));
         if (msg.success == false) {
-          Logger.instance.error(const UuidV4().generate(), "Received error message: ${msg.toJson()}");
+          Logger.instance.error(msg.traceId, "Received error message: ${msg.toJson()}");
           return;
         }
 

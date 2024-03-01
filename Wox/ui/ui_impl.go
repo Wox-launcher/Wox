@@ -321,7 +321,7 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 
 			resultDebouncer.Done(ctx)
 			return
-		case <-time.After(time.Second * 10):
+		case <-time.After(time.Minute):
 			logger.Info(ctx, fmt.Sprintf("query timeout, query: %s, request id: %s", query, request.RequestId))
 			resultDebouncer.Done(ctx)
 			responseUIError(ctx, request, fmt.Sprintf("query timeout, query: %s, request id: %s", query, request.RequestId))

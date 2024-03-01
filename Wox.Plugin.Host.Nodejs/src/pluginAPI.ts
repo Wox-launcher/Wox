@@ -5,6 +5,7 @@ import * as crypto from "crypto"
 import { waitingForResponse } from "./index"
 import Deferred from "promise-deferred"
 import { logger } from "./logger"
+import { Context } from "@wox-launcher/wox-plugin/dist/context"
 
 export class PluginAPI implements PublicAPI {
   ws: WebSocket
@@ -19,12 +20,15 @@ export class PluginAPI implements PublicAPI {
     this.settingChangeCallbacks = new Map<string, (key: string, value: string) => void>()
   }
 
-  async invokeMethod(method: string, params: { [key: string]: string }): Promise<unknown> {
+  async invokeMethod(ctx: Context, method: string, params: { [key: string]: string }): Promise<unknown> {
     const startTime = Date.now()
     const requestId = crypto.randomUUID()
-    const traceId = crypto.randomUUID()
+    let traceId: string = crypto.randomUUID()
+    if (ctx.Exists("traceId")) {
+      traceId = ctx.Get("traceId")
+    }
 
-    logger.info(traceId, `[${this.pluginName}] start invoke method to Wox: ${method}, id: ${requestId} parameters: ${JSON.stringify(params)}`)
+    logger.info(ctx, `[${this.pluginName}] start invoke method to Wox: ${method}, id: ${requestId} parameters: ${JSON.stringify(params)}`)
 
     this.ws.send(
       JSON.stringify({
@@ -42,52 +46,52 @@ export class PluginAPI implements PublicAPI {
 
     const result = await deferred.promise
     const endTime = Date.now()
-    logger.info(traceId, `[${this.pluginName}] invoke method to Wox finished: ${method}, time: ${endTime - startTime}ms`)
+    logger.info(ctx, `[${this.pluginName}] invoke method to Wox finished: ${method}, time: ${endTime - startTime}ms`)
     return result
   }
 
-  async ChangeQuery(query: ChangeQueryParam): Promise<void> {
-    await this.invokeMethod("ChangeQuery", {
+  async ChangeQuery(ctx: Context, query: ChangeQueryParam): Promise<void> {
+    await this.invokeMethod(ctx, "ChangeQuery", {
       queryType: query.QueryType,
       queryText: query.QueryText === undefined ? "" : query.QueryText,
       querySelection: JSON.stringify(query.QuerySelection)
     })
   }
 
-  async HideApp(): Promise<void> {
-    await this.invokeMethod("HideApp", {})
+  async HideApp(ctx: Context): Promise<void> {
+    await this.invokeMethod(ctx, "HideApp", {})
   }
 
-  async Log(level: "Info" | "Error" | "Debug" | "Warning", msg: string): Promise<void> {
-    await this.invokeMethod("Log", { msg, level })
+  async Log(ctx: Context, level: "Info" | "Error" | "Debug" | "Warning", msg: string): Promise<void> {
+    await this.invokeMethod(ctx, "Log", { msg, level })
   }
 
-  async ShowApp(): Promise<void> {
-    await this.invokeMethod("ShowApp", {})
+  async ShowApp(ctx: Context): Promise<void> {
+    await this.invokeMethod(ctx, "ShowApp", {})
   }
 
-  async Notify(title: string, description: string | undefined): Promise<void> {
-    await this.invokeMethod("Notify", {
+  async Notify(ctx: Context, title: string, description: string | undefined): Promise<void> {
+    await this.invokeMethod(ctx, "Notify", {
       title,
       description: description === undefined ? "" : description
     })
   }
 
-  async GetTranslation(key: string): Promise<string> {
-    return (await this.invokeMethod("GetTranslation", { key })) as string
+  async GetTranslation(ctx: Context, key: string): Promise<string> {
+    return (await this.invokeMethod(ctx, "GetTranslation", { key })) as string
   }
 
-  async GetSetting(key: string): Promise<string> {
-    return (await this.invokeMethod("GetSetting", { key })) as string
+  async GetSetting(ctx: Context, key: string): Promise<string> {
+    return (await this.invokeMethod(ctx, "GetSetting", { key })) as string
   }
 
-  async SaveSetting(key: string, value: string, isPlatformSpecific: boolean): Promise<void> {
-    await this.invokeMethod("SaveSetting", { key, value, isPlatformSpecific: isPlatformSpecific.toString() })
+  async SaveSetting(ctx: Context, key: string, value: string, isPlatformSpecific: boolean): Promise<void> {
+    await this.invokeMethod(ctx, "SaveSetting", { key, value, isPlatformSpecific: isPlatformSpecific.toString() })
   }
 
-  async OnSettingChanged(callback: (key: string, value: string) => void): Promise<void> {
+  async OnSettingChanged(ctx: Context, callback: (key: string, value: string) => void): Promise<void> {
     const callbackId = crypto.randomUUID()
     this.settingChangeCallbacks.set(callbackId, callback)
-    await this.invokeMethod("OnPluginSettingChanged", { callbackId })
+    await this.invokeMethod(ctx, "OnPluginSettingChanged", { callbackId })
   }
 }

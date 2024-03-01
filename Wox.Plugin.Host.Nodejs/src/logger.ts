@@ -2,6 +2,9 @@ import winston, { format } from "winston"
 import dayjs from "dayjs"
 import WebSocket from "ws"
 import { PluginJsonRpcTypeSystemLog } from "./jsonrpc"
+import { Context } from "@wox-launcher/wox-plugin/dist/context"
+import crypto from "crypto"
+import { TraceIdKey } from "./trace"
 
 const logDirectory = process.argv[3]
 let ws: WebSocket | undefined = undefined
@@ -12,7 +15,12 @@ const winstonLogger = winston.createLogger({
   transports: [new winston.transports.File({ filename: "node.log", dirname: logDirectory })]
 })
 
-function log(traceId: string, level: string, msg: string) {
+function log(ctx: Context, level: string, msg: string) {
+  let traceId: string = crypto.randomUUID()
+  if (ctx.Exists(TraceIdKey)) {
+    traceId = ctx.Get(TraceIdKey)
+  }
+
   winstonLogger.log(level, `${traceId} [${level}] ${msg}`)
 
   if (ws !== undefined) {
@@ -28,14 +36,14 @@ function log(traceId: string, level: string, msg: string) {
 }
 
 export const logger = {
-  debug: (traceId: string, msg: string) => {
-    log(traceId, "debug", msg)
+  debug: (ctx: Context, msg: string) => {
+    log(ctx, "debug", msg)
   },
-  info: (traceId: string, msg: string) => {
-    log(traceId, "info", msg)
+  info: (ctx: Context, msg: string) => {
+    log(ctx, "info", msg)
   },
-  error: (traceId: string, msg: string) => {
-    log(traceId, "error", msg)
+  error: (ctx: Context, msg: string) => {
+    log(ctx, "error", msg)
   },
   updateWebSocket: (newWs: WebSocket | undefined) => {
     ws = newWs

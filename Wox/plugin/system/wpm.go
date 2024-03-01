@@ -77,6 +77,10 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 				Description: "Install Wox plugins",
 			},
 			{
+				Command:     "add",
+				Description: "Add local Wox plugin",
+			},
+			{
 				Command:     "uninstall",
 				Description: "Uninstall Wox plugins",
 			},
@@ -122,7 +126,7 @@ func (w *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		w.loadDevPlugin(ctx, directory)
 	}
 
-	util.Go(ctx, "load dev plugins in dist", func() {
+	util.Go(ctx, "reload dev plugins in dist", func() {
 		// must delay reload, because host env is not ready when system plugin init
 		time.Sleep(time.Second * 5)
 		newCtx := util.NewTraceContext()
@@ -183,11 +187,33 @@ func (w *WPMPlugin) parseMetadata(ctx context.Context, directory string) (plugin
 }
 
 func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	var results []plugin.QueryResult
-
 	if query.Command == "create" {
-		if w.creatingProcess != "" {
-			results = append(results, plugin.QueryResult{
+		return w.createCommand(query)
+	}
+
+	if query.Command == "dev" {
+		return w.devCommand(ctx)
+	}
+
+	if query.Command == "install" {
+		return w.installCommand(ctx, query)
+	}
+
+	if query.Command == "uninstall" {
+		return w.uninstallCommand(ctx, query)
+	}
+
+	if query.Command == "add" {
+		return w.addCommand(ctx, query)
+	}
+
+	return []plugin.QueryResult{}
+}
+
+func (w *WPMPlugin) createCommand(query plugin.Query) []plugin.QueryResult {
+	if w.creatingProcess != "" {
+		return []plugin.QueryResult{
+			{
 				Id:              uuid.NewString(),
 				Title:           w.creatingProcess,
 				SubTitle:        "Please wait...",
@@ -197,51 +223,143 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 					current.Title = w.creatingProcess
 					return current
 				},
-			})
-			return results
-		}
-
-		for _, template := range pluginTemplates {
-			// action will be executed in another go routine, so we need to copy the variable
-			pluginTemplateDummy := template
-			results = append(results, plugin.QueryResult{
-				Id:       uuid.NewString(),
-				Title:    "Create " + string(pluginTemplateDummy.Runtime) + " plugin",
-				SubTitle: fmt.Sprintf("Name: %s", query.Search),
-				Icon:     wpmIcon,
-				Actions: []plugin.QueryResultAction{
-					{
-						Name:                   "create",
-						PreventHideAfterAction: true,
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							pluginName := query.Search
-							util.Go(ctx, "create plugin", func() {
-								w.createPlugin(ctx, pluginTemplateDummy, pluginName, query)
-							})
-							w.api.ChangeQuery(ctx, share.ChangedQuery{
-								QueryType: plugin.QueryTypeInput,
-								QueryText: fmt.Sprintf("%s create ", query.TriggerKeyword),
-							})
-						},
-					},
-				}})
+			},
 		}
 	}
 
-	if query.Command == "dev" {
-		//list all local plugins
-		return lo.Map(w.localPlugins, func(lp localPlugin, _ int) plugin.QueryResult {
-			iconImage := plugin.ParseWoxImageOrDefault(lp.metadata.Metadata.Icon, wpmIcon)
-			iconImage = plugin.ConvertIcon(ctx, iconImage, lp.metadata.Directory)
+	var results []plugin.QueryResult
+	for _, template := range pluginTemplates {
+		// action will be executed in another go routine, so we need to copy the variable
+		pluginTemplateDummy := template
+		results = append(results, plugin.QueryResult{
+			Id:       uuid.NewString(),
+			Title:    "Create " + string(pluginTemplateDummy.Runtime) + " plugin",
+			SubTitle: fmt.Sprintf("Name: %s", query.Search),
+			Icon:     wpmIcon,
+			Actions: []plugin.QueryResultAction{
+				{
+					Name:                   "create",
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						pluginName := query.Search
+						util.Go(ctx, "create plugin", func() {
+							w.createPlugin(ctx, pluginTemplateDummy, pluginName, query)
+						})
+						w.api.ChangeQuery(ctx, share.ChangedQuery{
+							QueryType: plugin.QueryTypeInput,
+							QueryText: fmt.Sprintf("%s create ", query.TriggerKeyword),
+						})
+					},
+				},
+			}})
+	}
 
-			return plugin.QueryResult{
-				Id:       uuid.NewString(),
-				Title:    lp.metadata.Metadata.Name,
-				SubTitle: lp.metadata.Metadata.Description,
-				Icon:     iconImage,
-				Preview: plugin.WoxPreview{
-					PreviewType: plugin.WoxPreviewTypeMarkdown,
-					PreviewData: fmt.Sprintf(`
+	return results
+}
+
+func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	var results []plugin.QueryResult
+	plugins := plugin.GetPluginManager().GetPluginInstances()
+	plugins = lo.Filter(plugins, func(pluginInstance *plugin.Instance, _ int) bool {
+		return pluginInstance.IsSystemPlugin == false
+	})
+	if query.Search != "" {
+		plugins = lo.Filter(plugins, func(pluginInstance *plugin.Instance, _ int) bool {
+			return IsStringMatchNoPinYin(ctx, pluginInstance.Metadata.Name, query.Search)
+		})
+	}
+
+	results = lo.Map(plugins, func(pluginInstanceShadow *plugin.Instance, _ int) plugin.QueryResult {
+		// action will be executed in another go routine, so we need to copy the variable
+		pluginInstance := pluginInstanceShadow
+
+		icon := plugin.ParseWoxImageOrDefault(pluginInstance.Metadata.Icon, wpmIcon)
+		icon = plugin.ConvertRelativePathToAbsolutePath(ctx, icon, pluginInstance.PluginDirectory)
+
+		return plugin.QueryResult{
+			Id:       uuid.NewString(),
+			Title:    pluginInstance.Metadata.Name,
+			SubTitle: pluginInstance.Metadata.Description,
+			Icon:     icon,
+			Actions: []plugin.QueryResultAction{
+				{
+					Name: "uninstall",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						plugin.GetStoreManager().Uninstall(ctx, pluginInstance)
+					},
+				},
+			},
+		}
+	})
+	return results
+}
+
+func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	var results []plugin.QueryResult
+	pluginManifests := plugin.GetStoreManager().Search(ctx, query.Search)
+	for _, pluginManifestShadow := range pluginManifests {
+		// action will be executed in another go routine, so we need to copy the variable
+		pluginManifest := pluginManifestShadow
+
+		screenShotsMarkdown := lo.Map(pluginManifest.ScreenshotUrls, func(screenshot string, _ int) string {
+			return fmt.Sprintf("![screenshot](%s)", screenshot)
+		})
+
+		results = append(results, plugin.QueryResult{
+			Id:       uuid.NewString(),
+			Title:    pluginManifest.Name,
+			SubTitle: pluginManifest.Description,
+			Icon:     plugin.NewWoxImageUrl(pluginManifest.IconUrl),
+			Preview: plugin.WoxPreview{
+				PreviewType: plugin.WoxPreviewTypeMarkdown,
+				PreviewData: fmt.Sprintf(`
+### Description
+
+%s
+
+### Website
+
+%s
+
+### Screenshots
+
+%s
+`, pluginManifest.Description, pluginManifest.Website, strings.Join(screenShotsMarkdown, "\n")),
+				PreviewProperties: map[string]string{
+					"Author":  pluginManifest.Author,
+					"Version": pluginManifest.Version,
+					"Website": pluginManifest.Website,
+				},
+			},
+			Actions: []plugin.QueryResultAction{
+				{
+					Name: "install",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
+						if installErr != nil {
+							w.api.Notify(ctx, "Failed to install plugin", installErr.Error())
+						}
+					},
+				},
+			}})
+	}
+	return results
+}
+
+func (w *WPMPlugin) devCommand(ctx context.Context) []plugin.QueryResult {
+	//list all local plugins
+	return lo.Map(w.localPlugins, func(lp localPlugin, _ int) plugin.QueryResult {
+		iconImage := plugin.ParseWoxImageOrDefault(lp.metadata.Metadata.Icon, wpmIcon)
+		iconImage = plugin.ConvertIcon(ctx, iconImage, lp.metadata.Directory)
+
+		return plugin.QueryResult{
+			Id:       uuid.NewString(),
+			Title:    lp.metadata.Metadata.Name,
+			SubTitle: lp.metadata.Metadata.Description,
+			Icon:     iconImage,
+			Preview: plugin.WoxPreview{
+				PreviewType: plugin.WoxPreviewTypeMarkdown,
+				PreviewData: fmt.Sprintf(`
 - **Directory**: %s
 - **Name**: %s  
 - **Description**: %s
@@ -256,142 +374,70 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 - **SupportedOS**: %s
 - **Features**: %s
 `, lp.metadata.Directory, lp.metadata.Metadata.Name, lp.metadata.Metadata.Description, lp.metadata.Metadata.Author,
-						lp.metadata.Metadata.Website, lp.metadata.Metadata.Version, lp.metadata.Metadata.MinWoxVersion,
-						lp.metadata.Metadata.Runtime, lp.metadata.Metadata.Entry, lp.metadata.Metadata.TriggerKeywords,
-						lp.metadata.Metadata.Commands, lp.metadata.Metadata.SupportedOS, lp.metadata.Metadata.Features),
-				},
-				Actions: []plugin.QueryResultAction{
-					{
-						Name:      "Reload",
-						IsDefault: true,
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							w.reloadLocalDistPlugin(ctx, lp.metadata, "reload by user")
-						},
-					},
-					{
-						Name: "Open plugin directory",
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							openErr := util.ShellOpen(lp.metadata.Directory)
-							if openErr != nil {
-								w.api.Notify(ctx, "Failed to open plugin directory", openErr.Error())
-							}
-						},
-					},
-					{
-						Name: "Remove",
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
-								return directory != lp.metadata.Directory
-							})
-							w.saveLocalPluginDirectories(ctx)
-						},
-					},
-					{
-						Name: "Remove and delete plugin directory",
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							deleteErr := os.RemoveAll(lp.metadata.Directory)
-							if deleteErr != nil {
-								w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to delete plugin directory: %s", deleteErr.Error()))
-								return
-							}
-
-							w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
-								return directory != lp.metadata.Directory
-							})
-							w.saveLocalPluginDirectories(ctx)
-						},
+					lp.metadata.Metadata.Website, lp.metadata.Metadata.Version, lp.metadata.Metadata.MinWoxVersion,
+					lp.metadata.Metadata.Runtime, lp.metadata.Metadata.Entry, lp.metadata.Metadata.TriggerKeywords,
+					lp.metadata.Metadata.Commands, lp.metadata.Metadata.SupportedOS, lp.metadata.Metadata.Features),
+			},
+			Actions: []plugin.QueryResultAction{
+				{
+					Name:      "Reload",
+					IsDefault: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						w.reloadLocalDistPlugin(ctx, lp.metadata, "reload by user")
 					},
 				},
-			}
-		})
-	}
-
-	if query.Command == "install" {
-		pluginManifests := plugin.GetStoreManager().Search(ctx, query.Search)
-		for _, pluginManifestShadow := range pluginManifests {
-			// action will be executed in another go routine, so we need to copy the variable
-			pluginManifest := pluginManifestShadow
-
-			screenShotsMarkdown := lo.Map(pluginManifest.ScreenshotUrls, func(screenshot string, _ int) string {
-				return fmt.Sprintf("![screenshot](%s)", screenshot)
-			})
-
-			results = append(results, plugin.QueryResult{
-				Id:       uuid.NewString(),
-				Title:    pluginManifest.Name,
-				SubTitle: pluginManifest.Description,
-				Icon:     plugin.NewWoxImageUrl(pluginManifest.IconUrl),
-				Preview: plugin.WoxPreview{
-					PreviewType: plugin.WoxPreviewTypeMarkdown,
-					PreviewData: fmt.Sprintf(`
-### Description
-
-%s
-
-### Website
-
-%s
-
-### Screenshots
-
-%s
-`, pluginManifest.Description, pluginManifest.Website, strings.Join(screenShotsMarkdown, "\n")),
-					PreviewProperties: map[string]string{
-						"Author":  pluginManifest.Author,
-						"Version": pluginManifest.Version,
-						"Website": pluginManifest.Website,
+				{
+					Name: "Open plugin directory",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						openErr := util.ShellOpen(lp.metadata.Directory)
+						if openErr != nil {
+							w.api.Notify(ctx, "Failed to open plugin directory", openErr.Error())
+						}
 					},
 				},
-				Actions: []plugin.QueryResultAction{
-					{
-						Name: "install",
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
-							if installErr != nil {
-								w.api.Notify(ctx, "Failed to install plugin", installErr.Error())
-							}
-						},
+				{
+					Name: "Remove",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
+							return directory != lp.metadata.Directory
+						})
+						w.saveLocalPluginDirectories(ctx)
 					},
-				}})
+				},
+				{
+					Name: "Remove and delete plugin directory",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						deleteErr := os.RemoveAll(lp.metadata.Directory)
+						if deleteErr != nil {
+							w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to delete plugin directory: %s", deleteErr.Error()))
+							return
+						}
+
+						w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
+							return directory != lp.metadata.Directory
+						})
+						w.saveLocalPluginDirectories(ctx)
+					},
+				},
+			},
 		}
+	})
+}
+
+func (w *WPMPlugin) addCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	w.api.Log(ctx, plugin.LogLevelInfo, "Please choose a directory to add local plugin")
+	pluginDirectories := plugin.GetPluginManager().GetUI().PickFiles(ctx, share.PickFilesParams{IsDirectory: true})
+	if len(pluginDirectories) == 0 {
+		w.api.Notify(ctx, "Please choose a directory", "You need to choose a directory to add local plugin")
+		return []plugin.QueryResult{}
 	}
 
-	if query.Command == "uninstall" {
-		plugins := plugin.GetPluginManager().GetPluginInstances()
-		plugins = lo.Filter(plugins, func(pluginInstance *plugin.Instance, _ int) bool {
-			return pluginInstance.IsSystemPlugin == false
-		})
-		if query.Search != "" {
-			plugins = lo.Filter(plugins, func(pluginInstance *plugin.Instance, _ int) bool {
-				return IsStringMatchNoPinYin(ctx, pluginInstance.Metadata.Name, query.Search)
-			})
-		}
-
-		results = lo.Map(plugins, func(pluginInstanceShadow *plugin.Instance, _ int) plugin.QueryResult {
-			// action will be executed in another go routine, so we need to copy the variable
-			pluginInstance := pluginInstanceShadow
-
-			icon := plugin.ParseWoxImageOrDefault(pluginInstance.Metadata.Icon, wpmIcon)
-			icon = plugin.ConvertRelativePathToAbsolutePath(ctx, icon, pluginInstance.PluginDirectory)
-
-			return plugin.QueryResult{
-				Id:       uuid.NewString(),
-				Title:    pluginInstance.Metadata.Name,
-				SubTitle: pluginInstance.Metadata.Description,
-				Icon:     icon,
-				Actions: []plugin.QueryResultAction{
-					{
-						Name: "uninstall",
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							plugin.GetStoreManager().Uninstall(ctx, pluginInstance)
-						},
-					},
-				},
-			}
-		})
-	}
-
-	return results
+	pluginDirectory := pluginDirectories[0]
+	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Add local plugin: %s", pluginDirectory))
+	w.localPluginDirectories = append(w.localPluginDirectories, pluginDirectory)
+	w.saveLocalPluginDirectories(ctx)
+	w.loadDevPlugin(ctx, pluginDirectory)
+	return []plugin.QueryResult{}
 }
 
 func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, pluginName string, query plugin.Query) {

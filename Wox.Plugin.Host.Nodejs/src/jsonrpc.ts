@@ -1,9 +1,10 @@
 import { logger } from "./logger"
 import path from "path"
 import { PluginAPI } from "./pluginAPI"
-import { Plugin, PluginInitContext, Query, RefreshableResult, Result, ResultAction, Selection } from "@wox-launcher/wox-plugin"
+import { Plugin, PluginInitParams, Query, RefreshableResult, Result, ResultAction, Selection } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
+import { Context } from "@wox-launcher/wox-plugin/dist/context"
 
 const pluginInstances = new Map<PluginJsonRpcRequest["PluginId"], PluginInstance>()
 
@@ -42,42 +43,42 @@ export interface PluginJsonRpcResponse {
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-export async function handleRequestFromWox(request: PluginJsonRpcRequest, ws: WebSocket): unknown {
-  logger.info(request.TraceId, `[${request.PluginName}] invoke method: ${request.Method}, parameters: ${JSON.stringify(request.Params)}`)
+export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcRequest, ws: WebSocket): unknown {
+  logger.info(ctx, `[${request.PluginName}] invoke method: ${request.Method}, parameters: ${JSON.stringify(request.Params)}`)
 
   switch (request.Method) {
     case "loadPlugin":
-      return loadPlugin(request)
+      return loadPlugin(ctx, request)
     case "init":
-      return initPlugin(request, ws)
+      return initPlugin(ctx, request, ws)
     case "query":
-      return query(request)
+      return query(ctx, request)
     case "action":
-      return action(request)
+      return action(ctx, request)
     case "refresh":
-      return refresh(request)
+      return refresh(ctx, request)
     case "unloadPlugin":
-      return unloadPlugin(request)
+      return unloadPlugin(ctx, request)
     case "onPluginSettingChange":
-      return onPluginSettingChange(request)
+      return onPluginSettingChange(ctx, request)
     default:
-      logger.info(request.TraceId, `unknown method handler: ${request.Method}`)
+      logger.info(ctx, `unknown method handler: ${request.Method}`)
       throw new Error(`unknown method handler: ${request.Method}`)
   }
 }
 
-async function loadPlugin(request: PluginJsonRpcRequest) {
+async function loadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
   const pluginDirectory = request.Params.PluginDirectory
   const entry = request.Params.Entry
   const modulePath = path.join(pluginDirectory, entry)
 
   const module = await import(modulePath)
   if (module["plugin"] === undefined || module["plugin"] === null) {
-    logger.error(request.TraceId, `[${request.PluginName}] plugin doesn't export plugin object`)
+    logger.error(ctx, `[${request.PluginName}] plugin doesn't export plugin object`)
     return
   }
 
-  logger.info(request.TraceId, `[${request.PluginName}] load plugin successfully`)
+  logger.info(ctx, `[${request.PluginName}] load plugin successfully`)
   pluginInstances.set(request.PluginId, {
     Plugin: module["plugin"] as Plugin,
     API: {} as PluginAPI,
@@ -87,52 +88,52 @@ async function loadPlugin(request: PluginJsonRpcRequest) {
   })
 }
 
-function unloadPlugin(request: PluginJsonRpcRequest) {
+function unloadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
   let pluginInstance = pluginInstances.get(request.PluginId)
   if (pluginInstance === undefined || pluginInstance === null) {
-    logger.error(request.TraceId, `[${request.PluginName}] plugin instance not found: ${request.PluginName}`)
+    logger.error(ctx, `[${request.PluginName}] plugin instance not found: ${request.PluginName}`)
     throw new Error(`plugin instance not found: ${request.PluginName}`)
   }
 
   delete require.cache[require.resolve(pluginInstance.ModulePath)]
   pluginInstances.delete(request.PluginId)
 
-  logger.info(request.TraceId, `[${request.PluginName}] unload plugin successfully`)
+  logger.info(ctx, `[${request.PluginName}] unload plugin successfully`)
 }
 
-function getMethod<M extends keyof Plugin>(request: PluginJsonRpcRequest, methodName: M): Plugin[M] {
+function getMethod<M extends keyof Plugin>(ctx: Context, request: PluginJsonRpcRequest, methodName: M): Plugin[M] {
   const plugin = pluginInstances.get(request.PluginId)
   if (plugin === undefined || plugin === null) {
-    logger.error(request.TraceId, `plugin not found: ${request.PluginName}, forget to load plugin?`)
+    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
     throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
   }
 
   const method = plugin.Plugin[methodName]
   if (method === undefined) {
-    logger.info(request.TraceId, `plugin method not found: ${request.PluginName}`)
+    logger.info(ctx, `plugin method not found: ${request.PluginName}`)
     throw new Error(`plugin method not found: ${request.PluginName}`)
   }
 
   return method
 }
 
-async function initPlugin(request: PluginJsonRpcRequest, ws: WebSocket) {
+async function initPlugin(ctx: Context, request: PluginJsonRpcRequest, ws: WebSocket) {
   const plugin = pluginInstances.get(request.PluginId)
   if (plugin === undefined || plugin === null) {
-    logger.error(request.TraceId, `plugin not found: ${request.PluginName}, forget to load plugin?`)
+    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
     throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
   }
 
-  const init = getMethod(request, "init")
+  const init = getMethod(ctx, request, "init")
   const pluginApi = new PluginAPI(ws, request.PluginId, request.PluginName)
   plugin.API = pluginApi
-  return init({ API: pluginApi, PluginDirectory: request.Params.PluginDirectory } as PluginInitContext)
+  return init(ctx, { API: pluginApi, PluginDirectory: request.Params.PluginDirectory } as PluginInitParams)
 }
 
-async function onPluginSettingChange(request: PluginJsonRpcRequest) {
+async function onPluginSettingChange(ctx: Context, request: PluginJsonRpcRequest) {
   const plugin = pluginInstances.get(request.PluginId)
   if (plugin === undefined || plugin === null) {
-    logger.error(request.TraceId, `plugin not found: ${request.PluginName}, forget to load plugin?`)
+    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
     throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
   }
 
@@ -142,20 +143,20 @@ async function onPluginSettingChange(request: PluginJsonRpcRequest) {
   plugin.API.settingChangeCallbacks.get(callbackId)?.(settingKey, settingValue)
 }
 
-async function query(request: PluginJsonRpcRequest) {
+async function query(ctx: Context, request: PluginJsonRpcRequest) {
   const plugin = pluginInstances.get(request.PluginId)
   if (plugin === undefined || plugin === null) {
-    logger.error(request.TraceId, `plugin not found: ${request.PluginName}, forget to load plugin?`)
+    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
     throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
   }
 
-  const query = getMethod(request, "query")
+  const query = getMethod(ctx, request, "query")
 
   //clean action cache for current plugin
   plugin.Actions.clear()
   plugin.Refreshes.clear()
 
-  const results = await query({
+  const results = await query(ctx, {
     Type: request.Params.Type,
     RawQuery: request.Params.RawQuery,
     TriggerKeyword: request.Params.TriggerKeyword,
@@ -166,7 +167,7 @@ async function query(request: PluginJsonRpcRequest) {
   } as Query)
 
   if (!results) {
-    logger.info(request.TraceId, `plugin query didn't return results: ${request.PluginName}`)
+    logger.info(ctx, `plugin query didn't return results: ${request.PluginName}`)
     return []
   }
 
@@ -195,16 +196,16 @@ async function query(request: PluginJsonRpcRequest) {
   return results
 }
 
-async function action(request: PluginJsonRpcRequest) {
+async function action(ctx: Context, request: PluginJsonRpcRequest) {
   const plugin = pluginInstances.get(request.PluginId)
   if (plugin === undefined || plugin === null) {
-    logger.error(request.TraceId, `plugin not found: ${request.PluginName}, forget to load plugin?`)
+    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
     throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
   }
 
   const pluginAction = plugin.Actions.get(request.Params.ActionId)
   if (pluginAction === undefined || pluginAction === null) {
-    logger.error(request.TraceId, `[${request.PluginName}] plugin action not found: ${request.PluginName}`)
+    logger.error(ctx, `[${request.PluginName}] plugin action not found: ${request.PluginName}`)
     return
   }
 
@@ -213,16 +214,16 @@ async function action(request: PluginJsonRpcRequest) {
   })
 }
 
-async function refresh(request: PluginJsonRpcRequest) {
+async function refresh(ctx: Context, request: PluginJsonRpcRequest) {
   const plugin = pluginInstances.get(request.PluginId)
   if (plugin === undefined || plugin === null) {
-    logger.error(request.TraceId, `plugin not found: ${request.PluginName}, forget to load plugin?`)
+    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
     throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
   }
 
   const pluginRefresh = plugin.Refreshes.get(request.Params.ResultId)
   if (pluginRefresh === undefined || pluginRefresh === null) {
-    logger.error(request.TraceId, `[${request.PluginName}] plugin refresh not found: ${request.PluginName}`)
+    logger.error(ctx, `[${request.PluginName}] plugin refresh not found: ${request.PluginName}`)
     return
   }
 

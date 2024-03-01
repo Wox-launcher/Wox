@@ -95,6 +95,10 @@ func (w *WebsocketHost) UnloadPlugin(ctx context.Context, metadata plugin.Metada
 }
 
 func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metadata, method string, params map[string]string) (result any, err error) {
+	if !w.ws.IsConnected() {
+		return "", fmt.Errorf("host is not connected")
+	}
+
 	request := JsonRpcRequest{
 		TraceId:    util.GetContextTraceId(ctx),
 		Id:         uuid.NewString(),
