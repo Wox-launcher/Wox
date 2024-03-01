@@ -1,11 +1,10 @@
-import { ChangeQueryParam, PublicAPI } from "@wox-launcher/wox-plugin"
+import { ChangeQueryParam, Context, PublicAPI } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import { PluginJsonRpcRequest, PluginJsonRpcTypeRequest } from "./jsonrpc"
 import * as crypto from "crypto"
 import { waitingForResponse } from "./index"
 import Deferred from "promise-deferred"
 import { logger } from "./logger"
-import { Context } from "@wox-launcher/wox-plugin/dist/context"
 
 export class PluginAPI implements PublicAPI {
   ws: WebSocket
@@ -23,10 +22,7 @@ export class PluginAPI implements PublicAPI {
   async invokeMethod(ctx: Context, method: string, params: { [key: string]: string }): Promise<unknown> {
     const startTime = Date.now()
     const requestId = crypto.randomUUID()
-    let traceId: string = crypto.randomUUID()
-    if (ctx.Exists("traceId")) {
-      traceId = ctx.Get("traceId")
-    }
+    const traceId = ctx.Get("traceId") || crypto.randomUUID()
 
     logger.info(ctx, `[${this.pluginName}] start invoke method to Wox: ${method}, id: ${requestId} parameters: ${JSON.stringify(params)}`)
 

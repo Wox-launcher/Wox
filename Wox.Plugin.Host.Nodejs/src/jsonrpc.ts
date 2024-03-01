@@ -1,10 +1,9 @@
 import { logger } from "./logger"
 import path from "path"
 import { PluginAPI } from "./pluginAPI"
-import { Plugin, PluginInitParams, Query, RefreshableResult, Result, ResultAction, Selection } from "@wox-launcher/wox-plugin"
+import { Context, Plugin, PluginInitParams, Query, RefreshableResult, Result, ResultAction, Selection } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
-import { Context } from "@wox-launcher/wox-plugin/dist/context"
 
 const pluginInstances = new Map<PluginJsonRpcRequest["PluginId"], PluginInstance>()
 

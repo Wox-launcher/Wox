@@ -5,7 +5,7 @@ import { logger } from "./logger"
 import * as crypto from "crypto"
 import Deferred from "promise-deferred"
 import { NewTraceContext, TraceIdKey } from "./trace"
-import { NewContextWithValue } from "@wox-launcher/wox-plugin/dist/context"
+import { NewContextWithValue } from "@wox-launcher/wox-plugin"
 
 if (process.argv.length < 5) {
   console.error("Usage: node node.js <port> <logDirectory> <woxPid>")
@@ -40,7 +40,7 @@ const wss = new WebSocketServer({ port: Number.parseInt(port) })
 wss.on("connection", function connection(ws) {
   logger.updateWebSocket(ws)
 
-  ws.on("error", function (error) {
+  ws.on("error", function(error) {
     logger.updateWebSocket(undefined)
     logger.error(NewTraceContext(), `[${hostId}] connection error: ${error.message}`)
   })

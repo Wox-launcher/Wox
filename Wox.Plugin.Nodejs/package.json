@@ -1,6 +1,6 @@
 {
   "name": "@wox-launcher/wox-plugin",
-  "version": "0.0.59",
+  "version": "0.0.63",
   "description": "All nodejs plugin for Wox should use types in this package",
   "repository": {
     "type": "git",
@@ -8,9 +8,10 @@
   },
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./types/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "types"
   ],
   "scripts": {
     "build": "pnpm clean && tsc",

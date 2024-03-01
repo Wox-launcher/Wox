@@ -2,9 +2,9 @@ import winston, { format } from "winston"
 import dayjs from "dayjs"
 import WebSocket from "ws"
 import { PluginJsonRpcTypeSystemLog } from "./jsonrpc"
-import { Context } from "@wox-launcher/wox-plugin/dist/context"
 import crypto from "crypto"
 import { TraceIdKey } from "./trace"
+import { Context } from "@wox-launcher/wox-plugin"
 
 const logDirectory = process.argv[3]
 let ws: WebSocket | undefined = undefined
@@ -16,11 +16,7 @@ const winstonLogger = winston.createLogger({
 })
 
 function log(ctx: Context, level: string, msg: string) {
-  let traceId: string = crypto.randomUUID()
-  if (ctx.Exists(TraceIdKey)) {
-    traceId = ctx.Get(TraceIdKey)
-  }
-
+  const traceId = ctx.Get(TraceIdKey) || crypto.randomUUID()
   winstonLogger.log(level, `${traceId} [${level}] ${msg}`)
 
   if (ws !== undefined) {

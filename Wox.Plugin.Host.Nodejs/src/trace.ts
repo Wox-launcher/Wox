@@ -1,5 +1,5 @@
-import { Context, NewContextWithValue } from "@wox-launcher/wox-plugin/dist/context"
 import crypto from "crypto"
+import { Context, NewContextWithValue } from "@wox-launcher/wox-plugin"
 
 export const TraceIdKey: string = "traceId"
 

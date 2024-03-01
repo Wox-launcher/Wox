@@ -1,11 +1,12 @@
 {
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "types/**/*"
   ],
   "compilerOptions": {
     "target": "es2015",
-    "module": "es2015",
-    "declaration": true,
+    "module": "NodeNext",
+    "declaration": false,
     "outDir": "./dist",
     "noEmit": false,
     "strict": true,
