@@ -20,7 +20,7 @@
     "Id": "72a6fc3b-2915-4d50-b4ee-54968c174aba",
     "Name": "Emoji",
     "Author": "Wox-launcher",
-    "Version": "0.0.1",
+    "Version": "0.0.2",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "Search emojis",
@@ -31,7 +31,7 @@
       "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Emoji/main/snapshot/snapshot.png"
     ],
     "DateCreated": "2024-01-02 20:00:00",
-    "DateUpdated": "2024-01-02 20:00:00"
+    "DateUpdated": "2024-03-01 19:01:54"
   },
   {
     "Id": "bf145a9f-4976-4486-a671-d44eb64c7cd0",
