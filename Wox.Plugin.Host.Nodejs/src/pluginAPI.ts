@@ -20,11 +20,12 @@ export class PluginAPI implements PublicAPI {
   }
 
   async invokeMethod(ctx: Context, method: string, params: { [key: string]: string }): Promise<unknown> {
-    const startTime = Date.now()
     const requestId = crypto.randomUUID()
     const traceId = ctx.Get("traceId") || crypto.randomUUID()
 
-    logger.info(ctx, `[${this.pluginName}] start invoke method to Wox: ${method}, id: ${requestId} parameters: ${JSON.stringify(params)}`)
+    if (method !== "Log") {
+      logger.info(ctx, `[${this.pluginName}] start invoke method to Wox: ${method}, id: ${requestId} parameters: ${JSON.stringify(params)}`)
+    }
 
     this.ws.send(
       JSON.stringify({
@@ -40,10 +41,7 @@ export class PluginAPI implements PublicAPI {
     const deferred = new Deferred<unknown>()
     waitingForResponse[requestId] = deferred
 
-    const result = await deferred.promise
-    const endTime = Date.now()
-    logger.info(ctx, `[${this.pluginName}] invoke method to Wox finished: ${method}, time: ${endTime - startTime}ms`)
-    return result
+    return await deferred.promise
   }
 
   async ChangeQuery(ctx: Context, query: ChangeQueryParam): Promise<void> {

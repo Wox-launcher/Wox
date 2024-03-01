@@ -130,7 +130,7 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 		util.GetLogger().Error(ctx, fmt.Sprintf("invoke %s response timeout, response time: %dms", metadata.Name, util.GetSystemTimestamp()-startTimestamp))
 		return "", fmt.Errorf("request timeout, request id: %s", request.Id)
 	case response := <-resultChan:
-		util.GetLogger().Debug(ctx, fmt.Sprintf("inovke plugin %s method: %s finished, response time: %dms", metadata.Name, method, util.GetSystemTimestamp()-startTimestamp))
+		util.GetLogger().Debug(ctx, fmt.Sprintf("inovke plugin <%s> method: %s finished, response time: %dms", metadata.Name, method, util.GetSystemTimestamp()-startTimestamp))
 		if response.Error != "" {
 			return "", fmt.Errorf(response.Error)
 		} else {
@@ -155,10 +155,6 @@ func (w *WebsocketHost) startWebsocketServer(ctx context.Context, port int) {
 
 func (w *WebsocketHost) onMessage(data string) {
 	ctx := util.NewTraceContext()
-
-	if !strings.Contains(data, string(JsonRpcTypeSystemLog)) {
-		util.GetLogger().Debug(ctx, fmt.Sprintf("[%s -> Wox] received message: %s", w.getHostName(ctx), data))
-	}
 
 	if strings.Contains(data, string(JsonRpcTypeSystemLog)) {
 		traceId := gjson.Get(data, "TraceId").String()
@@ -199,7 +195,9 @@ func (w *WebsocketHost) onMessage(data string) {
 }
 
 func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request JsonRpcRequest) {
-	util.GetLogger().Info(ctx, fmt.Sprintf("[%s] got request from plugin, method: %s", request.PluginName, request.Method))
+	if request.Method != "Log" {
+		util.GetLogger().Info(ctx, fmt.Sprintf("got request from plugin <%s>, method: %s", request.PluginName, request.Method))
+	}
 
 	var pluginInstance *plugin.Instance
 	for _, instance := range plugin.GetPluginManager().GetPluginInstances() {

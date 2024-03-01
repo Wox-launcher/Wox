@@ -43,7 +43,7 @@ export interface PluginJsonRpcResponse {
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcRequest, ws: WebSocket): unknown {
-  logger.info(ctx, `[${request.PluginName}] invoke method: ${request.Method}, parameters: ${JSON.stringify(request.Params)}`)
+  logger.info(ctx, `invoke <${request.PluginName}> method: ${request.Method}, parameters: ${JSON.stringify(request.Params)}`)
 
   switch (request.Method) {
     case "loadPlugin":
