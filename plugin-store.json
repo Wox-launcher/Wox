@@ -37,7 +37,7 @@
     "Id": "bf145a9f-4976-4486-a671-d44eb64c7cd0",
     "Name": "Sum Selection Numbers",
     "Author": "Wox-launcher",
-    "Version": "0.0.1",
+    "Version": "0.0.2",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "Sum Selection Numbers",
@@ -48,7 +48,7 @@
       "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Selection.Sum/main/assets/snipaste.png"
     ],
     "DateCreated": "2024-02-03 15:49:00",
-    "DateUpdated": "2024-02-03 15:49:00"
+    "DateUpdated": "2024-03-02 09:57:37"
   },
   {
     "Id": "09ea2847-929c-440a-aa2c-9b74bcaae69f",
@@ -65,6 +65,6 @@
       "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.DeepL/main/assets/snapshot.png"
     ],
     "DateCreated": "2024-02-23 19:09:00",
-    "DateUpdated": "2024-03-02 09:22:45"
+    "DateUpdated": "2024-03-02 09:57:38"
   }
 ]
