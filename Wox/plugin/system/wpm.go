@@ -111,17 +111,21 @@ func (w *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		return
 	}
 
-	// remove invalid directories
-	w.localPluginDirectories = lo.Filter(localPluginDirs, func(directory string, _ int) bool {
-		_, statErr := os.Stat(directory)
-		if statErr != nil {
+	// remove invalid and duplicate directories
+	var pluginDirs []string
+	for _, pluginDir := range localPluginDirs {
+		if _, statErr := os.Stat(pluginDir); statErr != nil {
 			w.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Failed to stat local plugin directory, remove it: %s", statErr.Error()))
-			os.RemoveAll(directory)
-			return false
+			os.RemoveAll(pluginDir)
+			continue
 		}
-		return true
-	})
 
+		if !lo.Contains(pluginDirs, pluginDir) {
+			pluginDirs = append(pluginDirs, pluginDir)
+		}
+	}
+
+	w.localPluginDirectories = pluginDirs
 	for _, directory := range w.localPluginDirectories {
 		w.loadDevPlugin(ctx, directory)
 	}
@@ -433,6 +437,12 @@ func (w *WPMPlugin) addCommand(ctx context.Context, query plugin.Query) []plugin
 	}
 
 	pluginDirectory := pluginDirectories[0]
+
+	if lo.Contains(w.localPluginDirectories, pluginDirectory) {
+		w.api.Notify(ctx, "Already added", "The plugin directory has already been added")
+		return []plugin.QueryResult{}
+	}
+
 	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Add local plugin: %s", pluginDirectory))
 	w.localPluginDirectories = append(w.localPluginDirectories, pluginDirectory)
 	w.saveLocalPluginDirectories(ctx)
