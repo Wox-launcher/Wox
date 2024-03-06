@@ -132,19 +132,28 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     }
 
     if (isShowActionPanel.value) {
-      isShowActionPanel.value = false;
-      resultActionTextFieldController.text = "";
-      queryBoxFocusNode.requestFocus();
+      hideActionPanel();
     } else {
-      _activeActionIndex.value = 0;
-      _resultActions.value = queryResults[_activeResultIndex.value].actions;
-      filterResultActions.value = _resultActions;
-      for (var _ in filterResultActions) {
-        _resultActionItemGlobalKeys.add(GlobalKey());
-      }
-      isShowActionPanel.value = true;
-      resultActionFocusNode.requestFocus();
+      showActionPanel();
     }
+  }
+
+  void hideActionPanel() {
+    isShowActionPanel.value = false;
+    resultActionTextFieldController.text = "";
+    queryBoxFocusNode.requestFocus();
+    _resizeHeight();
+  }
+
+  void showActionPanel() {
+    _activeActionIndex.value = 0;
+    _resultActions.value = queryResults[_activeResultIndex.value].actions;
+    filterResultActions.value = _resultActions;
+    for (var _ in filterResultActions) {
+      _resultActionItemGlobalKeys.add(GlobalKey());
+    }
+    isShowActionPanel.value = true;
+    resultActionFocusNode.requestFocus();
     _resizeHeight();
   }
 
@@ -178,6 +187,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
             "actionId": woxResultAction.id,
           });
       WoxWebsocketMsgUtil.instance.sendMessage(msg);
+      hideActionPanel();
       if (!woxResultAction.preventHideAfterAction) {
         hideApp(traceId);
       }
