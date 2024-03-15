@@ -2,11 +2,18 @@ package host
 
 import (
 	"context"
+	"fmt"
 	"path"
-	"strings"
 	"wox/plugin"
 	"wox/util"
 )
+
+var possibleNodejsPaths = []string{
+	"/opt/homebrew/bin/node",
+	"/usr/local/bin/node",
+	"/usr/bin/node",
+	"/usr/local/node",
+}
 
 func init() {
 	host := &NodejsHost{}
@@ -30,8 +37,11 @@ func (n *NodejsHost) Start(ctx context.Context) error {
 }
 
 func (n *NodejsHost) findNodejsPath(ctx context.Context) string {
-	if output, err := util.ShellRunOutput("which", "node"); err == nil {
-		return strings.ReplaceAll(string(output), "\n", "")
+	for _, p := range possibleNodejsPaths {
+		if util.IsFileExists(p) {
+			util.GetLogger().Debug(ctx, fmt.Sprintf("found nodejs path: %s", p))
+			return p
+		}
 	}
 
 	return "node"
