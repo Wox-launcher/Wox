@@ -3,17 +3,11 @@ package host
 import (
 	"context"
 	"fmt"
+	"github.com/Masterminds/semver/v3"
 	"path"
 	"wox/plugin"
 	"wox/util"
 )
-
-var possibleNodejsPaths = []string{
-	"/opt/homebrew/bin/node",
-	"/usr/local/bin/node",
-	"/usr/bin/node",
-	"/usr/local/node",
-}
 
 func init() {
 	host := &NodejsHost{}
@@ -37,11 +31,37 @@ func (n *NodejsHost) Start(ctx context.Context) error {
 }
 
 func (n *NodejsHost) findNodejsPath(ctx context.Context) string {
+	util.GetLogger().Debug(ctx, "start finding nodejs path")
+
+	var possibleNodejsPaths = []string{
+		"/opt/homebrew/bin/node",
+		"/usr/local/bin/node",
+		"/usr/bin/node",
+		"/usr/local/node",
+	}
+
+	foundVersion, _ := semver.NewVersion("v0.0.1")
+	foundPath := ""
 	for _, p := range possibleNodejsPaths {
 		if util.IsFileExists(p) {
-			util.GetLogger().Debug(ctx, fmt.Sprintf("found nodejs path: %s", p))
-			return p
+			version, versionErr := util.ShellRunOutput(p, "-v")
+			if versionErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("failed to get nodejs version: %s, path=%s", versionErr, p))
+				continue
+			}
+			installedVersion, _ := semver.NewVersion(string(version))
+			util.GetLogger().Debug(ctx, fmt.Sprintf("found nodejs path: %s, version: %s", p, installedVersion.String()))
+
+			if installedVersion.GreaterThan(foundVersion) {
+				foundPath = p
+				foundVersion = installedVersion
+			}
 		}
+	}
+
+	if foundPath != "" {
+		util.GetLogger().Info(ctx, fmt.Sprintf("finally use nodejs path: %s, version: %s", foundPath, foundVersion.String()))
+		return foundPath
 	}
 
 	return "node"
