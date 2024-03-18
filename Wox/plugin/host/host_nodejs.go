@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"github.com/Masterminds/semver/v3"
+	"github.com/mitchellh/go-homedir"
 	"path"
+	"strings"
 	"wox/plugin"
 	"wox/util"
 )
@@ -40,16 +42,25 @@ func (n *NodejsHost) findNodejsPath(ctx context.Context) string {
 		"/usr/local/node",
 	}
 
+	nvmNodePaths, _ := homedir.Expand("~/.nvm/versions/node")
+	if util.IsDirExists(nvmNodePaths) {
+		versions, _ := util.ListDir(nvmNodePaths)
+		for _, v := range versions {
+			possibleNodejsPaths = append(possibleNodejsPaths, path.Join(nvmNodePaths, v, "bin", "node"))
+		}
+	}
+
 	foundVersion, _ := semver.NewVersion("v0.0.1")
 	foundPath := ""
 	for _, p := range possibleNodejsPaths {
 		if util.IsFileExists(p) {
-			version, versionErr := util.ShellRunOutput(p, "-v")
+			versionOriginal, versionErr := util.ShellRunOutput(p, "-v")
 			if versionErr != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("failed to get nodejs version: %s, path=%s", versionErr, p))
 				continue
 			}
-			installedVersion, _ := semver.NewVersion(string(version))
+			version := strings.TrimSpace(string(versionOriginal))
+			installedVersion, _ := semver.NewVersion(version)
 			util.GetLogger().Debug(ctx, fmt.Sprintf("found nodejs path: %s, version: %s", p, installedVersion.String()))
 
 			if installedVersion.GreaterThan(foundVersion) {
@@ -64,6 +75,7 @@ func (n *NodejsHost) findNodejsPath(ctx context.Context) string {
 		return foundPath
 	}
 
+	util.GetLogger().Info(ctx, "finally use default node from env path")
 	return "node"
 }
 
