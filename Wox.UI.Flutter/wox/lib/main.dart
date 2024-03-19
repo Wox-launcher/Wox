@@ -9,6 +9,7 @@ import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/modules/launcher/views/wox_launcher_view.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
+import 'package:wox/modules/setting/views/wox_setting_view.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 import 'package:wox/utils/env.dart';
 import 'package:wox/utils/heartbeat_checker.dart';
@@ -108,6 +109,10 @@ class _WoxAppState extends State<WoxApp> with WindowListener {
   @override
   void initState() {
     super.initState();
+    var launcherController = Get.find<WoxLauncherController>();
+    launcherController.isInSettingView.stream.listen((event) {
+      setState(() {});
+    });
     windowManager.addListener(this);
   }
 
@@ -127,6 +132,14 @@ class _WoxAppState extends State<WoxApp> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    final launcherController = Get.find<WoxLauncherController>();
+
+    if (launcherController.isInSettingView.value) {
+      windowManager.setSize(const Size(1200, 800));
+      return const WoxSettingView();
+    }
+
+    launcherController.resizeHeight();
     return const WoxLauncherView();
   }
 }

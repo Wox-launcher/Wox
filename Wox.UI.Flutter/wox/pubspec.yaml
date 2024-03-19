@@ -51,7 +51,7 @@ dependencies:
   syncfusion_flutter_pdfviewer: ^24.1.43
   desktop_drop: ^0.4.4
   file_picker: ^6.1.1
-  desktop_multi_window: ^0.2.0
+  fluent_ui: ^4.4.0
 
 dev_dependencies:
   flutter_test:

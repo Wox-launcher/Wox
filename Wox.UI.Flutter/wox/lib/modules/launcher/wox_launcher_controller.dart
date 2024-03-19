@@ -55,6 +55,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   var selectedQueryHistoryIndex = 0;
   var lastQueryMode = WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_PRESERVE.code;
   var canArrowUpHistory = true;
+  final isInSettingView = false.obs;
 
   @override
   Future<void> toggleApp(String traceId, ShowAppParams params) async {
@@ -142,7 +143,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     isShowActionPanel.value = false;
     resultActionTextFieldController.text = "";
     queryBoxFocusNode.requestFocus();
-    _resizeHeight();
+    resizeHeight();
   }
 
   void showActionPanel() {
@@ -154,7 +155,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     }
     isShowActionPanel.value = true;
     resultActionFocusNode.requestFocus();
-    _resizeHeight();
+    resizeHeight();
   }
 
   @override
@@ -371,7 +372,9 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       final pickFilesParams = PickFilesParams.fromJson(msg.data);
       final files = await pickFiles(msg.traceId, pickFilesParams);
       responseWoxWebsocketRequest(msg, true, files);
-    } else if (msg.method == "OpenSettingWindow") {}
+    } else if (msg.method == "OpenSettingWindow") {
+      isInSettingView.value = true;
+    }
   }
 
   Future<void> handleWebSocketResponseMessage(WoxWebsocketMsg msg) async {
@@ -424,7 +427,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     isShowPreviewPanel.value = false;
     isShowActionPanel.value = false;
     _resultItemGlobalKeys.clear();
-    _resizeHeight();
+    resizeHeight();
   }
 
   void _onReceivedQueryResults(List<WoxQueryResult> results) {
@@ -448,7 +451,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     if (currentQueryResults.isEmpty) {
       _resetActiveResult();
     }
-    _resizeHeight();
+    resizeHeight();
   }
 
   // select all text in query box
@@ -471,7 +474,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     isShowPreviewPanel.value = currentPreview.value.previewData != "";
   }
 
-  void _resizeHeight() {
+  void resizeHeight() {
     double resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(queryResults.length > 10 ? 10 : queryResults.length);
     if (isShowActionPanel.value || isShowPreviewPanel.value) {
       resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(10);

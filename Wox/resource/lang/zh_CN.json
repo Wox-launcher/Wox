@@ -20,6 +20,7 @@
   "plugin_sys_execute": "执行",
   "plugin_sys_quit_wox": "退出Wox",
   "plugin_sys_open_wox_preferences": "打开Wox设置",
+  "plugin_sys_open_wox_settings": "打开Wox设置",
   "plugin_websearch_trigger_keyword": "关键字",
   "plugin_websearch_title": "标题",
   "plugin_websearch_url": "网址",

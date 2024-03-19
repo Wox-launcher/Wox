@@ -7,7 +7,6 @@
 #include "generated_plugin_registrant.h"
 
 #include <desktop_drop/desktop_drop_plugin.h>
-#include <desktop_multi_window/desktop_multi_window_plugin.h>
 #include <flutter_acrylic/flutter_acrylic_plugin.h>
 #include <screen_retriever/screen_retriever_plugin.h>
 #include <syncfusion_pdfviewer_windows/syncfusion_pdfviewer_windows_plugin.h>
@@ -17,8 +16,6 @@
 void RegisterPlugins(flutter::PluginRegistry* registry) {
   DesktopDropPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("DesktopDropPlugin"));
-  DesktopMultiWindowPluginRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("DesktopMultiWindowPlugin"));
   FlutterAcrylicPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("FlutterAcrylicPlugin"));
   ScreenRetrieverPluginRegisterWithRegistrar(
