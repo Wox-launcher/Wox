@@ -1,9 +1,9 @@
 from loguru import logger as loguru_logger
 
 
-def update_log_directory(log_directroy: str) -> None:
+def update_log_directory(log_directory: str) -> None:
     loguru_logger.remove()
-    loguru_logger.add(f"{log_directroy}/python.log", format="{time:YYYY-MM-DD HH:mm:ss.SSS} [{level}] {message}", rotation="100 MB", retention="3 days")
+    loguru_logger.add(f"{log_directory}/python.log", format="{time:YYYY-MM-DD HH:mm:ss.SSS} [{level}] {message}", rotation="100 MB", retention="3 days")
 
 
 def debug(trace_id: str, message: str) -> None:
