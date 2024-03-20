@@ -56,6 +56,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   var lastQueryMode = WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_PRESERVE.code;
   var canArrowUpHistory = true;
   final isInSettingView = false.obs;
+  var positionBeforeOpenSetting = Offset(0, 0);
 
   @override
   Future<void> toggleApp(String traceId, ShowAppParams params) async {

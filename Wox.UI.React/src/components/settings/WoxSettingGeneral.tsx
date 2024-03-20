@@ -62,7 +62,10 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
       }
       if (!updatingSetting.current) {
         setTimeout(() => {
-          const setting = mainHotKeyFocus ? { Key: "MainHotkey", Value: currentMainHotKey.current.join("+") } : { Key: "SelectionHotkey", Value: currentSelectionHotKey.current.join("+") }
+          const setting = mainHotKeyFocus ? { Key: "MainHotkey", Value: currentMainHotKey.current.join("+") } : {
+            Key: "SelectionHotkey",
+            Value: currentSelectionHotKey.current.join("+")
+          }
           executeSettingUpdate(setting).then(_ => {
             updatingSetting.current = false
           })

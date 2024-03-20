@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 
+import 'wox_setting_general_view.dart';
+
 class WoxSettingView extends GetView<WoxSettingController> {
   const WoxSettingView({super.key});
 
@@ -25,43 +27,61 @@ class WoxSettingView extends GetView<WoxSettingController> {
             debugShowCheckedModeBanner: false,
             home: NavigationView(
               pane: NavigationPane(
+                header: const SizedBox(height: 10),
                 selected: controller.activePaneIndex.value,
                 onChanged: (index) => controller.activePaneIndex.value = index,
-                displayMode: PaneDisplayMode.auto,
+                displayMode: PaneDisplayMode.open,
+                size: const NavigationPaneSize(openWidth: 250),
                 items: [
                   PaneItem(
-                    icon: const Icon(FluentIcons.home),
-                    title: const Text('Home'),
-                    body: const Text('Home bdoy'),
-                  ),
-                  PaneItem(
-                    icon: const Icon(FluentIcons.issue_tracking),
-                    title: const Text('Track orders'),
-                    infoBadge: const InfoBadge(source: Text('8')),
-                    body: const Text('Track orders'),
-                  ),
-                  PaneItem(
-                    icon: const Icon(FluentIcons.disable_updates),
-                    title: const Text('Disabled Item'),
-                    body: const Text('Track orders'),
-                    enabled: false,
+                    icon: const Icon(FluentIcons.settings),
+                    title: const Text('General'),
+                    body: const WoxSettingGeneralView(),
                   ),
                   PaneItemExpander(
-                    icon: const Icon(FluentIcons.account_management),
-                    title: const Text('Account'),
-                    body: const Text('Track orders'),
+                      icon: const Icon(FluentIcons.app_icon_default_add),
+                      title: const Text('Plugins'),
+                      body: const Text('Plugins'),
+                      onTap: () => controller.activePaneIndex.value = 2,
+                      initiallyExpanded: true,
+                      items: [
+                        PaneItem(
+                          icon: const Icon(FluentIcons.office_store_logo),
+                          title: const Text('Store Plugins'),
+                          body: const Text('Store Plugins'),
+                        ),
+                        PaneItem(
+                          icon: const Icon(FluentIcons.installation),
+                          title: const Text('Installed Plugins'),
+                          body: const Text('Installed Plugins'),
+                        ),
+                      ]),
+                  PaneItemExpander(
+                    icon: const Icon(FluentIcons.color),
+                    title: const Text('Themes'),
+                    body: const Text('Themes'),
+                    onTap: () => controller.activePaneIndex.value = 5,
+                    initiallyExpanded: true,
                     items: [
                       PaneItem(
                         icon: const Icon(FluentIcons.mail),
-                        title: const Text('Mail'),
+                        title: const Text('Store Themes'),
                         body: const Text('Track orders'),
                       ),
                       PaneItem(
-                        icon: const Icon(FluentIcons.calendar),
-                        title: const Text('Calendar'),
+                        icon: const Icon(FluentIcons.installation),
+                        title: const Text('Installed Themes'),
                         body: const Text('Track orders'),
                       ),
                     ],
+                  ),
+                ],
+                footerItems: [
+                  PaneItem(
+                    icon: const Icon(FluentIcons.back),
+                    title: const Text('Back'),
+                    body: const Text('Back'),
+                    onTap: () => controller.hideWindow(),
                   ),
                 ],
               ),

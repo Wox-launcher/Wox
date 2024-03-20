@@ -110,7 +110,16 @@ class _WoxAppState extends State<WoxApp> with WindowListener {
   void initState() {
     super.initState();
     var launcherController = Get.find<WoxLauncherController>();
-    launcherController.isInSettingView.stream.listen((event) {
+    launcherController.isInSettingView.stream.listen((isShowSetting) async {
+      if (isShowSetting) {
+        launcherController.positionBeforeOpenSetting = await windowManager.getPosition();
+        windowManager.setSize(const Size(1200, 800));
+        windowManager.center();
+        Get.find<WoxSettingController>().activePaneIndex.value = 0;
+      } else {
+        launcherController.resizeHeight();
+        windowManager.setPosition(launcherController.positionBeforeOpenSetting);
+      }
       setState(() {});
     });
     windowManager.addListener(this);
@@ -135,11 +144,9 @@ class _WoxAppState extends State<WoxApp> with WindowListener {
     final launcherController = Get.find<WoxLauncherController>();
 
     if (launcherController.isInSettingView.value) {
-      windowManager.setSize(const Size(1200, 800));
       return const WoxSettingView();
     }
 
-    launcherController.resizeHeight();
     return const WoxLauncherView();
   }
 }
