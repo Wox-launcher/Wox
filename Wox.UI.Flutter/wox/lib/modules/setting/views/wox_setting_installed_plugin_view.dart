@@ -3,8 +3,8 @@ import 'package:get/get.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 
-class WoxSettingStorePluginView extends GetView<WoxSettingController> {
-  const WoxSettingStorePluginView({super.key});
+class WoxSettingInstalledPluginView extends GetView<WoxSettingController> {
+  const WoxSettingInstalledPluginView({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -29,9 +29,9 @@ class WoxSettingStorePluginView extends GetView<WoxSettingController> {
             child: Scrollbar(
               child: Obx(() {
                 return ListView.builder(
-                  itemCount: controller.storePlugins.length,
+                  itemCount: controller.installedPlugins.length,
                   itemBuilder: (context, index) {
-                    final plugin = controller.storePlugins[index];
+                    final plugin = controller.installedPlugins[index];
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8.0),
                       child: ListTile(
@@ -48,28 +48,26 @@ class WoxSettingStorePluginView extends GetView<WoxSettingController> {
                             ),
                           ),
                         ),
-                        trailing: plugin.isInstalled
-                            ? const Text("Installed")
-                            : Button(
-                                style: ButtonStyle(
-                                  backgroundColor: ButtonState.resolveWith((states) {
-                                    // blue color for installed plugins
-                                    return Colors.blue;
-                                  }),
-                                  foregroundColor: ButtonState.resolveWith((states) {
-                                    // white color for installed plugins
-                                    return Colors.white;
-                                  }),
-                                ),
-                                onPressed: () {}, // Add onPressed feature
-                                child: const Row(
-                                  children: [
-                                    Icon(FluentIcons.download),
-                                    SizedBox(width: 4),
-                                    Text('Install'),
-                                  ],
-                                ), // Change the text to 'Install'
-                              ),
+                        trailing: Button(
+                          style: ButtonStyle(
+                            backgroundColor: ButtonState.resolveWith((states) {
+                              // blue color for installed plugins
+                              return Colors.red["dark"];
+                            }),
+                            foregroundColor: ButtonState.resolveWith((states) {
+                              // white color for installed plugins
+                              return Colors.white;
+                            }),
+                          ),
+                          onPressed: () {}, // Add onPressed feature
+                          child: Row(
+                            children: [
+                              Icon(FluentIcons.download),
+                              SizedBox(width: 4),
+                              Text(plugin.isSystem ? "Disable" : 'Uninstall'),
+                            ],
+                          ), // Change the text to 'Install'
+                        ),
                       ),
                     );
                   },

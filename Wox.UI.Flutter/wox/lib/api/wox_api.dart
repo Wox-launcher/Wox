@@ -27,4 +27,8 @@ class WoxApi {
   Future<List<StorePlugin>> findStorePlugins() async {
     return await WoxHttpUtil.instance.postData("/plugin/store", null);
   }
+
+  Future<List<InstalledPlugin>> findInstalledPlugins() async {
+    return await WoxHttpUtil.instance.postData("/plugin/installed", null);
+  }
 }

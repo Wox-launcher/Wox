@@ -82,7 +82,7 @@ class InstalledPlugin {
     entry = json['Entry'];
     triggerKeywords = List<String>.from(json['TriggerKeywords']);
     commands = <MetadataCommand>[];
-    json['Commands'].forEach((v) {
+    json['Commands']?.forEach((v) {
       commands.add(MetadataCommand.fromJson(v));
     });
     supportedOS = List<String>.from(json['SupportedOS']);

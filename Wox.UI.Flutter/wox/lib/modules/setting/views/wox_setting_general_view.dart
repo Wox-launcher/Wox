@@ -56,7 +56,7 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-        padding: const EdgeInsets.only(left: 10, top: 24),
+        padding: const EdgeInsets.all(20),
         child: form(width: 800, children: [
           formField(
             label: "Hotkey",

@@ -10,6 +10,7 @@ class WoxSettingController extends GetxController {
   final activePaneIndex = 0.obs;
   final woxSetting = WoxSettingUtil.instance.currentSetting.obs;
   final storePlugins = <StorePlugin>[].obs;
+  final installedPlugins = <InstalledPlugin>[].obs;
 
   void hideWindow() {
     Get.find<WoxLauncherController>().isInSettingView.value = false;
@@ -24,5 +25,9 @@ class WoxSettingController extends GetxController {
 
   void loadStorePlugins() async {
     storePlugins.value = await WoxApi.instance.findStorePlugins();
+  }
+
+  void loadInstalledPlugins() async {
+    installedPlugins.value = await WoxApi.instance.findInstalledPlugins();
   }
 }
