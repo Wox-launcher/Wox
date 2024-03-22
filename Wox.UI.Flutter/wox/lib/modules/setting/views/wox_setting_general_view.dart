@@ -56,39 +56,12 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-        padding: EdgeInsets.only(left: 10, top: 24),
+        padding: const EdgeInsets.only(left: 10, top: 24),
         child: form(width: 800, children: [
           formField(
             label: "Hotkey",
-            child: Text("data"),
+            child: const Text("TBD"),
           ),
-          formField(
-              label: "Themes",
-              child: ComboBox<String>(
-                placeholder: Text('select a theme'),
-                value: "empty",
-                items: [
-                  ComboBoxItem<String>(child: Text('Light'), value: 'light'),
-                  ComboBoxItem<String>(child: Text('Dark'), value: 'dark'),
-                ],
-                onChanged: (value) {
-                  print(value);
-                },
-              )),
-          formField(
-              label: "Themes",
-              tips: "In 'Preserve' model, it will show last query result, when you reopen wox launcher.",
-              child: ComboBox<String>(
-                placeholder: Text('select a theme'),
-                value: "empty",
-                items: [
-                  ComboBoxItem<String>(child: Text('Light'), value: 'light'),
-                  ComboBoxItem<String>(child: Text('Dark'), value: 'dark'),
-                ],
-                onChanged: (value) {
-                  print(value);
-                },
-              )),
           formField(
             label: "Use PinYin",
             tips: "If selected, When searching, it converts Chinese into Pinyin and matches it.",
@@ -104,34 +77,50 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
           formField(
             label: "Hide On Lost Focus",
             tips: "If selected, When wox lost focus, it will be hidden.",
-            child: ToggleSwitch(
-              checked: true,
-              onChanged: (bool value) {},
-            ),
+            child: Obx(() {
+              return ToggleSwitch(
+                checked: controller.woxSetting.value.hideOnLostFocus,
+                onChanged: (bool value) {
+                  controller.updateConfig("HideOnLostFocus", value.toString());
+                },
+              );
+            }),
           ),
           formField(
             label: "Hide On Start",
             tips: "If selected, When wox start, it will be hidden.",
-            child: ToggleSwitch(
-              checked: true,
-              onChanged: (bool value) {},
-            ),
+            child: Obx(() {
+              return ToggleSwitch(
+                checked: controller.woxSetting.value.hideOnStart,
+                onChanged: (bool value) {
+                  controller.updateConfig("HideOnStart", value.toString());
+                },
+              );
+            }),
           ),
           formField(
             label: "Show Tray",
             tips: "If selected, When wox start, icon will be shown on tray.",
-            child: ToggleSwitch(
-              checked: true,
-              onChanged: (bool value) {},
-            ),
+            child: Obx(() {
+              return ToggleSwitch(
+                checked: controller.woxSetting.value.showTray,
+                onChanged: (bool value) {
+                  controller.updateConfig("ShowTray", value.toString());
+                },
+              );
+            }),
           ),
           formField(
             label: "Switch Input Method",
             tips: "If selected, input method will be switched to english, when enter input field.",
-            child: ToggleSwitch(
-              checked: true,
-              onChanged: (bool value) {},
-            ),
+            child: Obx(() {
+              return ToggleSwitch(
+                checked: controller.woxSetting.value.switchInputMethodABC,
+                onChanged: (bool value) {
+                  controller.updateConfig("SwitchInputMethodABC", value.toString());
+                },
+              );
+            }),
           ),
         ]));
   }

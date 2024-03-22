@@ -103,8 +103,8 @@ func main() {
 
 		t := hotkey.Hotkey{}
 		t.Register(ctx, "ctrl+ctrl", func() {
-			files := plugin.GetPluginManager().GetUI().PickFiles(ctx, share.PickFilesParams{IsDirectory: true})
-			ui.GetUIManager().GetUI(ctx).Notify(ctx, "Picked files", fmt.Sprintf("%v", files))
+			//files := plugin.GetPluginManager().GetUI().PickFiles(ctx, share.PickFilesParams{IsDirectory: true})
+			//ui.GetUIManager().GetUI(ctx).Notify(ctx, "Picked files", fmt.Sprintf("%v", files))
 		})
 
 		if util.IsProd() {
