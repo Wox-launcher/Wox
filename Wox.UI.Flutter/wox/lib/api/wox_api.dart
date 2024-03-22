@@ -18,4 +18,8 @@ class WoxApi {
   Future<WoxSetting> loadSetting() async {
     return await WoxHttpUtil.instance.postData<WoxSetting>("/setting/wox", null);
   }
+
+  Future<void> updateSetting(String key, String value) async {
+    await WoxHttpUtil.instance.postData("/setting/wox/update", {"Key": key, "Value": value});
+  }
 }

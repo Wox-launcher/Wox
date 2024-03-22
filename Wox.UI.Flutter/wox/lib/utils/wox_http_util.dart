@@ -28,14 +28,15 @@ class WoxHttpUtil {
   }
 
   Future<T> postData<T>(String url, dynamic data) async {
-    Logger.instance.info(const UuidV4().generate(), 'Posting data to $_baseUrl$url');
+    final traceId = const UuidV4().generate();
+    Logger.instance.info(traceId, 'Posting data to $_baseUrl$url');
     try {
       final response = await _dio.post(_baseUrl + url, data: data);
       WoxResponse woxResponse = WoxResponse.fromJson(response.data);
       if (woxResponse.success == false) throw Exception(woxResponse.message);
       return EntityFactory.generateOBJ<T>(woxResponse.data);
     } catch (e) {
-      Logger.instance.error(const UuidV4().generate(), 'Failed to post data: $e');
+      Logger.instance.error(traceId, 'Failed to post data: $e');
       throw Exception('Failed to post data: $e');
     }
   }

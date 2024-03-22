@@ -92,10 +92,14 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
           formField(
             label: "Use PinYin",
             tips: "If selected, When searching, it converts Chinese into Pinyin and matches it.",
-            child: ToggleSwitch(
-              checked: true,
-              onChanged: (bool value) {},
-            ),
+            child: Obx(() {
+              return ToggleSwitch(
+                checked: controller.woxSetting.value.usePinYin,
+                onChanged: (bool value) {
+                  controller.updateConfig("UsePinYin", value.toString());
+                },
+              );
+            }),
           ),
           formField(
             label: "Hide On Lost Focus",
