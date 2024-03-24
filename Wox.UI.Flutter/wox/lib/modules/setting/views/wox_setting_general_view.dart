@@ -1,5 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:get/get.dart';
+import 'package:wox/components/wox_hotkey_recorder_view.dart';
+import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 
 class WoxSettingGeneralView extends GetView<WoxSettingController> {
@@ -60,7 +62,12 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
         child: form(width: 800, children: [
           formField(
             label: "Hotkey",
-            child: const Text("TBD"),
+            child: WoxHotkeyRecorder(
+              hotkey: WoxHotkey.parseHotkey(controller.woxSetting.value.mainHotkey),
+              onHotKeyRecorded: (hotkey) {
+                print(hotkey.modifiers);
+              },
+            ),
           ),
           formField(
             label: "Use PinYin",
