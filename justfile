@@ -1,4 +1,5 @@
 current_flutter_target := if os() == "windows" { "windows" } else if os() == "linux" { "linux" } else if os() == "macos" { "macos" } else { "unknown" }
+python_command := if os() == "windows" { "python" } else { "python3" }
 
 default:
     @just --list --unsorted
@@ -119,9 +120,9 @@ default:
     cd Wox.Plugin.Host.Python && \
     rm -rf python-host && \
     rm -rf python-host.pyz && \
-    python3 -m pip install -r requirements.txt --target python-host && \
+    {{python_command}} -m pip install -r requirements.txt --target python-host && \
     cp *.py python-host && \
-    python3 -m zipapp -p "interpreter" python-host && \
+    {{python_command}} -m zipapp -p "interpreter" python-host && \
     rm -rf python-host && \
     cd ..
     mkdir -p {{directory}}
