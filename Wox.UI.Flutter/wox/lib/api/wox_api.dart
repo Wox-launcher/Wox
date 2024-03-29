@@ -31,4 +31,12 @@ class WoxApi {
   Future<List<InstalledPlugin>> findInstalledPlugins() async {
     return await WoxHttpUtil.instance.postData("/plugin/installed", null);
   }
+
+  Future<void> installPlugin(String id) async {
+    await WoxHttpUtil.instance.postData("/plugin/install", {"id": id});
+  }
+
+  Future<void> uninstallPlugin(String id) async {
+    await WoxHttpUtil.instance.postData("/plugin/uninstall", {"id": id});
+  }
 }

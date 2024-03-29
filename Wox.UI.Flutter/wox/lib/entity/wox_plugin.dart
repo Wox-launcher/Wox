@@ -15,6 +15,7 @@ class StorePlugin {
   late String dateCreated;
   late String dateUpdated;
   late bool isInstalled;
+  bool isInstalling = false;
 
   StorePlugin.fromJson(Map<String, dynamic> json) {
     id = json['Id'];

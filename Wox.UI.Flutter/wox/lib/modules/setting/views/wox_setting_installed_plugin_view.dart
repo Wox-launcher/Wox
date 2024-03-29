@@ -59,7 +59,14 @@ class WoxSettingInstalledPluginView extends GetView<WoxSettingController> {
                               return Colors.white;
                             }),
                           ),
-                          onPressed: () {}, // Add onPressed feature
+                          onPressed: () {
+                            if (plugin.isSystem) {
+                              // Disable the plugin
+                            } else {
+                              // Uninstall the plugin
+                              controller.uninstall(plugin);
+                            }
+                          }, // Add onPressed feature
                           child: Row(
                             children: [
                               Icon(FluentIcons.download),

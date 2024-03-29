@@ -1,5 +1,9 @@
 #!/bin/sh
 
+if [ "$LEFTHOOK_VERBOSE" = "1" -o "$LEFTHOOK_VERBOSE" = "true" ]; then
+  set -x
+fi
+
 if [ "$LEFTHOOK" = "0" ]; then
   exit 0
 fi
@@ -10,7 +14,10 @@ call_lefthook()
   osArch=$(uname | tr '[:upper:]' '[:lower:]')
   cpuArch=$(uname -m | sed 's/aarch64/arm64/')
 
-  if lefthook -h >/dev/null 2>&1
+  if test -n "$LEFTHOOK_BIN"
+  then
+    "$LEFTHOOK_BIN" "$@"
+  elif lefthook -h >/dev/null 2>&1
   then
     lefthook "$@"
   elif test -f "$dir/node_modules/lefthook/bin/index.js"
@@ -50,12 +57,12 @@ call_lefthook()
   elif pnpm lefthook -h >/dev/null 2>&1
   then
     pnpm lefthook "$@"
-  elif command -v npx >/dev/null 2>&1
-  then
-    npx lefthook "$@"
   elif swift package plugin lefthook >/dev/null 2>&1
   then
     swift package --disable-sandbox plugin lefthook "$@"
+  elif command -v npx >/dev/null 2>&1
+  then
+    npx lefthook "$@"
   else
     echo "Can't find lefthook in PATH"
   fi

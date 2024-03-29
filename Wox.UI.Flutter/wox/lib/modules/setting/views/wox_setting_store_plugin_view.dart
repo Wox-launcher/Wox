@@ -61,12 +61,16 @@ class WoxSettingStorePluginView extends GetView<WoxSettingController> {
                                     return Colors.white;
                                   }),
                                 ),
-                                onPressed: () {}, // Add onPressed feature
-                                child: const Row(
+                                onPressed: () async {
+                                  plugin.isInstalling = true;
+                                  await controller.install(plugin);
+                                  plugin.isInstalling = false;
+                                }, // Add onPressed feature
+                                child: Row(
                                   children: [
-                                    Icon(FluentIcons.download),
-                                    SizedBox(width: 4),
-                                    Text('Install'),
+                                    plugin.isInstalling ? const Icon(FluentIcons.processing) : const Icon(FluentIcons.download),
+                                    const SizedBox(width: 4),
+                                    const Text('Install'),
                                   ],
                                 ), // Change the text to 'Install'
                               ),

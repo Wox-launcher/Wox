@@ -16,6 +16,13 @@ const port = process.argv[2]
 const woxPid = process.argv[4]
 const hostId = `node-${crypto.randomUUID()}`
 
+process.on("uncaughtException", function (error) {
+  logger.error(NewTraceContext(), `nodejs uncaughtException: ${error.message}, stack: ${error.stack}`)
+})
+process.on("unhandledRejection", function (reason, error) {
+  logger.error(NewTraceContext(), `nodejs unhandledRejection: ${reason}, error: ${error}`)
+})
+
 const startupContext = NewTraceContext()
 logger.info(startupContext, "----------------------------------------")
 logger.info(startupContext, `start nodejs host: ${hostId}`)
@@ -40,7 +47,7 @@ const wss = new WebSocketServer({ port: Number.parseInt(port) })
 wss.on("connection", function connection(ws) {
   logger.updateWebSocket(ws)
 
-  ws.on("error", function(error) {
+  ws.on("error", function (error) {
     logger.updateWebSocket(undefined)
     logger.error(NewTraceContext(), `[${hostId}] connection error: ${error.message}`)
   })

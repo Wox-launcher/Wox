@@ -30,4 +30,16 @@ class WoxSettingController extends GetxController {
   void loadInstalledPlugins() async {
     installedPlugins.value = await WoxApi.instance.findInstalledPlugins();
   }
+
+  Future<void> install(StorePlugin plugin) async {
+    Logger.instance.info(const UuidV4().generate(), 'Installing plugin: ${plugin.id}');
+    await WoxApi.instance.installPlugin(plugin.id);
+    loadStorePlugins();
+  }
+
+  Future<void> uninstall(InstalledPlugin plugin) async {
+    Logger.instance.info(const UuidV4().generate(), 'Uninstalling plugin: ${plugin.id}');
+    await WoxApi.instance.uninstallPlugin(plugin.id);
+    loadInstalledPlugins();
+  }
 }
