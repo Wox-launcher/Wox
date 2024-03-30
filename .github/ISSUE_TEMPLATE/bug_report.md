@@ -11,7 +11,7 @@ assignees: 'qianlifeng'
 **Version**  
 
 - [ ] v1 (has no resource to fix)
-- [ ] v2
+- [x] v2
 
 **Platform**  
 
