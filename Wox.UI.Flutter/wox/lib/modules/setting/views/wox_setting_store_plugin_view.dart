@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
@@ -14,15 +15,28 @@ class WoxSettingStorePluginView extends GetView<WoxSettingController> {
         children: [
           Padding(
             padding: const EdgeInsets.only(bottom: 20),
-            child: TextBox(
-              autofocus: true,
-              placeholder: 'Search plugins',
-              padding: const EdgeInsets.all(10),
-              suffix: const Padding(
-                padding: EdgeInsets.only(right: 8.0),
-                child: Icon(FluentIcons.search),
+            child: RawKeyboardListener(
+              focusNode: FocusNode(onKey: (FocusNode node, RawKeyEvent event) {
+                if (event is RawKeyDownEvent) {
+                  switch (event.logicalKey) {
+                    case LogicalKeyboardKey.escape:
+                      controller.hideWindow();
+                      return KeyEventResult.handled;
+                  }
+                }
+
+                return KeyEventResult.ignored;
+              }),
+              child: TextBox(
+                autofocus: true,
+                placeholder: 'Search plugins',
+                padding: const EdgeInsets.all(10),
+                suffix: const Padding(
+                  padding: EdgeInsets.only(right: 8.0),
+                  child: Icon(FluentIcons.search),
+                ),
+                onChanged: (value) => {controller.onFilterStorePlugins(value)},
               ),
-              onChanged: (value) => {},
             ),
           ),
           Expanded(

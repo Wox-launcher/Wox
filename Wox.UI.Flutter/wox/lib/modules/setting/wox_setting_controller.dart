@@ -9,6 +9,8 @@ import 'package:wox/utils/wox_setting_util.dart';
 class WoxSettingController extends GetxController {
   final activePaneIndex = 0.obs;
   final woxSetting = WoxSettingUtil.instance.currentSetting.obs;
+  var rawStorePlugins = <StorePlugin>[];
+  var rawInstalledPlugins = <InstalledPlugin>[];
   final storePlugins = <StorePlugin>[].obs;
   final installedPlugins = <InstalledPlugin>[].obs;
 
@@ -24,11 +26,11 @@ class WoxSettingController extends GetxController {
   }
 
   void loadStorePlugins() async {
-    storePlugins.value = await WoxApi.instance.findStorePlugins();
+    rawStorePlugins = await WoxApi.instance.findStorePlugins();
   }
 
   void loadInstalledPlugins() async {
-    installedPlugins.value = await WoxApi.instance.findInstalledPlugins();
+    rawInstalledPlugins = await WoxApi.instance.findInstalledPlugins();
   }
 
   Future<void> install(StorePlugin plugin) async {
@@ -41,5 +43,15 @@ class WoxSettingController extends GetxController {
     Logger.instance.info(const UuidV4().generate(), 'Uninstalling plugin: ${plugin.id}');
     await WoxApi.instance.uninstallPlugin(plugin.id);
     loadInstalledPlugins();
+  }
+
+  onFilterStorePlugins(String filter) {
+    storePlugins.clear();
+    storePlugins.addAll(rawStorePlugins.where((element) => element.name.toLowerCase().contains(filter.toLowerCase())));
+  }
+
+  onFilterInstalledPlugins(String filter) {
+    installedPlugins.clear();
+    installedPlugins.addAll(rawInstalledPlugins.where((element) => element.name.toLowerCase().contains(filter.toLowerCase())));
   }
 }
