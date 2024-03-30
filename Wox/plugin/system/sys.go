@@ -102,6 +102,20 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 				plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx)
 			},
 		},
+		{
+			Title:                  "i18n:plugin_sys_open_system_settings",
+			SubTitle:               "",
+			PreventHideAfterAction: true,
+			Icon:                   sysSettingIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				if util.IsMacOS() {
+					util.ShellRun("open", "-a", "System Preferences")
+				}
+				if util.IsWindows() {
+					util.ShellRun("desk.cpl")
+				}
+			},
+		},
 	}
 
 	if util.IsDev() {

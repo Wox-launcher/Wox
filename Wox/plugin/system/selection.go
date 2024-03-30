@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"path"
 	"strings"
 	"wox/plugin"
 	"wox/util"
@@ -97,6 +98,20 @@ func (i *SelectionPlugin) queryForSelectionFile(ctx context.Context, filePaths [
 			},
 		},
 	})
+	if len(filePaths) == 1 {
+		results = append(results, plugin.QueryResult{
+			Title: "Open containing folder",
+			Icon:  plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAABCUlEQVR4nO2VMWrDQBBFp8gRQhoFV5a0pM0Zci/fRAK7CcJd0gXcRfKALxFIZ4OdA+gbxZ1A3nU1A/4Pfv/f7OyuCCGEEDICS3lGJQ1q+UMtSEolC3FTvpZDcnFvErhM/vbyXiRwy9p4lMBQYPUAfGVAVwAabNMVPTazX3w+vaUJDOXb3L64jtLmPT4eX+MCw+Sty+pENrOfuICHtdGpUyj6uIB1Sb0eCoAnELhCV7FeEfASq/2UwWdU7ScNfmTqMxLDuiAooPZTBldI7ScNXmL1GbmHZ/RkXRJT2YZjXGBbrh0LNAkCoYCWe/OyOk55wO5lHhX4l/jOM2h4d7JOp2HyyeUJIYTcFWcLXG7i+rfwxwAAAABJRU5ErkJggg==`),
+			Actions: []plugin.QueryResultAction{
+				{
+					Name: "Open containing folder",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						util.ShellOpen(path.Dir(filePaths[0]))
+					},
+				},
+			},
+		})
+	}
 
 	if util.IsMacOS() {
 		// share with airdrop
