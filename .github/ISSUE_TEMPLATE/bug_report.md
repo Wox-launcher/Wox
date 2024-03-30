@@ -1,37 +1,29 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+description: Create a report to help us improve
 title: ''
 labels: ''
-assignees: ''
+assignees: 'qianlifeng'
 
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+**Version**  
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
-
-**Expected behavior**
-A clear and concise description of what you expected to happen.
-
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
-
-**Version**
 - [ ] v1 (has no resource to fix)
 - [ ] v2
 
-**Platforms**
+**Platform**  
+
 - [ ] Macos
 - [ ] Windows
 - [ ] Linux
 
+**Description**  
 
-**Additional context**
-Add any other context about the problem here.
+A clear and concise description of what the bug is.
+
+**Log**  
+
+please upload wox log to help identify your bug.
+- `~/.wox/log/log` if you use macos or linux
+- `C:\Users\<yourname>\.wox\log\log` if you use windows
