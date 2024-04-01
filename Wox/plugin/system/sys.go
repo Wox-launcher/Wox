@@ -86,7 +86,6 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		},
 		{
 			Title:                  "i18n:plugin_sys_open_wox_preferences",
-			SubTitle:               "",
 			PreventHideAfterAction: true,
 			Icon:                   sysSettingIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -95,7 +94,6 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		},
 		{
 			Title:                  "i18n:plugin_sys_open_wox_settings",
-			SubTitle:               "",
 			PreventHideAfterAction: true,
 			Icon:                   sysSettingIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -103,10 +101,8 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			},
 		},
 		{
-			Title:                  "i18n:plugin_sys_open_system_settings",
-			SubTitle:               "",
-			PreventHideAfterAction: true,
-			Icon:                   sysSettingIcon,
+			Title: "i18n:plugin_sys_open_system_settings",
+			Icon:  sysSettingIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if util.IsMacOS() {
 					util.ShellRun("open", "-a", "System Preferences")

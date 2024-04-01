@@ -55,8 +55,8 @@ default:
     mkdir -p {{name}}.app/Contents/MacOS && \
     mkdir -p {{name}}.app/Contents/Resources && \
     cp {{name}} {{name}}.app/Contents/MacOS/wox && \
-    cp ../Assets/Info.plist {{name}}.app/Contents/Info.plist && \
-    cp ../Assets/app.icns {{name}}.app/Contents/Resources/app.icns && \
+    cp ../Assets/mac/Info.plist {{name}}.app/Contents/Info.plist && \
+    cp ../Assets/mac/app.icns {{name}}.app/Contents/Resources/app.icns && \
     mv {{name}}.app Wox.app && \
     create-dmg Wox.app && \
     mv "Wox 2.0.0.dmg" {{name}}.dmg
