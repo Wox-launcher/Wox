@@ -43,5 +43,3 @@ type ShowContext struct {
 type PickFilesParams struct {
 	IsDirectory bool
 }
-
-var ExitApp func(ctx context.Context)

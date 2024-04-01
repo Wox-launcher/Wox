@@ -19,6 +19,9 @@ var LangFS embed.FS
 //go:embed ui
 var UIFS embed.FS
 
+//go:embed app.png
+var appIcon []byte
+
 var embedThemes = []string{}
 
 func Extract(ctx context.Context) error {
@@ -122,4 +125,8 @@ func GetLangJson(ctx context.Context, langCode string) ([]byte, error) {
 
 func GetEmbedThemes(ctx context.Context) []string {
 	return embedThemes
+}
+
+func GetAppIcon() []byte {
+	return appIcon
 }

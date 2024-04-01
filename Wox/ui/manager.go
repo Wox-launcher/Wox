@@ -18,6 +18,7 @@ import (
 	"wox/share"
 	"wox/util"
 	"wox/util/hotkey"
+	"wox/util/tray"
 )
 
 var managerInstance *Manager
@@ -304,4 +305,43 @@ func (m *Manager) PostAppStart(ctx context.Context) {
 
 func (m *Manager) IsSystemTheme(id string) bool {
 	return lo.Contains(m.systemThemeIds, id)
+}
+
+func (m *Manager) ShowTray() {
+	ctx := util.NewTraceContext()
+
+	tray.CreateTray(resource.GetAppIcon(),
+		tray.MenuItem{
+			Title: "Toggle Wox",
+			Callback: func() {
+				m.GetUI(ctx).ToggleApp(ctx)
+			},
+		}, tray.MenuItem{
+			Title: "Quit",
+			Callback: func() {
+				m.ExitApp(util.NewTraceContext())
+			},
+		})
+}
+
+func (m *Manager) HideTray() {
+	tray.RemoveTray()
+}
+
+func (m *Manager) PostSettingUpdate(ctx context.Context, key, value string) {
+	if key == "ShowTray" {
+		if value == "true" {
+			m.ShowTray()
+		} else {
+			m.HideTray()
+		}
+	}
+}
+
+func (m *Manager) ExitApp(ctx context.Context) {
+	util.GetLogger().Info(ctx, "start quitting")
+	plugin.GetPluginManager().Stop(ctx)
+	m.Stop(ctx)
+	util.GetLogger().Info(ctx, "bye~")
+	os.Exit(0)
 }

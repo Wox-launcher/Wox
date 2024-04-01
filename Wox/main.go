@@ -10,7 +10,6 @@ import (
 	"wox/plugin"
 	"wox/resource"
 	"wox/setting"
-	"wox/share"
 	"wox/ui"
 	"wox/util"
 	"wox/util/hotkey"
@@ -37,8 +36,6 @@ func main() {
 	util.GetLogger().Info(ctx, fmt.Sprintf("golang version: %s", strings.ReplaceAll(runtime.Version(), "go", "")))
 	util.GetLogger().Info(ctx, fmt.Sprintf("wox data location: %s", util.GetLocation().GetWoxDataDirectory()))
 	util.GetLogger().Info(ctx, fmt.Sprintf("user data location: %s", util.GetLocation().GetUserDataDirectory()))
-
-	share.ExitApp = ExitApp
 
 	extractErr := resource.Extract(ctx)
 	if extractErr != nil {
@@ -76,7 +73,7 @@ func main() {
 	}
 
 	if woxSetting.ShowTray {
-		startTray(ctx)
+		ui.GetUIManager().ShowTray()
 	}
 
 	shareUI := ui.GetUIManager().GetUI(ctx)
@@ -106,7 +103,6 @@ func main() {
 			//files := plugin.GetPluginManager().GetUI().PickFiles(ctx, share.PickFilesParams{IsDirectory: true})
 			//ui.GetUIManager().GetUI(ctx).Notify(ctx, "Picked files", fmt.Sprintf("%v", files))
 		})
-
 		if util.IsProd() {
 			util.Go(ctx, "start ui", func() {
 				time.Sleep(time.Millisecond * 200) // wait websocket server start

@@ -433,6 +433,8 @@ func serveAndWait(ctx context.Context, port int) {
 			return
 		}
 
+		GetUIManager().PostSettingUpdate(util.NewTraceContext(), kv.Key, kv.Value)
+
 		writeSuccessResponse(w, "")
 	})
 
