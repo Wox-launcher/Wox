@@ -4,14 +4,26 @@ package tray
 #cgo LDFLAGS: -lshell32
 #include <windows.h>
 
-extern void init(HICON icon);
+extern void init(char *iconPath, char *tooltip);
 extern void addMenuItem(unsigned int id, char *title);
 extern void removeTrayIcon();
 extern void showMenu();
 extern unsigned int nextMenuId;
+extern LPVOID GetLastErrorToText(DWORD error);
+extern DWORD my_CreateIconFromResourceEx(
+    PBYTE pbIconBits,
+    DWORD cbIconBits,
+    BOOL  fIcon,
+    DWORD dwVersion,
+    int  cxDesired,
+    int  cyDesired,
+    UINT uFlags );
 */
 import "C"
 import (
+	"golang.design/x/hotkey/mainthread"
+	"os"
+	"time"
 	"unsafe"
 )
 
@@ -27,8 +39,16 @@ func reportClick(menuId C.UINT_PTR) {
 
 // initializes the system tray icon and menu.
 func CreateTray(appIcon []byte, items ...MenuItem) {
-	icon := C.CreateIconFromResourceEx((*C.BYTE)(unsafe.Pointer(&appIcon[0])), C.DWORD(len(appIcon)), C.TRUE, 0x30000, 32, 32, C.LR_DEFAULTCOLOR)
-	C.init(icon)
+	temp, _ := os.CreateTemp("", "app.ico")
+	temp.Write(appIcon)
+	temp.Close()
+	iconPath := temp.Name()
+	iconPathC := C.CString(iconPath)
+	defer C.free(unsafe.Pointer(iconPathC))
+	tooltipC := C.CString("Wox")
+	defer C.free(unsafe.Pointer(tooltipC))
+
+	C.init(iconPathC, tooltipC)
 
 	for _, item := range items {
 		title := C.CString(item.Title)
@@ -38,17 +58,17 @@ func CreateTray(appIcon []byte, items ...MenuItem) {
 		menuCallbacks[uint32(menuId)] = item.Callback
 		C.nextMenuId++
 	}
-	//
-	//go func() {
-	//	time.Sleep(time.Second)
-	//	mainthread.Call(func() {
-	//		var msg C.MSG
-	//		for C.GetMessage(&msg, nil, 0, 0) > 0 {
-	//			C.TranslateMessage(&msg)
-	//			C.DispatchMessage(&msg)
-	//		}
-	//	})
-	//}()
+
+	go func() {
+		time.Sleep(time.Second)
+		mainthread.Call(func() {
+			var msg C.MSG
+			for C.GetMessage(&msg, nil, 0, 0) > 0 {
+				C.TranslateMessage(&msg)
+				C.DispatchMessage(&msg)
+			}
+		})
+	}()
 }
 
 // RemoveTray removes the system tray icon.

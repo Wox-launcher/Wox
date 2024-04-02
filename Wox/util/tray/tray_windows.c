@@ -55,17 +55,22 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 	return 0;
 }
 
-void init(HICON icon, const char* tooltip) {
+HICON loadIcon(const char* iconName) {
+	return (HICON)LoadImage(NULL, iconName, IMAGE_ICON, 32, 32, LR_LOADFROMFILE);
+}
+
+void init(const char* iconName, const char* tooltip) {
 	hMenu = CreatePopupMenu();
+	HICON icon = loadIcon(iconName);
 	setTrayIcon(tooltip, icon);
 
 	WNDCLASS wc = {0};
 	wc.lpfnWndProc = WindowProc;
 	wc.hInstance = GetModuleHandle(NULL);
-	wc.lpszClassName = "TrayWindowClass";
+	wc.lpszClassName = "WoxWindowClass";
 	RegisterClass(&wc);
 
-	HWND hwnd = CreateWindowEx(0, "TrayWindowClass", "Tray Window", WS_OVERLAPPEDWINDOW,
+	HWND hwnd = CreateWindowEx(0, "WoxWindowClass", "Wox", WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, wc.hInstance, NULL);
 	nid.hWnd = hwnd;
 	UpdateWindow(hwnd);
