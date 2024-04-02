@@ -22,6 +22,9 @@ var UIFS embed.FS
 //go:embed app.png
 var appIcon []byte
 
+//go:embed app.ico
+var appIconWindows []byte
+
 var embedThemes = []string{}
 
 func Extract(ctx context.Context) error {
@@ -128,5 +131,9 @@ func GetEmbedThemes(ctx context.Context) []string {
 }
 
 func GetAppIcon() []byte {
+	if util.IsWindows() {
+		return appIconWindows
+	}
+
 	return appIcon
 }
