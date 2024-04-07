@@ -1,5 +1,6 @@
 import 'dart:core';
 
+import 'package:flutter/material.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
@@ -38,5 +39,21 @@ class WoxApi {
 
   Future<void> uninstallPlugin(String id) async {
     await WoxHttpUtil.instance.postData("/plugin/uninstall", {"id": id});
+  }
+
+  Future<List<WoxTheme>> findStoreThemes() async {
+    return await WoxHttpUtil.instance.postData("/theme/store", null);
+  }
+
+  Future<List<WoxTheme>> findInstalledThemes() async {
+    return await WoxHttpUtil.instance.postData("/theme/installed", null);
+  }
+
+  Future<void> installTheme(String id) async {
+    await WoxHttpUtil.instance.postData("/theme/install", {"id": id});
+  }
+
+  Future<void> uninstallTheme(String id) async {
+    await WoxHttpUtil.instance.postData("/theme/uninstall", {"id": id});
   }
 }
