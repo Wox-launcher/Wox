@@ -230,7 +230,7 @@ func (a *MacRetriever) parseMacAppIconFromInfoPlist(ctx context.Context, appPath
 		}
 	}
 
-	return "", fmt.Errorf("info plist doesnt have CFBundleIconFile property")
+	return "", fmt.Errorf("info plist doesn't have CFBundleIconFile property")
 }
 
 func (a *MacRetriever) parseMacAppIconFromCgo(ctx context.Context, appPath string) (string, error) {

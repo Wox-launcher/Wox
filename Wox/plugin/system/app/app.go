@@ -128,7 +128,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							runErr := util.ShellOpen(info.Path)
 							if runErr != nil {
-								a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error openning app %s: %s", info.Path, runErr.Error()))
+								a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", info.Path, runErr.Error()))
 							}
 						},
 					},
@@ -138,7 +138,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							runErr := util.ShellOpen(path.Dir(info.Path))
 							if runErr != nil {
-								a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error openning app %s: %s", info.Path, runErr.Error()))
+								a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", info.Path, runErr.Error()))
 							}
 						},
 					},

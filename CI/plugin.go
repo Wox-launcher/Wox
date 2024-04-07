@@ -78,7 +78,7 @@ func checkPluginNewVersion() error {
 			plugins[index].Version = currentVersion.String()
 			plugins[index].DateUpdated = time.Now().Format("2006-01-02 15:04:05")
 			hasUpdate = true
-			fmt.Println(fmt.Sprintf("[%s] Exist version: %s, New version: %s, udpate found", plugin.Name, existVersion, currentVersion))
+			fmt.Println(fmt.Sprintf("[%s] Exist version: %s, New version: %s, update found", plugin.Name, existVersion, currentVersion))
 		} else {
 			fmt.Println(fmt.Sprintf("[%s] Exist version: %s, New version: %s", plugin.Name, existVersion, currentVersion))
 		}
