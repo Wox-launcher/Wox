@@ -2,11 +2,10 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:wox/modules/setting/views/wox_setting_store_plugin_view.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 
 import 'wox_setting_general_view.dart';
-import 'wox_setting_installed_plugin_view.dart';
+import 'wox_setting_plugin_view.dart';
 
 class WoxSettingView extends GetView<WoxSettingController> {
   const WoxSettingView({super.key});
@@ -48,7 +47,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                     PaneItemExpander(
                         icon: const Icon(FluentIcons.app_icon_default_add),
                         title: const Text('Plugins'),
-                        body: const WoxSettingStorePluginView(),
+                        body: const WoxSettingPluginView(),
                         onTap: () {
                           controller.loadStorePlugins();
                           controller.activePaneIndex.value = 2;
@@ -58,13 +57,13 @@ class WoxSettingView extends GetView<WoxSettingController> {
                           PaneItem(
                             icon: const Icon(FluentIcons.office_store_logo),
                             title: const Text('Store Plugins'),
-                            body: const WoxSettingStorePluginView(),
+                            body: const WoxSettingPluginView(),
                             onTap: () => controller.loadStorePlugins(),
                           ),
                           PaneItem(
                             icon: const Icon(FluentIcons.installation),
                             title: const Text('Installed Plugins'),
-                            body: const WoxSettingInstalledPluginView(),
+                            body: const WoxSettingPluginView(),
                             onTap: () => controller.loadInstalledPlugins(),
                           ),
                         ]),

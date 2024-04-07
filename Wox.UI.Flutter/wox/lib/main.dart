@@ -49,10 +49,10 @@ Future<void> initialServices(List<String> arguments) async {
   await initArgs(arguments);
   await WoxThemeUtil.instance.loadTheme();
   await WoxSettingUtil.instance.loadSetting();
-  var controller = WoxLauncherController()..startRefreshSchedule();
-  await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://localhost:${Env.serverPort}/ws"), onMessageReceived: controller.handleWebSocketMessage);
+  var launcherController = WoxLauncherController()..startRefreshSchedule();
+  await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://localhost:${Env.serverPort}/ws"), onMessageReceived: launcherController.handleWebSocketMessage);
   HeartbeatChecker().startChecking();
-  Get.put(controller);
+  Get.put(launcherController);
   Get.put(WoxSettingController());
 }
 

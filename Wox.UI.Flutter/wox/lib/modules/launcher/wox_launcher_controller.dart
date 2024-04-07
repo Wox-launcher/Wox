@@ -22,6 +22,7 @@ import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
 import 'package:wox/interfaces/wox_launcher_interface.dart';
+import 'package:wox/modules/setting/wox_setting_controller.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
@@ -375,6 +376,9 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       responseWoxWebsocketRequest(msg, true, files);
     } else if (msg.method == "OpenSettingWindow") {
       isInSettingView.value = true;
+      final settingController = Get.find<WoxSettingController>();
+      settingController.loadInstalledPlugins();
+      settingController.loadStorePlugins();
     }
   }
 

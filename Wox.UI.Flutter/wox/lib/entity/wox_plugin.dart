@@ -126,3 +126,63 @@ class MetadataCommand {
     return data;
   }
 }
+
+class PluginDetail {
+  late String id;
+  late String name;
+  late String description;
+  late String author;
+  late String version;
+  late WoxImage icon;
+  late String website;
+  late String entry;
+  late List<String> triggerKeywords;
+  late List<MetadataCommand> commands;
+  late List<String> supportedOS;
+  late bool isSystem;
+  late bool isInstalled;
+  late bool isActive;
+
+  PluginDetail.empty() {
+    id = '';
+    name = '';
+    description = '';
+    author = '';
+    version = '';
+    icon = WoxImage.empty();
+    website = '';
+    entry = '';
+    triggerKeywords = <String>[];
+    commands = <MetadataCommand>[];
+    supportedOS = <String>[];
+    isSystem = false;
+    isInstalled = false;
+    isActive = false;
+  }
+
+  PluginDetail.fromInstalledPlugin(InstalledPlugin plugin) {
+    id = plugin.id;
+    name = plugin.name;
+    description = plugin.description;
+    author = plugin.author;
+    version = plugin.version;
+    icon = plugin.icon;
+    website = plugin.website;
+    entry = plugin.entry;
+    triggerKeywords = plugin.triggerKeywords;
+    commands = plugin.commands;
+    supportedOS = plugin.supportedOS;
+    isSystem = plugin.isSystem;
+    isInstalled = true;
+  }
+
+  PluginDetail.fromStorePlugin(StorePlugin plugin) {
+    id = plugin.id;
+    name = plugin.name;
+    description = plugin.description;
+    author = plugin.author;
+    version = plugin.version;
+    icon = plugin.icon;
+    website = plugin.website;
+  }
+}

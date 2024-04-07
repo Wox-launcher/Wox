@@ -10,10 +10,9 @@ import 'package:wox/utils/wox_setting_util.dart';
 class WoxSettingController extends GetxController {
   final activePaneIndex = 0.obs;
   final woxSetting = WoxSettingUtil.instance.currentSetting.obs;
-  var rawStorePlugins = <StorePlugin>[];
-  var rawInstalledPlugins = <InstalledPlugin>[];
-  final storePlugins = <StorePlugin>[].obs;
-  final installedPlugins = <InstalledPlugin>[].obs;
+  final pluginDetails = <PluginDetail>[];
+  final filteredPluginDetails = <PluginDetail>[].obs;
+  final activePluginDetail = PluginDetail.empty().obs;
   var rawStoreThemes = <WoxTheme>[];
   var rawInstalledThemes = <WoxTheme>[];
   final storeThemes = <WoxTheme>[].obs;
@@ -31,11 +30,29 @@ class WoxSettingController extends GetxController {
   }
 
   void loadStorePlugins() async {
-    rawStorePlugins = await WoxApi.instance.findStorePlugins();
+    final rawStorePlugins = await WoxApi.instance.findStorePlugins();
+    pluginDetails.clear();
+    for (var plugin in rawStorePlugins) {
+      pluginDetails.add(PluginDetail.fromStorePlugin(plugin));
+    }
+    filteredPluginDetails.clear();
+    filteredPluginDetails.addAll(pluginDetails);
+    if (filteredPluginDetails.isNotEmpty) {
+      activePluginDetail.value = filteredPluginDetails[0];
+    }
   }
 
   void loadInstalledPlugins() async {
-    rawInstalledPlugins = await WoxApi.instance.findInstalledPlugins();
+    final installedPlugin = await WoxApi.instance.findInstalledPlugins();
+    pluginDetails.clear();
+    for (var plugin in installedPlugin) {
+      pluginDetails.add(PluginDetail.fromInstalledPlugin(plugin));
+    }
+    filteredPluginDetails.clear();
+    filteredPluginDetails.addAll(pluginDetails);
+    if (filteredPluginDetails.isNotEmpty) {
+      activePluginDetail.value = filteredPluginDetails[0];
+    }
   }
 
   Future<void> install(StorePlugin plugin) async {
@@ -50,14 +67,9 @@ class WoxSettingController extends GetxController {
     loadInstalledPlugins();
   }
 
-  onFilterStorePlugins(String filter) {
-    storePlugins.clear();
-    storePlugins.addAll(rawStorePlugins.where((element) => element.name.toLowerCase().contains(filter.toLowerCase())));
-  }
-
-  onFilterInstalledPlugins(String filter) {
-    installedPlugins.clear();
-    installedPlugins.addAll(rawInstalledPlugins.where((element) => element.name.toLowerCase().contains(filter.toLowerCase())));
+  onFilterPlugins(String filter) {
+    filteredPluginDetails.clear();
+    filteredPluginDetails.addAll(pluginDetails.where((element) => element.name.toLowerCase().contains(filter.toLowerCase())));
   }
 
   void loadStoreThemes() async {
@@ -79,7 +91,6 @@ class WoxSettingController extends GetxController {
     await WoxApi.instance.uninstallTheme(theme.themeId);
     loadInstalledThemes();
   }
-
 
   onFilterStoreThemes(String filter) {
     storeThemes.clear();
