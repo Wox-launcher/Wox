@@ -62,6 +62,7 @@ default:
     mv "Wox 2.0.0.dmg" {{name}}.dmg
 
 @test:
+    just dev
     cd Wox && go test ./...
 
 @_build_dev_nodejs_plugin pluginName directory:
