@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 
 import 'wox_setting_general_view.dart';
@@ -48,9 +49,8 @@ class WoxSettingView extends GetView<WoxSettingController> {
                         icon: const Icon(FluentIcons.app_icon_default_add),
                         title: const Text('Plugins'),
                         body: const WoxSettingPluginView(),
-                        onTap: () {
-                          controller.loadStorePlugins();
-                          controller.activePaneIndex.value = 2;
+                        onTap: () async {
+                          await controller.switchToPluginList(true);
                         },
                         initiallyExpanded: true,
                         items: [
@@ -58,13 +58,17 @@ class WoxSettingView extends GetView<WoxSettingController> {
                             icon: const Icon(FluentIcons.office_store_logo),
                             title: const Text('Store Plugins'),
                             body: const WoxSettingPluginView(),
-                            onTap: () => controller.loadStorePlugins(),
+                            onTap: () async {
+                              await controller.switchToPluginList(true);
+                            },
                           ),
                           PaneItem(
                             icon: const Icon(FluentIcons.installation),
                             title: const Text('Installed Plugins'),
                             body: const WoxSettingPluginView(),
-                            onTap: () => controller.loadInstalledPlugins(),
+                            onTap: () async {
+                              await controller.switchToPluginList(false);
+                            },
                           ),
                         ]),
                     PaneItemExpander(

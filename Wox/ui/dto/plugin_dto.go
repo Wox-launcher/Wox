@@ -34,10 +34,12 @@ type InstalledPlugin struct {
 	Icon               plugin.WoxImage
 	Website            string
 	Entry              string
+	ScreenshotUrls     []string
 	TriggerKeywords    []string //User can add/update/delete trigger keywords
 	Commands           []plugin.MetadataCommand
 	SupportedOS        []string
 	SettingDefinitions definition.PluginSettingDefinitions
 	Settings           setting.PluginSetting
 	IsSystem           bool
+	IsDisable          bool
 }

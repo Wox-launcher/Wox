@@ -64,6 +64,9 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     var isVisible = await windowManager.isVisible();
     if (isVisible) {
       hideApp(traceId);
+      if (isInSettingView.value) {
+        isInSettingView.value = false;
+      }
     } else {
       showApp(traceId, params);
     }
@@ -376,9 +379,6 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       responseWoxWebsocketRequest(msg, true, files);
     } else if (msg.method == "OpenSettingWindow") {
       isInSettingView.value = true;
-      final settingController = Get.find<WoxSettingController>();
-      settingController.loadInstalledPlugins();
-      settingController.loadStorePlugins();
     }
   }
 

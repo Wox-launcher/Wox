@@ -33,25 +33,6 @@ class StorePlugin {
     dateUpdated = json['DateUpdated'];
     isInstalled = json['IsInstalled'];
   }
-
-  Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = <String, dynamic>{};
-    data['Id'] = id;
-    data['Name'] = name;
-    data['Author'] = author;
-    data['Version'] = version;
-    data['MinWoxVersion'] = minWoxVersion;
-    data['Runtime'] = runtime;
-    data['Description'] = description;
-    data['Icon'] = icon.toJson();
-    data['Website'] = website;
-    data['DownloadUrl'] = downloadUrl;
-    data['ScreenshotUrls'] = screenshotUrls;
-    data['DateCreated'] = dateCreated;
-    data['DateUpdated'] = dateUpdated;
-    data['IsInstalled'] = isInstalled;
-    return data;
-  }
 }
 
 class InstalledPlugin {
@@ -67,8 +48,10 @@ class InstalledPlugin {
   late String entry;
   late List<String> triggerKeywords;
   late List<MetadataCommand> commands;
+  late List<String> screenshotUrls;
   late List<String> supportedOS;
   late bool isSystem;
+  late bool isDisable;
 
   InstalledPlugin.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
@@ -83,30 +66,21 @@ class InstalledPlugin {
     entry = json['Entry'];
     triggerKeywords = List<String>.from(json['TriggerKeywords']);
     commands = <MetadataCommand>[];
+    if (json['ScreenshotUrls'] != null) {
+      screenshotUrls = List<String>.from(json['ScreenshotUrls']);
+    } else {
+      screenshotUrls = <String>[];
+    }
+    if (json['Settings'] != null) {
+      isDisable = json['Settings']["Disabled"];
+    } else {
+      isDisable = false;
+    }
     json['Commands']?.forEach((v) {
       commands.add(MetadataCommand.fromJson(v));
     });
     supportedOS = List<String>.from(json['SupportedOS']);
     isSystem = json['IsSystem'];
-  }
-
-  Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = <String, dynamic>{};
-    data['Id'] = id;
-    data['Name'] = name;
-    data['Author'] = author;
-    data['Version'] = version;
-    data['MinWoxVersion'] = minWoxVersion;
-    data['Runtime'] = runtime;
-    data['Description'] = description;
-    data['Icon'] = icon.toJson();
-    data['Website'] = website;
-    data['Entry'] = entry;
-    data['TriggerKeywords'] = triggerKeywords;
-    data['Commands'] = commands.map((v) => v.toJson()).toList();
-    data['SupportedOS'] = supportedOS;
-    data['IsSystem'] = isSystem;
-    return data;
   }
 }
 
@@ -139,9 +113,10 @@ class PluginDetail {
   late List<String> triggerKeywords;
   late List<MetadataCommand> commands;
   late List<String> supportedOS;
+  late List<String> screenshotUrls;
   late bool isSystem;
   late bool isInstalled;
-  late bool isActive;
+  late bool isDisable;
 
   PluginDetail.empty() {
     id = '';
@@ -155,9 +130,10 @@ class PluginDetail {
     triggerKeywords = <String>[];
     commands = <MetadataCommand>[];
     supportedOS = <String>[];
+    screenshotUrls = <String>[];
     isSystem = false;
     isInstalled = false;
-    isActive = false;
+    isDisable = false;
   }
 
   PluginDetail.fromInstalledPlugin(InstalledPlugin plugin) {
@@ -174,6 +150,8 @@ class PluginDetail {
     supportedOS = plugin.supportedOS;
     isSystem = plugin.isSystem;
     isInstalled = true;
+    screenshotUrls = plugin.screenshotUrls;
+    isDisable = plugin.isDisable;
   }
 
   PluginDetail.fromStorePlugin(StorePlugin plugin) {
@@ -184,5 +162,9 @@ class PluginDetail {
     version = plugin.version;
     icon = plugin.icon;
     website = plugin.website;
+    isInstalled = plugin.isInstalled;
+    isSystem = false;
+    screenshotUrls = plugin.screenshotUrls;
+    isDisable = false;
   }
 }

@@ -53,6 +53,8 @@ dependencies:
   file_picker: ^6.1.1
   fluent_ui: ^4.4.0
   hotkey_manager: ^0.2.1
+  url_launcher: ^6.2.5
+  flutter_image_slideshow: ^0.1.6
 
 dev_dependencies:
   flutter_test:

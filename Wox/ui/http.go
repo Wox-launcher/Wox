@@ -201,6 +201,14 @@ func serveAndWait(ctx context.Context, port int) {
 				return
 			}
 
+			//load screenshot urls from store if exist
+			storePlugin, foundErr := plugin.GetStoreManager().GetStorePluginManifestById(getCtx, instance.Metadata.Id)
+			if foundErr == nil {
+				installedPlugin.ScreenshotUrls = storePlugin.ScreenshotUrls
+			} else {
+				installedPlugin.ScreenshotUrls = []string{}
+			}
+
 			installedPlugin.IsSystem = instance.IsSystemPlugin
 			logger.Debug(getCtx, fmt.Sprintf("get plugin setting: %s", instance.Metadata.Name))
 			installedPlugin.SettingDefinitions = lo.Filter(instance.Metadata.SettingDefinitions, func(item definition.PluginSettingDefinitionItem, _ int) bool {
@@ -295,6 +303,70 @@ func serveAndWait(ctx context.Context, port int) {
 		uninstallErr := plugin.GetStoreManager().Uninstall(ctx, findPlugin)
 		if uninstallErr != nil {
 			writeErrorResponse(w, "can't uninstall plugin: "+uninstallErr.Error())
+			return
+		}
+
+		writeSuccessResponse(w, "")
+	})
+
+	mux.HandleFunc("/plugin/disable", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		idResult := gjson.GetBytes(body, "id")
+		if !idResult.Exists() {
+			writeErrorResponse(w, "id is empty")
+			return
+		}
+
+		pluginId := idResult.String()
+
+		plugins := plugin.GetPluginManager().GetPluginInstances()
+		findPlugin, exist := lo.Find(plugins, func(item *plugin.Instance) bool {
+			if item.Metadata.Id == pluginId {
+				return true
+			}
+			return false
+		})
+		if !exist {
+			writeErrorResponse(w, "can't find plugin")
+			return
+		}
+
+		findPlugin.Setting.Disabled = true
+		err := findPlugin.SaveSetting(ctx)
+		if err != nil {
+			writeErrorResponse(w, "can't disable plugin: "+err.Error())
+			return
+		}
+
+		writeSuccessResponse(w, "")
+	})
+
+	mux.HandleFunc("/plugin/enable", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		idResult := gjson.GetBytes(body, "id")
+		if !idResult.Exists() {
+			writeErrorResponse(w, "id is empty")
+			return
+		}
+
+		pluginId := idResult.String()
+
+		plugins := plugin.GetPluginManager().GetPluginInstances()
+		findPlugin, exist := lo.Find(plugins, func(item *plugin.Instance) bool {
+			if item.Metadata.Id == pluginId {
+				return true
+			}
+			return false
+		})
+		if !exist {
+			writeErrorResponse(w, "can't find plugin")
+			return
+		}
+
+		findPlugin.Setting.Disabled = false
+		err := findPlugin.SaveSetting(ctx)
+		if err != nil {
+			writeErrorResponse(w, "can't enable plugin: "+err.Error())
 			return
 		}
 

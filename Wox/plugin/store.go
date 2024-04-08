@@ -137,6 +137,17 @@ func (s *Store) GetStorePluginManifest(ctx context.Context, store storeManifest)
 	return storePluginManifests, nil
 }
 
+func (s *Store) GetStorePluginManifestById(ctx context.Context, id string) (StorePluginManifest, error) {
+	manifest, found := lo.Find(s.pluginManifests, func(manifest StorePluginManifest) bool {
+		return manifest.Id == id
+	})
+	if found {
+		return manifest, nil
+	}
+
+	return StorePluginManifest{}, fmt.Errorf("plugin %s not found", id)
+}
+
 func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifest {
 	return lo.Filter(s.pluginManifests, func(manifest StorePluginManifest, _ int) bool {
 		if keyword == "" {

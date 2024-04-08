@@ -41,6 +41,14 @@ class WoxApi {
     await WoxHttpUtil.instance.postData("/plugin/uninstall", {"id": id});
   }
 
+  Future<void> disablePlugin(String id) async {
+    await WoxHttpUtil.instance.postData("/plugin/disable", {"id": id});
+  }
+
+  Future<void> enablePlugin(String id) async {
+    await WoxHttpUtil.instance.postData("/plugin/enable", {"id": id});
+  }
+
   Future<List<WoxTheme>> findStoreThemes() async {
     return await WoxHttpUtil.instance.postData("/theme/store", null);
   }

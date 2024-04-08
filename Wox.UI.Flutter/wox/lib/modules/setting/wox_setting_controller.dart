@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_plugin.dart';
@@ -10,9 +11,15 @@ import 'package:wox/utils/wox_setting_util.dart';
 class WoxSettingController extends GetxController {
   final activePaneIndex = 0.obs;
   final woxSetting = WoxSettingUtil.instance.currentSetting.obs;
+
+  //plugins
   final pluginDetails = <PluginDetail>[];
   final filteredPluginDetails = <PluginDetail>[].obs;
   final activePluginDetail = PluginDetail.empty().obs;
+  final activePluginDetailTab = 0.obs;
+  final isStorePluginList = true.obs;
+
+  //themes
   var rawStoreThemes = <WoxTheme>[];
   var rawInstalledThemes = <WoxTheme>[];
   final storeThemes = <WoxTheme>[].obs;
@@ -29,48 +36,96 @@ class WoxSettingController extends GetxController {
     Logger.instance.info(const UuidV4().generate(), 'Setting updated: $key=$value');
   }
 
-  void loadStorePlugins() async {
+  // ---------- Plugins ----------
+
+  Future<void> loadStorePlugins() async {
     final rawStorePlugins = await WoxApi.instance.findStorePlugins();
+    rawStorePlugins.sort((a, b) => a.name.compareTo(b.name));
     pluginDetails.clear();
     for (var plugin in rawStorePlugins) {
       pluginDetails.add(PluginDetail.fromStorePlugin(plugin));
     }
     filteredPluginDetails.clear();
     filteredPluginDetails.addAll(pluginDetails);
-    if (filteredPluginDetails.isNotEmpty) {
-      activePluginDetail.value = filteredPluginDetails[0];
-    }
   }
 
-  void loadInstalledPlugins() async {
+  Future<void> loadInstalledPlugins() async {
     final installedPlugin = await WoxApi.instance.findInstalledPlugins();
+    installedPlugin.sort((a, b) => a.name.compareTo(b.name));
     pluginDetails.clear();
     for (var plugin in installedPlugin) {
       pluginDetails.add(PluginDetail.fromInstalledPlugin(plugin));
     }
     filteredPluginDetails.clear();
     filteredPluginDetails.addAll(pluginDetails);
+  }
+
+  Future<void> refreshPluginList() async {
+    if (isStorePluginList.value) {
+      await loadStorePlugins();
+    } else {
+      await loadInstalledPlugins();
+    }
+
+    //active plugin
+    if (activePluginDetail.value.id.isNotEmpty) {
+      activePluginDetail.value = filteredPluginDetails.firstWhere((element) => element.id == activePluginDetail.value.id, orElse: () => filteredPluginDetails[0]);
+    } else {
+      setFirstFilteredPluginDetailActive();
+    }
+  }
+
+  Future<void> switchToPluginList(bool isStorePlugin) async {
+    activePaneIndex.value = isStorePlugin ? 2 : 3;
+    isStorePluginList.value = isStorePlugin;
+    activePluginDetail.value = PluginDetail.empty();
+    await refreshPluginList();
+    setFirstFilteredPluginDetailActive();
+  }
+
+  void setFirstFilteredPluginDetailActive() {
     if (filteredPluginDetails.isNotEmpty) {
       activePluginDetail.value = filteredPluginDetails[0];
     }
   }
 
-  Future<void> install(StorePlugin plugin) async {
-    Logger.instance.info(const UuidV4().generate(), 'Installing plugin: ${plugin.id}');
+  Future<void> installPlugin(PluginDetail plugin) async {
+    Logger.instance.info(const UuidV4().generate(), 'installing plugin: ${plugin.name}');
     await WoxApi.instance.installPlugin(plugin.id);
-    loadStorePlugins();
+    await refreshPluginList();
   }
 
-  Future<void> uninstall(InstalledPlugin plugin) async {
-    Logger.instance.info(const UuidV4().generate(), 'Uninstalling plugin: ${plugin.id}');
+  Future<void> disablePlugin(PluginDetail plugin) async {
+    Logger.instance.info(const UuidV4().generate(), 'disabling plugin: ${plugin.name}');
+    await WoxApi.instance.disablePlugin(plugin.id);
+    await refreshPluginList();
+  }
+
+  Future<void> enablePlugin(PluginDetail plugin) async {
+    Logger.instance.info(const UuidV4().generate(), 'enabling plugin: ${plugin.name}');
+    await WoxApi.instance.enablePlugin(plugin.id);
+    await refreshPluginList();
+  }
+
+  Future<void> uninstallPlugin(PluginDetail plugin) async {
+    Logger.instance.info(const UuidV4().generate(), 'uninstalling plugin: ${plugin.name}');
     await WoxApi.instance.uninstallPlugin(plugin.id);
-    loadInstalledPlugins();
+    await refreshPluginList();
   }
 
   onFilterPlugins(String filter) {
     filteredPluginDetails.clear();
     filteredPluginDetails.addAll(pluginDetails.where((element) => element.name.toLowerCase().contains(filter.toLowerCase())));
+    if (filteredPluginDetails.isNotEmpty) {
+      activePluginDetail.value = filteredPluginDetails[0];
+    }
   }
+
+  Future<void> openPluginWebsite(String website) async {
+    await launchUrl(Uri.parse(website));
+  }
+
+  // ---------- Themes ----------
 
   void loadStoreThemes() async {
     rawStoreThemes = await WoxApi.instance.findStoreThemes();
