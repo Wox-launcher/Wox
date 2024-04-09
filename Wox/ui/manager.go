@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Masterminds/semver/v3"
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
@@ -59,6 +60,8 @@ func (m *Manager) Start(ctx context.Context) error {
 			logger.Error(ctx, fmt.Sprintf("failed to parse theme: %s", themeErr.Error()))
 			continue
 		}
+		theme.IsInstalled = true
+		theme.IsSystem = true
 		m.themes.Store(theme.ThemeId, theme)
 		m.systemThemeIds = append(m.systemThemeIds, theme.ThemeId)
 	}
@@ -270,6 +273,13 @@ func (m *Manager) RemoveTheme(ctx context.Context, theme share.Theme) {
 	}
 }
 
+func (m *Manager) GetThemeById(themeId string) share.Theme {
+	if v, ok := m.themes.Load(themeId); ok {
+		return v
+	}
+	return share.Theme{}
+}
+
 func (m *Manager) parseTheme(themeJson string) (share.Theme, error) {
 	var theme share.Theme
 	parseErr := json.Unmarshal([]byte(themeJson), &theme)
@@ -305,6 +315,20 @@ func (m *Manager) PostAppStart(ctx context.Context) {
 
 func (m *Manager) IsSystemTheme(id string) bool {
 	return lo.Contains(m.systemThemeIds, id)
+}
+
+func (m *Manager) IsThemeUpgradable(id string, version string) bool {
+	theme := m.GetThemeById(id)
+	if theme.ThemeId != "" {
+		existingVersion, existingErr := semver.NewVersion(theme.Version)
+		currentVersion, currentErr := semver.NewVersion(version)
+		if existingErr != nil && currentErr != nil {
+			if existingVersion.GreaterThan(currentVersion) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (m *Manager) ShowTray() {

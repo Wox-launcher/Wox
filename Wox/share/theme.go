@@ -6,6 +6,8 @@ type Theme struct {
 	ThemeAuthor string
 	ThemeUrl    string
 	Version     string
+	IsSystem    bool
+	IsInstalled bool
 
 	AppBackgroundColor              string
 	AppPaddingLeft                  int

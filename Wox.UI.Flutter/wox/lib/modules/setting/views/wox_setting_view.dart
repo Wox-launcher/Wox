@@ -75,18 +75,26 @@ class WoxSettingView extends GetView<WoxSettingController> {
                       icon: const Icon(FluentIcons.color),
                       title: const Text('Themes'),
                       body: const Text('Themes'),
-                      onTap: () => controller.activePaneIndex.value = 5,
+                      onTap: () async {
+                        await controller.switchToThemeList(true);
+                      },
                       initiallyExpanded: true,
                       items: [
                         PaneItem(
                           icon: const Icon(FluentIcons.mail),
                           title: const Text('Store Themes'),
                           body: const WoxSettingThemeView(),
+                          onTap: () async {
+                            await controller.switchToThemeList(true);
+                          },
                         ),
                         PaneItem(
                           icon: const Icon(FluentIcons.installation),
                           title: const Text('Installed Themes'),
                           body: const WoxSettingThemeView(),
+                          onTap: () async {
+                            await controller.switchToThemeList(false);
+                          },
                         ),
                       ],
                     ),

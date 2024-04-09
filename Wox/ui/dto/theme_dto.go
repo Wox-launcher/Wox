@@ -61,6 +61,7 @@ type SettingTheme struct {
 	ThemeAuthor    string
 	ThemeUrl       string
 	Version        string
+	Description    string
 	IsInstalled    bool
 	IsSystem       bool
 	IsUpgradable   bool

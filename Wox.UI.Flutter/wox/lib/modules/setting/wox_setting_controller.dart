@@ -21,9 +21,10 @@ class WoxSettingController extends GetxController {
   final isStorePluginList = true.obs;
 
   //themes
-  late List<WoxSettingTheme> themeList = <WoxSettingTheme>[];
+  final themeList = <WoxSettingTheme>[];
   final filteredThemeList = <WoxSettingTheme>[].obs;
   final activeTheme = WoxSettingTheme.empty().obs;
+  final isStoreThemeList = true.obs;
 
   void hideWindow() {
     Get.find<WoxLauncherController>().isInSettingView.value = false;
@@ -123,14 +124,24 @@ class WoxSettingController extends GetxController {
 
   // ---------- Themes ----------
 
-  void loadStoreThemes() async {
-    themeList = await WoxApi.instance.findStoreThemes();
+  Future<void> loadStoreThemes() async {
+    final storeThemes = await WoxApi.instance.findStoreThemes();
+    storeThemes.sort((a, b) => a.themeName.compareTo(b.themeName));
+    themeList.clear();
+    for (var theme in storeThemes) {
+      themeList.add(WoxSettingTheme.fromWoxSettingTheme(theme));
+    }
     filteredThemeList.clear();
     filteredThemeList.addAll(themeList);
   }
 
-  void loadInstalledThemes() async {
-    themeList = await WoxApi.instance.findInstalledThemes();
+  Future<void> loadInstalledThemes() async {
+    final installThemes = await WoxApi.instance.findInstalledThemes();
+    installThemes.sort((a, b) => a.themeName.compareTo(b.themeName));
+    themeList.clear();
+    for (var theme in installThemes) {
+      themeList.add(WoxSettingTheme.fromWoxSettingTheme(theme));
+    }
     filteredThemeList.clear();
     filteredThemeList.addAll(themeList);
   }
@@ -150,5 +161,34 @@ class WoxSettingController extends GetxController {
   onFilterThemes(String filter) {
     filteredThemeList.clear();
     filteredThemeList.addAll(themeList.where((element) => element.themeName.toLowerCase().contains(filter.toLowerCase())));
+  }
+
+  void setFirstFilteredThemeActive() {
+    if (filteredThemeList.isNotEmpty) {
+      activeTheme.value = filteredThemeList[0];
+    }
+  }
+
+  Future<void> refreshThemeList() async {
+    if (isStoreThemeList.value) {
+      await loadStoreThemes();
+    } else {
+      await loadInstalledThemes();
+    }
+
+    //active theme
+    if (activeTheme.value.themeId.isNotEmpty) {
+      activeTheme.value = filteredThemeList.firstWhere((element) => element.themeId == activeTheme.value.themeId, orElse: () => filteredThemeList[0]);
+    } else {
+      setFirstFilteredThemeActive();
+    }
+  }
+
+  Future<void> switchToThemeList(bool isStoreTheme) async {
+    activePaneIndex.value = isStoreTheme ? 5 : 6;
+    isStoreThemeList.value = isStoreTheme;
+    activeTheme.value = WoxSettingTheme.empty();
+    await refreshThemeList();
+    setFirstFilteredThemeActive();
   }
 }

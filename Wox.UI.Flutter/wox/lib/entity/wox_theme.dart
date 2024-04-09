@@ -217,7 +217,18 @@ class WoxSettingTheme {
   late bool isInstalled;
   late bool isUpgradable;
 
-  WoxSettingTheme({themeId, themeName, themeAuthor, themeUrl, version, isInstalled, isSystem, isUpgradable, screenshotUrls});
+  WoxSettingTheme.fromJson(Map<String, dynamic> json) {
+    themeId = json['ThemeId'];
+    themeName = json['ThemeName'];
+    themeAuthor = json['ThemeAuthor'];
+    themeUrl = json['ThemeUrl'];
+    version = json['Version'];
+    description = json['Description'];
+    isSystem = json['IsSystem'];
+    isInstalled = json['IsInstalled'];
+    isUpgradable = json['IsUpgradable'];
+    screenshotUrls = List<String>.from(json['ScreenshotUrls']);
+  }
 
   WoxSettingTheme.empty() {
     themeId = '';
@@ -230,5 +241,18 @@ class WoxSettingTheme {
     isInstalled = false;
     isUpgradable = false;
     screenshotUrls = <String>[];
+  }
+
+  WoxSettingTheme.fromWoxSettingTheme(WoxSettingTheme woxSettingTheme) {
+    themeId = woxSettingTheme.themeId;
+    themeName = woxSettingTheme.themeName;
+    themeAuthor = woxSettingTheme.themeAuthor;
+    themeUrl = woxSettingTheme.themeUrl;
+    version = woxSettingTheme.version;
+    description = woxSettingTheme.description;
+    isSystem = woxSettingTheme.isSystem;
+    isInstalled = woxSettingTheme.isInstalled;
+    isUpgradable = woxSettingTheme.isUpgradable;
+    screenshotUrls = woxSettingTheme.screenshotUrls;
   }
 }

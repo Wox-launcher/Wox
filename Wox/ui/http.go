@@ -370,7 +370,10 @@ func serveAndWait(ctx context.Context, port int) {
 			isInstalled := lo.ContainsBy(GetUIManager().GetAllThemes(ctx), func(item share.Theme) bool {
 				return item.ThemeId == storeTheme.ThemeId
 			})
+			themes[i].IsUpgradable = GetUIManager().IsThemeUpgradable(storeTheme.ThemeId, storeTheme.Version)
 			themes[i].IsInstalled = isInstalled
+			themes[i].IsSystem = GetUIManager().IsSystemTheme(storeTheme.ThemeId)
+			themes[i].ScreenshotUrls = []string{}
 		}
 
 		writeSuccessResponse(w, themes)
@@ -385,6 +388,12 @@ func serveAndWait(ctx context.Context, port int) {
 			return
 		}
 
+		for i, storeTheme := range themes {
+			themes[i].IsInstalled = true
+			themes[i].IsUpgradable = GetUIManager().IsThemeUpgradable(storeTheme.ThemeId, storeTheme.Version)
+			themes[i].IsSystem = GetUIManager().IsSystemTheme(storeTheme.ThemeId)
+			themes[i].ScreenshotUrls = []string{}
+		}
 		writeSuccessResponse(w, themes)
 	})
 
