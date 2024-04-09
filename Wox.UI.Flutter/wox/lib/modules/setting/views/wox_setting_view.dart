@@ -2,7 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:wox/entity/wox_plugin.dart';
+import 'package:wox/modules/setting/views/wox_setting_theme_view.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 
 import 'wox_setting_general_view.dart';
@@ -81,12 +81,12 @@ class WoxSettingView extends GetView<WoxSettingController> {
                         PaneItem(
                           icon: const Icon(FluentIcons.mail),
                           title: const Text('Store Themes'),
-                          body: const Text('Track orders'),
+                          body: const WoxSettingThemeView(),
                         ),
                         PaneItem(
                           icon: const Icon(FluentIcons.installation),
                           title: const Text('Installed Themes'),
-                          body: const Text('Track orders'),
+                          body: const WoxSettingThemeView(),
                         ),
                       ],
                     ),

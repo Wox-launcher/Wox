@@ -4,6 +4,8 @@ class WoxTheme {
   late String themeAuthor;
   late String themeUrl;
   late String version;
+  late String description;
+
   late String appBackgroundColor;
   late int appPaddingLeft;
   late int appPaddingTop;
@@ -200,5 +202,33 @@ class WoxTheme {
     data['PreviewPropertyContentColor'] = previewPropertyContentColor;
     data['PreviewTextSelectionColor'] = previewTextSelectionColor;
     return data;
+  }
+}
+
+class WoxSettingTheme {
+  late String themeId;
+  late String themeName;
+  late String themeAuthor;
+  late String themeUrl;
+  late String version;
+  late String description;
+  late List<String> screenshotUrls;
+  late bool isSystem;
+  late bool isInstalled;
+  late bool isUpgradable;
+
+  WoxSettingTheme({themeId, themeName, themeAuthor, themeUrl, version, isInstalled, isSystem, isUpgradable, screenshotUrls});
+
+  WoxSettingTheme.empty() {
+    themeId = '';
+    themeName = '';
+    themeAuthor = '';
+    themeUrl = '';
+    version = '';
+    description = '';
+    isSystem = false;
+    isInstalled = false;
+    isUpgradable = false;
+    screenshotUrls = <String>[];
   }
 }

@@ -375,7 +375,7 @@ func serveAndWait(ctx context.Context, port int) {
 
 	mux.HandleFunc("/theme/store", func(w http.ResponseWriter, r *http.Request) {
 		storeThemes := GetStoreManager().GetThemes()
-		var themes = make([]dto.Theme, len(storeThemes))
+		var themes = make([]dto.SettingTheme, len(storeThemes))
 		copyErr := copier.Copy(&themes, &storeThemes)
 		if copyErr != nil {
 			writeErrorResponse(w, copyErr.Error())
@@ -394,7 +394,7 @@ func serveAndWait(ctx context.Context, port int) {
 
 	mux.HandleFunc("/theme/installed", func(w http.ResponseWriter, r *http.Request) {
 		installedThemes := GetUIManager().GetAllThemes(ctx)
-		var themes = make([]dto.Theme, len(installedThemes))
+		var themes = make([]dto.SettingTheme, len(installedThemes))
 		copyErr := copier.Copy(&themes, &installedThemes)
 		if copyErr != nil {
 			writeErrorResponse(w, copyErr.Error())

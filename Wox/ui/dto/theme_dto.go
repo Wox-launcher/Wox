@@ -54,3 +54,15 @@ type Theme struct {
 	PreviewPropertyContentColor     string
 	PreviewTextSelectionColor       string
 }
+
+type SettingTheme struct {
+	ThemeId        string
+	ThemeName      string
+	ThemeAuthor    string
+	ThemeUrl       string
+	Version        string
+	IsInstalled    bool
+	IsSystem       bool
+	IsUpgradable   bool
+	ScreenshotUrls []string
+}

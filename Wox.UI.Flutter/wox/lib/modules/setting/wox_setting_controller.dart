@@ -16,14 +16,14 @@ class WoxSettingController extends GetxController {
   final pluginDetails = <PluginDetail>[];
   final filteredPluginDetails = <PluginDetail>[].obs;
   final activePluginDetail = PluginDetail.empty().obs;
+
   final activePluginDetailTab = 0.obs;
   final isStorePluginList = true.obs;
 
   //themes
-  var rawStoreThemes = <WoxTheme>[];
-  var rawInstalledThemes = <WoxTheme>[];
-  final storeThemes = <WoxTheme>[].obs;
-  final installedThemes = <WoxTheme>[].obs;
+  late List<WoxSettingTheme> themeList = <WoxSettingTheme>[];
+  final filteredThemeList = <WoxSettingTheme>[].obs;
+  final activeTheme = WoxSettingTheme.empty().obs;
 
   void hideWindow() {
     Get.find<WoxLauncherController>().isInSettingView.value = false;
@@ -128,32 +128,31 @@ class WoxSettingController extends GetxController {
   // ---------- Themes ----------
 
   void loadStoreThemes() async {
-    rawStoreThemes = await WoxApi.instance.findStoreThemes();
+    themeList = await WoxApi.instance.findStoreThemes();
+    filteredThemeList.clear();
+    filteredThemeList.addAll(themeList);
   }
 
   void loadInstalledThemes() async {
-    rawInstalledThemes = await WoxApi.instance.findInstalledThemes();
+    themeList = await WoxApi.instance.findInstalledThemes();
+    filteredThemeList.clear();
+    filteredThemeList.addAll(themeList);
   }
 
-  Future<void> installTheme(WoxTheme theme) async {
+  Future<void> installTheme(WoxSettingTheme theme) async {
     Logger.instance.info(const UuidV4().generate(), 'Installing theme: ${theme.themeId}');
     await WoxApi.instance.installTheme(theme.themeId);
     loadStoreThemes();
   }
 
-  Future<void> uninstallTheme(WoxTheme theme) async {
+  Future<void> uninstallTheme(WoxSettingTheme theme) async {
     Logger.instance.info(const UuidV4().generate(), 'Uninstalling theme: ${theme.themeId}');
     await WoxApi.instance.uninstallTheme(theme.themeId);
     loadInstalledThemes();
   }
 
-  onFilterStoreThemes(String filter) {
-    storeThemes.clear();
-    storeThemes.addAll(rawStoreThemes.where((element) => element.themeName.toLowerCase().contains(filter.toLowerCase())));
-  }
-
-  onFilterInstalledThemes(String filter) {
-    installedThemes.clear();
-    installedThemes.addAll(rawInstalledThemes.where((element) => element.themeName.toLowerCase().contains(filter.toLowerCase())));
+  onFilterThemes(String filter) {
+    filteredThemeList.clear();
+    filteredThemeList.addAll(themeList.where((element) => element.themeName.toLowerCase().contains(filter.toLowerCase())));
   }
 }
