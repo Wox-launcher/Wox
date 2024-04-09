@@ -1,86 +1,99 @@
 import 'wox_image.dart';
+import 'wox_plugin_setting.dart';
 
-class StorePlugin {
+class PluginDetail {
   late String id;
   late String name;
+  late String description;
   late String author;
   late String version;
-  late String minWoxVersion;
-  late String runtime;
-  late String description;
-  late WoxImage icon;
-  late String website;
-  late String downloadUrl;
-  late List<String> screenshotUrls;
-  late String dateCreated;
-  late String dateUpdated;
-  late bool isInstalled;
-  bool isInstalling = false;
-
-  StorePlugin.fromJson(Map<String, dynamic> json) {
-    id = json['Id'];
-    name = json['Name'];
-    author = json['Author'];
-    version = json['Version'];
-    minWoxVersion = json['MinWoxVersion'];
-    runtime = json['Runtime'];
-    description = json['Description'];
-    icon = WoxImage.fromJson(json['Icon']);
-    website = json['Website'];
-    downloadUrl = json['DownloadUrl'];
-    screenshotUrls = List<String>.from(json['ScreenshotUrls']);
-    dateCreated = json['DateCreated'];
-    dateUpdated = json['DateUpdated'];
-    isInstalled = json['IsInstalled'];
-  }
-}
-
-class InstalledPlugin {
-  late String id;
-  late String name;
-  late String author;
-  late String version;
-  late String minWoxVersion;
-  late String runtime;
-  late String description;
   late WoxImage icon;
   late String website;
   late String entry;
   late List<String> triggerKeywords;
   late List<MetadataCommand> commands;
-  late List<String> screenshotUrls;
   late List<String> supportedOS;
+  late List<String> screenshotUrls;
   late bool isSystem;
+  late bool isInstalled;
   late bool isDisable;
+  late List<PluginSettingDefinitionItem> settingDefinitions;
+  late PluginSetting setting;
 
-  InstalledPlugin.fromJson(Map<String, dynamic> json) {
+  PluginDetail.empty() {
+    id = '';
+    name = '';
+    description = '';
+    author = '';
+    version = '';
+    icon = WoxImage.empty();
+    website = '';
+    entry = '';
+    triggerKeywords = <String>[];
+    commands = <MetadataCommand>[];
+    supportedOS = <String>[];
+    screenshotUrls = <String>[];
+    isSystem = false;
+    isInstalled = false;
+    isDisable = false;
+    settingDefinitions = <PluginSettingDefinitionItem>[];
+    setting = PluginSetting.empty();
+  }
+
+  PluginDetail.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
     name = json['Name'];
+    description = json['Description'];
     author = json['Author'];
     version = json['Version'];
-    minWoxVersion = json['MinWoxVersion'];
-    runtime = json['Runtime'];
-    description = json['Description'];
     icon = WoxImage.fromJson(json['Icon']);
     website = json['Website'];
     entry = json['Entry'];
-    triggerKeywords = List<String>.from(json['TriggerKeywords']);
-    commands = <MetadataCommand>[];
+    isSystem = json['IsSystem'];
+    isInstalled = json['IsInstalled'];
+    isDisable = json['IsDisable'];
+
+    if (json['TriggerKeywords'] != null) {
+      triggerKeywords = (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
+    } else {
+      triggerKeywords = <String>[];
+    }
+
+    if (json['Commands'] != null) {
+      commands = <MetadataCommand>[];
+      json['Commands'].forEach((v) {
+        commands.add(MetadataCommand.fromJson(v));
+      });
+    } else {
+      commands = <MetadataCommand>[];
+    }
+
+    if (json['SupportedOS'] != null) {
+      supportedOS = (json['SupportedOS'] as List).map((e) => e.toString()).toList();
+    } else {
+      supportedOS = <String>[];
+    }
+
     if (json['ScreenshotUrls'] != null) {
-      screenshotUrls = List<String>.from(json['ScreenshotUrls']);
+      screenshotUrls = (json['ScreenshotUrls'] as List).map((e) => e.toString()).toList();
     } else {
       screenshotUrls = <String>[];
     }
-    if (json['Settings'] != null) {
-      isDisable = json['Settings']["Disabled"];
+
+    if (json['SettingDefinitions'] != null) {
+      settingDefinitions = <PluginSettingDefinitionItem>[];
+      json['SettingDefinitions'].forEach((v) {
+        settingDefinitions.add(PluginSettingDefinitionItem.fromJson(v));
+      });
     } else {
-      isDisable = false;
+      settingDefinitions = <PluginSettingDefinitionItem>[];
     }
-    json['Commands']?.forEach((v) {
-      commands.add(MetadataCommand.fromJson(v));
-    });
-    supportedOS = List<String>.from(json['SupportedOS']);
-    isSystem = json['IsSystem'];
+
+    if (json['Setting'] != null) {
+      setting = PluginSetting.fromJson(json['Setting']);
+    } else {
+      setting = PluginSetting.empty();
+    }
   }
 }
 
@@ -101,70 +114,51 @@ class MetadataCommand {
   }
 }
 
-class PluginDetail {
-  late String id;
-  late String name;
-  late String description;
-  late String author;
-  late String version;
-  late WoxImage icon;
-  late String website;
-  late String entry;
+class PluginSetting {
+  late bool disabled;
   late List<String> triggerKeywords;
-  late List<MetadataCommand> commands;
-  late List<String> supportedOS;
-  late List<String> screenshotUrls;
-  late bool isSystem;
-  late bool isInstalled;
-  late bool isDisable;
+  late List<PluginQueryCommand> queryCommands;
+  late Map<String, String> settings;
 
-  PluginDetail.empty() {
-    id = '';
-    name = '';
-    description = '';
-    author = '';
-    version = '';
-    icon = WoxImage.empty();
-    website = '';
-    entry = '';
+  PluginSetting.empty() {
+    disabled = false;
     triggerKeywords = <String>[];
-    commands = <MetadataCommand>[];
-    supportedOS = <String>[];
-    screenshotUrls = <String>[];
-    isSystem = false;
-    isInstalled = false;
-    isDisable = false;
+    queryCommands = <PluginQueryCommand>[];
+    settings = <String, String>{};
   }
 
-  PluginDetail.fromInstalledPlugin(InstalledPlugin plugin) {
-    id = plugin.id;
-    name = plugin.name;
-    description = plugin.description;
-    author = plugin.author;
-    version = plugin.version;
-    icon = plugin.icon;
-    website = plugin.website;
-    entry = plugin.entry;
-    triggerKeywords = plugin.triggerKeywords;
-    commands = plugin.commands;
-    supportedOS = plugin.supportedOS;
-    isSystem = plugin.isSystem;
-    isInstalled = true;
-    screenshotUrls = plugin.screenshotUrls;
-    isDisable = plugin.isDisable;
-  }
+  PluginSetting.fromJson(Map<String, dynamic> json) {
+    disabled = json['Disabled'];
 
-  PluginDetail.fromStorePlugin(StorePlugin plugin) {
-    id = plugin.id;
-    name = plugin.name;
-    description = plugin.description;
-    author = plugin.author;
-    version = plugin.version;
-    icon = plugin.icon;
-    website = plugin.website;
-    isInstalled = plugin.isInstalled;
-    isSystem = false;
-    screenshotUrls = plugin.screenshotUrls;
-    isDisable = false;
+    if (json['TriggerKeywords'] == null) {
+      triggerKeywords = <String>[];
+    } else {
+      triggerKeywords = (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();
+    }
+
+    if (json['QueryCommands'] == null) {
+      queryCommands = <PluginQueryCommand>[];
+    } else {
+      queryCommands = <PluginQueryCommand>[];
+      json['QueryCommands'].forEach((v) {
+        queryCommands.add(PluginQueryCommand.fromJson(v));
+      });
+    }
+
+    if (json['Settings'] == null) {
+      settings = <String, String>{};
+    } else {
+      settings = json['Settings'].cast<String, String>();
+    }
+  }
+}
+
+class PluginQueryCommand {
+  late String command;
+  late String description;
+
+  PluginQueryCommand.fromJson(Map<String, dynamic> json) {
+    command = json['Command'];
+    description = json['Description'];
   }
 }

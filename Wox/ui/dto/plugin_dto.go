@@ -6,24 +6,7 @@ import (
 	"wox/setting/definition"
 )
 
-type StorePlugin struct {
-	Id             string
-	Name           string
-	Author         string
-	Version        string
-	MinWoxVersion  string
-	Runtime        string
-	Description    string
-	Icon           plugin.WoxImage
-	Website        string
-	DownloadUrl    string
-	ScreenshotUrls []string
-	DateCreated    string
-	DateUpdated    string
-	IsInstalled    bool
-}
-
-type InstalledPlugin struct {
+type PluginDto struct {
 	Id                 string
 	Name               string
 	Author             string
@@ -38,8 +21,9 @@ type InstalledPlugin struct {
 	TriggerKeywords    []string //User can add/update/delete trigger keywords
 	Commands           []plugin.MetadataCommand
 	SupportedOS        []string
-	SettingDefinitions definition.PluginSettingDefinitions
-	Settings           setting.PluginSetting
+	SettingDefinitions definition.PluginSettingDefinitions // only available when plugin is installed
+	Setting            setting.PluginSetting               // only available when plugin is installed
 	IsSystem           bool
-	IsDisable          bool
+	IsInstalled        bool
+	IsDisable          bool // only available when plugin is installed
 }

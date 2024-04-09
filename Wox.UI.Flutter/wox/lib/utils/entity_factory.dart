@@ -14,10 +14,8 @@ class EntityFactory {
       return WoxSetting.fromJson(json) as T;
     } else if (T.toString() == "WoxPreview") {
       return WoxPreview.fromJson(json) as T;
-    } else if (T.toString() == "List<StorePlugin>") {
-      return (json as List).map((e) => StorePlugin.fromJson(e)).toList() as T;
-    } else if (T.toString() == "List<InstalledPlugin>") {
-      return (json as List).map((e) => InstalledPlugin.fromJson(e)).toList() as T;
+    } else if (T.toString() == "List<PluginDetail>") {
+      return (json as List).map((e) => PluginDetail.fromJson(e)).toList() as T;
     } else {
       return json as T;
     }

@@ -10,9 +10,6 @@ type PluginQueryCommand struct {
 }
 
 type PluginSetting struct {
-	// plugin name, readonly
-	Name string
-
 	// Is this plugin disabled by user
 	Disabled bool
 

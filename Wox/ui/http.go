@@ -168,8 +168,9 @@ func serveAndWait(ctx context.Context, port int) {
 	})
 
 	mux.HandleFunc("/plugin/store", func(w http.ResponseWriter, r *http.Request) {
+		getCtx := util.NewTraceContext()
 		manifests := plugin.GetStoreManager().GetStorePluginManifests(util.NewTraceContext())
-		var plugins = make([]dto.StorePlugin, len(manifests))
+		var plugins = make([]dto.PluginDto, len(manifests))
 		copyErr := copier.Copy(&plugins, &manifests)
 		if copyErr != nil {
 			writeErrorResponse(w, copyErr.Error())
@@ -177,11 +178,12 @@ func serveAndWait(ctx context.Context, port int) {
 		}
 
 		for i, storePlugin := range plugins {
-			isInstalled := lo.ContainsBy(plugin.GetPluginManager().GetPluginInstances(), func(item *plugin.Instance) bool {
+			pluginInstance, isInstalled := lo.Find(plugin.GetPluginManager().GetPluginInstances(), func(item *plugin.Instance) bool {
 				return item.Metadata.Id == storePlugin.Id
 			})
 			plugins[i].Icon = plugin.NewWoxImageUrl(manifests[i].IconUrl)
 			plugins[i].IsInstalled = isInstalled
+			plugins[i] = convertPluginDto(getCtx, plugins[i], pluginInstance)
 		}
 
 		writeSuccessResponse(w, plugins)
@@ -192,54 +194,36 @@ func serveAndWait(ctx context.Context, port int) {
 
 		getCtx := util.NewTraceContext()
 		instances := plugin.GetPluginManager().GetPluginInstances()
-		var plugins []dto.InstalledPlugin
-		for _, instance := range instances {
-			var installedPlugin dto.InstalledPlugin
-			copyErr := copier.Copy(&installedPlugin, &instance.Metadata)
+		var plugins []dto.PluginDto
+		for _, pluginInstance := range instances {
+			var installedPlugin dto.PluginDto
+			copyErr := copier.Copy(&installedPlugin, &pluginInstance.Metadata)
 			if copyErr != nil {
 				writeErrorResponse(w, copyErr.Error())
 				return
 			}
+			installedPlugin.IsSystem = pluginInstance.IsSystemPlugin
+			installedPlugin.IsInstalled = true
+			installedPlugin.IsDisable = pluginInstance.Setting.Disabled
 
 			//load screenshot urls from store if exist
-			storePlugin, foundErr := plugin.GetStoreManager().GetStorePluginManifestById(getCtx, instance.Metadata.Id)
+			storePlugin, foundErr := plugin.GetStoreManager().GetStorePluginManifestById(getCtx, pluginInstance.Metadata.Id)
 			if foundErr == nil {
 				installedPlugin.ScreenshotUrls = storePlugin.ScreenshotUrls
 			} else {
 				installedPlugin.ScreenshotUrls = []string{}
 			}
 
-			installedPlugin.IsSystem = instance.IsSystemPlugin
-			logger.Debug(getCtx, fmt.Sprintf("get plugin setting: %s", instance.Metadata.Name))
-			installedPlugin.SettingDefinitions = lo.Filter(instance.Metadata.SettingDefinitions, func(item definition.PluginSettingDefinitionItem, _ int) bool {
-				return !lo.Contains(item.DisabledInPlatforms, util.GetCurrentPlatform())
-			})
-
-			//translate setting definition labels
-			for i := range installedPlugin.SettingDefinitions {
-				if installedPlugin.SettingDefinitions[i].Value != nil {
-					installedPlugin.SettingDefinitions[i].Value.Translate(instance.API.GetTranslation)
-				}
-			}
-
-			var definitionSettings = util.NewHashMap[string, string]()
-			for _, item := range instance.Metadata.SettingDefinitions {
-				if item.Value != nil {
-					settingValue := instance.API.GetSetting(getCtx, item.Value.GetKey())
-					definitionSettings.Store(item.Value.GetKey(), settingValue)
-				}
-			}
-			installedPlugin.Settings = *instance.Setting
-			//only return user pre-defined settings
-			installedPlugin.Settings.Settings = definitionSettings
-
-			iconImg, parseErr := plugin.ParseWoxImage(instance.Metadata.Icon)
+			// load icon
+			iconImg, parseErr := plugin.ParseWoxImage(pluginInstance.Metadata.Icon)
 			if parseErr == nil {
 				installedPlugin.Icon = iconImg
 			} else {
 				installedPlugin.Icon = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAELUlEQVR4nO3ZW2xTdRwH8JPgkxE1XuKFQUe73rb1IriNyYOJvoiALRszvhqffHBLJjEx8Q0TlRiN0RiNrPd27boLY1wUFAQHyquJiTIYpefay7au2yiJG1/zb6Kx/ZfS055T1mS/5JtzXpr+Pufy//9P/gyzURulXIHp28Rp7H5eY/OSc6bRiiPNN9tBQs4bDsFrbN5/AQ2JANO3qRgx9dZ76I2vwingvsQhgHUK2NPQCKeAuOw7Mf72B1hPCEZu9bBrWE8IRm6RH60nBFMNQA3Eh6kVzCzzyOVu5I+HUyvqApREkOZxe5bKR+kVdQFKIcgVLwW4usyrD1ACcSsXKwm4lYvVB1Ar4r7fAWeNCPLClgIcruBFVhRQK4Jc8Vwulj/WZRQqh4i8+X5d5glGaYCDBzp/WYQ5KsJ98JDqCEZJgIO/g53nM9BHpXxMEQHuXnURjFIA0vyOHxfQMiIVxBgW4FIRwSgBcLB3YPt+DrqwWDKGEA9Xz7tlES/9nkPHuQyeP5/By3/crh9gf3wNlpMpaENC2egDHFwHSiBurqL78hLaJlNoPZaCeSIJ01gSu68sqw/YF1uDeTKF5qBQUXR+DkNFiOgbg7BOSBTAOJrIw1QD7J1dzf+Jxs/LitbL4qhjsAAROjAA67hEAQzRBLovLSkPePX6an6U2eblqorWE4en7xCFsIxJFEAfkcoiZANeufo3tMMitnq4qkIArZMp2E+k4H29COEcQPuoSAH0YQm7prPKAMhjsMXFVpUmN4f2qTRsp+dgPTUH21SyJKJtRKQALcNiSYRswLNH46gmTW4W7SfSsP8w/x/AcjIN6/EkvEWPU9AxgNaIQAF0IRFdF7O1AZ75Lg65aXKxsJxKw35mngIQlOVYoiTCHBYogDZQiJANePrbm5AT8uhYT8/hubPzdwW0HU/BMpGA5yCNMIV4CrDdL6DzQrY6wFPfxFBpSPOkabLEuBeAzAOWcYIonCcCr/XDFOQpQLOPIBblA578OoZKQprfcXYeO88tVAwg80D7mARPL40wBjgKoPHy8gFPfHUD90q++Z8W8usauQAyD7RFJbiLEfv7YfBztQMe/3IW5bLFzeYb7/g5UzXANJZE64gIdw+N0Hu52gCPfTGLu2Wrm0XHhQw6Ly7WDDCOJmCOiNQq1r+vHy0etnrAo59fR6mQcZ40Tr7GlAIYogmYhgVqFUsQOjdbHeCRz66hONt8HLqmF9E1nVUcoI9IMIUIYpBGuOLyAQ9/eg3/jybAo/tyFrsuZVUD6MMSjEGeQvj2vgMwLz4gC7D5yAy7+cgMSLYHBbzw2xK6f1Uf0DIswhDgMeQsRPAae0QW4sGP/9zz0Cd/seRTcfeVpboCdCEReh+PIUeNiHWx7dtsDxQibF6mkQpFCHLONOYGvM1Hmm+obd+NYhqg/gG2aOxED6eh5gAAAABJRU5ErkJggg==`)
 			}
-			installedPlugin.Icon = plugin.ConvertIcon(ctx, installedPlugin.Icon, instance.PluginDirectory)
+			installedPlugin.Icon = plugin.ConvertIcon(ctx, installedPlugin.Icon, pluginInstance.PluginDirectory)
+
+			installedPlugin = convertPluginDto(getCtx, installedPlugin, pluginInstance)
 
 			plugins = append(plugins, installedPlugin)
 		}
@@ -469,7 +453,7 @@ func serveAndWait(ctx context.Context, port int) {
 	mux.HandleFunc("/setting/wox", func(w http.ResponseWriter, r *http.Request) {
 		woxSetting := setting.GetSettingManager().GetWoxSetting(util.NewTraceContext())
 
-		var settingDto dto.WoxSetting
+		var settingDto dto.WoxSettingDto
 		copyErr := copier.Copy(&settingDto, &woxSetting)
 		if copyErr != nil {
 			writeErrorResponse(w, copyErr.Error())
@@ -706,4 +690,33 @@ func responseUIError(ctx context.Context, request WebsocketMsg, errMsg string) {
 		Success:   false,
 		Data:      errMsg,
 	})
+}
+
+func convertPluginDto(ctx context.Context, pluginDto dto.PluginDto, pluginInstance *plugin.Instance) dto.PluginDto {
+	if pluginInstance != nil {
+		logger.Debug(ctx, fmt.Sprintf("get plugin setting: %s", pluginInstance.Metadata.Name))
+		pluginDto.SettingDefinitions = lo.Filter(pluginInstance.Metadata.SettingDefinitions, func(item definition.PluginSettingDefinitionItem, _ int) bool {
+			return !lo.Contains(item.DisabledInPlatforms, util.GetCurrentPlatform())
+		})
+
+		//translate setting definition labels
+		for i := range pluginDto.SettingDefinitions {
+			if pluginDto.SettingDefinitions[i].Value != nil {
+				pluginDto.SettingDefinitions[i].Value.Translate(pluginInstance.API.GetTranslation)
+			}
+		}
+
+		var definitionSettings = util.NewHashMap[string, string]()
+		for _, item := range pluginInstance.Metadata.SettingDefinitions {
+			if item.Value != nil {
+				settingValue := pluginInstance.API.GetSetting(ctx, item.Value.GetKey())
+				definitionSettings.Store(item.Value.GetKey(), settingValue)
+			}
+		}
+		pluginDto.Setting = *pluginInstance.Setting
+		//only return user pre-defined settings
+		pluginDto.Setting.Settings = definitionSettings
+	}
+
+	return pluginDto
 }

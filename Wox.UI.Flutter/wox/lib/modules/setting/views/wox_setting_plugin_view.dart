@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' as base;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +6,10 @@ import 'package:flutter_image_slideshow/flutter_image_slideshow.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_plugin.dart';
+import 'package:wox/entity/wox_plugin_setting_checkbox.dart';
+import 'package:wox/entity/wox_plugin_setting_textbox.dart';
+import 'package:wox/modules/setting/views/wox_setting_plugin_checkbox_view.dart';
+import 'package:wox/modules/setting/views/wox_setting_plugin_textbox_view.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 import 'package:wox/utils/colors.dart';
 
@@ -263,7 +268,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     child: base.TabBarView(
                       children: [
                         pluginTabDescription(),
-                        controller.activePluginDetail.value.isInstalled ? pluginTabSetting() : const SizedBox(),
+                        controller.activePluginDetail.value.isInstalled && controller.activePluginDetail.value.settingDefinitions.isNotEmpty
+                            ? pluginTabSetting()
+                            : const SizedBox(),
                       ],
                     ),
                   ),
@@ -302,17 +309,32 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   }
 
   Widget pluginTabSetting() {
-    return const base.Padding(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Settings',
-          ),
-        ],
-      ),
-    );
+    return Obx(() {
+      var plugin = controller.activePluginDetail.value;
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ...plugin.settingDefinitions.map((e) {
+              if (e.type == "checkbox") {
+                return WoxSettingPluginCheckbox(e.value as PluginSettingValueCheckBox, plugin.setting.settings, (key, value) {
+                  controller.refreshPluginList();
+                });
+              }
+              if (e.type == "textbox") {
+                return WoxSettingPluginTextBox(e.value as PluginSettingValueTextBox, plugin.setting.settings, (key, value) {
+                  controller.refreshPluginList();
+                });
+              }
+
+              return Text("NULL");
+            })
+          ],
+        ),
+      );
+    });
   }
 
   @override

@@ -5,7 +5,7 @@ import (
 	"wox/setting"
 )
 
-type WoxSetting struct {
+type WoxSettingDto struct {
 	MainHotkey           string
 	SelectionHotkey      string
 	UsePinYin            bool

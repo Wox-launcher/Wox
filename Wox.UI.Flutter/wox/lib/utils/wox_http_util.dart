@@ -23,7 +23,7 @@ class WoxHttpUtil {
       return EntityFactory.generateOBJ<T>(woxResponse.data);
     } catch (e) {
       Logger.instance.error(const UuidV4().generate(), 'Failed to fetch data: $e');
-      throw Exception('Failed to fetch data: $e');
+      rethrow;
     }
   }
 
@@ -37,7 +37,7 @@ class WoxHttpUtil {
       return EntityFactory.generateOBJ<T>(woxResponse.data);
     } catch (e) {
       Logger.instance.error(traceId, 'Failed to post data: $e');
-      throw Exception('Failed to post data: $e');
+      rethrow;
     }
   }
 }

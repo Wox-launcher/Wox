@@ -1,6 +1,6 @@
 package dto
 
-type Theme struct {
+type ThemeDto struct {
 	ThemeId      string
 	ThemeName    string
 	ThemeAuthor  string

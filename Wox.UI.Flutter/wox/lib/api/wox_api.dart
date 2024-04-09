@@ -25,11 +25,11 @@ class WoxApi {
     await WoxHttpUtil.instance.postData("/setting/wox/update", {"Key": key, "Value": value});
   }
 
-  Future<List<StorePlugin>> findStorePlugins() async {
+  Future<List<PluginDetail>> findStorePlugins() async {
     return await WoxHttpUtil.instance.postData("/plugin/store", null);
   }
 
-  Future<List<InstalledPlugin>> findInstalledPlugins() async {
+  Future<List<PluginDetail>> findInstalledPlugins() async {
     return await WoxHttpUtil.instance.postData("/plugin/installed", null);
   }
 

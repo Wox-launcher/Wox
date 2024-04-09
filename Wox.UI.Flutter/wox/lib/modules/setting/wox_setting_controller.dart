@@ -39,12 +39,10 @@ class WoxSettingController extends GetxController {
   // ---------- Plugins ----------
 
   Future<void> loadStorePlugins() async {
-    final rawStorePlugins = await WoxApi.instance.findStorePlugins();
-    rawStorePlugins.sort((a, b) => a.name.compareTo(b.name));
+    final storePlugins = await WoxApi.instance.findStorePlugins();
+    storePlugins.sort((a, b) => a.name.compareTo(b.name));
     pluginDetails.clear();
-    for (var plugin in rawStorePlugins) {
-      pluginDetails.add(PluginDetail.fromStorePlugin(plugin));
-    }
+    pluginDetails.addAll(storePlugins);
     filteredPluginDetails.clear();
     filteredPluginDetails.addAll(pluginDetails);
   }
@@ -53,9 +51,7 @@ class WoxSettingController extends GetxController {
     final installedPlugin = await WoxApi.instance.findInstalledPlugins();
     installedPlugin.sort((a, b) => a.name.compareTo(b.name));
     pluginDetails.clear();
-    for (var plugin in installedPlugin) {
-      pluginDetails.add(PluginDetail.fromInstalledPlugin(plugin));
-    }
+    pluginDetails.addAll(installedPlugin);
     filteredPluginDetails.clear();
     filteredPluginDetails.addAll(pluginDetails);
   }
