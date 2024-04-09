@@ -40,13 +40,13 @@ class WoxSetting {
     if (json['QueryHotkeys'] != null) {
       queryHotkeys = <QueryHotkey>[];
       json['QueryHotkeys'].forEach((v) {
-        queryHotkeys!.add(QueryHotkey.fromJson(v));
+        queryHotkeys.add(QueryHotkey.fromJson(v));
       });
     }
     if (json['QueryShortcuts'] != null) {
       queryShortcuts = <QueryShortcut>[];
       json['QueryShortcuts'].forEach((v) {
-        queryShortcuts!.add(QueryShortcut.fromJson(v));
+        queryShortcuts.add(QueryShortcut.fromJson(v));
       });
     }
     lastQueryMode = json['LastQueryMode'];

@@ -15,7 +15,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
         Padding(
           padding: const EdgeInsets.only(bottom: 20),
           child: RawKeyboardListener(
-            focusNode: FocusNode(onKey: (FocusNode node, RawKeyEvent event) {
+            focusNode: FocusNode(onKey: (FocusNode node, event) {
               if (event is RawKeyDownEvent) {
                 switch (event.logicalKey) {
                   case LogicalKeyboardKey.escape:
@@ -84,7 +84,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                                 ),
                                 const base.SizedBox(width: 10),
                                 Text(
-                                  "${theme.themeAuthor}",
+                                  theme.themeAuthor,
                                   maxLines: 1, // Limiting the description to two lines
                                   overflow: TextOverflow.ellipsis, // Add ellipsis for overflow
                                   style: TextStyle(

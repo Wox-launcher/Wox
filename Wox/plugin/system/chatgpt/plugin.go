@@ -147,10 +147,15 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 				},
 			},
 			{
+				Type:  definition.PluginSettingDefinitionTypeNewLine,
+				Value: &definition.PluginSettingValueNewLine{},
+			},
+			{
 				Type: definition.PluginSettingDefinitionTypeTextBox,
 				Value: &definition.PluginSettingValueTextBox{
 					Key:   "api_key",
 					Label: "API Key",
+					Width: 400,
 				},
 			},
 		},

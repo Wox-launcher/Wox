@@ -5,8 +5,8 @@ import 'package:get/get.dart';
 import 'package:wox/modules/setting/views/wox_setting_theme_view.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 
-import 'wox_setting_general_view.dart';
 import 'wox_setting_plugin_view.dart';
+import 'wox_setting_general_view.dart';
 
 class WoxSettingView extends GetView<WoxSettingController> {
   const WoxSettingView({super.key});

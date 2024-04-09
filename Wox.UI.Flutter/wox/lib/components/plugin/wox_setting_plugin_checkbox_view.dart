@@ -4,25 +4,24 @@ import 'package:wox/entity/wox_plugin_setting_checkbox.dart';
 import 'wox_setting_plugin_item_view.dart';
 
 class WoxSettingPluginCheckbox extends WoxSettingPluginItem {
-  final PluginSettingValueCheckBox checkBox;
+  final PluginSettingValueCheckBox item;
 
-  const WoxSettingPluginCheckbox(this.checkBox, super.settings, super.onUpdate, {super.key, required});
+  const WoxSettingPluginCheckbox(super.plugin, this.item, super.onUpdate, {super.key, required});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Wrap(
       children: [
-        Text(checkBox.label),
+        Text(item.label),
         const SizedBox(width: 10),
         ToggleSwitch(
-          checked: getSetting(checkBox.key) == "true",
+          checked: getSetting(item.key) == "true",
           onChanged: (value) {
             if (value == true) {
-              updateConfig(checkBox.key, "true");
+              updateConfig(item.key, "true");
             } else {
-              updateConfig(checkBox.key, "false");
+              updateConfig(item.key, "false");
             }
-            onUpdate(key, value);
           },
         ),
       ],

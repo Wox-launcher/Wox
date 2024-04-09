@@ -1,15 +1,18 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' as base;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_image_slideshow/flutter_image_slideshow.dart';
 import 'package:get/get.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_newline_view.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_select_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_plugin_setting_checkbox.dart';
+import 'package:wox/entity/wox_plugin_setting_newline.dart';
+import 'package:wox/entity/wox_plugin_setting_select.dart';
 import 'package:wox/entity/wox_plugin_setting_textbox.dart';
-import 'package:wox/modules/setting/views/wox_setting_plugin_checkbox_view.dart';
-import 'package:wox/modules/setting/views/wox_setting_plugin_textbox_view.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_checkbox_view.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_textbox_view.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 import 'package:wox/utils/colors.dart';
 
@@ -92,7 +95,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                                 ),
                                 const base.SizedBox(width: 10),
                                 Text(
-                                  "${plugin.author}",
+                                  plugin.author,
                                   maxLines: 1, // Limiting the description to two lines
                                   overflow: TextOverflow.ellipsis, // Add ellipsis for overflow
                                   style: TextStyle(
@@ -246,7 +249,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
           ),
           Expanded(
             child: base.DefaultTabController(
-              length: plugin.isInstalled ? 2 : 1,
+              length: shouldShowSettingTab() ? 2 : 1,
               child: Column(
                 children: [
                   base.TabBar(
@@ -258,7 +261,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       const base.Tab(
                         child: Text('Description'),
                       ),
-                      if (plugin.isInstalled)
+                      if (shouldShowSettingTab())
                         const base.Tab(
                           child: Text('Settings'),
                         )
@@ -268,9 +271,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     child: base.TabBarView(
                       children: [
                         pluginTabDescription(),
-                        controller.activePluginDetail.value.isInstalled && controller.activePluginDetail.value.settingDefinitions.isNotEmpty
-                            ? pluginTabSetting()
-                            : const SizedBox(),
+                        if (shouldShowSettingTab()) pluginTabSetting(),
                       ],
                     ),
                   ),
@@ -281,6 +282,10 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         ]);
       }),
     );
+  }
+
+  bool shouldShowSettingTab() {
+    return controller.activePluginDetail.value.isInstalled && controller.activePluginDetail.value.settingDefinitions.isNotEmpty;
   }
 
   Widget pluginTabDescription() {
@@ -313,25 +318,37 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
       var plugin = controller.activePluginDetail.value;
       return Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ...plugin.settingDefinitions.map((e) {
-              if (e.type == "checkbox") {
-                return WoxSettingPluginCheckbox(e.value as PluginSettingValueCheckBox, plugin.setting.settings, (key, value) {
-                  controller.refreshPluginList();
-                });
-              }
-              if (e.type == "textbox") {
-                return WoxSettingPluginTextBox(e.value as PluginSettingValueTextBox, plugin.setting.settings, (key, value) {
-                  controller.refreshPluginList();
-                });
-              }
-
-              return Text("NULL");
-            })
-          ],
+        child: Flexible(
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ...plugin.settingDefinitions.map(
+                (e) {
+                  if (e.type == "checkbox") {
+                    return WoxSettingPluginCheckbox(plugin, e.value as PluginSettingValueCheckBox, (key, value) {
+                      controller.refreshPluginList();
+                    });
+                  }
+                  if (e.type == "textbox") {
+                    return WoxSettingPluginTextBox(plugin, e.value as PluginSettingValueTextBox, (key, value) {
+                      controller.refreshPluginList();
+                    });
+                  }
+                  if (e.type == "newline") {
+                    return WoxSettingPluginNewLine(plugin, e.value as PluginSettingValueNewLine, (key, value) {
+                      controller.refreshPluginList();
+                    });
+                  }
+                  if (e.type == "select") {
+                    return WoxSettingPluginSelect(plugin, e.value as PluginSettingValueSelect, (key, value) {
+                      controller.refreshPluginList();
+                    });
+                  }
+                  return Text(e.type + " not supported 2");
+                },
+              )
+            ],
+          ),
         ),
       );
     });

@@ -540,7 +540,7 @@ func serveAndWait(ctx context.Context, port int) {
 		} else {
 			var isPlatformSpecific = false
 			for _, settingDefinition := range pluginInstance.Metadata.SettingDefinitions {
-				if settingDefinition.Value.GetKey() == kv.Key {
+				if settingDefinition.Value != nil && settingDefinition.Value.GetKey() == kv.Key {
 					isPlatformSpecific = settingDefinition.IsPlatformSpecific
 					break
 				}

@@ -122,6 +122,11 @@ class WoxSettingController extends GetxController {
     await launchUrl(Uri.parse(website));
   }
 
+  Future<void> updatePluginSetting(String pluginId, String key, String value) async {
+    await WoxApi.instance.updatePluginSetting(pluginId, key, value);
+    Logger.instance.info(const UuidV4().generate(), 'plugin setting updated: $key=$value');
+  }
+
   // ---------- Themes ----------
 
   Future<void> loadStoreThemes() async {

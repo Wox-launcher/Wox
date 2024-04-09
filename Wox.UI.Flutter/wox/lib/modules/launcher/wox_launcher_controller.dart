@@ -22,7 +22,6 @@ import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
 import 'package:wox/interfaces/wox_launcher_interface.dart';
-import 'package:wox/modules/setting/wox_setting_controller.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
@@ -243,6 +242,11 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   void onQueryChanged(String traceId, WoxChangeQuery query, String changeReason, {bool moveCursorToEnd = false}) {
     Logger.instance.debug(traceId, "query changed: ${query.queryText}, reason: $changeReason");
 
+    //hide setting view if query changed
+    if (isInSettingView.value) {
+      isInSettingView.value = false;
+    }
+
     if (query.queryId == "") {
       query.queryId = const UuidV4().generate();
     }
@@ -344,7 +348,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   Future<void> handleWebSocketMessage(WoxWebsocketMsg msg) async {
-    if (msg.method != WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code) {
+    if (msg.method != WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code && msg.type == WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code) {
       Logger.instance.info(msg.traceId, "Received message: ${msg.method}");
     }
 

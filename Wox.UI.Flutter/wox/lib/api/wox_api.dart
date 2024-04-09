@@ -1,6 +1,5 @@
 import 'dart:core';
 
-import 'package:flutter/material.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
@@ -23,6 +22,10 @@ class WoxApi {
 
   Future<void> updateSetting(String key, String value) async {
     await WoxHttpUtil.instance.postData("/setting/wox/update", {"Key": key, "Value": value});
+  }
+
+  Future<void> updatePluginSetting(String pluginId, String key, String value) async {
+    await WoxHttpUtil.instance.postData("/setting/plugin/update", {"PluginId": pluginId, "Key": key, "Value": value});
   }
 
   Future<List<PluginDetail>> findStorePlugins() async {

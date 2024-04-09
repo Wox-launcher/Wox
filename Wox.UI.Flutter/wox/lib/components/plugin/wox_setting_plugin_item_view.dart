@@ -1,20 +1,20 @@
-import 'dart:ui';
-
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:get/get.dart';
+import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 
 abstract class WoxSettingPluginItem extends StatelessWidget {
-  final Map<String, String> settings;
+  final PluginDetail plugin;
   final Function onUpdate;
 
-  const WoxSettingPluginItem(this.settings, this.onUpdate, {super.key});
+  const WoxSettingPluginItem(this.plugin, this.onUpdate, {super.key});
 
   void updateConfig(String key, String value) {
-    Get.find<WoxSettingController>().updateConfig(key, value);
+    Get.find<WoxSettingController>().updatePluginSetting(plugin.id, key, value);
+    onUpdate(key, value);
   }
 
   String getSetting(String key) {
-    return settings[key] ?? "";
+    return plugin.setting.settings[key] ?? "";
   }
 }
