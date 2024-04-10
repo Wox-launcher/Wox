@@ -10,7 +10,7 @@ class WoxSettingPluginCheckbox extends WoxSettingPluginItem {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
+    return layout(
       children: [
         Text(item.label),
         const SizedBox(width: 10),
@@ -25,6 +25,7 @@ class WoxSettingPluginCheckbox extends WoxSettingPluginItem {
           },
         ),
       ],
+      style: item.style,
     );
   }
 }

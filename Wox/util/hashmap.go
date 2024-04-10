@@ -18,12 +18,18 @@ func NewHashMap[K comparable, V any]() *HashMap[K, V] {
 }
 
 func (h *HashMap[K, V]) UnmarshalJSON(b []byte) error {
+	h.rw.Lock()
+	defer h.rw.Unlock()
+
 	h.inner = make(map[K]V)
 	json.Unmarshal(b, &h.inner)
 	return nil
 }
 
 func (h *HashMap[K, V]) MarshalJSON() ([]byte, error) {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+
 	return json.Marshal(h.inner)
 }
 

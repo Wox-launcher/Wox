@@ -13,30 +13,28 @@ class WoxSettingPluginTextBox extends WoxSettingPluginItem {
 
   @override
   Widget build(BuildContext context) {
-    return Flexible(
-      child: Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          if (item.label != "") Text(item.label),
-          Padding(
-            padding: const EdgeInsets.only(left: 3, right: 3),
-            child: SizedBox(
-              width: item.width > 0 ? item.width.toDouble() : 100,
-              child: Focus(
-                onFocusChange: (hasFocus) {
-                  if (!hasFocus) {
-                    updateConfig(item.key, controller.text);
-                  }
-                },
-                child: TextBox(
-                  controller: controller,
-                ),
+    return layout(
+      children: [
+        if (item.label != "") Text(item.label),
+        Padding(
+          padding: const EdgeInsets.only(left: 3, right: 3),
+          child: SizedBox(
+            width: item.width > 0 ? item.width.toDouble() : 100,
+            child: Focus(
+              onFocusChange: (hasFocus) {
+                if (!hasFocus) {
+                  updateConfig(item.key, controller.text);
+                }
+              },
+              child: TextBox(
+                controller: controller,
               ),
             ),
           ),
-          if (item.suffix != "") Text(item.suffix),
-        ],
-      ),
+        ),
+        if (item.suffix != "") Text(item.suffix),
+      ],
+      style: item.style,
     );
   }
 }

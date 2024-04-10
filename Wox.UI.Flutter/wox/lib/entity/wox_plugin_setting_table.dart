@@ -1,3 +1,4 @@
+import 'wox_plugin_setting.dart';
 import 'wox_plugin_setting_select.dart';
 
 class PluginSettingValueTable {
@@ -5,6 +6,7 @@ class PluginSettingValueTable {
   late String defaultValue;
   late bool enableFilter;
   late List<PluginSettingValueTableColumn> columns;
+  late PluginSettingValueStyle style;
 
   PluginSettingValueTable.fromJson(Map<String, dynamic> json) {
     key = json['Key'];
@@ -14,6 +16,12 @@ class PluginSettingValueTable {
       columns = (json['Columns'] as List).map((e) => PluginSettingValueTableColumn.fromJson(e)).toList();
     } else {
       columns = [];
+    }
+
+    if (json['Style'] != null) {
+      style = PluginSettingValueStyle.fromJson(json['Style']);
+    } else {
+      style = PluginSettingValueStyle.fromJson(<String, dynamic>{});
     }
   }
 }

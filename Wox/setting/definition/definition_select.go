@@ -8,6 +8,8 @@ type PluginSettingValueSelect struct {
 	Suffix       string
 	DefaultValue string
 	Options      []PluginSettingValueSelectOption
+
+	Style PluginSettingValueStyle
 }
 
 type PluginSettingValueSelectOption struct {

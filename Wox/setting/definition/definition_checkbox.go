@@ -6,6 +6,7 @@ type PluginSettingValueCheckBox struct {
 	Key          string
 	Label        string
 	DefaultValue string
+	Style        PluginSettingValueStyle
 }
 
 func (p *PluginSettingValueCheckBox) GetPluginSettingType() PluginSettingDefinitionType {

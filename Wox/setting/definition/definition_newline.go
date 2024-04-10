@@ -6,6 +6,7 @@ import (
 )
 
 type PluginSettingValueNewLine struct {
+	Style PluginSettingValueStyle
 }
 
 func (p *PluginSettingValueNewLine) GetPluginSettingType() PluginSettingDefinitionType {

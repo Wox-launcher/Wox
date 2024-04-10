@@ -33,6 +33,13 @@ type PluginSettingDefinitionItem struct {
 	IsPlatformSpecific  bool // if true, this setting may be different in different platforms
 }
 
+type PluginSettingValueStyle struct {
+	PaddingLeft   int
+	PaddingTop    int
+	PaddingRight  int
+	PaddingBottom int
+}
+
 func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 	value := gjson.GetBytes(b, "Type")
 	if !value.Exists() {

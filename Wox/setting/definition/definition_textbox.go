@@ -8,6 +8,8 @@ type PluginSettingValueTextBox struct {
 	Suffix       string
 	DefaultValue string
 	Width        int
+
+	Style PluginSettingValueStyle
 }
 
 func (p *PluginSettingValueTextBox) GetPluginSettingType() PluginSettingDefinitionType {

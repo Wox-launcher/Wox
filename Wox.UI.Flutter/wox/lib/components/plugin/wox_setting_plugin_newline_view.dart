@@ -10,16 +10,18 @@ class WoxSettingPluginNewLine extends WoxSettingPluginItem {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(top: 4, bottom: 4),
-      child: Row(
-        children: [
-          Expanded(
-              child: SizedBox(
-            width: 1,
-          )),
-        ],
-      ),
+    return layout(
+      children: [
+        const Row(
+          children: [
+            Expanded(
+                child: SizedBox(
+              width: 1,
+            )),
+          ],
+        )
+      ],
+      style: item.style,
     );
   }
 }

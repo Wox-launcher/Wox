@@ -168,15 +168,19 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 				Type: definition.PluginSettingDefinitionTypeCheckBox,
 				Value: &definition.PluginSettingValueCheckBox{
 					Key:          isKeepTextHistorySettingKey,
-					Label:        "i18n:plugin_clipboard_keep_text_history",
 					DefaultValue: "true",
+					Style: definition.PluginSettingValueStyle{
+						PaddingRight: 10,
+					},
 				},
 			},
 			{
 				Type: definition.PluginSettingDefinitionTypeTextBox,
 				Value: &definition.PluginSettingValueTextBox{
 					Key:          textHistoryDaysSettingKey,
+					Label:        "i18n:plugin_clipboard_keep_text_history",
 					Suffix:       "i18n:plugin_clipboard_days",
+					Width:        50,
 					DefaultValue: "90",
 				},
 			},
@@ -187,7 +191,6 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 				Type: definition.PluginSettingDefinitionTypeCheckBox,
 				Value: &definition.PluginSettingValueCheckBox{
 					Key:          isKeepImageHistorySettingKey,
-					Label:        "i18n:plugin_clipboard_keep_image_history",
 					DefaultValue: "true",
 				},
 			},
@@ -195,7 +198,9 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 				Type: definition.PluginSettingDefinitionTypeTextBox,
 				Value: &definition.PluginSettingValueTextBox{
 					Key:          imageHistoryDaysSettingKey,
+					Label:        "i18n:plugin_clipboard_keep_image_history",
 					Suffix:       "i18n:plugin_clipboard_days",
+					Width:        50,
 					DefaultValue: "3",
 				},
 			},

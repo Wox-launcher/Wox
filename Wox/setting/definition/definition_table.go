@@ -17,6 +17,8 @@ type PluginSettingValueTable struct {
 	DefaultValue string
 	EnableFilter bool
 	Columns      []PluginSettingValueTableColumn
+
+	Style PluginSettingValueStyle
 }
 
 type PluginSettingValueTableColumn struct {

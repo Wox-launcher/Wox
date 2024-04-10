@@ -3,7 +3,6 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 
 class WoxHotkey {
   static HotKey? parseHotkey(String value) {
-    print(value);
     final modifiers = <HotKeyModifier>[];
     LogicalKeyboardKey? key;
     value.split("+").forEach((element) {

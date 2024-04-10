@@ -1,13 +1,17 @@
-import 'package:flutter/material.dart' as base;
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 import 'package:flutter_image_slideshow/flutter_image_slideshow.dart';
 import 'package:get/get.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_head_view.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_label_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_newline_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_select_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_plugin_setting_checkbox.dart';
+import 'package:wox/entity/wox_plugin_setting_head.dart';
+import 'package:wox/entity/wox_plugin_setting_label.dart';
 import 'package:wox/entity/wox_plugin_setting_newline.dart';
 import 'package:wox/entity/wox_plugin_setting_select.dart';
 import 'package:wox/entity/wox_plugin_setting_textbox.dart';
@@ -51,9 +55,11 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
           ),
         ),
         Expanded(
-          child: base.Scrollbar(
+          child: Scrollbar(
+            thumbVisibility: false,
             child: Obx(() {
               return ListView.builder(
+                primary: true,
                 itemCount: controller.filteredPluginDetails.length,
                 itemBuilder: (context, index) {
                   final plugin = controller.filteredPluginDetails[index];
@@ -63,7 +69,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       final isActive = controller.activePluginDetail.value.id == plugin.id;
                       return Container(
                         decoration: BoxDecoration(
-                          color: isActive ? SettingPrimaryColor : base.Colors.transparent,
+                          color: isActive ? SettingPrimaryColor : Colors.transparent,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: GestureDetector(
@@ -71,35 +77,35 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                           onTap: () {
                             controller.activePluginDetail.value = plugin;
                           },
-                          child: base.ListTile(
+                          // fluent listTile is not clickable
+                          child: material.ListTile(
                             leading: WoxImageView(woxImage: plugin.icon, width: 32),
-                            //ellipsis: true,
                             title: Text(plugin.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: 15,
-                                  color: isActive ? base.Colors.white : base.Colors.black,
+                                  color: isActive ? Colors.white : Colors.black,
                                 )),
-                            subtitle: base.Row(
+                            subtitle: Row(
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
                                 Text(
-                                  "${plugin.version}",
+                                  plugin.version,
                                   maxLines: 1, // Limiting the description to two lines
                                   overflow: TextOverflow.ellipsis, // Add ellipsis for overflow
                                   style: TextStyle(
-                                    color: isActive ? base.Colors.white : base.Colors.grey,
+                                    color: isActive ? Colors.white : Colors.grey,
                                     fontSize: 12,
                                   ),
                                 ),
-                                const base.SizedBox(width: 10),
+                                const SizedBox(width: 10),
                                 Text(
                                   plugin.author,
                                   maxLines: 1, // Limiting the description to two lines
                                   overflow: TextOverflow.ellipsis, // Add ellipsis for overflow
                                   style: TextStyle(
-                                    color: isActive ? base.Colors.white : base.Colors.grey,
+                                    color: isActive ? Colors.white : Colors.grey,
                                     fontSize: 12,
                                   ),
                                 ),
@@ -123,7 +129,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   Widget pluginTrailIcon(PluginDetail plugin) {
     if (controller.isStorePluginList.value) {
       if (plugin.isInstalled) {
-        return const Icon(FluentIcons.skype_circle_check, color: base.Colors.green);
+        return Icon(FluentIcons.skype_circle_check, color: Colors.green);
       }
     }
     return const SizedBox();
@@ -152,8 +158,8 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   padding: const EdgeInsets.only(left: 10.0),
                   child: Text(
                     plugin.version,
-                    style: const TextStyle(
-                      color: base.Colors.grey,
+                    style: TextStyle(
+                      color: Colors.grey,
                     ),
                   ),
                 ),
@@ -168,7 +174,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 Text(
                   plugin.author,
                   style: const TextStyle(
-                    color: base.Colors.grey,
+                    color: Colors.grey,
                   ),
                 ),
                 Padding(
@@ -177,12 +183,12 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     onPressed: () {
                       controller.openPluginWebsite(plugin.website);
                     },
-                    child: const base.Row(
+                    child: Row(
                       children: [
                         Text(
                           "website",
                           style: TextStyle(
-                            color: base.Colors.blue,
+                            color: Colors.blue,
                           ),
                         ),
                         Padding(
@@ -190,7 +196,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                           child: Icon(
                             FluentIcons.open_in_new_tab,
                             size: 12,
-                            color: base.Colors.blue,
+                            color: Colors.blue,
                           ),
                         ),
                       ],
@@ -205,7 +211,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
             child: Row(
               children: [
                 if (plugin.isInstalled && !plugin.isSystem)
-                  base.Padding(
+                  Padding(
                     padding: const EdgeInsets.only(right: 8.0),
                     child: Button(
                       onPressed: () {
@@ -215,7 +221,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     ),
                   ),
                 if (!plugin.isInstalled)
-                  base.Padding(
+                  Padding(
                     padding: const EdgeInsets.only(right: 8.0),
                     child: Button(
                       onPressed: () {
@@ -225,7 +231,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     ),
                   ),
                 if (plugin.isInstalled && !plugin.isDisable)
-                  base.Padding(
+                  Padding(
                     padding: const EdgeInsets.only(right: 8.0),
                     child: Button(
                       onPressed: () {
@@ -235,7 +241,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     ),
                   ),
                 if (plugin.isInstalled && plugin.isDisable)
-                  base.Padding(
+                  Padding(
                     padding: const EdgeInsets.only(right: 8.0),
                     child: Button(
                       onPressed: () {
@@ -248,27 +254,27 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
             ),
           ),
           Expanded(
-            child: base.DefaultTabController(
+            child: material.DefaultTabController(
               length: shouldShowSettingTab() ? 2 : 1,
               child: Column(
                 children: [
-                  base.TabBar(
+                  material.TabBar(
                     isScrollable: true,
-                    tabAlignment: base.TabAlignment.start,
+                    tabAlignment: material.TabAlignment.start,
                     labelColor: SettingPrimaryColor,
                     indicatorColor: SettingPrimaryColor,
                     tabs: [
-                      const base.Tab(
+                      const material.Tab(
                         child: Text('Description'),
                       ),
                       if (shouldShowSettingTab())
-                        const base.Tab(
+                        const material.Tab(
                           child: Text('Settings'),
                         )
                     ],
                   ),
                   Expanded(
-                    child: base.TabBarView(
+                    child: material.TabBarView(
                       children: [
                         pluginTabDescription(),
                         if (shouldShowSettingTab()) pluginTabSetting(),
@@ -289,7 +295,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   }
 
   Widget pluginTabDescription() {
-    return base.Padding(
+    return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -304,7 +310,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   height: 400,
                   indicatorColor: SettingPrimaryColor,
                   children: [
-                    ...controller.activePluginDetail.value.screenshotUrls.map((e) => base.Image.network(e)),
+                    ...controller.activePluginDetail.value.screenshotUrls.map((e) => Image.network(e)),
                   ],
                 )
               : const SizedBox(),
@@ -318,37 +324,45 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
       var plugin = controller.activePluginDetail.value;
       return Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Flexible(
-          child: Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              ...plugin.settingDefinitions.map(
-                (e) {
-                  if (e.type == "checkbox") {
-                    return WoxSettingPluginCheckbox(plugin, e.value as PluginSettingValueCheckBox, (key, value) {
-                      controller.refreshPluginList();
-                    });
-                  }
-                  if (e.type == "textbox") {
-                    return WoxSettingPluginTextBox(plugin, e.value as PluginSettingValueTextBox, (key, value) {
-                      controller.refreshPluginList();
-                    });
-                  }
-                  if (e.type == "newline") {
-                    return WoxSettingPluginNewLine(plugin, e.value as PluginSettingValueNewLine, (key, value) {
-                      controller.refreshPluginList();
-                    });
-                  }
-                  if (e.type == "select") {
-                    return WoxSettingPluginSelect(plugin, e.value as PluginSettingValueSelect, (key, value) {
-                      controller.refreshPluginList();
-                    });
-                  }
-                  return Text(e.type + " not supported 2");
-                },
-              )
-            ],
-          ),
+        child: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            ...plugin.settingDefinitions.map(
+              (e) {
+                if (e.type == "checkbox") {
+                  return WoxSettingPluginCheckbox(plugin, e.value as PluginSettingValueCheckBox, (key, value) {
+                    controller.refreshPluginList();
+                  });
+                }
+                if (e.type == "textbox") {
+                  return WoxSettingPluginTextBox(plugin, e.value as PluginSettingValueTextBox, (key, value) {
+                    controller.refreshPluginList();
+                  });
+                }
+                if (e.type == "newline") {
+                  return WoxSettingPluginNewLine(plugin, e.value as PluginSettingValueNewLine, (key, value) {
+                    controller.refreshPluginList();
+                  });
+                }
+                if (e.type == "select") {
+                  return WoxSettingPluginSelect(plugin, e.value as PluginSettingValueSelect, (key, value) {
+                    controller.refreshPluginList();
+                  });
+                }
+                if (e.type == "head") {
+                  return WoxSettingPluginHead(plugin, e.value as PluginSettingValueHead, (key, value) {
+                    controller.refreshPluginList();
+                  });
+                }
+                if (e.type == "label") {
+                  return WoxSettingPluginLabel(plugin, e.value as PluginSettingValueLabel, (key, value) {
+                    controller.refreshPluginList();
+                  });
+                }
+                return Text(e.type + " not supported 2");
+              },
+            )
+          ],
         ),
       );
     });

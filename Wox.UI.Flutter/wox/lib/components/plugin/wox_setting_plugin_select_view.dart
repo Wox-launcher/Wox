@@ -11,29 +11,27 @@ class WoxSettingPluginSelect extends WoxSettingPluginItem {
 
   @override
   Widget build(BuildContext context) {
-    return Flexible(
-      child: Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          if (item.label != "") Text(item.label),
-          Padding(
-            padding: const EdgeInsets.only(left: 3, right: 3),
-            child: ComboBox<String>(
-              value: getSetting(item.key),
-              items: item.options.map((e) {
-                return ComboBoxItem(
-                  value: e.value,
-                  child: Text(e.label),
-                );
-              }).toList(),
-              onChanged: (v) {
-                updateConfig(item.key, v ?? "");
-              },
-            ),
+    return layout(
+      children: [
+        if (item.label != "") Text(item.label),
+        Padding(
+          padding: const EdgeInsets.only(left: 3, right: 3),
+          child: ComboBox<String>(
+            value: getSetting(item.key),
+            items: item.options.map((e) {
+              return ComboBoxItem(
+                value: e.value,
+                child: Text(e.label),
+              );
+            }).toList(),
+            onChanged: (v) {
+              updateConfig(item.key, v ?? "");
+            },
           ),
-          if (item.suffix != "") Text(item.suffix),
-        ],
-      ),
+        ),
+        if (item.suffix != "") Text(item.suffix),
+      ],
+      style: item.style,
     );
   }
 }

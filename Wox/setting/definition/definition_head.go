@@ -7,6 +7,7 @@ import (
 
 type PluginSettingValueHead struct {
 	Content string
+	Style   PluginSettingValueStyle
 }
 
 func (p *PluginSettingValueHead) GetPluginSettingType() PluginSettingDefinitionType {
