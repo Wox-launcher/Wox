@@ -22,9 +22,9 @@
   "plugin_sys_open_wox_preferences": "Open Wox Preferences",
   "plugin_sys_open_wox_settings": "Open Wox Settings",
   "plugin_sys_open_system_settings": "Open System Settings",
-  "plugin_websearch_trigger_keyword": "Trigger keyword",
+  "plugin_websearch_trigger_keyword": "keyword",
   "plugin_websearch_title": "Title",
-  "plugin_websearch_url": "URL",
+  "plugin_websearch_urls": "URLs",
   "plugin_websearch_enabled": "Enabled",
   "plugin_websearch_icon": "Icon"
 }

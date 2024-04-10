@@ -20,13 +20,11 @@ class WoxSettingPluginHead extends WoxSettingPluginItem {
       children: [
         Row(
           children: [
-            Expanded(
-              child: Text(
-                item.content,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+            Text(
+              item.content,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ],

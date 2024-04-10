@@ -19,6 +19,13 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
     return plugin.setting.settings[key] ?? "";
   }
 
+  Widget withFlexible(List<Widget> children) {
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: children,
+    );
+  }
+
   Widget layout({required List<Widget> children, required PluginSettingValueStyle style}) {
     if (style.hasAnyPadding()) {
       return Padding(
@@ -33,12 +40,5 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
     }
 
     return withFlexible(children);
-  }
-
-  Widget withFlexible(List<Widget> children) {
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: children,
-    );
   }
 }

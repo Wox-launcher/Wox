@@ -14,12 +14,11 @@ class WoxSettingPluginNewLine extends WoxSettingPluginItem {
       children: [
         const Row(
           children: [
-            Expanded(
-                child: SizedBox(
+            SizedBox(
               width: 1,
-            )),
+            ),
           ],
-        )
+        ),
       ],
       style: item.style,
     );

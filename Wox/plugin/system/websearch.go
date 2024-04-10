@@ -17,7 +17,7 @@ import (
 var webSearchesSettingKey = "webSearches"
 var webSearchesTableColumnTriggerKeywordSettingKey = "Keyword"
 var webSearchesTableColumnTitleSettingKey = "Title"
-var webSearchesTableColumnUrlSettingKey = "Url"
+var webSearchesTableColumnUrlSettingKey = "Urls"
 var webSearchesTableColumnEnabledSettingKey = "Enabled"
 var webSearchesTableColumnIconSettingKey = "Icon"
 
@@ -73,7 +73,7 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 							Key:   webSearchesTableColumnIconSettingKey,
 							Label: "i18n:plugin_websearch_icon",
 							Type:  definition.PluginSettingValueTableColumnTypeWoxImage,
-							Width: 80,
+							Width: 50,
 						},
 						{
 							Key:   webSearchesTableColumnTriggerKeywordSettingKey,
@@ -85,18 +85,18 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 							Key:   webSearchesTableColumnTitleSettingKey,
 							Label: "i18n:plugin_websearch_title",
 							Type:  definition.PluginSettingValueTableColumnTypeText,
-							Width: 80,
+							Width: 120,
 						},
 						{
 							Key:   webSearchesTableColumnUrlSettingKey,
-							Label: "i18n:plugin_websearch_url",
-							Type:  definition.PluginSettingValueTableColumnTypeText,
+							Label: "i18n:plugin_websearch_urls",
+							Type:  definition.PluginSettingValueTableColumnTypeTextList,
 						},
 						{
 							Key:   webSearchesTableColumnEnabledSettingKey,
 							Label: "i18n:plugin_websearch_enabled",
 							Type:  definition.PluginSettingValueTableColumnTypeCheckbox,
-							Width: 80,
+							Width: 60,
 						},
 					},
 				},
@@ -118,6 +118,11 @@ func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams
 func (r *WebSearchPlugin) indexIcons(ctx context.Context) {
 	for i, search := range r.webSearches {
 		r.webSearches[i].Icon = r.indexWebSearchIcon(ctx, search)
+	}
+
+	marshal, err := json.Marshal(r.webSearches)
+	if err == nil {
+		r.api.SaveSetting(ctx, webSearchesSettingKey, string(marshal), false)
 	}
 }
 

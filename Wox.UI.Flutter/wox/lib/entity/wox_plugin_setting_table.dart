@@ -26,6 +26,15 @@ class PluginSettingValueTable {
   }
 }
 
+class PluginSettingValueType {
+  static const pluginSettingValueTableColumnTypeText = "text";
+  static const pluginSettingValueTableColumnTypeTextList = "textList";
+  static const pluginSettingValueTableColumnTypeCheckbox = "checkbox";
+  static const pluginSettingValueTableColumnTypeDirPath = "dirPath";
+  static const pluginSettingValueTableColumnTypeSelect = "select";
+  static const pluginSettingValueTableColumnTypeWoxImage = "woxImage";
+}
+
 class PluginSettingValueTableColumn {
   late String key;
   late String label;

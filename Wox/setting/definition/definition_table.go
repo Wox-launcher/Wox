@@ -6,6 +6,7 @@ type PluginSettingValueTableColumnType = string
 
 const (
 	PluginSettingValueTableColumnTypeText     PluginSettingValueTableColumnType = "text"
+	PluginSettingValueTableColumnTypeTextList PluginSettingValueTableColumnType = "textList"
 	PluginSettingValueTableColumnTypeCheckbox PluginSettingValueTableColumnType = "checkbox"
 	PluginSettingValueTableColumnTypeDirPath  PluginSettingValueTableColumnType = "dirPath"
 	PluginSettingValueTableColumnTypeSelect   PluginSettingValueTableColumnType = "select"
