@@ -18,6 +18,11 @@ const (
 	PluginSettingDefinitionTypeLabel    PluginSettingDefinitionType = "label"
 	PluginSettingDefinitionTypeNewLine  PluginSettingDefinitionType = "newline"
 	PluginSettingDefinitionTypeTable    PluginSettingDefinitionType = "table"
+
+	// dynamic setting will be replaced by the actual setting when retrieved
+	// this is useful when the setting is dynamic. E.g. a list of plugins for select
+	// if user define the dynamic setting, user should use api.
+	PluginSettingDefinitionTypeDynamic PluginSettingDefinitionType = "dynamic"
 )
 
 type PluginSettingDefinitionValue interface {

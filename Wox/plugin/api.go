@@ -6,6 +6,7 @@ import (
 	"path"
 	"wox/i18n"
 	"wox/setting"
+	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
 )
@@ -29,13 +30,15 @@ type API interface {
 	GetSetting(ctx context.Context, key string) string
 	SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool)
 	OnSettingChanged(ctx context.Context, callback func(key string, value string))
+	OnGetDynamicSetting(ctx context.Context, callback func(key string) definition.PluginSettingDefinitionItem)
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
 }
 
 type APIImpl struct {
-	pluginInstance         *Instance
-	logger                 *util.Log
-	settingChangeCallbacks []func(key string, value string)
+	pluginInstance          *Instance
+	logger                  *util.Log
+	settingChangeCallbacks  []func(key string, value string)
+	dynamicSettingCallbacks []func(key string) definition.PluginSettingDefinitionItem
 }
 
 func (a *APIImpl) ChangeQuery(ctx context.Context, query share.ChangedQuery) {
@@ -115,7 +118,7 @@ func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string, isP
 	a.pluginInstance.Setting.Settings.Store(key, value)
 	a.pluginInstance.SaveSetting(ctx)
 
-	if !exist || (exist && existValue != value) {
+	if !exist || (existValue != value) {
 		for _, callback := range a.settingChangeCallbacks {
 			callback(key, value)
 		}
@@ -124,6 +127,10 @@ func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string, isP
 
 func (a *APIImpl) OnSettingChanged(ctx context.Context, callback func(key string, value string)) {
 	a.settingChangeCallbacks = append(a.settingChangeCallbacks, callback)
+}
+
+func (a *APIImpl) OnGetDynamicSetting(ctx context.Context, callback func(key string) definition.PluginSettingDefinitionItem) {
+	a.pluginInstance.DynamicSettingCallbacks = append(a.pluginInstance.DynamicSettingCallbacks, callback)
 }
 
 func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []MetadataCommand) {

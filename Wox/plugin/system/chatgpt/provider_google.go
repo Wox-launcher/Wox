@@ -10,35 +10,49 @@ import (
 	"io"
 )
 
-type GoogleClient struct {
+type GoogleProvider struct {
+	apiKey string
 	client *genai.Client
 }
 
-type GoogleClientStream struct {
+type GoogleProviderStream struct {
 	stream        *genai.GenerateContentResponseIterator
 	conversations []Conversation
 }
 
-func NewGoogleClient(ctx context.Context, apiKey string) (Client, error) {
-	client, newClientErr := genai.NewClient(ctx, option.WithAPIKey(apiKey))
-	if newClientErr != nil {
-		return nil, newClientErr
-	}
-	return &GoogleClient{client: client}, nil
+func NewGoogleProvider(ctx context.Context, apiKey string) (Provider, error) {
+	return &GoogleProvider{apiKey: apiKey}, nil
 }
 
-func (c *GoogleClient) ChatStream(ctx context.Context, model chatgptModel, conversations []Conversation) (ClientChatStream, error) {
-	chatMessages, lastConversation := c.convertConversations(conversations)
-	aiModel := c.client.GenerativeModel(model.Name)
+func (g *GoogleProvider) Connect(ctx context.Context) error {
+	client, newClientErr := genai.NewClient(ctx, option.WithAPIKey(g.apiKey))
+	if newClientErr != nil {
+		return newClientErr
+	}
+
+	g.client = client
+	return nil
+}
+
+func (g *GoogleProvider) Close(ctx context.Context) error {
+	if g.client != nil {
+		return g.client.Close()
+	}
+	return nil
+}
+
+func (g *GoogleProvider) ChatStream(ctx context.Context, model chatgptModel, conversations []Conversation) (ProviderChatStream, error) {
+	chatMessages, lastConversation := g.convertConversations(conversations)
+	aiModel := g.client.GenerativeModel(model.Name)
 	session := aiModel.StartChat()
 	session.History = chatMessages
 	stream := session.SendMessageStream(ctx, lastConversation.Parts...)
-	return &GoogleClientStream{conversations: conversations, stream: stream}, nil
+	return &GoogleProviderStream{conversations: conversations, stream: stream}, nil
 }
 
-func (c *GoogleClient) Chat(ctx context.Context, model chatgptModel, conversations []Conversation) (string, error) {
-	chatMessages, lastConversation := c.convertConversations(conversations)
-	aiModel := c.client.GenerativeModel(model.Name)
+func (g *GoogleProvider) Chat(ctx context.Context, model chatgptModel, conversations []Conversation) (string, error) {
+	chatMessages, lastConversation := g.convertConversations(conversations)
+	aiModel := g.client.GenerativeModel(model.Name)
 	session := aiModel.StartChat()
 	session.History = chatMessages
 	response, sendErr := session.SendMessage(ctx, lastConversation.Parts...)
@@ -55,8 +69,18 @@ func (c *GoogleClient) Chat(ctx context.Context, model chatgptModel, conversatio
 	return "", errors.New("no text in response")
 }
 
-func (s *GoogleClientStream) Receive() (string, error) {
-	response, err := s.stream.Next()
+func (g *GoogleProvider) Models(ctx context.Context) ([]chatgptModel, error) {
+	return []chatgptModel{
+		{
+			DisplayName: "google-gemini-1.0-pro",
+			Name:        "gemini-1.0-pro",
+			Provider:    chatgptModelProviderNameGoogle,
+		},
+	}, nil
+}
+
+func (g *GoogleProviderStream) Receive() (string, error) {
+	response, err := g.stream.Next()
 	if err != nil {
 		// no more messages
 		if errors.Is(err, iterator.Done) {
@@ -83,11 +107,11 @@ func (s *GoogleClientStream) Receive() (string, error) {
 	return "", errors.New("no text in response")
 }
 
-func (s *GoogleClientStream) Close() {
+func (g *GoogleProviderStream) Close() {
 	// no-op
 }
 
-func (c *GoogleClient) convertConversations(conversations []Conversation) (msgWithoutLast []*genai.Content, lastMsg *genai.Content) {
+func (g *GoogleProvider) convertConversations(conversations []Conversation) (msgWithoutLast []*genai.Content, lastMsg *genai.Content) {
 	var chatMessages []*genai.Content
 	for _, conversation := range conversations {
 		role := ""

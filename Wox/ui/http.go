@@ -708,6 +708,21 @@ func convertPluginDto(ctx context.Context, pluginDto dto.PluginDto, pluginInstan
 			return !lo.Contains(item.DisabledInPlatforms, util.GetCurrentPlatform())
 		})
 
+		// replace dynamic setting definition
+		for i, settingDefinition := range pluginDto.SettingDefinitions {
+			if settingDefinition.Type == definition.PluginSettingDefinitionTypeDynamic {
+				for _, callback := range pluginInstance.DynamicSettingCallbacks {
+					newSettingDefinition := callback(settingDefinition.Value.GetKey())
+					if newSettingDefinition.Value != nil && newSettingDefinition.Type != definition.PluginSettingDefinitionTypeDynamic {
+						logger.Debug(ctx, fmt.Sprintf("dynamic setting replaced: %s(%s) -> %s(%s)", settingDefinition.Value.GetKey(), settingDefinition.Type, newSettingDefinition.Value.GetKey(), newSettingDefinition.Type))
+						pluginDto.SettingDefinitions[i] = newSettingDefinition
+					} else {
+						logger.Error(ctx, fmt.Sprintf("dynamic setting not valid: %+v", newSettingDefinition))
+					}
+				}
+			}
+		}
+
 		//translate setting definition labels
 		for i := range pluginDto.SettingDefinitions {
 			if pluginDto.SettingDefinitions[i].Value != nil {
@@ -716,7 +731,7 @@ func convertPluginDto(ctx context.Context, pluginDto dto.PluginDto, pluginInstan
 		}
 
 		var definitionSettings = util.NewHashMap[string, string]()
-		for _, item := range pluginInstance.Metadata.SettingDefinitions {
+		for _, item := range pluginDto.SettingDefinitions {
 			if item.Value != nil {
 				settingValue := pluginInstance.API.GetSetting(ctx, item.Value.GetKey())
 				definitionSettings.Store(item.Value.GetKey(), settingValue)

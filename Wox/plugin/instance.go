@@ -3,16 +3,18 @@ package plugin
 import (
 	"context"
 	"wox/setting"
+	"wox/setting/definition"
 )
 
 type Instance struct {
-	Plugin          Plugin                 // plugin implementation
-	API             API                    // APIs exposed to plugin
-	Metadata        Metadata               // metadata parsed from plugin.json
-	IsSystemPlugin  bool                   // is system plugin, see `plugin.md` for more detail
-	PluginDirectory string                 // absolute path to plugin directory
-	Host            Host                   // plugin host to run this plugin
-	Setting         *setting.PluginSetting // setting for this plugin
+	Plugin                  Plugin                                                    // plugin implementation
+	API                     API                                                       // APIs exposed to plugin
+	Metadata                Metadata                                                  // metadata parsed from plugin.json
+	IsSystemPlugin          bool                                                      // is system plugin, see `plugin.md` for more detail
+	PluginDirectory         string                                                    // absolute path to plugin directory
+	Host                    Host                                                      // plugin host to run this plugin
+	Setting                 *setting.PluginSetting                                    // setting for this plugin
+	DynamicSettingCallbacks []func(key string) definition.PluginSettingDefinitionItem // dynamic setting callbacks
 
 	// for measure performance
 	LoadStartTimestamp    int64

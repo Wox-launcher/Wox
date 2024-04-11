@@ -24,32 +24,10 @@ var chatgptNewChatIcon = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0
 var chatgptActiveChatIcon = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAACXBIWXMAAAsTAAALEwEAmpwYAAAWcUlEQVR4nO1deVwVR56vccZkd7Mzk2SPyeyVz8zmk83sfnbcZCabGTUCCgqiKJ6It0bU8QJBQBAQ5HxijEdAo4lH0AhGjSd4EeQyEI2JhsQjCAjK+Y7qpzGbyaT282u63+uurvde93sNjyTU5/P7Q3xdVV3fqt9dv0aov/W3/tbf+punzWQyPW21WqdyHLcRY1yGMa7DGLdijL/iOI5w3a0JY1yOMd7OcVwExvg/+ldex/bgwYN/4jguFhZfWHR3qJ7juDX3799/qh8cNxvHcb/BGB/CGH/jARAywhh/jTEutFgsL/YDo7Ldv3//lxjjNzDGf9YLCE4JzF+EMf6uHxgnDWM8FmPc2VNAcEpgjBjjmf2gUI0Q8ijHcZsxxt86W0CLBZPamjqyc/txEh+zjcyYuo4EB8QRvyGRZMTLUWTMqHgyfco6snrVdvJG/lHyYW0d/4wrYLq6unIIIT/qB6YbjL/mOK7Y2YLdrm8mW157l0wYu4b4/HG5JhofnEg2vXqQ1Nc3OwWlubn5KGwMQshPTCbTvwE7s1gsTwD9YMBqbW19DGNc6miRWprbSHZGAfEfFqUZCJqGD40kGWl7yZ079xyCYjQazRjj/2OwtocY46ugZHAcl2A2m5//3oEEOxFjfNbR4pw4VsmzIB9qYUeOSiQzI98mK7ZUk8SD9STjnInkVH9Jcqq+JOnnTWTNodtk+ZZqMjOqgP8t/fxo/1hy5NAFPeTPPYxxHmiD6PvQOI5bz3pRk8lMstMLFAs5YfpGEvPmFX7xDRe/UkU5VQ9JzFsfk4mztyj6W5eymxiNJj2AAblXbLVa/dB3tVmt1sksAd7ZaSTRK16XLVzQmFR+UdWC4Ihid18lwePWyfpesWQT6eww6qm1FYIhi75LDYQlx3FG1smgwQhfsotkXcAegyFSVhlHpi/fIxtj6aKNxGg0y+bR1HiX3LzZxFNra4dWUMB9swB9V5rAdxUvAsJbulCvpBzXDQgDRQvTT8nHmmsgsSvzydTQFOI7eIWCvQWNWEUWzDWQDTnvkNJzH6pidZ2dnW8SQgaivtysVutvWa4QEOC9BYaBly1fkrBFO93W2AAgQ+Y+8vlnt52Ccu/evYtms/lx1Fcbx3EF9KTvtrSRsYF2bSp86a6eA6L6IYnMqyGjQ9IcLrbf0CheOwsas5an4T6rHP92SCSvHDQ0tDgE5e7du9cqKyt/ivpSI4QM4DjOB/R5esI5mfskAnytrjLDIKHEoltkfPirikX1HRJFQme8RpZtLCfJR5pIduUDxbPpZ028YjEv8QgTTFCljx4pdwjKjRs3LkZERPyNt3FAFovldxzH5WKM7ziywP2HrbS9mB7alIGitNOdZPqKvcR3iFw2+PvHk4XpxbztorXPuLc/I5Pn5yuAATkISgHrXWtqao4ihH7iTdd5kSvBB+4Q8WVCp2/UFYjsyvv8go/wlbMcv5ejyNyEwySz1OzxGAAMfWKil29lCn1Q8/Py8lYhhHrPwuc47u8xxjvUxDAsFovMNxW98yPdwFi5/UOe/dE7eMqC7WTt8bu6Ap91gePlnnScVVF5/PvR79za2mocPHhw7xiQGOM/OGJNLDpzusb2AgEjE3jNx9PFSTp0m0yYuUkBxJjQTBK755ru7FBKoBlKx3xtQxHzvSsqKs4hhH7Zo2AIsWuFU05Kzc2tpOjAeX73BPnHyiYPPN6TxUg/ZyQzV+4jvoMjFXJiSe77uoCthuateU82PtgsDM7wl/Dw8CUIoUd0BwI8nhzHbXIGxKfXviBpybtkwpum5Zur3FqA7IoHZFHWGTJieJxCdZ0TV0QySrULbE/VamCL4jwmhiSRtrZOxZpcvHixDCGkfxgZY7zVof7d0u06B12dBYJU6wGVVOvLx+65RoJDMxT9giMx6UhjrwIhpYz3zWTUKLts3J73nmJtTCbT1y+88EIEQuhnuoEBmSCOwKgov0ImjFEGk8aH5ZLFhnNk7Ym7PDsR/w4sR+0LJx1pIpPmbFX0HTwuvUfUZndoxdaLMhuF5Q8rKCjYjRB6SRcwrFarPyQKsMAo2FNC/Cidf/K8PJJY9IVs0qB+2vT3CqUxxqLF2WeJL3Xi/IfHk8U555gGnbcI3P7B49NtcyzYe1qxTjdv3ryOEJqCEHpUD9W2jQUGHE/pYoELAmIYrElLnXjAe9W86AiJTQHAzIp5h7eivQ0Ai5a+VmGb6/xZOSzh/s0zzzwzHyH0rKeA7GKBsb/gjCKglH6my+GE3QHEV3Lykg436LZ4cLrg9AHbm7pwB0k+esfjPsHw9Hs52jbf+i/uKNYsLS0tByHk75ErhBVYKi/7iI9Z21jU/HySVW51vrgeApKj8hl3lAPQ0kCN9vT0TZprj+8cP1qpAKSwsLAAIRSGEHLPTY8xPkJ3CmrdpHFJtoFDpqznrVeXi+tlQFKOtTD9UVIKGNEtn7SEjaW0IPWEra/12fsVgJSVlZ1GCE1DCGmPMlqt1v9iCXKptxYsbmdsqi8AkvG+mcyJP8ifAply4BdHItJO8J5fhaU/MZv3W2kdK3rHZZk7hV67urq6KwIgz+kiO65/3iBjVeBDUjvZ3gYkp+ohn40Cm4a2h8KX7Sbrzto3EvjVWL4wOFFrT9xTPSZoluKzc2dkKQBpamq6IwDye01gQCiS4ziTQigl251qYBtoWaDeBCS+4DMydmK2YoHhNID/i/UMqOLArlje4jmxRSSzzHXcJvlos+05yLKk16+xsbFJAMRXEyAWi2UU3dm9e+1kpK9di0govNnnAEkrbud3Px0nHxWUxJ8WVX2c7uj2k1G2FVjjS1+9wJ88x4Dcsf1+Zli6ApCGhobbAiCjPU5MeLewVCbItYDR04BkXeDIgrXHyfBh9g0DNNwnhv97doVzDZDNfm6R8dM2KE4ZvPvqd24wn4G/i7+DJAl6Devr678QAAnSBAjHcR/SnUFCszgYHO2+AEhO9UMSta2WjApMksuJwSv4pIbUU62a58nqPzAomd1/cZvs95F5dhfKmvgdzoR6oNZ4+H26M2liQsqxZq8Dklj0BTNmzmtJoekk4YB2B6arEyg1/FgncG7CIdv/bd10SAHIqVOnjgiAjFQNiMVi+Xcl72uxDQSub3dUUL0ASTvdyeTxtNyAf09ftpuXCXoBk3qqW0bRGwA0tLi9n5JxU9Y7jY3k5uZu1CzUrVbrcLqji9VXbQONC8t162U8BSSrnOMT3ug0Hdi1EChKP9ulahfrQbF7PyVjJmQxNkT3fME0YHl8g4KCVgiA/FY1IBjjILqjklN23jg14g2vABI0JkWxM8EPRdsJjnZx4OhuTUsvUMCah+gkGJj0WFFLtzDDFLt27dohAPKvqgHhOG483RH4ZaT5t94AxEdCYydmkbi365w+C5Y2WNz0s6EzNjq0RdwhYKG0S2ZmWCafSE6vo9ls/nr27NnxCKG/1QLIJLqj4pPV9l25aGfvATJYDkhAQDxZuqFMta9JtNZHBlDW+uDlCmvdo9NS9ZDMWW1PcRK1LIyV1+uuX79ehxB6RgsgPqyIoNTN7o0TMieu0O2YOfizIAvRlzotwG4WZhSrDpi5okWZJbL+d795ksm6cnNzcxFC6nKALRbLM3QHN6432gYZFbjGK4DkeOjthedZ7A8I7pE4CqxpJUi2sAE+bCW5dvWWApCWlpbWRx991F/LpUw62kVG+cXYBkor6fAIELUGm28PAQIsy1HCBOT7ejRO1Ze8Jir2uXzxJuYpSUlJyUYI/YtatnWL7mDZIrub2h1tBdRPmyo6LJpPNHMVR/HtMUBWdEcNwZnISikCZ6IHqafg05K6+y+8/5ECkCtXrtQihMaoSjWF9FC6A+CH4gBTXtmmeZIAAMvpt+L1iw4X27cHARH/DpdIAQBW0p0nwapZqw7Y+opcspkZY3/xxRcXqcpqxBjPoDu4eaPRtqAweXf8RAngsJMcZ5HAwl194KZXADEIlPhuPa+w0HMLmZRD4vZ9rnk88HOJGTMwHlyXo9d08+bNWxFCQ10CYrVafwGFW+gO4NKkOFHIAPHIYTda6RDkVdHTnV4BRKTI/BqmM/GV5KOaxwROIvax561TCkAqKirOCzH2v1JzSg7RHZSV2kOUwCOT37vj0YVMpqvD1+7q8AYg/NzKrWRB6nGZ3IN5ap0DyFpnwr25ufmeYLk/7RIQi8USyNIOpMJ93NRcjxObHTvsUt1SlfUARBrwks5J6xzAihefDRweo7iyABk9Tz755CxVeb+CG/4GDQjo1dJEahBeniyUSOAKAZeIjwNbwRuAAHk6B2ne7y2GHBEcjsFITeM4bhzrlAA/lE4UvLB6gGJLTPBfrQAkfNkuTTnBUoJrbLNj3vEKINKYTXXlJ4q1jImJSRXY1gBVoGCMz9OdgI8mafUO2WRnxRY6jTdroYxSU7erg74nODxek6sD2OmS9aV8vpUM4F4EBLzj4vOniz9wFiNR53C0Wq3/bbFYxKKTNgJv5uzwTNmEJ87Z6pYV74hSjjXLsgFFGh2yzmXmu6PrC719Qqb96U3b8yePVykAyczMzBUA+UdVgAisaz6LdYHfn35ZsHxhV+p5iykWFleSXS5zdVCaHtwplF6isSsJa70CiNQ1f+5MrWIN16xZk6U5RsIK60JETEyaA9+QD8VeYHfG7tbvnl+2C1dHakk7mZd4mPgNld/cgjwrYHNZFVavACIN69ZcvOZMhvyzakCsVusUuiOIGdvU37D1ZPW+63w2Ob0zpyzYputN2HUO7qHT90jg/+F3oHp6S8sCmSoNObOKqfn5+S0TAFFf0hZjnEV3BFkV4kCQbaFmF+txV9wgyZui49rOXDHeAASuUNjmNDpBAYbJZHo4YMCAcHdkyCm6s8Q4u/YADkLpRHrKYWcQCBQHVobiyJEJDjMUvQHIoszTTvO06uvrbwlgAKkvxcFxXC3d2YI5Bttgq/dfZ+/ig/V8xQZ6B4dMziHxbjjsssqtvDyg82/BnQ9qsrP8W28AIo3pH3m3TAFIWVlZiQDGZNVgCCzrCt0Z5K6Kg8HFTGcTg+zywGBl1ghoIKkn1XmNoz3MUO9tQECm2k6uXzTzunR8fPw6zYlzAiCfOgNEjZMRglGwu+m8KnF3O6oKlKiTW7y3AZHWfcxI3aMAo7Oz0/rYY4/NEAD5nceAwMVGccAERixDK/+HWL2U/2foLId6E5DIvA/sCs2QSGbhs6qqqlKJ/PiFJkA4jiuhO4QSeeKgK7fValocIJAhsMvpnR86fSPv+lZoalDVZ/W7bmtqvQUIpK5CupL4DFSio9fOYrF8Gx4eHiuAMUFzxSDW9YQNhgMel+hzdMvJpyeSD3oBEFA6wCYTfz9pXDJpb+9SAHL58uUPJKfjfzWBIQASTXd64liVfcFmbfZosWzBKsrKDtYxPaenAYF3AF+e+FuoTV9VofTuQgxk7ty58QIYEC38uTuAjKY7brjdYpMDwE70uNAPV8LCFu0kY0IzyOKcs7pWa4B4fk8BAmxKmvoDdLCwVAEGUGVl5XnJ6RiC3Gkmk+nnrCJli16x3zD60/pS3RbPoHfJv+V7ZK4Wf79Y3QBZ+cYlRfwGvubAAqOtrc347LPPzpcA8oRbgAinpIIeoHD/OdskwEboS/VHsiusJGId4/rC0JV8frCqPirvy5QK+vrahFmb5Sr80EhyYN9ZJhiQ9iNxJLonO6TNYrEsowfp6OgiIYH23QGXIr0NhAF27bZaphEJwSKoTKS2H0jGlqrbYG+BOyRkit1LYRfgSfw9GhYYkmpAIhjjPS5oJhShUZR93bXTnkAHqqqeASqDRgIjklUIAGIpq3Z9ork/uGls68dBHTAQ3lC1AW4pOwLjzJkzxyRghGlyJLoA5U2lxWkkYRPXylTU3iqxZxAIqknMiCpQuOSBt2u5vkDT8k3yCtxSgiviWevedlntmgJjmsfVgKTNbDb/ilVrsbLiY1nNLEii06tYjMEFj4crACCk5XKi24iEawie9E+nJ8HF14TYN3hHobMTIV7O2b9//x4KjP9BejeM8eusCcA3oKSTn61j0oPBQV2RoLGpTGcjqM+eg/1Apj2Vnr/kFAAp3b17t2PevHkJPQ4GtK6urp9hjJsYBg9JTpAXvIdUSr0LUyYdblBoN0Bgu8A3Q/QE3CawQ5JUfWwMNKkLFy6cee65516RADEVIdSzXx+Fm7qsOlpms0WRHgSJYlqK1BiclYaN3q9wNkKKj95JFUBSQy9vy2GXYNTV1V2T+KdEGuuRraGlmc3mLexdgmUlxUWCrHcARquATS1u493ztD0BMXRgi+7UcndFYOzZAPeJdvg1hNbW1o6SkpJjwkXOaZQm9fseqdXrqBFCftzW1qYI7YoEKS/wCTsaGHAkwsV/CPtC3hUIZtlJOG/iPcELM0r4yCIktdF9gM/IVVDMXQJvsjT7PTf7HWbZ18jIyBRJPFxKfm75p3QC5ZHGxsYax8KtnWzMLXRaVBn8SpCRCEQXGfOhCEou6eVsZBFohnD3XRxvXFACU5uqqakpp0AIQQgNUn2RsydbQ0PD47dv31YUq6EdkcCHQxknRi2FL93d46o0sEbpRoGCCSzBLZEVUPb1H1Bfa9u3bx9YXV2937UWgvlkMSgvG7VsCx8vkFao45UAvxgyb2YWSUvZTZZEyEO3UNOwp06GFAwg+P4U6x1KS0uLJSfjD6gPt4GFhYU5XV1dD9Tq68KO49kCUFeXvPoBfE1Neh+l+6To+yU3kBlSNgUUF53P/PxEe3s7lnhr3Ytl9HL70eTJk4fX1tZWagHFGXV2Gknk0s3Kbx3qIEtA66OvrwEY9MYQ7KxvJYnRQC+g71D7dVxc3JqrV69ehvixp6AYjWaSmbZXIVfAkQgGnBZVGq4yABDSUKsoMyAszToZQCdPnjwsASO0V1VanRpcZPxjSEhIVFlZWXFbW5vH300/frSSjBmprL4DSQWQxwvlviHFFPJ/IR4CBAYleG3h/8A3Jf0ogM1GCk4kZ0pqHI577dq1KwMHDpSquOoTo/tgAy1kGPBc0E4OHjy479KlS9VQENJoNH7Jcsq1t7ebXX0WA9ze7mpsUo/tq+sPkDYnX/eEsnxPPfXUbAkY6mtd9fH2UyEhbJxUh4cC9eD7EWngwIHhjz/++Mza2tpyV6o0JHzDR1S0AjF5fDLJ33qE3Gly/GlvoI8//vhDmItkvj69+pGvXmygnfxGCPJDQchJtMU7YMCAsJKSEpdffgOn5keXPydv7TjB+9FmTcvgWRC4PIDAZT5nehaf7Ax3I698dINZNonS/L4Fl4gks1Asy/dj9ANqAwVB+YhAsBMHFBUVJXd0dGC9tDZX1N7ebpHcahLpZdWXMn8ILSAgYAi4teEDWz0FhNls/jMUy3/++ecXUk7CQd9XNuVpezoiIiIabBwQ/DoC8c2lS5cqg4ODI6lTEarpVtMPtD0Cbm34wNahQ4f2Nzc3t7gLBGh5BQUFewYNGhRBATFVUD48+zTRD6w9ATYOLF5AQMDy/Pz8fLj8AkGilpaWe11dXfeBBZlMpq/A/mloaGisq6v7pKSk5Gh2dnbuSy+9tJjhNgcgBmsqUNnfFA128X8KpSmmuUmBQiZI/4nQuT2GEPqVwG78hGptE4WdP1mwfwIF9XWQUF7PdVmk/tbf+hvqW+3/AXPM0izf8OCbAAAAAElFTkSuQmCC`)
 var chatgptRenameIcon = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAABtElEQVR4nO2Zz0sCQRTH32FnO1VU/0U//o8kwZHQPyGI0BkP0tFzB8Odtwj+MVEU3YU6eAyt6eJNL0E1MSoS7q6CKY7xPvAuu9+B992dmZ19D4AgiKXBJD4yiYYJ7HtCPTOhaqxYO4zoSnjEJAZDDfYHY6R6gFUzTGQy1CcTKoRKxYdCsMGkqjOBX3FaRw2Mjdwyoe6maVadP9hpMN0EJofAe3CG8tWmLxT3JLaSEvaEavtFPLVacJbz+o5NNC55KFV3YR3wBeYmDfj2ya8NhWArsljLLk+bGJzbbZwykH03J1ybV66NWWi8fZvMy4dJN7uRHSjd7A7uWU3S+Iw2Ha5NaqaBkdC4ZoAPoz3TwFKSX5wBQwY4vYEuTaGp0CLWtAsZ2kY5fcgMfYk5HSU0HeYMnUb1HMfp//BDk1qKib8baGe1OQYXoKrESrlsbK91YYvJMB8pLQrFYS24wD1PYidS3JXYsoVfcLseGubjkme/y+sCc1YLzvXI5grlao9s3IG5GYTbLaaEJp/EAM4azDb6mEQcXXO5R6Z6nsQnJlXVLwT7UV14wARejzQ993pkBAHO8gNcJwywrWE/wgAAAABJRU5ErkJggg==`)
 
-type chatgptModelProvider string
-
-var (
-	chatgptModelProviderOpenAI chatgptModelProvider = "openai"
-	chatgptModelProviderGoogle chatgptModelProvider = "google"
-)
-
 type chatgptModel struct {
-	Name     string
-	Provider chatgptModelProvider
-}
-
-var (
-	chatgptModelOpenAIGPT3Dot5Turbo = chatgptModel{
-		Name:     "gpt-3.5-turbo",
-		Provider: chatgptModelProviderOpenAI,
-	}
-	chatgptModelGoogleGemini1DotZeroPro = chatgptModel{
-		Name:     "gemini-1.0-pro",
-		Provider: chatgptModelProviderGoogle,
-	}
-)
-
-var availableModels = []chatgptModel{
-	chatgptModelOpenAIGPT3Dot5Turbo,
-	chatgptModelGoogleGemini1DotZeroPro,
+	DisplayName string
+	Name        string
+	Provider    chatgptModelProviderName
 }
 
 func init() {
@@ -58,7 +36,7 @@ func init() {
 
 type Plugin struct {
 	api    plugin.API
-	client Client
+	client Provider
 	model  chatgptModel
 
 	nonActiveChats           []*Chat
@@ -130,20 +108,9 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
-				Type: definition.PluginSettingDefinitionTypeSelect,
-				Value: &definition.PluginSettingValueSelect{
-					Key:   "model",
-					Label: "Model",
-					Options: []definition.PluginSettingValueSelectOption{
-						{
-							Label: chatgptModelOpenAIGPT3Dot5Turbo.Name,
-							Value: chatgptModelOpenAIGPT3Dot5Turbo.Name,
-						},
-						{
-							Label: chatgptModelGoogleGemini1DotZeroPro.Name,
-							Value: chatgptModelGoogleGemini1DotZeroPro.Name,
-						},
-					},
+				Type: definition.PluginSettingDefinitionTypeDynamic,
+				Value: &definition.PluginSettingValueDynamic{
+					Key: "models",
 				},
 			},
 			{
@@ -181,8 +148,46 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 
 func (c *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
+	c.api.OnGetDynamicSetting(ctx, func(key string) definition.PluginSettingDefinitionItem {
+		if key == "models" {
+			var options []definition.PluginSettingValueSelectOption
+			for _, model := range c.getAvailableModels(ctx) {
+				options = append(options, definition.PluginSettingValueSelectOption{
+					Label: model.DisplayName,
+					Value: model.Name,
+				})
+			}
+
+			return definition.PluginSettingDefinitionItem{
+				Type: definition.PluginSettingDefinitionTypeSelect,
+				Value: &definition.PluginSettingValueSelect{
+					Key:     "model",
+					Label:   "Model",
+					Options: options,
+				},
+			}
+		}
+
+		return definition.PluginSettingDefinitionItem{}
+	})
 	c.loadClient(ctx)
 	c.loadChats(ctx)
+}
+
+func (c *Plugin) getAvailableModels(ctx context.Context) (models []chatgptModel) {
+	for _, providerName := range chatgptModelProviderNames {
+		if provider, providerErr := NewProvider(ctx, "", providerName); providerErr == nil {
+			if providerModels, modelsErr := provider.Models(ctx); modelsErr == nil {
+				models = append(models, providerModels...)
+			} else {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get models from providerName: %s", modelsErr.Error()))
+			}
+		} else {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to create chatgpt providerName: %s", providerErr.Error()))
+		}
+	}
+
+	return
 }
 
 func (c *Plugin) loadClient(ctx context.Context) {
@@ -197,9 +202,9 @@ func (c *Plugin) loadClient(ctx context.Context) {
 		return
 	}
 
-	for _, availableModel := range availableModels {
+	for _, availableModel := range c.getAvailableModels(ctx) {
 		if availableModel.Name == model {
-			client, clientErr := NewClient(ctx, apiKey, availableModel)
+			client, clientErr := NewProvider(ctx, apiKey, availableModel.Provider)
 			if clientErr != nil {
 				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to create chatgpt client: %s", clientErr.Error()))
 			} else {
@@ -216,7 +221,7 @@ func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryRe
 	if c.client == nil {
 		return []plugin.QueryResult{
 			{
-				Title:    "Client not initialized",
+				Title:    "Provider not initialized",
 				SubTitle: "Please complete the settings",
 				Icon:     chatgptIcon,
 			},
@@ -508,7 +513,7 @@ func (c *Plugin) generateGptResultRefresh(ctx context.Context, conversations []C
 	onAnswerErr func(plugin.RefreshableResult, error) plugin.RefreshableResult,
 	onAnswerFinished func(plugin.RefreshableResult) plugin.RefreshableResult) func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
 
-	var stream ClientChatStream
+	var stream ProviderChatStream
 	var creatingStream bool
 	return func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
 		if stream == nil {
