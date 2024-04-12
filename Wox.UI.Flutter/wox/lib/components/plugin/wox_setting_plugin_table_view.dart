@@ -30,7 +30,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
             for (var column in item.columns)
               columnWidth(
                 child: Padding(
-                  padding: const EdgeInsets.only(left: 0, right: 8, top: 8, bottom: 8),
+                  padding: const EdgeInsets.all(8),
                   child: Text(
                     column.label,
                     style: const TextStyle(
@@ -42,6 +42,22 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 ),
                 width: column.width,
               )
+            //operation column
+            ,
+            columnWidth(
+              child: const Padding(
+                padding: EdgeInsets.all(8),
+                child: Text(
+                  "Operation",
+                  style: TextStyle(
+                    overflow: TextOverflow.ellipsis,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              width: 100,
+            ),
           ],
         ),
         const material.Divider(thickness: 0.4, indent: 0)
@@ -90,11 +106,14 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   Widget buildRows() {
     var rowsJson = getSetting(item.key);
     if (rowsJson == "") {
-      return const Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text("No rows"),
-        ],
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 8.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text("No rows"),
+          ],
+        ),
       );
     }
 
@@ -109,11 +128,30 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                   for (var column in item.columns)
                     columnWidth(
                       child: Padding(
-                        padding: const EdgeInsets.only(top: 8, bottom: 8, left: 0, right: 8),
+                        padding: const EdgeInsets.all(8),
                         child: buildRowValue(column, row),
                       ),
                       width: column.width,
                     ),
+                  //operation column
+                  columnWidth(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Row(
+                        children: [
+                          HyperlinkButton(
+                            onPressed: () {},
+                            child: const Icon(material.Icons.edit),
+                          ),
+                          HyperlinkButton(
+                            onPressed: () {},
+                            child: const Icon(material.Icons.delete),
+                          ),
+                        ],
+                      ),
+                    ),
+                    width: 100,
+                  ),
                 ],
               ),
               const material.Divider(thickness: 0.4, indent: 0)
@@ -125,12 +163,48 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
 
   @override
   Widget build(BuildContext context) {
-    return layout(
-      children: [
-        buildHeader(),
-        buildRows(),
-      ],
-      style: item.style,
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Text(
+                  item.title,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              HyperlinkButton(
+                  onPressed: () {},
+                  child: const Row(
+                    children: [
+                      Icon(material.Icons.add),
+                      Text("Add"),
+                    ],
+                  )),
+            ],
+          ),
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: material.Colors.grey[300]!),
+            ),
+            child: layout(
+              children: [
+                buildHeader(),
+                buildRows(),
+              ],
+              style: item.style,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

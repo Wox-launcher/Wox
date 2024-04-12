@@ -2,7 +2,6 @@ package chatgpt
 
 import (
 	"context"
-	"errors"
 )
 
 type chatgptModelProviderName string
@@ -19,6 +18,11 @@ var chatgptModelProviderNames = []chatgptModelProviderName{
 	chatgptModelProviderNameOllama,
 }
 
+type chatgptProviderConnectContext struct {
+	ApiKey string
+	Host   string // E.g. "https://api.openai.com:8908"
+}
+
 type Provider interface {
 	Connect(ctx context.Context) error
 	Close(ctx context.Context) error
@@ -30,18 +34,4 @@ type Provider interface {
 type ProviderChatStream interface {
 	Receive() (string, error) // will return io.EOF if no more messages
 	Close()
-}
-
-func NewProvider(ctx context.Context, apiKey string, provider chatgptModelProviderName) (Provider, error) {
-	if provider == chatgptModelProviderNameGoogle {
-		return NewGoogleProvider(ctx, apiKey)
-	}
-	if provider == chatgptModelProviderNameOpenAI {
-		return NewOpenAIClient(ctx, apiKey), nil
-	}
-	if provider == chatgptModelProviderNameOllama {
-		return NewOllamaProvider(ctx, apiKey), nil
-	}
-
-	return nil, errors.New("unknown model provider")
 }

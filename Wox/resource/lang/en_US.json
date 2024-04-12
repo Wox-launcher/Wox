@@ -23,8 +23,10 @@
   "plugin_sys_open_wox_settings": "Open Wox Settings",
   "plugin_sys_open_system_settings": "Open System Settings",
   "plugin_websearch_trigger_keyword": "keyword",
+  "plugin_websearch_trigger_keyword_tooltip": "The keyword you want to use to trigger the search",
   "plugin_websearch_title": "Title",
   "plugin_websearch_urls": "URLs",
   "plugin_websearch_enabled": "Enabled",
-  "plugin_websearch_icon": "Icon"
+  "plugin_websearch_icon": "Icon",
+  "plugin_websearch_web_searches": "Web Searches"
 }

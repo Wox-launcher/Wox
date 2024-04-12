@@ -81,6 +81,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                           },
                           // fluent listTile is not clickable
                           child: material.ListTile(
+                            contentPadding: const EdgeInsets.only(left: 6, right: 6),
                             leading: WoxImageView(woxImage: plugin.icon, width: 32),
                             title: Text(plugin.name,
                                 maxLines: 1,
@@ -113,7 +114,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                                 ),
                               ],
                             ),
-                            trailing: pluginTrailIcon(plugin),
+                            trailing: pluginTrailIcon(plugin, isActive),
                           ),
                         ),
                       );
@@ -128,10 +129,10 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     );
   }
 
-  Widget pluginTrailIcon(PluginDetail plugin) {
+  Widget pluginTrailIcon(PluginDetail plugin, bool isActive) {
     if (controller.isStorePluginList.value) {
       if (plugin.isInstalled) {
-        return Icon(FluentIcons.skype_circle_check, color: Colors.green);
+        return Icon(FluentIcons.skype_circle_check, color: isActive ? Colors.white : Colors.green);
       }
     }
     return const SizedBox();
@@ -368,7 +369,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     });
                   }
 
-                  return Text(e.type + " not suppr");
+                  return Text(e.type + " not spdr2d");
                 },
               )
             ],
@@ -386,7 +387,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 300,
+            width: 250,
             child: pluginList(),
           ),
           // This is your divider

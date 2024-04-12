@@ -16,7 +16,7 @@ const (
 type PluginSettingValueTable struct {
 	Key          string
 	DefaultValue string
-	EnableFilter bool
+	Title        string
 	Columns      []PluginSettingValueTableColumn
 
 	Style PluginSettingValueStyle
@@ -44,7 +44,9 @@ func (p *PluginSettingValueTable) GetDefaultValue() string {
 }
 
 func (p *PluginSettingValueTable) Translate(translator func(ctx context.Context, key string) string) {
+	p.Title = translator(context.Background(), p.Title)
 	for i := range p.Columns {
 		p.Columns[i].Label = translator(context.Background(), p.Columns[i].Label)
+		p.Columns[i].Tooltip = translator(context.Background(), p.Columns[i].Tooltip)
 	}
 }

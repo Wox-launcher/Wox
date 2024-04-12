@@ -67,19 +67,21 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 				Type:               definition.PluginSettingDefinitionTypeTable,
 				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
-					Key: webSearchesSettingKey,
+					Key:   webSearchesSettingKey,
+					Title: "i18n:plugin_websearch_web_searches",
 					Columns: []definition.PluginSettingValueTableColumn{
 						{
 							Key:   webSearchesTableColumnIconSettingKey,
 							Label: "i18n:plugin_websearch_icon",
 							Type:  definition.PluginSettingValueTableColumnTypeWoxImage,
-							Width: 50,
+							Width: 55,
 						},
 						{
-							Key:   webSearchesTableColumnTriggerKeywordSettingKey,
-							Label: "i18n:plugin_websearch_trigger_keyword",
-							Type:  definition.PluginSettingValueTableColumnTypeText,
-							Width: 80,
+							Key:     webSearchesTableColumnTriggerKeywordSettingKey,
+							Label:   "i18n:plugin_websearch_trigger_keyword",
+							Tooltip: "i18n:plugin_websearch_trigger_keyword_tooltip",
+							Type:    definition.PluginSettingValueTableColumnTypeText,
+							Width:   85,
 						},
 						{
 							Key:   webSearchesTableColumnTitleSettingKey,
@@ -96,7 +98,7 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 							Key:   webSearchesTableColumnEnabledSettingKey,
 							Label: "i18n:plugin_websearch_enabled",
 							Type:  definition.PluginSettingValueTableColumnTypeCheckbox,
-							Width: 60,
+							Width: 75,
 						},
 					},
 				},

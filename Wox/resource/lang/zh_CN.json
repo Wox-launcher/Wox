@@ -23,8 +23,10 @@
   "plugin_sys_open_wox_settings": "打开Wox设置",
   "plugin_sys_open_system_settings": "打开系统设置",
   "plugin_websearch_trigger_keyword": "关键字",
+  "plugin_websearch_trigger_keyword_tooltip": "输入关键字触发网页搜索",
   "plugin_websearch_title": "标题",
-  "plugin_websearch_url": "网址",
+  "plugin_websearch_urls": "网址",
   "plugin_websearch_enabled": "启用",
-  "plugin_websearch_icon": "图标"
+  "plugin_websearch_icon": "图标",
+  "plugin_websearch_web_searches": "网页搜索"
 }

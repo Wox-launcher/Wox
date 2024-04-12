@@ -35,9 +35,9 @@ func init() {
 }
 
 type Plugin struct {
-	api    plugin.API
-	client Provider
-	model  chatgptModel
+	api      plugin.API
+	provider Provider
+	model    chatgptModel
 
 	nonActiveChats           []*Chat
 	activeChat               *Chat
@@ -108,9 +108,31 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
+				Type: definition.PluginSettingDefinitionTypeSelect,
+				Value: &definition.PluginSettingValueSelect{
+					Key:          "provider",
+					Label:        "Service Provider",
+					DefaultValue: string(chatgptModelProviderNameOpenAI),
+					Options: []definition.PluginSettingValueSelectOption{
+						{
+							Label: "OpenAI",
+							Value: string(chatgptModelProviderNameOpenAI),
+						},
+						{
+							Label: "Google",
+							Value: string(chatgptModelProviderNameGoogle),
+						},
+						{
+							Label: "Ollama",
+							Value: string(chatgptModelProviderNameOllama),
+						},
+					},
+				},
+			},
+			{
 				Type: definition.PluginSettingDefinitionTypeDynamic,
 				Value: &definition.PluginSettingValueDynamic{
-					Key: "models",
+					Key: "dynamic_models",
 				},
 			},
 			{
@@ -124,17 +146,15 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 				},
 			},
 			{
-				Type: definition.PluginSettingDefinitionTypeTextBox,
-				Value: &definition.PluginSettingValueTextBox{
-					Key:   "api_key",
-					Label: "API Key",
-					Width: 400,
+				Type: definition.PluginSettingDefinitionTypeDynamic,
+				Value: &definition.PluginSettingValueDynamic{
+					Key: "dynamic_host",
 				},
 			},
 			{
-				Type: definition.PluginSettingDefinitionTypeLabel,
-				Value: &definition.PluginSettingValueLabel{
-					Content: "label info",
+				Type: definition.PluginSettingDefinitionTypeDynamic,
+				Value: &definition.PluginSettingValueDynamic{
+					Key: "dynamic_api_key",
 				},
 			},
 		},
@@ -149,13 +169,20 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 func (c *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
 	c.api.OnGetDynamicSetting(ctx, func(key string) definition.PluginSettingDefinitionItem {
-		if key == "models" {
+		if key == "dynamic_models" {
+			var provider = c.api.GetSetting(ctx, "provider")
+			if provider == "" {
+				return definition.PluginSettingDefinitionItem{}
+			}
+
 			var options []definition.PluginSettingValueSelectOption
 			for _, model := range c.getAvailableModels(ctx) {
-				options = append(options, definition.PluginSettingValueSelectOption{
-					Label: model.DisplayName,
-					Value: model.Name,
-				})
+				if string(model.Provider) == provider {
+					options = append(options, definition.PluginSettingValueSelectOption{
+						Label: model.DisplayName,
+						Value: model.Name,
+					})
+				}
 			}
 
 			return definition.PluginSettingDefinitionItem{
@@ -168,6 +195,33 @@ func (c *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			}
 		}
 
+		if key == "dynamic_host" {
+			if c.api.GetSetting(ctx, "provider") == string(chatgptModelProviderNameOllama) {
+				return definition.PluginSettingDefinitionItem{
+					Type: definition.PluginSettingDefinitionTypeTextBox,
+					Value: &definition.PluginSettingValueTextBox{
+						Key:          "host",
+						Label:        "Host",
+						Width:        400,
+						DefaultValue: "http://localhost:11434",
+					},
+				}
+			}
+		}
+
+		if key == "dynamic_api_key" {
+			if c.api.GetSetting(ctx, "provider") != string(chatgptModelProviderNameOllama) {
+				return definition.PluginSettingDefinitionItem{
+					Type: definition.PluginSettingDefinitionTypeTextBox,
+					Value: &definition.PluginSettingValueTextBox{
+						Key:   "api_key",
+						Label: "API Key",
+						Width: 400,
+					},
+				}
+			}
+		}
+
 		return definition.PluginSettingDefinitionItem{}
 	})
 	c.loadClient(ctx)
@@ -176,7 +230,16 @@ func (c *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 
 func (c *Plugin) getAvailableModels(ctx context.Context) (models []chatgptModel) {
 	for _, providerName := range chatgptModelProviderNames {
-		if provider, providerErr := NewProvider(ctx, "", providerName); providerErr == nil {
+		if provider, providerErr := c.NewProvider(ctx, providerName); providerErr == nil {
+			// ollama need to connect first to get models
+			if providerName == chatgptModelProviderNameOllama {
+				connectErr := provider.Connect(ctx)
+				if connectErr != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to connect to %s: %s", providerName, connectErr.Error()))
+					continue
+				}
+			}
+
 			if providerModels, modelsErr := provider.Models(ctx); modelsErr == nil {
 				models = append(models, providerModels...)
 			} else {
@@ -196,29 +259,48 @@ func (c *Plugin) loadClient(ctx context.Context) {
 		c.api.Log(ctx, plugin.LogLevelWarning, "model is empty")
 		return
 	}
-	apiKey := c.api.GetSetting(ctx, "api_key")
-	if apiKey == "" {
-		c.api.Log(ctx, plugin.LogLevelWarning, "api_key is empty")
-		return
-	}
-
 	for _, availableModel := range c.getAvailableModels(ctx) {
 		if availableModel.Name == model {
-			client, clientErr := NewProvider(ctx, apiKey, availableModel.Provider)
-			if clientErr != nil {
-				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to create chatgpt client: %s", clientErr.Error()))
+			provider, providerErr := c.NewProvider(ctx, availableModel.Provider)
+			if providerErr != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to create chatgpt provider: %s", providerErr.Error()))
 			} else {
-				c.client = client
+				connectErr := provider.Connect(ctx)
+				if connectErr != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to connect to chatgpt provider: %s", connectErr.Error()))
+					return
+				}
+
+				c.provider = provider
 				c.model = availableModel
-				c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("chatgpt client created with model: %s", model))
+				c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("chatgpt provider created with model: %s", model))
 			}
 			break
 		}
 	}
 }
 
+func (c *Plugin) NewProvider(ctx context.Context, provider chatgptModelProviderName) (Provider, error) {
+	connectContext := chatgptProviderConnectContext{
+		ApiKey: c.api.GetSetting(ctx, "api_key"),
+		Host:   c.api.GetSetting(ctx, "host"),
+	}
+
+	if provider == chatgptModelProviderNameGoogle {
+		return NewGoogleProvider(ctx, connectContext), nil
+	}
+	if provider == chatgptModelProviderNameOpenAI {
+		return NewOpenAIClient(ctx, connectContext), nil
+	}
+	if provider == chatgptModelProviderNameOllama {
+		return NewOllamaProvider(ctx, connectContext), nil
+	}
+
+	return nil, errors.New("unknown model provider")
+}
+
 func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	if c.client == nil {
+	if c.provider == nil {
 		return []plugin.QueryResult{
 			{
 				Title:    "Provider not initialized",
@@ -525,7 +607,7 @@ func (c *Plugin) generateGptResultRefresh(ctx context.Context, conversations []C
 			startTime := util.GetSystemTimestamp()
 			c.api.Log(ctx, plugin.LogLevelInfo, "creating stream")
 			creatingStream = true
-			createdStream, createErr := c.client.ChatStream(ctx, c.model, conversations)
+			createdStream, createErr := c.provider.ChatStream(ctx, c.model, conversations)
 			creatingStream = false
 			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("created stream (cost %d ms)", util.GetSystemTimestamp()-startTime))
 			if createErr != nil {
@@ -538,7 +620,7 @@ func (c *Plugin) generateGptResultRefresh(ctx context.Context, conversations []C
 			stream = createdStream
 		}
 
-		c.api.Log(ctx, plugin.LogLevelInfo, "reading stream")
+		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("reading stream, model=%s", c.model.Name))
 		response, streamErr := stream.Receive()
 		if errors.Is(streamErr, io.EOF) {
 			c.api.Log(ctx, plugin.LogLevelInfo, "read stream completed")
@@ -700,7 +782,7 @@ func (c *Plugin) summaryChatTitle(ctx context.Context, conversations []Conversat
 		})
 	}
 
-	resp, err := c.client.Chat(ctx, c.model, finalConversations)
+	resp, err := c.provider.Chat(ctx, c.model, finalConversations)
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to summary chat title: %s", err.Error()))
 		return "", err

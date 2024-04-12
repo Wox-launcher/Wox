@@ -11,8 +11,8 @@ import (
 )
 
 type GoogleProvider struct {
-	apiKey string
-	client *genai.Client
+	connectContext chatgptProviderConnectContext
+	client         *genai.Client
 }
 
 type GoogleProviderStream struct {
@@ -20,12 +20,12 @@ type GoogleProviderStream struct {
 	conversations []Conversation
 }
 
-func NewGoogleProvider(ctx context.Context, apiKey string) (Provider, error) {
-	return &GoogleProvider{apiKey: apiKey}, nil
+func NewGoogleProvider(ctx context.Context, connectContext chatgptProviderConnectContext) Provider {
+	return &GoogleProvider{connectContext: connectContext}
 }
 
 func (g *GoogleProvider) Connect(ctx context.Context) error {
-	client, newClientErr := genai.NewClient(ctx, option.WithAPIKey(g.apiKey))
+	client, newClientErr := genai.NewClient(ctx, option.WithAPIKey(g.connectContext.ApiKey))
 	if newClientErr != nil {
 		return newClientErr
 	}

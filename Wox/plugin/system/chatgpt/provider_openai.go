@@ -7,8 +7,8 @@ import (
 )
 
 type OpenAIProvider struct {
-	apikey string
-	client *openai.Client
+	connectContext chatgptProviderConnectContext
+	client         *openai.Client
 }
 
 type OpenAIProviderStream struct {
@@ -16,12 +16,12 @@ type OpenAIProviderStream struct {
 	conversations []Conversation
 }
 
-func NewOpenAIClient(ctx context.Context, apiKey string) Provider {
-	return &OpenAIProvider{apikey: apiKey}
+func NewOpenAIClient(ctx context.Context, connectContext chatgptProviderConnectContext) Provider {
+	return &OpenAIProvider{connectContext: connectContext}
 }
 
 func (o *OpenAIProvider) Connect(ctx context.Context) error {
-	o.client = openai.NewClient(o.apikey)
+	o.client = openai.NewClient(o.connectContext.ApiKey)
 	return nil
 }
 
