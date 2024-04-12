@@ -9,7 +9,7 @@ import 'package:wox/utils/colors.dart';
 class WoxSettingThemeView extends GetView<WoxSettingController> {
   const WoxSettingThemeView({super.key});
 
-  Widget pluginList() {
+  Widget themeList() {
     return Column(
       children: [
         Padding(
@@ -271,7 +271,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
         children: [
           SizedBox(
             width: 300,
-            child: pluginList(),
+            child: themeList(),
           ),
           // This is your divider
           Container(

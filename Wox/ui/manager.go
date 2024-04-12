@@ -322,7 +322,7 @@ func (m *Manager) IsThemeUpgradable(id string, version string) bool {
 	if theme.ThemeId != "" {
 		existingVersion, existingErr := semver.NewVersion(theme.Version)
 		currentVersion, currentErr := semver.NewVersion(version)
-		if existingErr != nil && currentErr != nil {
+		if existingErr != nil && currentErr != nil && existingVersion != nil && currentVersion != nil {
 			if existingVersion.GreaterThan(currentVersion) {
 				return true
 			}
