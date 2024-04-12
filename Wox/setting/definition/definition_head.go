@@ -7,6 +7,7 @@ import (
 
 type PluginSettingValueHead struct {
 	Content string
+	Tooltip string
 	Style   PluginSettingValueStyle
 }
 

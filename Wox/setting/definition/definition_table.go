@@ -17,6 +17,7 @@ type PluginSettingValueTable struct {
 	Key          string
 	DefaultValue string
 	Title        string
+	Tooltip      string
 	Columns      []PluginSettingValueTableColumn
 
 	Style PluginSettingValueStyle

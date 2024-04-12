@@ -7,6 +7,7 @@ type PluginSettingValueTextBox struct {
 	Label        string
 	Suffix       string
 	DefaultValue string
+	Tooltip      string
 
 	Style PluginSettingValueStyle
 }

@@ -7,6 +7,7 @@ class PluginSettingValueTable {
   late String key;
   late String defaultValue;
   late String title;
+  late String tooltip;
   late List<PluginSettingValueTableColumn> columns;
   late PluginSettingValueStyle style;
 
@@ -14,6 +15,7 @@ class PluginSettingValueTable {
     key = json['Key'];
     defaultValue = json['DefaultValue'];
     title = json['Title'] ?? "";
+    tooltip = json['Tooltip'] ?? "";
     if (json['Columns'] != null) {
       columns = (json['Columns'] as List).map((e) => PluginSettingValueTableColumn.fromJson(e)).toList();
     } else {

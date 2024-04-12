@@ -5,6 +5,7 @@ class PluginSettingValueSelect {
   late String label;
   late String suffix;
   late String defaultValue;
+  late String tooltip;
   late List<PluginSettingValueSelectOption> options;
   late PluginSettingValueStyle style;
 
@@ -13,6 +14,7 @@ class PluginSettingValueSelect {
     label = json['Label'];
     suffix = json['Suffix'];
     defaultValue = json['DefaultValue'];
+    tooltip = json['Tooltip'];
     if (json['Options'] != null) {
       options = (json['Options'] as List).map((e) => PluginSettingValueSelectOption.fromJson(e)).toList();
     } else {

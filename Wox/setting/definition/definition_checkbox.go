@@ -6,6 +6,7 @@ type PluginSettingValueCheckBox struct {
 	Key          string
 	Label        string
 	DefaultValue string
+	Tooltip      string
 	Style        PluginSettingValueStyle
 }
 

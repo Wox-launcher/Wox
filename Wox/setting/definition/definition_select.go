@@ -7,6 +7,7 @@ type PluginSettingValueSelect struct {
 	Label        string
 	Suffix       string
 	DefaultValue string
+	Tooltip      string
 	Options      []PluginSettingValueSelectOption
 
 	Style PluginSettingValueStyle
