@@ -8,6 +8,8 @@ require (
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/cdfmlr/ellipsis v0.0.1
 	github.com/disintegration/imaging v1.6.2
+	github.com/djherbis/buffer v1.2.0
+	github.com/djherbis/nio/v3 v3.0.1
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/gen2brain/beeep v0.0.0-20240112042604-c7bb2cd88fea
 	github.com/go-resty/resty/v2 v2.12.0

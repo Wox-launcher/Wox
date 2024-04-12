@@ -13,23 +13,20 @@ class WoxSettingPluginSelect extends WoxSettingPluginItem {
   Widget build(BuildContext context) {
     return layout(
       children: [
-        if (item.label != "") Text(item.label),
-        Padding(
-          padding: const EdgeInsets.only(left: 3, right: 3),
-          child: ComboBox<String>(
-            value: getSetting(item.key),
-            items: item.options.map((e) {
-              return ComboBoxItem(
-                value: e.value,
-                child: Text(e.label),
-              );
-            }).toList(),
-            onChanged: (v) {
-              updateConfig(item.key, v ?? "");
-            },
-          ),
+        label(item.label, item.style),
+        ComboBox<String>(
+          value: getSetting(item.key),
+          items: item.options.map((e) {
+            return ComboBoxItem(
+              value: e.value,
+              child: Text(e.label),
+            );
+          }).toList(),
+          onChanged: (v) {
+            updateConfig(item.key, v ?? "");
+          },
         ),
-        if (item.suffix != "") Text(item.suffix),
+        suffix(item.suffix),
       ],
       style: item.style,
     );

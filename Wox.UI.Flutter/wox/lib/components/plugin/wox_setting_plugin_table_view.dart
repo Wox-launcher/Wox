@@ -35,8 +35,6 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                     column.label,
                     style: const TextStyle(
                       overflow: TextOverflow.ellipsis,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
@@ -51,8 +49,6 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                   "Operation",
                   style: TextStyle(
                     overflow: TextOverflow.ellipsis,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
@@ -175,10 +171,6 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 padding: const EdgeInsets.all(8),
                 child: Text(
                   item.title,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
                 ),
               ),
               HyperlinkButton(

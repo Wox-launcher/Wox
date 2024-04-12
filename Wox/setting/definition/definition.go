@@ -43,6 +43,9 @@ type PluginSettingValueStyle struct {
 	PaddingTop    int
 	PaddingRight  int
 	PaddingBottom int
+
+	Width      int
+	LabelWidth int // if has label, E.g. select, checkbox, textbox
 }
 
 func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {

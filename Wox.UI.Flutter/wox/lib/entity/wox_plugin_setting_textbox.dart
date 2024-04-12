@@ -5,7 +5,6 @@ class PluginSettingValueTextBox {
   late String label;
   late String suffix;
   late String defaultValue;
-  late int width;
 
   late PluginSettingValueStyle style;
 
@@ -14,7 +13,6 @@ class PluginSettingValueTextBox {
     label = json['Label'];
     suffix = json['Suffix'];
     defaultValue = json['DefaultValue'];
-    width = json['Width'];
 
     if (json['Style'] != null) {
       style = PluginSettingValueStyle.fromJson(json['Style']);

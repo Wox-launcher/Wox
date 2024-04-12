@@ -369,7 +369,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     });
                   }
 
-                  return Text(e.type + " not spdr2d");
+                  return Text(e.type + " not dspd dsss");
                 },
               )
             ],

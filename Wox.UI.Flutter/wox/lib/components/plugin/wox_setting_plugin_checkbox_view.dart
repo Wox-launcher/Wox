@@ -12,8 +12,7 @@ class WoxSettingPluginCheckbox extends WoxSettingPluginItem {
   Widget build(BuildContext context) {
     return layout(
       children: [
-        Text(item.label),
-        const SizedBox(width: 10),
+        label(item.label, item.style),
         ToggleSwitch(
           checked: getSetting(item.key) == "true",
           onChanged: (value) {

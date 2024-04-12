@@ -5,11 +5,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"testing"
 	"wox/plugin"
+	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
 )
 
 type emptyAPIImpl struct {
+}
+
+func (e emptyAPIImpl) OnGetDynamicSetting(ctx context.Context, callback func(key string) definition.PluginSettingDefinitionItem) {
 }
 
 func (e emptyAPIImpl) ChangeQuery(ctx context.Context, query share.ChangedQuery) {

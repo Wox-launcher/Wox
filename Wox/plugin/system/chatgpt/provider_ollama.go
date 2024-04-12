@@ -3,6 +3,9 @@ package chatgpt
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/djherbis/buffer"
+	"github.com/djherbis/nio/v3"
 	"github.com/tidwall/gjson"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/ollama"
@@ -45,21 +48,22 @@ func (o *OllamaProvider) ChatStream(ctx context.Context, model chatgptModel, con
 		return nil, clientErr
 	}
 
-	reader, writer := io.Pipe()
-
+	buf := buffer.New(4 * 1024) // 4KB In memory Buffer
+	r, w := nio.Pipe(buf)
 	util.Go(ctx, "ollama chat stream", func() {
 		_, err := client.GenerateContent(ctx, o.convertConversations(conversations), llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-			writer.Write(chunk)
+			util.GetLogger().Debug(ctx, fmt.Sprintf("OLLAMA: Received chunk: %s", string(chunk)))
+			w.Write(chunk)
 			return nil
 		}))
 		if err != nil {
-			writer.CloseWithError(err)
+			w.CloseWithError(err)
 		} else {
-			writer.Close()
+			w.Close()
 		}
 	})
 
-	return &OllamaProviderStream{conversations: conversations, reader: reader}, nil
+	return &OllamaProviderStream{conversations: conversations, reader: r}, nil
 }
 
 func (o *OllamaProvider) Chat(ctx context.Context, model chatgptModel, conversations []Conversation) (string, error) {
@@ -108,7 +112,7 @@ func (o *OllamaProvider) convertConversations(conversations []Conversation) (cha
 }
 
 func (s *OllamaProviderStream) Receive() (string, error) {
-	buf := make([]byte, 1024)
+	buf := make([]byte, 2048)
 	n, err := s.reader.Read(buf)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -117,7 +121,9 @@ func (s *OllamaProviderStream) Receive() (string, error) {
 		return "", err
 	}
 
-	return string(buf[:n]), nil
+	resp := string(buf[:n])
+	util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("OLLAMA: Send response: %s", resp))
+	return resp, nil
 }
 
 func (s *OllamaProviderStream) Close() {

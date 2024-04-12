@@ -46,6 +46,8 @@ class PluginSettingValueStyle {
   late double paddingTop;
   late double paddingRight;
   late double paddingBottom;
+  late double width;
+  late double labelWidth;
 
   PluginSettingValueStyle.fromJson(Map<String, dynamic> json) {
     if (json['PaddingLeft'] == null) {
@@ -70,6 +72,18 @@ class PluginSettingValueStyle {
       paddingBottom = 0;
     } else {
       paddingBottom = (json['PaddingBottom'] as int).toDouble();
+    }
+
+    if (json['Width'] == null) {
+      width = 0;
+    } else {
+      width = (json['Width'] as int).toDouble();
+    }
+
+    if (json['LabelWidth'] == null) {
+      labelWidth = 0;
+    } else {
+      labelWidth = (json['LabelWidth'] as int).toDouble();
     }
   }
 

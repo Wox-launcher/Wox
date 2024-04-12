@@ -41,4 +41,36 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
 
     return withFlexible(children);
   }
+
+  Widget label(String text, PluginSettingValueStyle style) {
+    if (text != "") {
+      if (style.labelWidth > 0) {
+        return Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: SizedBox(
+            width: style.labelWidth,
+            child: Text(text, style: const TextStyle(overflow: TextOverflow.ellipsis), textAlign: TextAlign.right),
+          ),
+        );
+      } else {
+        return Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: Text(text),
+        );
+      }
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  Widget suffix(String text) {
+    if (text != "") {
+      return Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: Text(text),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
 }
