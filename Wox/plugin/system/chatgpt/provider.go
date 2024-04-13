@@ -32,6 +32,6 @@ type Provider interface {
 }
 
 type ProviderChatStream interface {
-	Receive() (string, error) // will return io.EOF if no more messages
-	Close()
+	Receive(ctx context.Context) (string, error) // will return io.EOF if no more messages
+	Close(ctx context.Context)
 }

@@ -8,11 +8,13 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"io"
+	"wox/plugin"
 )
 
 type GoogleProvider struct {
 	connectContext chatgptProviderConnectContext
 	client         *genai.Client
+	api            plugin.API
 }
 
 type GoogleProviderStream struct {
@@ -20,8 +22,8 @@ type GoogleProviderStream struct {
 	conversations []Conversation
 }
 
-func NewGoogleProvider(ctx context.Context, connectContext chatgptProviderConnectContext) Provider {
-	return &GoogleProvider{connectContext: connectContext}
+func NewGoogleProvider(ctx context.Context, connectContext chatgptProviderConnectContext, api plugin.API) Provider {
+	return &GoogleProvider{connectContext: connectContext, api: api}
 }
 
 func (g *GoogleProvider) Connect(ctx context.Context) error {
@@ -79,7 +81,7 @@ func (g *GoogleProvider) Models(ctx context.Context) ([]chatgptModel, error) {
 	}, nil
 }
 
-func (g *GoogleProviderStream) Receive() (string, error) {
+func (g *GoogleProviderStream) Receive(ctx context.Context) (string, error) {
 	response, err := g.stream.Next()
 	if err != nil {
 		// no more messages
@@ -107,7 +109,7 @@ func (g *GoogleProviderStream) Receive() (string, error) {
 	return "", errors.New("no text in response")
 }
 
-func (g *GoogleProviderStream) Close() {
+func (g *GoogleProviderStream) Close(ctx context.Context) {
 	// no-op
 }
 

@@ -379,10 +379,11 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "PickFiles") {
       final pickFilesParams = PickFilesParams.fromJson(msg.data);
-      final files = await pickFiles(msg.traceId, pickFilesParams);
+        final files = await pickFiles(msg.traceId, pickFilesParams);
       responseWoxWebsocketRequest(msg, true, files);
     } else if (msg.method == "OpenSettingWindow") {
       isInSettingView.value = true;
+      responseWoxWebsocketRequest(msg, true, null);
     }
   }
 

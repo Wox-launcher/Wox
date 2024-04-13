@@ -1,15 +1,18 @@
 import 'dart:convert';
 
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_plugin_setting_table.dart';
 import 'package:flutter/material.dart' as material;
 
 import 'wox_setting_plugin_item_view.dart';
+import 'wox_setting_plugin_table_update_view.dart';
 
 class WoxSettingPluginTable extends WoxSettingPluginItem {
   final PluginSettingValueTable item;
+  static const String rowUniqueIdKey = "wox_table_row_id";
 
   const WoxSettingPluginTable(super.plugin, this.item, super.onUpdate, {super.key, required});
 
@@ -67,6 +70,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeText) {
       return Text(
         value,
+        style: const TextStyle(
+          overflow: TextOverflow.ellipsis,
+        ),
       );
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeCheckbox) {
@@ -99,7 +105,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     return Text("Unknown column type: ${column.type}");
   }
 
-  Widget buildRows() {
+  Widget buildRows(BuildContext context) {
     var rowsJson = getSetting(item.key);
     if (rowsJson == "") {
       return const Padding(
@@ -114,6 +120,11 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     }
 
     var rows = json.decode(rowsJson);
+    //give each row a unique key
+    for (var row in rows) {
+      row[rowUniqueIdKey] = const UuidV4().generate();
+    }
+
     return Column(
       children: [
         for (var row in rows)
@@ -136,11 +147,53 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                       child: Row(
                         children: [
                           HyperlinkButton(
-                            onPressed: () {},
+                            onPressed: () {
+                              showDialog(
+                                  context: context,
+                                  builder: (context) {
+                                    return WoxSettingPluginTableUpdate(
+                                      plugin: plugin,
+                                      item: item,
+                                      row: row,
+                                      onUpdate: (key, value) {
+                                        var rowsJson = getSetting(key);
+                                        if (rowsJson == "") {
+                                          rowsJson = "[]";
+                                        }
+                                        for (var i = 0; i < rows.length; i++) {
+                                          if (rows[i][rowUniqueIdKey] == value[rowUniqueIdKey]) {
+                                            rows[i] = value;
+                                            break;
+                                          }
+                                        }
+
+                                        //remove the unique key
+                                        rows.forEach((element) {
+                                          element.remove(rowUniqueIdKey);
+                                        });
+
+                                        updateConfig(key, json.encode(rows));
+                                      },
+                                    );
+                                  });
+                            },
                             child: const Icon(material.Icons.edit),
                           ),
                           HyperlinkButton(
-                            onPressed: () {},
+                            onPressed: () {
+                              var rowsJson = getSetting(item.key);
+                              if (rowsJson == "") {
+                                rowsJson = "[]";
+                              }
+                              rows.removeWhere((element) => element[rowUniqueIdKey] == row[rowUniqueIdKey]);
+
+                              //remove the unique key
+                              rows.forEach((element) {
+                                element.remove(rowUniqueIdKey);
+                              });
+
+                              updateConfig(item.key, json.encode(rows));
+                            },
                             child: const Icon(material.Icons.delete),
                           ),
                         ],
@@ -174,7 +227,31 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 ),
               ),
               HyperlinkButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    showDialog(
+                        context: context,
+                        builder: (context) {
+                          return WoxSettingPluginTableUpdate(
+                            plugin: plugin,
+                            item: item,
+                            row: const {},
+                            onUpdate: (key, row) {
+                              var rowsJson = getSetting(key);
+                              if (rowsJson == "") {
+                                rowsJson = "[]";
+                              }
+                              var rows = json.decode(rowsJson);
+                              rows.add(row);
+                              //remove the unique key
+                              rows.forEach((element) {
+                                element.remove(rowUniqueIdKey);
+                              });
+
+                              updateConfig(key, json.encode(rows));
+                            },
+                          );
+                        });
+                  },
                   child: const Row(
                     children: [
                       Icon(material.Icons.add),
@@ -190,7 +267,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
             child: layout(
               children: [
                 buildHeader(),
-                buildRows(),
+                buildRows(context),
               ],
               style: item.style,
             ),

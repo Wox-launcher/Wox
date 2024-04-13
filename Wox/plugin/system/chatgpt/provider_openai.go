@@ -4,11 +4,13 @@ import (
 	"context"
 	"github.com/sashabaranov/go-openai"
 	"io"
+	"wox/plugin"
 )
 
 type OpenAIProvider struct {
 	connectContext chatgptProviderConnectContext
 	client         *openai.Client
+	api            plugin.API
 }
 
 type OpenAIProviderStream struct {
@@ -16,8 +18,8 @@ type OpenAIProviderStream struct {
 	conversations []Conversation
 }
 
-func NewOpenAIClient(ctx context.Context, connectContext chatgptProviderConnectContext) Provider {
-	return &OpenAIProvider{connectContext: connectContext}
+func NewOpenAIClient(ctx context.Context, connectContext chatgptProviderConnectContext, api plugin.API) Provider {
+	return &OpenAIProvider{connectContext: connectContext, api: api}
 }
 
 func (o *OpenAIProvider) Connect(ctx context.Context) error {
@@ -64,7 +66,7 @@ func (o *OpenAIProvider) Models(ctx context.Context) ([]chatgptModel, error) {
 	}, nil
 }
 
-func (s *OpenAIProviderStream) Receive() (string, error) {
+func (s *OpenAIProviderStream) Receive(ctx context.Context) (string, error) {
 	response, err := s.stream.Recv()
 	if err != nil {
 		// no more messages
@@ -81,7 +83,7 @@ func (s *OpenAIProviderStream) Receive() (string, error) {
 	return response.Choices[0].Delta.Content, nil
 }
 
-func (s *OpenAIProviderStream) Close() {
+func (s *OpenAIProviderStream) Close(ctx context.Context) {
 	s.stream.Close()
 }
 

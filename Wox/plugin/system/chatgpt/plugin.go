@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/sashabaranov/go-openai"
+	"github.com/tidwall/gjson"
 	"github.com/xeonx/timeago"
 	"io"
 	"sort"
@@ -176,9 +177,10 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 							Type:  definition.PluginSettingValueTableColumnTypeText,
 						},
 						{
-							Key:   "prompt",
-							Label: "Prompt",
-							Type:  definition.PluginSettingValueTableColumnTypeText,
+							Key:          "prompt",
+							Label:        "Prompt",
+							Type:         definition.PluginSettingValueTableColumnTypeText,
+							TextMaxLines: 10,
 						},
 					},
 				},
@@ -195,72 +197,96 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 func (c *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
 	c.api.OnGetDynamicSetting(ctx, func(key string) definition.PluginSettingDefinitionItem {
-		if key == "dynamic_models" {
-			var provider = c.api.GetSetting(ctx, "provider")
-			if provider == "" {
-				return definition.PluginSettingDefinitionItem{}
-			}
+		return c.getDynamicSetting(ctx, key)
+	})
+	c.api.OnSettingChanged(ctx, func(key string, value string) {
+		if key == "tools" {
+			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("tools setting changed: %s", value))
+			var commands []plugin.MetadataCommand
+			gjson.Parse(value).ForEach(func(_, command gjson.Result) bool {
+				commands = append(commands, plugin.MetadataCommand{
+					Command:     command.Get("command").String(),
+					Description: command.Get("name").String(),
+				})
 
-			var options []definition.PluginSettingValueSelectOption
-			for _, model := range c.getAvailableModels(ctx) {
-				if string(model.Provider) == provider {
-					options = append(options, definition.PluginSettingValueSelectOption{
-						Label: model.DisplayName,
-						Value: model.Name,
-					})
-				}
-			}
+				return true
+			})
+			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("registering query commands: %v", commands))
+			c.api.RegisterQueryCommands(ctx, commands)
+		}
+		if key == "provider" || key == "model" || key == "host" || key == "api_key" {
+			c.loadClient(ctx)
 
+		}
+	})
+	c.loadClient(ctx)
+	c.loadChats(ctx)
+}
+
+func (c *Plugin) getDynamicSetting(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
+	if key == "dynamic_models" {
+		var provider = c.api.GetSetting(ctx, "provider")
+		if provider == "" {
+			return definition.PluginSettingDefinitionItem{}
+		}
+
+		var options []definition.PluginSettingValueSelectOption
+		for _, model := range c.getAvailableModels(ctx) {
+			if string(model.Provider) == provider {
+				options = append(options, definition.PluginSettingValueSelectOption{
+					Label: model.DisplayName,
+					Value: model.Name,
+				})
+			}
+		}
+
+		return definition.PluginSettingDefinitionItem{
+			Type: definition.PluginSettingDefinitionTypeSelect,
+			Value: &definition.PluginSettingValueSelect{
+				Key:     "model",
+				Label:   "Model",
+				Options: options,
+				Style: definition.PluginSettingValueStyle{
+					LabelWidth: chatgptLabelWidth,
+				},
+			},
+		}
+	}
+
+	if key == "dynamic_host" {
+		if c.api.GetSetting(ctx, "provider") == string(chatgptModelProviderNameOllama) {
 			return definition.PluginSettingDefinitionItem{
-				Type: definition.PluginSettingDefinitionTypeSelect,
-				Value: &definition.PluginSettingValueSelect{
-					Key:     "model",
-					Label:   "Model",
-					Options: options,
+				Type: definition.PluginSettingDefinitionTypeTextBox,
+				Value: &definition.PluginSettingValueTextBox{
+					Key:          "host",
+					Label:        "Host",
+					DefaultValue: "http://localhost:11434",
 					Style: definition.PluginSettingValueStyle{
+						Width:      300,
 						LabelWidth: chatgptLabelWidth,
 					},
 				},
 			}
 		}
+	}
 
-		if key == "dynamic_host" {
-			if c.api.GetSetting(ctx, "provider") == string(chatgptModelProviderNameOllama) {
-				return definition.PluginSettingDefinitionItem{
-					Type: definition.PluginSettingDefinitionTypeTextBox,
-					Value: &definition.PluginSettingValueTextBox{
-						Key:          "host",
-						Label:        "Host",
-						DefaultValue: "http://localhost:11434",
-						Style: definition.PluginSettingValueStyle{
-							Width:      300,
-							LabelWidth: chatgptLabelWidth,
-						},
+	if key == "dynamic_api_key" {
+		if c.api.GetSetting(ctx, "provider") != string(chatgptModelProviderNameOllama) {
+			return definition.PluginSettingDefinitionItem{
+				Type: definition.PluginSettingDefinitionTypeTextBox,
+				Value: &definition.PluginSettingValueTextBox{
+					Key:   "api_key",
+					Label: "API Key",
+					Style: definition.PluginSettingValueStyle{
+						Width:      chatgptLabelWidth,
+						LabelWidth: chatgptLabelWidth,
 					},
-				}
+				},
 			}
 		}
+	}
 
-		if key == "dynamic_api_key" {
-			if c.api.GetSetting(ctx, "provider") != string(chatgptModelProviderNameOllama) {
-				return definition.PluginSettingDefinitionItem{
-					Type: definition.PluginSettingDefinitionTypeTextBox,
-					Value: &definition.PluginSettingValueTextBox{
-						Key:   "api_key",
-						Label: "API Key",
-						Style: definition.PluginSettingValueStyle{
-							Width:      chatgptLabelWidth,
-							LabelWidth: chatgptLabelWidth,
-						},
-					},
-				}
-			}
-		}
-
-		return definition.PluginSettingDefinitionItem{}
-	})
-	c.loadClient(ctx)
-	c.loadChats(ctx)
+	return definition.PluginSettingDefinitionItem{}
 }
 
 func (c *Plugin) getAvailableModels(ctx context.Context) (models []chatgptModel) {
@@ -300,6 +326,16 @@ func (c *Plugin) loadClient(ctx context.Context) {
 			if providerErr != nil {
 				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to create chatgpt provider: %s", providerErr.Error()))
 			} else {
+				//close previous provider
+				if c.provider != nil {
+					closeErr := c.provider.Close(ctx)
+					if closeErr != nil {
+						c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to close chatgpt provider: %s", closeErr.Error()))
+					} else {
+						c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("chatgpt provider closed, model: %s", c.model.Name))
+					}
+				}
+
 				connectErr := provider.Connect(ctx)
 				if connectErr != nil {
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to connect to chatgpt provider: %s", connectErr.Error()))
@@ -322,13 +358,13 @@ func (c *Plugin) NewProvider(ctx context.Context, provider chatgptModelProviderN
 	}
 
 	if provider == chatgptModelProviderNameGoogle {
-		return NewGoogleProvider(ctx, connectContext), nil
+		return NewGoogleProvider(ctx, connectContext, c.api), nil
 	}
 	if provider == chatgptModelProviderNameOpenAI {
-		return NewOpenAIClient(ctx, connectContext), nil
+		return NewOpenAIClient(ctx, connectContext, c.api), nil
 	}
 	if provider == chatgptModelProviderNameOllama {
-		return NewOllamaProvider(ctx, connectContext), nil
+		return NewOllamaProvider(ctx, connectContext, c.api), nil
 	}
 
 	return nil, errors.New("unknown model provider")
@@ -571,57 +607,76 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 		}
 	}
 
-	//TODO: need a simple way to read user settings
-	var prompts []string
-	commandContent := c.api.GetSetting(ctx, fmt.Sprintf("command_key_%s", query.Command))
-	if commandContent != "" {
-		prompts = strings.Split(commandContent, "|")
+	toolSettings := c.api.GetSetting(ctx, "tools")
+	if toolSettings == "" {
+		return []plugin.QueryResult{
+			{
+				Title: "No tools found",
+				Icon:  chatgptIcon,
+			},
+		}
 	}
 
-	if len(prompts) > 0 {
-		var conversations []Conversation
-		for index, message := range prompts {
-			msg := fmt.Sprintf(message, query.Search)
-			if index%2 == 0 {
-				conversations = append(conversations, Conversation{
-					Role: ConversationRoleUser,
-					Text: msg,
-				})
-			} else {
-				conversations = append(conversations, Conversation{
-					Role: ConversationRoleSystem,
-					Text: msg,
-				})
-			}
+	promptResult := gjson.Parse(toolSettings).Get(fmt.Sprintf("#(command==\"%s\").prompt", query.Command))
+	if !promptResult.Exists() {
+		return []plugin.QueryResult{
+			{
+				Title: "No command found",
+				Icon:  chatgptIcon,
+			},
 		}
-
-		onAnswering := func(current plugin.RefreshableResult, deltaAnswer string) plugin.RefreshableResult {
-			current.Icon = chatgptLoadingIcon
-			current.Preview.PreviewData += deltaAnswer
-			return current
-		}
-		onAnswerErr := func(current plugin.RefreshableResult, err error) plugin.RefreshableResult {
-			current.Icon = chatgptIcon
-			current.Preview.PreviewData += fmt.Sprintf("\n\nError: %s", err.Error())
-			current.RefreshInterval = 0 // stop refreshing
-			return current
-		}
-		onAnswerFinished := func(current plugin.RefreshableResult) plugin.RefreshableResult {
-			current.Icon = chatgptIcon
-			current.RefreshInterval = 0 // stop refreshing
-			return current
-		}
-
-		return []plugin.QueryResult{{
-			Title:           fmt.Sprintf("Chat with %s", query.Command),
-			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
-			Icon:            chatgptLoadingIcon,
-			RefreshInterval: 100,
-			OnRefresh:       c.generateGptResultRefresh(ctx, conversations, onAnswering, onAnswerErr, onAnswerFinished),
-		}}
 	}
 
-	return []plugin.QueryResult{}
+	if promptResult.String() == "" {
+		return []plugin.QueryResult{
+			{
+				Title: "No prompt found for this command",
+				Icon:  chatgptIcon,
+			},
+		}
+	}
+
+	var prompts = strings.Split(promptResult.String(), "|")
+	var conversations []Conversation
+	for index, message := range prompts {
+		msg := fmt.Sprintf(message, query.Search)
+		if index%2 == 0 {
+			conversations = append(conversations, Conversation{
+				Role: ConversationRoleUser,
+				Text: msg,
+			})
+		} else {
+			conversations = append(conversations, Conversation{
+				Role: ConversationRoleSystem,
+				Text: msg,
+			})
+		}
+	}
+
+	onAnswering := func(current plugin.RefreshableResult, deltaAnswer string) plugin.RefreshableResult {
+		current.Icon = chatgptLoadingIcon
+		current.Preview.PreviewData += deltaAnswer
+		return current
+	}
+	onAnswerErr := func(current plugin.RefreshableResult, err error) plugin.RefreshableResult {
+		current.Icon = chatgptIcon
+		current.Preview.PreviewData += fmt.Sprintf("\n\nError: %s", err.Error())
+		current.RefreshInterval = 0 // stop refreshing
+		return current
+	}
+	onAnswerFinished := func(current plugin.RefreshableResult) plugin.RefreshableResult {
+		current.Icon = chatgptIcon
+		current.RefreshInterval = 0 // stop refreshing
+		return current
+	}
+
+	return []plugin.QueryResult{{
+		Title:           fmt.Sprintf("Chat with %s", query.Command),
+		Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
+		Icon:            chatgptLoadingIcon,
+		RefreshInterval: 100,
+		OnRefresh:       c.generateGptResultRefresh(ctx, conversations, onAnswering, onAnswerErr, onAnswerFinished),
+	}}
 }
 
 // generate a result which will send chat messages to openai and show the result automatically
@@ -656,10 +711,10 @@ func (c *Plugin) generateGptResultRefresh(ctx context.Context, conversations []C
 		}
 
 		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("reading stream, model=%s", c.model.Name))
-		response, streamErr := stream.Receive()
+		response, streamErr := stream.Receive(ctx)
 		if errors.Is(streamErr, io.EOF) {
 			c.api.Log(ctx, plugin.LogLevelInfo, "read stream completed")
-			stream.Close()
+			stream.Close(ctx)
 			if onAnswerFinished != nil {
 				current = onAnswerFinished(current)
 			}
@@ -669,7 +724,7 @@ func (c *Plugin) generateGptResultRefresh(ctx context.Context, conversations []C
 
 		if streamErr != nil {
 			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to read stream: %s", streamErr.Error()))
-			stream.Close()
+			stream.Close(ctx)
 			if onAnswerErr != nil {
 				current = onAnswerErr(current, streamErr)
 			}

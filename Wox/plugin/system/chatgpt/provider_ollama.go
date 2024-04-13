@@ -11,21 +11,24 @@ import (
 	"github.com/tmc/langchaingo/llms/ollama"
 	"github.com/tmc/langchaingo/schema"
 	"io"
+	"wox/plugin"
 	"wox/util"
 )
 
 type OllamaProvider struct {
 	connectContext chatgptProviderConnectContext
 	client         *ollama.LLM
+	api            plugin.API
 }
 
 type OllamaProviderStream struct {
 	conversations []Conversation
 	reader        io.Reader
+	api           plugin.API
 }
 
-func NewOllamaProvider(ctx context.Context, connectContext chatgptProviderConnectContext) Provider {
-	return &OllamaProvider{connectContext: connectContext}
+func NewOllamaProvider(ctx context.Context, connectContext chatgptProviderConnectContext, api plugin.API) Provider {
+	return &OllamaProvider{connectContext: connectContext, api: api}
 }
 
 func (o *OllamaProvider) Connect(ctx context.Context) error {
@@ -52,7 +55,7 @@ func (o *OllamaProvider) ChatStream(ctx context.Context, model chatgptModel, con
 	r, w := nio.Pipe(buf)
 	util.Go(ctx, "ollama chat stream", func() {
 		_, err := client.GenerateContent(ctx, o.convertConversations(conversations), llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-			util.GetLogger().Debug(ctx, fmt.Sprintf("OLLAMA: Received chunk: %s", string(chunk)))
+			o.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("OLLAMA: receive chunks from model: %s", string(chunk)))
 			w.Write(chunk)
 			return nil
 		}))
@@ -63,7 +66,7 @@ func (o *OllamaProvider) ChatStream(ctx context.Context, model chatgptModel, con
 		}
 	})
 
-	return &OllamaProviderStream{conversations: conversations, reader: r}, nil
+	return &OllamaProviderStream{conversations: conversations, reader: r, api: o.api}, nil
 }
 
 func (o *OllamaProvider) Chat(ctx context.Context, model chatgptModel, conversations []Conversation) (string, error) {
@@ -111,7 +114,7 @@ func (o *OllamaProvider) convertConversations(conversations []Conversation) (cha
 	return chatMessages
 }
 
-func (s *OllamaProviderStream) Receive() (string, error) {
+func (s *OllamaProviderStream) Receive(ctx context.Context) (string, error) {
 	buf := make([]byte, 2048)
 	n, err := s.reader.Read(buf)
 	if err != nil {
@@ -126,6 +129,6 @@ func (s *OllamaProviderStream) Receive() (string, error) {
 	return resp, nil
 }
 
-func (s *OllamaProviderStream) Close() {
+func (s *OllamaProviderStream) Close(ctx context.Context) {
 	// no-op
 }

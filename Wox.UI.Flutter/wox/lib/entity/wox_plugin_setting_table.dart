@@ -44,8 +44,9 @@ class PluginSettingValueTableColumn {
   late String label;
   late String tooltip;
   late int width;
-  late String type;
+  late String type; //see PluginSettingValueType
   late List<PluginSettingValueSelectOption> selectOptions; // Only used when Type is PluginSettingValueTableColumnTypeSelect
+  late int textMaxLines; // Only used when Type is PluginSettingValueTableColumnTypeText
 
   PluginSettingValueTableColumn.fromJson(Map<String, dynamic> json) {
     key = json['Key'];
@@ -57,6 +58,10 @@ class PluginSettingValueTableColumn {
       selectOptions = (json['SelectOptions'] as List).map((e) => PluginSettingValueSelectOption.fromJson(e)).toList();
     } else {
       selectOptions = [];
+    }
+    textMaxLines = json['TextMaxLines'] ?? 1;
+    if (textMaxLines < 1) {
+      textMaxLines = 1;
     }
   }
 }

@@ -30,6 +30,7 @@ type PluginSettingValueTableColumn struct {
 	Width         int
 	Type          PluginSettingValueTableColumnType
 	SelectOptions []PluginSettingValueSelectOption // Only used when Type is PluginSettingValueTableColumnTypeSelect
+	TextMaxLines  int                              // Only used when Type is PluginSettingValueTableColumnTypeText
 }
 
 func (p *PluginSettingValueTable) GetPluginSettingType() PluginSettingDefinitionType {
