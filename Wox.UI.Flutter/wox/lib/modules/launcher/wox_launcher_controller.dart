@@ -24,6 +24,7 @@ import 'package:wox/enums/wox_selection_type_enum.dart';
 import 'package:wox/interfaces/wox_launcher_interface.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 
@@ -291,18 +292,6 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   @override
-  Future<List<String>> pickFiles(String traceId, PickFilesParams params) async {
-    if (params.isDirectory) {
-      String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
-      if (selectedDirectory != null) {
-        return [selectedDirectory];
-      }
-    }
-
-    return [];
-  }
-
-  @override
   void onQueryActionChanged(String traceId, String queryAction) {
     filterResultActions.value = _resultActions.where((element) => transferChineseToPinYin(element.name.toLowerCase()).contains(queryAction.toLowerCase())).toList().obs();
     filterResultActions.refresh();
@@ -378,8 +367,8 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       woxTheme.value = theme;
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "PickFiles") {
-      final pickFilesParams = PickFilesParams.fromJson(msg.data);
-        final files = await pickFiles(msg.traceId, pickFilesParams);
+      final pickFilesParams = FileSelectorParams.fromJson(msg.data);
+      final files = await FileSelector.pick(msg.traceId, pickFilesParams);
       responseWoxWebsocketRequest(msg, true, files);
     } else if (msg.method == "OpenSettingWindow") {
       isInSettingView.value = true;

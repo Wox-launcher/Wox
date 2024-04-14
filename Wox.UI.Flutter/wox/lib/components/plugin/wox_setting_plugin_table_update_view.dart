@@ -1,6 +1,8 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_plugin_setting_table.dart';
+import 'package:wox/utils/picker.dart';
 
 class WoxSettingPluginTableUpdate extends StatefulWidget {
   final PluginSettingValueTable item;
@@ -17,6 +19,7 @@ class WoxSettingPluginTableUpdate extends StatefulWidget {
 class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdate> {
   Map<String, dynamic> values = {};
   bool isUpdate = false;
+  bool disableBrowse = false;
 
   @override
   void initState() {
@@ -89,7 +92,32 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           },
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeDirPath:
-        return const Text("dir path...");
+        return Expanded(
+          child: TextBox(
+            controller: TextEditingController(text: getValue(column.key)),
+            onChanged: (value) {
+              updateValue(column.key, value);
+            },
+            suffixMode: OverlayVisibilityMode.always,
+            suffix: Button(
+              onPressed: disableBrowse
+                  ? null
+                  : () async {
+                      disableBrowse = true;
+                      final selectedDirectory = await FileSelector.pick(
+                        const UuidV4().generate(),
+                        FileSelectorParams(isDirectory: true),
+                      );
+                      if (selectedDirectory.isNotEmpty) {
+                        updateValue(column.key, selectedDirectory[0]);
+                        setState(() {});
+                      }
+                      disableBrowse = false;
+                    },
+              child: const Text('Browse'),
+            ),
+          ),
+        );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeSelect:
         return Expanded(
           child: ComboBox<String>(

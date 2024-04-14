@@ -40,8 +40,4 @@ abstract class WoxLauncherInterface {
   void changeResultScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {}
 
   void changeResultActionScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {}
-
-  Future<List<String>> pickFiles(String traceId, PickFilesParams pickFilesParams) async {
-    return [];
-  }
 }

@@ -70,7 +70,7 @@ class Logger {
 }
 
 class LoggerSwitch {
-  static bool enablePaintLog = false;
+  static bool enablePaintLog = true;
   static bool enableSizeAndPositionLog = false;
 }
 

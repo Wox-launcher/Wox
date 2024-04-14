@@ -200,14 +200,6 @@ class ShowAppParams {
   }
 }
 
-class PickFilesParams {
-  late bool isDirectory;
-
-  PickFilesParams.fromJson(Map<String, dynamic> json) {
-    isDirectory = json['IsDirectory'];
-  }
-}
-
 class WoxListViewItemParams {
   late String title;
   late String subTitle;

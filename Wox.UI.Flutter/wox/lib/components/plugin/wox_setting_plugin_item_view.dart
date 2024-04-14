@@ -10,8 +10,8 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
 
   const WoxSettingPluginItem(this.plugin, this.onUpdate, {super.key});
 
-  void updateConfig(String key, String value) {
-    Get.find<WoxSettingController>().updatePluginSetting(plugin.id, key, value);
+  Future<void> updateConfig(String key, String value) async {
+    await Get.find<WoxSettingController>().updatePluginSetting(plugin.id, key, value);
     onUpdate(key, value);
   }
 

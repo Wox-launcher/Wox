@@ -70,6 +70,8 @@ class WoxSettingController extends GetxController {
     } else {
       setFirstFilteredPluginDetailActive();
     }
+
+
   }
 
   Future<void> switchToPluginList(bool isStorePlugin) async {
