@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/wox_plugin_setting_textbox.dart';
 
 import 'wox_setting_plugin_item_view.dart';
@@ -16,6 +17,7 @@ class WoxSettingPluginTextBox extends WoxSettingPluginItem {
     return layout(
       children: [
         label(item.label, item.style),
+        if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip),
         SizedBox(
           width: item.style.width > 0 ? item.style.width.toDouble() : 100,
           child: Focus(

@@ -114,6 +114,7 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 				Value: &definition.PluginSettingValueSelect{
 					Key:          "provider",
 					Label:        "Provider",
+					Tooltip:      "The LLM service provider",
 					DefaultValue: string(chatgptModelProviderNameOpenAI),
 					Options: []definition.PluginSettingValueSelectOption{
 						{
@@ -163,8 +164,9 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 			{
 				Type: definition.PluginSettingDefinitionTypeTable,
 				Value: &definition.PluginSettingValueTable{
-					Key:   "tools",
-					Title: "Tools",
+					Key:     "tools",
+					Title:   "Tools",
+					Tooltip: "The tools to run the chatgpt tool.\r\nE.g. `translate`, user will type `gpt translate` to run translate based on the chatgpt prompt",
 					Columns: []definition.PluginSettingValueTableColumn{
 						{
 							Key:     "name",
@@ -250,6 +252,7 @@ func (c *Plugin) getDynamicSetting(ctx context.Context, key string) definition.P
 			Value: &definition.PluginSettingValueSelect{
 				Key:     "model",
 				Label:   "Model",
+				Tooltip: "The LLM provided by the provider you selected",
 				Options: options,
 				Style: definition.PluginSettingValueStyle{
 					LabelWidth: chatgptLabelWidth,
@@ -265,6 +268,7 @@ func (c *Plugin) getDynamicSetting(ctx context.Context, key string) definition.P
 				Value: &definition.PluginSettingValueTextBox{
 					Key:          "host",
 					Label:        "Host",
+					Tooltip:      "The Ollama host",
 					DefaultValue: "http://localhost:11434",
 					Style: definition.PluginSettingValueStyle{
 						Width:      300,
@@ -280,8 +284,9 @@ func (c *Plugin) getDynamicSetting(ctx context.Context, key string) definition.P
 			return definition.PluginSettingDefinitionItem{
 				Type: definition.PluginSettingDefinitionTypeTextBox,
 				Value: &definition.PluginSettingValueTextBox{
-					Key:   "api_key",
-					Label: "API Key",
+					Key:     "api_key",
+					Label:   "API Key",
+					Tooltip: "The API key for the provider you selected. Please refer to the provider's documentation to get the API key",
 					Style: definition.PluginSettingValueStyle{
 						Width:      chatgptLabelWidth,
 						LabelWidth: chatgptLabelWidth,

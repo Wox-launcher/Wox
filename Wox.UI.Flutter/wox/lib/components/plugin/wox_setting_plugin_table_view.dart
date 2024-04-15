@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_plugin_setting_table.dart';
 import 'package:flutter/material.dart' as material;
@@ -16,6 +17,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final tableWidth = 600.0;
   final operationWidth = 75.0;
   final columnSpacing = 10.0;
+  final columnTooltipWidth = 25.0;
 
   const WoxSettingPluginTable(super.plugin, this.item, super.onUpdate, {super.key, required});
 
@@ -25,14 +27,18 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     // if all columns have width set to 0, we will set the max width to 100 for each column
     var zeroWidthColumnCount = 0;
     var totalWidth = 0.0;
+    var totalColumnTooltipWidth = 0.0;
     for (var element in item.columns) {
       totalWidth += element.width + columnSpacing;
       if (element.width == 0) {
         zeroWidthColumnCount++;
       }
+      if (element.tooltip.isNotEmpty) {
+        totalColumnTooltipWidth += columnTooltipWidth;
+      }
     }
     if (zeroWidthColumnCount == 1) {
-      return tableWidth - totalWidth - (operationWidth + columnSpacing);
+      return tableWidth - totalWidth - (operationWidth + columnSpacing) - totalColumnTooltipWidth;
     }
 
     return 100.0;
@@ -54,11 +60,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        if (column.tooltip != "")
-          Tooltip(
-            message: column.tooltip,
-            child: const Icon(material.Icons.info),
-          ),
+        if (column.tooltip != "") WoxTooltipView(tooltip: column.tooltip),
       ],
     );
   }
@@ -283,7 +285,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
         for (var column in item.columns)
           material.DataColumn(
             label: columnWidth(
-              width: column.width,
+              width: column.width + (column.tooltip.isEmpty ? 0 : columnTooltipWidth.toInt()),
               child: buildHeaderCell(column),
             ),
           ),
@@ -327,8 +329,13 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
             children: [
               Padding(
                 padding: const EdgeInsets.all(8),
-                child: Text(
-                  item.title,
+                child: Row(
+                  children: [
+                    Text(
+                      item.title,
+                    ),
+                    if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip),
+                  ],
                 ),
               ),
               HyperlinkButton(

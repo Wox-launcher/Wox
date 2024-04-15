@@ -1,5 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_plugin_setting_table.dart';
 import 'package:wox/utils/picker.dart';
@@ -143,25 +144,42 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   @override
   Widget build(BuildContext context) {
     return ContentDialog(
-      constraints: const BoxConstraints(maxWidth: 600, maxHeight: 400),
-      content: Column(children: [
-        for (var column in widget.item.columns)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8.0),
-            child: Row(children: [
-              SizedBox(
-                width: getMaxColumnWidth(),
-                child: Text(
-                  column.label,
-                  style: const TextStyle(overflow: TextOverflow.ellipsis),
-                  textAlign: TextAlign.right,
-                ),
+      constraints: const BoxConstraints(maxWidth: 800, maxHeight: 600),
+      content: SingleChildScrollView(
+        child: Column(children: [
+          for (var column in widget.item.columns)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: getMaxColumnWidth(),
+                        child: Text(
+                          column.label,
+                          style: const TextStyle(overflow: TextOverflow.ellipsis),
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      buildColumn(column),
+                    ],
+                  ),
+                  if (column.tooltip != "")
+                    Padding(
+                      padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
+                      child: Text(
+                        column.tooltip,
+                        style: TextStyle(color: Colors.grey[90], fontSize: 12),
+                      ),
+                    ),
+                ],
               ),
-              const SizedBox(width: 16),
-              buildColumn(column),
-            ]),
-          ),
-      ]),
+            ),
+        ]),
+      ),
       actions: [
         Row(
           mainAxisAlignment: MainAxisAlignment.end,

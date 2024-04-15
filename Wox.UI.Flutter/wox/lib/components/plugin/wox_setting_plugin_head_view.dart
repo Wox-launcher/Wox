@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/wox_plugin_setting_head.dart';
 
 import 'wox_setting_plugin_item_view.dart';
@@ -27,6 +28,7 @@ class WoxSettingPluginHead extends WoxSettingPluginItem {
                 fontWeight: FontWeight.bold,
               ),
             ),
+            if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip),
           ],
         ),
       ],

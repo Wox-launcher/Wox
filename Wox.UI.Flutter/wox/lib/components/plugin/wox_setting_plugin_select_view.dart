@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/wox_plugin_setting_select.dart';
 import 'package:wox/entity/wox_plugin_setting_textbox.dart';
 
@@ -14,6 +15,7 @@ class WoxSettingPluginSelect extends WoxSettingPluginItem {
     return layout(
       children: [
         label(item.label, item.style),
+        if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip),
         ComboBox<String>(
           value: getSetting(item.key),
           items: item.options.map((e) {
