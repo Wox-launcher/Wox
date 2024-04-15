@@ -110,12 +110,13 @@ func (a *APIImpl) GetSetting(ctx context.Context, key string) string {
 }
 
 func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool) {
+	finalKey := key
 	if isPlatformSpecific {
-		key = key + "@" + util.GetCurrentPlatform()
+		finalKey = key + "@" + util.GetCurrentPlatform()
 	}
 
-	existValue, exist := a.pluginInstance.Setting.Settings.Load(key)
-	a.pluginInstance.Setting.Settings.Store(key, value)
+	existValue, exist := a.pluginInstance.Setting.Settings.Load(finalKey)
+	a.pluginInstance.Setting.Settings.Store(finalKey, value)
 	a.pluginInstance.SaveSetting(ctx)
 
 	if !exist || (existValue != value) {

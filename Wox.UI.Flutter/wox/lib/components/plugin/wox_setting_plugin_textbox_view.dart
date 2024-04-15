@@ -17,7 +17,7 @@ class WoxSettingPluginTextBox extends WoxSettingPluginItem {
     return layout(
       children: [
         label(item.label, item.style),
-        if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip),
+        if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip, paddingLeft: 0),
         SizedBox(
           width: item.style.width > 0 ? item.style.width.toDouble() : 100,
           child: Focus(

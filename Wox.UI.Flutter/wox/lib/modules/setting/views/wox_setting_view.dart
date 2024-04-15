@@ -38,7 +38,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                   selected: controller.activePaneIndex.value,
                   onChanged: (index) => controller.activePaneIndex.value = index,
                   displayMode: PaneDisplayMode.open,
-                  size: const NavigationPaneSize(openWidth: 250),
+                  size: const NavigationPaneSize(openWidth: 200),
                   items: [
                     PaneItem(
                       icon: const Icon(FluentIcons.settings),

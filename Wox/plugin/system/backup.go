@@ -98,16 +98,15 @@ func (c *BackupPlugin) restore(ctx context.Context, query plugin.Query) []plugin
 
 	var results []plugin.QueryResult
 	for index, backup := range backups {
-		backupDummy := backup
 		results = append(results, plugin.QueryResult{
 			Title:    fmt.Sprintf("#%d", index+1),
-			SubTitle: fmt.Sprintf("%s - %s", backupDummy.Type, util.FormatTimestamp(backupDummy.Timestamp)),
+			SubTitle: fmt.Sprintf("%s - %s", backup.Type, util.FormatTimestamp(backup.Timestamp)),
 			Icon:     backupIcon,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Restore",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						restoreErr := setting.GetSettingManager().Restore(ctx, backupDummy.Id)
+						restoreErr := setting.GetSettingManager().Restore(ctx, backup.Id)
 						if restoreErr != nil {
 							c.api.Notify(ctx, "Error", restoreErr.Error())
 						} else {

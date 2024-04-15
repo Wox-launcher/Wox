@@ -7,6 +7,7 @@ import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_plugin_setting_table.dart';
 import 'package:flutter/material.dart' as material;
+import 'package:wox/utils/log.dart';
 
 import 'wox_setting_plugin_item_view.dart';
 import 'wox_setting_plugin_table_update_view.dart';
@@ -14,14 +15,14 @@ import 'wox_setting_plugin_table_update_view.dart';
 class WoxSettingPluginTable extends WoxSettingPluginItem {
   final PluginSettingValueTable item;
   static const String rowUniqueIdKey = "wox_table_row_id";
-  final tableWidth = 600.0;
+  final tableWidth = 650.0;
   final operationWidth = 75.0;
   final columnSpacing = 10.0;
-  final columnTooltipWidth = 25.0;
+  final columnTooltipWidth = 20.0;
 
   const WoxSettingPluginTable(super.plugin, this.item, super.onUpdate, {super.key, required});
 
-  double calculateColumnWidthForZeroWidth() {
+  double calculateColumnWidthForZeroWidth(PluginSettingValueTableColumn column) {
     // if there are multiple columns which have width set to 0, we will set the max width to 100 for each column
     // if there is only one column which has width set to 0, we will set the max width to 600 - (other columns width)
     // if all columns have width set to 0, we will set the max width to 100 for each column
@@ -29,6 +30,10 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     var totalWidth = 0.0;
     var totalColumnTooltipWidth = 0.0;
     for (var element in item.columns) {
+      if (element.hideInTable) {
+        continue;
+      }
+
       totalWidth += element.width + columnSpacing;
       if (element.width == 0) {
         zeroWidthColumnCount++;
@@ -44,15 +49,27 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     return 100.0;
   }
 
-  Widget columnWidth({required Widget child, required int width}) {
+  Widget columnWidth({required PluginSettingValueTableColumn column, required bool isHeader, required bool isOperation, required Widget child}) {
+    var width = column.width;
+    if (isOperation) {
+      width = operationWidth.toInt();
+    }
+    if (width == 0) {
+      width = calculateColumnWidthForZeroWidth(column).toInt();
+    }
+    if (column.tooltip.isNotEmpty) {
+      width += columnTooltipWidth.toInt();
+    }
+
     return SizedBox(
-      width: width == 0 ? calculateColumnWidthForZeroWidth() : width.toDouble(),
+      width: width.toDouble(),
       child: child,
     );
   }
 
   Widget buildHeaderCell(PluginSettingValueTableColumn column) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
           column.label,
@@ -60,7 +77,11 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        if (column.tooltip != "") WoxTooltipView(tooltip: column.tooltip),
+        if (column.tooltip != "")
+          WoxTooltipView(
+            tooltip: column.tooltip,
+            paddingRight: 0,
+          ),
       ],
     );
   }
@@ -70,7 +91,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
 
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeText) {
       return columnWidth(
-        width: column.width,
+        column: column,
+        isHeader: false,
+        isOperation: false,
         child: Text(
           value,
           style: const TextStyle(
@@ -81,7 +104,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeDirPath) {
       return columnWidth(
-        width: column.width,
+        column: column,
+        isHeader: false,
+        isOperation: false,
         child: Text(
           value,
           style: const TextStyle(
@@ -91,21 +116,31 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       );
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeCheckbox) {
+      var isChecked = false;
+      if (value is bool) {
+        isChecked = value;
+      } else if (value is String) {
+        isChecked = value == "true";
+      }
       return Row(
         children: [
-          value == "true" ? const Icon(material.Icons.check_box) : const Icon(material.Icons.check_box_outline_blank),
+          isChecked ? const Icon(material.Icons.check_box) : const Icon(material.Icons.check_box_outline_blank),
         ],
       );
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeTextList) {
       return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           for (var txt in value)
             columnWidth(
-              width: column.width,
+              column: column,
+              isHeader: false,
+              isOperation: false,
               child: Text(
                 "${(value as List<dynamic>).length == 1 ? "" : "-"} $txt",
                 maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
         ],
@@ -227,7 +262,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
             for (var column in item.columns)
               material.DataColumn(
                 label: columnWidth(
-                  width: column.width,
+                  column: column,
+                  isHeader: false,
+                  isOperation: false,
                   child: Text(
                     column.label,
                     style: const TextStyle(
@@ -238,7 +275,16 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
               ),
             material.DataColumn(
               label: columnWidth(
-                width: operationWidth.toInt(),
+                column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
+                  "Key": "Operation",
+                  "Label": "Operation",
+                  "Tooltip": "",
+                  "Width": operationWidth.toInt(),
+                  "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText,
+                  "TextMaxLines": 1,
+                }),
+                isHeader: false,
+                isOperation: true,
                 child: const Text(
                   "Operation",
                   style: TextStyle(
@@ -283,15 +329,27 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       border: TableBorder.all(color: material.Colors.grey[300]!),
       columns: [
         for (var column in item.columns)
-          material.DataColumn(
-            label: columnWidth(
-              width: column.width + (column.tooltip.isEmpty ? 0 : columnTooltipWidth.toInt()),
-              child: buildHeaderCell(column),
+          if (!column.hideInTable)
+            material.DataColumn(
+              label: columnWidth(
+                column: column,
+                isHeader: true,
+                isOperation: false,
+                child: buildHeaderCell(column),
+              ),
             ),
-          ),
         material.DataColumn(
           label: columnWidth(
-            width: operationWidth.toInt(),
+            column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
+              "Key": "Operation",
+              "Label": "Operation",
+              "Tooltip": "",
+              "Width": operationWidth.toInt(),
+              "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText,
+              "TextMaxLines": 1,
+            }),
+            isHeader: true,
+            isOperation: true,
             child: const Text(
               "Operation",
               style: TextStyle(
@@ -306,9 +364,10 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           material.DataRow(
             cells: [
               for (var column in item.columns)
-                material.DataCell(
-                  buildRowCell(column, row),
-                ),
+                if (!column.hideInTable)
+                  material.DataCell(
+                    buildRowCell(column, row),
+                  ),
               // operation cell
               buildOperationCell(context, row, rows),
             ],

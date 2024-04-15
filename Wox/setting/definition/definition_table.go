@@ -31,6 +31,7 @@ type PluginSettingValueTableColumn struct {
 	Type          PluginSettingValueTableColumnType
 	SelectOptions []PluginSettingValueSelectOption // Only used when Type is PluginSettingValueTableColumnTypeSelect
 	TextMaxLines  int                              // Only used when Type is PluginSettingValueTableColumnTypeText
+	HideInTable   bool                             // Hide this column in the table, but still show it in the setting dialog
 }
 
 func (p *PluginSettingValueTable) GetPluginSettingType() PluginSettingDefinitionType {

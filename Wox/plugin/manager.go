@@ -261,8 +261,7 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 	start := util.GetSystemTimestamp()
 	logger.Info(ctx, fmt.Sprintf("start loading system plugins, found %d system plugins", len(AllSystemPlugin)))
 
-	for _, pluginDummy := range AllSystemPlugin {
-		plugin := pluginDummy
+	for _, plugin := range AllSystemPlugin {
 		util.Go(ctx, fmt.Sprintf("load system plugin <%s>", plugin.GetMetadata().Name), func() {
 			metadata := plugin.GetMetadata()
 			instance := &Instance{

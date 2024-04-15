@@ -47,6 +47,7 @@ class PluginSettingValueTableColumn {
   late String type; //see PluginSettingValueType
   late List<PluginSettingValueSelectOption> selectOptions; // Only used when Type is PluginSettingValueTableColumnTypeSelect
   late int textMaxLines; // Only used when Type is PluginSettingValueTableColumnTypeText
+  late bool hideInTable; // Hide this column in the table, but still show it in the setting dialog
 
   PluginSettingValueTableColumn.fromJson(Map<String, dynamic> json) {
     key = json['Key'];
@@ -63,5 +64,6 @@ class PluginSettingValueTableColumn {
     if (textMaxLines < 1) {
       textMaxLines = 1;
     }
+    hideInTable = json['HideInTable'] ?? false;
   }
 }

@@ -15,7 +15,7 @@ class WoxSettingPluginSelect extends WoxSettingPluginItem {
     return layout(
       children: [
         label(item.label, item.style),
-        if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip),
+        if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip, paddingLeft: 0),
         ComboBox<String>(
           value: getSetting(item.key),
           items: item.options.map((e) {

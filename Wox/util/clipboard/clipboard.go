@@ -102,7 +102,6 @@ func watchChange() {
 		}
 
 		for _, cb := range watchList {
-			cbDummy := cb
 			go func() {
 				defer func() {
 					if err1 := recover(); err1 != nil {
@@ -110,7 +109,7 @@ func watchChange() {
 					}
 				}()
 
-				cbDummy(data)
+				cb(data)
 			}()
 		}
 	}

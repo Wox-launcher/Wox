@@ -233,11 +233,9 @@ func (w *WPMPlugin) createCommand(query plugin.Query) []plugin.QueryResult {
 
 	var results []plugin.QueryResult
 	for _, template := range pluginTemplates {
-		// action will be executed in another go routine, so we need to copy the variable
-		pluginTemplateDummy := template
 		results = append(results, plugin.QueryResult{
 			Id:       uuid.NewString(),
-			Title:    "Create " + string(pluginTemplateDummy.Runtime) + " plugin",
+			Title:    "Create " + string(template.Runtime) + " plugin",
 			SubTitle: fmt.Sprintf("Name: %s", query.Search),
 			Icon:     wpmIcon,
 			Actions: []plugin.QueryResultAction{
@@ -247,7 +245,7 @@ func (w *WPMPlugin) createCommand(query plugin.Query) []plugin.QueryResult {
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						pluginName := query.Search
 						util.Go(ctx, "create plugin", func() {
-							w.createPlugin(ctx, pluginTemplateDummy, pluginName, query)
+							w.createPlugin(ctx, template, pluginName, query)
 						})
 						w.api.ChangeQuery(ctx, share.ChangedQuery{
 							QueryType: plugin.QueryTypeInput,

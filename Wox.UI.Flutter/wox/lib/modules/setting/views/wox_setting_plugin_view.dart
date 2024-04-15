@@ -369,7 +369,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     });
                   }
 
-                  return Text(e.type + "  df dd sss");
+                  return Text(e.type + "  df ds s ss");
                 },
               )
             ],

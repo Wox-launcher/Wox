@@ -23,10 +23,14 @@
   "plugin_sys_open_wox_settings": "Open Wox Settings",
   "plugin_sys_open_system_settings": "Open System Settings",
   "plugin_websearch_trigger_keyword": "keyword",
-  "plugin_websearch_trigger_keyword_tooltip": "The keyword you want to use to trigger the search",
+  "plugin_websearch_trigger_keyword_tooltip": "The trigger keyword you want to use to trigger the search",
   "plugin_websearch_title": "Title",
+  "plugin_websearch_title_tooltip": "The title of the search, use {query} to represent the query",
   "plugin_websearch_urls": "URLs",
+  "plugin_websearch_urls_tooltip": "The URLs of the search. You can add multiple urls for one websearch. use {query} for the query, {lower_query} for the query in lower case, {upper_query} for the query in upper case",
   "plugin_websearch_enabled": "Enabled",
+  "plugin_websearch_is_fallback": "Fallback",
+  "plugin_websearch_is_fallback_tooltip": "If enabled, this search will be used if no other search matches the query",
   "plugin_websearch_icon": "Icon",
   "plugin_websearch_web_searches": "Web Searches"
 }

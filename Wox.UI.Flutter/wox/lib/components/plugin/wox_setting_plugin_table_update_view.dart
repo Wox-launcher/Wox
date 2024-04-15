@@ -136,6 +136,69 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeWoxImage:
         return Text("wox image...");
+      case PluginSettingValueType.pluginSettingValueTableColumnTypeTextList:
+        var columnValues = getValue(column.key);
+        if (columnValues is String && columnValues == "") {
+          columnValues = [];
+        }
+        if (columnValues is List) {
+          columnValues = columnValues.map((e) => e.toString()).toList();
+        }
+        return Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < columnValues.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextBox(
+                          controller: TextEditingController(text: columnValues[i]),
+                          onChanged: (value) {
+                            columnValues[i] = value;
+                          },
+                          maxLines: 1,
+                          style: const TextStyle(
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(FluentIcons.delete),
+                        onPressed: () {
+                          columnValues.removeAt(i);
+                          values[column.key] = columnValues;
+                          setState(() {});
+                        },
+                      ),
+                      // last row show add button
+                      if (i == columnValues.length - 1)
+                        IconButton(
+                          icon: const Icon(FluentIcons.add),
+                          onPressed: () {
+                            columnValues.add("");
+                            values[column.key] = columnValues;
+                            setState(() {});
+                          },
+                        ),
+                      if (i != columnValues.length - 1) const SizedBox(width: 26),
+                    ],
+                  ),
+                ),
+              if (columnValues.isEmpty)
+                IconButton(
+                  icon: const Icon(FluentIcons.add),
+                  onPressed: () {
+                    columnValues.add("");
+                    values[column.key] = columnValues;
+                    setState(() {});
+                  },
+                ),
+            ],
+          ),
+        );
       default:
         return const SizedBox();
     }
@@ -186,13 +249,24 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           children: [
             Button(
               child: const Text('Cancel'),
-              onPressed: () => Navigator.pop(context, 'User canceled dialog'),
+              onPressed: () => Navigator.pop(context),
             ),
             const SizedBox(width: 16),
             FilledButton(
               child: const Text('Confirm'),
               onPressed: () {
-                Navigator.pop(context, 'User confirmed');
+                Navigator.pop(context);
+
+                // remove empty text list
+                for (var column in widget.item.columns) {
+                  if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeTextList) {
+                    var columnValues = getValue(column.key);
+                    if (columnValues is List) {
+                      columnValues.removeWhere((element) => element == "");
+                    }
+                  }
+                }
+
                 widget.onUpdate(widget.item.key, values);
               },
             ),

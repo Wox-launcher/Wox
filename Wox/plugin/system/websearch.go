@@ -15,11 +15,6 @@ import (
 )
 
 var webSearchesSettingKey = "webSearches"
-var webSearchesTableColumnTriggerKeywordSettingKey = "Keyword"
-var webSearchesTableColumnTitleSettingKey = "Title"
-var webSearchesTableColumnUrlSettingKey = "Urls"
-var webSearchesTableColumnEnabledSettingKey = "Enabled"
-var webSearchesTableColumnIconSettingKey = "Icon"
 
 var webSearchIcon = plugin.NewWoxImageSvg(`<svg t="1700799533400" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="8846" width="200" height="200"><path d="M869.484748 1024a96.009331 96.009331 0 0 1-76.327418-37.923686l-174.736982-228.982254a96.009331 96.009331 0 0 1 152.654836-116.651337l174.736982 228.982254a96.009331 96.009331 0 0 1-76.327418 154.094976z" fill="#D34233" p-id="8847"></path><path d="M770.595138 640.92277a96.009331 96.009331 0 0 0-100.809798-34.563359 240.023327 240.023327 0 0 1-57.605598 65.766391c-3.360327 2.400233-7.2007 4.32042-11.041074 6.720653a96.009331 96.009331 0 0 0 16.801633 79.687745l70.566859 92.649004a432.041989 432.041989 0 0 0 39.843872-26.882612A429.161709 429.161709 0 0 0 826.760596 715.810048z" fill="#C1211A" p-id="8848"></path><path d="M490.727938 864.144464a432.041989 432.041989 0 1 1 261.625427-88.328584A432.041989 432.041989 0 0 1 490.727938 864.144464zM490.727938 192.079148a240.023327 240.023327 0 1 0 192.018662 96.009331 240.023327 240.023327 0 0 0-192.018662-96.009331z" fill="#F16A54" p-id="8849"></path></svg>`)
 
@@ -71,34 +66,43 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 					Title: "i18n:plugin_websearch_web_searches",
 					Columns: []definition.PluginSettingValueTableColumn{
 						{
-							Key:   webSearchesTableColumnIconSettingKey,
+							Key:   "Icon",
 							Label: "i18n:plugin_websearch_icon",
 							Type:  definition.PluginSettingValueTableColumnTypeWoxImage,
 							Width: 40,
 						},
 						{
-							Key:     webSearchesTableColumnTriggerKeywordSettingKey,
+							Key:     "Keyword",
 							Label:   "i18n:plugin_websearch_trigger_keyword",
 							Tooltip: "i18n:plugin_websearch_trigger_keyword_tooltip",
 							Type:    definition.PluginSettingValueTableColumnTypeText,
 							Width:   60,
 						},
 						{
-							Key:   webSearchesTableColumnTitleSettingKey,
-							Label: "i18n:plugin_websearch_title",
-							Type:  definition.PluginSettingValueTableColumnTypeText,
-							Width: 120,
+							Key:     "Title",
+							Label:   "i18n:plugin_websearch_title",
+							Tooltip: "i18n:plugin_websearch_title_tooltip",
+							Type:    definition.PluginSettingValueTableColumnTypeText,
 						},
 						{
-							Key:   webSearchesTableColumnUrlSettingKey,
-							Label: "i18n:plugin_websearch_urls",
-							Type:  definition.PluginSettingValueTableColumnTypeTextList,
+							Key:         "Urls",
+							Label:       "i18n:plugin_websearch_urls",
+							Tooltip:     "i18n:plugin_websearch_urls_tooltip",
+							HideInTable: true,
+							Type:        definition.PluginSettingValueTableColumnTypeTextList,
 						},
 						{
-							Key:   webSearchesTableColumnEnabledSettingKey,
+							Key:   "Enabled",
 							Label: "i18n:plugin_websearch_enabled",
 							Type:  definition.PluginSettingValueTableColumnTypeCheckbox,
 							Width: 60,
+						},
+						{
+							Key:     "IsFallback",
+							Label:   "i18n:plugin_websearch_is_fallback",
+							Tooltip: "i18n:plugin_websearch_is_fallback_tooltip",
+							Type:    definition.PluginSettingValueTableColumnTypeCheckbox,
+							Width:   60,
 						},
 					},
 				},
@@ -112,6 +116,12 @@ func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	r.webSearches = r.loadWebSearches(ctx)
 	r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("loaded %d web searches", len(r.webSearches)))
 
+	r.api.OnSettingChanged(ctx, func(key string, value string) {
+		if key == webSearchesSettingKey {
+			r.webSearches = r.loadWebSearches(ctx)
+		}
+	})
+
 	util.Go(ctx, "parse websearch icons", func() {
 		r.indexIcons(ctx)
 	})
@@ -119,7 +129,9 @@ func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams
 
 func (r *WebSearchPlugin) indexIcons(ctx context.Context) {
 	for i, search := range r.webSearches {
-		r.webSearches[i].Icon = r.indexWebSearchIcon(ctx, search)
+		if search.Icon.ImageType == "" {
+			r.webSearches[i].Icon = r.indexWebSearchIcon(ctx, search)
+		}
 	}
 
 	marshal, err := json.Marshal(r.webSearches)
@@ -186,19 +198,18 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 	otherQuery := strings.Join(queries[1:], " ")
 
 	for _, search := range r.webSearches {
-		searchDummy := search
-		if searchDummy.IsFallback {
+		if search.IsFallback || !search.Enabled {
 			continue
 		}
-		if strings.ToLower(searchDummy.Keyword) == strings.ToLower(triggerKeyword) {
-			results = append(results, plugin.QueryResult{Title: r.replaceVariables(ctx, searchDummy.Title, otherQuery),
+		if strings.ToLower(search.Keyword) == strings.ToLower(triggerKeyword) {
+			results = append(results, plugin.QueryResult{Title: r.replaceVariables(ctx, search.Title, otherQuery),
 				Score: 100,
-				Icon:  searchDummy.Icon,
+				Icon:  search.Icon,
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "Search",
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							for _, url := range searchDummy.Urls {
+							for _, url := range search.Urls {
 								util.ShellOpen(r.replaceVariables(ctx, url, otherQuery))
 								time.Sleep(time.Millisecond * 100)
 							}
@@ -214,20 +225,22 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 
 func (r *WebSearchPlugin) QueryFallback(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
 	for _, search := range r.webSearches {
-		searchDummy := search
-		if !searchDummy.IsFallback {
+		if !search.Enabled {
+			continue
+		}
+		if !search.IsFallback {
 			continue
 		}
 
 		results = append(results, plugin.QueryResult{
-			Title: r.replaceVariables(ctx, searchDummy.Title, query.RawQuery),
+			Title: r.replaceVariables(ctx, search.Title, query.RawQuery),
 			Score: 100,
-			Icon:  searchDummy.Icon,
+			Icon:  search.Icon,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Search",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						for _, url := range searchDummy.Urls {
+						for _, url := range search.Urls {
 							util.ShellOpen(r.replaceVariables(ctx, url, query.RawQuery))
 							time.Sleep(time.Millisecond * 100)
 						}
