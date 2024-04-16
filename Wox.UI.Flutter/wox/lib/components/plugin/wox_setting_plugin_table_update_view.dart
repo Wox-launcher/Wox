@@ -22,24 +22,31 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   bool disableBrowse = false;
   Map<String, String> fieldValidationErrors = {};
   Map<String, TextEditingController> textboxEditingController = {};
+  List<PluginSettingValueTableColumn> columns = [];
 
   @override
   void initState() {
     super.initState();
+
+    for (var element in widget.item.columns) {
+      if (!element.hideInUpdate) {
+        columns.add(element);
+      }
+    }
 
     widget.row.forEach((key, value) {
       values[key] = value;
     });
 
     if (values.isEmpty) {
-      for (var column in widget.item.columns) {
+      for (var column in columns) {
         values[column.key] = "";
       }
     } else {
       isUpdate = true;
     }
 
-    for (var column in widget.item.columns) {
+    for (var column in columns) {
       // init text box controller
       if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeText) {
         textboxEditingController[column.key] = TextEditingController(text: getValue(column.key));
@@ -94,7 +101,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
 
   double getMaxColumnWidth() {
     double max = 0;
-    for (var column in widget.item.columns) {
+    for (var column in columns) {
       if (column.width > max) {
         max = column.width.toDouble();
       }
@@ -309,45 +316,46 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
       constraints: const BoxConstraints(maxWidth: 800, maxHeight: 600),
       content: SingleChildScrollView(
         child: Column(children: [
-          for (var column in widget.item.columns)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: getMaxColumnWidth(),
+          for (var column in columns)
+            if (!column.hideInUpdate)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: getMaxColumnWidth(),
+                          child: Text(
+                            column.label,
+                            style: const TextStyle(overflow: TextOverflow.ellipsis),
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        buildColumn(column),
+                      ],
+                    ),
+                    if (column.tooltip != "")
+                      Padding(
+                        padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
                         child: Text(
-                          column.label,
-                          style: const TextStyle(overflow: TextOverflow.ellipsis),
-                          textAlign: TextAlign.right,
+                          column.tooltip,
+                          style: TextStyle(color: Colors.grey[90], fontSize: 12),
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      buildColumn(column),
-                    ],
-                  ),
-                  if (column.tooltip != "")
-                    Padding(
-                      padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
-                      child: Text(
-                        column.tooltip,
-                        style: TextStyle(color: Colors.grey[90], fontSize: 12),
+                    if (fieldValidationErrors.containsKey(column.key))
+                      Padding(
+                        padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
+                        child: Text(
+                          fieldValidationErrors[column.key]!,
+                          style: TextStyle(color: Colors.red, fontSize: 12),
+                        ),
                       ),
-                    ),
-                  if (fieldValidationErrors.containsKey(column.key))
-                    Padding(
-                      padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
-                      child: Text(
-                        fieldValidationErrors[column.key]!,
-                        style: TextStyle(color: Colors.red, fontSize: 12),
-                      ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
         ]),
       ),
       actions: [
@@ -363,7 +371,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
               child: const Text('Confirm'),
               onPressed: () {
                 // validate
-                for (var column in widget.item.columns) {
+                for (var column in columns) {
                   if (column.validators.isNotEmpty) {
                     for (var element in column.validators) {
                       var errMsg = element.validator.validate(getValue(column.key));
@@ -381,7 +389,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 }
 
                 // remove empty text list
-                for (var column in widget.item.columns) {
+                for (var column in columns) {
                   if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeTextList) {
                     var columnValues = getValue(column.key);
                     if (columnValues is List) {
