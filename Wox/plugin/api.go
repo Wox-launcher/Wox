@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"fmt"
 	"github.com/samber/lo"
 	"path"
 	"wox/i18n"
@@ -113,11 +114,18 @@ func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string, isP
 	finalKey := key
 	if isPlatformSpecific {
 		finalKey = key + "@" + util.GetCurrentPlatform()
+	} else {
+		// if not platform specific, remove platform specific setting, otherwise it will be loaded first
+		a.pluginInstance.Setting.Settings.Delete(key + "@" + util.GetCurrentPlatform())
 	}
 
 	existValue, exist := a.pluginInstance.Setting.Settings.Load(finalKey)
 	a.pluginInstance.Setting.Settings.Store(finalKey, value)
-	a.pluginInstance.SaveSetting(ctx)
+	saveErr := a.pluginInstance.SaveSetting(ctx)
+	if saveErr != nil {
+		a.logger.Error(ctx, fmt.Sprintf("failed to save setting: %s", saveErr.Error()))
+		return
+	}
 
 	if !exist || (existValue != value) {
 		for _, callback := range a.settingChangeCallbacks {

@@ -324,6 +324,19 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       row[rowUniqueIdKey] = const UuidV4().generate();
     }
 
+    //sort the rows if needed
+    if (item.sortColumnKey.isNotEmpty) {
+      rows.sort((a, b) {
+        var aValue = a[item.sortColumnKey] ?? "";
+        var bValue = b[item.sortColumnKey] ?? "";
+        if (item.sortOrder == "asc") {
+          return aValue.toString().compareTo(bValue.toString());
+        } else {
+          return bValue.toString().compareTo(aValue.toString());
+        }
+      });
+    }
+
     return material.DataTable(
       columnSpacing: columnSpacing,
       horizontalMargin: 5,

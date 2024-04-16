@@ -8,6 +8,8 @@ class PluginSettingValueTable {
   late String title;
   late String tooltip;
   late List<PluginSettingValueTableColumn> columns;
+  late String sortColumnKey; // The key of the column that should be used for sorting
+  late String sortOrder; // asc or desc
   late PluginSettingValueStyle style;
 
   PluginSettingValueTable.fromJson(Map<String, dynamic> json) {
@@ -20,6 +22,9 @@ class PluginSettingValueTable {
     } else {
       columns = [];
     }
+
+    sortColumnKey = json['SortColumnKey'] ?? "";
+    sortOrder = json['SortOrder'] ?? "asc";
 
     if (json['Style'] != null) {
       style = PluginSettingValueStyle.fromJson(json['Style']);
@@ -47,6 +52,7 @@ class PluginSettingValueTableColumn {
   late List<PluginSettingValueSelectOption> selectOptions; // Only used when Type is PluginSettingValueTableColumnTypeSelect
   late int textMaxLines; // Only used when Type is PluginSettingValueTableColumnTypeText
   late bool hideInTable; // Hide this column in the table, but still show it in the setting dialog
+  late bool hideInUpdate; // Hide this column in the update dialog
   late List<PluginSettingValidatorItem> validators;
 
   PluginSettingValueTableColumn.fromJson(Map<String, dynamic> json) {
@@ -65,6 +71,7 @@ class PluginSettingValueTableColumn {
       textMaxLines = 1;
     }
     hideInTable = json['HideInTable'] ?? false;
+    hideInUpdate = json['HideInUpdate'] ?? false;
 
     if (json['Validators'] != null) {
       validators = (json['Validators'] as List).map((e) => PluginSettingValidatorItem.fromJson(e)).toList();

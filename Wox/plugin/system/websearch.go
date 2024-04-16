@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/mat/besticon/besticon"
 	"io"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -63,14 +64,17 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 				Type:               definition.PluginSettingDefinitionTypeTable,
 				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
-					Key:   webSearchesSettingKey,
-					Title: "i18n:plugin_websearch_web_searches",
+					Key:           webSearchesSettingKey,
+					Title:         "i18n:plugin_websearch_web_searches",
+					SortColumnKey: "Keyword",
+					SortOrder:     definition.PluginSettingValueTableSortOrderAsc,
 					Columns: []definition.PluginSettingValueTableColumn{
 						{
-							Key:   "Icon",
-							Label: "i18n:plugin_websearch_icon",
-							Type:  definition.PluginSettingValueTableColumnTypeWoxImage,
-							Width: 40,
+							Key:          "Icon",
+							Label:        "i18n:plugin_websearch_icon",
+							Type:         definition.PluginSettingValueTableColumnTypeWoxImage,
+							HideInUpdate: true,
+							Width:        40,
 						},
 						{
 							Key:     "Keyword",
@@ -128,6 +132,7 @@ func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams
 
 	r.api.OnSettingChanged(ctx, func(key string, value string) {
 		if key == webSearchesSettingKey {
+			r.indexIcons(ctx)
 			r.webSearches = r.loadWebSearches(ctx)
 		}
 	})
@@ -138,22 +143,32 @@ func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams
 }
 
 func (r *WebSearchPlugin) indexIcons(ctx context.Context) {
+	hasAnyIconIndexed := false
 	for i, search := range r.webSearches {
 		if search.Icon.ImageType == "" {
 			r.webSearches[i].Icon = r.indexWebSearchIcon(ctx, search)
+			hasAnyIconIndexed = true
 		}
 	}
 
-	marshal, err := json.Marshal(r.webSearches)
-	if err == nil {
-		r.api.SaveSetting(ctx, webSearchesSettingKey, string(marshal), false)
+	if hasAnyIconIndexed {
+		marshal, err := json.Marshal(r.webSearches)
+		if err == nil {
+			r.api.SaveSetting(ctx, webSearchesSettingKey, string(marshal), false)
+		}
 	}
 }
 
 func (r *WebSearchPlugin) indexWebSearchIcon(ctx context.Context, search webSearch) plugin.WoxImage {
 	//sort urls, so that we can get the same icon between different runs
 	slices.Sort(search.Urls)
-	iconUrl := search.Urls[0]
+	parseUrl, err := url.Parse(search.Urls[0])
+	if err != nil {
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to parse url for %s: %s", search.Urls, err.Error()))
+		return webSearchIcon
+	}
+	iconUrl := parseUrl.Scheme + "://" + parseUrl.Host
+	r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("indexing icon for %s", iconUrl))
 
 	option := besticon.WithLogger(besticon.NewDefaultLogger(io.Discard))
 	iconFinder := besticon.New(option).NewIconFinder()

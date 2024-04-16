@@ -16,12 +16,19 @@ const (
 	PluginSettingValueTableColumnTypeWoxImage PluginSettingValueTableColumnType = "woxImage"
 )
 
+const (
+	PluginSettingValueTableSortOrderAsc  = "asc"
+	PluginSettingValueTableSortOrderDesc = "desc"
+)
+
 type PluginSettingValueTable struct {
-	Key          string
-	DefaultValue string
-	Title        string
-	Tooltip      string
-	Columns      []PluginSettingValueTableColumn
+	Key           string
+	DefaultValue  string
+	Title         string
+	Tooltip       string
+	Columns       []PluginSettingValueTableColumn
+	SortColumnKey string // The key of the column that should be used for sorting
+	SortOrder     string // asc or desc
 
 	Style PluginSettingValueStyle
 }
@@ -36,6 +43,7 @@ type PluginSettingValueTableColumn struct {
 	SelectOptions []PluginSettingValueSelectOption   // Only used when Type is PluginSettingValueTableColumnTypeSelect
 	TextMaxLines  int                                // Only used when Type is PluginSettingValueTableColumnTypeText
 	HideInTable   bool                               // Hide this column in the table, but still show it in the setting dialog
+	HideInUpdate  bool                               // Hide this column in the update/add dialog, but still show it in the table
 }
 
 func (p *PluginSettingValueTable) GetPluginSettingType() PluginSettingDefinitionType {
