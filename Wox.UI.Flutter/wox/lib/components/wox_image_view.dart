@@ -15,7 +15,7 @@ class WoxImageView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_URL.code) {
-      return Image.network(woxImage.imageData, width: width, height: height);
+      return Image.network(woxImage.imageData, width: width, height: height, fit: BoxFit.contain);
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code) {
       return SvgPicture.string(woxImage.imageData, width: width, height: height);
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
@@ -25,7 +25,7 @@ class WoxImageView extends StatelessWidget {
         return Text("Invalid image data: ${woxImage.imageData}", style: const TextStyle(color: Colors.red));
       }
       final imageData = woxImage.imageData.split(";base64,")[1];
-      return Image.memory(base64Decode(imageData), width: width, height: height, fit: BoxFit.fill);
+      return Image.memory(base64Decode(imageData), width: width, height: height, fit: BoxFit.contain);
     }
     return const SizedBox(width: 24, height: 24);
   }

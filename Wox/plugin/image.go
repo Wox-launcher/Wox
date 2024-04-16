@@ -260,17 +260,23 @@ func cropPngTransparentPaddings(ctx context.Context, woxImage WoxImage) (newImag
 				if x < minX {
 					minX = x
 				}
-				if x > maxX {
-					maxX = x
+				if x+1 > maxX { // add 1 to maxX
+					maxX = x + 1
 				}
 				if y < minY {
 					minY = y
 				}
-				if y > maxY {
-					maxY = y
+				if y+1 > maxY { // add 1 to maxY
+					maxY = y + 1
 				}
 			}
 		}
+	}
+	if maxX > bounds.Max.X {
+		maxX = bounds.Max.X
+	}
+	if maxY > bounds.Max.Y {
+		maxY = bounds.Max.Y
 	}
 
 	cropImg := imaging.Crop(pngImg, image.Rect(minX, minY, maxX, maxY))

@@ -1,6 +1,11 @@
 package util
 
-import "os"
+import (
+	"github.com/samber/lo"
+	"os"
+	"path/filepath"
+	"strings"
+)
 
 // IsFileExecAny returns true if the file mode indicates that the file is executable by any user.
 func IsFileExecAny(mode os.FileMode) bool {
@@ -29,4 +34,10 @@ func ListDir(path string) ([]string, error) {
 	}
 
 	return files, nil
+}
+
+func IsImageFile(path string) bool {
+	currentExt := strings.ToLower(filepath.Ext(path))
+	imageSuffixList := []string{".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff", ".svg"}
+	return lo.Contains(imageSuffixList, currentExt)
 }

@@ -397,8 +397,8 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	// convert icon
 	result.Icon = ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
 
-	// if query is selection, replace preview with selection
-	if query.Type == QueryTypeSelection {
+	// add default preview for selection query if no preview is set
+	if query.Type == QueryTypeSelection && result.Preview.PreviewType == "" {
 		if query.Selection.Type == util.SelectionTypeText {
 			result.Preview = WoxPreview{
 				PreviewType: WoxPreviewTypeText,
