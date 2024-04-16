@@ -1,6 +1,9 @@
 package definition
 
-import "context"
+import (
+	"context"
+	"wox/setting/validator"
+)
 
 type PluginSettingValueSelect struct {
 	Key          string
@@ -9,6 +12,7 @@ type PluginSettingValueSelect struct {
 	DefaultValue string
 	Tooltip      string
 	Options      []PluginSettingValueSelectOption
+	Validators   []validator.PluginSettingValidator // validators for this setting, every validator should be satisfied
 
 	Style PluginSettingValueStyle
 }

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:lpinyin/lpinyin.dart';
@@ -63,9 +62,11 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   Future<void> toggleApp(String traceId, ShowAppParams params) async {
     var isVisible = await windowManager.isVisible();
     if (isVisible) {
-      hideApp(traceId);
       if (isInSettingView.value) {
         isInSettingView.value = false;
+        showApp(traceId, params);
+      } else {
+        hideApp(traceId);
       }
     } else {
       showApp(traceId, params);

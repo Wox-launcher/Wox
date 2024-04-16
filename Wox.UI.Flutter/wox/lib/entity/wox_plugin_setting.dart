@@ -1,10 +1,11 @@
-import 'wox_plugin_setting_checkbox.dart';
-import 'wox_plugin_setting_head.dart';
-import 'wox_plugin_setting_label.dart';
-import 'wox_plugin_setting_newline.dart';
-import 'wox_plugin_setting_select.dart';
-import 'wox_plugin_setting_table.dart';
-import 'wox_plugin_setting_textbox.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
+
+import 'setting/wox_plugin_setting_checkbox.dart';
+import 'setting/wox_plugin_setting_head.dart';
+import 'setting/wox_plugin_setting_label.dart';
+import 'setting/wox_plugin_setting_newline.dart';
+import 'setting/wox_plugin_setting_select.dart';
+import 'setting/wox_plugin_setting_textbox.dart';
 
 class PluginSettingDefinitionItem {
   late String type;

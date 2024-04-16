@@ -1,5 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:wox/entity/wox_plugin_setting_checkbox.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_checkbox.dart';
 
 import 'wox_setting_plugin_item_view.dart';
 

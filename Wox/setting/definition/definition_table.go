@@ -1,6 +1,9 @@
 package definition
 
-import "context"
+import (
+	"context"
+	"wox/setting/validator"
+)
 
 type PluginSettingValueTableColumnType = string
 
@@ -29,9 +32,10 @@ type PluginSettingValueTableColumn struct {
 	Tooltip       string
 	Width         int
 	Type          PluginSettingValueTableColumnType
-	SelectOptions []PluginSettingValueSelectOption // Only used when Type is PluginSettingValueTableColumnTypeSelect
-	TextMaxLines  int                              // Only used when Type is PluginSettingValueTableColumnTypeText
-	HideInTable   bool                             // Hide this column in the table, but still show it in the setting dialog
+	Validators    []validator.PluginSettingValidator // validators for this setting, every validator should be satisfied
+	SelectOptions []PluginSettingValueSelectOption   // Only used when Type is PluginSettingValueTableColumnTypeSelect
+	TextMaxLines  int                                // Only used when Type is PluginSettingValueTableColumnTypeText
+	HideInTable   bool                               // Hide this column in the table, but still show it in the setting dialog
 }
 
 func (p *PluginSettingValueTable) GetPluginSettingType() PluginSettingDefinitionType {

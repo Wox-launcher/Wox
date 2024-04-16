@@ -1,6 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
-import 'package:wox/entity/wox_plugin_setting_textbox.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_textbox.dart';
 
 import 'wox_setting_plugin_item_view.dart';
 
@@ -23,11 +23,24 @@ class WoxSettingPluginTextBox extends WoxSettingPluginItem {
           child: Focus(
             onFocusChange: (hasFocus) {
               if (!hasFocus) {
+                for (var element in item.validators) {
+                  var errMsg = element.validator.validate(controller.text);
+                  item.tooltip = errMsg;
+                  return;
+                }
+
                 updateConfig(item.key, controller.text);
               }
             },
             child: TextBox(
               controller: controller,
+              onChanged: (value) {
+                for (var element in item.validators) {
+                  var errMsg = element.validator.validate(value);
+                  item.tooltip = errMsg;
+                  break;
+                }
+              },
             ),
           ),
         ),

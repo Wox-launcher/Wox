@@ -1,8 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:uuid/v4.dart';
-import 'package:wox/components/wox_tooltip_view.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_plugin.dart';
-import 'package:wox/entity/wox_plugin_setting_table.dart';
 import 'package:wox/utils/picker.dart';
 
 class WoxSettingPluginTableUpdate extends StatefulWidget {
@@ -21,6 +20,8 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   Map<String, dynamic> values = {};
   bool isUpdate = false;
   bool disableBrowse = false;
+  Map<String, String> fieldValidationErrors = {};
+  Map<String, TextEditingController> textboxEditingController = {};
 
   @override
   void initState() {
@@ -37,6 +38,36 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     } else {
       isUpdate = true;
     }
+
+    for (var column in widget.item.columns) {
+      // init text box controller
+      if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeText) {
+        textboxEditingController[column.key] = TextEditingController(text: getValue(column.key));
+      }
+      // init text box controller for text list
+      if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeTextList) {
+        var columnValues = getValue(column.key);
+        if (columnValues is String && columnValues == "") {
+          columnValues = [];
+        }
+        if (columnValues is List) {
+          columnValues = columnValues.map((e) => e.toString()).toList();
+        }
+        updateValue(column.key, columnValues);
+
+        for (var i = 0; i < columnValues.length; i++) {
+          textboxEditingController[column.key + i.toString()] = TextEditingController(text: columnValues[i]);
+        }
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    for (var controller in textboxEditingController.values) {
+      controller.dispose();
+    }
+    super.dispose();
   }
 
   dynamic getValue(String key) {
@@ -76,12 +107,41 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     switch (column.type) {
       case PluginSettingValueType.pluginSettingValueTableColumnTypeText:
         return Expanded(
-          child: TextBox(
-            controller: TextEditingController(text: isUpdate ? getValue(column.key) : ""),
-            onChanged: (value) {
-              updateValue(column.key, value);
+          child: Focus(
+            onFocusChange: (hasFocus) {
+              if (!hasFocus) {
+                for (var element in column.validators) {
+                  var errMsg = element.validator.validate(textboxEditingController[column.key]!.text);
+                  if (errMsg != "") {
+                    fieldValidationErrors[column.key] = errMsg;
+                    setState(() {});
+                    return;
+                  }
+                }
+
+                fieldValidationErrors.remove(column.key);
+                setState(() {});
+              }
             },
-            maxLines: column.textMaxLines,
+            child: TextBox(
+              controller: textboxEditingController[column.key],
+              onChanged: (value) {
+                updateValue(column.key, value);
+
+                for (var element in column.validators) {
+                  var errMsg = element.validator.validate(value);
+                  if (errMsg != "") {
+                    fieldValidationErrors[column.key] = errMsg;
+                    setState(() {});
+                    return;
+                  }
+                }
+
+                fieldValidationErrors.remove(column.key);
+                setState(() {});
+              },
+              maxLines: column.textMaxLines,
+            ),
           ),
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeCheckbox:
@@ -138,12 +198,6 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         return Text("wox image...");
       case PluginSettingValueType.pluginSettingValueTableColumnTypeTextList:
         var columnValues = getValue(column.key);
-        if (columnValues is String && columnValues == "") {
-          columnValues = [];
-        }
-        if (columnValues is List) {
-          columnValues = columnValues.map((e) => e.toString()).toList();
-        }
         return Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -154,14 +208,44 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                   child: Row(
                     children: [
                       Expanded(
-                        child: TextBox(
-                          controller: TextEditingController(text: columnValues[i]),
-                          onChanged: (value) {
-                            columnValues[i] = value;
+                        child: Focus(
+                          onFocusChange: (hasFocus) {
+                            if (!hasFocus) {
+                              //validate
+                              for (var element in column.validators) {
+                                var errMsg = element.validator.validate(columnValues);
+                                if (errMsg != "") {
+                                  fieldValidationErrors[column.key] = errMsg;
+                                  setState(() {});
+                                  return;
+                                }
+                              }
+
+                              fieldValidationErrors.remove(column.key);
+                              setState(() {});
+                            }
                           },
-                          maxLines: 1,
-                          style: const TextStyle(
-                            overflow: TextOverflow.ellipsis,
+                          child: TextBox(
+                            controller: textboxEditingController[column.key + i.toString()],
+                            onChanged: (value) {
+                              columnValues[i] = value;
+
+                              for (var element in column.validators) {
+                                var errMsg = element.validator.validate(columnValues);
+                                if (errMsg != "") {
+                                  fieldValidationErrors[column.key] = errMsg;
+                                  setState(() {});
+                                  return;
+                                }
+                              }
+
+                              fieldValidationErrors.remove(column.key);
+                              setState(() {});
+                            },
+                            maxLines: 1,
+                            style: const TextStyle(
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
                       ),
@@ -169,7 +253,21 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                         icon: const Icon(FluentIcons.delete),
                         onPressed: () {
                           columnValues.removeAt(i);
+                          //remove controller
+                          textboxEditingController.remove(column.key + i.toString());
                           values[column.key] = columnValues;
+
+                          //validate
+                          for (var element in column.validators) {
+                            var errMsg = element.validator.validate(columnValues);
+                            if (errMsg != "") {
+                              fieldValidationErrors[column.key] = errMsg;
+                              setState(() {});
+                              return;
+                            }
+                          }
+
+                          fieldValidationErrors.remove(column.key);
                           setState(() {});
                         },
                       ),
@@ -179,6 +277,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                           icon: const Icon(FluentIcons.add),
                           onPressed: () {
                             columnValues.add("");
+                            textboxEditingController[column.key + (columnValues.length - 1).toString()] = TextEditingController();
                             values[column.key] = columnValues;
                             setState(() {});
                           },
@@ -238,6 +337,14 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                         style: TextStyle(color: Colors.grey[90], fontSize: 12),
                       ),
                     ),
+                  if (fieldValidationErrors.containsKey(column.key))
+                    Padding(
+                      padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
+                      child: Text(
+                        fieldValidationErrors[column.key]!,
+                        style: TextStyle(color: Colors.red, fontSize: 12),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -255,7 +362,23 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             FilledButton(
               child: const Text('Confirm'),
               onPressed: () {
-                Navigator.pop(context);
+                // validate
+                for (var column in widget.item.columns) {
+                  if (column.validators.isNotEmpty) {
+                    for (var element in column.validators) {
+                      var errMsg = element.validator.validate(getValue(column.key));
+                      if (errMsg != "") {
+                        fieldValidationErrors[column.key] = errMsg;
+                      } else {
+                        fieldValidationErrors.remove(column.key);
+                      }
+                    }
+                  }
+                }
+                if (fieldValidationErrors.isNotEmpty) {
+                  setState(() {});
+                  return;
+                }
 
                 // remove empty text list
                 for (var column in widget.item.columns) {
@@ -268,6 +391,8 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 }
 
                 widget.onUpdate(widget.item.key, values);
+
+                Navigator.pop(context);
               },
             ),
           ],

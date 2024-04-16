@@ -9,14 +9,14 @@ import 'package:wox/components/plugin/wox_setting_plugin_newline_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_select_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_label.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_plugin.dart';
-import 'package:wox/entity/wox_plugin_setting_checkbox.dart';
-import 'package:wox/entity/wox_plugin_setting_head.dart';
-import 'package:wox/entity/wox_plugin_setting_label.dart';
-import 'package:wox/entity/wox_plugin_setting_newline.dart';
-import 'package:wox/entity/wox_plugin_setting_select.dart';
-import 'package:wox/entity/wox_plugin_setting_table.dart';
-import 'package:wox/entity/wox_plugin_setting_textbox.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_checkbox.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_head.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_newline.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_textbox.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_checkbox_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_textbox_view.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
@@ -369,7 +369,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     });
                   }
 
-                  return Text(e.type + "  df ds s ss");
+                  return Text(e.type + "  df s");
                 },
               )
             ],

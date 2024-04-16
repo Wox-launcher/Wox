@@ -1,6 +1,9 @@
 package definition
 
-import "context"
+import (
+	"context"
+	"wox/setting/validator"
+)
 
 type PluginSettingValueTextBox struct {
 	Key          string
@@ -8,6 +11,7 @@ type PluginSettingValueTextBox struct {
 	Suffix       string
 	DefaultValue string
 	Tooltip      string
+	Validators   []validator.PluginSettingValidator // validators for this setting, every validator should be satisfied
 
 	Style PluginSettingValueStyle
 }

@@ -1,11 +1,11 @@
-import 'wox_plugin_setting.dart';
+import '../wox_plugin_setting.dart';
 
-class PluginSettingValueLabel {
+class PluginSettingValueHead {
   late String content;
   late String tooltip;
   late PluginSettingValueStyle style;
 
-  PluginSettingValueLabel.fromJson(Map<String, dynamic> json) {
+  PluginSettingValueHead.fromJson(Map<String, dynamic> json) {
     content = json['Content'];
     tooltip = json['Tooltip'];
     if (json['Style'] != null) {

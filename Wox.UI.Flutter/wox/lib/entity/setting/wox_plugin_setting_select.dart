@@ -1,4 +1,6 @@
-import 'wox_plugin_setting.dart';
+import 'package:wox/entity/validator/wox_setting_validator.dart';
+
+import '../wox_plugin_setting.dart';
 
 class PluginSettingValueSelect {
   late String key;
@@ -8,6 +10,7 @@ class PluginSettingValueSelect {
   late String tooltip;
   late List<PluginSettingValueSelectOption> options;
   late PluginSettingValueStyle style;
+  late List<PluginSettingValidatorItem> validators;
 
   PluginSettingValueSelect.fromJson(Map<String, dynamic> json) {
     key = json['Key'];
@@ -25,6 +28,12 @@ class PluginSettingValueSelect {
       style = PluginSettingValueStyle.fromJson(json['Style']);
     } else {
       style = PluginSettingValueStyle.fromJson(<String, dynamic>{});
+    }
+
+    if (json['Validators'] != null) {
+      validators = (json['Validators'] as List).map((e) => PluginSettingValidatorItem.fromJson(e)).toList();
+    } else {
+      validators = [];
     }
   }
 }

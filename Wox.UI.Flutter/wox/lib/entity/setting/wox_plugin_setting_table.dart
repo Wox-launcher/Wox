@@ -1,7 +1,6 @@
-import 'package:uuid/v4.dart';
-
-import 'wox_plugin_setting.dart';
-import 'wox_plugin_setting_select.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
+import 'package:wox/entity/validator/wox_setting_validator.dart';
+import 'package:wox/entity/wox_plugin_setting.dart';
 
 class PluginSettingValueTable {
   late String key;
@@ -48,6 +47,7 @@ class PluginSettingValueTableColumn {
   late List<PluginSettingValueSelectOption> selectOptions; // Only used when Type is PluginSettingValueTableColumnTypeSelect
   late int textMaxLines; // Only used when Type is PluginSettingValueTableColumnTypeText
   late bool hideInTable; // Hide this column in the table, but still show it in the setting dialog
+  late List<PluginSettingValidatorItem> validators;
 
   PluginSettingValueTableColumn.fromJson(Map<String, dynamic> json) {
     key = json['Key'];
@@ -65,5 +65,11 @@ class PluginSettingValueTableColumn {
       textMaxLines = 1;
     }
     hideInTable = json['HideInTable'] ?? false;
+
+    if (json['Validators'] != null) {
+      validators = (json['Validators'] as List).map((e) => PluginSettingValidatorItem.fromJson(e)).toList();
+    } else {
+      validators = [];
+    }
   }
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 	"wox/plugin"
 	"wox/setting/definition"
+	"wox/setting/validator"
 	"wox/util"
 )
 
@@ -76,13 +77,19 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 							Label:   "i18n:plugin_websearch_trigger_keyword",
 							Tooltip: "i18n:plugin_websearch_trigger_keyword_tooltip",
 							Type:    definition.PluginSettingValueTableColumnTypeText,
-							Width:   60,
+							Validators: []validator.PluginSettingValidator{
+								&validator.PluginSettingValidatorNotEmpty{},
+							},
+							Width: 60,
 						},
 						{
 							Key:     "Title",
 							Label:   "i18n:plugin_websearch_title",
 							Tooltip: "i18n:plugin_websearch_title_tooltip",
 							Type:    definition.PluginSettingValueTableColumnTypeText,
+							Validators: []validator.PluginSettingValidator{
+								&validator.PluginSettingValidatorNotEmpty{},
+							},
 						},
 						{
 							Key:         "Urls",
@@ -90,6 +97,9 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 							Tooltip:     "i18n:plugin_websearch_urls_tooltip",
 							HideInTable: true,
 							Type:        definition.PluginSettingValueTableColumnTypeTextList,
+							Validators: []validator.PluginSettingValidator{
+								&validator.PluginSettingValidatorNotEmpty{},
+							},
 						},
 						{
 							Key:   "Enabled",

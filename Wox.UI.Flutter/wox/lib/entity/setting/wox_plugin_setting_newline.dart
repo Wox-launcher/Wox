@@ -1,4 +1,4 @@
-import 'wox_plugin_setting.dart';
+import '../wox_plugin_setting.dart';
 
 class PluginSettingValueNewLine {
   late PluginSettingValueStyle style;
