@@ -373,7 +373,6 @@ func serveAndWait(ctx context.Context, port int) {
 			themes[i].IsUpgradable = GetUIManager().IsThemeUpgradable(storeTheme.ThemeId, storeTheme.Version)
 			themes[i].IsInstalled = isInstalled
 			themes[i].IsSystem = GetUIManager().IsSystemTheme(storeTheme.ThemeId)
-			themes[i].ScreenshotUrls = []string{}
 		}
 
 		writeSuccessResponse(w, themes)
@@ -392,7 +391,6 @@ func serveAndWait(ctx context.Context, port int) {
 			themes[i].IsInstalled = true
 			themes[i].IsUpgradable = GetUIManager().IsThemeUpgradable(storeTheme.ThemeId, storeTheme.Version)
 			themes[i].IsSystem = GetUIManager().IsSystemTheme(storeTheme.ThemeId)
-			themes[i].ScreenshotUrls = []string{}
 		}
 		writeSuccessResponse(w, themes)
 	})

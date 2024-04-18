@@ -227,7 +227,11 @@ class WoxSettingTheme {
     isSystem = json['IsSystem'];
     isInstalled = json['IsInstalled'];
     isUpgradable = json['IsUpgradable'];
-    screenshotUrls = List<String>.from(json['ScreenshotUrls']);
+    if (json['ScreenshotUrls'] != null) {
+      screenshotUrls = List<String>.from(json['ScreenshotUrls']);
+    } else {
+      screenshotUrls = <String>[];
+    }
   }
 
   WoxSettingTheme.empty() {
