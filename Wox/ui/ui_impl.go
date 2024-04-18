@@ -59,12 +59,8 @@ func (u *uiImpl) ChangeTheme(ctx context.Context, theme share.Theme) {
 	u.send(ctx, "ChangeTheme", theme)
 }
 
-func (u *uiImpl) OpenSettingWindow(ctx context.Context) {
-	x, y := getWindowMouseScreenLocation(1200)
-	u.send(ctx, "OpenSettingWindow", map[string]int{
-		"x": x,
-		"y": y,
-	})
+func (u *uiImpl) OpenSettingWindow(ctx context.Context, windowContext share.SettingWindowContext) {
+	u.send(ctx, "OpenSettingWindow", windowContext)
 }
 
 func (u *uiImpl) GetAllThemes(ctx context.Context) []share.Theme {

@@ -666,6 +666,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	onAnswering := func(current plugin.RefreshableResult, deltaAnswer string) plugin.RefreshableResult {
 		current.Icon = chatgptLoadingIcon
 		current.Preview.PreviewData += deltaAnswer
+		current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
 		return current
 	}
 	onAnswerErr := func(current plugin.RefreshableResult, err error) plugin.RefreshableResult {

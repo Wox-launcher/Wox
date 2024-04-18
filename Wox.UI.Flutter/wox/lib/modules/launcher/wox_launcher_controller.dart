@@ -4,12 +4,14 @@ import 'dart:ui';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:get/get.dart';
 import 'package:lpinyin/lpinyin.dart';
 import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_query.dart';
+import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_websocket_msg.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
@@ -21,6 +23,7 @@ import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
 import 'package:wox/interfaces/wox_launcher_interface.dart';
+import 'package:wox/modules/setting/wox_setting_controller.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/picker.dart';
@@ -372,7 +375,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       final files = await FileSelector.pick(msg.traceId, pickFilesParams);
       responseWoxWebsocketRequest(msg, true, files);
     } else if (msg.method == "OpenSettingWindow") {
-      isInSettingView.value = true;
+      openSettingWindow(msg.traceId, SettingWindowContext.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
     }
   }
@@ -640,6 +643,23 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     queryBoxTextFieldController.dispose();
     resultListViewScrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> openSettingWindow(String traceId, SettingWindowContext context) async {
+    isInSettingView.value = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (context.path == "/plugin/setting") {
+        var settingController = Get.find<WoxSettingController>();
+        await settingController.switchToPluginList(false);
+        settingController.filterPluginKeywordController.text = context.param;
+        settingController.filterPlugins();
+        settingController.setFirstFilteredPluginDetailActive();
+
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          settingController.switchToPluginSettingTab();
+        });
+      }
+    });
   }
 
   void moveQueryBoxCursorToStart() {

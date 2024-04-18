@@ -8,6 +8,7 @@ import (
 	"time"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/share"
 	"wox/ui"
 	"wox/util"
 )
@@ -89,7 +90,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			PreventHideAfterAction: true,
 			Icon:                   sysSettingIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx)
+				plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, share.DefaultSettingWindowContext)
 			},
 		},
 		{
@@ -97,7 +98,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			PreventHideAfterAction: true,
 			Icon:                   sysSettingIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx)
+				plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, share.DefaultSettingWindowContext)
 			},
 		},
 		{
@@ -168,5 +169,38 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 			})
 		}
 	}
+
+	for _, instance := range plugin.GetPluginManager().GetPluginInstances() {
+		//check if plugin has setting
+		if len(instance.Metadata.SettingDefinitions) > 0 {
+			if match, score := IsStringMatchScore(ctx, instance.Metadata.Name, query.Search); match {
+				// load icon
+				pluginIcon := sysSettingIcon
+				iconImg, parseErr := plugin.ParseWoxImage(instance.Metadata.Icon)
+				if parseErr == nil {
+					pluginIcon = iconImg
+				}
+
+				results = append(results, plugin.QueryResult{
+					Title: "Open " + instance.Metadata.Name + " settings",
+					Score: score,
+					Icon:  pluginIcon,
+					Actions: []plugin.QueryResultAction{
+						{
+							Name: "Open plugin settings",
+							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+								plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, share.SettingWindowContext{
+									Path:  "/plugin/setting",
+									Param: instance.Metadata.Name,
+								})
+							},
+							PreventHideAfterAction: true,
+						},
+					},
+				})
+			}
+		}
+	}
+
 	return
 }

@@ -1,3 +1,4 @@
+import 'package:dynamic_tabbar/dynamic_tabbar.dart' as dt;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
@@ -165,7 +166,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   padding: const EdgeInsets.only(left: 10.0),
                   child: Text(
                     plugin.version,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.grey,
                     ),
                   ),
@@ -199,7 +200,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                           ),
                         ),
                         Padding(
-                          padding: EdgeInsets.only(left: 4.0),
+                          padding: const EdgeInsets.only(left: 4.0),
                           child: Icon(
                             FluentIcons.open_in_new_tab,
                             size: 12,
@@ -261,44 +262,69 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
             ),
           ),
           Expanded(
-            child: material.DefaultTabController(
-              length: shouldShowSettingTab() ? 2 : 1,
-              child: Column(
-                children: [
-                  material.TabBar(
-                    isScrollable: true,
-                    tabAlignment: material.TabAlignment.start,
-                    labelColor: SettingPrimaryColor,
-                    indicatorColor: SettingPrimaryColor,
-                    tabs: [
-                      const material.Tab(
-                        child: Text('Description'),
-                      ),
-                      if (shouldShowSettingTab())
-                        const material.Tab(
-                          child: Text('Settings'),
-                        )
-                    ],
+            // child: material.DefaultTabController(
+            //   length: controller.shouldShowSettingTab() ? 2 : 1,
+            //   child: Column(
+            //     children: [
+            //       material.TabBar(
+            //         isScrollable: true,
+            //         tabAlignment: material.TabAlignment.start,
+            //         labelColor: SettingPrimaryColor,
+            //         indicatorColor: SettingPrimaryColor,
+            //         tabs: [
+            //           const material.Tab(
+            //             child: Text('Description'),
+            //           ),
+            //           if (controller.shouldShowSettingTab())
+            //             const material.Tab(
+            //               child: Text('Settings'),
+            //             )
+            //         ],
+            //       ),
+            //       Expanded(
+            //         child: material.TabBarView(
+            //           children: [
+            //             pluginTabDescription(),
+            //             if (controller.shouldShowSettingTab()) pluginTabSetting(),
+            //           ],
+            //         ),
+            //       ),
+            //     ],
+            //   ),
+            // ),
+            child: dt.DynamicTabBarWidget(
+              isScrollable: true,
+              showBackIcon: false,
+              showNextIcon: false,
+              tabAlignment: material.TabAlignment.start,
+              labelColor: SettingPrimaryColor,
+              indicatorColor: SettingPrimaryColor,
+              dynamicTabs: [
+                dt.TabData(
+                  index: 1,
+                  title: const material.Tab(
+                    child: Text('Description'),
                   ),
-                  Expanded(
-                    child: material.TabBarView(
-                      children: [
-                        pluginTabDescription(),
-                        if (shouldShowSettingTab()) pluginTabSetting(),
-                      ],
+                  content: pluginTabDescription(),
+                ),
+                if (controller.shouldShowSettingTab())
+                  dt.TabData(
+                    index: 2,
+                    title: const material.Tab(
+                      child: Text('Settings'),
                     ),
+                    content: pluginTabSetting(),
                   ),
-                ],
-              ),
+              ],
+              onTabControllerUpdated: (tabController) {
+                controller.activePluginTabController = tabController;
+              },
+              onTabChanged: (index) {},
             ),
           ),
         ]);
       }),
     );
-  }
-
-  bool shouldShowSettingTab() {
-    return controller.activePluginDetail.value.isInstalled && controller.activePluginDetail.value.settingDefinitions.isNotEmpty;
   }
 
   Widget pluginTabDescription() {

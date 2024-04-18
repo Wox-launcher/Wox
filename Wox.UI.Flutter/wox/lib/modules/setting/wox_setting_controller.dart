@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/v4.dart';
@@ -18,9 +19,8 @@ class WoxSettingController extends GetxController {
   final filterPluginKeywordController = TextEditingController();
   final filteredPluginDetails = <PluginDetail>[].obs;
   final activePluginDetail = PluginDetail.empty().obs;
-
-  final activePluginDetailTab = 0.obs;
   final isStorePluginList = true.obs;
+  late TabController activePluginTabController;
 
   //themes
   final themeList = <WoxSettingTheme>[];
@@ -128,6 +128,16 @@ class WoxSettingController extends GetxController {
   Future<void> updatePluginSetting(String pluginId, String key, String value) async {
     await WoxApi.instance.updatePluginSetting(pluginId, key, value);
     Logger.instance.info(const UuidV4().generate(), 'plugin setting updated: $key=$value');
+  }
+
+  bool shouldShowSettingTab() {
+    return activePluginDetail.value.isInstalled && activePluginDetail.value.settingDefinitions.isNotEmpty;
+  }
+
+  void switchToPluginSettingTab() {
+    if (shouldShowSettingTab()) {
+      activePluginTabController.animateTo(1, duration: Duration.zero);
+    }
   }
 
   // ---------- Themes ----------

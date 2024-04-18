@@ -113,6 +113,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.4.0"
+  dynamic_tabbar:
+    dependency: "direct main"
+    description:
+      name: dynamic_tabbar
+      sha256: cd4ec0f5a1334bbad363d95b135181ac621e191c072d12d515c3bd3a84235334
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.6"
   fake_async:
     dependency: transitive
     description:
@@ -836,5 +844,5 @@ packages:
     source: hosted
     version: "6.4.2"
 sdks:
-  dart: ">=3.2.0 <4.0.0"
+  dart: ">=3.2.1 <4.0.0"
   flutter: ">=3.16.0"

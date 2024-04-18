@@ -112,3 +112,15 @@ class QueryShortcut {
     return data;
   }
 }
+
+class SettingWindowContext {
+  late String path;
+  late String param;
+
+  SettingWindowContext({required this.path, required this.param});
+
+  SettingWindowContext.fromJson(Map<String, dynamic> json) {
+    path = json['Path'];
+    param = json['Param'];
+  }
+}

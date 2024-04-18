@@ -11,6 +11,13 @@ type ChangedQuery struct {
 	QuerySelection util.Selection
 }
 
+var DefaultSettingWindowContext = SettingWindowContext{Path: "/"}
+
+type SettingWindowContext struct {
+	Path  string
+	Param string
+}
+
 func (c ChangedQuery) IsEmpty() bool {
 	return c.QueryText == "" && c.QuerySelection.String() == ""
 }
@@ -31,7 +38,7 @@ type UI interface {
 	Notify(ctx context.Context, title string, description string)
 	GetServerPort(ctx context.Context) int
 	ChangeTheme(ctx context.Context, theme Theme)
-	OpenSettingWindow(ctx context.Context)
+	OpenSettingWindow(ctx context.Context, windowContext SettingWindowContext)
 	GetAllThemes(ctx context.Context) []Theme
 	PickFiles(ctx context.Context, params PickFilesParams) []string
 }
