@@ -1,4 +1,3 @@
-import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -167,13 +166,13 @@ class WoxSettingController extends GetxController {
   Future<void> installTheme(WoxSettingTheme theme) async {
     Logger.instance.info(const UuidV4().generate(), 'Installing theme: ${theme.themeId}');
     await WoxApi.instance.installTheme(theme.themeId);
-    loadStoreThemes();
+    await refreshThemeList();
   }
 
   Future<void> uninstallTheme(WoxSettingTheme theme) async {
     Logger.instance.info(const UuidV4().generate(), 'Uninstalling theme: ${theme.themeId}');
     await WoxApi.instance.uninstallTheme(theme.themeId);
-    loadInstalledThemes();
+    await refreshThemeList();
   }
 
   onFilterThemes(String filter) {

@@ -5,6 +5,7 @@
     "ThemeAuthor": "Wox launcher",
     "ThemeUrl": "http://www.github.com/wox-launcher/wox",
     "Version": "1.0.0",
+    "IsSystemTheme": true,
     "AppBackgroundColor": "rgba(0,0,0, 0.65)",
     "AppPaddingLeft": 10,
     "AppPaddingTop": 10,
@@ -20,16 +21,18 @@
     "ResultItemPaddingRight": 0,
     "ResultItemPaddingBottom": 0,
     "ResultItemTitleColor": "#f0f0f0",
-    "ResultItemSubTitleColor": "#f0f0f0",
+    "ResultItemSubTitleColor": "#dbd9d9",
     "ResultItemBorderLeft": "0",
     "ResultItemActiveBackgroundColor": "rgba(31, 118, 124, 0.8)",
     "ResultItemActiveTitleColor": "#f0f0f0",
-    "ResultItemActiveSubTitleColor": "#f0f0f0",
+    "ResultItemActiveSubTitleColor": "#dbd9d9",
     "ResultItemActiveBorderLeft": "0",
     "QueryBoxFontColor": "#e4e7e7",
-    "QueryBoxBackgroundColor": "rgb(24 25 26 / 40%)",
+    "QueryBoxBackgroundColor": "rgba(24, 25, 26, 0.4)",
     "QueryBoxBorderRadius": 8,
-    "ActionContainerBackgroundColor": "#1d2a2f",
+    "QueryBoxCursorColor": "#e4e7e7",
+    "QueryBoxTextSelectionColor": "rgba(31, 118, 124, 0.8)",
+    "ActionContainerBackgroundColor": "#373839",
     "ActionContainerHeaderFontColor": "#e4e7e7",
     "ActionContainerPaddingLeft": 14,
     "ActionContainerPaddingTop": 10,
@@ -44,6 +47,11 @@
     "PreviewFontColor": "#f0f0f0",
     "PreviewSplitLineColor": "#3a474e",
     "PreviewPropertyTitleColor": "#b0b3b5",
-    "PreviewPropertyContentColor": "#f0f0f0"
+    "PreviewPropertyContentColor": "#f0f0f0",
+    "PreviewTextSelectionColor": "rgba(31, 118, 124, 0.8)",
+    "Description": "Dark theme for QLF",
+    "ScreenshotUrls": [
+      "http://www.github.com/wox-launcher/wox/v2/store-theme-screen-shot.png"
+    ]
   }
 ]

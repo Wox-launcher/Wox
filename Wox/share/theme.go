@@ -52,4 +52,6 @@ type Theme struct {
 	PreviewPropertyTitleColor       string
 	PreviewPropertyContentColor     string
 	PreviewTextSelectionColor       string
+	Description                     string
+	ScreenshotUrls                  []string
 }
