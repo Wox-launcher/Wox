@@ -45,13 +45,17 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
             child: Obx(() {
               return TextBox(
                 autofocus: true,
+                controller: controller.filterPluginKeywordController,
                 placeholder: 'Search ${controller.filteredPluginDetails.length} plugins',
                 padding: const EdgeInsets.all(10),
                 suffix: const Padding(
                   padding: EdgeInsets.only(right: 8.0),
                   child: Icon(FluentIcons.search),
                 ),
-                onChanged: (value) => {controller.onFilterPlugins(value)},
+                onChanged: (value) {
+                  controller.filterPlugins();
+                  controller.setFirstFilteredPluginDetailActive();
+                },
               );
             }),
           ),
@@ -369,7 +373,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     });
                   }
 
-                  return Text(e.type + "  dfs");
+                  return Text(e.type + "  ");
                 },
               )
             ],

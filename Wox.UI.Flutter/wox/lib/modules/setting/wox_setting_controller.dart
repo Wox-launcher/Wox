@@ -1,3 +1,4 @@
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/v4.dart';
@@ -14,6 +15,7 @@ class WoxSettingController extends GetxController {
 
   //plugins
   final pluginDetails = <PluginDetail>[];
+  final filterPluginKeywordController = TextEditingController();
   final filteredPluginDetails = <PluginDetail>[].obs;
   final activePluginDetail = PluginDetail.empty().obs;
 
@@ -44,8 +46,6 @@ class WoxSettingController extends GetxController {
     storePlugins.sort((a, b) => a.name.compareTo(b.name));
     pluginDetails.clear();
     pluginDetails.addAll(storePlugins);
-    filteredPluginDetails.clear();
-    filteredPluginDetails.addAll(pluginDetails);
   }
 
   Future<void> loadInstalledPlugins() async {
@@ -53,8 +53,6 @@ class WoxSettingController extends GetxController {
     installedPlugin.sort((a, b) => a.name.compareTo(b.name));
     pluginDetails.clear();
     pluginDetails.addAll(installedPlugin);
-    filteredPluginDetails.clear();
-    filteredPluginDetails.addAll(pluginDetails);
   }
 
   Future<void> refreshPluginList() async {
@@ -64,20 +62,21 @@ class WoxSettingController extends GetxController {
       await loadInstalledPlugins();
     }
 
+    filterPlugins();
+
     //active plugin
     if (activePluginDetail.value.id.isNotEmpty) {
       activePluginDetail.value = filteredPluginDetails.firstWhere((element) => element.id == activePluginDetail.value.id, orElse: () => filteredPluginDetails[0]);
     } else {
       setFirstFilteredPluginDetailActive();
     }
-
-
   }
 
   Future<void> switchToPluginList(bool isStorePlugin) async {
     activePaneIndex.value = isStorePlugin ? 2 : 3;
     isStorePluginList.value = isStorePlugin;
     activePluginDetail.value = PluginDetail.empty();
+    filterPluginKeywordController.text = "";
     await refreshPluginList();
     setFirstFilteredPluginDetailActive();
   }
@@ -112,11 +111,13 @@ class WoxSettingController extends GetxController {
     await refreshPluginList();
   }
 
-  onFilterPlugins(String filter) {
+  filterPlugins() {
     filteredPluginDetails.clear();
-    filteredPluginDetails.addAll(pluginDetails.where((element) => element.name.toLowerCase().contains(filter.toLowerCase())));
-    if (filteredPluginDetails.isNotEmpty) {
-      activePluginDetail.value = filteredPluginDetails[0];
+
+    if (filterPluginKeywordController.text.isEmpty) {
+      filteredPluginDetails.addAll(pluginDetails);
+    } else {
+      filteredPluginDetails.addAll(pluginDetails.where((element) => element.name.toLowerCase().contains(filterPluginKeywordController.text.toLowerCase())));
     }
   }
 
