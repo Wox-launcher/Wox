@@ -262,46 +262,17 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
             ),
           ),
           Expanded(
-            // child: material.DefaultTabController(
-            //   length: controller.shouldShowSettingTab() ? 2 : 1,
-            //   child: Column(
-            //     children: [
-            //       material.TabBar(
-            //         isScrollable: true,
-            //         tabAlignment: material.TabAlignment.start,
-            //         labelColor: SettingPrimaryColor,
-            //         indicatorColor: SettingPrimaryColor,
-            //         tabs: [
-            //           const material.Tab(
-            //             child: Text('Description'),
-            //           ),
-            //           if (controller.shouldShowSettingTab())
-            //             const material.Tab(
-            //               child: Text('Settings'),
-            //             )
-            //         ],
-            //       ),
-            //       Expanded(
-            //         child: material.TabBarView(
-            //           children: [
-            //             pluginTabDescription(),
-            //             if (controller.shouldShowSettingTab()) pluginTabSetting(),
-            //           ],
-            //         ),
-            //       ),
-            //     ],
-            //   ),
-            // ),
             child: dt.DynamicTabBarWidget(
               isScrollable: true,
               showBackIcon: false,
               showNextIcon: false,
               tabAlignment: material.TabAlignment.start,
+              onAddTabMoveTo: dt.MoveToTab.idol,
               labelColor: SettingPrimaryColor,
               indicatorColor: SettingPrimaryColor,
               dynamicTabs: [
                 dt.TabData(
-                  index: 1,
+                  index: 0,
                   title: const material.Tab(
                     child: Text('Description'),
                   ),
@@ -309,7 +280,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 ),
                 if (controller.shouldShowSettingTab())
                   dt.TabData(
-                    index: 2,
+                    index: 1,
                     title: const material.Tab(
                       child: Text('Settings'),
                     ),

@@ -135,7 +135,8 @@ class WoxSettingController extends GetxController {
 
   void switchToPluginSettingTab() {
     if (shouldShowSettingTab()) {
-      activePluginTabController.animateTo(1, duration: Duration.zero);
+      // buggy, ref https://github.com/alihaider78222/dynamic_tabbar/issues/6
+      // activePluginTabController.animateTo(1, duration: Duration.zero);
     }
   }
 
