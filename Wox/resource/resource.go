@@ -117,10 +117,6 @@ func parseThemes(ctx context.Context) error {
 	return nil
 }
 
-func GetReactFile(ctx context.Context, paths ...string) ([]byte, error) {
-	return UIFS.ReadFile(path.Join("ui", "react", path.Join(paths...)))
-}
-
 func GetLangJson(ctx context.Context, langCode string) ([]byte, error) {
 	var langJsonPath = path.Join("lang", fmt.Sprintf("%s.json", langCode))
 	return LangFS.ReadFile(langJsonPath)

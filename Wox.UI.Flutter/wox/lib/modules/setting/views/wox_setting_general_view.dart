@@ -64,9 +64,7 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
             label: "Hotkey",
             child: WoxHotkeyRecorder(
               hotkey: WoxHotkey.parseHotkey(controller.woxSetting.value.mainHotkey),
-              onHotKeyRecorded: (hotkey) {
-                print(hotkey.modifiers);
-              },
+              onHotKeyRecorded: (hotkey) {},
             ),
           ),
           formField(
