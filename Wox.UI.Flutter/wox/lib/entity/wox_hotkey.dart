@@ -9,11 +9,11 @@ class WoxHotkey {
       final e = element.toLowerCase();
       if (e == "alt" || e == "option") {
         modifiers.add(HotKeyModifier.alt);
-      } else if (e == "control") {
+      } else if (e == "control" || e == "ctrl") {
         modifiers.add(HotKeyModifier.control);
       } else if (e == "shift") {
         modifiers.add(HotKeyModifier.shift);
-      } else if (e == "meta" || e == "command") {
+      } else if (e == "meta" || e == "command" || e == "cmd") {
         modifiers.add(HotKeyModifier.meta);
       } else if (e == "a") {
         key = LogicalKeyboardKey.keyA;

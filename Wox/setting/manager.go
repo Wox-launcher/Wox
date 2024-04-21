@@ -13,6 +13,7 @@ import (
 	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
+	"wox/util/hotkey"
 )
 
 var managerInstance *Manager
@@ -156,8 +157,16 @@ func (m *Manager) UpdateWoxSetting(ctx context.Context, key, value string) error
 	}
 
 	if key == "MainHotkey" {
+		isAvailable := hotkey.IsHotkeyAvailable(ctx, value)
+		if !isAvailable {
+			return fmt.Errorf("hotkey is not available: %s", value)
+		}
 		m.woxSetting.MainHotkey.Set(value)
 	} else if key == "SelectionHotkey" {
+		isAvailable := hotkey.IsHotkeyAvailable(ctx, value)
+		if !isAvailable {
+			return fmt.Errorf("hotkey is not available: %s", value)
+		}
 		m.woxSetting.SelectionHotkey.Set(value)
 	} else if key == "UsePinYin" {
 		m.woxSetting.UsePinYin = value == "true"

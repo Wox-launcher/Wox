@@ -15,7 +15,6 @@ import (
 	"wox/setting"
 	"wox/share"
 	"wox/util"
-	"wox/util/hotkey"
 	"wox/util/ime"
 	"wox/util/screen"
 )
@@ -141,10 +140,6 @@ func onUIRequest(ctx context.Context, request WebsocketMsg) {
 		handleAction(ctx, request)
 	case "Refresh":
 		handleRefresh(ctx, request)
-	case "RegisterMainHotkey":
-		handleRegisterMainHotkey(ctx, request)
-	case "IsHotkeyAvailable":
-		handleIsHotkeyAvailable(ctx, request)
 	case "ChangeLanguage":
 		handleChangeLanguage(ctx, request)
 	case "GetLanguageJson":
@@ -497,43 +492,6 @@ func onAppHide(ctx context.Context, query share.ChangedQuery) {
 			QueryText: "",
 		})
 	}
-}
-
-func handleRegisterMainHotkey(ctx context.Context, request WebsocketMsg) {
-	hotkey, hotkeyErr := getWebsocketMsgParameter(ctx, request, "hotkey")
-	if hotkeyErr != nil {
-		logger.Error(ctx, hotkeyErr.Error())
-		responseUIError(ctx, request, hotkeyErr.Error())
-		return
-	}
-
-	registerErr := GetUIManager().RegisterMainHotkey(ctx, hotkey)
-	if registerErr != nil {
-		responseUIError(ctx, request, registerErr.Error())
-	} else {
-		responseUISuccess(ctx, request)
-	}
-}
-
-func handleIsHotkeyAvailable(ctx context.Context, request WebsocketMsg) {
-	hotkeyStr, hotkeyErr := getWebsocketMsgParameter(ctx, request, "hotkey")
-	if hotkeyErr != nil {
-		logger.Error(ctx, hotkeyErr.Error())
-		responseUIError(ctx, request, hotkeyErr.Error())
-		return
-	}
-
-	isAvailable := false
-	hk := hotkey.Hotkey{}
-	registerErr := hk.Register(ctx, hotkeyStr, func() {
-
-	})
-	if registerErr == nil {
-		isAvailable = true
-		hk.Unregister(ctx)
-	}
-
-	responseUISuccessWithData(ctx, request, isAvailable)
 }
 
 func getWebsocketMsgParameter(ctx context.Context, msg WebsocketMsg, key string) (string, error) {

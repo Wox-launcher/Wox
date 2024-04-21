@@ -164,12 +164,26 @@ func (m *Manager) Stop(ctx context.Context) {
 }
 
 func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) error {
+	logger.Info(ctx, fmt.Sprintf("register main hotkey: %s", combineKey))
+	// unregister previous hotkey
+	if m.mainHotkey != nil {
+		m.mainHotkey.Unregister(ctx)
+	}
+
+	managerInstance.mainHotkey = &hotkey.Hotkey{}
 	return m.mainHotkey.Register(ctx, combineKey, func() {
 		m.ui.ToggleApp(util.NewTraceContext())
 	})
 }
 
 func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string) error {
+	logger.Info(ctx, fmt.Sprintf("register selection hotkey: %s", combineKey))
+	// unregister previous hotkey
+	if m.selectionHotkey != nil {
+		m.selectionHotkey.Unregister(ctx)
+	}
+
+	managerInstance.selectionHotkey = &hotkey.Hotkey{}
 	return m.selectionHotkey.Register(ctx, combineKey, func() {
 		newCtx := util.NewTraceContext()
 		selection, err := util.GetSelected()
@@ -359,6 +373,12 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key, value string) {
 		} else {
 			m.HideTray()
 		}
+	}
+	if key == "MainHotkey" {
+		m.RegisterMainHotkey(ctx, value)
+	}
+	if key == "SelectionHotkey" {
+		m.RegisterSelectionHotkey(ctx, value)
 	}
 }
 

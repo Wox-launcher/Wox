@@ -1,10 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
+import 'package:uuid/v4.dart';
+import 'package:wox/api/wox_api.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/log.dart';
 
 class WoxHotkeyRecorder extends StatefulWidget {
-  final ValueChanged<HotKey> onHotKeyRecorded;
+  final ValueChanged<String> onHotKeyRecorded;
   final HotKey? hotkey;
 
   const WoxHotkeyRecorder({super.key, required this.onHotKeyRecorded, required this.hotkey});
@@ -36,44 +41,136 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
     HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
   }
 
+  String getHotkeyString(HotKey hotKey) {
+    var modifiers = [];
+    if (hotKey.modifiers != null) {
+      for (var modifier in hotKey.modifiers!) {
+        if (modifier == HotKeyModifier.shift) {
+          modifiers.add("shift");
+        } else if (modifier == HotKeyModifier.control) {
+          modifiers.add("ctrl");
+        } else if (modifier == HotKeyModifier.alt) {
+          if (Platform.isMacOS) {
+            modifiers.add("option");
+          } else {
+            modifiers.add("alt");
+          }
+        } else if (modifier == HotKeyModifier.meta) {
+          if (Platform.isMacOS) {
+            modifiers.add("cmd");
+          } else {
+            modifiers.add("win");
+          }
+        }
+      }
+    }
+
+    var keyStr = hotKey.key.keyLabel.toLowerCase();
+    if (hotKey.key == PhysicalKeyboardKey.space) {
+      keyStr = "space";
+    } else if (hotKey.key == PhysicalKeyboardKey.enter) {
+      keyStr = "enter";
+    } else if (hotKey.key == PhysicalKeyboardKey.backspace) {
+      keyStr = "backspace";
+    } else if (hotKey.key == PhysicalKeyboardKey.delete) {
+      keyStr = "delete";
+    } else if (hotKey.key == PhysicalKeyboardKey.arrowLeft) {
+      keyStr = "left";
+    } else if (hotKey.key == PhysicalKeyboardKey.arrowDown) {
+      keyStr = "down";
+    } else if (hotKey.key == PhysicalKeyboardKey.arrowRight) {
+      keyStr = "right";
+    } else if (hotKey.key == PhysicalKeyboardKey.arrowUp) {
+      keyStr = "up";
+    }
+
+    return "${modifiers.join("+")}+$keyStr";
+  }
+
+  bool isAllowedKey(PhysicalKeyboardKey key) {
+    var allowedKeys = [
+      PhysicalKeyboardKey.keyA,
+      PhysicalKeyboardKey.keyB,
+      PhysicalKeyboardKey.keyC,
+      PhysicalKeyboardKey.keyD,
+      PhysicalKeyboardKey.keyE,
+      PhysicalKeyboardKey.keyF,
+      PhysicalKeyboardKey.keyG,
+      PhysicalKeyboardKey.keyH,
+      PhysicalKeyboardKey.keyI,
+      PhysicalKeyboardKey.keyJ,
+      PhysicalKeyboardKey.keyK,
+      PhysicalKeyboardKey.keyL,
+      PhysicalKeyboardKey.keyM,
+      PhysicalKeyboardKey.keyN,
+      PhysicalKeyboardKey.keyO,
+      PhysicalKeyboardKey.keyP,
+      PhysicalKeyboardKey.keyQ,
+      PhysicalKeyboardKey.keyR,
+      PhysicalKeyboardKey.keyS,
+      PhysicalKeyboardKey.keyT,
+      PhysicalKeyboardKey.keyU,
+      PhysicalKeyboardKey.keyV,
+      PhysicalKeyboardKey.keyW,
+      PhysicalKeyboardKey.keyX,
+      PhysicalKeyboardKey.keyY,
+      PhysicalKeyboardKey.keyZ,
+      PhysicalKeyboardKey.digit1,
+      PhysicalKeyboardKey.digit2,
+      PhysicalKeyboardKey.digit3,
+      PhysicalKeyboardKey.digit4,
+      PhysicalKeyboardKey.digit5,
+      PhysicalKeyboardKey.digit6,
+      PhysicalKeyboardKey.digit7,
+      PhysicalKeyboardKey.digit8,
+      PhysicalKeyboardKey.digit9,
+      PhysicalKeyboardKey.digit0,
+      PhysicalKeyboardKey.space,
+      PhysicalKeyboardKey.enter,
+      PhysicalKeyboardKey.backspace,
+      PhysicalKeyboardKey.delete,
+      PhysicalKeyboardKey.arrowLeft,
+      PhysicalKeyboardKey.arrowDown,
+      PhysicalKeyboardKey.arrowRight,
+      PhysicalKeyboardKey.arrowUp,
+    ];
+
+    return allowedKeys.contains(key);
+  }
+
   bool _handleKeyEvent(KeyEvent keyEvent) {
+    // Logger.instance.debug(const UuidV4().generate(), "Hotkey: ${keyEvent}");
+
     if (_isFocused == false) return false;
     if (keyEvent is KeyUpEvent) return false;
 
     final physicalKeysPressed = HardwareKeyboard.instance.physicalKeysPressed;
-    PhysicalKeyboardKey? key = keyEvent.physicalKey;
-    List<HotKeyModifier>? modifiers = HotKeyModifier.values.where((e) => e.physicalKeys.any(physicalKeysPressed.contains)).toList();
-    if (modifiers.isNotEmpty) {
-      // Remove the key from the modifiers list if it is a modifier
-      modifiers = modifiers.where((e) => !e.physicalKeys.contains(key)).toList();
+    var modifiers = HotKeyModifier.values.where((e) => e.physicalKeys.any(physicalKeysPressed.contains)).toList();
+    PhysicalKeyboardKey? key;
+    physicalKeysPressed.removeWhere((element) => !isAllowedKey(element));
+    if (physicalKeysPressed.isNotEmpty) {
+      key = physicalKeysPressed.last;
     }
 
-    if (modifiers.isEmpty) {
-      return false;
-    }
-    // ignore tab, arrow keys
-    if (keyEvent.physicalKey == PhysicalKeyboardKey.tab && modifiers.isEmpty) {
-      return false;
-    }
-    if (keyEvent.physicalKey == PhysicalKeyboardKey.tab && modifiers.length == 1 && modifiers.contains(HotKeyModifier.shift)) {
-      return false;
-    }
-    if (keyEvent.physicalKey == PhysicalKeyboardKey.arrowLeft && modifiers.isEmpty) {
-      return false;
-    }
-    if (keyEvent.physicalKey == PhysicalKeyboardKey.arrowDown && modifiers.isEmpty) {
-      return false;
-    }
-    if (keyEvent.physicalKey == PhysicalKeyboardKey.arrowRight && modifiers.isEmpty) {
-      return false;
-    }
-    if (keyEvent.physicalKey == PhysicalKeyboardKey.arrowUp && modifiers.isEmpty) {
+    if (modifiers.isEmpty || key == null) {
       return false;
     }
 
-    _hotKey = HotKey(key: keyEvent.physicalKey, modifiers: modifiers, scope: HotKeyScope.system);
-    widget.onHotKeyRecorded(_hotKey!);
-    setState(() {});
+    var newHotkey = HotKey(key: key, modifiers: modifiers, scope: HotKeyScope.system);
+    var hotkeyStr = getHotkeyString(newHotkey);
+    Logger.instance.debug(const UuidV4().generate(), "Hotkey str: $hotkeyStr");
+    WoxApi.instance.isHotkeyAvailable(hotkeyStr).then((isAvailable) {
+      Logger.instance.debug(const UuidV4().generate(), "Hotkey available: $isAvailable");
+      if (!isAvailable) {
+        return false;
+      }
+
+      _hotKey = newHotkey;
+      widget.onHotKeyRecorded(hotkeyStr);
+      setState(() {});
+      return true;
+    });
+
     return true;
   }
 

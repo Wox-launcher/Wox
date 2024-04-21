@@ -34,6 +34,7 @@ func (h *Hotkey) Register(ctx context.Context, combineKey string, callback func(
 		return registerDoubleHotKey(ctx, modifiers[0], callback)
 	}
 
+	h.isDoubleKey = false
 	return h.registerNormalKey(ctx, modifiers, key, callback)
 }
 
@@ -47,19 +48,21 @@ func (h *Hotkey) registerNormalKey(ctx context.Context, modifiers []hotkey.Modif
 	h.Unregister(ctx)
 	h.unregisterChan = make(chan bool)
 	h.hk = newHk
-	util.GetLogger().Info(ctx, fmt.Sprintf("register normal hotkey: %s", h.combineKey))
+
+	currentKey := h.combineKey
+	util.GetLogger().Info(ctx, fmt.Sprintf("register normal hotkey: %s", currentKey))
 
 	util.Go(ctx, "", func() {
 		for {
 			select {
 			case <-h.hk.Keyup():
-				util.Go(ctx, "normal hotkey callback", func() {
+				util.Go(ctx, fmt.Sprintf("normal hotkey (%s) callback", currentKey), func() {
 					if callback != nil {
 						callback()
 					}
 				})
 			case <-h.unregisterChan:
-				util.GetLogger().Error(ctx, "unregister normal hotkey event received, exit loop")
+				util.GetLogger().Error(ctx, fmt.Sprintf("unregister normal hotkey (%s) event received, exit loop", currentKey))
 				return
 			}
 		}
@@ -81,11 +84,30 @@ func (h *Hotkey) Unregister(ctx context.Context) {
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("unregister normal hotkey: %s", h.combineKey))
 	if h.unregisterChan != nil {
-		h.unregisterChan <- true
-		close(h.unregisterChan)
+		//make sure unregisterChan is not closed and then close it
+		select {
+		case <-h.unregisterChan:
+		default:
+			close(h.unregisterChan)
+		}
 	}
 
 	if h.hk != nil {
-		h.hk.Unregister()
+		unregisterErr := h.hk.Unregister()
+		if unregisterErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to unregister hotkey: %s", unregisterErr.Error()))
+		}
 	}
+}
+
+func IsHotkeyAvailable(ctx context.Context, hotkeyStr string) (isAvailable bool) {
+	isAvailable = false
+	hk := Hotkey{}
+	registerErr := hk.Register(ctx, hotkeyStr, func() {})
+	if registerErr == nil {
+		isAvailable = true
+		hk.Unregister(ctx)
+	}
+
+	return
 }

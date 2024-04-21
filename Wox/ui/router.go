@@ -14,6 +14,7 @@ import (
 	"wox/share"
 	"wox/ui/dto"
 	"wox/util"
+	"wox/util/hotkey"
 )
 
 var routers = map[string]func(w http.ResponseWriter, r *http.Request){
@@ -35,14 +36,15 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/setting/wox/update":    handleSettingWoxUpdate,
 	"/setting/plugin/update": handleSettingPluginUpdate,
 	// others
-	"/":               handleHome,
-	"/ping":           handlePing,
-	"/image":          handleImage,
-	"/preview":        handlePreview,
-	"/open/url":       handleOpenUrl,
-	"/backup/now":     handleBackupNow,
-	"/backup/restore": handleBackupRestore,
-	"/backup/all":     handleBackupAll,
+	"/":                 handleHome,
+	"/ping":             handlePing,
+	"/image":            handleImage,
+	"/preview":          handlePreview,
+	"/open/url":         handleOpenUrl,
+	"/backup/now":       handleBackupNow,
+	"/backup/restore":   handleBackupRestore,
+	"/backup/all":       handleBackupAll,
+	"/hotkey/available": handleHotkeyAvailable,
 }
 
 func handleHome(w http.ResponseWriter, r *http.Request) {
@@ -544,4 +546,18 @@ func handleBackupAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeSuccessResponse(w, backups)
+}
+
+func handleHotkeyAvailable(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+
+	body, _ := io.ReadAll(r.Body)
+	hotkeyResult := gjson.GetBytes(body, "hotkey")
+	if !hotkeyResult.Exists() {
+		writeErrorResponse(w, "hotkey is empty")
+		return
+	}
+
+	isAvailable := hotkey.IsHotkeyAvailable(ctx, hotkeyResult.String())
+	writeSuccessResponse(w, isAvailable)
 }
