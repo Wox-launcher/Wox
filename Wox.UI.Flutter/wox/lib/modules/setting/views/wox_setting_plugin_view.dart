@@ -171,6 +171,26 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     ),
                   ),
                 ),
+                if (plugin.isDev)
+                  // dev tag, warning color with warning border
+                  Padding(
+                    padding: const EdgeInsets.only(left: 10.0),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: SettingWarningColor,
+                        border: Border.all(color: SettingWarningColor),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'dev',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

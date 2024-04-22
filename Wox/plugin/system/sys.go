@@ -178,7 +178,7 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 				pluginIcon := sysSettingIcon
 				iconImg, parseErr := plugin.ParseWoxImage(instance.Metadata.Icon)
 				if parseErr == nil {
-					pluginIcon = iconImg
+					pluginIcon = plugin.ConvertRelativePathToAbsolutePath(ctx, iconImg, instance.PluginDirectory)
 				}
 
 				results = append(results, plugin.QueryResult{

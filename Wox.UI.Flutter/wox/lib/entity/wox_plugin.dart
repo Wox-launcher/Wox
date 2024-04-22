@@ -15,6 +15,7 @@ class PluginDetail {
   late List<String> supportedOS;
   late List<String> screenshotUrls;
   late bool isSystem;
+  late bool isDev;
   late bool isInstalled;
   late bool isDisable;
   late List<PluginSettingDefinitionItem> settingDefinitions;
@@ -34,6 +35,7 @@ class PluginDetail {
     supportedOS = <String>[];
     screenshotUrls = <String>[];
     isSystem = false;
+    isDev = false;
     isInstalled = false;
     isDisable = false;
     settingDefinitions = <PluginSettingDefinitionItem>[];
@@ -49,9 +51,10 @@ class PluginDetail {
     icon = WoxImage.fromJson(json['Icon']);
     website = json['Website'];
     entry = json['Entry'];
-    isSystem = json['IsSystem'];
-    isInstalled = json['IsInstalled'];
-    isDisable = json['IsDisable'];
+    isSystem = json['IsSystem'] ?? false;
+    isDev = json['IsDev'] ?? false;
+    isInstalled = json['IsInstalled'] ?? false;
+    isDisable = json['IsDisable'] ?? false;
 
     if (json['TriggerKeywords'] != null) {
       triggerKeywords = (json['TriggerKeywords'] as List).map((e) => e.toString()).toList();

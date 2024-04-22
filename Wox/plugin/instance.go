@@ -11,6 +11,8 @@ type Instance struct {
 	API                     API                                                       // APIs exposed to plugin
 	Metadata                Metadata                                                  // metadata parsed from plugin.json
 	IsSystemPlugin          bool                                                      // is system plugin, see `plugin.md` for more detail
+	IsDevPlugin             bool                                                      // plugins loaded from `local plugin directories` which defined in wpm settings
+	DevPluginDirectory      string                                                    // absolute path to dev plugin directory defined in wpm settings
 	PluginDirectory         string                                                    // absolute path to plugin directory
 	Host                    Host                                                      // plugin host to run this plugin
 	Setting                 *setting.PluginSetting                                    // setting for this plugin

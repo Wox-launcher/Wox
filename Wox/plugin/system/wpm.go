@@ -13,17 +13,23 @@ import (
 	"strings"
 	"time"
 	"wox/plugin"
+	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
 )
 
 var wpmIcon = plugin.NewWoxImageSvg(`<svg t="1697178225584" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="16738" width="200" height="200"><path d="M842.99 884.364H181.01c-22.85 0-41.374-18.756-41.374-41.892V181.528c0-23.136 18.524-41.892 41.374-41.892h661.98c22.85 0 41.374 18.756 41.374 41.892v660.944c0 23.136-18.524 41.892-41.374 41.892z" fill="#9C34FE" p-id="16739" data-spm-anchor-id="a313x.search_index.0.i6.1f873a81xqBP8f"></path><path d="M387.88 307.2h-82.748v83.78c0 115.68 92.618 209.456 206.868 209.456s206.868-93.776 206.868-209.454V307.2h-82.746v83.78c0 69.408-55.572 125.674-124.122 125.674s-124.12-56.266-124.12-125.672V307.2z" fill="#FFFFFF" p-id="16740"></path></svg>`)
+var localPluginDirectoriesKey = "local_plugin_directories"
 var pluginTemplates = []pluginTemplate{
 	{
 		Runtime: plugin.PLUGIN_RUNTIME_NODEJS,
 		Name:    "Wox.Plugin.Template.Nodejs",
 		Url:     "https://codeload.github.com/Wox-launcher/Wox.Plugin.Template.Nodejs/zip/refs/heads/main",
 	},
+}
+
+type LocalPlugin struct {
+	Path string
 }
 
 func init() {
@@ -77,10 +83,6 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 				Description: "Install Wox plugins",
 			},
 			{
-				Command:     "add",
-				Description: "Add local Wox plugin",
-			},
-			{
 				Command:     "uninstall",
 				Description: "Uninstall Wox plugins",
 			},
@@ -89,8 +91,16 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 				Description: "Create Wox plugin",
 			},
 			{
-				Command:     "dev",
-				Description: "Develop Wox plugins",
+				Command:     "dev.list",
+				Description: "List local Wox plugins",
+			},
+			{
+				Command:     "dev.add",
+				Description: "Add existing Wox plugin directory",
+			},
+			{
+				Command:     "dev.remove",
+				Description: "Remove local Wox plugin, followed by a directory",
 			},
 		},
 		SupportedOS: []string{
@@ -98,14 +108,31 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
+		SettingDefinitions: definition.PluginSettingDefinitions{
+			{
+				Type: definition.PluginSettingDefinitionTypeTable,
+				Value: &definition.PluginSettingValueTable{
+					Key:     localPluginDirectoriesKey,
+					Title:   "Local Plugin Directories",
+					Tooltip: "The directories to load local plugins, useful for plugin development",
+					Columns: []definition.PluginSettingValueTableColumn{
+						{
+							Key:   "path",
+							Label: "Path",
+							Type:  definition.PluginSettingValueTableColumnTypeDirPath,
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
 func (w *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	w.api = initParams.API
 
-	var localPluginDirs []string
-	unmarshalErr := json.Unmarshal([]byte(w.api.GetSetting(ctx, "localPluginDirectories")), &localPluginDirs)
+	var localPluginDirs []LocalPlugin
+	unmarshalErr := json.Unmarshal([]byte(w.api.GetSetting(ctx, localPluginDirectoriesKey)), &localPluginDirs)
 	if unmarshalErr != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to unmarshal local plugin directories: %s", unmarshalErr.Error()))
 		return
@@ -114,14 +141,14 @@ func (w *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	// remove invalid and duplicate directories
 	var pluginDirs []string
 	for _, pluginDir := range localPluginDirs {
-		if _, statErr := os.Stat(pluginDir); statErr != nil {
+		if _, statErr := os.Stat(pluginDir.Path); statErr != nil {
 			w.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Failed to stat local plugin directory, remove it: %s", statErr.Error()))
-			os.RemoveAll(pluginDir)
+			os.RemoveAll(pluginDir.Path)
 			continue
 		}
 
-		if !lo.Contains(pluginDirs, pluginDir) {
-			pluginDirs = append(pluginDirs, pluginDir)
+		if !lo.Contains(pluginDirs, pluginDir.Path) {
+			pluginDirs = append(pluginDirs, pluginDir.Path)
 		}
 	}
 
@@ -195,10 +222,6 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 		return w.createCommand(query)
 	}
 
-	if query.Command == "dev" {
-		return w.devCommand(ctx)
-	}
-
 	if query.Command == "install" {
 		return w.installCommand(ctx, query)
 	}
@@ -207,8 +230,16 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 		return w.uninstallCommand(ctx, query)
 	}
 
-	if query.Command == "add" {
-		return w.addCommand(ctx, query)
+	if query.Command == "dev.add" {
+		return w.addDevCommand(ctx, query)
+	}
+
+	if query.Command == "dev.remove" {
+		return w.removeDevCommand(ctx, query)
+	}
+
+	if query.Command == "dev.list" {
+		return w.listDevCommand(ctx)
 	}
 
 	return []plugin.QueryResult{}
@@ -348,7 +379,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 	return results
 }
 
-func (w *WPMPlugin) devCommand(ctx context.Context) []plugin.QueryResult {
+func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 	//list all local plugins
 	return lo.Map(w.localPlugins, func(lp localPlugin, _ int) plugin.QueryResult {
 		iconImage := plugin.ParseWoxImageOrDefault(lp.metadata.Metadata.Icon, wpmIcon)
@@ -426,7 +457,7 @@ func (w *WPMPlugin) devCommand(ctx context.Context) []plugin.QueryResult {
 	})
 }
 
-func (w *WPMPlugin) addCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (w *WPMPlugin) addDevCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	w.api.Log(ctx, plugin.LogLevelInfo, "Please choose a directory to add local plugin")
 	pluginDirectories := plugin.GetPluginManager().GetUI().PickFiles(ctx, share.PickFilesParams{IsDirectory: true})
 	if len(pluginDirectories) == 0 {
@@ -445,6 +476,25 @@ func (w *WPMPlugin) addCommand(ctx context.Context, query plugin.Query) []plugin
 	w.localPluginDirectories = append(w.localPluginDirectories, pluginDirectory)
 	w.saveLocalPluginDirectories(ctx)
 	w.loadDevPlugin(ctx, pluginDirectory)
+	return []plugin.QueryResult{}
+}
+
+func (w *WPMPlugin) removeDevCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	if len(query.Search) == 0 {
+		w.api.Notify(ctx, "Please input a directory", "You need to input a directory to remove local plugin")
+		return []plugin.QueryResult{}
+	}
+
+	pluginDirectory := query.Search
+	if !lo.Contains(w.localPluginDirectories, pluginDirectory) {
+		w.api.Notify(ctx, "Not found", "The plugin directory is not found")
+		return []plugin.QueryResult{}
+	}
+
+	w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
+		return directory != pluginDirectory
+	})
+	w.saveLocalPluginDirectories(ctx)
 	return []plugin.QueryResult{}
 }
 
@@ -551,7 +601,7 @@ func (w *WPMPlugin) saveLocalPluginDirectories(ctx context.Context) {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to marshal local plugin directories: %s", marshalErr.Error()))
 		return
 	}
-	w.api.SaveSetting(ctx, "localPluginDirectories", string(data), false)
+	w.api.SaveSetting(ctx, localPluginDirectoriesKey, string(data), false)
 }
 
 func (w *WPMPlugin) reloadLocalDistPlugin(ctx context.Context, localPlugin plugin.MetadataWithDirectory, reason string) error {
@@ -570,6 +620,8 @@ func (w *WPMPlugin) reloadLocalDistPlugin(ctx context.Context, localPlugin plugi
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to load local plugin: %s", err.Error()))
 		return err
 	}
+	distPluginMetadata.IsDev = true
+	distPluginMetadata.DevPluginDirectory = localPlugin.Directory
 
 	reloadErr := plugin.GetPluginManager().ReloadPlugin(ctx, distPluginMetadata)
 	if reloadErr != nil {

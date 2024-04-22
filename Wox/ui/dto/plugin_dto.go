@@ -24,6 +24,7 @@ type PluginDto struct {
 	SettingDefinitions definition.PluginSettingDefinitions // only available when plugin is installed
 	Setting            setting.PluginSetting               // only available when plugin is installed
 	IsSystem           bool
+	IsDev              bool
 	IsInstalled        bool
 	IsDisable          bool // only available when plugin is installed
 }

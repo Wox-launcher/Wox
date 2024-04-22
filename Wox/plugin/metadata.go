@@ -95,7 +95,11 @@ type MetadataCommand struct {
 
 type MetadataWithDirectory struct {
 	Metadata  Metadata
-	Directory string
+	Directory string // absolute path to plugin directory
+
+	//for dev plugin
+	IsDev              bool   // plugins loaded from `local plugin directories` which defined in wpm settings
+	DevPluginDirectory string // absolute path to dev plugin directory defined in wpm settings, only available when IsDev is true
 }
 
 type MetadataFeatureParamsDebounce struct {

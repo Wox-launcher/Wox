@@ -252,11 +252,25 @@ func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error
 func (s *Store) Uninstall(ctx context.Context, plugin *Instance) error {
 	logger.Info(ctx, fmt.Sprintf("start to uninstall plugin %s(%s)", plugin.Metadata.Name, plugin.Metadata.Version))
 
-	removeErr := os.RemoveAll(plugin.PluginDirectory)
-	if removeErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to remove plugin directory %s: %s", plugin.PluginDirectory, removeErr.Error()))
-		return removeErr
+	if plugin.IsDevPlugin {
+		var wpmPlugin *Instance
+		for _, instance := range GetPluginManager().GetPluginInstances() {
+			if instance.Metadata.Id == "e2c5f005-6c73-43c8-bc53-ab04def265b2" {
+				wpmPlugin = instance
+				break
+			}
+		}
+		if wpmPlugin != nil {
+			wpmPlugin.Plugin.Query(ctx, newQueryInputWithPlugins("wpm dev.remove "+plugin.DevPluginDirectory, GetPluginManager().GetPluginInstances()))
+		}
+	} else {
+		removeErr := os.RemoveAll(plugin.PluginDirectory)
+		if removeErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to remove plugin directory %s: %s", plugin.PluginDirectory, removeErr.Error()))
+			return removeErr
+		}
 	}
+
 	GetPluginManager().UnloadPlugin(ctx, plugin)
 
 	return nil

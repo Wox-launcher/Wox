@@ -125,7 +125,7 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 				}
 			}
 		}
-		metaDataList = append(metaDataList, MetadataWithDirectory{metadata, pluginDirectory})
+		metaDataList = append(metaDataList, MetadataWithDirectory{Metadata: metadata, Directory: pluginDirectory})
 	}
 	logger.Info(ctx, fmt.Sprintf("start loading user plugins, found %d user plugins", len(metaDataList)))
 
@@ -157,7 +157,7 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 }
 
 func (m *Manager) ReloadPlugin(ctx context.Context, metadata MetadataWithDirectory) error {
-	logger.Info(ctx, fmt.Sprintf("start reloading plugin: %s", metadata.Metadata.Name))
+	logger.Info(ctx, fmt.Sprintf("start reloading dev plugin: %s", metadata.Metadata.Name))
 
 	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
 		return strings.ToLower(string(item.GetRuntime(ctx))) == strings.ToLower(metadata.Metadata.Runtime)
@@ -200,6 +200,8 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 		Host:                  host,
 		LoadStartTimestamp:    loadStartTimestamp,
 		LoadFinishedTimestamp: loadFinishTimestamp,
+		IsDevPlugin:           metadata.IsDev,
+		DevPluginDirectory:    metadata.DevPluginDirectory,
 	}
 	instance.API = NewAPI(instance)
 	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Metadata.Id, metadata.Metadata.Name, metadata.Metadata.SettingDefinitions)
@@ -237,7 +239,7 @@ func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error 
 		return fmt.Errorf("unsupported runtime: %s", metadata.Runtime)
 	}
 
-	loadErr := m.loadHostPlugin(ctx, pluginHost, MetadataWithDirectory{metadata, pluginDirectory})
+	loadErr := m.loadHostPlugin(ctx, pluginHost, MetadataWithDirectory{Metadata: metadata, Directory: pluginDirectory})
 	if loadErr != nil {
 		return loadErr
 	}

@@ -134,6 +134,7 @@ func handlePluginInstalled(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		installedPlugin.IsSystem = pluginInstance.IsSystemPlugin
+		installedPlugin.IsDev = pluginInstance.IsDevPlugin
 		installedPlugin.IsInstalled = true
 		installedPlugin.IsDisable = pluginInstance.Setting.Disabled
 
