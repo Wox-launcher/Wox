@@ -1,6 +1,8 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
+import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/utils/picker.dart';
 
@@ -156,6 +158,14 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           checked: getValueBool(column.key),
           onChanged: (value) {
             updateValue(column.key, value);
+            setState(() {});
+          },
+        );
+      case PluginSettingValueType.pluginSettingValueTableColumnTypeHotkey:
+        return WoxHotkeyRecorder(
+          hotkey: WoxHotkey.parseHotkey(getValue(column.key)),
+          onHotKeyRecorded: (hotkey) {
+            updateValue(column.key, hotkey);
             setState(() {});
           },
         );

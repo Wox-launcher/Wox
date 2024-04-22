@@ -1,12 +1,14 @@
 import 'dart:convert';
 
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:flutter/material.dart' as material;
+import 'package:wox/utils/log.dart';
 
 import 'wox_setting_plugin_item_view.dart';
 import 'wox_setting_plugin_table_update_view.dart';
@@ -102,6 +104,19 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       );
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeDirPath) {
+      return columnWidth(
+        column: column,
+        isHeader: false,
+        isOperation: false,
+        child: Text(
+          value,
+          style: const TextStyle(
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      );
+    }
+    if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeHotkey) {
       return columnWidth(
         column: column,
         isHeader: false,
@@ -315,7 +330,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       return buildEmptyTable();
     }
     var rows = json.decode(rowsJson);
-    if (rows==null || rows.isEmpty) {
+    if (rows == null || rows.isEmpty) {
       return buildEmptyTable();
     }
 
@@ -397,7 +412,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: item.title == "" ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

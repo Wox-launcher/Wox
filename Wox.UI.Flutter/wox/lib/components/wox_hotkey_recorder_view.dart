@@ -140,9 +140,16 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
 
   bool _handleKeyEvent(KeyEvent keyEvent) {
     // Logger.instance.debug(const UuidV4().generate(), "Hotkey: ${keyEvent}");
-
     if (_isFocused == false) return false;
     if (keyEvent is KeyUpEvent) return false;
+
+    // backspace to clear hotkey
+    if (keyEvent.logicalKey == LogicalKeyboardKey.backspace) {
+      _hotKey = null;
+      widget.onHotKeyRecorded("");
+      setState(() {});
+      return true;
+    }
 
     final physicalKeysPressed = HardwareKeyboard.instance.physicalKeysPressed;
     var modifiers = HotKeyModifier.values.where((e) => e.physicalKeys.any(physicalKeysPressed.contains)).toList();
@@ -199,7 +206,16 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
               ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
-                child: widget.hotkey == null ? const Text("") : HotKeyVirtualView(hotKey: _hotKey!),
+                child: _hotKey == null
+                    ? SizedBox(
+                        width: 80,
+                        height: 18,
+                        child: Text(
+                          _isFocused ? "Recording..." : "Click to set",
+                          style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                        ),
+                      )
+                    : HotKeyVirtualView(hotKey: _hotKey!),
               ),
             ),
             if (_isFocused)

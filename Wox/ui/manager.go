@@ -164,6 +164,15 @@ func (m *Manager) Stop(ctx context.Context) {
 }
 
 func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) error {
+	if combineKey == "" {
+		// remove hotkey
+		logger.Info(ctx, "remove main hotkey")
+		if m.mainHotkey != nil {
+			m.mainHotkey.Unregister(ctx)
+		}
+		return nil
+	}
+
 	logger.Info(ctx, fmt.Sprintf("register main hotkey: %s", combineKey))
 	// unregister previous hotkey
 	if m.mainHotkey != nil {
@@ -177,6 +186,15 @@ func (m *Manager) RegisterMainHotkey(ctx context.Context, combineKey string) err
 }
 
 func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string) error {
+	if combineKey == "" {
+		// remove hotkey
+		logger.Info(ctx, "remove selection hotkey")
+		if m.selectionHotkey != nil {
+			m.selectionHotkey.Unregister(ctx)
+		}
+		return nil
+	}
+
 	logger.Info(ctx, fmt.Sprintf("register selection hotkey: %s", combineKey))
 	// unregister previous hotkey
 	if m.selectionHotkey != nil {

@@ -157,9 +157,11 @@ func (m *Manager) UpdateWoxSetting(ctx context.Context, key, value string) error
 	}
 
 	if key == "MainHotkey" {
-		isAvailable := hotkey.IsHotkeyAvailable(ctx, value)
-		if !isAvailable {
-			return fmt.Errorf("hotkey is not available: %s", value)
+		if value != "" {
+			isAvailable := hotkey.IsHotkeyAvailable(ctx, value)
+			if !isAvailable {
+				return fmt.Errorf("hotkey is not available: %s", value)
+			}
 		}
 		m.woxSetting.MainHotkey.Set(value)
 	} else if key == "SelectionHotkey" {
@@ -184,6 +186,21 @@ func (m *Manager) UpdateWoxSetting(ctx context.Context, key, value string) error
 		m.woxSetting.LastQueryMode = value
 	} else if key == "ThemeId" {
 		m.woxSetting.ThemeId = value
+	} else if key == "QueryHotkeys" {
+		// value is a json string
+		var queryHotkeys []QueryHotkey
+		if unmarshalErr := json.Unmarshal([]byte(value), &queryHotkeys); unmarshalErr != nil {
+			return unmarshalErr
+		}
+		m.woxSetting.QueryHotkeys.Set(queryHotkeys)
+	} else if key == "QueryShortcuts" {
+		// value is a json string
+		var queryShortcuts []QueryShortcut
+		if unmarshalErr := json.Unmarshal([]byte(value), &queryShortcuts); unmarshalErr != nil {
+			return unmarshalErr
+		}
+
+		m.woxSetting.QueryShortcuts = queryShortcuts
 	} else {
 		return fmt.Errorf("unknown key: %s", key)
 	}

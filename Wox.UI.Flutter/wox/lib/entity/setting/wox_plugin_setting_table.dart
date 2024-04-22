@@ -14,7 +14,7 @@ class PluginSettingValueTable {
 
   PluginSettingValueTable.fromJson(Map<String, dynamic> json) {
     key = json['Key'];
-    defaultValue = json['DefaultValue'];
+    defaultValue = json['DefaultValue'] ?? "";
     title = json['Title'] ?? "";
     tooltip = json['Tooltip'] ?? "";
     if (json['Columns'] != null) {
@@ -41,6 +41,7 @@ class PluginSettingValueType {
   static const pluginSettingValueTableColumnTypeDirPath = "dirPath";
   static const pluginSettingValueTableColumnTypeSelect = "select";
   static const pluginSettingValueTableColumnTypeWoxImage = "woxImage";
+  static const pluginSettingValueTableColumnTypeHotkey = "hotkey";
 }
 
 class PluginSettingValueTableColumn {
@@ -59,7 +60,7 @@ class PluginSettingValueTableColumn {
     key = json['Key'];
     label = json['Label'];
     tooltip = json['Tooltip'];
-    width = json['Width'];
+    width = json['Width'] ?? 0;
     type = json['Type'];
     if (json['SelectOptions'] != null) {
       selectOptions = (json['SelectOptions'] as List).map((e) => PluginSettingValueSelectOption.fromJson(e)).toList();

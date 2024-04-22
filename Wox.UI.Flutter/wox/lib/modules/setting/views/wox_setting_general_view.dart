@@ -1,7 +1,12 @@
+import 'dart:convert';
+
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:get/get.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 
 class WoxSettingGeneralView extends GetView<WoxSettingController> {
@@ -59,7 +64,7 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
   Widget build(BuildContext context) {
     return Padding(
         padding: const EdgeInsets.all(20),
-        child: form(width: 800, children: [
+        child: form(width: 850, children: [
           formField(
             label: "Hotkey",
             tips: "Hotkeys to open or hide Wox.",
@@ -138,6 +143,44 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                   controller.updateConfig("SwitchInputMethodABC", value.toString());
                 },
               );
+            }),
+          ),
+          formField(
+            label: "Query Hotkeys",
+            child: Obx(() {
+              PluginDetail fakePluginDetail = PluginDetail.empty();
+              fakePluginDetail.setting = PluginSetting.empty();
+              fakePluginDetail.setting.settings["QueryHotkeys"] = json.encode(controller.woxSetting.value.queryHotkeys);
+              PluginSettingValueTable fakePluginSettingValueTable = PluginSettingValueTable.fromJson({
+                "Key": "QueryHotkeys",
+                "Columns": [
+                  {
+                    "Key": "Hotkey",
+                    "Label": "Hotkey",
+                    "Tooltip": "The hotkey to trigger the query.",
+                    "Width": 120,
+                    "Type": "hotkey",
+                    "TextMaxLines": 1,
+                    "Validators": [
+                      {"Type": "not_empty"}
+                    ],
+                  },
+                  {
+                    "Key": "Query",
+                    "Label": "Query",
+                    "Tooltip": "The query when the hotkey is triggered.",
+                    "Type": "text",
+                    "TextMaxLines": 1,
+                    "Validators": [
+                      {"Type": "not_empty"}
+                    ],
+                  }
+                ],
+                "SortColumnKey": "Query"
+              });
+              return WoxSettingPluginTable(fakePluginDetail, fakePluginSettingValueTable, (key, value) {
+                controller.updateConfig("QueryHotkeys", value);
+              });
             }),
           ),
         ]));

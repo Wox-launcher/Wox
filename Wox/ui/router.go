@@ -69,7 +69,7 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, statErr := os.Stat(imagePath); os.IsNotExist(statErr) {
-		w.Write([]byte("image not exist"))
+		writeErrorResponse(w, "image not exist")
 		return
 	}
 
@@ -430,15 +430,13 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 	var kv keyValuePair
 	err := decoder.Decode(&kv)
 	if err != nil {
-		w.Header().Set("code", "500")
-		w.Write([]byte(err.Error()))
+		writeErrorResponse(w, err.Error())
 		return
 	}
 
 	updateErr := setting.GetSettingManager().UpdateWoxSetting(util.NewTraceContext(), kv.Key, kv.Value)
 	if updateErr != nil {
-		w.Header().Set("code", "500")
-		w.Write([]byte(updateErr.Error()))
+		writeErrorResponse(w, updateErr.Error())
 		return
 	}
 
@@ -460,8 +458,7 @@ func handleSettingPluginUpdate(w http.ResponseWriter, r *http.Request) {
 	var kv keyValuePair
 	err := decoder.Decode(&kv)
 	if err != nil {
-		w.Header().Set("code", "500")
-		w.Write([]byte(err.Error()))
+		writeErrorResponse(w, err.Error())
 		return
 	}
 
@@ -472,8 +469,7 @@ func handleSettingPluginUpdate(w http.ResponseWriter, r *http.Request) {
 		return false
 	})
 	if !exist {
-		w.Header().Set("code", "500")
-		w.Write([]byte("can't find plugin"))
+		writeErrorResponse(w, "can't find plugin")
 		return
 	}
 
