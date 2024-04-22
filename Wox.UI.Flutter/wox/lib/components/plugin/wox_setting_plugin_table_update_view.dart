@@ -3,16 +3,14 @@ import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_hotkey.dart';
-import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/utils/picker.dart';
 
 class WoxSettingPluginTableUpdate extends StatefulWidget {
   final PluginSettingValueTable item;
   final Map<String, dynamic> row;
-  final PluginDetail plugin;
   final Function onUpdate;
 
-  const WoxSettingPluginTableUpdate({super.key, required this.item, required this.row, required this.plugin, required this.onUpdate});
+  const WoxSettingPluginTableUpdate({super.key, required this.item, required this.row, required this.onUpdate});
 
   @override
   State<WoxSettingPluginTableUpdate> createState() => _WoxSettingPluginTableUpdateState();

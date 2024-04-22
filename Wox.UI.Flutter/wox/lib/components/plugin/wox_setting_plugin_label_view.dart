@@ -7,7 +7,7 @@ import 'wox_setting_plugin_item_view.dart';
 class WoxSettingPluginLabel extends WoxSettingPluginItem {
   final PluginSettingValueLabel item;
 
-  const WoxSettingPluginLabel(super.plugin, this.item, super.onUpdate, {super.key, required});
+  const WoxSettingPluginLabel({super.key, required this.item, required super.value, required super.onUpdate});
 
   @override
   Widget build(BuildContext context) {

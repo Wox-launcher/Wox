@@ -5,17 +5,17 @@ import 'package:wox/entity/wox_plugin_setting.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 
 abstract class WoxSettingPluginItem extends StatelessWidget {
-  final PluginDetail plugin;
+  final String value;
   final Function onUpdate;
 
-  const WoxSettingPluginItem(this.plugin, this.onUpdate, {super.key});
+  const WoxSettingPluginItem({super.key, required this.value, required this.onUpdate});
 
   Future<void> updateConfig(String key, String value) async {
     onUpdate(key, value);
   }
 
   String getSetting(String key) {
-    return plugin.setting.settings[key] ?? "";
+    return value;
   }
 
   Widget withFlexible(List<Widget> children) {

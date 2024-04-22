@@ -664,12 +664,16 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   void moveQueryBoxCursorToStart() {
     queryBoxTextFieldController.selection = TextSelection.fromPosition(const TextPosition(offset: 0));
-    queryBoxScrollController.jumpTo(0);
+    if (queryBoxScrollController.hasClients) {
+      queryBoxScrollController.jumpTo(0);
+    }
   }
 
   void moveQueryBoxCursorToEnd() {
     queryBoxTextFieldController.selection = TextSelection.collapsed(offset: queryBoxTextFieldController.text.length);
-    queryBoxScrollController.jumpTo(queryBoxScrollController.position.maxScrollExtent);
+    if (queryBoxScrollController.hasClients) {
+      queryBoxScrollController.jumpTo(queryBoxScrollController.position.maxScrollExtent);
+    }
   }
 
   void handleQueryBoxArrowUp() {

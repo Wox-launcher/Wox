@@ -8,7 +8,6 @@ import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:flutter/material.dart' as material;
-import 'package:wox/utils/log.dart';
 
 import 'wox_setting_plugin_item_view.dart';
 import 'wox_setting_plugin_table_update_view.dart';
@@ -21,7 +20,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final columnSpacing = 10.0;
   final columnTooltipWidth = 20.0;
 
-  const WoxSettingPluginTable(super.plugin, this.item, super.onUpdate, {super.key, required});
+  const WoxSettingPluginTable({super.key, required this.item, required super.value, required super.onUpdate});
 
   double calculateColumnWidthForZeroWidth(PluginSettingValueTableColumn column) {
     // if there are multiple columns which have width set to 0, we will set the max width to 100 for each column
@@ -188,7 +187,6 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                     context: context,
                     builder: (context) {
                       return WoxSettingPluginTableUpdate(
-                        plugin: plugin,
                         item: item,
                         row: row,
                         onUpdate: (key, value) {
@@ -434,7 +432,6 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                         context: context,
                         builder: (context) {
                           return WoxSettingPluginTableUpdate(
-                            plugin: plugin,
                             item: item,
                             row: const {},
                             onUpdate: (key, row) {

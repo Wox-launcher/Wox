@@ -62,127 +62,167 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-        padding: const EdgeInsets.all(20),
-        child: form(width: 850, children: [
-          formField(
-            label: "Hotkey",
-            tips: "Hotkeys to open or hide Wox.",
-            child: WoxHotkeyRecorder(
-              hotkey: WoxHotkey.parseHotkey(controller.woxSetting.value.mainHotkey),
-              onHotKeyRecorded: (hotkey) {
-                controller.updateConfig("MainHotkey", hotkey);
-              },
+    return SingleChildScrollView(
+      child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: form(width: 850, children: [
+            formField(
+              label: "Hotkey",
+              tips: "Hotkeys to open or hide Wox.",
+              child: WoxHotkeyRecorder(
+                hotkey: WoxHotkey.parseHotkey(controller.woxSetting.value.mainHotkey),
+                onHotKeyRecorded: (hotkey) {
+                  controller.updateConfig("MainHotkey", hotkey);
+                },
+              ),
             ),
-          ),
-          formField(
-            label: "Selection Hotkey",
-            tips: "Hotkeys to do actions on selected text or files.",
-            child: WoxHotkeyRecorder(
-              hotkey: WoxHotkey.parseHotkey(controller.woxSetting.value.selectionHotkey),
-              onHotKeyRecorded: (hotkey) {
-                controller.updateConfig("SelectionHotkey", hotkey);
-              },
+            formField(
+              label: "Selection Hotkey",
+              tips: "Hotkeys to do actions on selected text or files.",
+              child: WoxHotkeyRecorder(
+                hotkey: WoxHotkey.parseHotkey(controller.woxSetting.value.selectionHotkey),
+                onHotKeyRecorded: (hotkey) {
+                  controller.updateConfig("SelectionHotkey", hotkey);
+                },
+              ),
             ),
-          ),
-          formField(
-            label: "Use PinYin",
-            tips: "If selected, When searching, it converts Chinese into Pinyin and matches it.",
-            child: Obx(() {
-              return ToggleSwitch(
-                checked: controller.woxSetting.value.usePinYin,
-                onChanged: (bool value) {
-                  controller.updateConfig("UsePinYin", value.toString());
-                },
-              );
-            }),
-          ),
-          formField(
-            label: "Hide On Lost Focus",
-            tips: "If selected, When wox lost focus, it will be hidden.",
-            child: Obx(() {
-              return ToggleSwitch(
-                checked: controller.woxSetting.value.hideOnLostFocus,
-                onChanged: (bool value) {
-                  controller.updateConfig("HideOnLostFocus", value.toString());
-                },
-              );
-            }),
-          ),
-          formField(
-            label: "Hide On Start",
-            tips: "If selected, When wox start, it will be hidden.",
-            child: Obx(() {
-              return ToggleSwitch(
-                checked: controller.woxSetting.value.hideOnStart,
-                onChanged: (bool value) {
-                  controller.updateConfig("HideOnStart", value.toString());
-                },
-              );
-            }),
-          ),
-          formField(
-            label: "Show Tray",
-            tips: "If selected, When wox start, icon will be shown on tray.",
-            child: Obx(() {
-              return ToggleSwitch(
-                checked: controller.woxSetting.value.showTray,
-                onChanged: (bool value) {
-                  controller.updateConfig("ShowTray", value.toString());
-                },
-              );
-            }),
-          ),
-          formField(
-            label: "Switch Input Method",
-            tips: "If selected, input method will be switched to english, when enter input field.",
-            child: Obx(() {
-              return ToggleSwitch(
-                checked: controller.woxSetting.value.switchInputMethodABC,
-                onChanged: (bool value) {
-                  controller.updateConfig("SwitchInputMethodABC", value.toString());
-                },
-              );
-            }),
-          ),
-          formField(
-            label: "Query Hotkeys",
-            child: Obx(() {
-              PluginDetail fakePluginDetail = PluginDetail.empty();
-              fakePluginDetail.setting = PluginSetting.empty();
-              fakePluginDetail.setting.settings["QueryHotkeys"] = json.encode(controller.woxSetting.value.queryHotkeys);
-              PluginSettingValueTable fakePluginSettingValueTable = PluginSettingValueTable.fromJson({
-                "Key": "QueryHotkeys",
-                "Columns": [
-                  {
-                    "Key": "Hotkey",
-                    "Label": "Hotkey",
-                    "Tooltip": "The hotkey to trigger the query.",
-                    "Width": 120,
-                    "Type": "hotkey",
-                    "TextMaxLines": 1,
-                    "Validators": [
-                      {"Type": "not_empty"}
-                    ],
+            formField(
+              label: "Use PinYin",
+              tips: "If selected, When searching, it converts Chinese into Pinyin and matches it.",
+              child: Obx(() {
+                return ToggleSwitch(
+                  checked: controller.woxSetting.value.usePinYin,
+                  onChanged: (bool value) {
+                    controller.updateConfig("UsePinYin", value.toString());
                   },
-                  {
-                    "Key": "Query",
-                    "Label": "Query",
-                    "Tooltip": "The query when the hotkey is triggered.",
-                    "Type": "text",
-                    "TextMaxLines": 1,
-                    "Validators": [
-                      {"Type": "not_empty"}
+                );
+              }),
+            ),
+            formField(
+              label: "Hide On Lost Focus",
+              tips: "If selected, When wox lost focus, it will be hidden.",
+              child: Obx(() {
+                return ToggleSwitch(
+                  checked: controller.woxSetting.value.hideOnLostFocus,
+                  onChanged: (bool value) {
+                    controller.updateConfig("HideOnLostFocus", value.toString());
+                  },
+                );
+              }),
+            ),
+            formField(
+              label: "Hide On Start",
+              tips: "If selected, When wox start, it will be hidden.",
+              child: Obx(() {
+                return ToggleSwitch(
+                  checked: controller.woxSetting.value.hideOnStart,
+                  onChanged: (bool value) {
+                    controller.updateConfig("HideOnStart", value.toString());
+                  },
+                );
+              }),
+            ),
+            formField(
+              label: "Show Tray",
+              tips: "If selected, When wox start, icon will be shown on tray.",
+              child: Obx(() {
+                return ToggleSwitch(
+                  checked: controller.woxSetting.value.showTray,
+                  onChanged: (bool value) {
+                    controller.updateConfig("ShowTray", value.toString());
+                  },
+                );
+              }),
+            ),
+            formField(
+              label: "Switch Input Method",
+              tips: "If selected, input method will be switched to english, when enter input field.",
+              child: Obx(() {
+                return ToggleSwitch(
+                  checked: controller.woxSetting.value.switchInputMethodABC,
+                  onChanged: (bool value) {
+                    controller.updateConfig("SwitchInputMethodABC", value.toString());
+                  },
+                );
+              }),
+            ),
+            formField(
+              label: "Query Hotkeys",
+              child: Obx(() {
+                return WoxSettingPluginTable(
+                  value: json.encode(controller.woxSetting.value.queryHotkeys),
+                  item: PluginSettingValueTable.fromJson({
+                    "Key": "QueryHotkeys",
+                    "Columns": [
+                      {
+                        "Key": "Hotkey",
+                        "Label": "Hotkey",
+                        "Tooltip": "The hotkey to trigger the query.",
+                        "Width": 120,
+                        "Type": "hotkey",
+                        "TextMaxLines": 1,
+                        "Validators": [
+                          {"Type": "not_empty"}
+                        ],
+                      },
+                      {
+                        "Key": "Query",
+                        "Label": "Query",
+                        "Tooltip": "The query when the hotkey is triggered.\nYou can use {wox:selected_text} to insert selected text.",
+                        "Type": "text",
+                        "TextMaxLines": 1,
+                        "Validators": [
+                          {"Type": "not_empty"}
+                        ],
+                      }
                     ],
-                  }
-                ],
-                "SortColumnKey": "Query"
-              });
-              return WoxSettingPluginTable(fakePluginDetail, fakePluginSettingValueTable, (key, value) {
-                controller.updateConfig("QueryHotkeys", value);
-              });
-            }),
-          ),
-        ]));
+                    "SortColumnKey": "Query"
+                  }),
+                  onUpdate: (key, value) {
+                    controller.updateConfig("QueryHotkeys", value);
+                  },
+                );
+              }),
+            ),
+            formField(
+              label: "Query Shortcuts",
+              child: Obx(() {
+                return WoxSettingPluginTable(
+                  value: json.encode(controller.woxSetting.value.queryShortcuts),
+                  item: PluginSettingValueTable.fromJson({
+                    "Key": "QueryShortcuts",
+                    "Columns": [
+                      {
+                        "Key": "Shortcut",
+                        "Label": "Shortcut",
+                        "Tooltip": "Query shortcut. E.g. 'translate' => 'chatgpt translate'",
+                        "Width": 120,
+                        "Type": "text",
+                        "TextMaxLines": 1,
+                        "Validators": [
+                          {"Type": "not_empty"}
+                        ],
+                      },
+                      {
+                        "Key": "Query",
+                        "Label": "Query",
+                        "Tooltip": "The query represented by the shortcut.",
+                        "Type": "text",
+                        "TextMaxLines": 1,
+                        "Validators": [
+                          {"Type": "not_empty"}
+                        ],
+                      }
+                    ],
+                    "SortColumnKey": "Query"
+                  }),
+                  onUpdate: (key, value) {
+                    controller.updateConfig("QueryShortcuts", value);
+                  },
+                );
+              }),
+            ),
+          ])),
+    );
   }
 }

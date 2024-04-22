@@ -8,7 +8,7 @@ import 'wox_setting_plugin_item_view.dart';
 class WoxSettingPluginSelect extends WoxSettingPluginItem {
   final PluginSettingValueSelect item;
 
-  const WoxSettingPluginSelect(super.plugin, this.item, super.onUpdate, {super.key, required});
+  const WoxSettingPluginSelect({super.key, required this.item, required super.value, required super.onUpdate});
 
   @override
   Widget build(BuildContext context) {

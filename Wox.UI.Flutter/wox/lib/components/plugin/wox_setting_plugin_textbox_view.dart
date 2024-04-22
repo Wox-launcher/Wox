@@ -8,7 +8,7 @@ class WoxSettingPluginTextBox extends WoxSettingPluginItem {
   final PluginSettingValueTextBox item;
   final controller = TextEditingController();
 
-  WoxSettingPluginTextBox(super.plugin, this.item, super.onUpdate, {super.key, required}) {
+  WoxSettingPluginTextBox({super.key, required this.item, required super.value, required super.onUpdate}) {
     controller.text = getSetting(item.key);
   }
 

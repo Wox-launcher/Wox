@@ -335,49 +335,77 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
               ...plugin.settingDefinitions.map(
                 (e) {
                   if (e.type == "checkbox") {
-                    return WoxSettingPluginCheckbox(plugin, e.value as PluginSettingValueCheckBox, (key, value) async {
-                      await controller.updatePluginSetting(plugin.id, key, value);
-                      controller.refreshPluginList();
-                    });
+                    return WoxSettingPluginCheckbox(
+                      value: plugin.setting.settings[e.value.key] ?? "",
+                      item: e.value as PluginSettingValueCheckBox,
+                      onUpdate: (key, value) async {
+                        await controller.updatePluginSetting(plugin.id, key, value);
+                        controller.refreshPluginList();
+                      },
+                    );
                   }
                   if (e.type == "textbox") {
-                    return WoxSettingPluginTextBox(plugin, e.value as PluginSettingValueTextBox, (key, value) async {
-                      await controller.updatePluginSetting(plugin.id, key, value);
-                      controller.refreshPluginList();
-                    });
+                    return WoxSettingPluginTextBox(
+                      value: plugin.setting.settings[e.value.key] ?? "",
+                      item: e.value as PluginSettingValueTextBox,
+                      onUpdate: (key, value) async {
+                        await controller.updatePluginSetting(plugin.id, key, value);
+                        controller.refreshPluginList();
+                      },
+                    );
                   }
                   if (e.type == "newline") {
-                    return WoxSettingPluginNewLine(plugin, e.value as PluginSettingValueNewLine, (key, value) async {
-                      await controller.updatePluginSetting(plugin.id, key, value);
-                      controller.refreshPluginList();
-                    });
+                    return WoxSettingPluginNewLine(
+                      value: "",
+                      item: e.value as PluginSettingValueNewLine,
+                      onUpdate: (key, value) async {
+                        await controller.updatePluginSetting(plugin.id, key, value);
+                        controller.refreshPluginList();
+                      },
+                    );
                   }
                   if (e.type == "select") {
-                    return WoxSettingPluginSelect(plugin, e.value as PluginSettingValueSelect, (key, value) async {
-                      await controller.updatePluginSetting(plugin.id, key, value);
-                      controller.refreshPluginList();
-                    });
+                    return WoxSettingPluginSelect(
+                      value: plugin.setting.settings[e.value.key] ?? "",
+                      item: e.value as PluginSettingValueSelect,
+                      onUpdate: (key, value) async {
+                        await controller.updatePluginSetting(plugin.id, key, value);
+                        controller.refreshPluginList();
+                      },
+                    );
                   }
                   if (e.type == "head") {
-                    return WoxSettingPluginHead(plugin, e.value as PluginSettingValueHead, (key, value) async {
-                      await controller.updatePluginSetting(plugin.id, key, value);
-                      controller.refreshPluginList();
-                    });
+                    return WoxSettingPluginHead(
+                      value: plugin.setting.settings[e.value.key] ?? "",
+                      item: e.value as PluginSettingValueHead,
+                      onUpdate: (key, value) async {
+                        await controller.updatePluginSetting(plugin.id, key, value);
+                        controller.refreshPluginList();
+                      },
+                    );
                   }
                   if (e.type == "label") {
-                    return WoxSettingPluginLabel(plugin, e.value as PluginSettingValueLabel, (key, value) async {
-                      await controller.updatePluginSetting(plugin.id, key, value);
-                      controller.refreshPluginList();
-                    });
+                    return WoxSettingPluginLabel(
+                      value: plugin.setting.settings[e.value.key] ?? "",
+                      item: e.value as PluginSettingValueLabel,
+                      onUpdate: (key, value) async {
+                        await controller.updatePluginSetting(plugin.id, key, value);
+                        controller.refreshPluginList();
+                      },
+                    );
                   }
                   if (e.type == "table") {
-                    return WoxSettingPluginTable(plugin, e.value as PluginSettingValueTable, (key, value) async {
-                      await controller.updatePluginSetting(plugin.id, key, value);
-                      controller.refreshPluginList();
-                    });
+                    return WoxSettingPluginTable(
+                      value: plugin.setting.settings[e.value.key] ?? "",
+                      item: e.value as PluginSettingValueTable,
+                      onUpdate: (key, value) async {
+                        await controller.updatePluginSetting(plugin.id, key, value);
+                        controller.refreshPluginList();
+                      },
+                    );
                   }
 
-                  return Text(e.type + "  ");
+                  return Text(e.type);
                 },
               )
             ],

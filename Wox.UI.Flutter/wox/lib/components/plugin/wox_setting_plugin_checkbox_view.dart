@@ -6,7 +6,7 @@ import 'wox_setting_plugin_item_view.dart';
 class WoxSettingPluginCheckbox extends WoxSettingPluginItem {
   final PluginSettingValueCheckBox item;
 
-  const WoxSettingPluginCheckbox(super.plugin, this.item, super.onUpdate, {super.key, required});
+  const WoxSettingPluginCheckbox({super.key, required this.item, required super.value, required super.onUpdate});
 
   @override
   Widget build(BuildContext context) {
