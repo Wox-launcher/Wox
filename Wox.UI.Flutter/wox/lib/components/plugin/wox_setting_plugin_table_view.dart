@@ -315,7 +315,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       return buildEmptyTable();
     }
     var rows = json.decode(rowsJson);
-    if (rows.isEmpty) {
+    if (rows==null || rows.isEmpty) {
       return buildEmptyTable();
     }
 
