@@ -288,7 +288,7 @@ func (c *Plugin) getDynamicSetting(ctx context.Context, key string) definition.P
 					Label:   "API Key",
 					Tooltip: "The API key for the provider you selected. Please refer to the provider's documentation to get the API key",
 					Style: definition.PluginSettingValueStyle{
-						Width:      chatgptLabelWidth,
+						Width:      500,
 						LabelWidth: chatgptLabelWidth,
 					},
 				},

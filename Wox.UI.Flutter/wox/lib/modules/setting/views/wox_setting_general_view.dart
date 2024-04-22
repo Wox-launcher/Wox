@@ -62,10 +62,21 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
         child: form(width: 800, children: [
           formField(
             label: "Hotkey",
+            tips: "Hotkeys to open or hide Wox.",
             child: WoxHotkeyRecorder(
               hotkey: WoxHotkey.parseHotkey(controller.woxSetting.value.mainHotkey),
               onHotKeyRecorded: (hotkey) {
                 controller.updateConfig("MainHotkey", hotkey);
+              },
+            ),
+          ),
+          formField(
+            label: "Selection Hotkey",
+            tips: "Hotkeys to do actions on selected text or files.",
+            child: WoxHotkeyRecorder(
+              hotkey: WoxHotkey.parseHotkey(controller.woxSetting.value.selectionHotkey),
+              onHotKeyRecorded: (hotkey) {
+                controller.updateConfig("SelectionHotkey", hotkey);
               },
             ),
           ),

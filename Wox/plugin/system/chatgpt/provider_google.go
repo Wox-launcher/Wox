@@ -78,6 +78,11 @@ func (g *GoogleProvider) Models(ctx context.Context) ([]chatgptModel, error) {
 			Name:        "gemini-1.0-pro",
 			Provider:    chatgptModelProviderNameGoogle,
 		},
+		{
+			DisplayName: "google-gemini-1.5-pro",
+			Name:        "gemini-1.5-pro",
+			Provider:    chatgptModelProviderNameGoogle,
+		},
 	}, nil
 }
 
