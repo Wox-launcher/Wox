@@ -683,6 +683,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 
 	return []plugin.QueryResult{{
 		Title:           fmt.Sprintf("Chat with %s", query.Command),
+		SubTitle:        fmt.Sprintf("%s - %s", c.model.Provider, c.model.DisplayName),
 		Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
 		Icon:            chatgptLoadingIcon,
 		RefreshInterval: 100,
