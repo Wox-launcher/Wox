@@ -41,17 +41,17 @@ dependencies:
   logger: ^2.0.2+1
   uuid: ^4.0.0
   flutter_svg: ^2.0.9
-  flutter_markdown: ^0.6.18+2
+  flutter_markdown: ^0.7.1
   path_provider: ^2.1.1
   dio: ^5.4.0
   from_css_color: ^2.0.0
   path: ^1.8.3
   chinese_font_library: ^1.1.0
   lpinyin: ^2.0.3
-  syncfusion_flutter_pdfviewer: ^24.1.43
+  syncfusion_flutter_pdfviewer: ^25.1.41
   desktop_drop: ^0.4.4
-  file_picker: ^6.1.1
-  fluent_ui: ^4.4.0
+  file_picker: ^8.0.2
+  fluent_ui: ^4.8.7
   hotkey_manager: ^0.2.1
   url_launcher: ^6.2.5
   flutter_image_slideshow: ^0.1.6
