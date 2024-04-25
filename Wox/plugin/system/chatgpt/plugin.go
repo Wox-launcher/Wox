@@ -129,6 +129,10 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 							Label: "Ollama",
 							Value: string(chatgptModelProviderNameOllama),
 						},
+						{
+							Label: "Groq",
+							Value: string(chatgptModelProviderNameGroq),
+						},
 					},
 					Style: definition.PluginSettingValueStyle{
 						LabelWidth: chatgptLabelWidth,
@@ -221,9 +225,8 @@ func (c *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("registering query commands: %v", commands))
 			c.api.RegisterQueryCommands(ctx, commands)
 		}
-		if key == "provider" || key == "model" || key == "host" || key == "api_key" {
+		if key == "provider" || strings.HasPrefix(key, "model_") || strings.HasPrefix(key, "host_") || strings.HasPrefix(key, "api_key_") {
 			c.loadClient(ctx)
-
 		}
 	})
 	c.loadClient(ctx)
@@ -238,19 +241,17 @@ func (c *Plugin) getDynamicSetting(ctx context.Context, key string) definition.P
 		}
 
 		var options []definition.PluginSettingValueSelectOption
-		for _, model := range c.getAvailableModels(ctx) {
-			if string(model.Provider) == provider {
-				options = append(options, definition.PluginSettingValueSelectOption{
-					Label: model.DisplayName,
-					Value: model.Name,
-				})
-			}
+		for _, model := range c.getProviderModels(ctx, chatgptModelProviderName(provider)) {
+			options = append(options, definition.PluginSettingValueSelectOption{
+				Label: model.DisplayName,
+				Value: model.Name,
+			})
 		}
 
 		return definition.PluginSettingDefinitionItem{
 			Type: definition.PluginSettingDefinitionTypeSelect,
 			Value: &definition.PluginSettingValueSelect{
-				Key:     "model",
+				Key:     "model_" + provider, // different model for different provider
 				Label:   "Model",
 				Tooltip: "The LLM provided by the provider you selected",
 				Options: options,
@@ -266,7 +267,7 @@ func (c *Plugin) getDynamicSetting(ctx context.Context, key string) definition.P
 			return definition.PluginSettingDefinitionItem{
 				Type: definition.PluginSettingDefinitionTypeTextBox,
 				Value: &definition.PluginSettingValueTextBox{
-					Key:          "host",
+					Key:          "host_" + string(chatgptModelProviderNameOllama),
 					Label:        "Host",
 					Tooltip:      "The Ollama host",
 					DefaultValue: "http://localhost:11434",
@@ -284,7 +285,7 @@ func (c *Plugin) getDynamicSetting(ctx context.Context, key string) definition.P
 			return definition.PluginSettingDefinitionItem{
 				Type: definition.PluginSettingDefinitionTypeTextBox,
 				Value: &definition.PluginSettingValueTextBox{
-					Key:     "api_key",
+					Key:     "api_key_" + c.api.GetSetting(ctx, "provider"), // different api key for different provider
 					Label:   "API Key",
 					Tooltip: "The API key for the provider you selected. Please refer to the provider's documentation to get the API key",
 					Style: definition.PluginSettingValueStyle{
@@ -299,72 +300,80 @@ func (c *Plugin) getDynamicSetting(ctx context.Context, key string) definition.P
 	return definition.PluginSettingDefinitionItem{}
 }
 
-func (c *Plugin) getAvailableModels(ctx context.Context) (models []chatgptModel) {
-	for _, providerName := range chatgptModelProviderNames {
-		if provider, providerErr := c.NewProvider(ctx, providerName); providerErr == nil {
-			// ollama need to connect first to get models
-			if providerName == chatgptModelProviderNameOllama {
-				connectErr := provider.Connect(ctx)
-				if connectErr != nil {
-					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to connect to %s: %s", providerName, connectErr.Error()))
-					continue
-				}
+func (c *Plugin) getProviderModels(ctx context.Context, providerName chatgptModelProviderName) (models []chatgptModel) {
+	if provider, providerErr := c.NewProvider(ctx, providerName); providerErr == nil {
+		// ollama need to connect first to get models
+		if providerName == chatgptModelProviderNameOllama {
+			connectErr := provider.Connect(ctx)
+			if connectErr != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to connect to %s: %s", providerName, connectErr.Error()))
+				return
 			}
-
-			if providerModels, modelsErr := provider.Models(ctx); modelsErr == nil {
-				models = append(models, providerModels...)
-			} else {
-				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get models from providerName: %s", modelsErr.Error()))
-			}
-		} else {
-			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to create chatgpt providerName: %s", providerErr.Error()))
 		}
+
+		if providerModels, modelsErr := provider.Models(ctx); modelsErr == nil {
+			models = append(models, providerModels...)
+		} else {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get models from providerName: %s", modelsErr.Error()))
+		}
+	} else {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to create chatgpt providerName: %s", providerErr.Error()))
 	}
 
 	return
 }
 
 func (c *Plugin) loadClient(ctx context.Context) {
-	model := c.api.GetSetting(ctx, "model")
+	providerName := c.api.GetSetting(ctx, "provider")
+	if providerName == "" {
+		c.api.Log(ctx, plugin.LogLevelWarning, "provider is empty")
+		return
+	}
+	model := c.api.GetSetting(ctx, "model_"+providerName)
 	if model == "" {
 		c.api.Log(ctx, plugin.LogLevelWarning, "model is empty")
 		return
 	}
-	for _, availableModel := range c.getAvailableModels(ctx) {
-		if availableModel.Name == model {
-			provider, providerErr := c.NewProvider(ctx, availableModel.Provider)
-			if providerErr != nil {
-				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to create chatgpt provider: %s", providerErr.Error()))
-			} else {
-				//close previous provider
-				if c.provider != nil {
-					closeErr := c.provider.Close(ctx)
-					if closeErr != nil {
-						c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to close chatgpt provider: %s", closeErr.Error()))
-					} else {
-						c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("chatgpt provider closed, model: %s", c.model.Name))
-					}
-				}
 
-				connectErr := provider.Connect(ctx)
-				if connectErr != nil {
-					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to connect to chatgpt provider: %s", connectErr.Error()))
-					return
-				}
+	provider, providerErr := c.NewProvider(ctx, chatgptModelProviderName(providerName))
+	if providerErr != nil {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to create chatgpt provider: %s", providerErr.Error()))
+		return
+	}
 
-				c.provider = provider
-				c.model = availableModel
-				c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("chatgpt provider created with model: %s", model))
-			}
+	//close previous provider
+	if c.provider != nil {
+		closeErr := c.provider.Close(ctx)
+		if closeErr != nil {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to close chatgpt provider: %s", closeErr.Error()))
+		} else {
+			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("chatgpt provider closed, model: %s", c.model.Name))
+		}
+	}
+
+	connectErr := provider.Connect(ctx)
+	if connectErr != nil {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to connect to chatgpt provider: %s", connectErr.Error()))
+		return
+	}
+
+	models := c.getProviderModels(ctx, chatgptModelProviderName(providerName))
+	var availableModel chatgptModel
+	for _, m := range models {
+		if m.Name == model {
+			availableModel = m
 			break
 		}
 	}
+	c.model = availableModel
+	c.provider = provider
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("chatgpt provider created with model: %s", model))
 }
 
 func (c *Plugin) NewProvider(ctx context.Context, provider chatgptModelProviderName) (Provider, error) {
 	connectContext := chatgptProviderConnectContext{
-		ApiKey: c.api.GetSetting(ctx, "api_key"),
-		Host:   c.api.GetSetting(ctx, "host"),
+		ApiKey: c.api.GetSetting(ctx, "api_key_"+string(provider)),
+		Host:   c.api.GetSetting(ctx, "host_"+string(provider)),
 	}
 
 	if provider == chatgptModelProviderNameGoogle {
@@ -375,6 +384,9 @@ func (c *Plugin) NewProvider(ctx context.Context, provider chatgptModelProviderN
 	}
 	if provider == chatgptModelProviderNameOllama {
 		return NewOllamaProvider(ctx, connectContext, c.api), nil
+	}
+	if provider == chatgptModelProviderNameGroq {
+		return NewGroqProvider(ctx, connectContext, c.api), nil
 	}
 
 	return nil, errors.New("unknown model provider")

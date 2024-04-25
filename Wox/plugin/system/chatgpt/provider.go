@@ -10,12 +10,14 @@ var (
 	chatgptModelProviderNameOpenAI chatgptModelProviderName = "openai"
 	chatgptModelProviderNameGoogle chatgptModelProviderName = "google"
 	chatgptModelProviderNameOllama chatgptModelProviderName = "ollama"
+	chatgptModelProviderNameGroq   chatgptModelProviderName = "groq"
 )
 
 var chatgptModelProviderNames = []chatgptModelProviderName{
 	chatgptModelProviderNameOpenAI,
 	chatgptModelProviderNameGoogle,
 	chatgptModelProviderNameOllama,
+	chatgptModelProviderNameGroq,
 }
 
 type chatgptProviderConnectContext struct {
