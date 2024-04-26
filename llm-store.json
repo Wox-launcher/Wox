@@ -1,0 +1,14 @@
+[
+    {
+        "Name": "Translate English to Chinese",
+        "Author": "qianlifeng",
+        "Command": "translate",
+        "Prompt": "请将以下英文翻译为中文，不要输出任何与译文无关的解释：\n%s"
+    },
+    {
+        "Name": "TLDR",
+        "Author": "qianlifeng",
+        "Command": "tldr",
+        "Prompt": "Extract all facts from the text and summarize it in all relevant aspects in up to seven bullet points and a 1-liner summary. Pick a good matching emoji for every bullet point. And replay in chinese, thx.\nText: %s\nSummary:"
+    }
+]

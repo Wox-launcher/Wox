@@ -346,15 +346,18 @@ func (m *Manager) GetPluginInstances() []*Instance {
 }
 
 func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance, query Query) bool {
+	if pluginInstance.Setting.Disabled {
+		return false
+	}
+
+	if query.Type == QueryTypeSelection {
+		isPluginSupportSelection := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureQuerySelection)
+		return isPluginSupportSelection
+	}
+
 	var validGlobalQuery = lo.Contains(pluginInstance.GetTriggerKeywords(), "*") && query.TriggerKeyword == ""
 	var validNonGlobalQuery = lo.Contains(pluginInstance.GetTriggerKeywords(), query.TriggerKeyword)
 	if !validGlobalQuery && !validNonGlobalQuery {
-		return false
-	}
-	if query.Type == QueryTypeSelection && !pluginInstance.Metadata.IsSupportFeature(MetadataFeatureQuerySelection) {
-		return false
-	}
-	if pluginInstance.Setting.Disabled {
 		return false
 	}
 

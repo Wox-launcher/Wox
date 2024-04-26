@@ -4,7 +4,6 @@ import 'dart:ui';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:get/get.dart';
 import 'package:lpinyin/lpinyin.dart';
 import 'package:uuid/v4.dart';
@@ -78,7 +77,10 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   @override
   Future<void> showApp(String traceId, ShowAppParams params) async {
-    canArrowUpHistory = true;
+    if (_query.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
+      canArrowUpHistory = true;
+    }
+
     latestQueryHistories.assignAll(params.queryHistories);
     lastQueryMode = params.lastQueryMode;
 
@@ -258,6 +260,9 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
     _query.value = query;
     isShowActionPanel.value = false;
+    if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
+      canArrowUpHistory = false;
+    }
 
     if (queryBoxTextFieldController.text != query.queryText) {
       queryBoxTextFieldController.text = query.queryText;
