@@ -209,6 +209,10 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 			logger.Error(newCtx, fmt.Sprintf("failed to get selected: %s", err.Error()))
 			return
 		}
+		if selection.IsEmpty() {
+			logger.Info(newCtx, "no selection")
+			return
+		}
 
 		m.ui.ChangeQuery(newCtx, share.ChangedQuery{
 			QueryType:      plugin.QueryTypeSelection,

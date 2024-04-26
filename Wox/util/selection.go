@@ -43,6 +43,17 @@ func (s *Selection) String() string {
 	return ""
 }
 
+func (s *Selection) IsEmpty() bool {
+	switch s.Type {
+	case SelectionTypeText:
+		return s.Text == ""
+	case SelectionTypeFile:
+		return s.FilePaths == nil || len(s.FilePaths) == 0
+	}
+
+	return false
+}
+
 func GetSelected() (Selection, error) {
 	simulateStartTimestamp := GetSystemTimestamp()
 	if keyboard.SimulateCopy() != nil {
