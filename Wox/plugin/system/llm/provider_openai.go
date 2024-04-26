@@ -1,16 +1,14 @@
-package chatgpt
+package llm
 
 import (
 	"context"
 	"github.com/sashabaranov/go-openai"
 	"io"
-	"wox/plugin"
 )
 
 type OpenAIProvider struct {
-	connectContext chatgptProviderConnectContext
+	connectContext providerConnectContext
 	client         *openai.Client
-	api            plugin.API
 }
 
 type OpenAIProviderStream struct {
@@ -18,20 +16,27 @@ type OpenAIProviderStream struct {
 	conversations []Conversation
 }
 
-func NewOpenAIClient(ctx context.Context, connectContext chatgptProviderConnectContext, api plugin.API) Provider {
-	return &OpenAIProvider{connectContext: connectContext, api: api}
-}
-
-func (o *OpenAIProvider) Connect(ctx context.Context) error {
-	o.client = openai.NewClient(o.connectContext.ApiKey)
-	return nil
+func NewOpenAIClient(ctx context.Context, connectContext providerConnectContext) Provider {
+	return &OpenAIProvider{connectContext: connectContext}
 }
 
 func (o *OpenAIProvider) Close(ctx context.Context) error {
 	return nil
 }
 
-func (o *OpenAIProvider) ChatStream(ctx context.Context, model chatgptModel, conversations []Conversation) (ProviderChatStream, error) {
+func (o *OpenAIProvider) ensureClient(ctx context.Context) error {
+	if o.client == nil {
+		o.client = openai.NewClient(o.connectContext.ApiKey)
+	}
+
+	return nil
+}
+
+func (o *OpenAIProvider) ChatStream(ctx context.Context, model model, conversations []Conversation) (ProviderChatStream, error) {
+	if ensureClientErr := o.ensureClient(ctx); ensureClientErr != nil {
+		return nil, ensureClientErr
+	}
+
 	createdStream, createErr := o.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
 		Stream:   true,
 		Model:    model.Name,
@@ -44,7 +49,11 @@ func (o *OpenAIProvider) ChatStream(ctx context.Context, model chatgptModel, con
 	return &OpenAIProviderStream{conversations: conversations, stream: createdStream}, nil
 }
 
-func (o *OpenAIProvider) Chat(ctx context.Context, model chatgptModel, conversations []Conversation) (string, error) {
+func (o *OpenAIProvider) Chat(ctx context.Context, model model, conversations []Conversation) (string, error) {
+	if ensureClientErr := o.ensureClient(ctx); ensureClientErr != nil {
+		return "", ensureClientErr
+	}
+
 	resp, createErr := o.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model:    model.Name,
 		Messages: o.convertConversations(conversations),
@@ -56,12 +65,12 @@ func (o *OpenAIProvider) Chat(ctx context.Context, model chatgptModel, conversat
 	return resp.Choices[0].Message.Content, nil
 }
 
-func (o *OpenAIProvider) Models(ctx context.Context) ([]chatgptModel, error) {
-	return []chatgptModel{
+func (o *OpenAIProvider) Models(ctx context.Context) ([]model, error) {
+	return []model{
 		{
 			DisplayName: "chatgpt-3.5-turbo",
 			Name:        "gpt-3.5-turbo",
-			Provider:    chatgptModelProviderNameOpenAI,
+			Provider:    modelProviderNameOpenAI,
 		},
 	}, nil
 }

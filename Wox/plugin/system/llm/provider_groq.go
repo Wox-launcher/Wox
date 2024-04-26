@@ -1,4 +1,4 @@
-package chatgpt
+package llm
 
 import (
 	"context"
@@ -15,9 +15,8 @@ import (
 )
 
 type GroqProvider struct {
-	connectContext chatgptProviderConnectContext
+	connectContext providerConnectContext
 	client         *openai.LLM
-	api            plugin.API
 }
 
 type GroqProviderStream struct {
@@ -26,19 +25,15 @@ type GroqProviderStream struct {
 	api           plugin.API
 }
 
-func NewGroqProvider(ctx context.Context, connectContext chatgptProviderConnectContext, api plugin.API) Provider {
-	return &GroqProvider{connectContext: connectContext, api: api}
+func NewGroqProvider(ctx context.Context, connectContext providerConnectContext) Provider {
+	return &GroqProvider{connectContext: connectContext}
 }
 
-func (o *GroqProvider) Connect(ctx context.Context) error {
+func (g *GroqProvider) Close(ctx context.Context) error {
 	return nil
 }
 
-func (o *GroqProvider) Close(ctx context.Context) error {
-	return nil
-}
-
-func (o *GroqProvider) ChatStream(ctx context.Context, model chatgptModel, conversations []Conversation) (ProviderChatStream, error) {
+func (o *GroqProvider) ChatStream(ctx context.Context, model model, conversations []Conversation) (ProviderChatStream, error) {
 	client, clientErr := openai.New(openai.WithModel(model.Name), openai.WithBaseURL("https://api.groq.com/openai/v1"), openai.WithToken(o.connectContext.ApiKey))
 	if clientErr != nil {
 		return nil, clientErr
@@ -48,7 +43,7 @@ func (o *GroqProvider) ChatStream(ctx context.Context, model chatgptModel, conve
 	r, w := nio.Pipe(buf)
 	util.Go(ctx, "Groq chat stream", func() {
 		_, err := client.GenerateContent(ctx, o.convertConversations(conversations), llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-			o.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Groq: receive chunks from model: %s", string(chunk)))
+			o.connectContext.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Groq: receive chunks from model: %s", string(chunk)))
 			w.Write(chunk)
 			return nil
 		}))
@@ -59,10 +54,10 @@ func (o *GroqProvider) ChatStream(ctx context.Context, model chatgptModel, conve
 		}
 	})
 
-	return &GroqProviderStream{conversations: conversations, reader: r, api: o.api}, nil
+	return &GroqProviderStream{conversations: conversations, reader: r}, nil
 }
 
-func (o *GroqProvider) Chat(ctx context.Context, model chatgptModel, conversations []Conversation) (string, error) {
+func (o *GroqProvider) Chat(ctx context.Context, model model, conversations []Conversation) (string, error) {
 	client, clientErr := openai.New(openai.WithModel(model.Name), openai.WithBaseURL("https://api.groq.com/openai/v1"), openai.WithToken(o.connectContext.ApiKey))
 	if clientErr != nil {
 		return "", clientErr
@@ -76,27 +71,27 @@ func (o *GroqProvider) Chat(ctx context.Context, model chatgptModel, conversatio
 	return response.Choices[0].Content, nil
 }
 
-func (o *GroqProvider) Models(ctx context.Context) (models []chatgptModel, err error) {
-	return []chatgptModel{
+func (o *GroqProvider) Models(ctx context.Context) (models []model, err error) {
+	return []model{
 		{
 			Name:        "llama3-8b-8192",
 			DisplayName: "llama3-8b-8192",
-			Provider:    chatgptModelProviderNameGroq,
+			Provider:    modelProviderNameGroq,
 		},
 		{
 			Name:        "llama3-70b-8192",
 			DisplayName: "llama3-70b-8192",
-			Provider:    chatgptModelProviderNameGroq,
+			Provider:    modelProviderNameGroq,
 		},
 		{
 			Name:        "mixtral-8x7b-32768",
 			DisplayName: "mixtral-8x7b-32768",
-			Provider:    chatgptModelProviderNameGroq,
+			Provider:    modelProviderNameGroq,
 		},
 		{
 			Name:        "gemma-7b-it",
 			DisplayName: "gemma-7b-it",
-			Provider:    chatgptModelProviderNameGroq,
+			Provider:    modelProviderNameGroq,
 		},
 	}, nil
 }

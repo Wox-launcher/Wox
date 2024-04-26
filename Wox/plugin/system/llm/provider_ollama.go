@@ -1,4 +1,4 @@
-package chatgpt
+package llm
 
 import (
 	"context"
@@ -16,36 +16,24 @@ import (
 )
 
 type OllamaProvider struct {
-	connectContext chatgptProviderConnectContext
+	connectContext providerConnectContext
 	client         *ollama.LLM
-	api            plugin.API
 }
 
 type OllamaProviderStream struct {
 	conversations []Conversation
 	reader        io.Reader
-	api           plugin.API
 }
 
-func NewOllamaProvider(ctx context.Context, connectContext chatgptProviderConnectContext, api plugin.API) Provider {
-	return &OllamaProvider{connectContext: connectContext, api: api}
-}
-
-func (o *OllamaProvider) Connect(ctx context.Context) error {
-	client, clientErr := ollama.New(ollama.WithServerURL(o.connectContext.Host))
-	if clientErr != nil {
-		return clientErr
-	}
-
-	o.client = client
-	return nil
+func NewOllamaProvider(ctx context.Context, connectContext providerConnectContext) Provider {
+	return &OllamaProvider{connectContext: connectContext}
 }
 
 func (o *OllamaProvider) Close(ctx context.Context) error {
 	return nil
 }
 
-func (o *OllamaProvider) ChatStream(ctx context.Context, model chatgptModel, conversations []Conversation) (ProviderChatStream, error) {
+func (o *OllamaProvider) ChatStream(ctx context.Context, model model, conversations []Conversation) (ProviderChatStream, error) {
 	client, clientErr := ollama.New(ollama.WithServerURL(o.connectContext.Host), ollama.WithModel(model.Name))
 	if clientErr != nil {
 		return nil, clientErr
@@ -55,7 +43,7 @@ func (o *OllamaProvider) ChatStream(ctx context.Context, model chatgptModel, con
 	r, w := nio.Pipe(buf)
 	util.Go(ctx, "ollama chat stream", func() {
 		_, err := client.GenerateContent(ctx, o.convertConversations(conversations), llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-			o.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("OLLAMA: receive chunks from model: %s", string(chunk)))
+			o.connectContext.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("OLLAMA: receive chunks from model: %s", string(chunk)))
 			w.Write(chunk)
 			return nil
 		}))
@@ -66,10 +54,10 @@ func (o *OllamaProvider) ChatStream(ctx context.Context, model chatgptModel, con
 		}
 	})
 
-	return &OllamaProviderStream{conversations: conversations, reader: r, api: o.api}, nil
+	return &OllamaProviderStream{conversations: conversations, reader: r}, nil
 }
 
-func (o *OllamaProvider) Chat(ctx context.Context, model chatgptModel, conversations []Conversation) (string, error) {
+func (o *OllamaProvider) Chat(ctx context.Context, model model, conversations []Conversation) (string, error) {
 	client, clientErr := ollama.New(ollama.WithServerURL(o.connectContext.Host), ollama.WithModel(model.Name))
 	if clientErr != nil {
 		return "", clientErr
@@ -83,17 +71,17 @@ func (o *OllamaProvider) Chat(ctx context.Context, model chatgptModel, conversat
 	return response.Choices[0].Content, nil
 }
 
-func (o *OllamaProvider) Models(ctx context.Context) (models []chatgptModel, err error) {
+func (o *OllamaProvider) Models(ctx context.Context) (models []model, err error) {
 	body, err := util.HttpGet(ctx, o.connectContext.Host+"/api/tags")
 	if err != nil {
 		return nil, err
 	}
 
 	gjson.Get(string(body), "models.#.name").ForEach(func(key, value gjson.Result) bool {
-		models = append(models, chatgptModel{
+		models = append(models, model{
 			DisplayName: value.String(),
 			Name:        value.String(),
-			Provider:    chatgptModelProviderNameOllama,
+			Provider:    modelProviderNameOllama,
 		})
 		return true
 	})

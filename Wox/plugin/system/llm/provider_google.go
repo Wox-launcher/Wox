@@ -1,4 +1,4 @@
-package chatgpt
+package llm
 
 import (
 	"context"
@@ -8,13 +8,11 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"io"
-	"wox/plugin"
 )
 
 type GoogleProvider struct {
-	connectContext chatgptProviderConnectContext
+	connectContext providerConnectContext
 	client         *genai.Client
-	api            plugin.API
 }
 
 type GoogleProviderStream struct {
@@ -22,17 +20,20 @@ type GoogleProviderStream struct {
 	conversations []Conversation
 }
 
-func NewGoogleProvider(ctx context.Context, connectContext chatgptProviderConnectContext, api plugin.API) Provider {
-	return &GoogleProvider{connectContext: connectContext, api: api}
+func NewGoogleProvider(ctx context.Context, connectContext providerConnectContext) Provider {
+	return &GoogleProvider{connectContext: connectContext}
 }
 
-func (g *GoogleProvider) Connect(ctx context.Context) error {
-	client, newClientErr := genai.NewClient(ctx, option.WithAPIKey(g.connectContext.ApiKey))
-	if newClientErr != nil {
-		return newClientErr
+func (g *GoogleProvider) ensureClient(ctx context.Context) error {
+	if g.client == nil {
+		client, newClientErr := genai.NewClient(ctx, option.WithAPIKey(g.connectContext.ApiKey))
+		if newClientErr != nil {
+			return newClientErr
+		}
+
+		g.client = client
 	}
 
-	g.client = client
 	return nil
 }
 
@@ -43,7 +44,11 @@ func (g *GoogleProvider) Close(ctx context.Context) error {
 	return nil
 }
 
-func (g *GoogleProvider) ChatStream(ctx context.Context, model chatgptModel, conversations []Conversation) (ProviderChatStream, error) {
+func (g *GoogleProvider) ChatStream(ctx context.Context, model model, conversations []Conversation) (ProviderChatStream, error) {
+	if ensureClientErr := g.ensureClient(ctx); ensureClientErr != nil {
+		return nil, ensureClientErr
+	}
+
 	chatMessages, lastConversation := g.convertConversations(conversations)
 	aiModel := g.client.GenerativeModel(model.Name)
 	session := aiModel.StartChat()
@@ -52,7 +57,11 @@ func (g *GoogleProvider) ChatStream(ctx context.Context, model chatgptModel, con
 	return &GoogleProviderStream{conversations: conversations, stream: stream}, nil
 }
 
-func (g *GoogleProvider) Chat(ctx context.Context, model chatgptModel, conversations []Conversation) (string, error) {
+func (g *GoogleProvider) Chat(ctx context.Context, model model, conversations []Conversation) (string, error) {
+	if ensureClientErr := g.ensureClient(ctx); ensureClientErr != nil {
+		return "", ensureClientErr
+	}
+
 	chatMessages, lastConversation := g.convertConversations(conversations)
 	aiModel := g.client.GenerativeModel(model.Name)
 	session := aiModel.StartChat()
@@ -71,17 +80,17 @@ func (g *GoogleProvider) Chat(ctx context.Context, model chatgptModel, conversat
 	return "", errors.New("no text in response")
 }
 
-func (g *GoogleProvider) Models(ctx context.Context) ([]chatgptModel, error) {
-	return []chatgptModel{
+func (g *GoogleProvider) Models(ctx context.Context) ([]model, error) {
+	return []model{
 		{
 			DisplayName: "google-gemini-1.0-pro",
 			Name:        "gemini-1.0-pro",
-			Provider:    chatgptModelProviderNameGoogle,
+			Provider:    modelProviderNameGoogle,
 		},
 		{
 			DisplayName: "google-gemini-1.5-pro",
 			Name:        "gemini-1.5-pro",
-			Provider:    chatgptModelProviderNameGoogle,
+			Provider:    modelProviderNameGoogle,
 		},
 	}, nil
 }
