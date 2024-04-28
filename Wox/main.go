@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"golang.design/x/hotkey/mainthread"
+	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 	"wox/i18n"
@@ -13,7 +16,6 @@ import (
 	"wox/ui"
 	"wox/util"
 	"wox/util/hotkey"
-	"wox/util/single_instance"
 )
 
 import _ "wox/plugin/host" // import all hosts
@@ -49,23 +51,22 @@ func main() {
 	}
 	util.GetLogger().Info(ctx, fmt.Sprintf("server port: %d", serverPort))
 
-	existingPort, lockErr := single_instance.Lock(serverPort)
-	if lockErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("there is existing instance running, port: %d, lock return: %s", existingPort, lockErr.Error()))
-
-		if existingPort > 0 {
-			_, postShowErr := util.HttpPost(ctx, fmt.Sprintf("http://localhost:%d/show", existingPort), "")
-			if postShowErr != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("failed to show existing instance: %s", postShowErr.Error()))
-				return
-			}
+	// check if there is existing instance running
+	if existingPort := getExistingInstancePort(ctx); existingPort > 0 {
+		util.GetLogger().Error(ctx, fmt.Sprintf("there is existing instance running, port: %d", existingPort))
+		_, postShowErr := util.HttpPost(ctx, fmt.Sprintf("http://localhost:%d/show", existingPort), "")
+		if postShowErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to show existing instance: %s", postShowErr.Error()))
 		} else {
-			util.GetLogger().Error(ctx, "failed to get existing instance port")
+			util.GetLogger().Info(ctx, "show existing instance successfully, bye~")
 		}
-
 		return
 	} else {
-		util.GetLogger().Info(ctx, "lock server port success")
+		util.GetLogger().Info(ctx, "no existing instance found")
+		writeErr := os.WriteFile(util.GetLocation().GetAppLockPath(), []byte(fmt.Sprintf("%d", serverPort)), 0644)
+		if writeErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to write lock file: %s", writeErr.Error()))
+		}
 	}
 
 	extractErr := resource.Extract(ctx)
@@ -137,4 +138,35 @@ func main() {
 
 		ui.GetUIManager().StartWebsocketAndWait(ctx, serverPort)
 	})
+}
+
+// retrieves the instance port from the existing instance lock file.
+// It returns 0 if the lock file doesn't exist or fails to read the file.
+func getExistingInstancePort(ctx context.Context) int {
+	filePath := util.GetLocation().GetAppLockPath()
+	if !util.IsFileExists(filePath) {
+		return 0
+	}
+
+	file, err := os.ReadFile(filePath)
+	if err != nil {
+		return 0
+	}
+
+	port, err := strconv.Atoi(string(file))
+	if err != nil {
+		return 0
+	}
+
+	//check if the port is valid
+	response, err := util.HttpGet(ctx, fmt.Sprintf("http://localhost:%d/ping", port))
+	if err != nil {
+		return 0
+	}
+
+	if !strings.Contains(string(response), "pong") {
+		return 0
+	}
+
+	return port
 }

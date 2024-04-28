@@ -38,7 +38,6 @@ require (
 	github.com/tidwall/pretty v1.2.1
 	github.com/tmc/langchaingo v0.1.8
 	github.com/wissance/stringFormatter v1.2.0
-	github.com/xeonx/timeago v1.0.0-rc5
 	go.uber.org/zap v1.27.0
 	golang.design/x/hotkey v0.4.1
 	golang.org/x/image v0.15.0

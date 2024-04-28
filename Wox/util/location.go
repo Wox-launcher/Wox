@@ -193,6 +193,6 @@ func (l *Location) GetUIAppPath() string {
 	return ""
 }
 
-func (l *Location) GetAppLockFilePath() string {
+func (l *Location) GetAppLockPath() string {
 	return path.Join(l.GetWoxDataDirectory(), "wox.lock")
 }

@@ -85,8 +85,13 @@ func (u *uiImpl) send(ctx context.Context, method string, data any) (responseDat
 		return "", err
 	}
 
+	var timeout = time.Second * 2
+	if method == "PickFiles" {
+		// pick files may take a long time
+		timeout = time.Second * 180
+	}
 	select {
-	case <-time.NewTimer(time.Second * 60).C:
+	case <-time.NewTimer(timeout).C:
 		logger.Error(ctx, fmt.Sprintf("invoke ui method %s response timeout", method))
 		return "", fmt.Errorf("request timeout, request id: %s", requestID)
 	case response := <-resultChan:
