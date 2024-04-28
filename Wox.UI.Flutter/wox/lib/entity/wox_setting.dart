@@ -13,20 +13,21 @@ class WoxSetting {
   late int appWidth;
   late String themeId;
 
-  WoxSetting(
-      {required this.mainHotkey,
-      required this.selectionHotkey,
-      required this.usePinYin,
-      required this.switchInputMethodABC,
-      required this.hideOnStart,
-      required this.hideOnLostFocus,
-      required this.showTray,
-      required this.langCode,
-      required this.queryHotkeys,
-      required this.queryShortcuts,
-      required this.lastQueryMode,
-      required this.appWidth,
-      required this.themeId});
+  WoxSetting({
+    required this.mainHotkey,
+    required this.selectionHotkey,
+    required this.usePinYin,
+    required this.switchInputMethodABC,
+    required this.hideOnStart,
+    required this.hideOnLostFocus,
+    required this.showTray,
+    required this.langCode,
+    required this.queryHotkeys,
+    required this.queryShortcuts,
+    required this.lastQueryMode,
+    required this.appWidth,
+    required this.themeId,
+  });
 
   WoxSetting.fromJson(Map<String, dynamic> json) {
     mainHotkey = json['MainHotkey'];
@@ -37,18 +38,25 @@ class WoxSetting {
     hideOnLostFocus = json['HideOnLostFocus'];
     showTray = json['ShowTray'];
     langCode = json['LangCode'];
+
     if (json['QueryHotkeys'] != null) {
       queryHotkeys = <QueryHotkey>[];
       json['QueryHotkeys'].forEach((v) {
         queryHotkeys.add(QueryHotkey.fromJson(v));
       });
+    } else {
+      queryHotkeys = <QueryHotkey>[];
     }
+
     if (json['QueryShortcuts'] != null) {
       queryShortcuts = <QueryShortcut>[];
       json['QueryShortcuts'].forEach((v) {
         queryShortcuts.add(QueryShortcut.fromJson(v));
       });
+    } else {
+      queryShortcuts = <QueryShortcut>[];
     }
+
     lastQueryMode = json['LastQueryMode'];
     appWidth = json['AppWidth'];
     themeId = json['ThemeId'];
