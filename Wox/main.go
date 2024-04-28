@@ -13,6 +13,7 @@ import (
 	"wox/ui"
 	"wox/util"
 	"wox/util/hotkey"
+	"wox/util/single_instance"
 )
 
 import _ "wox/plugin/host" // import all hosts
@@ -37,6 +38,36 @@ func main() {
 	util.GetLogger().Info(ctx, fmt.Sprintf("wox data location: %s", util.GetLocation().GetWoxDataDirectory()))
 	util.GetLogger().Info(ctx, fmt.Sprintf("user data location: %s", util.GetLocation().GetUserDataDirectory()))
 
+	serverPort := 34987
+	if util.IsProd() {
+		availablePort, portErr := util.GetAvailableTcpPort(ctx)
+		if portErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to get server port: %s", portErr.Error()))
+			return
+		}
+		serverPort = availablePort
+	}
+	util.GetLogger().Info(ctx, fmt.Sprintf("server port: %d", serverPort))
+
+	existingPort, lockErr := single_instance.Lock(serverPort)
+	if lockErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("there is existing instance running, port: %d, lock return: %s", existingPort, lockErr.Error()))
+
+		if existingPort > 0 {
+			_, postShowErr := util.HttpPost(ctx, fmt.Sprintf("http://localhost:%d/show", existingPort), "")
+			if postShowErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("failed to show existing instance: %s", postShowErr.Error()))
+				return
+			}
+		} else {
+			util.GetLogger().Error(ctx, "failed to get existing instance port")
+		}
+
+		return
+	} else {
+		util.GetLogger().Info(ctx, "lock server port success")
+	}
+
 	extractErr := resource.Extract(ctx)
 	if extractErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to extract embed file: %s", extractErr.Error()))
@@ -60,16 +91,6 @@ func main() {
 	if themeErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize themes: %s", themeErr.Error()))
 		return
-	}
-
-	serverPort := 34987
-	if util.IsProd() {
-		availablePort, portErr := util.GetAvailableTcpPort(ctx)
-		if portErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize lang(%s): %s", woxSetting.LangCode, portErr.Error()))
-			return
-		}
-		serverPort = availablePort
 	}
 
 	if woxSetting.ShowTray {

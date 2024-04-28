@@ -18,6 +18,19 @@ func HttpGet(ctx context.Context, url string) ([]byte, error) {
 	return resp.Body(), nil
 }
 
+func HttpPost(ctx context.Context, url string, body any) ([]byte, error) {
+	client := resty.New()
+	resp, err := client.R().SetBody(body).Post(url)
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, resp.Error().(error)
+	}
+
+	return resp.Body(), nil
+}
+
 func HttpDownload(ctx context.Context, url string, dest string) error {
 	client := resty.New()
 	resp, err := client.R().SetOutput(dest).Get(url)

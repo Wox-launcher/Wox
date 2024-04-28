@@ -1,0 +1,1 @@
+This single_instance module is inspired by the https://github.com/allan-simon/go-singleinstance
