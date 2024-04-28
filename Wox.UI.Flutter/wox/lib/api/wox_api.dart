@@ -71,4 +71,8 @@ class WoxApi {
   Future<bool> isHotkeyAvailable(String hotkey) async {
     return await WoxHttpUtil.instance.postData("/hotkey/available", {"hotkey": hotkey});
   }
+
+  Future<void> uiReady() async {
+    await WoxHttpUtil.instance.postData("/ui/ready", {});
+  }
 }

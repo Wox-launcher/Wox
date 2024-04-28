@@ -9,7 +9,6 @@ import (
 	"github.com/samber/lo"
 	"net/http"
 	"strings"
-	"time"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/ui/dto"
@@ -17,7 +16,6 @@ import (
 )
 
 var m *melody.Melody
-var uiConnected = false
 
 type websocketMsgType string
 
@@ -80,18 +78,6 @@ func serveAndWait(ctx context.Context, port int) {
 
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		m.HandleRequest(w, r)
-	})
-
-	m.HandleConnect(func(s *melody.Session) {
-		if !uiConnected {
-			uiConnected = true
-			logger.Info(ctx, fmt.Sprintf("ui connected: %s", s.Request.RemoteAddr))
-
-			util.Go(ctx, "post app start", func() {
-				time.Sleep(time.Millisecond * 500) // wait for ui to be ready
-				GetUIManager().PostAppStart(util.NewTraceContext())
-			})
-		}
 	})
 
 	m.HandleMessage(func(s *melody.Session, msg []byte) {

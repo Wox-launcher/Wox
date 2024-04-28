@@ -27,14 +27,15 @@ var managerOnce sync.Once
 var logger *util.Log
 
 type Manager struct {
-	mainHotkey      *hotkey.Hotkey
-	selectionHotkey *hotkey.Hotkey
-	queryHotkeys    []*hotkey.Hotkey
-	ui              share.UI
-	serverPort      int
-	uiProcess       *os.Process
-	themes          *util.HashMap[string, share.Theme]
-	systemThemeIds  []string
+	mainHotkey       *hotkey.Hotkey
+	selectionHotkey  *hotkey.Hotkey
+	queryHotkeys     []*hotkey.Hotkey
+	ui               share.UI
+	serverPort       int
+	uiProcess        *os.Process
+	themes           *util.HashMap[string, share.Theme]
+	systemThemeIds   []string
+	isUIReadyHandled bool
 }
 
 func GetUIManager() *Manager {
@@ -342,7 +343,15 @@ func (m *Manager) GetUI(ctx context.Context) share.UI {
 	return m.ui
 }
 
-func (m *Manager) PostAppStart(ctx context.Context) {
+// called after UI is ready to show, and will execute only once
+func (m *Manager) PostUIReady(ctx context.Context) {
+	logger.Info(ctx, "app is ready to show")
+	if m.isUIReadyHandled {
+		logger.Warn(ctx, "app is already handled ready to show event")
+		return
+	}
+	m.isUIReadyHandled = true
+
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if !woxSetting.HideOnStart {
 		m.ui.ShowApp(ctx, share.ShowContext{SelectAll: false})

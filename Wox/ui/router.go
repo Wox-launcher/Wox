@@ -39,6 +39,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/":                 handleHome,
 	"/show":             handleShow,
 	"/ping":             handlePing,
+	"/ui/ready":         handleUIReady,
 	"/image":            handleImage,
 	"/preview":          handlePreview,
 	"/open/url":         handleOpenUrl,
@@ -563,5 +564,11 @@ func handleHotkeyAvailable(w http.ResponseWriter, r *http.Request) {
 func handleShow(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
 	GetUIManager().GetUI(ctx).ShowApp(ctx, share.ShowContext{SelectAll: true})
+	writeSuccessResponse(w, "")
+}
+
+func handleUIReady(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+	GetUIManager().PostUIReady(ctx)
 	writeSuccessResponse(w, "")
 }
