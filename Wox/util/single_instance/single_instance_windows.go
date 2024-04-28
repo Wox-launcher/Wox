@@ -20,7 +20,7 @@ func lock(content string) error {
 
 	file, err := os.OpenFile(filename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	_, err = file.WriteString(content)
