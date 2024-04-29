@@ -202,7 +202,7 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
                   label="Hide Wox On Lost Focus"
                 />
               </div>
-              <div className={"setting-item-intro"}>If selected, When wox lost focus, it will be hidden.</div>
+              <div className={"setting-item-intro"}>When selected, Wox will hide on lost focus.</div>
             </div>
           </div>
           <div className={"wox-setting-item"}>
