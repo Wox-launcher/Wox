@@ -88,7 +88,7 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
             ),
             formField(
               label: "Use PinYin",
-              tips: "If selected, When searching, it converts Chinese into Pinyin and matches it.",
+              tips: "When selected, Wox will convert Chinese into Pinyin.",
               child: Obx(() {
                 return ToggleSwitch(
                   checked: controller.woxSetting.value.usePinYin,
@@ -100,7 +100,7 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
             ),
             formField(
               label: "Hide On Lost Focus",
-              tips: "If selected, When wox lost focus, it will be hidden.",
+              tips: "When selected, Wox will hide on lost focus",
               child: Obx(() {
                 return ToggleSwitch(
                   checked: controller.woxSetting.value.hideOnLostFocus,
@@ -112,7 +112,7 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
             ),
             formField(
               label: "Hide On Start",
-              tips: "If selected, When wox start, it will be hidden.",
+              tips: "When selected, Wox will hide on start.",
               child: Obx(() {
                 return ToggleSwitch(
                   checked: controller.woxSetting.value.hideOnStart,
@@ -124,7 +124,7 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
             ),
             formField(
               label: "Show Tray",
-              tips: "If selected, When wox start, icon will be shown on tray.",
+              tips: "When selected, Wox will show icon on system tray on start.",
               child: Obx(() {
                 return ToggleSwitch(
                   checked: controller.woxSetting.value.showTray,
@@ -136,7 +136,7 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
             ),
             formField(
               label: "Switch Input Method",
-              tips: "If selected, input method will be switched to english, when enter input field.",
+              tips: "When selected, the input method will be switched to english",
               child: Obx(() {
                 return ToggleSwitch(
                   checked: controller.woxSetting.value.switchInputMethodABC,
