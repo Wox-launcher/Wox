@@ -182,7 +182,7 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
                   label="Use PinYin For Searching"
                 />
               </div>
-              <div className={"setting-item-intro"}>If selected, When searching, it converts Chinese into Pinyin and matches it.</div>
+              <div className={"setting-item-intro"}>When selected, Wox will convert Chinese into Pinyin.</div>
             </div>
           </div>
           <div className={"wox-setting-item"}>
@@ -222,7 +222,7 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
                   label="Hide Wox On Start"
                 />
               </div>
-              <div className={"setting-item-intro"}>If selected, When wox start, it will be hidden.</div>
+              <div className={"setting-item-intro"}>When selected, Wox will hide on start.</div>
             </div>
           </div>
           <div className={"wox-setting-item"}>
@@ -242,7 +242,7 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
                   label="Show Wox Tray Icon"
                 />
               </div>
-              <div className={"setting-item-intro"}>If selected, When wox start, icon will be shown on tray.</div>
+              <div className={"setting-item-intro"}>When selected, Wox will show icon on system tray on start.</div>
             </div>
           </div>
           <div className={"wox-setting-item"}>
@@ -262,7 +262,7 @@ export default React.forwardRef((_props: WoxSettingGeneralProps, ref: React.Ref<
                   label="Switch Input Method To English"
                 />
               </div>
-              <div className={"setting-item-intro"}>If selected, input method will be switched to english, when enter input field.</div>
+              <div className={"setting-item-intro"}>When selected, the input method will be switched to english.</div>
             </div>
           </div>
         </>
