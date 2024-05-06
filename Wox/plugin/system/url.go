@@ -3,7 +3,7 @@ package system
 import (
 	"context"
 	"regexp"
-	"time"
+	"strings"
 	"wox/plugin"
 	"wox/util"
 )
@@ -50,47 +50,23 @@ func (r *UrlPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 
 func (r *UrlPlugin) getReg() *regexp.Regexp {
 	// based on https://gist.github.com/dperini/729294
-	return regexp.MustCompile(`(?i)^(?:(?:(?:https?|ftp):)?\/\/)(?:\S+(?::\S*)?@)?(?:(!(?:10|127)(?:\.\d{1,3}){3})(!(?:169\.254|192\.168)(?:\.\d{1,3}){2})(!172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z0-9\\u00a1-\\uffff][a-z0-9\\u00a1-\\uffff_-]{0,62})?[a-z0-9\\u00a1-\\uffff]\.)+(?:[a-z\\u00a1-\\uffff]{2,}\.?))(?::\d{2,5})?(?:[/?#]\S*)?$`)
+	return regexp.MustCompile(`^(http:\/\/www\.|https:\/\/www\.|http:\/\/|https:\/\/)?[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[0-9]{1,5})?(\/.*)?$`)
 }
 
 func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
 	if len(r.reg.FindStringIndex(query.Search)) > 0 {
 		results = append(results, plugin.QueryResult{
-			Title:           query.Search,
-			SubTitle:        "Open the typed URL from Wox",
-			Score:           100,
-			Icon:            urlIcon,
-			RefreshInterval: 100,
-			OnRefresh: func(ctx context.Context, result plugin.RefreshableResult) plugin.RefreshableResult {
-				time.Sleep(time.Second)
-				result.Title = util.GetSystemTimestampStr()
-				result.SubTitle = util.GetSystemTimestampStr()
-				return result
-			},
+			Title:    query.Search,
+			SubTitle: "Open in browser",
+			Score:    100,
+			Icon:     urlIcon,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Open in browser",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						util.ShellOpen(query.Search)
-					},
-				},
-			},
-		})
-		results = append(results, plugin.QueryResult{
-			Title:           query.Search,
-			SubTitle:        "Open the typed URL from Wox",
-			Score:           100,
-			Icon:            urlIcon,
-			RefreshInterval: 100,
-			OnRefresh: func(ctx context.Context, result plugin.RefreshableResult) plugin.RefreshableResult {
-				result.Title = util.GetSystemTimestampStr()
-				result.SubTitle = util.GetSystemTimestampStr()
-				return result
-			},
-			Actions: []plugin.QueryResultAction{
-				{
-					Name: "Open in browser",
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						if strings.HasPrefix(query.Search, "http") == false {
+							query.Search = "https://" + query.Search
+						}
 						util.ShellOpen(query.Search)
 					},
 				},
