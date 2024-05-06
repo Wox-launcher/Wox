@@ -579,8 +579,15 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 	counter := &atomic.Int32{}
 	counter.Store(int32(len(m.instances)))
 
-	for _, instance := range m.instances {
-		pluginInstance := instance
+	for _, pluginInstance := range m.instances {
+		if !m.canOperateQuery(ctx, pluginInstance, query) {
+			counter.Add(-1)
+			if counter.Load() == 0 {
+				done <- true
+			}
+			continue
+		}
+
 		if pluginInstance.Metadata.IsSupportFeature(MetadataFeatureDebounce) {
 			debounceParams, err := pluginInstance.Metadata.GetFeatureParamsForDebounce()
 			if err == nil {
@@ -641,14 +648,6 @@ func (m *Manager) QueryFallback(ctx context.Context, query Query) (results []Que
 
 func (m *Manager) queryParallel(ctx context.Context, pluginInstance *Instance, query Query, results chan []QueryResultUI, done chan bool, counter *atomic.Int32) {
 	util.Go(ctx, fmt.Sprintf("[%s] parallel query", pluginInstance.Metadata.Name), func() {
-		if !m.canOperateQuery(ctx, pluginInstance, query) {
-			counter.Add(-1)
-			if counter.Load() == 0 {
-				done <- true
-			}
-			return
-		}
-
 		queryResults := m.queryForPlugin(ctx, pluginInstance, query)
 		results <- lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
 			return item.ToUI()
