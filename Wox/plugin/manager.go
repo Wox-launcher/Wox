@@ -681,35 +681,35 @@ func (m *Manager) GetUI() share.UI {
 	return m.ui
 }
 
-func (m *Manager) NewQuery(ctx context.Context, changedQuery share.PlainQuery) (Query, error) {
-	if changedQuery.QueryType == QueryTypeInput {
-		newQuery := changedQuery.QueryText
+func (m *Manager) NewQuery(ctx context.Context, plainQuery share.PlainQuery) (Query, *Instance, error) {
+	if plainQuery.QueryType == QueryTypeInput {
+		newQuery := plainQuery.QueryText
 		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 		if len(woxSetting.QueryShortcuts) > 0 {
-			originQuery := changedQuery.QueryText
-			expandedQuery := m.expandQueryShortcut(ctx, changedQuery.QueryText, woxSetting.QueryShortcuts)
+			originQuery := plainQuery.QueryText
+			expandedQuery := m.expandQueryShortcut(ctx, plainQuery.QueryText, woxSetting.QueryShortcuts)
 			if originQuery != expandedQuery {
 				logger.Info(ctx, fmt.Sprintf("expand query shortcut: %s -> %s", originQuery, expandedQuery))
 				newQuery = expandedQuery
 			}
 		}
-		query := newQueryInputWithPlugins(newQuery, GetPluginManager().GetPluginInstances())
+		query, instance := newQueryInputWithPlugins(newQuery, GetPluginManager().GetPluginInstances())
 		query.Env.ActiveWindowTitle = m.GetUI().GetActiveWindowName()
-		return query, nil
+		return query, instance, nil
 	}
 
-	if changedQuery.QueryType == QueryTypeSelection {
+	if plainQuery.QueryType == QueryTypeSelection {
 		query := Query{
 			Type:      QueryTypeSelection,
-			RawQuery:  changedQuery.QueryText,
-			Search:    changedQuery.QueryText,
-			Selection: changedQuery.QuerySelection,
+			RawQuery:  plainQuery.QueryText,
+			Search:    plainQuery.QueryText,
+			Selection: plainQuery.QuerySelection,
 		}
 		query.Env.ActiveWindowTitle = window.GetActiveWindowName()
-		return query, nil
+		return query, nil, nil
 	}
 
-	return Query{}, errors.New("invalid query type")
+	return Query{}, nil, errors.New("invalid query type")
 }
 
 func (m *Manager) expandQueryShortcut(ctx context.Context, query string, queryShorts []setting.QueryShortcut) (newQuery string) {

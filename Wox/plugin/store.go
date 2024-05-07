@@ -261,7 +261,8 @@ func (s *Store) Uninstall(ctx context.Context, plugin *Instance) error {
 			}
 		}
 		if wpmPlugin != nil {
-			wpmPlugin.Plugin.Query(ctx, newQueryInputWithPlugins("wpm dev.remove "+plugin.DevPluginDirectory, GetPluginManager().GetPluginInstances()))
+			query, _ := newQueryInputWithPlugins("wpm dev.remove "+plugin.DevPluginDirectory, GetPluginManager().GetPluginInstances())
+			wpmPlugin.Plugin.Query(ctx, query)
 		}
 	} else {
 		removeErr := os.RemoveAll(plugin.PluginDirectory)

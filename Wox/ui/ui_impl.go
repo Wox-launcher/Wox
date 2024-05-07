@@ -264,7 +264,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 		return
 	}
 
-	query, queryErr := plugin.GetPluginManager().NewQuery(ctx, changedQuery)
+	query, _, queryErr := plugin.GetPluginManager().NewQuery(ctx, changedQuery)
 	if queryErr != nil {
 		logger.Error(ctx, queryErr.Error())
 		responseUIError(ctx, request, queryErr.Error())

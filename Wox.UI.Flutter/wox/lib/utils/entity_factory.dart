@@ -1,3 +1,4 @@
+import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_setting.dart';
@@ -12,6 +13,8 @@ class EntityFactory {
       return WoxSetting.fromJson(json) as T;
     } else if (T.toString() == "WoxPreview") {
       return WoxPreview.fromJson(json) as T;
+    } else if (T.toString() == "WoxImage") {
+      return WoxImage.fromJson(json) as T;
     } else if (T.toString() == "List<PluginDetail>") {
       return (json as List).map((e) => PluginDetail.fromJson(e)).toList() as T;
     } else if (T.toString() == "List<WoxSettingTheme>") {

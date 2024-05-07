@@ -61,6 +61,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/backup/restore":   handleBackupRestore,
 	"/backup/all":       handleBackupAll,
 	"/hotkey/available": handleHotkeyAvailable,
+	"/query/icon":       handleQueryIcon,
 }
 
 func handleHome(w http.ResponseWriter, r *http.Request) {
@@ -664,14 +665,56 @@ func handleOnHide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var changedQuery share.PlainQuery
-	unmarshalErr := json.Unmarshal([]byte(queryResult.String()), &changedQuery)
+	var plainQuery share.PlainQuery
+	unmarshalErr := json.Unmarshal([]byte(queryResult.String()), &plainQuery)
 	if unmarshalErr != nil {
 		logger.Error(ctx, unmarshalErr.Error())
 		writeErrorResponse(w, unmarshalErr.Error())
 		return
 	}
 
-	GetUIManager().PostOnHide(ctx, changedQuery)
+	GetUIManager().PostOnHide(ctx, plainQuery)
 	writeSuccessResponse(w, "")
+}
+
+func handleQueryIcon(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+
+	body, _ := io.ReadAll(r.Body)
+	queryResult := gjson.GetBytes(body, "query")
+	if !queryResult.Exists() {
+		writeErrorResponse(w, "query is empty")
+		return
+	}
+
+	var plainQuery share.PlainQuery
+	unmarshalErr := json.Unmarshal([]byte(queryResult.String()), &plainQuery)
+	if unmarshalErr != nil {
+		logger.Error(ctx, unmarshalErr.Error())
+		writeErrorResponse(w, unmarshalErr.Error())
+		return
+	}
+
+	_, pluginInstance, err := plugin.GetPluginManager().NewQuery(ctx, plainQuery)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to new query: %s", err.Error()))
+		writeSuccessResponse(w, plugin.WoxImage{})
+		return
+	}
+
+	if pluginInstance == nil {
+		// this query is not for any plugin (now a global query)
+		writeSuccessResponse(w, plugin.WoxImage{})
+		return
+	}
+
+	iconImg, parseErr := plugin.ParseWoxImage(pluginInstance.Metadata.Icon)
+	if parseErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to parse icon: %s", parseErr.Error()))
+		writeSuccessResponse(w, plugin.WoxImage{})
+		return
+	}
+
+	iconImage := plugin.ConvertIcon(ctx, iconImg, pluginInstance.PluginDirectory)
+	writeSuccessResponse(w, iconImage)
 }

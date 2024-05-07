@@ -1,5 +1,6 @@
 import 'dart:core';
 
+import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/entity/wox_setting.dart';
@@ -87,6 +88,12 @@ class WoxApi {
 
   Future<void> onHide(PlainQuery query) async {
     await WoxHttpUtil.instance.postData("/on/hide", {
+      "query": query.toJson(),
+    });
+  }
+
+  Future<WoxImage> getQueryIcon(PlainQuery query) async {
+    return await WoxHttpUtil.instance.postData("/query/icon", {
       "query": query.toJson(),
     });
   }

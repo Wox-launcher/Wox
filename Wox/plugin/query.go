@@ -170,13 +170,13 @@ type QueryResultCache struct {
 	Actions        *util.HashMap[string, func(ctx context.Context, actionContext ActionContext)]
 }
 
-func newQueryInputWithPlugins(query string, pluginInstances []*Instance) Query {
+func newQueryInputWithPlugins(query string, pluginInstances []*Instance) (Query, *Instance) {
 	var terms = strings.Split(query, " ")
 	if len(terms) == 0 {
 		return Query{
 			Type:     QueryTypeInput,
 			RawQuery: query,
-		}
+		}, nil
 	}
 
 	var rawQuery = query
@@ -220,6 +220,7 @@ func newQueryInputWithPlugins(query string, pluginInstances []*Instance) Query {
 		triggerKeyword = ""
 		command = ""
 		search = rawQuery
+		pluginInstance = nil
 	}
 
 	return Query{
@@ -228,5 +229,5 @@ func newQueryInputWithPlugins(query string, pluginInstances []*Instance) Query {
 		TriggerKeyword: triggerKeyword,
 		Command:        command,
 		Search:         search,
-	}
+	}, pluginInstance
 }

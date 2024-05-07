@@ -9,6 +9,8 @@ import 'package:lpinyin/lpinyin.dart';
 import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
+import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/entity/wox_setting.dart';
@@ -16,6 +18,7 @@ import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_websocket_msg.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_event_device_type_enum.dart';
+import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/enums/wox_last_query_mode_enum.dart';
 import 'package:wox/enums/wox_msg_method_enum.dart';
 import 'package:wox/enums/wox_msg_type_enum.dart';
@@ -32,6 +35,7 @@ import 'package:wox/utils/wox_websocket_msg_util.dart';
 
 class WoxLauncherController extends GetxController implements WoxLauncherInterface {
   final _query = PlainQuery.empty().obs;
+  final queryIcon = WoxImage.empty().obs;
   final _activeResultIndex = 0.obs;
   final _activeActionIndex = 0.obs;
   final _resultItemGlobalKeys = <GlobalKey>[];
@@ -45,8 +49,6 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   final resultActionListViewScrollController = ScrollController(initialScrollOffset: 0.0);
   final currentPreview = WoxPreview.empty().obs;
   final Rx<WoxTheme> woxTheme = WoxThemeUtil.instance.currentTheme.obs;
-  final activeResultIndex = 0.obs;
-  final activeActionIndex = 0.obs;
   final isShowActionPanel = false.obs;
   final isShowPreviewPanel = false.obs;
   final queryResults = <WoxQueryResult>[].obs;
@@ -59,7 +61,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   var lastQueryMode = WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_PRESERVE.code;
   var canArrowUpHistory = true;
   final isInSettingView = false.obs;
-  var positionBeforeOpenSetting = Offset(0, 0);
+  var positionBeforeOpenSetting = const Offset(0, 0);
 
   @override
   Future<void> toggleApp(String traceId, ShowAppParams params) async {
@@ -219,7 +221,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   void onQueryBoxTextChanged(String value) {
     canArrowUpHistory = false;
 
-    PlainQuery woxChangeQuery = PlainQuery(
+    PlainQuery plainQuery = PlainQuery(
       queryId: const UuidV4().generate(),
       queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
       queryText: value,
@@ -228,16 +230,18 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
     // do filter if query type is selection
     if (_query.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
-      woxChangeQuery.queryType = WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code;
-      woxChangeQuery.querySelection = _query.value.querySelection;
+      plainQuery.queryType = WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code;
+      plainQuery.querySelection = _query.value.querySelection;
     }
 
-    onQueryChanged(const UuidV4().generate(), woxChangeQuery, "user input changed");
+    onQueryChanged(const UuidV4().generate(), plainQuery, "user input changed");
   }
 
   @override
   void onQueryChanged(String traceId, PlainQuery query, String changeReason, {bool moveCursorToEnd = false}) {
     Logger.instance.debug(traceId, "query changed: ${query.queryText}, reason: $changeReason");
+
+    changeQueryIcon(traceId, query);
 
     //hide setting view if query changed
     if (isInSettingView.value) {
@@ -716,5 +720,32 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     );
 
     onQueryChanged(const UuidV4().generate(), woxChangeQuery, "user drop files");
+  }
+
+  Future<void> changeQueryIcon(String traceId, PlainQuery query) async {
+    if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
+      if (query.querySelection.type == WoxSelectionTypeEnum.WOX_SELECTION_TYPE_FILE.code) {
+        queryIcon.value = WoxImage(
+            imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code,
+            imageData:
+                '<svg t="1704957058350" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4383" width="200" height="200"><path d="M127.921872 233.342828H852.118006c24.16765 0 43.960122 19.792472 43.960122 43.960122v522.104578c0 24.16765-19.792472 43.960122-43.960122 43.960122H172.090336c-24.16765 0-43.960122-19.792472-43.960122-43.960122L127.921872 233.342828z" fill="#FFB300" p-id="4384"></path><path d="M156.4647 180.63235h312.721058c15.625636 0 28.334486 13.125534 28.334486 29.376195V233.342828H127.921872v-23.334283c0-16.250661 12.917192-29.376195 28.542828-29.376195z" fill="#FFA000" p-id="4385"></path><path d="M361.889725 258.343845h348.347508v535.855138H312.512716V303.137335z" fill="#FFFFFF" p-id="4386"></path><path d="M170.631943 372.723499h282.719837l59.7941-47.918616H852.118006c23.542625 0 42.710071 19.792472 42.710071 43.960122v430.642523c0 24.16765-19.167447 43.960122-42.710071 43.960122H170.631943c-23.542625 0-42.710071-19.792472-42.710071-43.960122V416.683622c0-24.16765 19.375788-43.960122 42.710071-43.960123z" fill="#FFD54F" p-id="4387"></path><path d="M361.473042 303.76236l-48.960326-0.625025 48.960326-44.79349z" fill="#BDBDBD" p-id="4388"></path></svg>');
+        return;
+      }
+      if (query.querySelection.type == WoxSelectionTypeEnum.WOX_SELECTION_TYPE_TEXT.code) {
+        queryIcon.value = WoxImage(
+            imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code,
+            imageData:
+                '<svg t="1704958243895" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="5762" width="200" height="200"><path d="M925.48105 1024H98.092461a98.51895 98.51895 0 0 1-97.879217-98.945439V98.732195A98.732195 98.732195 0 0 1 98.092461 0.426489h827.388589a98.732195 98.732195 0 0 1 98.305706 98.305706v826.322366a98.51895 98.51895 0 0 1-98.305706 98.945439z m-829.094544-959.600167a33.052895 33.052895 0 0 0-32.199917 32.626406v829.734277a32.83965 32.83965 0 0 0 32.199917 33.26614h831.653477a32.83965 32.83965 0 0 0 31.773428-33.26614V97.026239a33.266139 33.266139 0 0 0-32.626406-32.626406z" fill="#0077F0" p-id="5763"></path><path d="M281.69596 230.943773h460.60808v73.569347h-187.655144v488.969596h-85.297792V304.51312h-187.655144z" fill="#0077F0" opacity=".5" p-id="5764"></path></svg>');
+        return;
+      }
+    }
+
+    if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
+      var img = await WoxApi.instance.getQueryIcon(query);
+      queryIcon.value = img;
+      return;
+    }
+
+    queryIcon.value = WoxImage.empty();
   }
 }
