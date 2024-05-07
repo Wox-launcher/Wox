@@ -102,6 +102,10 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 				Command:     "dev.remove",
 				Description: "Remove local Wox plugin, followed by a directory",
 			},
+			{
+				Command:     "dev.reload",
+				Description: "Reload all dev plugins",
+			},
 		},
 		SupportedOS: []string{
 			"Windows",
@@ -131,6 +135,20 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 func (w *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	w.api = initParams.API
 
+	w.reloadAllDevPlugins(ctx)
+
+	util.Go(ctx, "reload dev plugins in dist", func() {
+		// must delay reload, because host env is not ready when system plugin init
+		time.Sleep(time.Second * 5)
+
+		newCtx := util.NewTraceContext()
+		for _, lp := range w.localPlugins {
+			w.reloadLocalDistPlugin(newCtx, lp.metadata, "reload after startup")
+		}
+	})
+}
+
+func (w *WPMPlugin) reloadAllDevPlugins(ctx context.Context) {
 	var localPluginDirs []LocalPlugin
 	unmarshalErr := json.Unmarshal([]byte(w.api.GetSetting(ctx, localPluginDirectoriesKey)), &localPluginDirs)
 	if unmarshalErr != nil {
@@ -156,15 +174,6 @@ func (w *WPMPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	for _, directory := range w.localPluginDirectories {
 		w.loadDevPlugin(ctx, directory)
 	}
-
-	util.Go(ctx, "reload dev plugins in dist", func() {
-		// must delay reload, because host env is not ready when system plugin init
-		time.Sleep(time.Second * 5)
-		newCtx := util.NewTraceContext()
-		for _, lp := range w.localPlugins {
-			w.reloadLocalDistPlugin(newCtx, lp.metadata, "reload after startup")
-		}
-	})
 }
 
 func (w *WPMPlugin) loadDevPlugin(ctx context.Context, pluginDirectory string) {
@@ -178,6 +187,24 @@ func (w *WPMPlugin) loadDevPlugin(ctx context.Context, pluginDirectory string) {
 
 	lp := localPlugin{
 		metadata: metadata,
+	}
+
+	// check if plugin is already loaded
+	existingLocalPlugin, exist := lo.Find(w.localPlugins, func(lp localPlugin) bool {
+		return lp.metadata.Metadata.Id == metadata.Metadata.Id
+	})
+	if exist {
+		w.api.Log(ctx, plugin.LogLevelInfo, "plugin already loaded, unload first")
+		if existingLocalPlugin.watcher != nil {
+			closeWatcherErr := existingLocalPlugin.watcher.Close()
+			if closeWatcherErr != nil {
+				w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to close watcher: %s", closeWatcherErr.Error()))
+			}
+		}
+
+		w.localPlugins = lo.Filter(w.localPlugins, func(lp localPlugin, _ int) bool {
+			return lp.metadata.Metadata.Id != metadata.Metadata.Id
+		})
 	}
 
 	// watch dist directory changes and auto reload plugin
@@ -236,6 +263,10 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 
 	if query.Command == "dev.remove" {
 		return w.removeDevCommand(ctx, query)
+	}
+
+	if query.Command == "dev.reload" {
+		return w.reloadDevCommand(ctx)
 	}
 
 	if query.Command == "dev.list" {
@@ -455,6 +486,29 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 			},
 		}
 	})
+}
+
+func (w *WPMPlugin) reloadDevCommand(ctx context.Context) []plugin.QueryResult {
+	return []plugin.QueryResult{
+		{
+			Title: "Reload all dev plugins",
+			Icon:  wpmIcon,
+			Actions: []plugin.QueryResultAction{
+				{
+					Name: "Reload",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						w.reloadAllDevPlugins(ctx)
+						util.Go(ctx, "reload dev plugins in dist", func() {
+							newCtx := util.NewTraceContext()
+							for _, lp := range w.localPlugins {
+								w.reloadLocalDistPlugin(newCtx, lp.metadata, "reload after user action")
+							}
+						})
+					},
+				},
+			},
+		},
+	}
 }
 
 func (w *WPMPlugin) addDevCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
