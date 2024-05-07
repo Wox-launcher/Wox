@@ -102,3 +102,19 @@ char* getActiveWindowIcon(unsigned char **iconData, int *iconSize, int *width, i
     CloseHandle(hProcess);
     return result;
 }
+
+char* getActiveWindowName() {
+    HWND hwnd = GetForegroundWindow();
+    if (!hwnd) {
+        return "";
+    }
+
+    WCHAR windowTitle[1024];
+    if (0 == GetWindowTextW(hwnd, windowTitle, 1024)) {
+        return "";
+    }
+
+    char windowTitleA[1024];
+    WideCharToMultiByte(CP_ACP, 0, windowTitle, -1, windowTitleA, 1024, NULL, NULL);
+    return windowTitleA;
+}

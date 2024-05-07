@@ -6,8 +6,8 @@ package window
 #include <psapi.h>
 #include <shellapi.h>
 
-char* getIconData(HICON hIcon, unsigned char **iconData, int *iconSize, int *width, int *height);
 char* getActiveWindowIcon(unsigned char **iconData, int *iconSize, int *width, int *height);
+char* getActiveWindowName();
 */
 import "C"
 import (
@@ -46,4 +46,9 @@ func GetActiveWindowIcon() (image.Image, error) {
 	}
 
 	return img, nil
+}
+
+func GetActiveWindowName() string {
+	cname := C.getActiveWindowName()
+	return C.GoString(cname)
 }

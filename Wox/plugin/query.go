@@ -49,6 +49,10 @@ type Query struct {
 	//
 	// NOTE: Only available when query type is QueryTypeSelection
 	Selection util.Selection
+
+	// additional query environment data
+	// expose more context env data to plugin, E.g. plugin A only show result when active window title is "Chrome"
+	Env QueryEnv
 }
 
 func (q *Query) IsGlobalQuery() bool {
@@ -63,6 +67,10 @@ func (q *Query) String() string {
 		return q.Selection.String()
 	}
 	return ""
+}
+
+type QueryEnv struct {
+	ActiveWindowTitle string // active window title when user query
 }
 
 // Query result return from plugin

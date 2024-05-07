@@ -33,6 +33,12 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 		return []plugin.QueryResult{}
 	}
 
+	envJson, marshalEnvErr := json.Marshal(query.Env)
+	if marshalEnvErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal plugin query env: %s", w.metadata.Name, marshalEnvErr.Error()))
+		return []plugin.QueryResult{}
+	}
+
 	rawResults, queryErr := w.websocketHost.invokeMethod(ctx, w.metadata, "query", map[string]string{
 		"Type":           query.Type,
 		"RawQuery":       query.RawQuery,
@@ -40,6 +46,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 		"Command":        query.Command,
 		"Search":         query.Search,
 		"Selection":      string(selectionJson),
+		"Env":            string(envJson),
 	})
 	if queryErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] query failed: %s", w.metadata.Name, queryErr.Error()))

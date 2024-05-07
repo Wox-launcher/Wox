@@ -6,6 +6,7 @@ package window
 #include <stdlib.h>
 
 int getActiveWindowIcon(unsigned char **iconData);
+char* getActiveWindowName();
 */
 import "C"
 import (
@@ -31,4 +32,9 @@ func GetActiveWindowIcon() (image.Image, error) {
 	}
 
 	return img, nil
+}
+
+func GetActiveWindowName() string {
+	name := C.getActiveWindowName()
+	return C.GoString(name)
 }

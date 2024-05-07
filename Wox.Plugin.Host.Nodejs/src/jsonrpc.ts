@@ -1,7 +1,7 @@
 import { logger } from "./logger"
 import path from "path"
 import { PluginAPI } from "./pluginAPI"
-import { Context, Plugin, PluginInitParams, Query, RefreshableResult, Result, ResultAction, Selection } from "@wox-launcher/wox-plugin"
+import { Context, Plugin, PluginInitParams, Query, QueryEnv, RefreshableResult, Result, ResultAction, Selection } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 
@@ -88,7 +88,7 @@ async function loadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
 }
 
 function unloadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
-  let pluginInstance = pluginInstances.get(request.PluginId)
+  const pluginInstance = pluginInstances.get(request.PluginId)
   if (pluginInstance === undefined || pluginInstance === null) {
     logger.error(ctx, `[${request.PluginName}] plugin instance not found: ${request.PluginName}`)
     throw new Error(`plugin instance not found: ${request.PluginName}`)
@@ -162,7 +162,9 @@ async function query(ctx: Context, request: PluginJsonRpcRequest) {
     Command: request.Params.Command,
     Search: request.Params.Search,
     ShortcutFrom: request.Params.ShortcutFrom,
-    Selection: JSON.parse(request.Params.Selection) as Selection
+    Selection: JSON.parse(request.Params.Selection) as Selection,
+    Env: JSON.parse(request.Params.Env) as QueryEnv,
+    IsGlobalQuery: () => request.Params.Type === "input" && request.Params.TriggerKeyword === ""
   } as Query)
 
   if (!results) {

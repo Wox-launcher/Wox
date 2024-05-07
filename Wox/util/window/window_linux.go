@@ -6,3 +6,7 @@ import "image"
 func GetActiveWindowIcon() (image.Image, error) {
 	return nil, errors.New("not implemented")
 }
+
+func GetActiveWindowName() string {
+	return ""
+}

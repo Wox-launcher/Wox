@@ -22,6 +22,7 @@ import (
 	"wox/setting"
 	"wox/share"
 	"wox/util"
+	"wox/util/window"
 )
 
 var managerInstance *Manager
@@ -692,16 +693,20 @@ func (m *Manager) NewQuery(ctx context.Context, changedQuery share.ChangedQuery)
 				newQuery = expandedQuery
 			}
 		}
-		return newQueryInputWithPlugins(newQuery, GetPluginManager().GetPluginInstances()), nil
+		query := newQueryInputWithPlugins(newQuery, GetPluginManager().GetPluginInstances())
+		query.Env.ActiveWindowTitle = window.GetActiveWindowName()
+		return query, nil
 	}
 
 	if changedQuery.QueryType == QueryTypeSelection {
-		return Query{
+		query := Query{
 			Type:      QueryTypeSelection,
 			RawQuery:  changedQuery.QueryText,
 			Search:    changedQuery.QueryText,
 			Selection: changedQuery.QuerySelection,
-		}, nil
+		}
+		query.Env.ActiveWindowTitle = window.GetActiveWindowName()
+		return query, nil
 	}
 
 	return Query{}, errors.New("invalid query type")

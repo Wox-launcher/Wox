@@ -31,3 +31,14 @@ int getActiveWindowIcon(unsigned char **iconData) {
         return (int)length;
     }
 }
+
+char* getActiveWindowName() {
+    @autoreleasepool {
+        NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        if (!activeApp) {
+            return "";
+        }
+
+        return strdup([[activeApp localizedName] UTF8String]);
+    }
+}
