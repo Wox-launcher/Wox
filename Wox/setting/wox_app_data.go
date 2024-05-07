@@ -15,7 +15,7 @@ type WoxAppData struct {
 }
 
 type QueryHistory struct {
-	Query     share.ChangedQuery
+	Query     share.PlainQuery
 	Timestamp int64
 }
 

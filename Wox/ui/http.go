@@ -92,7 +92,7 @@ func serveAndWait(ctx context.Context, port int) {
 			}
 			util.Go(ctxNew, "handle ui query", func() {
 				traceCtx := context.WithValue(ctxNew, util.ContextKeyTraceId, request.TraceId)
-				onUIRequest(traceCtx, request)
+				onUIWebsocketRequest(traceCtx, request)
 			})
 		} else if strings.Contains(string(msg), string(WebsocketMsgTypeResponse)) {
 			var response WebsocketMsg
@@ -103,7 +103,7 @@ func serveAndWait(ctx context.Context, port int) {
 			}
 			util.Go(ctxNew, "handle ui response", func() {
 				traceCtx := context.WithValue(ctxNew, util.ContextKeyTraceId, response.TraceId)
-				onUIResponse(traceCtx, response)
+				onUIWebsocketResponse(traceCtx, response)
 			})
 		} else {
 			logger.Error(ctxNew, fmt.Sprintf("unknown websocket msg: %s", string(msg)))

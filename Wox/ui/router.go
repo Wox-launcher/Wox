@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/jinzhu/copier"
 	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
 	"wox/share"
@@ -25,21 +27,33 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/plugin/uninstall": handlePluginUninstall,
 	"/plugin/disable":   handlePluginDisable,
 	"/plugin/enable":    handlePluginEnable,
+
 	//	themes
 	"/theme":           handleTheme,
 	"/theme/store":     handleThemeStore,
 	"/theme/installed": handleThemeInstalled,
 	"/theme/install":   handleThemeInstall,
 	"/theme/uninstall": handleThemeUninstall,
+
 	// settings
 	"/setting/wox":           handleSettingWox,
 	"/setting/wox/update":    handleSettingWoxUpdate,
 	"/setting/plugin/update": handleSettingPluginUpdate,
+
+	// events
+	"/on/focus/lost": handleOnFocusLost,
+	"/on/ready":      handleOnUIReady,
+	"/on/show":       handleOnShow,
+	"/on/hide":       handleOnHide,
+
+	// lang
+	"/lang/change": handleLangChange,
+	"/lang/json":   handleLangJson,
+
 	// others
 	"/":                 handleHome,
 	"/show":             handleShow,
 	"/ping":             handlePing,
-	"/ui/ready":         handleUIReady,
 	"/image":            handleImage,
 	"/preview":          handlePreview,
 	"/open/url":         handleOpenUrl,
@@ -567,8 +581,97 @@ func handleShow(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "")
 }
 
-func handleUIReady(w http.ResponseWriter, r *http.Request) {
+func handleOnUIReady(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
 	GetUIManager().PostUIReady(ctx)
+	writeSuccessResponse(w, "")
+}
+
+func handleOnFocusLost(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if woxSetting.HideOnLostFocus {
+		GetUIManager().GetUI(ctx).HideApp(ctx)
+	}
+	writeSuccessResponse(w, "")
+}
+
+func handleLangChange(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+
+	body, _ := io.ReadAll(r.Body)
+	langCodeResult := gjson.GetBytes(body, "langCode")
+	if !langCodeResult.Exists() {
+		writeErrorResponse(w, "langCode is empty")
+		return
+	}
+	langCode := langCodeResult.String()
+
+	if !i18n.IsSupportedLangCode(langCode) {
+		logger.Error(ctx, fmt.Sprintf("unsupported lang code: %s", langCode))
+		writeErrorResponse(w, fmt.Sprintf("unsupported lang code: %s", langCode))
+		return
+	}
+
+	langErr := i18n.GetI18nManager().UpdateLang(ctx, i18n.LangCode(langCode))
+	if langErr != nil {
+		logger.Error(ctx, langErr.Error())
+		writeErrorResponse(w, langErr.Error())
+		return
+	}
+}
+
+func handleLangJson(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+
+	body, _ := io.ReadAll(r.Body)
+	langCodeResult := gjson.GetBytes(body, "langCode")
+	if !langCodeResult.Exists() {
+		writeErrorResponse(w, "langCode is empty")
+		return
+	}
+	langCode := langCodeResult.String()
+
+	if !i18n.IsSupportedLangCode(langCode) {
+		logger.Error(ctx, fmt.Sprintf("unsupported lang code: %s", langCode))
+		writeErrorResponse(w, fmt.Sprintf("unsupported lang code: %s", langCode))
+		return
+	}
+
+	langJson, err := i18n.GetI18nManager().GetLangJson(ctx, i18n.LangCode(langCode))
+	if err != nil {
+		logger.Error(ctx, err.Error())
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	writeSuccessResponse(w, langJson)
+}
+
+func handleOnShow(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+	GetUIManager().PostOnShow(ctx)
+	writeSuccessResponse(w, "")
+}
+
+func handleOnHide(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+
+	body, _ := io.ReadAll(r.Body)
+	queryResult := gjson.GetBytes(body, "query")
+	if !queryResult.Exists() {
+		writeErrorResponse(w, "query is empty")
+		return
+	}
+
+	var changedQuery share.PlainQuery
+	unmarshalErr := json.Unmarshal([]byte(queryResult.String()), &changedQuery)
+	if unmarshalErr != nil {
+		logger.Error(ctx, unmarshalErr.Error())
+		writeErrorResponse(w, unmarshalErr.Error())
+		return
+	}
+
+	GetUIManager().PostOnHide(ctx, changedQuery)
 	writeSuccessResponse(w, "")
 }

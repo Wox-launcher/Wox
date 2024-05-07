@@ -65,7 +65,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 						Name:                   "activate",
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							i.api.ChangeQuery(ctx, share.ChangedQuery{
+							i.api.ChangeQuery(ctx, share.PlainQuery{
 								QueryType: plugin.QueryTypeInput,
 								QueryText: fmt.Sprintf("%s ", triggerKeyword),
 							})
@@ -87,7 +87,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 							Name:                   "activate",
 							PreventHideAfterAction: true,
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-								i.api.ChangeQuery(ctx, share.ChangedQuery{
+								i.api.ChangeQuery(ctx, share.PlainQuery{
 									QueryType: plugin.QueryTypeInput,
 									QueryText: fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command),
 								})

@@ -10,13 +10,10 @@ import (
 	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
 	"time"
-	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
 	"wox/share"
 	"wox/util"
-	"wox/util/ime"
-	"wox/util/screen"
 	"wox/util/window"
 )
 
@@ -24,22 +21,22 @@ type uiImpl struct {
 	requestMap *util.HashMap[string, chan WebsocketMsg]
 }
 
-func (u *uiImpl) ChangeQuery(ctx context.Context, query share.ChangedQuery) {
-	u.send(ctx, "ChangeQuery", query)
+func (u *uiImpl) ChangeQuery(ctx context.Context, query share.PlainQuery) {
+	u.invokeWebsocketMethod(ctx, "ChangeQuery", query)
 }
 
 func (u *uiImpl) HideApp(ctx context.Context) {
-	u.send(ctx, "HideApp", nil)
+	u.invokeWebsocketMethod(ctx, "HideApp", nil)
 }
 
 func (u *uiImpl) ShowApp(ctx context.Context, showContext share.ShowContext) {
 	GetUIManager().SetActiveWindowName(window.GetActiveWindowName())
-	u.send(ctx, "ShowApp", getShowAppParams(ctx, showContext.SelectAll))
+	u.invokeWebsocketMethod(ctx, "ShowApp", getShowAppParams(ctx, showContext.SelectAll))
 }
 
 func (u *uiImpl) ToggleApp(ctx context.Context) {
 	GetUIManager().SetActiveWindowName(window.GetActiveWindowName())
-	u.send(ctx, "ToggleApp", getShowAppParams(ctx, true))
+	u.invokeWebsocketMethod(ctx, "ToggleApp", getShowAppParams(ctx, true))
 }
 
 func (u *uiImpl) Notify(ctx context.Context, title string, description string) {
@@ -58,18 +55,39 @@ func (u *uiImpl) ChangeTheme(ctx context.Context, theme share.Theme) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	woxSetting.ThemeId = theme.ThemeId
 	setting.GetSettingManager().SaveWoxSetting(ctx)
-	u.send(ctx, "ChangeTheme", theme)
+	u.invokeWebsocketMethod(ctx, "ChangeTheme", theme)
 }
 
 func (u *uiImpl) OpenSettingWindow(ctx context.Context, windowContext share.SettingWindowContext) {
-	u.send(ctx, "OpenSettingWindow", windowContext)
+	u.invokeWebsocketMethod(ctx, "OpenSettingWindow", windowContext)
 }
 
 func (u *uiImpl) GetAllThemes(ctx context.Context) []share.Theme {
 	return GetUIManager().GetAllThemes(ctx)
 }
 
-func (u *uiImpl) send(ctx context.Context, method string, data any) (responseData any, responseErr error) {
+func (u *uiImpl) PickFiles(ctx context.Context, params share.PickFilesParams) []string {
+	respData, err := u.invokeWebsocketMethod(ctx, "PickFiles", params)
+	if err != nil {
+		return nil
+	}
+	if _, ok := respData.([]any); !ok {
+		logger.Error(ctx, fmt.Sprintf("pick files response data type error: %T", respData))
+		return nil
+	}
+
+	var result []string
+	lo.ForEach(respData.([]any), func(file any, _ int) {
+		result = append(result, file.(string))
+	})
+	return result
+}
+
+func (u *uiImpl) GetActiveWindowName() string {
+	return GetUIManager().GetActiveWindowName()
+}
+
+func (u *uiImpl) invokeWebsocketMethod(ctx context.Context, method string, data any) (responseData any, responseErr error) {
 	requestID := uuid.NewString()
 	resultChan := make(chan WebsocketMsg)
 	u.requestMap.Store(requestID, resultChan)
@@ -106,27 +124,6 @@ func (u *uiImpl) send(ctx context.Context, method string, data any) (responseDat
 	}
 }
 
-func (u *uiImpl) PickFiles(ctx context.Context, params share.PickFilesParams) []string {
-	respData, err := u.send(ctx, "PickFiles", params)
-	if err != nil {
-		return nil
-	}
-	if _, ok := respData.([]any); !ok {
-		logger.Error(ctx, fmt.Sprintf("pick files response data type error: %T", respData))
-		return nil
-	}
-
-	var result []string
-	lo.ForEach(respData.([]any), func(file any, _ int) {
-		result = append(result, file.(string))
-	})
-	return result
-}
-
-func (u *uiImpl) GetActiveWindowName() string {
-	return GetUIManager().GetActiveWindowName()
-}
-
 func getShowAppParams(ctx context.Context, selectAll bool) map[string]any {
 	return map[string]any{
 		"SelectAll":      selectAll,
@@ -136,36 +133,25 @@ func getShowAppParams(ctx context.Context, selectAll bool) map[string]any {
 	}
 }
 
-func onUIRequest(ctx context.Context, request WebsocketMsg) {
+func onUIWebsocketRequest(ctx context.Context, request WebsocketMsg) {
 	if request.Method != "Log" {
 		logger.Debug(ctx, fmt.Sprintf("got <%s> request from ui", request.Method))
 	}
 
+	// we handle time/amount sensitive requests in websocket, other requests in http (see router.go)
 	switch request.Method {
-	case "Ping":
-		responseUISuccessWithData(ctx, request, "Pong")
 	case "Log":
-		handleUILog(ctx, request)
+		handleWebsocketLog(ctx, request)
 	case "Query":
-		handleQuery(ctx, request)
+		handleWebsocketQuery(ctx, request)
 	case "Action":
-		handleAction(ctx, request)
+		handleWebsocketAction(ctx, request)
 	case "Refresh":
-		handleRefresh(ctx, request)
-	case "ChangeLanguage":
-		handleChangeLanguage(ctx, request)
-	case "GetLanguageJson":
-		handleGetLanguageJson(ctx, request)
-	case "VisibilityChanged":
-		handleOnVisibilityChanged(ctx, request)
-	case "LostFocus":
-		handleLostFocus(ctx, request)
-	case "GetQueryHistories":
-		handleGetQueryHistories(ctx, request)
+		handleWebsocketRefresh(ctx, request)
 	}
 }
 
-func onUIResponse(ctx context.Context, response WebsocketMsg) {
+func onUIWebsocketResponse(ctx context.Context, response WebsocketMsg) {
 	logger.Debug(ctx, fmt.Sprintf("got <%s> response from ui", response.Method))
 
 	requestID := response.RequestId
@@ -183,7 +169,7 @@ func onUIResponse(ctx context.Context, response WebsocketMsg) {
 	resultChan <- response
 }
 
-func handleUILog(ctx context.Context, request WebsocketMsg) {
+func handleWebsocketLog(ctx context.Context, request WebsocketMsg) {
 	traceId, traceIdErr := getWebsocketMsgParameter(ctx, request, "traceId")
 	if traceIdErr != nil {
 		logger.Error(ctx, traceIdErr.Error())
@@ -221,7 +207,7 @@ func handleUILog(ctx context.Context, request WebsocketMsg) {
 	responseUISuccess(ctx, request)
 }
 
-func handleQuery(ctx context.Context, request WebsocketMsg) {
+func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 	queryId, queryIdErr := getWebsocketMsgParameter(ctx, request, "queryId")
 	if queryIdErr != nil {
 		logger.Error(ctx, queryIdErr.Error())
@@ -249,14 +235,14 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 	var querySelection util.Selection
 	json.Unmarshal([]byte(querySelectionJson), &querySelection)
 
-	var changedQuery share.ChangedQuery
+	var changedQuery share.PlainQuery
 	if queryType == plugin.QueryTypeInput {
-		changedQuery = share.ChangedQuery{
+		changedQuery = share.PlainQuery{
 			QueryType: plugin.QueryTypeInput,
 			QueryText: queryText,
 		}
 	} else if queryType == plugin.QueryTypeSelection {
-		changedQuery = share.ChangedQuery{
+		changedQuery = share.PlainQuery{
 			QueryType:      plugin.QueryTypeSelection,
 			QueryText:      queryText,
 			QuerySelection: querySelection,
@@ -336,7 +322,7 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 
 }
 
-func handleAction(ctx context.Context, request WebsocketMsg) {
+func handleWebsocketAction(ctx context.Context, request WebsocketMsg) {
 	resultId, idErr := getWebsocketMsgParameter(ctx, request, "resultId")
 	if idErr != nil {
 		logger.Error(ctx, idErr.Error())
@@ -355,7 +341,7 @@ func handleAction(ctx context.Context, request WebsocketMsg) {
 	responseUISuccess(ctx, request)
 }
 
-func handleRefresh(ctx context.Context, request WebsocketMsg) {
+func handleWebsocketRefresh(ctx context.Context, request WebsocketMsg) {
 	resultStr, resultErr := getWebsocketMsgParameter(ctx, request, "refreshableResult")
 	if resultErr != nil {
 		logger.Error(ctx, resultErr.Error())
@@ -403,111 +389,6 @@ func handleRefresh(ctx context.Context, request WebsocketMsg) {
 	responseUISuccessWithData(ctx, request, newResult)
 }
 
-func handleChangeLanguage(ctx context.Context, request WebsocketMsg) {
-	langCode, langCodeErr := getWebsocketMsgParameter(ctx, request, "langCode")
-	if langCodeErr != nil {
-		logger.Error(ctx, langCodeErr.Error())
-		responseUIError(ctx, request, langCodeErr.Error())
-		return
-	}
-	if !i18n.IsSupportedLangCode(langCode) {
-		logger.Error(ctx, fmt.Sprintf("unsupported lang code: %s", langCode))
-		responseUIError(ctx, request, fmt.Sprintf("unsupported lang code: %s", langCode))
-		return
-	}
-
-	langErr := i18n.GetI18nManager().UpdateLang(ctx, i18n.LangCode(langCode))
-	if langErr != nil {
-		logger.Error(ctx, langErr.Error())
-		responseUIError(ctx, request, langErr.Error())
-		return
-	}
-
-	responseUISuccess(ctx, request)
-}
-
-func handleGetLanguageJson(ctx context.Context, request WebsocketMsg) {
-	langCode, langCodeErr := getWebsocketMsgParameter(ctx, request, "langCode")
-	if langCodeErr != nil {
-		logger.Error(ctx, langCodeErr.Error())
-		responseUIError(ctx, request, langCodeErr.Error())
-		return
-	}
-	if !i18n.IsSupportedLangCode(langCode) {
-		logger.Error(ctx, fmt.Sprintf("unsupported lang code: %s", langCode))
-		responseUIError(ctx, request, fmt.Sprintf("unsupported lang code: %s", langCode))
-		return
-	}
-
-	langJson, err := i18n.GetI18nManager().GetLangJson(ctx, i18n.LangCode(langCode))
-	if err != nil {
-		logger.Error(ctx, err.Error())
-		responseUIError(ctx, request, err.Error())
-		return
-	}
-
-	responseUISuccessWithData(ctx, request, langJson)
-}
-
-func handleOnVisibilityChanged(ctx context.Context, request WebsocketMsg) {
-	isVisible, isVisibleErr := getWebsocketMsgParameter(ctx, request, "isVisible")
-	if isVisibleErr != nil {
-		logger.Error(ctx, isVisibleErr.Error())
-		responseUIError(ctx, request, isVisibleErr.Error())
-		return
-	}
-
-	query, queryErr := getWebsocketMsgParameter(ctx, request, "query")
-	if queryErr != nil {
-		logger.Error(ctx, queryErr.Error())
-		responseUIError(ctx, request, queryErr.Error())
-		return
-	}
-	var changedQuery share.ChangedQuery
-	unmarshalErr := json.Unmarshal([]byte(query), &changedQuery)
-	if unmarshalErr != nil {
-		logger.Error(ctx, unmarshalErr.Error())
-		responseUIError(ctx, request, unmarshalErr.Error())
-		return
-	}
-
-	if isVisible == "true" {
-		onAppShow(ctx)
-	} else {
-		onAppHide(ctx, changedQuery)
-	}
-}
-
-func handleLostFocus(ctx context.Context, request WebsocketMsg) {
-	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if woxSetting.HideOnLostFocus {
-		GetUIManager().GetUI(ctx).HideApp(ctx)
-	}
-}
-
-func handleGetQueryHistories(ctx context.Context, request WebsocketMsg) {
-	queryHistories := setting.GetSettingManager().GetWoxAppData(ctx).QueryHistories
-	responseUISuccessWithData(ctx, request, queryHistories)
-}
-
-func onAppShow(ctx context.Context) {
-	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if woxSetting.SwitchInputMethodABC {
-		util.GetLogger().Info(ctx, "switch input method to ABC")
-		ime.SwitchInputMethodABC()
-	}
-}
-
-func onAppHide(ctx context.Context, query share.ChangedQuery) {
-	setting.GetSettingManager().AddQueryHistory(ctx, query)
-	if setting.GetSettingManager().GetWoxSetting(ctx).LastQueryMode == setting.LastQueryModeEmpty {
-		GetUIManager().GetUI(ctx).ChangeQuery(ctx, share.ChangedQuery{
-			QueryType: plugin.QueryTypeInput,
-			QueryText: "",
-		})
-	}
-}
-
 func getWebsocketMsgParameter(ctx context.Context, msg WebsocketMsg, key string) (string, error) {
 	jsonData, marshalErr := json.Marshal(msg.Data)
 	if marshalErr != nil {
@@ -520,11 +401,4 @@ func getWebsocketMsgParameter(ctx context.Context, msg WebsocketMsg, key string)
 	}
 
 	return paramterData.String(), nil
-}
-
-func getWindowMouseScreenLocation(windowWidth int) (int, int) {
-	size := screen.GetMouseScreen()
-	x := size.X + (size.Width-windowWidth)/2
-	y := size.Height / 6
-	return x, y
 }

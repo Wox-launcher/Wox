@@ -681,7 +681,7 @@ func (m *Manager) GetUI() share.UI {
 	return m.ui
 }
 
-func (m *Manager) NewQuery(ctx context.Context, changedQuery share.ChangedQuery) (Query, error) {
+func (m *Manager) NewQuery(ctx context.Context, changedQuery share.PlainQuery) (Query, error) {
 	if changedQuery.QueryType == QueryTypeInput {
 		newQuery := changedQuery.QueryText
 		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)

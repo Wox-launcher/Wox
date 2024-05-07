@@ -22,7 +22,7 @@ const (
 )
 
 type API interface {
-	ChangeQuery(ctx context.Context, query share.ChangedQuery)
+	ChangeQuery(ctx context.Context, query share.PlainQuery)
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context)
 	Notify(ctx context.Context, title string, description string)
@@ -42,7 +42,7 @@ type APIImpl struct {
 	dynamicSettingCallbacks []func(key string) definition.PluginSettingDefinitionItem
 }
 
-func (a *APIImpl) ChangeQuery(ctx context.Context, query share.ChangedQuery) {
+func (a *APIImpl) ChangeQuery(ctx context.Context, query share.PlainQuery) {
 	GetPluginManager().GetUI().ChangeQuery(ctx, query)
 }
 

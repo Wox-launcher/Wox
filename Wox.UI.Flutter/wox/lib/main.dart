@@ -131,7 +131,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener {
 
     // notify server that ui is ready
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
-      WoxApi.instance.uiReady();
+      WoxApi.instance.onUIReady();
     });
   }
 
@@ -147,6 +147,11 @@ class _WoxAppState extends State<WoxApp> with WindowListener {
     if (Platform.isWindows) {
       setState(() {});
     }
+  }
+
+  @override
+  void onWindowBlur() {
+    WoxApi.instance.onFocusLost();
   }
 
   @override

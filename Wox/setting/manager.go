@@ -302,7 +302,7 @@ func (m *Manager) SavePluginSetting(ctx context.Context, pluginId string, plugin
 	return nil
 }
 
-func (m *Manager) AddQueryHistory(ctx context.Context, query share.ChangedQuery) {
+func (m *Manager) AddQueryHistory(ctx context.Context, query share.PlainQuery) {
 	if query.IsEmpty() {
 		return
 	}

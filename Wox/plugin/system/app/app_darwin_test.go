@@ -16,7 +16,7 @@ type emptyAPIImpl struct {
 func (e emptyAPIImpl) OnGetDynamicSetting(ctx context.Context, callback func(key string) definition.PluginSettingDefinitionItem) {
 }
 
-func (e emptyAPIImpl) ChangeQuery(ctx context.Context, query share.ChangedQuery) {
+func (e emptyAPIImpl) ChangeQuery(ctx context.Context, query share.PlainQuery) {
 }
 
 func (e emptyAPIImpl) HideApp(ctx context.Context) {

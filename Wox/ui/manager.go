@@ -19,6 +19,7 @@ import (
 	"wox/share"
 	"wox/util"
 	"wox/util/hotkey"
+	"wox/util/ime"
 	"wox/util/tray"
 )
 
@@ -217,7 +218,7 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 			return
 		}
 
-		m.ui.ChangeQuery(newCtx, share.ChangedQuery{
+		m.ui.ChangeQuery(newCtx, share.PlainQuery{
 			QueryType:      plugin.QueryTypeSelection,
 			QuerySelection: selection,
 		})
@@ -230,7 +231,7 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 	err := hk.Register(ctx, queryHotkey.Hotkey, func() {
 		newCtx := util.NewTraceContext()
 		query := plugin.GetPluginManager().ReplaceQueryVariable(newCtx, queryHotkey.Query)
-		m.ui.ChangeQuery(newCtx, share.ChangedQuery{
+		m.ui.ChangeQuery(newCtx, share.PlainQuery{
 			QueryType: plugin.QueryTypeInput,
 			QueryText: query,
 		})
@@ -357,6 +358,24 @@ func (m *Manager) PostUIReady(ctx context.Context) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if !woxSetting.HideOnStart {
 		m.ui.ShowApp(ctx, share.ShowContext{SelectAll: false})
+	}
+}
+
+func (m *Manager) PostOnShow(ctx context.Context) {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if woxSetting.SwitchInputMethodABC {
+		util.GetLogger().Info(ctx, "switch input method to ABC")
+		ime.SwitchInputMethodABC()
+	}
+}
+
+func (m *Manager) PostOnHide(ctx context.Context, query share.PlainQuery) {
+	setting.GetSettingManager().AddQueryHistory(ctx, query)
+	if setting.GetSettingManager().GetWoxSetting(ctx).LastQueryMode == setting.LastQueryModeEmpty {
+		GetUIManager().GetUI(ctx).ChangeQuery(ctx, share.PlainQuery{
+			QueryType: plugin.QueryTypeInput,
+			QueryText: "",
+		})
 	}
 }
 

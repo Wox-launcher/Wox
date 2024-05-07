@@ -27,7 +27,7 @@ abstract class WoxLauncherInterface {
 
   /// When the query is changed, this method will be called.
   /// [query] is the changed query.
-  void onQueryChanged(String traceId, WoxChangeQuery query, String changeReason) {}
+  void onQueryChanged(String traceId, PlainQuery query, String changeReason) {}
 
   /// When the query box on action panel is changed, this method will be called.
   /// [queryAction] is the changed query action.

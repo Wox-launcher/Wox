@@ -309,7 +309,7 @@ func (w *WPMPlugin) createCommand(query plugin.Query) []plugin.QueryResult {
 						util.Go(ctx, "create plugin", func() {
 							w.createPlugin(ctx, template, pluginName, query)
 						})
-						w.api.ChangeQuery(ctx, share.ChangedQuery{
+						w.api.ChangeQuery(ctx, share.PlainQuery{
 							QueryType: plugin.QueryTypeInput,
 							QueryText: fmt.Sprintf("%s create ", query.TriggerKeyword),
 						})
@@ -643,7 +643,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 	w.localPluginDirectories = append(w.localPluginDirectories, pluginDirectory)
 	w.saveLocalPluginDirectories(ctx)
 	w.loadDevPlugin(ctx, pluginDirectory)
-	w.api.ChangeQuery(ctx, share.ChangedQuery{
+	w.api.ChangeQuery(ctx, share.PlainQuery{
 		QueryType: plugin.QueryTypeInput,
 		QueryText: fmt.Sprintf("%s dev ", query.TriggerKeyword),
 	})

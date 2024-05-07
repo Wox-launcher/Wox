@@ -5,7 +5,7 @@ import (
 	"wox/util"
 )
 
-type ChangedQuery struct {
+type PlainQuery struct {
 	QueryType      string
 	QueryText      string
 	QuerySelection util.Selection
@@ -18,11 +18,11 @@ type SettingWindowContext struct {
 	Param string
 }
 
-func (c ChangedQuery) IsEmpty() bool {
+func (c PlainQuery) IsEmpty() bool {
 	return c.QueryText == "" && c.QuerySelection.String() == ""
 }
 
-func (c ChangedQuery) String() string {
+func (c PlainQuery) String() string {
 	if c.QueryText != "" {
 		return c.QueryText
 	}
@@ -30,18 +30,21 @@ func (c ChangedQuery) String() string {
 	return c.QuerySelection.String()
 }
 
+// ui methods that can be invoked by plugins
+// because the golang recycle dependency issue, we can't use UI interface directly from plugin, so we need to define a new interface here
 type UI interface {
-	ChangeQuery(ctx context.Context, query ChangedQuery)
+	ChangeQuery(ctx context.Context, query PlainQuery)
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context, showContext ShowContext)
 	ToggleApp(ctx context.Context)
 	Notify(ctx context.Context, title string, description string)
-	GetServerPort(ctx context.Context) int
-	ChangeTheme(ctx context.Context, theme Theme)
 	OpenSettingWindow(ctx context.Context, windowContext SettingWindowContext)
-	GetAllThemes(ctx context.Context) []Theme
 	PickFiles(ctx context.Context, params PickFilesParams) []string
+
 	GetActiveWindowName() string
+	GetServerPort(ctx context.Context) int
+	GetAllThemes(ctx context.Context) []Theme
+	ChangeTheme(ctx context.Context, theme Theme)
 }
 
 type ShowContext struct {

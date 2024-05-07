@@ -206,7 +206,7 @@ func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryRe
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("run tool: %s", t.Command))
-							c.api.ChangeQuery(ctx, share.ChangedQuery{
+							c.api.ChangeQuery(ctx, share.PlainQuery{
 								QueryType: plugin.QueryTypeInput,
 								QueryText: fmt.Sprintf("%s %s %s", c.GetMetadata().TriggerKeywords[0], t.Command, query.Selection.Text),
 							})
@@ -398,7 +398,7 @@ func (c *Plugin) listAllTools(ctx context.Context, query plugin.Query) []plugin.
 					Name:                   "Run",
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						c.api.ChangeQuery(ctx, share.ChangedQuery{
+						c.api.ChangeQuery(ctx, share.PlainQuery{
 							QueryType: plugin.QueryTypeInput,
 							QueryText: fmt.Sprintf("%s %s ", query.TriggerKeyword, t.Command),
 						})

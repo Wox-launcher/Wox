@@ -1,5 +1,7 @@
 package ui
 
+import "wox/util/screen"
+
 type PositionType string
 
 const (
@@ -20,4 +22,11 @@ func NewMouseScreenPosition() Position {
 		X:    x,
 		Y:    y,
 	}
+}
+
+func getWindowMouseScreenLocation(windowWidth int) (int, int) {
+	size := screen.GetMouseScreen()
+	x := size.X + (size.Width-windowWidth)/2
+	y := size.Height / 6
+	return x, y
 }

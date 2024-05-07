@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import 'package:lpinyin/lpinyin.dart';
 import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/entity/wox_setting.dart';
@@ -30,7 +31,7 @@ import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 
 class WoxLauncherController extends GetxController implements WoxLauncherInterface {
-  final _query = WoxChangeQuery.empty().obs;
+  final _query = PlainQuery.empty().obs;
   final _activeResultIndex = 0.obs;
   final _activeActionIndex = 0.obs;
   final _resultItemGlobalKeys = <GlobalKey>[];
@@ -91,7 +92,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       await windowManager.setPosition(Offset(params.position.x.toDouble(), params.position.y.toDouble()));
     }
     await windowManager.show();
-    if(Platform.isWindows) {
+    if (Platform.isWindows) {
       // on windows, it is somehow necessary to invoke show twice to make the window show
       // otherwise, the window will not show up if it is the first time to invoke showApp
       await windowManager.show();
@@ -99,15 +100,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     await windowManager.focus();
     queryBoxFocusNode.requestFocus();
 
-    WoxWebsocketMsgUtil.instance.sendMessage(
-      WoxWebsocketMsg(
-        requestId: const UuidV4().generate(),
-        traceId: traceId,
-        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
-        method: WoxMsgMethodEnum.WOX_MSG_METHOD_VISIBILITY_CHANGED.code,
-        data: {"isVisible": "true", "query": _query.value.toJson()},
-      ),
-    );
+    WoxApi.instance.onShow();
   }
 
   @override
@@ -124,21 +117,13 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
     //clear query box text if query type is selection
     if (getCurrentQuery().queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
-      onQueryChanged(traceId, WoxChangeQuery.emptyInput(), "clear input after hide app");
+      onQueryChanged(traceId, PlainQuery.emptyInput(), "clear input after hide app");
     }
 
-    WoxWebsocketMsgUtil.instance.sendMessage(
-      WoxWebsocketMsg(
-        requestId: const UuidV4().generate(),
-        traceId: traceId,
-        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
-        method: WoxMsgMethodEnum.WOX_MSG_METHOD_VISIBILITY_CHANGED.code,
-        data: {"isVisible": "false", "query": _query.value.toJson()},
-      ),
-    );
+    WoxApi.instance.onHide(_query.value);
   }
 
-  WoxChangeQuery getCurrentQuery() {
+  PlainQuery getCurrentQuery() {
     return _query.value;
   }
 
@@ -220,7 +205,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     final queryText = queryResults[_activeResultIndex.value].title;
     onQueryChanged(
       traceId,
-      WoxChangeQuery(
+      PlainQuery(
         queryId: const UuidV4().generate(),
         queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
         queryText: queryText.value,
@@ -234,7 +219,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   void onQueryBoxTextChanged(String value) {
     canArrowUpHistory = false;
 
-    WoxChangeQuery woxChangeQuery = WoxChangeQuery(
+    PlainQuery woxChangeQuery = PlainQuery(
       queryId: const UuidV4().generate(),
       queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
       queryText: value,
@@ -251,7 +236,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   @override
-  void onQueryChanged(String traceId, WoxChangeQuery query, String changeReason, {bool moveCursorToEnd = false}) {
+  void onQueryChanged(String traceId, PlainQuery query, String changeReason, {bool moveCursorToEnd = false}) {
     Logger.instance.debug(traceId, "query changed: ${query.queryText}, reason: $changeReason");
 
     //hide setting view if query changed
@@ -373,7 +358,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       showApp(msg.traceId, ShowAppParams.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ChangeQuery") {
-      onQueryChanged(msg.traceId, WoxChangeQuery.fromJson(msg.data), "receive change query from wox", moveCursorToEnd: true);
+      onQueryChanged(msg.traceId, PlainQuery.fromJson(msg.data), "receive change query from wox", moveCursorToEnd: true);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ChangeTheme") {
       final theme = WoxTheme.fromJson(msg.data);
@@ -723,7 +708,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
     canArrowUpHistory = false;
 
-    WoxChangeQuery woxChangeQuery = WoxChangeQuery(
+    PlainQuery woxChangeQuery = PlainQuery(
       queryId: const UuidV4().generate(),
       queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code,
       queryText: "",

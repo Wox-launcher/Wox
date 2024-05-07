@@ -1,6 +1,7 @@
 import 'dart:core';
 
 import 'package:wox/entity/wox_plugin.dart';
+import 'package:wox/entity/wox_query.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/utils/wox_http_util.dart';
@@ -72,7 +73,21 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData("/hotkey/available", {"hotkey": hotkey});
   }
 
-  Future<void> uiReady() async {
-    await WoxHttpUtil.instance.postData("/ui/ready", {});
+  Future<void> onUIReady() async {
+    await WoxHttpUtil.instance.postData("/on/ready", {});
+  }
+
+  Future<void> onFocusLost() async {
+    await WoxHttpUtil.instance.postData("/on/focus/lost", {});
+  }
+
+  Future<void> onShow() async {
+    await WoxHttpUtil.instance.postData("/on/show", {});
+  }
+
+  Future<void> onHide(PlainQuery query) async {
+    await WoxHttpUtil.instance.postData("/on/hide", {
+      "query": query.toJson(),
+    });
   }
 }
