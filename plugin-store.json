@@ -75,7 +75,7 @@
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "Search arc tabs and spaces",
-    "IconUrl": "https://github.com/Wox-launcher/Wox.Plugin.Arc/main/images/app.png",
+    "IconUrl": "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Arc/main/images/app.png",
     "Website": "https://github.com/Wox-launcher/Wox.Plugin.Arc",
     "DownloadUrl": "https://github.com/Wox-launcher/Wox.Plugin.Arc/releases/latest/download/wox.plugin.arc.wox",
     "ScreenshotUrls": [
