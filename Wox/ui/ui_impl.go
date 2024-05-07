@@ -17,6 +17,7 @@ import (
 	"wox/util"
 	"wox/util/ime"
 	"wox/util/screen"
+	"wox/util/window"
 )
 
 type uiImpl struct {
@@ -32,10 +33,12 @@ func (u *uiImpl) HideApp(ctx context.Context) {
 }
 
 func (u *uiImpl) ShowApp(ctx context.Context, showContext share.ShowContext) {
+	GetUIManager().SetActiveWindowName(window.GetActiveWindowName())
 	u.send(ctx, "ShowApp", getShowAppParams(ctx, showContext.SelectAll))
 }
 
 func (u *uiImpl) ToggleApp(ctx context.Context) {
+	GetUIManager().SetActiveWindowName(window.GetActiveWindowName())
 	u.send(ctx, "ToggleApp", getShowAppParams(ctx, true))
 }
 
@@ -118,6 +121,10 @@ func (u *uiImpl) PickFiles(ctx context.Context, params share.PickFilesParams) []
 		result = append(result, file.(string))
 	})
 	return result
+}
+
+func (u *uiImpl) GetActiveWindowName() string {
+	return GetUIManager().GetActiveWindowName()
 }
 
 func getShowAppParams(ctx context.Context, selectAll bool) map[string]any {
@@ -277,6 +284,8 @@ func handleQuery(ctx context.Context, request WebsocketMsg) {
 		responseUIError(ctx, request, queryErr.Error())
 		return
 	}
+
+	//logger.Info(ctx, fmt.Sprintf("active window title: %s", query.Env.ActiveWindowTitle))
 
 	var totalResultCount int
 	var startTimestamp = util.GetSystemTimestamp()

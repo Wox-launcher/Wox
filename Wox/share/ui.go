@@ -41,6 +41,7 @@ type UI interface {
 	OpenSettingWindow(ctx context.Context, windowContext SettingWindowContext)
 	GetAllThemes(ctx context.Context) []Theme
 	PickFiles(ctx context.Context, params PickFilesParams) []string
+	GetActiveWindowName() string
 }
 
 type ShowContext struct {

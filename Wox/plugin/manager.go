@@ -694,7 +694,7 @@ func (m *Manager) NewQuery(ctx context.Context, changedQuery share.ChangedQuery)
 			}
 		}
 		query := newQueryInputWithPlugins(newQuery, GetPluginManager().GetPluginInstances())
-		query.Env.ActiveWindowTitle = window.GetActiveWindowName()
+		query.Env.ActiveWindowTitle = m.GetUI().GetActiveWindowName()
 		return query, nil
 	}
 

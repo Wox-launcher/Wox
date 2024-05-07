@@ -36,6 +36,8 @@ type Manager struct {
 	themes           *util.HashMap[string, share.Theme]
 	systemThemeIds   []string
 	isUIReadyHandled bool
+
+	activeWindowName string //active window name before wox is activated
 }
 
 func GetUIManager() *Manager {
@@ -419,4 +421,12 @@ func (m *Manager) ExitApp(ctx context.Context) {
 	m.Stop(ctx)
 	util.GetLogger().Info(ctx, "bye~")
 	os.Exit(0)
+}
+
+func (m *Manager) SetActiveWindowName(name string) {
+	m.activeWindowName = name
+}
+
+func (m *Manager) GetActiveWindowName() string {
+	return m.activeWindowName
 }

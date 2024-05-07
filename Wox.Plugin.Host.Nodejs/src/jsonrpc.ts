@@ -161,7 +161,6 @@ async function query(ctx: Context, request: PluginJsonRpcRequest) {
     TriggerKeyword: request.Params.TriggerKeyword,
     Command: request.Params.Command,
     Search: request.Params.Search,
-    ShortcutFrom: request.Params.ShortcutFrom,
     Selection: JSON.parse(request.Params.Selection) as Selection,
     Env: JSON.parse(request.Params.Env) as QueryEnv,
     IsGlobalQuery: () => request.Params.Type === "input" && request.Params.TriggerKeyword === ""
