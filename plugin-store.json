@@ -71,7 +71,7 @@
     "Id": "84cb8c8f-1156-489d-a490-6d04fbc85d52",
     "Name": "Arc",
     "Author": "Wox-launcher",
-    "Version": "0.0.1",
+    "Version": "0.0.2",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "Search arc tabs",
@@ -82,6 +82,6 @@
       "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Arc/main/assets/snapshot.png"
     ],
     "DateCreated": "2024-05-07 13:02:00",
-    "DateUpdated": "2024-05-07 13:02:00"
+    "DateUpdated": "2024-05-07 15:44:22"
   }
 ]
