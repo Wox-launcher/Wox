@@ -26,6 +26,7 @@ import _ "wox/plugin/system"
 import _ "wox/plugin/system/app"
 import _ "wox/plugin/system/calculator"
 import _ "wox/plugin/system/llm"
+import _ "wox/plugin/system/file"
 
 func main() {
 	// logger depends on location, so location must be initialized first
