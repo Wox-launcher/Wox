@@ -104,9 +104,7 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 
 func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
-	for _, infoShadow := range a.apps {
-		// action will be executed in another go routine, so we need to copy the variable
-		info := infoShadow
+	for _, info := range a.apps {
 		if isMatch, score := system.IsStringMatchScore(ctx, info.Name, query.Search); isMatch {
 			results = append(results, plugin.QueryResult{
 				Id:       uuid.NewString(),
@@ -294,22 +292,6 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []ap
 			if dir.Recursive {
 				appPaths = append(appPaths, a.getAppPaths(ctx, []appDirectory{{Path: subDir, Recursive: true}})...)
 				continue
-			}
-
-			appSubDir, readSubDirErr := os.ReadDir(subDir)
-			if readSubDirErr != nil {
-				a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error reading sub directory %s: %s", subDir, readSubDirErr.Error()))
-				continue
-			}
-
-			for _, subEntry := range appSubDir {
-				isExtensionMatch = lo.ContainsBy(appExtensions, func(ext string) bool {
-					return strings.HasSuffix(subEntry.Name(), fmt.Sprintf(".%s", ext))
-				})
-				if isExtensionMatch {
-					appPaths = append(appPaths, path.Join(dir.Path, entry.Name(), subEntry.Name()))
-					continue
-				}
 			}
 		}
 	}
