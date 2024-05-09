@@ -39,7 +39,14 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 			"Linux",
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{},
-		Features:           []plugin.MetadataFeature{},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureDebounce,
+				Params: map[string]string{
+					"intervalMs": "500",
+				},
+			},
+		},
 	}
 }
 

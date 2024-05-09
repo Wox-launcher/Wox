@@ -1,7 +1,9 @@
 package file
 
 import (
+	"bytes"
 	"fmt"
+	"path/filepath"
 	"wox/util"
 )
 
@@ -11,22 +13,26 @@ type MacSearcher struct {
 }
 
 func (m *MacSearcher) Search(pattern SearchPattern) []SearchResult {
-	// use mdfind to search files
-	// mdfind -onlyin /path/to/search 'kMDItemDisplayName==pattern'
-
-	var arguments = []string{fmt.Sprintf("kMDItemDisplayName=='%s'", pattern.Name)}
-	if len(pattern.Paths) > 0 {
-		arguments = append(arguments, "-onlyin", pattern.Paths[0])
+	// if the search pattern is too short, return empty result
+	if len(pattern.Name) <= 3 {
+		return []SearchResult{}
 	}
 
-	output, err := util.ShellRunOutput("mdfind", arguments...)
+	// use mdfind to search files
+	cmd := fmt.Sprintf("mdfind \"kMDItemDisplayName=='%s'\" | head -n 20", pattern.Name)
+	output, err := util.ShellRunOutput("bash", "-c", cmd)
 	if err != nil {
 		return nil
 	}
 
+	//read output line by line
 	var results []SearchResult
-	for _, line := range output {
-		results = append(results, SearchResult{Name: string(line), Path: string(line)})
+	for _, line := range bytes.Split(output, []byte("\n")) {
+		if len(line) > 0 {
+			path := string(line)
+			fileName := filepath.Base(path)
+			results = append(results, SearchResult{Name: fileName, Path: path})
+		}
 	}
-	return []SearchResult{}
+	return results
 }

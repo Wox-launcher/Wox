@@ -1,8 +1,7 @@
 package file
 
 type SearchPattern struct {
-	Name  string   // The name of the file or directory.
-	Paths []string // Search path if specified.
+	Name string // The name of the file or directory.
 }
 
 type SearchResult struct {

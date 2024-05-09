@@ -75,7 +75,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                       decoration: InputDecoration(
                         contentPadding: const EdgeInsets.only(
                           left: 8,
-                          right: 8,
+                          right: 68,
                           top: 4,
                           bottom: 17,
                         ),
@@ -120,7 +120,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
               child: WoxImageView(woxImage: controller.queryIcon.value, width: 24, height: 24),
             ),
           )),
-        )
+        ),
       ]);
     });
   }
