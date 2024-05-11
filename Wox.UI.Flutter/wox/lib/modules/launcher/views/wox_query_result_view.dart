@@ -151,9 +151,9 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
 
 // Action Query Box
   Widget getActionQueryBox() {
-    return RawKeyboardListener(
-        focusNode: FocusNode(onKey: (FocusNode node, RawKeyEvent event) {
-          if (event is RawKeyDownEvent) {
+    return Focus(
+        onKeyEvent: (FocusNode node, KeyEvent event) {
+          if (event is KeyDownEvent) {
             if (event.logicalKey == LogicalKeyboardKey.escape) {
               controller.toggleActionPanel(const UuidV4().generate());
               return KeyEventResult.handled;
@@ -172,14 +172,14 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
               controller.executeResultAction(const UuidV4().generate());
               return KeyEventResult.handled;
             }
-            if (event.isMetaPressed && event.logicalKey == LogicalKeyboardKey.keyJ) {
+            if ((HardwareKeyboard.instance.isMetaPressed || HardwareKeyboard.instance.isAltPressed) && event.logicalKey == LogicalKeyboardKey.keyJ) {
               controller.toggleActionPanel(const UuidV4().generate());
               return KeyEventResult.handled;
             }
           }
 
           return KeyEventResult.ignored;
-        }),
+        },
         child: Padding(
           padding: const EdgeInsets.only(top: 6.0),
           child: SizedBox(

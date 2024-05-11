@@ -70,15 +70,6 @@ Future<void> initWindow() async {
     titleBarStyle: TitleBarStyle.hidden,
     windowButtonVisibility: false,
   );
-
-  if (Platform.isMacOS) {
-    await windowManager.setVisibleOnAllWorkspaces(true, visibleOnFullScreen: true);
-    await Window.setBlurViewState(MacOSBlurViewState.active);
-    await Window.setEffect(effect: WindowEffect.popover, dark: false);
-  }
-  if (Platform.isWindows) {
-    await Window.setEffect(effect: WindowEffect.mica);
-  }
   await windowManager.setResizable(false);
   await windowManager.setMaximizable(false);
   await windowManager.setMinimizable(false);
@@ -112,6 +103,9 @@ class _WoxAppState extends State<WoxApp> with WindowListener {
   @override
   void initState() {
     super.initState();
+
+    setAcrylicEffect();
+
     var launcherController = Get.find<WoxLauncherController>();
     launcherController.isInSettingView.stream.listen((isShowSetting) async {
       if (isShowSetting) {
@@ -133,6 +127,18 @@ class _WoxAppState extends State<WoxApp> with WindowListener {
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
       WoxApi.instance.onUIReady();
     });
+   }
+
+
+  Future<void> setAcrylicEffect() async {
+    if (Platform.isMacOS) {
+      await windowManager.setVisibleOnAllWorkspaces(true, visibleOnFullScreen: true);
+      await Window.setBlurViewState(MacOSBlurViewState.active);
+      await Window.setEffect(effect: WindowEffect.popover, dark: false);
+    }
+    if (Platform.isWindows) {
+      await Window.setEffect(effect: WindowEffect.mica, color: const Color(0xFF222222), dark: false);
+    }
   }
 
   @override

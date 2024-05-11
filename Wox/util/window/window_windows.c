@@ -3,6 +3,8 @@
 #include <windows.h>
 #include <psapi.h>
 #include <shellapi.h>
+#include <stdlib.h>
+#include <string.h>
 
 char* getIconData(HICON hIcon, unsigned char **iconData, int *iconSize, int *width, int *height) {
     ICONINFO iconinfo;
@@ -103,18 +105,25 @@ char* getActiveWindowIcon(unsigned char **iconData, int *iconSize, int *width, i
     return result;
 }
 
+
 char* getActiveWindowName() {
     HWND hwnd = GetForegroundWindow();
     if (!hwnd) {
-        return "";
+        char* result = (char*)malloc(1);
+        result[0] = '\0';
+        return result;
     }
 
     WCHAR windowTitle[1024];
     if (0 == GetWindowTextW(hwnd, windowTitle, 1024)) {
-        return "";
+        char* result = (char*)malloc(1);
+        result[0] = '\0';
+        return result;
     }
 
-    char windowTitleA[1024];
-    WideCharToMultiByte(CP_ACP, 0, windowTitle, -1, windowTitleA, 1024, NULL, NULL);
+    int len = WideCharToMultiByte(CP_UTF8, 0, windowTitle, -1, NULL, 0, NULL, NULL);
+    char* windowTitleA = (char*)malloc(len);
+    WideCharToMultiByte(CP_UTF8, 0, windowTitle, -1, windowTitleA, len, NULL, NULL);
+
     return windowTitleA;
 }

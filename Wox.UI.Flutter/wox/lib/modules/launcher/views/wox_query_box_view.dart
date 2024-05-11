@@ -24,9 +24,10 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
     return Obx(() {
       return Stack(children: [
         Positioned(
-            child: RawKeyboardListener(
-                focusNode: FocusNode(onKey: (FocusNode node, RawKeyEvent event) {
-                  if (event is RawKeyDownEvent) {
+            child: Focus(
+                autofocus: true,
+                onKeyEvent: (FocusNode node, KeyEvent event) {
+                  if (event is KeyDownEvent) {
                     switch (event.logicalKey) {
                       case LogicalKeyboardKey.escape:
                         controller.hideApp(const UuidV4().generate());
@@ -50,7 +51,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         controller.moveQueryBoxCursorToEnd();
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.keyJ:
-                        if (event.isMetaPressed || event.isAltPressed) {
+                        if (HardwareKeyboard.instance.isAltPressed || HardwareKeyboard.instance.isAltPressed) {
                           controller.toggleActionPanel(const UuidV4().generate());
                           return KeyEventResult.handled;
                         }
@@ -58,7 +59,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   }
 
                   return KeyEventResult.ignored;
-                }),
+                },
                 child: SizedBox(
                   height: 55.0,
                   child: Theme(
