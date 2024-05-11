@@ -10,6 +10,7 @@ import (
 	"github.com/tidwall/pretty"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -134,7 +135,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 						Name: "i18n:plugin_app_open_containing_folder",
 						Icon: plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><path fill="#FFA000" d="M40,12H22l-4-4H8c-2.2,0-4,1.8-4,4v8h40v-4C44,13.8,42.2,12,40,12z"></path><path fill="#FFCA28" d="M40,12H8c-2.2,0-4,1.8-4,4v20c0,2.2,1.8,4,4,4h32c2.2,0,4-1.8,4-4V16C44,13.8,42.2,12,40,12z"></path></svg>`),
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							runErr := util.ShellOpen(path.Dir(info.Path))
+							runErr := util.ShellOpen(filepath.Dir(info.Path))
 							if runErr != nil {
 								a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", info.Path, runErr.Error()))
 							}
