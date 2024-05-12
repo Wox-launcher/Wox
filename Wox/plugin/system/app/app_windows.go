@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lxn/win"
 	"github.com/parsiya/golnk"
 	"image"
 	"image/color"
@@ -39,8 +38,9 @@ func (a *WindowsRetriever) GetPlatform() string {
 func (a *WindowsRetriever) GetAppDirectories(ctx context.Context) []appDirectory {
 	return []appDirectory{
 		{
-			Path:      "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs",
-			Recursive: true,
+			Path:           "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs",
+			Recursive:      true,
+			RecursiveDepth: 2,
 		},
 	}
 }

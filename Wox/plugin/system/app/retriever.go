@@ -12,8 +12,9 @@ type appInfo struct {
 }
 
 type appDirectory struct {
-	Path      string
-	Recursive bool
+	Path           string
+	Recursive      bool
+	RecursiveDepth int
 }
 
 type Retriever interface {

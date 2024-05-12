@@ -290,9 +290,8 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []ap
 				continue
 			}
 
-			if dir.Recursive {
-				appPaths = append(appPaths, a.getAppPaths(ctx, []appDirectory{{Path: subDir, Recursive: true}})...)
-				continue
+			if dir.Recursive && dir.RecursiveDepth > 0 {
+				appPaths = append(appPaths, a.getAppPaths(ctx, []appDirectory{{Path: subDir, Recursive: true, RecursiveDepth: dir.RecursiveDepth - 1}})...)
 			}
 		}
 	}
