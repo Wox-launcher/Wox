@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"github.com/disintegration/imaging"
 	"github.com/mitchellh/go-homedir"
+	"github.com/tidwall/gjson"
 	"howett.net/plist"
 	"image"
 	"io"
@@ -23,6 +24,7 @@ import (
 	"os/exec"
 	"path"
 	"strings"
+	"sync"
 	"unsafe"
 	"wox/plugin"
 	"wox/util"
@@ -149,6 +151,79 @@ func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (plugi
 		ImageType: plugin.WoxImageTypeAbsolutePath,
 		ImageData: iconCachePath,
 	}, nil
+}
+
+func (a *MacRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
+	//use `system_profiler SPApplicationsDataType -json` to get all apps
+	out, err := util.ShellRunOutput("system_profiler", "SPApplicationsDataType", "-json")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get extra apps: %s", err.Error())
+	}
+
+	//parse json
+	results := gjson.Get(string(out), "SPApplicationsDataType")
+	if !results.Exists() {
+		return nil, errors.New("failed to parse extra apps")
+	}
+	var appPaths []string
+	for _, app := range results.Array() {
+		appPath := app.Get("path").String()
+		if appPath == "" {
+			continue
+		}
+		if strings.HasPrefix(appPath, "/System/Library/CoreServices/") {
+			continue
+		}
+		if strings.HasPrefix(appPath, "/System/Library/PrivateFrameworks/") {
+			continue
+		}
+		if strings.HasPrefix(appPath, "/System/Library/Frameworks/") {
+			continue
+		}
+
+		appPaths = append(appPaths, appPath)
+	}
+
+	// split into groups, so we can index apps in parallel
+	var appPathGroups [][]string
+	var groupSize = 25
+	for i := 0; i < len(appPaths); i += groupSize {
+		var end = i + groupSize
+		if end > len(appPaths) {
+			end = len(appPaths)
+		}
+		appPathGroups = append(appPathGroups, appPaths[i:end])
+	}
+	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("found extra %d apps in %d groups", len(appPaths), len(appPathGroups)))
+
+	// index apps in parallel
+	var appInfos []appInfo
+	var waitGroup sync.WaitGroup
+	var lock sync.Mutex
+	waitGroup.Add(len(appPathGroups))
+	for groupIndex := range appPathGroups {
+		var appPathGroup = appPathGroups[groupIndex]
+		util.Go(ctx, fmt.Sprintf("index extra app group: %d", groupIndex), func() {
+			for _, appPath := range appPathGroup {
+				info, getErr := a.ParseAppInfo(ctx, appPath)
+				if getErr != nil {
+					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error getting extra app info for %s: %s", appPath, getErr.Error()))
+					continue
+				}
+
+				lock.Lock()
+				appInfos = append(appInfos, info)
+				lock.Unlock()
+			}
+			waitGroup.Done()
+		}, func() {
+			waitGroup.Done()
+		})
+	}
+
+	waitGroup.Wait()
+
+	return appInfos, nil
 }
 
 func (a *MacRetriever) getMacAppIconImagePath(ctx context.Context, appPath string) (string, error) {

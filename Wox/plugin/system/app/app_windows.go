@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lxn/win"
 	"github.com/parsiya/golnk"
 	"image"
 	"image/color"
@@ -165,4 +164,8 @@ func (a *WindowsRetriever) GetAppIcon(ctx context.Context, path string) (image.I
 	}
 
 	return img, nil
+}
+
+func (a *WindowsRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
+	return []appInfo{}, nil
 }

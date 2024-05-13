@@ -106,13 +106,15 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	for _, info := range a.apps {
-		if isMatch, score := system.IsStringMatchScore(ctx, info.Name, query.Search); isMatch {
+		isNameMatch, nameScore := system.IsStringMatchScore(ctx, info.Name, query.Search)
+		isPathNameMatch, pathNameScore := system.IsStringMatchScore(ctx, filepath.Base(info.Path), query.Search)
+		if isNameMatch || isPathNameMatch {
 			results = append(results, plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    info.Name,
 				SubTitle: info.Path,
 				Icon:     info.Icon,
-				Score:    score,
+				Score:    util.MaxInt64(nameScore, pathNameScore),
 				Preview: plugin.WoxPreview{
 					PreviewType: plugin.WoxPreviewTypeText,
 					PreviewData: info.Path,
@@ -213,6 +215,30 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 	startTimestamp := util.GetSystemTimestamp()
 	a.api.Log(ctx, plugin.LogLevelInfo, "start to get apps")
 
+	appInfos := a.indexAppsByDirectory(ctx)
+	extraApps := a.indexExtraApps(ctx)
+
+	//merge extra apps
+	for _, extraApp := range extraApps {
+		var isExist = false
+		for _, app := range appInfos {
+			if app.Path == extraApp.Path {
+				isExist = true
+				break
+			}
+		}
+		if !isExist {
+			appInfos = append(appInfos, extraApp)
+		}
+	}
+
+	a.apps = appInfos
+	a.saveAppToCache(ctx)
+
+	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("indexed %d apps, cost %d ms", len(a.apps), util.GetSystemTimestamp()-startTimestamp))
+}
+
+func (a *ApplicationPlugin) indexAppsByDirectory(ctx context.Context) []appInfo {
 	appDirectories := a.getRetriever(ctx).GetAppDirectories(ctx)
 	appPaths := a.getAppPaths(ctx, appDirectories)
 
@@ -257,12 +283,21 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 
 	waitGroup.Wait()
 
-	if len(appInfos) > 0 {
-		a.apps = appInfos
-		a.saveAppToCache(ctx)
+	return appInfos
+}
+
+func (a *ApplicationPlugin) indexExtraApps(ctx context.Context) []appInfo {
+	apps, err := a.retriever.GetExtraApps(ctx)
+	if err != nil {
+		return []appInfo{}
 	}
 
-	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("indexed %d apps, cost %d ms", len(a.apps), util.GetSystemTimestamp()-startTimestamp))
+	//preprocess icon
+	for i := range apps {
+		apps[i].Icon = plugin.ConvertIcon(ctx, apps[i].Icon, a.pluginDirectory)
+	}
+
+	return apps
 }
 
 func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []appDirectory) (appPaths []string) {

@@ -34,3 +34,7 @@ func (a *LinuxRetriever) GetAppExtensions(ctx context.Context) []string {
 func (a *LinuxRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, error) {
 	return appInfo{}, errors.New("not implemented")
 }
+
+func (a *LinuxRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
+	return []appInfo{}, nil
+}

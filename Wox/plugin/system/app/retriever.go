@@ -23,4 +23,5 @@ type Retriever interface {
 	GetAppDirectories(ctx context.Context) []appDirectory
 	GetAppExtensions(ctx context.Context) []string
 	ParseAppInfo(ctx context.Context, path string) (appInfo, error)
+	GetExtraApps(ctx context.Context) ([]appInfo, error)
 }
