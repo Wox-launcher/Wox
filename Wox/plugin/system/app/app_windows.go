@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	win "github.com/lxn/win"
 	"github.com/parsiya/golnk"
 	"image"
 	"image/color"

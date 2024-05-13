@@ -180,6 +180,9 @@ func (a *MacRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
 		if strings.HasPrefix(appPath, "/System/Library/Frameworks/") {
 			continue
 		}
+		if !strings.HasSuffix(appPath, ".app") {
+			continue
+		}
 
 		appPaths = append(appPaths, appPath)
 	}
