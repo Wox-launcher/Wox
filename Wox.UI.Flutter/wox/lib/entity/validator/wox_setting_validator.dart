@@ -14,7 +14,7 @@ class PluginSettingValidatorItem {
     if (type == "not_empty") {
       validator = PluginSettingValidatorNotEmpty.fromJson(<String, dynamic>{});
     } else if (type == "is_number") {
-      validator = PluginSettingValidatorIsNumber.fromJson(json['Value']);
+      validator = PluginSettingValidatorIsNumber.fromJson(json);
     }
   }
 }

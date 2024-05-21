@@ -26,7 +26,9 @@ class WoxSettingPluginTextBox extends WoxSettingPluginItem {
                 for (var element in item.validators) {
                   var errMsg = element.validator.validate(controller.text);
                   item.tooltip = errMsg;
-                  return;
+                  if (errMsg != "") {
+                    return;
+                  }
                 }
 
                 updateConfig(item.key, controller.text);

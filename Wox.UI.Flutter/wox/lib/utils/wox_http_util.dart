@@ -35,8 +35,8 @@ class WoxHttpUtil {
       WoxResponse woxResponse = WoxResponse.fromJson(response.data);
       if (woxResponse.success == false) throw Exception(woxResponse.message);
       return EntityFactory.generateOBJ<T>(woxResponse.data);
-    } catch (e) {
-      Logger.instance.error(traceId, 'Failed to post data: $e');
+    } catch (e, stacktrace) {
+      Logger.instance.error(traceId, 'Failed to post data, url=${_baseUrl + url}, data=$data, err=$e, stacktrace=$stacktrace');
       rethrow;
     }
   }
