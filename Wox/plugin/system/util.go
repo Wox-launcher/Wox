@@ -2,6 +2,15 @@ package system
 
 import (
 	"context"
+	"crypto/md5"
+	"fmt"
+	"github.com/disintegration/imaging"
+	"github.com/mat/besticon/besticon"
+	"io"
+	"net/url"
+	"os"
+	"path"
+	"wox/plugin"
 	"wox/setting"
 	"wox/util"
 )
@@ -37,4 +46,51 @@ func IsStringMatchScoreNoPinYin(ctx context.Context, term string, subTerm string
 func IsStringMatchNoPinYin(ctx context.Context, term string, subTerm string) bool {
 	match, _ := util.IsStringMatchScore(term, subTerm, false)
 	return match
+}
+
+func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (plugin.WoxImage, error) {
+	parseUrl, err := url.Parse(websiteUrl)
+	if err != nil {
+		return webSearchIcon, fmt.Errorf("failed to parse url for %s: %s", websiteUrl, err.Error())
+	}
+	hostUrl := parseUrl.Scheme + "://" + parseUrl.Host
+
+	// check if existed in cache
+	iconPathMd5 := fmt.Sprintf("%x", md5.Sum([]byte(hostUrl)))
+	iconCachePath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("website_icon_%s.png", iconPathMd5))
+	if _, statErr := os.Stat(iconCachePath); statErr == nil {
+		return plugin.WoxImage{
+			ImageType: plugin.WoxImageTypeAbsolutePath,
+			ImageData: iconCachePath,
+		}, nil
+	}
+
+	option := besticon.WithLogger(besticon.NewDefaultLogger(io.Discard))
+	iconFinder := besticon.New(option).NewIconFinder()
+	icons, fetchErr := iconFinder.FetchIcons(hostUrl)
+	if fetchErr != nil {
+		return webSearchIcon, fmt.Errorf("failed to fetch icons for %s: %s", hostUrl, fetchErr.Error())
+	}
+
+	if len(icons) == 0 {
+		return webSearchIcon, fmt.Errorf("no icons found for %s", hostUrl)
+	}
+
+	image, imageEr := icons[0].Image()
+	if imageEr != nil {
+		return webSearchIcon, fmt.Errorf("failed to get image for %s: %s", hostUrl, imageEr.Error())
+	}
+
+	woxImage, woxImageErr := plugin.NewWoxImage(*image)
+	if woxImageErr != nil {
+		return webSearchIcon, fmt.Errorf("failed to convert image for %s: %s", hostUrl, woxImageErr.Error())
+	}
+
+	// save to cache
+	saveErr := imaging.Save(*image, iconCachePath)
+	if saveErr != nil {
+		return woxImage, fmt.Errorf("failed to save image for %s: %s", hostUrl, saveErr.Error())
+	}
+
+	return woxImage, nil
 }

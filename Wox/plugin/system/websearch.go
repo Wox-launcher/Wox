@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/mat/besticon/besticon"
-	"io"
-	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -162,40 +159,14 @@ func (r *WebSearchPlugin) indexIcons(ctx context.Context) {
 func (r *WebSearchPlugin) indexWebSearchIcon(ctx context.Context, search webSearch) plugin.WoxImage {
 	//sort urls, so that we can get the same icon between different runs
 	slices.Sort(search.Urls)
-	parseUrl, err := url.Parse(search.Urls[0])
+
+	img, err := getWebsiteIconWithCache(ctx, search.Urls[0])
 	if err != nil {
-		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to parse url for %s: %s", search.Urls, err.Error()))
-		return webSearchIcon
-	}
-	iconUrl := parseUrl.Scheme + "://" + parseUrl.Host
-	r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("indexing icon for %s", iconUrl))
-
-	option := besticon.WithLogger(besticon.NewDefaultLogger(io.Discard))
-	iconFinder := besticon.New(option).NewIconFinder()
-	icons, err := iconFinder.FetchIcons(iconUrl)
-	if err != nil {
-		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to fetch icons for %s: %s", search.Urls, err.Error()))
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get icon for %s: %s", search.Urls[0], err.Error()))
 		return webSearchIcon
 	}
 
-	if len(icons) == 0 {
-		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("no icons found for %s", search.Urls))
-		return webSearchIcon
-	}
-
-	image, imageEr := icons[0].Image()
-	if imageEr != nil {
-		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get image for %s: %s", search.Urls, imageEr.Error()))
-		return webSearchIcon
-	}
-
-	woxImage, woxImageErr := plugin.NewWoxImage(*image)
-	if woxImageErr != nil {
-		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to convert image for %s: %s", search.Urls, woxImageErr.Error()))
-		return webSearchIcon
-	}
-
-	return woxImage
+	return img
 }
 
 func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []webSearch) {
