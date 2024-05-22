@@ -2,12 +2,15 @@ package system
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/olahol/melody"
 	"github.com/rs/cors"
+	"github.com/samber/lo"
 	"net/http"
 	"strconv"
+	"strings"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/setting/validator"
@@ -25,6 +28,24 @@ type BrowserPlugin struct {
 	api    plugin.API
 	m      *melody.Melody
 	server *http.Server
+
+	openedTabs []browserTab
+	activeTab  browserTab
+}
+
+type websocketMsg struct {
+	Method string `json:"method"`
+	Data   string `json:"data"`
+}
+
+type browserTab struct {
+	TabId       int    `json:"tabId"`
+	WindowId    int    `json:"windowId"`
+	TabIndex    int    `json:"tabIndex"`
+	Title       string `json:"title"`
+	Url         string `json:"url"`
+	Pinned      bool   `json:"pinned"`
+	Highlighted bool   `json:"highlighted"`
 }
 
 func (c *BrowserPlugin) GetMetadata() plugin.Metadata {
@@ -94,8 +115,29 @@ func (c *BrowserPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 
 func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
 	if query.IsGlobalQuery() {
-		if query.Env.ActiveWindowTitle == "Google Chrome" {
+		if strings.ToLower(query.Env.ActiveWindowTitle) == "google chrome" {
+			for _, tab := range c.openedTabs {
+				isTitleMatched, titleScore := IsStringMatchScore(ctx, tab.Title, query.Search)
+				isUrlMatched, urlScore := strings.Contains(tab.Url, query.Search), int64(1)
+				if !isTitleMatched && !isUrlMatched {
+					continue
+				}
 
+				results = append(results, plugin.QueryResult{
+					Title:    tab.Title,
+					SubTitle: tab.Url,
+					Score:    util.MaxInt64(titleScore, urlScore),
+					Icon:     browserIcon,
+					Actions: []plugin.QueryResultAction{
+						{
+							Name: "Open",
+							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+								c.m.Broadcast([]byte(fmt.Sprintf(`{"method":"highlightTab","data":"{\"tabId\":%d,\"windowId\":%d,\"tabIndex\": %d}"}`, tab.TabId, tab.WindowId, tab.TabIndex)))
+							},
+						},
+					},
+				})
+			}
 		}
 	}
 
@@ -143,7 +185,47 @@ func (c *BrowserPlugin) newWebsocketServer(ctx context.Context) error {
 
 	c.m.HandleMessage(func(s *melody.Session, msg []byte) {
 		ctxNew := util.NewTraceContext()
-		c.api.Log(ctxNew, plugin.LogLevelInfo, fmt.Sprintf("received message: %s", string(msg)))
+		//c.api.Log(ctxNew, plugin.LogLevelInfo, fmt.Sprintf("received message: %s", string(msg)))
+
+		var request websocketMsg
+		unmarshalErr := json.Unmarshal(msg, &request)
+		if unmarshalErr != nil {
+			c.api.Log(ctxNew, plugin.LogLevelError, fmt.Sprintf("failed to unmarshal websocket request: %s", unmarshalErr.Error()))
+			return
+		}
+
+		util.Go(ctxNew, "handle chrome extension request", func() {
+			switch request.Method {
+			case "ping":
+				err := c.m.Broadcast([]byte(`{"method":"pong"}`))
+				if err != nil {
+					c.api.Log(ctxNew, plugin.LogLevelError, fmt.Sprintf("failed to broadcast pong: %s", err.Error()))
+					return
+				}
+			case "tabs":
+				var tabs []browserTab
+				err := json.Unmarshal([]byte(request.Data), &tabs)
+				if err != nil {
+					c.api.Log(ctxNew, plugin.LogLevelError, fmt.Sprintf("failed to unmarshal tabs: %s", err.Error()))
+					return
+				}
+
+				activeTab, exist := lo.Find(tabs, func(tab browserTab) bool {
+					return tab.Highlighted
+				})
+				if exist {
+					c.activeTab = activeTab
+					c.api.Log(ctxNew, plugin.LogLevelDebug, fmt.Sprintf("active tab: %s", activeTab.Title))
+				}
+
+				// filter invalid tabs
+				c.openedTabs = lo.Filter(tabs, func(tab browserTab, _ int) bool {
+					return tab.Url != ""
+				})
+			default:
+				c.api.Log(ctxNew, plugin.LogLevelError, fmt.Sprintf("unknown websocket method: %s", request.Method))
+			}
+		})
 	})
 
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("browser websocket server start at：ws://localhost:%d", port))
