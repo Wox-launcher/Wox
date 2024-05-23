@@ -94,8 +94,10 @@
     "Description": "OSX Volume Control",
     "IconUrl": "https://raw.githubusercontent.com/lylwx/Wox.Plugin.OSXVolumeControl/main/images/app.png",
     "Website": "https://github.com/lylwx/Wox.Plugin.OSXVolumeControl",
-    "DownloadUrl": "https://raw.githubusercontent.com/lylwx/Wox.Plugin.OSXVolumeControl/main/Wox.Plugin.OSXVolumeControl.wox",
-    "ScreenshotUrls": null,
+    "DownloadUrl": "https://github.com/lylwx/Wox.Plugin.OSXVolumeControl/releases/latest/download/Wox.Plugin.OSXVolumeControl.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/lylwx/Wox.Plugin.OSXVolumeControl/main/snapshot.jpg"
+    ],
     "DateCreated": "2024-05-21 15:50:00",
     "DateUpdated": "2024-05-23 15:16:05"
   }
