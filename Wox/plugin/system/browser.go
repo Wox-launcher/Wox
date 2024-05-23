@@ -16,6 +16,7 @@ import (
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/setting/validator"
+	"wox/share"
 	"wox/util"
 )
 
@@ -64,9 +65,14 @@ func (c *BrowserPlugin) GetMetadata() plugin.Metadata {
 		Icon:          browserIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
-			"*",
+			"*", "browser",
 		},
-		Commands: []plugin.MetadataCommand{},
+		Commands: []plugin.MetadataCommand{
+			{
+				Command:     "summary",
+				Description: "Summary current active browser url content",
+			},
+		},
 		SupportedOS: []string{
 			"Windows",
 			"Macos",
@@ -77,6 +83,7 @@ func (c *BrowserPlugin) GetMetadata() plugin.Metadata {
 				Name: "queryEnv",
 				Params: map[string]string{
 					"requireActiveWindowName": "true",
+					"requireActiveBrowserUrl": "true",
 				},
 			},
 		},
@@ -125,8 +132,10 @@ func (c *BrowserPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 }
 
 func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
-	if query.IsGlobalQuery() {
-		if strings.ToLower(query.Env.ActiveWindowTitle) == "google chrome" {
+	isInBrowser := strings.ToLower(query.Env.ActiveWindowTitle) == "google chrome"
+
+	if isInBrowser {
+		if query.IsGlobalQuery() {
 			for _, tab := range c.openedTabs {
 				isTitleMatched, titleScore := IsStringMatchScore(ctx, tab.Title, query.Search)
 				isUrlMatched, urlScore := strings.Contains(tab.Url, query.Search), int64(1)
@@ -163,6 +172,23 @@ func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) (results 
 					},
 				})
 			}
+		}
+
+		if query.Command == "summary" {
+			if query.Env.ActiveBrowserUrl == "" {
+				return []plugin.QueryResult{
+					{
+						Title:    "No active browser url",
+						SubTitle: "Please open a browser tab",
+						Icon:     browserIcon,
+					},
+				}
+			}
+
+			c.api.ChangeQuery(ctx, share.PlainQuery{
+				QueryType: plugin.QueryTypeInput,
+				QueryText: "llm tldr " + query.Env.ActiveBrowserUrl,
+			})
 		}
 	}
 
