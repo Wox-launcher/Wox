@@ -16,7 +16,8 @@ const (
 )
 
 const (
-	QueryVariableSelectedText QueryVariable = "{wox:selected_text}"
+	QueryVariableSelectedText     QueryVariable = "{wox:selected_text}"
+	QueryVariableActiveBrowserUrl QueryVariable = "{wox:active_browser_url}"
 )
 
 // Query from Wox. See "Doc/Query.md" for details.

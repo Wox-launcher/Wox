@@ -432,6 +432,19 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key, value string) {
 	if key == "SelectionHotkey" {
 		m.RegisterSelectionHotkey(ctx, value)
 	}
+	if key == "QueryHotkeys" {
+		// unregister previous hotkeys
+		logger.Info(ctx, "post update query hotkeys, unregister previous query hotkeys")
+		for _, hk := range m.queryHotkeys {
+			hk.Unregister(ctx)
+		}
+		m.queryHotkeys = nil
+
+		queryHotkeys := setting.GetSettingManager().GetWoxSetting(ctx).QueryHotkeys.Get()
+		for _, queryHotkey := range queryHotkeys {
+			m.RegisterQueryHotkey(ctx, queryHotkey)
+		}
+	}
 }
 
 func (m *Manager) ExitApp(ctx context.Context) {

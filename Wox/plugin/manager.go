@@ -880,6 +880,11 @@ func (m *Manager) ReplaceQueryVariable(ctx context.Context, query string) string
 		}
 	}
 
+	if strings.Contains(query, QueryVariableActiveBrowserUrl) {
+		activeBrowserUrl := m.activeBrowserUrl
+		query = strings.ReplaceAll(query, QueryVariableActiveBrowserUrl, activeBrowserUrl)
+	}
+
 	return query
 }
 

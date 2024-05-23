@@ -168,7 +168,9 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                       {
                         "Key": "Query",
                         "Label": "Query",
-                        "Tooltip": "The query when the hotkey is triggered.\nYou can use {wox:selected_text} to insert selected text.",
+                        "Tooltip": "The query when the hotkey is triggered. Following variables are supported:\n\n"
+                            "{wox:selected_text} represent the selected text.\n"
+                            "{wox:active_browser_url} represent the url of active browser tab.",
                         "Type": "text",
                         "TextMaxLines": 1,
                         "Validators": [

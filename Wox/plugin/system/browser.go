@@ -16,7 +16,6 @@ import (
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/setting/validator"
-	"wox/share"
 	"wox/util"
 )
 
@@ -66,12 +65,6 @@ func (c *BrowserPlugin) GetMetadata() plugin.Metadata {
 		Entry:         "",
 		TriggerKeywords: []string{
 			"*", "browser",
-		},
-		Commands: []plugin.MetadataCommand{
-			{
-				Command:     "summary",
-				Description: "Summary current active browser url content",
-			},
 		},
 		SupportedOS: []string{
 			"Windows",
@@ -132,64 +125,47 @@ func (c *BrowserPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 }
 
 func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
+	// only show results when the active window is a browser in global query
 	isInBrowser := strings.ToLower(query.Env.ActiveWindowTitle) == "google chrome"
+	if query.IsGlobalQuery() && !isInBrowser {
+		return results
+	}
 
-	if isInBrowser {
-		if query.IsGlobalQuery() {
-			for _, tab := range c.openedTabs {
-				isTitleMatched, titleScore := IsStringMatchScore(ctx, tab.Title, query.Search)
-				isUrlMatched, urlScore := strings.Contains(tab.Url, query.Search), int64(1)
-				if !isTitleMatched && !isUrlMatched {
-					continue
-				}
+	for _, tab := range c.openedTabs {
+		isTitleMatched, titleScore := IsStringMatchScore(ctx, tab.Title, query.Search)
+		isUrlMatched, urlScore := strings.Contains(tab.Url, query.Search), int64(1)
+		if !isTitleMatched && !isUrlMatched {
+			continue
+		}
 
-				icon := chromeIcon
-				if tabIconImg, err := getWebsiteIconWithCache(ctx, tab.Url); err == nil {
-					if backgroundImg, backgroundImgErr := chromeIcon.ToImage(); backgroundImgErr == nil {
-						if tabImage, tabImageErr := tabIconImg.ToImage(); tabImageErr == nil {
-							resizedImg := imaging.Resize(tabImage, 16, 16, imaging.Lanczos)
-							overlayImg := imaging.Overlay(backgroundImg, resizedImg, image.Pt(30, 30), 1)
-							overlayWoxImg, overlayWoxImgErr := plugin.NewWoxImage(overlayImg)
-							if overlayWoxImgErr == nil {
-								icon = overlayWoxImg
-							}
-						}
+		icon := chromeIcon
+		if tabIconImg, err := getWebsiteIconWithCache(ctx, tab.Url); err == nil {
+			if backgroundImg, backgroundImgErr := chromeIcon.ToImage(); backgroundImgErr == nil {
+				if tabImage, tabImageErr := tabIconImg.ToImage(); tabImageErr == nil {
+					resizedImg := imaging.Resize(tabImage, 16, 16, imaging.Lanczos)
+					overlayImg := imaging.Overlay(backgroundImg, resizedImg, image.Pt(30, 30), 1)
+					overlayWoxImg, overlayWoxImgErr := plugin.NewWoxImage(overlayImg)
+					if overlayWoxImgErr == nil {
+						icon = overlayWoxImg
 					}
 				}
-
-				results = append(results, plugin.QueryResult{
-					Title:    tab.Title,
-					SubTitle: tab.Url,
-					Score:    util.MaxInt64(titleScore, urlScore),
-					Icon:     icon,
-					Actions: []plugin.QueryResultAction{
-						{
-							Name: "Open",
-							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-								c.m.Broadcast([]byte(fmt.Sprintf(`{"method":"highlightTab","data":"{\"tabId\":%d,\"windowId\":%d,\"tabIndex\": %d}"}`, tab.TabId, tab.WindowId, tab.TabIndex)))
-							},
-						},
-					},
-				})
 			}
 		}
 
-		if query.Command == "summary" {
-			if query.Env.ActiveBrowserUrl == "" {
-				return []plugin.QueryResult{
-					{
-						Title:    "No active browser url",
-						SubTitle: "Please open a browser tab",
-						Icon:     browserIcon,
+		results = append(results, plugin.QueryResult{
+			Title:    tab.Title,
+			SubTitle: tab.Url,
+			Score:    util.MaxInt64(titleScore, urlScore),
+			Icon:     icon,
+			Actions: []plugin.QueryResultAction{
+				{
+					Name: "Open",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						c.m.Broadcast([]byte(fmt.Sprintf(`{"method":"highlightTab","data":"{\"tabId\":%d,\"windowId\":%d,\"tabIndex\": %d}"}`, tab.TabId, tab.WindowId, tab.TabIndex)))
 					},
-				}
-			}
-
-			c.api.ChangeQuery(ctx, share.PlainQuery{
-				QueryType: plugin.QueryTypeInput,
-				QueryText: "llm tldr " + query.Env.ActiveBrowserUrl,
-			})
-		}
+				},
+			},
+		})
 	}
 
 	return results
