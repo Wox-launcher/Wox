@@ -117,7 +117,9 @@ class _WoxAppState extends State<WoxApp> with WindowListener {
         Get.find<WoxSettingController>().activePaneIndex.value = 0;
       } else {
         launcherController.resizeHeight();
-        windowManager.setPosition(launcherController.positionBeforeOpenSetting);
+        await windowManager.setPosition(launcherController.positionBeforeOpenSetting);
+        await windowManager.focus();
+        launcherController.queryBoxFocusNode.requestFocus();
       }
       setState(() {});
     });
@@ -127,8 +129,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener {
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
       WoxApi.instance.onUIReady();
     });
-   }
-
+  }
 
   Future<void> setAcrylicEffect() async {
     if (Platform.isMacOS) {

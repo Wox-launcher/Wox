@@ -51,7 +51,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         controller.moveQueryBoxCursorToEnd();
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.keyJ:
-                        if (HardwareKeyboard.instance.isAltPressed || HardwareKeyboard.instance.isAltPressed) {
+                        if (HardwareKeyboard.instance.isMetaPressed || HardwareKeyboard.instance.isAltPressed) {
                           controller.toggleActionPanel(const UuidV4().generate());
                           return KeyEventResult.handled;
                         }
