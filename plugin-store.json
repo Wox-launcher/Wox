@@ -88,14 +88,15 @@
     "Id": "09ea2847-929c-440a-aa2c-9b74bcaae88f",
     "Name": "OSX Volume Control",
     "Author": "lyl",
-    "Version": "0.0.1",
+    "Version": "0.0.2",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "OSX Volume Control",
     "IconUrl": "https://raw.githubusercontent.com/lylwx/Wox.Plugin.OSXVolumeControl/main/images/app.png",
     "Website": "https://github.com/lylwx/Wox.Plugin.OSXVolumeControl",
     "DownloadUrl": "https://raw.githubusercontent.com/lylwx/Wox.Plugin.OSXVolumeControl/main/Wox.Plugin.OSXVolumeControl.wox",
+    "ScreenshotUrls": null,
     "DateCreated": "2024-05-21 15:50:00",
-    "DateUpdated": "2024-05-21 15:50:00"
+    "DateUpdated": "2024-05-23 13:37:48"
   }
 ]
