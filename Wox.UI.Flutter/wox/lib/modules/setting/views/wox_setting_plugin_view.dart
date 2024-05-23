@@ -3,6 +3,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 import 'package:flutter_image_slideshow/flutter_image_slideshow.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_head_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_label_view.dart';
@@ -10,6 +11,7 @@ import 'package:wox/components/plugin/wox_setting_plugin_newline_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_select_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_label.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_plugin.dart';
@@ -306,6 +308,13 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     ),
                     content: pluginTabSetting(),
                   ),
+                dt.TabData(
+                  index: 2,
+                  title: const material.Tab(
+                    child: Text('Privacy'),
+                  ),
+                  content: pluginTabPrivacy(),
+                ),
               ],
               onTabControllerUpdated: (tabController) {
                 controller.activePluginTabController = tabController;
@@ -433,6 +442,92 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         ),
       );
     });
+  }
+
+  Widget pluginTabPrivacy() {
+    var plugin = controller.activePluginDetail.value;
+    var noDataAccess = const Padding(
+      padding: EdgeInsets.all(16),
+      child: Text('This plugin requires no data access'),
+    );
+
+    if (plugin.features.isEmpty) {
+      return noDataAccess;
+    }
+
+    //check if "queryEnv" feature is exist and list it's params
+    var queryEnv = plugin.features.where((element) => element.name == "queryEnv").toList();
+    if (queryEnv.isEmpty) {
+      return noDataAccess;
+    }
+
+    List<String> params = [];
+    queryEnv.first.params.forEach((key, value) {
+      if (value == "true") {
+        params.add(key);
+      }
+    });
+    if (params.isEmpty) {
+      return noDataAccess;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('This plugin requires access to the following data:'),
+            const SizedBox(height: 20),
+            ...params.map((e) {
+              if (e == "requireActiveWindowName") {
+                return privacyItem(
+                  material.Icons.window,
+                  'Active window name',
+                  'E.g. you are using google chrome to view webpages, you activate Wox and this plugin will get the active window name as "Google Chrome"',
+                );
+              }
+              if (e == "requireActiveBrowserUrl") {
+                return privacyItem(
+                  material.Icons.web_sharp,
+                  'Active browser URL',
+                  'E.g. you are using google chrome to view webpages, you activate Wox and this plugin will get the url of active tab you are viewing',
+                );
+              }
+              return Text(e);
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget privacyItem(IconData icon, String title, String description) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Icon(icon),
+            SizedBox(width: 10),
+            Text(title),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            const SizedBox(width: 30),
+            Flexible(
+              child: Text(
+                description,
+                style: TextStyle(
+                  color: Colors.grey[100],
+                ),
+              ),
+            ),
+          ],
+        )
+      ],
+    );
   }
 
   @override

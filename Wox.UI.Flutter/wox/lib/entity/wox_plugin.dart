@@ -20,6 +20,7 @@ class PluginDetail {
   late bool isDisable;
   late List<PluginSettingDefinitionItem> settingDefinitions;
   late PluginSetting setting;
+  late List<MetadataFeature> features;
 
   PluginDetail.empty() {
     id = '';
@@ -40,6 +41,7 @@ class PluginDetail {
     isDisable = false;
     settingDefinitions = <PluginSettingDefinitionItem>[];
     setting = PluginSetting.empty();
+    features = <MetadataFeature>[];
   }
 
   PluginDetail.fromJson(Map<String, dynamic> json) {
@@ -96,6 +98,15 @@ class PluginDetail {
       setting = PluginSetting.fromJson(json['Setting']);
     } else {
       setting = PluginSetting.empty();
+    }
+
+    if (json['Features'] != null) {
+      features = <MetadataFeature>[];
+      json['Features'].forEach((v) {
+        features.add(MetadataFeature.fromJson(v));
+      });
+    } else {
+      features = <MetadataFeature>[];
     }
   }
 }
@@ -163,5 +174,20 @@ class PluginQueryCommand {
   PluginQueryCommand.fromJson(Map<String, dynamic> json) {
     command = json['Command'];
     description = json['Description'];
+  }
+}
+
+class MetadataFeature {
+  late String name;
+  late Map<String, String> params;
+
+  MetadataFeature.fromJson(Map<String, dynamic> json) {
+    name = json['Name'];
+
+    if (json['Params'] != null) {
+      params = json['Params'].cast<String, String>();
+    } else {
+      params = <String, String>{};
+    }
   }
 }

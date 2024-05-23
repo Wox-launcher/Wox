@@ -241,6 +241,7 @@ func convertPluginDto(ctx context.Context, pluginDto dto.PluginDto, pluginInstan
 		pluginDto.Setting = *pluginInstance.Setting
 		//only return user pre-defined settings
 		pluginDto.Setting.Settings = definitionSettings
+		pluginDto.Features = pluginInstance.Metadata.Features
 	}
 
 	return pluginDto

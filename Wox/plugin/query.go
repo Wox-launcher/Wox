@@ -71,6 +71,10 @@ func (q *Query) String() string {
 
 type QueryEnv struct {
 	ActiveWindowTitle string // active window title when user query
+
+	// active browser url when user query
+	// Only available when active window is browser and https://github.com/Wox-launcher/Wox.Chrome.Extension is installed
+	ActiveBrowserUrl string
 }
 
 // Query result return from plugin

@@ -72,6 +72,14 @@ func (c *BrowserPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: "queryEnv",
+				Params: map[string]string{
+					"requireActiveWindowName": "true",
+				},
+			},
+		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
 			{
 				Type: definition.PluginSettingDefinitionTypeTextBox,
@@ -251,7 +259,7 @@ func (c *BrowserPlugin) onUpdateTabs(ctx context.Context, data string) {
 	})
 	if exist {
 		c.activeTab = activeTab
-		//c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("active tab: %s", activeTab.Title))
+		plugin.GetPluginManager().SetActiveBrowserUrl(activeTab.Url)
 	}
 
 	// filter invalid tabs

@@ -22,6 +22,9 @@ const (
 	// enable this feature to let Wox don't auto score results
 	// by default, Wox will auto score results by the frequency of their actioned times
 	MetadataFeatureIgnoreAutoScore MetadataFeatureName = "ignoreAutoScore"
+
+	// enable this feature to get query env in plugin
+	MetadataFeatureQueryEnv MetadataFeatureName = "queryEnv"
 )
 
 // Metadata parsed from plugin.json, see `Plugin.json.md` for more detail
@@ -83,6 +86,33 @@ func (m *Metadata) GetFeatureParamsForDebounce() (MetadataFeatureParamsDebounce,
 	return MetadataFeatureParamsDebounce{}, errors.New("plugin does not support debounce feature")
 }
 
+func (m *Metadata) GetFeatureParamsForQueryEnv() (MetadataFeatureParamsQueryEnv, error) {
+	for _, feature := range m.Features {
+		if strings.ToLower(feature.Name) == strings.ToLower(MetadataFeatureQueryEnv) {
+			params := MetadataFeatureParamsQueryEnv{
+				RequireActiveWindowName: false,
+				RequireActiveBrowserUrl: false,
+			}
+
+			if v, ok := feature.Params["requireActiveWindowName"]; ok {
+				if v == "true" {
+					params.RequireActiveWindowName = true
+				}
+			}
+
+			if v, ok := feature.Params["requireActiveBrowserUrl"]; ok {
+				if v == "true" {
+					params.RequireActiveBrowserUrl = true
+				}
+			}
+
+			return params, nil
+		}
+	}
+
+	return MetadataFeatureParamsQueryEnv{}, errors.New("plugin does not support queryEnv feature")
+}
+
 type MetadataFeature struct {
 	Name   MetadataFeatureName
 	Params map[string]string
@@ -104,4 +134,9 @@ type MetadataWithDirectory struct {
 
 type MetadataFeatureParamsDebounce struct {
 	intervalMs int
+}
+
+type MetadataFeatureParamsQueryEnv struct {
+	RequireActiveWindowName bool
+	RequireActiveBrowserUrl bool
 }

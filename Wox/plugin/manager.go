@@ -39,6 +39,8 @@ type Manager struct {
 	ui                 share.UI
 	resultCache        *util.HashMap[string, *QueryResultCache]
 	debounceQueryTimer *util.HashMap[string, *debounceTimer]
+
+	activeBrowserUrl string //active browser url before wox is activated
 }
 
 func GetPluginManager() *Manager {
@@ -71,6 +73,10 @@ func (m *Manager) Stop(ctx context.Context) {
 	for _, host := range AllHosts {
 		host.Stop(ctx)
 	}
+}
+
+func (m *Manager) SetActiveBrowserUrl(url string) {
+	m.activeBrowserUrl = url
 }
 
 func (m *Manager) loadPlugins(ctx context.Context) error {
@@ -368,6 +374,25 @@ func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance,
 func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) []QueryResult {
 	logger.Info(ctx, fmt.Sprintf("<%s> start query: %s", pluginInstance.Metadata.Name, query.RawQuery))
 	start := util.GetSystemTimestamp()
+
+	// set query env base on plugin's feature
+	currentEnv := query.Env
+	newEnv := QueryEnv{}
+	if pluginInstance.Metadata.IsSupportFeature(MetadataFeatureQueryEnv) {
+		queryEnvParams, err := pluginInstance.Metadata.GetFeatureParamsForQueryEnv()
+		if err != nil {
+			logger.Error(ctx, fmt.Sprintf("<%s> invalid query env config: %s", pluginInstance.Metadata.Name, err))
+		} else {
+			if queryEnvParams.RequireActiveWindowName {
+				newEnv.ActiveWindowTitle = currentEnv.ActiveWindowTitle
+			}
+			if queryEnvParams.RequireActiveBrowserUrl {
+				newEnv.ActiveBrowserUrl = currentEnv.ActiveBrowserUrl
+			}
+		}
+	}
+	query.Env = newEnv
+
 	results := pluginInstance.Plugin.Query(ctx, query)
 	logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms", pluginInstance.Metadata.Name, len(results), util.GetSystemTimestamp()-start))
 
@@ -695,6 +720,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery share.PlainQuery) (Qu
 		}
 		query, instance := newQueryInputWithPlugins(newQuery, GetPluginManager().GetPluginInstances())
 		query.Env.ActiveWindowTitle = m.GetUI().GetActiveWindowName()
+		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
 		return query, instance, nil
 	}
 
@@ -706,10 +732,21 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery share.PlainQuery) (Qu
 			Selection: plainQuery.QuerySelection,
 		}
 		query.Env.ActiveWindowTitle = window.GetActiveWindowName()
+		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
 		return query, nil, nil
 	}
 
 	return Query{}, nil, errors.New("invalid query type")
+}
+
+func (m *Manager) getActiveBrowserUrl(ctx context.Context) string {
+	activeWindowName := m.GetUI().GetActiveWindowName()
+	isGoogleChrome := strings.ToLower(activeWindowName) == "google chrome"
+	if !isGoogleChrome {
+		return ""
+	}
+
+	return m.activeBrowserUrl
 }
 
 func (m *Manager) expandQueryShortcut(ctx context.Context, query string, queryShorts []setting.QueryShortcut) (newQuery string) {

@@ -23,6 +23,7 @@ type PluginDto struct {
 	SupportedOS        []string
 	SettingDefinitions definition.PluginSettingDefinitions // only available when plugin is installed
 	Setting            setting.PluginSetting               // only available when plugin is installed
+	Features           []plugin.MetadataFeature            // only available when plugin is installed
 	IsSystem           bool
 	IsDev              bool
 	IsInstalled        bool
