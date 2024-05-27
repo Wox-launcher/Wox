@@ -1,0 +1,2 @@
+* [Home](/)
+* [Plugin](Plugin.md)
