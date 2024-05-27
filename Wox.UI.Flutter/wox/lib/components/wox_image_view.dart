@@ -15,7 +15,15 @@ class WoxImageView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_URL.code) {
-      return Image.network(woxImage.imageData, width: width, height: height, fit: BoxFit.contain);
+      return Image.network(
+        woxImage.imageData,
+        width: width,
+        height: height,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) {
+          return SizedBox(width: width, height: height);
+        },
+      );
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code) {
       return SvgPicture.string(woxImage.imageData, width: width, height: height);
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {

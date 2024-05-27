@@ -228,14 +228,31 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 
 func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.QueryHotkey) error {
 	hk := &hotkey.Hotkey{}
+
 	err := hk.Register(ctx, queryHotkey.Hotkey, func() {
 		newCtx := util.NewTraceContext()
 		query := plugin.GetPluginManager().ReplaceQueryVariable(newCtx, queryHotkey.Query)
-		m.ui.ChangeQuery(newCtx, share.PlainQuery{
+		plainQuery := share.PlainQuery{
 			QueryType: plugin.QueryTypeInput,
 			QueryText: query,
-		})
-		m.ui.ShowApp(newCtx, share.ShowContext{SelectAll: false})
+		}
+
+		if queryHotkey.IsSilentExecution {
+			q, _, err := plugin.GetPluginManager().NewQuery(ctx, plainQuery)
+			if err != nil {
+				logger.Error(ctx, fmt.Sprintf("failed to create silent query: %s", err.Error()))
+				return
+			}
+			success := plugin.GetPluginManager().QuerySilent(ctx, q)
+			if !success {
+				logger.Error(ctx, fmt.Sprintf("failed to execute silent query: %s", query))
+			} else {
+				logger.Info(ctx, fmt.Sprintf("silent query executed: %s", query))
+			}
+		} else {
+			m.ui.ChangeQuery(newCtx, plainQuery)
+			m.ui.ShowApp(newCtx, share.ShowContext{SelectAll: false})
+		}
 	})
 	if err != nil {
 		return err

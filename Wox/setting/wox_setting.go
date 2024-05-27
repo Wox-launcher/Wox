@@ -49,8 +49,9 @@ func (q *QueryShortcut) PlaceholderCount() int {
 }
 
 type QueryHotkey struct {
-	Hotkey string
-	Query  string // Support plugin.QueryVariable
+	Hotkey            string
+	Query             string // Support plugin.QueryVariable
+	IsSilentExecution bool   // If true, the query will be executed without showing the query in the input box
 }
 
 func GetDefaultWoxSetting(ctx context.Context) WoxSetting {

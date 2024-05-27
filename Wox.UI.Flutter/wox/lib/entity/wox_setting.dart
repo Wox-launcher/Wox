@@ -86,17 +86,21 @@ class QueryHotkey {
 
   late String query; // Support plugin.QueryVariable
 
-  QueryHotkey({required this.hotkey, required this.query});
+  late bool isSilentExecution;
+
+  QueryHotkey({required this.hotkey, required this.query, required this.isSilentExecution});
 
   QueryHotkey.fromJson(Map<String, dynamic> json) {
     hotkey = json['Hotkey'];
     query = json['Query'];
+    isSilentExecution = json['IsSilentExecution'] ?? false;
   }
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
     data['Hotkey'] = hotkey;
     data['Query'] = query;
+    data['IsSilentExecution'] = isSilentExecution;
     return data;
   }
 }

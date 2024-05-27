@@ -176,6 +176,8 @@ class Position {
   late int x;
   late int y;
 
+  Position({required this.type, required this.x, required this.y});
+
   Position.fromJson(Map<String, dynamic> json) {
     type = json['Type'];
     x = json['X'];
@@ -189,13 +191,21 @@ class ShowAppParams {
   late List<QueryHistory> queryHistories;
   late WoxLastQueryMode lastQueryMode;
 
+  ShowAppParams({required this.selectAll, required this.position, required this.queryHistories, required this.lastQueryMode});
+
   ShowAppParams.fromJson(Map<String, dynamic> json) {
     selectAll = json['SelectAll'];
-    position = Position.fromJson(json['Position']);
+    if (json['Position'] != null) {
+      position = Position.fromJson(json['Position']);
+    }
     queryHistories = <QueryHistory>[];
-    json['QueryHistories'].forEach((v) {
-      queryHistories.add(QueryHistory.fromJson(v));
-    });
+    if (json['QueryHistories'] != null) {
+      json['QueryHistories'].forEach((v) {
+        queryHistories.add(QueryHistory.fromJson(v));
+      });
+    } else {
+      queryHistories = <QueryHistory>[];
+    }
     lastQueryMode = json['LastQueryMode'];
   }
 }

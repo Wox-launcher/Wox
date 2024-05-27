@@ -658,6 +658,23 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
           settingController.switchToPluginSettingTab();
         });
       }
+
+      // if user open setting window from silent query, the windows may not visible yet
+      var isVisible = await windowManager.isVisible();
+      if (!isVisible) {
+        await showApp(
+            traceId,
+            ShowAppParams(
+              queryHistories: latestQueryHistories,
+              lastQueryMode: lastQueryMode,
+              selectAll: true,
+              position: Position(
+                type: WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code,
+                x: 0,
+                y: 0,
+              ),
+            ));
+      }
     });
   }
 

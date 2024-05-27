@@ -176,6 +176,15 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                         "Validators": [
                           {"Type": "not_empty"}
                         ],
+                      },
+                      {
+                        "Key": "IsSilentExecution",
+                        "Label": "Silent",
+                        "Tooltip": "When selected, if the count of query result is 1, Wox will execute the query directly without showing the result list.\n\n"
+                            "This is useful when you have a query that always return one result and you want to execute it directly.\n"
+                            "Note: This option is only available when the query result count is 1. Otherwise it will be ignored and notify a warning.",
+                        "Width": 60,
+                        "Type": "checkbox"
                       }
                     ],
                     "SortColumnKey": "Query"

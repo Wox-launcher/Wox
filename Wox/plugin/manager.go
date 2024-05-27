@@ -650,6 +650,38 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 	return
 }
 
+func (m *Manager) QuerySilent(ctx context.Context, query Query) bool {
+	var startTimestamp = util.GetSystemTimestamp()
+	var results []QueryResultUI
+	resultChan, doneChan := m.Query(ctx, query)
+	for {
+		select {
+		case r := <-resultChan:
+			results = append(results, r...)
+		case <-doneChan:
+			logger.Info(ctx, fmt.Sprintf("silent query done, total results: %d, cost %d ms", len(results), util.GetSystemTimestamp()-startTimestamp))
+
+			// execute default action if only one result
+			if len(results) == 1 {
+				result := results[0]
+				for _, action := range result.Actions {
+					if action.IsDefault {
+						m.ExecuteAction(ctx, result.Id, action.Id)
+						return true
+					}
+				}
+			} else {
+				m.GetUI().Notify(ctx, "Silent query failed", fmt.Sprintf("There shouldbe only one result, but got %d", len(results)))
+			}
+
+			return false
+		case <-time.After(time.Minute):
+			logger.Error(ctx, "silent query timeout")
+			return false
+		}
+	}
+}
+
 func (m *Manager) QueryFallback(ctx context.Context, query Query) (results []QueryResultUI) {
 	if !query.IsGlobalQuery() {
 		return
