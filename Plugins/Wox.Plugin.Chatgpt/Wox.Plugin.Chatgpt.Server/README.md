@@ -1,1 +1,0 @@
-Wox plugin for killing processes by name
