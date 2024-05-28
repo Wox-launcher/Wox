@@ -1,6 +1,6 @@
 ## What are Query Shortcuts?
 
-Query shortcuts in Wox Launcher are a feature that allows you to simplify your queries. This can be done by assigning a shortcut to a longer query.
+Query shortcuts in Wox Launcher are a feature that allows you to simplify your [Query](query.md). This can be done by assigning a shortcut to a longer query.
 When this shortcut is entered, Wox Launcher will automatically expand it to the full query and pass it to all plugins. However, this expansion is implicit and not visible to the
 user. The user will still see the shortcut in the UI, but the plugins will receive the expanded query.
 

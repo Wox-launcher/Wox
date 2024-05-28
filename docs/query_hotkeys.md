@@ -1,6 +1,6 @@
 ## What are Query Hotkeys?
 
-Query hotkeys in Wox Launcher are a specific type of hotkeys that allow you to quickly perform a search for specific characters or strings. This can be done by assigning a query to
+Query hotkeys in Wox Launcher are a specific type of hotkeys that allow you to quickly perform a [Query](query.md). This can be done by assigning a query to
 a hotkey. When this hotkey is pressed, Wox Launcher will automatically perform this query.
 
 ## How to Use Query Hotkeys
@@ -27,7 +27,7 @@ performed.
 
 ## Silent Mode
 
-Wox Launcher also supports a silent mode for queries. When silent mode is enabled, Wox Launcher will not display the search interface when a query is performed. Instead, if the
+Wox Launcher also supports a silent mode for queries. When silent mode is enabled, Wox Launcher will not display the query interface when a query is performed. Instead, if the
 query returns exactly one result, it will directly execute that result. If the query returns more than one result or no results, the query will not be executed and no UI will be
 displayed, but a notification will be shown to inform the user that the query failed.
 

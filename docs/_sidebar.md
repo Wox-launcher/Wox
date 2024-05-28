@@ -4,13 +4,16 @@
 
 - Introduction
 
+    - [Query](query.md)
     - [Query Hotkeys](query_hotkeys.md)
     - [Query Shortcuts](query_shortcuts.md)
+    - [Action Panel](action_panel.md)
+    - [Selection Query](selection_query.md)
 
 - Plugin
 
     - [Plugin summary](plugin_summary.md)
-    - [Plugin store](deploy.md)
+    - [Plugin store](plugin_store.md)
     - [Write plugin](vue.md)
     - [Submit plugin](helpers.md)
 
