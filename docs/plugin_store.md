@@ -11,7 +11,7 @@ fetch('https://raw.githubusercontent.com/Wox-launcher/Wox/v2/plugin-store.json')
 
         let thead = document.createElement('thead');
         let headerRow = document.createElement('tr');
-        let headers = ['Icon', 'Name', 'Description', 'Author',  'Version'];
+        let headers = ['Icon', 'Name', 'Description', 'Author',  'Version', 'Install'];
         headers.forEach(header => {
             let th = document.createElement('th');
             if (header === 'Icon') {
@@ -45,6 +45,7 @@ fetch('https://raw.githubusercontent.com/Wox-launcher/Wox/v2/plugin-store.json')
                 plugin.Description,
                 plugin.Author,
                 `v${plugin.Version}`,
+                `<a href="wox://query?q=wpm install ${plugin.Name}" target="_blank">Install</a>`
             ];
             cells.forEach(cell => {
                 let td = document.createElement('td');

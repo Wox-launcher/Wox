@@ -62,6 +62,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/backup/all":       handleBackupAll,
 	"/hotkey/available": handleHotkeyAvailable,
 	"/query/icon":       handleQueryIcon,
+	"/deeplink":         handleDeeplink,
 }
 
 func handleHome(w http.ResponseWriter, r *http.Request) {
@@ -717,4 +718,30 @@ func handleQueryIcon(w http.ResponseWriter, r *http.Request) {
 
 	iconImage := plugin.ConvertIcon(ctx, iconImg, pluginInstance.PluginDirectory)
 	writeSuccessResponse(w, iconImage)
+}
+
+func handleDeeplink(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+
+	body, _ := io.ReadAll(r.Body)
+	commandResult := gjson.GetBytes(body, "command")
+	if !commandResult.Exists() {
+		writeErrorResponse(w, "command is empty")
+		return
+	}
+
+	// arguments is map[string]string
+	argumentsResult := gjson.GetBytes(body, "arguments")
+	var arguments = make(map[string]string)
+	if argumentsResult.Exists() {
+		err := json.Unmarshal([]byte(argumentsResult.String()), &arguments)
+		if err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+	}
+
+	GetUIManager().PostDeeplink(ctx, commandResult.String(), arguments)
+
+	writeSuccessResponse(w, "")
 }

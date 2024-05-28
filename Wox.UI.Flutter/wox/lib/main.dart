@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:get/get.dart';
+import 'package:protocol_handler/protocol_handler.dart';
 import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
@@ -23,6 +23,7 @@ import 'package:wox/utils/wox_websocket_msg_util.dart';
 void main(List<String> arguments) async {
   await initialServices(arguments);
   await initWindow();
+  await initDeepLink();
   runApp(const MyApp());
 }
 
@@ -56,6 +57,12 @@ Future<void> initialServices(List<String> arguments) async {
   HeartbeatChecker().startChecking();
   Get.put(launcherController);
   Get.put(WoxSettingController());
+}
+
+Future<void> initDeepLink() async {
+  // Register a custom protocol
+  // For macOS platform needs to declare the scheme in ios/Runner/Info.plist
+  await protocolHandler.register('wox');
 }
 
 Future<void> initWindow() async {
@@ -99,10 +106,12 @@ class WoxApp extends StatefulWidget {
   State<WoxApp> createState() => _WoxAppState();
 }
 
-class _WoxAppState extends State<WoxApp> with WindowListener {
+class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
   @override
   void initState() {
     super.initState();
+
+    protocolHandler.addListener(this);
 
     setAcrylicEffect();
 
@@ -145,7 +154,27 @@ class _WoxAppState extends State<WoxApp> with WindowListener {
   }
 
   @override
+  void onProtocolUrlReceived(String url) {
+    Logger.instance.info(const UuidV4().generate(), "deep link received: $url");
+    //replace %20 with space in the url
+    url = url.replaceAll("%20", " ");
+    // split the command and argument
+    // wox://command?argument=value&argument2=value2
+    var command = url.split("?")[0].split("//")[1];
+    var arguments = url.split("?")[1].split("&");
+    var argumentMap = <String, String>{};
+    for (var argument in arguments) {
+      var key = argument.split("=")[0];
+      var value = argument.split("=")[1];
+      argumentMap[key] = value;
+    }
+
+    WoxApi.instance.onProtocolUrlReceived(command, argumentMap);
+  }
+
+  @override
   void dispose() {
+    protocolHandler.removeListener(this);
     windowManager.removeListener(this);
     super.dispose();
   }

@@ -479,3 +479,18 @@ func (m *Manager) SetActiveWindowName(name string) {
 func (m *Manager) GetActiveWindowName() string {
 	return m.activeWindowName
 }
+
+func (m *Manager) PostDeeplink(ctx context.Context, command string, arguments map[string]string) {
+	logger.Info(ctx, fmt.Sprintf("deeplink: %s, %v", command, arguments))
+
+	if command == "query" {
+		query := arguments["q"]
+		if query != "" {
+			m.ui.ChangeQuery(ctx, share.PlainQuery{
+				QueryType: plugin.QueryTypeInput,
+				QueryText: query,
+			})
+			m.ui.ShowApp(ctx, share.ShowContext{SelectAll: false})
+		}
+	}
+}

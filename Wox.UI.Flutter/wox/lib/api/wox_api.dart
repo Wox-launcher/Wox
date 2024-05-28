@@ -97,4 +97,11 @@ class WoxApi {
       "query": query.toJson(),
     });
   }
+
+  Future<void> onProtocolUrlReceived(String command, Map<String, String> arguments) async {
+    await WoxHttpUtil.instance.postData("/deeplink", {
+      "command": command,
+      "arguments": arguments,
+    });
+  }
 }
