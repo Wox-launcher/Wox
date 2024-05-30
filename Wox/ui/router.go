@@ -741,6 +741,11 @@ func handleDeeplink(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// replace all %20 with space in arguments
+	for key, value := range arguments {
+		arguments[key] = strings.ReplaceAll(value, "%20", " ")
+	}
+
 	GetUIManager().PostDeeplink(ctx, commandResult.String(), arguments)
 
 	writeSuccessResponse(w, "")
