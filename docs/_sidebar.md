@@ -9,6 +9,7 @@
     - [Query Shortcuts](query_shortcuts.md)
     - [Action Panel](action_panel.md)
     - [Selection Query](selection_query.md)
+    - [Clip Query](clip_query.md)
     - [Deep Link](deep_link.md)
 
 - Plugin
