@@ -21,5 +21,6 @@
 
 - Theme
     - [Install Theme](theme.md)
+    - [AI Theme](ai_theme.md)
 
 - [Github](https://github.com/Wox-launcher/Wox)
