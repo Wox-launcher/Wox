@@ -5,6 +5,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"testing"
 	"wox/plugin"
+	"wox/plugin/llm"
 	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
@@ -48,8 +49,12 @@ func (e emptyAPIImpl) OnSettingChanged(ctx context.Context, callback func(key st
 func (e emptyAPIImpl) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
 }
 
-func (e emptyAPIImpl) LLMChat(ctx context.Context, conversations []plugin.LLMConversation) (string, error) {
+func (e emptyAPIImpl) LLMChat(ctx context.Context, conversations []llm.Conversation) (string, error) {
 	return "", nil
+}
+
+func (e emptyAPIImpl) LLMChatStream(ctx context.Context, conversations []llm.Conversation) (llm.ChatStream, error) {
+	return nil, nil
 }
 
 func TestMacRetriever_ParseAppInfo(t *testing.T) {
