@@ -115,10 +115,9 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 现在我想让你根据上面的格式生成一个新的主题，主题的要求是：` + query.Search + `。
 
 有一些注意点需要你遵守：
-1. 你的回答结果必须是JSON格式，且只能回答json相关内容，忽略解释，注释等信息
-2. 主题名称你自己决定，主题ID为随机生成的UUID
-3. 主题作者统一为：Wox launcher AI
-4. IsSystemTheme字段必须为false
+1. 你的回答结果必须是JSON格式,以{开头,以}结尾. 忽略解释，注释等信息
+2. 主题名称你自己决定,但是必须有意义
+3. 背景跟字体需要有区分度，不要让背景跟字体颜色太接近(这里包括正常未选中的结果与被高亮选中的结果)
 `,
 	})
 
@@ -159,6 +158,11 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 			}
 
 			theme.ThemeId = uuid.NewString()
+			theme.ThemeAuthor = "Wox launcher AI"
+			theme.ThemeUrl = "https://www.github.com/wox-launcher/wox"
+			theme.Version = "1.0.0"
+			theme.IsSystem = false
+			theme.ScreenshotUrls = []string{}
 			plugin.GetPluginManager().GetUI().InstallTheme(ctx, theme)
 		})
 		return current

@@ -1,10 +1,12 @@
 {
   "ThemeId": "92dc0ea7-a52f-4b0a-9f0d-7cb36a634860",
-  "ThemeName": "Wox Default Light Theme",
+  "ThemeName": "Wox Light",
+  "Description": "Wox default light theme",
   "ThemeAuthor": "Wox launcher",
   "Version": "1.0.0",
-  "ThemeUrl": "http://www.github.com/wox-launcher/wox",
+  "ThemeUrl": "https://www.github.com/wox-launcher/wox",
   "IsSystemTheme": true,
+  "ScreenshotUrls": [],
   "AppBackgroundColor": "rgba(236, 240, 240, 0.65)",
   "AppPaddingLeft": 10,
   "AppPaddingTop": 10,
@@ -47,7 +49,5 @@
   "PreviewSplitLineColor": "#caced0",
   "PreviewPropertyTitleColor": "#716b6b",
   "PreviewPropertyContentColor": "#716b6b",
-  "PreviewTextSelectionColor": "#529df7",
-  "Description": "Wox default light theme",
-  "ScreenshotUrls": []
+  "PreviewTextSelectionColor": "#529df7"
 }

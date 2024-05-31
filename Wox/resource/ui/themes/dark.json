@@ -1,10 +1,12 @@
 {
   "ThemeId": "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03",
-  "ThemeName": "Wox Default Dark Theme",
+  "ThemeName": "Wox Dark",
+  "Description": "Wox default dark theme",
   "ThemeAuthor": "Wox launcher",
   "Version": "1.0.0",
-  "ThemeUrl": "http://www.github.com/wox-launcher/wox",
+  "ThemeUrl": "https://www.github.com/wox-launcher/wox",
   "IsSystemTheme": true,
+  "ScreenshotUrls": [],
   "AppBackgroundColor": "rgba(0,0,0, 0.65)",
   "AppPaddingLeft": 10,
   "AppPaddingTop": 10,
@@ -47,7 +49,5 @@
   "PreviewSplitLineColor": "#3a474e",
   "PreviewPropertyTitleColor": "#b0b3b5",
   "PreviewPropertyContentColor": "#f0f0f0",
-  "PreviewTextSelectionColor": "rgba(31, 118, 124, 0.8)",
-  "Description": "Wox default dark theme",
-  "ScreenshotUrls": []
+  "PreviewTextSelectionColor": "rgba(31, 118, 124, 0.8)"
 }
