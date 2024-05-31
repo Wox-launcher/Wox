@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"github.com/disintegration/imaging"
 	"github.com/mat/besticon/besticon"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path"
 	"wox/plugin"
+	"wox/plugin/llm"
 	"wox/setting"
 	"wox/util"
 )
@@ -93,4 +95,70 @@ func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (plugin.Wox
 	}
 
 	return woxImage, nil
+}
+
+func createLLMOnRefreshHandler(ctx context.Context,
+	chatStream func(ctx context.Context, conversations []llm.Conversation) (llm.ChatStream, error),
+	conversations []llm.Conversation,
+	shouldStartAnswering func() bool,
+	onAnswering func(plugin.RefreshableResult, string) plugin.RefreshableResult,
+	onAnswerErr func(plugin.RefreshableResult, error) plugin.RefreshableResult,
+	onAnswerFinished func(plugin.RefreshableResult) plugin.RefreshableResult) func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
+
+	var stream llm.ChatStream
+	var creatingStream bool
+	return func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
+		if !shouldStartAnswering() {
+			return current
+		}
+
+		if stream == nil {
+			if creatingStream {
+				util.GetLogger().Info(ctx, "Already creating stream, waiting create finish")
+				return current
+			}
+
+			startTime := util.GetSystemTimestamp()
+			util.GetLogger().Info(ctx, "creating stream")
+			creatingStream = true
+			createdStream, createErr := chatStream(ctx, conversations)
+			creatingStream = false
+			util.GetLogger().Info(ctx, fmt.Sprintf("created stream (cost %d ms)", util.GetSystemTimestamp()-startTime))
+			if createErr != nil {
+				if onAnswerErr != nil {
+					current = onAnswerErr(current, createErr)
+				}
+				current.RefreshInterval = 0 // stop refreshing
+				return current
+			}
+			stream = createdStream
+		}
+
+		util.GetLogger().Info(ctx, fmt.Sprintf("reading stream"))
+		response, streamErr := stream.Receive(ctx)
+		if errors.Is(streamErr, io.EOF) {
+			util.GetLogger().Info(ctx, "read stream completed")
+			if onAnswerFinished != nil {
+				current = onAnswerFinished(current)
+			}
+			current.RefreshInterval = 0 // stop refreshing
+			return current
+		}
+
+		if streamErr != nil {
+			util.GetLogger().Info(ctx, fmt.Sprintf("failed to read stream: %s", streamErr.Error()))
+			if onAnswerErr != nil {
+				current = onAnswerErr(current, streamErr)
+			}
+			current.RefreshInterval = 0 // stop refreshing
+			return current
+		}
+
+		if onAnswering != nil {
+			util.GetLogger().Info(ctx, fmt.Sprintf("streamed %d text", len(response)))
+			current = onAnswering(current, response)
+		}
+
+		return current
+	}
 }

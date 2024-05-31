@@ -27,6 +27,7 @@ require (
 	github.com/otiai10/copy v1.14.0
 	github.com/parsiya/golnk v0.0.0-20221103095132-740a4c27c4ff
 	github.com/petermattis/goid v0.0.0-20240327183114-c42a807a84ba
+	github.com/pkg/errors v0.9.1
 	github.com/robotn/gohook v0.41.0
 	github.com/rs/cors v1.10.1
 	github.com/sahilm/fuzzy v0.1.1

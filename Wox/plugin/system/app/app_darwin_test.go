@@ -48,6 +48,10 @@ func (e emptyAPIImpl) OnSettingChanged(ctx context.Context, callback func(key st
 func (e emptyAPIImpl) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
 }
 
+func (e emptyAPIImpl) LLMChat(ctx context.Context, conversations []plugin.LLMConversation) (string, error) {
+	return "", nil
+}
+
 func TestMacRetriever_ParseAppInfo(t *testing.T) {
 	if util.IsMacOS() {
 		appRetriever.UpdateAPI(emptyAPIImpl{})

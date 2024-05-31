@@ -7,7 +7,7 @@ import (
 )
 
 type OpenAIProvider struct {
-	connectContext providerConnectContext
+	connectContext ProviderConnectContext
 	client         *openai.Client
 }
 
@@ -16,7 +16,7 @@ type OpenAIProviderStream struct {
 	conversations []Conversation
 }
 
-func NewOpenAIClient(ctx context.Context, connectContext providerConnectContext) Provider {
+func NewOpenAIClient(ctx context.Context, connectContext ProviderConnectContext) Provider {
 	return &OpenAIProvider{connectContext: connectContext}
 }
 
@@ -32,7 +32,7 @@ func (o *OpenAIProvider) ensureClient(ctx context.Context) error {
 	return nil
 }
 
-func (o *OpenAIProvider) ChatStream(ctx context.Context, model model, conversations []Conversation) (ProviderChatStream, error) {
+func (o *OpenAIProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
 	if ensureClientErr := o.ensureClient(ctx); ensureClientErr != nil {
 		return nil, ensureClientErr
 	}
@@ -49,7 +49,7 @@ func (o *OpenAIProvider) ChatStream(ctx context.Context, model model, conversati
 	return &OpenAIProviderStream{conversations: conversations, stream: createdStream}, nil
 }
 
-func (o *OpenAIProvider) Chat(ctx context.Context, model model, conversations []Conversation) (string, error) {
+func (o *OpenAIProvider) Chat(ctx context.Context, model Model, conversations []Conversation) (string, error) {
 	if ensureClientErr := o.ensureClient(ctx); ensureClientErr != nil {
 		return "", ensureClientErr
 	}
@@ -65,12 +65,12 @@ func (o *OpenAIProvider) Chat(ctx context.Context, model model, conversations []
 	return resp.Choices[0].Message.Content, nil
 }
 
-func (o *OpenAIProvider) Models(ctx context.Context) ([]model, error) {
-	return []model{
+func (o *OpenAIProvider) Models(ctx context.Context) ([]Model, error) {
+	return []Model{
 		{
 			DisplayName: "chatgpt-3.5-turbo",
 			Name:        "gpt-3.5-turbo",
-			Provider:    modelProviderNameOpenAI,
+			Provider:    ModelProviderNameOpenAI,
 		},
 	}, nil
 }
@@ -78,6 +78,8 @@ func (o *OpenAIProvider) Models(ctx context.Context) ([]model, error) {
 func (s *OpenAIProviderStream) Receive(ctx context.Context) (string, error) {
 	response, err := s.stream.Recv()
 	if err != nil {
+		s.stream.Close()
+
 		// no more messages
 		if err == io.EOF {
 			return "", io.EOF
@@ -90,10 +92,6 @@ func (s *OpenAIProviderStream) Receive(ctx context.Context) (string, error) {
 	}
 
 	return response.Choices[0].Delta.Content, nil
-}
-
-func (s *OpenAIProviderStream) Close(ctx context.Context) {
-	s.stream.Close()
 }
 
 func (o *OpenAIProvider) convertConversations(conversations []Conversation) []openai.ChatCompletionMessage {

@@ -6,6 +6,7 @@ import (
 	"github.com/samber/lo"
 	"path"
 	"wox/i18n"
+	"wox/plugin/llm"
 	"wox/setting"
 	"wox/setting/definition"
 	"wox/share"
@@ -33,6 +34,8 @@ type API interface {
 	OnSettingChanged(ctx context.Context, callback func(key string, value string))
 	OnGetDynamicSetting(ctx context.Context, callback func(key string) definition.PluginSettingDefinitionItem)
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
+	LLMChat(ctx context.Context, conversations []llm.Conversation) (string, error)
+	LLMChatStream(ctx context.Context, conversations []llm.Conversation) (llm.ChatStream, error)
 }
 
 type APIImpl struct {
@@ -150,6 +153,24 @@ func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []Metadata
 		}
 	})
 	a.pluginInstance.SaveSetting(ctx)
+}
+
+func (a *APIImpl) LLMChat(ctx context.Context, conversations []llm.Conversation) (string, error) {
+	provider, model := llm.GetInstance()
+	if provider == nil {
+		return "", fmt.Errorf("no LLM provider found")
+	}
+
+	return provider.Chat(ctx, model, conversations)
+}
+
+func (a *APIImpl) LLMChatStream(ctx context.Context, conversations []llm.Conversation) (llm.ChatStream, error) {
+	provider, model := llm.GetInstance()
+	if provider == nil {
+		return nil, fmt.Errorf("no LLM provider found")
+	}
+
+	return provider.ChatStream(ctx, model, conversations)
 }
 
 func NewAPI(instance *Instance) API {

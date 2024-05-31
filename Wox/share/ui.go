@@ -45,6 +45,7 @@ type UI interface {
 	GetServerPort(ctx context.Context) int
 	GetAllThemes(ctx context.Context) []Theme
 	ChangeTheme(ctx context.Context, theme Theme)
+	InstallTheme(ctx context.Context, theme Theme)
 }
 
 type ShowContext struct {

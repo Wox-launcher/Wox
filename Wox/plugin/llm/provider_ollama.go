@@ -11,12 +11,11 @@ import (
 	"github.com/tmc/langchaingo/llms/ollama"
 	"github.com/tmc/langchaingo/schema"
 	"io"
-	"wox/plugin"
 	"wox/util"
 )
 
 type OllamaProvider struct {
-	connectContext providerConnectContext
+	connectContext ProviderConnectContext
 	client         *ollama.LLM
 }
 
@@ -25,7 +24,7 @@ type OllamaProviderStream struct {
 	reader        io.Reader
 }
 
-func NewOllamaProvider(ctx context.Context, connectContext providerConnectContext) Provider {
+func NewOllamaProvider(ctx context.Context, connectContext ProviderConnectContext) Provider {
 	return &OllamaProvider{connectContext: connectContext}
 }
 
@@ -33,7 +32,7 @@ func (o *OllamaProvider) Close(ctx context.Context) error {
 	return nil
 }
 
-func (o *OllamaProvider) ChatStream(ctx context.Context, model model, conversations []Conversation) (ProviderChatStream, error) {
+func (o *OllamaProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
 	client, clientErr := ollama.New(ollama.WithServerURL(o.connectContext.Host), ollama.WithModel(model.Name))
 	if clientErr != nil {
 		return nil, clientErr
@@ -43,7 +42,6 @@ func (o *OllamaProvider) ChatStream(ctx context.Context, model model, conversati
 	r, w := nio.Pipe(buf)
 	util.Go(ctx, "ollama chat stream", func() {
 		_, err := client.GenerateContent(ctx, o.convertConversations(conversations), llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-			o.connectContext.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("OLLAMA: receive chunks from model: %s", string(chunk)))
 			w.Write(chunk)
 			return nil
 		}))
@@ -57,7 +55,7 @@ func (o *OllamaProvider) ChatStream(ctx context.Context, model model, conversati
 	return &OllamaProviderStream{conversations: conversations, reader: r}, nil
 }
 
-func (o *OllamaProvider) Chat(ctx context.Context, model model, conversations []Conversation) (string, error) {
+func (o *OllamaProvider) Chat(ctx context.Context, model Model, conversations []Conversation) (string, error) {
 	client, clientErr := ollama.New(ollama.WithServerURL(o.connectContext.Host), ollama.WithModel(model.Name))
 	if clientErr != nil {
 		return "", clientErr
@@ -71,17 +69,17 @@ func (o *OllamaProvider) Chat(ctx context.Context, model model, conversations []
 	return response.Choices[0].Content, nil
 }
 
-func (o *OllamaProvider) Models(ctx context.Context) (models []model, err error) {
+func (o *OllamaProvider) Models(ctx context.Context) (models []Model, err error) {
 	body, err := util.HttpGet(ctx, o.connectContext.Host+"/api/tags")
 	if err != nil {
 		return nil, err
 	}
 
 	gjson.Get(string(body), "models.#.name").ForEach(func(key, value gjson.Result) bool {
-		models = append(models, model{
+		models = append(models, Model{
 			DisplayName: value.String(),
 			Name:        value.String(),
-			Provider:    modelProviderNameOllama,
+			Provider:    ModelProviderNameOllama,
 		})
 		return true
 	})
@@ -115,8 +113,4 @@ func (s *OllamaProviderStream) Receive(ctx context.Context) (string, error) {
 	resp := string(buf[:n])
 	util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("OLLAMA: Send response: %s", resp))
 	return resp, nil
-}
-
-func (s *OllamaProviderStream) Close(ctx context.Context) {
-	// no-op
 }

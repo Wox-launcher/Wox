@@ -92,9 +92,6 @@ func parseThemes(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err != nil {
-		return err
-	}
 	if len(dir) == 0 {
 		return fmt.Errorf("no theme file found")
 	}

@@ -11,7 +11,7 @@ import (
 )
 
 type GoogleProvider struct {
-	connectContext providerConnectContext
+	connectContext ProviderConnectContext
 	client         *genai.Client
 }
 
@@ -20,7 +20,7 @@ type GoogleProviderStream struct {
 	conversations []Conversation
 }
 
-func NewGoogleProvider(ctx context.Context, connectContext providerConnectContext) Provider {
+func NewGoogleProvider(ctx context.Context, connectContext ProviderConnectContext) Provider {
 	return &GoogleProvider{connectContext: connectContext}
 }
 
@@ -44,7 +44,7 @@ func (g *GoogleProvider) Close(ctx context.Context) error {
 	return nil
 }
 
-func (g *GoogleProvider) ChatStream(ctx context.Context, model model, conversations []Conversation) (ProviderChatStream, error) {
+func (g *GoogleProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
 	if ensureClientErr := g.ensureClient(ctx); ensureClientErr != nil {
 		return nil, ensureClientErr
 	}
@@ -57,7 +57,7 @@ func (g *GoogleProvider) ChatStream(ctx context.Context, model model, conversati
 	return &GoogleProviderStream{conversations: conversations, stream: stream}, nil
 }
 
-func (g *GoogleProvider) Chat(ctx context.Context, model model, conversations []Conversation) (string, error) {
+func (g *GoogleProvider) Chat(ctx context.Context, model Model, conversations []Conversation) (string, error) {
 	if ensureClientErr := g.ensureClient(ctx); ensureClientErr != nil {
 		return "", ensureClientErr
 	}
@@ -80,17 +80,17 @@ func (g *GoogleProvider) Chat(ctx context.Context, model model, conversations []
 	return "", errors.New("no text in response")
 }
 
-func (g *GoogleProvider) Models(ctx context.Context) ([]model, error) {
-	return []model{
+func (g *GoogleProvider) Models(ctx context.Context) ([]Model, error) {
+	return []Model{
 		{
 			DisplayName: "google-gemini-1.0-pro",
 			Name:        "gemini-1.0-pro",
-			Provider:    modelProviderNameGoogle,
+			Provider:    ModelProviderNameGoogle,
 		},
 		{
 			DisplayName: "google-gemini-1.5-pro",
 			Name:        "gemini-1.5-pro",
-			Provider:    modelProviderNameGoogle,
+			Provider:    ModelProviderNameGoogle,
 		},
 	}, nil
 }

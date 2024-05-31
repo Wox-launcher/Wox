@@ -855,6 +855,11 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 	newResult := resultCache.Refresh(ctx, refreshableResult)
 	newResult = m.PolishRefreshableResult(ctx, resultCache.PluginInstance, refreshableResultWithId.ResultId, newResult)
 
+	// update result cache
+	resultCache.ResultTitle = newResult.Title
+	resultCache.ResultSubTitle = newResult.SubTitle
+	resultCache.ContextData = newResult.ContextData
+
 	return RefreshableResultWithResultId{
 		ResultId:        refreshableResultWithId.ResultId,
 		Title:           newResult.Title,

@@ -25,7 +25,6 @@ import _ "wox/plugin/host" // import all hosts
 import _ "wox/plugin/system"
 import _ "wox/plugin/system/app"
 import _ "wox/plugin/system/calculator"
-import _ "wox/plugin/system/llm"
 import _ "wox/plugin/system/file"
 
 func main() {

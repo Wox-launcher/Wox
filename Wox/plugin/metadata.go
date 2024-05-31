@@ -25,6 +25,9 @@ const (
 
 	// enable this feature to get query env in plugin
 	MetadataFeatureQueryEnv MetadataFeatureName = "queryEnv"
+
+	// enable this feature to chat with llm model in plugin
+	MetadataFeatureLLMChat MetadataFeatureName = "llmChat"
 )
 
 // Metadata parsed from plugin.json, see `Plugin.json.md` for more detail

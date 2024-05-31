@@ -58,6 +58,11 @@ func (u *uiImpl) ChangeTheme(ctx context.Context, theme share.Theme) {
 	u.invokeWebsocketMethod(ctx, "ChangeTheme", theme)
 }
 
+func (u *uiImpl) InstallTheme(ctx context.Context, theme share.Theme) {
+	logger.Info(ctx, fmt.Sprintf("install theme: %s", theme.ThemeName))
+	GetUIManager().AddTheme(ctx, theme)
+}
+
 func (u *uiImpl) OpenSettingWindow(ctx context.Context, windowContext share.SettingWindowContext) {
 	u.invokeWebsocketMethod(ctx, "OpenSettingWindow", windowContext)
 }
