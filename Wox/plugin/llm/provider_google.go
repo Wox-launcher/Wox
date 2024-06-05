@@ -57,29 +57,6 @@ func (g *GoogleProvider) ChatStream(ctx context.Context, model Model, conversati
 	return &GoogleProviderStream{conversations: conversations, stream: stream}, nil
 }
 
-func (g *GoogleProvider) Chat(ctx context.Context, model Model, conversations []Conversation) (string, error) {
-	if ensureClientErr := g.ensureClient(ctx); ensureClientErr != nil {
-		return "", ensureClientErr
-	}
-
-	chatMessages, lastConversation := g.convertConversations(conversations)
-	aiModel := g.client.GenerativeModel(model.Name)
-	session := aiModel.StartChat()
-	session.History = chatMessages
-	response, sendErr := session.SendMessage(ctx, lastConversation.Parts...)
-	if sendErr != nil {
-		return "", sendErr
-	}
-
-	for _, part := range response.Candidates[0].Content.Parts {
-		if v, ok := part.(genai.Text); ok {
-			return string(v), nil
-		}
-	}
-
-	return "", errors.New("no text in response")
-}
-
 func (g *GoogleProvider) Models(ctx context.Context) ([]Model, error) {
 	return []Model{
 		{

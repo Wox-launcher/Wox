@@ -49,22 +49,6 @@ func (o *OpenAIProvider) ChatStream(ctx context.Context, model Model, conversati
 	return &OpenAIProviderStream{conversations: conversations, stream: createdStream}, nil
 }
 
-func (o *OpenAIProvider) Chat(ctx context.Context, model Model, conversations []Conversation) (string, error) {
-	if ensureClientErr := o.ensureClient(ctx); ensureClientErr != nil {
-		return "", ensureClientErr
-	}
-
-	resp, createErr := o.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model:    model.Name,
-		Messages: o.convertConversations(conversations),
-	})
-	if createErr != nil {
-		return "", createErr
-	}
-
-	return resp.Choices[0].Message.Content, nil
-}
-
 func (o *OpenAIProvider) Models(ctx context.Context) ([]Model, error) {
 	return []Model{
 		{

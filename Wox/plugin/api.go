@@ -2,8 +2,10 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/samber/lo"
+	"io"
 	"path"
 	"wox/i18n"
 	"wox/plugin/llm"
@@ -34,8 +36,7 @@ type API interface {
 	OnSettingChanged(ctx context.Context, callback func(key string, value string))
 	OnGetDynamicSetting(ctx context.Context, callback func(key string) definition.PluginSettingDefinitionItem)
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
-	LLMChat(ctx context.Context, conversations []llm.Conversation) (string, error)
-	LLMChatStream(ctx context.Context, conversations []llm.Conversation) (llm.ChatStream, error)
+	LLMChatStream(ctx context.Context, conversations []llm.Conversation, callback llm.ChatStreamFunc) error
 }
 
 type APIImpl struct {
@@ -155,22 +156,40 @@ func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []Metadata
 	a.pluginInstance.SaveSetting(ctx)
 }
 
-func (a *APIImpl) LLMChat(ctx context.Context, conversations []llm.Conversation) (string, error) {
+func (a *APIImpl) LLMChatStream(ctx context.Context, conversations []llm.Conversation, callback llm.ChatStreamFunc) error {
 	provider, model := llm.GetInstance()
 	if provider == nil {
-		return "", fmt.Errorf("no LLM provider found")
+		return fmt.Errorf("no LLM provider found")
 	}
 
-	return provider.Chat(ctx, model, conversations)
-}
-
-func (a *APIImpl) LLMChatStream(ctx context.Context, conversations []llm.Conversation) (llm.ChatStream, error) {
-	provider, model := llm.GetInstance()
-	if provider == nil {
-		return nil, fmt.Errorf("no LLM provider found")
+	stream, err := provider.ChatStream(ctx, model, conversations)
+	if err != nil {
+		return err
 	}
 
-	return provider.ChatStream(ctx, model, conversations)
+	if callback != nil {
+		util.Go(ctx, "llm chat stream", func() {
+			for {
+				util.GetLogger().Info(ctx, fmt.Sprintf("reading chat stream"))
+				response, streamErr := stream.Receive(ctx)
+				if errors.Is(streamErr, io.EOF) {
+					util.GetLogger().Info(ctx, "read stream completed")
+					callback(llm.ChatStreamTypeFinished, "")
+					return
+				}
+
+				if streamErr != nil {
+					util.GetLogger().Info(ctx, fmt.Sprintf("failed to read stream: %s", streamErr.Error()))
+					callback(llm.ChatStreamTypeError, streamErr.Error())
+					return
+				}
+
+				callback(llm.ChatStreamTypeStreaming, response)
+			}
+		})
+	}
+
+	return nil
 }
 
 func NewAPI(instance *Instance) API {

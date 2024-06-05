@@ -121,50 +121,47 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 `,
 	})
 
-	onAnswering := func(current plugin.RefreshableResult, deltaAnswer string) plugin.RefreshableResult {
+	onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
 		current.SubTitle = "Generating..."
 		current.Preview.PreviewData += deltaAnswer
 		current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
-		current.ContextData = current.Preview.PreviewData
+
+		if isFinished {
+			current.RefreshInterval = 0 // stop refreshing
+			current.SubTitle = "Theme generated"
+
+			var themeJson = current.Preview.PreviewData
+			util.Go(ctx, "theme generated", func() {
+				// use regex to get json snippet from the whole text
+				group := util.FindRegexGroup(`(?ms){(?P<json>.*?)}`, themeJson)
+				if len(group) == 0 {
+					c.api.Notify(ctx, "Failed to extract json", "")
+					return
+				}
+
+				var jsonTheme = fmt.Sprintf("{%s}", group["json"])
+				var theme share.Theme
+				unmarshalErr := json.Unmarshal([]byte(jsonTheme), &theme)
+				if unmarshalErr != nil {
+					c.api.Notify(ctx, "Failed to unmarshal theme json", unmarshalErr.Error())
+					return
+				}
+
+				theme.ThemeId = uuid.NewString()
+				theme.ThemeAuthor = "Wox launcher AI"
+				theme.ThemeUrl = "https://www.github.com/wox-launcher/wox"
+				theme.Version = "1.0.0"
+				theme.IsSystem = false
+				theme.ScreenshotUrls = []string{}
+				plugin.GetPluginManager().GetUI().InstallTheme(ctx, theme)
+			})
+		}
+
 		return current
 	}
 	onAnswerErr := func(current plugin.RefreshableResult, err error) plugin.RefreshableResult {
 		current.Preview.PreviewData += fmt.Sprintf("\n\nError: %s", err.Error())
 		current.RefreshInterval = 0 // stop refreshing
-		return current
-	}
-	onAnswerFinished := func(current plugin.RefreshableResult) plugin.RefreshableResult {
-		current.RefreshInterval = 0 // stop refreshing
-		current.Title = "Theme generated"
-		util.Go(ctx, "theme generated", func() {
-			themeJson := current.ContextData
-			if themeJson == "" {
-				return
-			}
-
-			// use regex to get json snippet from the whole text
-			group := util.FindRegexGroup(`(?ms){(?P<json>.*?)}`, themeJson)
-			if len(group) == 0 {
-				c.api.Notify(ctx, "Failed to extract json", "")
-				return
-			}
-
-			var jsonTheme = fmt.Sprintf("{%s}", group["json"])
-			var theme share.Theme
-			unmarshalErr := json.Unmarshal([]byte(jsonTheme), &theme)
-			if unmarshalErr != nil {
-				c.api.Notify(ctx, "Failed to unmarshal theme json", unmarshalErr.Error())
-				return
-			}
-
-			theme.ThemeId = uuid.NewString()
-			theme.ThemeAuthor = "Wox launcher AI"
-			theme.ThemeUrl = "https://www.github.com/wox-launcher/wox"
-			theme.Version = "1.0.0"
-			theme.IsSystem = false
-			theme.ScreenshotUrls = []string{}
-			plugin.GetPluginManager().GetUI().InstallTheme(ctx, theme)
-		})
 		return current
 	}
 
@@ -178,7 +175,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 			RefreshInterval: 100,
 			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.LLMChatStream, conversations, func() bool {
 				return startGenerate
-			}, onAnswering, onAnswerErr, onAnswerFinished),
+			}, onAnswering, onAnswerErr),
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "Apply",

@@ -31,8 +31,8 @@ func (g *GroqProvider) Close(ctx context.Context) error {
 	return nil
 }
 
-func (o *GroqProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
-	client, clientErr := openai.New(openai.WithModel(model.Name), openai.WithBaseURL("https://api.groq.com/openai/v1"), openai.WithToken(o.connectContext.ApiKey))
+func (g *GroqProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
+	client, clientErr := openai.New(openai.WithModel(model.Name), openai.WithBaseURL("https://api.groq.com/openai/v1"), openai.WithToken(g.connectContext.ApiKey))
 	if clientErr != nil {
 		return nil, clientErr
 	}
@@ -40,7 +40,7 @@ func (o *GroqProvider) ChatStream(ctx context.Context, model Model, conversation
 	buf := buffer.New(4 * 1024) // 4KB In memory Buffer
 	r, w := nio.Pipe(buf)
 	util.Go(ctx, "Groq chat stream", func() {
-		_, err := client.GenerateContent(ctx, o.convertConversations(conversations), llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
+		_, err := client.GenerateContent(ctx, g.convertConversations(conversations), llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
 			w.Write(chunk)
 			return nil
 		}))
@@ -54,21 +54,7 @@ func (o *GroqProvider) ChatStream(ctx context.Context, model Model, conversation
 	return &GroqProviderStream{conversations: conversations, reader: r}, nil
 }
 
-func (o *GroqProvider) Chat(ctx context.Context, model Model, conversations []Conversation) (string, error) {
-	client, clientErr := openai.New(openai.WithModel(model.Name), openai.WithBaseURL("https://api.groq.com/openai/v1"), openai.WithToken(o.connectContext.ApiKey))
-	if clientErr != nil {
-		return "", clientErr
-	}
-
-	response, responseErr := client.GenerateContent(ctx, o.convertConversations(conversations))
-	if responseErr != nil {
-		return "", responseErr
-	}
-
-	return response.Choices[0].Content, nil
-}
-
-func (o *GroqProvider) Models(ctx context.Context) (models []Model, err error) {
+func (g *GroqProvider) Models(ctx context.Context) (models []Model, err error) {
 	return []Model{
 		{
 			Name:        "llama3-8b-8192",
@@ -93,7 +79,7 @@ func (o *GroqProvider) Models(ctx context.Context) (models []Model, err error) {
 	}, nil
 }
 
-func (o *GroqProvider) convertConversations(conversations []Conversation) (chatMessages []llms.MessageContent) {
+func (g *GroqProvider) convertConversations(conversations []Conversation) (chatMessages []llms.MessageContent) {
 	for _, conversation := range conversations {
 		if conversation.Role == ConversationRoleUser {
 			chatMessages = append(chatMessages, llms.TextParts(schema.ChatMessageTypeHuman, conversation.Text))

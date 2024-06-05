@@ -36,9 +36,18 @@ type Model struct {
 type Provider interface {
 	Close(ctx context.Context) error
 	ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error)
-	Chat(ctx context.Context, model Model, conversations []Conversation) (string, error)
 	Models(ctx context.Context) ([]Model, error)
 }
+
+type ChatStreamDataType string
+
+const (
+	ChatStreamTypeStreaming ChatStreamDataType = "streaming"
+	ChatStreamTypeFinished  ChatStreamDataType = "finished"
+	ChatStreamTypeError     ChatStreamDataType = "error"
+)
+
+type ChatStreamFunc func(t ChatStreamDataType, data string)
 
 type ChatStream interface {
 	Receive(ctx context.Context) (string, error) // will return io.EOF if no more messages

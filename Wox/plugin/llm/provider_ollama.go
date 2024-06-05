@@ -55,20 +55,6 @@ func (o *OllamaProvider) ChatStream(ctx context.Context, model Model, conversati
 	return &OllamaProviderStream{conversations: conversations, reader: r}, nil
 }
 
-func (o *OllamaProvider) Chat(ctx context.Context, model Model, conversations []Conversation) (string, error) {
-	client, clientErr := ollama.New(ollama.WithServerURL(o.connectContext.Host), ollama.WithModel(model.Name))
-	if clientErr != nil {
-		return "", clientErr
-	}
-
-	response, responseErr := client.GenerateContent(ctx, o.convertConversations(conversations))
-	if responseErr != nil {
-		return "", responseErr
-	}
-
-	return response.Choices[0].Content, nil
-}
-
 func (o *OllamaProvider) Models(ctx context.Context) (models []Model, err error) {
 	body, err := util.HttpGet(ctx, o.connectContext.Host+"/api/tags")
 	if err != nil {
