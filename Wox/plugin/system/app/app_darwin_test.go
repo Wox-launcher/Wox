@@ -49,12 +49,8 @@ func (e emptyAPIImpl) OnSettingChanged(ctx context.Context, callback func(key st
 func (e emptyAPIImpl) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
 }
 
-func (e emptyAPIImpl) LLMChat(ctx context.Context, conversations []llm.Conversation) (string, error) {
-	return "", nil
-}
-
-func (e emptyAPIImpl) LLMChatStream(ctx context.Context, conversations []llm.Conversation) (llm.ChatStream, error) {
-	return nil, nil
+func (e emptyAPIImpl) LLMChatStream(ctx context.Context, conversations []llm.Conversation, callback llm.ChatStreamFunc) error {
+	return nil
 }
 
 func TestMacRetriever_ParseAppInfo(t *testing.T) {
