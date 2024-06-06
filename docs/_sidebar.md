@@ -1,6 +1,7 @@
 - Getting started
 
     - [Install](install.md)
+    - [Uninstall](uninstall.md)
 
 - Introduction
 
