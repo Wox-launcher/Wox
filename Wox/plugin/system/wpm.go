@@ -497,6 +497,13 @@ func (w *WPMPlugin) reloadDevCommand(ctx context.Context) []plugin.QueryResult {
 				{
 					Name: "Reload",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						// delete all image caches, otherwise icon with same name will not be reloaded
+						location := util.GetLocation()
+						imageCacheDirectory := location.GetImageCacheDirectory()
+						if _, err := os.Stat(imageCacheDirectory); err == nil {
+							os.RemoveAll(imageCacheDirectory)
+						}
+
 						w.reloadAllDevPlugins(ctx)
 						util.Go(ctx, "reload dev plugins in dist", func() {
 							newCtx := util.NewTraceContext()
