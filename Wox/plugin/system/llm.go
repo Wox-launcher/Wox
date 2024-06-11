@@ -151,7 +151,7 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 				Name: plugin.MetadataFeatureQuerySelection,
 			},
 			{
-				Name: plugin.MetadataFeatureLLMChat,
+				Name: plugin.MetadataFeatureLLM,
 			},
 		},
 	}
@@ -509,7 +509,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 		Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
 		Icon:            llmIcon,
 		RefreshInterval: 100,
-		OnRefresh: createLLMOnRefreshHandler(ctx, c.api.LLMChatStream, conversations, func() bool {
+		OnRefresh: createLLMOnRefreshHandler(ctx, c.api.LLMStream, conversations, func() bool {
 			return true
 		}, onAnswering, onAnswerErr),
 		Actions: []plugin.QueryResultAction{

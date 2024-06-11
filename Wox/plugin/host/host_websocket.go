@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 	"wox/plugin"
+	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
 )
@@ -331,6 +332,53 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 				"Value":      value,
 			})
 		})
+		w.sendResponseToHost(ctx, request, "")
+	case "OnGetDynamicSetting":
+		callbackId, exist := request.Params["callbackId"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] OnGetDynamicSetting method must have a callbackId parameter", request.PluginName))
+			return
+		}
+
+		metadata := pluginInstance.Metadata
+		pluginInstance.API.OnGetDynamicSetting(ctx, func(key string) definition.PluginSettingDefinitionItem {
+			result, err := w.invokeMethod(ctx, metadata, "onGetDynamicSetting", map[string]string{
+				"CallbackId": callbackId,
+				"Key":        key,
+			})
+			if err != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to get dynamic setting: %s", request.PluginName, err))
+				return definition.PluginSettingDefinitionItem{
+					Type: definition.PluginSettingDefinitionTypeLabel,
+					Value: &definition.PluginSettingValueLabel{
+						Content: fmt.Sprintf("failed to get dynamic setting: %s", err),
+					},
+				}
+			}
+
+			var setting definition.PluginSettingDefinitionItem
+			unmarshalErr := json.Unmarshal([]byte(result.(string)), &setting)
+			if unmarshalErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal dynamic setting: %s", request.PluginName, unmarshalErr))
+				return definition.PluginSettingDefinitionItem{
+					Type: definition.PluginSettingDefinitionTypeLabel,
+					Value: &definition.PluginSettingValueLabel{
+						Content: fmt.Sprintf("failed to unmarshal dynamic setting: %s", unmarshalErr),
+					},
+				}
+			}
+
+			return setting
+		})
+	case "RegisterQueryCommands":
+		var commands []plugin.MetadataCommand
+		unmarshalErr := json.Unmarshal([]byte(request.Params["commands"]), &commands)
+		if unmarshalErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal commands: %s", request.PluginName, unmarshalErr))
+			return
+		}
+
+		pluginInstance.API.RegisterQueryCommands(ctx, commands)
 		w.sendResponseToHost(ctx, request, "")
 	}
 }

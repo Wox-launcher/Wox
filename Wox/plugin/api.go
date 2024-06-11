@@ -36,7 +36,7 @@ type API interface {
 	OnSettingChanged(ctx context.Context, callback func(key string, value string))
 	OnGetDynamicSetting(ctx context.Context, callback func(key string) definition.PluginSettingDefinitionItem)
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
-	LLMChatStream(ctx context.Context, conversations []llm.Conversation, callback llm.ChatStreamFunc) error
+	LLMStream(ctx context.Context, conversations []llm.Conversation, callback llm.ChatStreamFunc) error
 }
 
 type APIImpl struct {
@@ -156,7 +156,12 @@ func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []Metadata
 	a.pluginInstance.SaveSetting(ctx)
 }
 
-func (a *APIImpl) LLMChatStream(ctx context.Context, conversations []llm.Conversation, callback llm.ChatStreamFunc) error {
+func (a *APIImpl) LLMStream(ctx context.Context, conversations []llm.Conversation, callback llm.ChatStreamFunc) error {
+	//check if plugin has the feature permission
+	if !a.pluginInstance.Metadata.IsSupportFeature(MetadataFeatureLLM) {
+		return fmt.Errorf("plugin has no access to llm feature")
+	}
+
 	provider, model := llm.GetInstance()
 	if provider == nil {
 		return fmt.Errorf("no LLM provider found")

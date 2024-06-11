@@ -79,7 +79,10 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 							Tooltip: "i18n:plugin_websearch_trigger_keyword_tooltip",
 							Type:    definition.PluginSettingValueTableColumnTypeText,
 							Validators: []validator.PluginSettingValidator{
-								&validator.PluginSettingValidatorNotEmpty{},
+								{
+									Type:  validator.PluginSettingValidatorTypeNotEmpty,
+									Value: &validator.PluginSettingValidatorNotEmpty{},
+								},
 							},
 							Width: 60,
 						},
@@ -89,7 +92,10 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 							Tooltip: "i18n:plugin_websearch_title_tooltip",
 							Type:    definition.PluginSettingValueTableColumnTypeText,
 							Validators: []validator.PluginSettingValidator{
-								&validator.PluginSettingValidatorNotEmpty{},
+								{
+									Type:  validator.PluginSettingValidatorTypeNotEmpty,
+									Value: &validator.PluginSettingValidatorNotEmpty{},
+								},
 							},
 						},
 						{
@@ -99,7 +105,10 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 							HideInTable: true,
 							Type:        definition.PluginSettingValueTableColumnTypeTextList,
 							Validators: []validator.PluginSettingValidator{
-								&validator.PluginSettingValidatorNotEmpty{},
+								{
+									Type:  validator.PluginSettingValidatorTypeNotEmpty,
+									Value: &validator.PluginSettingValidatorNotEmpty{},
+								},
 							},
 						},
 						{

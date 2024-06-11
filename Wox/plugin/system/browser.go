@@ -73,7 +73,7 @@ func (c *BrowserPlugin) GetMetadata() plugin.Metadata {
 		},
 		Features: []plugin.MetadataFeature{
 			{
-				Name: "queryEnv",
+				Name: plugin.MetadataFeatureQueryEnv,
 				Params: map[string]string{
 					"requireActiveWindowName": "true",
 					"requireActiveBrowserUrl": "true",
@@ -92,8 +92,11 @@ func (c *BrowserPlugin) GetMetadata() plugin.Metadata {
 						PaddingRight: 10,
 					},
 					Validators: []validator.PluginSettingValidator{
-						&validator.PluginSettingValidatorIsNumber{
-							IsInteger: true,
+						{
+							Type: validator.PluginSettingValidatorTypeIsNumber,
+							Value: &validator.PluginSettingValidatorIsNumber{
+								IsInteger: true,
+							},
 						},
 					},
 				},

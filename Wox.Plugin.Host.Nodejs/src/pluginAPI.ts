@@ -5,18 +5,22 @@ import * as crypto from "crypto"
 import { waitingForResponse } from "./index"
 import Deferred from "promise-deferred"
 import { logger } from "./logger"
+import { llm } from "@wox-launcher/wox-plugin/types/llm"
+import { MetadataCommand, PluginSettingDefinitionItem } from "@wox-launcher/wox-plugin/types/setting"
 
 export class PluginAPI implements PublicAPI {
   ws: WebSocket
   pluginId: string
   pluginName: string
   settingChangeCallbacks: Map<string, (key: string, value: string) => void>
+  getDynamicSettingCallbacks: Map<string, (key: string) => PluginSettingDefinitionItem>
 
   constructor(ws: WebSocket, pluginId: string, pluginName: string) {
     this.ws = ws
     this.pluginId = pluginId
     this.pluginName = pluginName
     this.settingChangeCallbacks = new Map<string, (key: string, value: string) => void>()
+    this.getDynamicSettingCallbacks = new Map<string, (key: string) => PluginSettingDefinitionItem>()
   }
 
   async invokeMethod(ctx: Context, method: string, params: { [key: string]: string }): Promise<unknown> {
@@ -87,5 +91,23 @@ export class PluginAPI implements PublicAPI {
     const callbackId = crypto.randomUUID()
     this.settingChangeCallbacks.set(callbackId, callback)
     await this.invokeMethod(ctx, "OnPluginSettingChanged", { callbackId })
+  }
+
+  async OnGetDynamicSetting(ctx: Context, callback: (key: string) => PluginSettingDefinitionItem): Promise<void> {
+    const callbackId = crypto.randomUUID()
+    this.getDynamicSettingCallbacks.set(callbackId, callback)
+    await this.invokeMethod(ctx, "OnGetDynamicSetting", { callbackId })
+  }
+
+  async RegisterQueryCommands(ctx: Context, commands: MetadataCommand[]): Promise<void> {
+    await this.invokeMethod(ctx, "RegisterQueryCommands", { commands: JSON.stringify(commands) })
+  }
+
+  async LLMStream(ctx: Context, conversations: llm.Conversation[], callback: llm.ChatStreamFunc): Promise<void> {
+    const callbackId = crypto.randomUUID()
+    await this.invokeMethod(ctx, "LLMStream", { callbackId })
+
+    //TODO: implement LLMStream
+    return null
   }
 }

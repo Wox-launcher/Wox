@@ -60,6 +60,8 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
       return unloadPlugin(ctx, request)
     case "onPluginSettingChange":
       return onPluginSettingChange(ctx, request)
+    case "onGetDynamicSetting":
+      return onGetDynamicSetting(ctx, request)
     default:
       logger.info(ctx, `unknown method handler: ${request.Method}`)
       throw new Error(`unknown method handler: ${request.Method}`)
@@ -140,6 +142,24 @@ async function onPluginSettingChange(ctx: Context, request: PluginJsonRpcRequest
   const settingValue = request.Params.Value
   const callbackId = request.Params.CallbackId
   plugin.API.settingChangeCallbacks.get(callbackId)?.(settingKey, settingValue)
+}
+
+async function onGetDynamicSetting(ctx: Context, request: PluginJsonRpcRequest) {
+  const plugin = pluginInstances.get(request.PluginId)
+  if (plugin === undefined || plugin === null) {
+    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+  }
+
+  const settingKey = request.Params.Key
+  const callbackId = request.Params.CallbackId
+  const setting = plugin.API.getDynamicSettingCallbacks.get(callbackId)?.(settingKey)
+  if (setting === undefined || setting === null) {
+    logger.error(ctx, `dynamic setting not found: ${settingKey}`)
+    throw new Error(`dynamic setting not found: ${settingKey}`)
+  }
+
+  return setting
 }
 
 async function query(ctx: Context, request: PluginJsonRpcRequest) {

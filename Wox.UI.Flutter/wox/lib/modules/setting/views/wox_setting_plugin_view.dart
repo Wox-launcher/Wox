@@ -455,18 +455,24 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
       return noDataAccess;
     }
 
+    List<String> params = [];
+
     //check if "queryEnv" feature is exist and list it's params
     var queryEnv = plugin.features.where((element) => element.name == "queryEnv").toList();
-    if (queryEnv.isEmpty) {
-      return noDataAccess;
+    if (queryEnv.isNotEmpty) {
+      queryEnv.first.params.forEach((key, value) {
+        if (value == "true") {
+          params.add(key);
+        }
+      });
     }
 
-    List<String> params = [];
-    queryEnv.first.params.forEach((key, value) {
-      if (value == "true") {
-        params.add(key);
-      }
-    });
+    // check if llmChat feature is exist
+    var llmChat = plugin.features.where((element) => element.name == "llm").toList();
+    if (llmChat.isNotEmpty) {
+      params.add("llm");
+    }
+
     if (params.isEmpty) {
       return noDataAccess;
     }
@@ -478,7 +484,6 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('This plugin requires access to the following data:'),
-            const SizedBox(height: 20),
             ...params.map((e) {
               if (e == "requireActiveWindowName") {
                 return privacyItem(
@@ -494,6 +499,13 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   'E.g. you are using google chrome to view webpages, you activate Wox and this plugin will get the url of active tab you are viewing',
                 );
               }
+              if (e == "llm") {
+                return privacyItem(
+                  material.Icons.chat,
+                  'Large Language Model (LLM)',
+                  'This plugin uses large language model to provide better results, you need to configure the model in LLM Tools plugin first',
+                );
+              }
               return Text(e);
             }),
           ],
@@ -503,30 +515,33 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   }
 
   Widget privacyItem(IconData icon, String title, String description) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Icon(icon),
-            SizedBox(width: 10),
-            Text(title),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            const SizedBox(width: 30),
-            Flexible(
-              child: Text(
-                description,
-                style: TextStyle(
-                  color: Colors.grey[100],
+    return Padding(
+      padding: const EdgeInsets.only(top: 20.0),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(icon),
+              SizedBox(width: 10),
+              Text(title),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              const SizedBox(width: 30),
+              Flexible(
+                child: Text(
+                  description,
+                  style: TextStyle(
+                    color: Colors.grey[100],
+                  ),
                 ),
               ),
-            ),
-          ],
-        )
-      ],
+            ],
+          )
+        ],
+      ),
     );
   }
 

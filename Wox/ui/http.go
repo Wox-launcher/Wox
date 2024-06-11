@@ -201,29 +201,6 @@ func convertPluginDto(ctx context.Context, pluginDto dto.PluginDto, pluginInstan
 			return !lo.Contains(removedKeys, item.Value.GetKey())
 		})
 
-		//add validator type to setting definition so that ui can render correctly
-		for i := range pluginDto.SettingDefinitions {
-			definitionType := pluginDto.SettingDefinitions[i].Type
-			definitionValue := pluginDto.SettingDefinitions[i].Value
-			if definitionValue != nil {
-				if definitionType == definition.PluginSettingDefinitionTypeSelect {
-					for _, validator := range definitionValue.(*definition.PluginSettingValueSelect).Validators {
-						validator.SetValidatorType()
-					}
-				} else if definitionType == definition.PluginSettingDefinitionTypeTextBox {
-					for _, validator := range definitionValue.(*definition.PluginSettingValueTextBox).Validators {
-						validator.SetValidatorType()
-					}
-				} else if definitionType == definition.PluginSettingDefinitionTypeTable {
-					for _, column := range definitionValue.(*definition.PluginSettingValueTable).Columns {
-						for _, validator := range column.Validators {
-							validator.SetValidatorType()
-						}
-					}
-				}
-			}
-		}
-
 		//translate setting definition labels
 		for i := range pluginDto.SettingDefinitions {
 			if pluginDto.SettingDefinitions[i].Value != nil {

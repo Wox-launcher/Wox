@@ -44,6 +44,11 @@ func (c *ThemePlugin) GetMetadata() plugin.Metadata {
 				Description: "Generate a new theme with AI",
 			},
 		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureLLM,
+			},
+		},
 		SupportedOS: []string{
 			"Windows",
 			"Macos",
@@ -173,7 +178,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 			Icon:            themeIcon,
 			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
 			RefreshInterval: 100,
-			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.LLMChatStream, conversations, func() bool {
+			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.LLMStream, conversations, func() bool {
 				return startGenerate
 			}, onAnswering, onAnswerErr),
 			Actions: []plugin.QueryResultAction{

@@ -1,3 +1,8 @@
+import { llm } from "./llm.js"
+import { MetadataCommand, PluginSettingDefinitionItem } from "./setting.js"
+
+export type Platform = "windows" | "darwin" | "linux"
+
 export interface Plugin {
   init: (ctx: Context, initParams: PluginInitParams) => Promise<void>
   query: (ctx: Context, query: Query) => Promise<Result[]>
@@ -179,6 +184,21 @@ export interface PublicAPI {
    * Register setting changed callback
    */
   OnSettingChanged: (ctx: Context, callback: (key: string, value: string) => void) => Promise<void>
+
+  /**
+   * Get dynamic setting definition
+   */
+  OnGetDynamicSetting: (ctx: Context, callback: (key: string) => PluginSettingDefinitionItem) => Promise<void>
+
+  /**
+   * Register query commands
+   */
+  RegisterQueryCommands: (ctx: Context, commands: MetadataCommand[]) => Promise<void>
+
+  /**
+   * Chat using LLM
+   */
+  LLMStream: (ctx: Context, conversations: llm.Conversation[], callback: llm.ChatStreamFunc) => Promise<void>
 }
 
 export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url" | "emoji"
