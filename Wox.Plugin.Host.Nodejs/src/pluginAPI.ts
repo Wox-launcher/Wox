@@ -14,6 +14,7 @@ export class PluginAPI implements PublicAPI {
   pluginName: string
   settingChangeCallbacks: Map<string, (key: string, value: string) => void>
   getDynamicSettingCallbacks: Map<string, (key: string) => PluginSettingDefinitionItem>
+  llmStreamCallbacks: Map<string, llm.ChatStreamFunc>
 
   constructor(ws: WebSocket, pluginId: string, pluginName: string) {
     this.ws = ws
@@ -21,6 +22,7 @@ export class PluginAPI implements PublicAPI {
     this.pluginName = pluginName
     this.settingChangeCallbacks = new Map<string, (key: string, value: string) => void>()
     this.getDynamicSettingCallbacks = new Map<string, (key: string) => PluginSettingDefinitionItem>()
+    this.llmStreamCallbacks = new Map<string, llm.ChatStreamFunc>()
   }
 
   async invokeMethod(ctx: Context, method: string, params: { [key: string]: string }): Promise<unknown> {
@@ -105,9 +107,7 @@ export class PluginAPI implements PublicAPI {
 
   async LLMStream(ctx: Context, conversations: llm.Conversation[], callback: llm.ChatStreamFunc): Promise<void> {
     const callbackId = crypto.randomUUID()
-    await this.invokeMethod(ctx, "LLMStream", { callbackId })
-
-    //TODO: implement LLMStream
-    return null
+    this.llmStreamCallbacks.set(callbackId, callback)
+    await this.invokeMethod(ctx, "LLMStream", { callbackId, conversations: JSON.stringify(conversations) })
   }
 }

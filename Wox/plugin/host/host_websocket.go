@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 	"wox/plugin"
+	"wox/plugin/llm"
 	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
@@ -379,6 +380,37 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 		}
 
 		pluginInstance.API.RegisterQueryCommands(ctx, commands)
+		w.sendResponseToHost(ctx, request, "")
+	case "LLMStream":
+		callbackId, exist := request.Params["callbackId"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] LLMStream method must have a callbackId parameter", request.PluginName))
+			return
+		}
+		conversationsStr, exist := request.Params["conversations"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] LLMStream method must have a conversations parameter", request.PluginName))
+			return
+		}
+
+		var conversations []llm.Conversation
+		unmarshalErr := json.Unmarshal([]byte(conversationsStr), &conversations)
+		if unmarshalErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal conversations: %s", request.PluginName, unmarshalErr))
+			return
+		}
+
+		llmErr := pluginInstance.API.LLMStream(ctx, conversations, func(streamType llm.ChatStreamDataType, data string) {
+			w.invokeMethod(ctx, pluginInstance.Metadata, "onLLMStream", map[string]string{
+				"CallbackId": callbackId,
+				"StreamType": string(streamType),
+				"Data":       data,
+			})
+		})
+		if llmErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to start LLM stream: %s", request.PluginName, llmErr))
+		}
+
 		w.sendResponseToHost(ctx, request, "")
 	}
 }

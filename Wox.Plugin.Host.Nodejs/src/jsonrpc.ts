@@ -4,6 +4,7 @@ import { PluginAPI } from "./pluginAPI"
 import { Context, Plugin, PluginInitParams, Query, QueryEnv, RefreshableResult, Result, ResultAction, Selection } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
+import { llm } from "@wox-launcher/wox-plugin/types/llm"
 
 const pluginInstances = new Map<PluginJsonRpcRequest["PluginId"], PluginInstance>()
 
@@ -62,6 +63,8 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
       return onPluginSettingChange(ctx, request)
     case "onGetDynamicSetting":
       return onGetDynamicSetting(ctx, request)
+    case "onLLMStream":
+      return onLLMStream(ctx, request)
     default:
       logger.info(ctx, `unknown method handler: ${request.Method}`)
       throw new Error(`unknown method handler: ${request.Method}`)
@@ -160,6 +163,25 @@ async function onGetDynamicSetting(ctx: Context, request: PluginJsonRpcRequest) 
   }
 
   return setting
+}
+
+async function onLLMStream(ctx: Context, request: PluginJsonRpcRequest) {
+  const plugin = pluginInstances.get(request.PluginId)
+  if (plugin === undefined || plugin === null) {
+    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+  }
+
+  const callbackId = request.Params.CallbackId
+  const streamType = request.Params.StreamType
+  const data = request.Params.Data
+  const callbackFunc = plugin.API.llmStreamCallbacks.get(callbackId)
+  if (callbackFunc === undefined || callbackFunc === null) {
+    logger.error(ctx, `llm stream callback not found: ${callbackId}`)
+    throw new Error(`llm stream callback not found: ${callbackId}`)
+  }
+
+  callbackFunc(<llm.ChatStreamDataType>streamType, data)
 }
 
 async function query(ctx: Context, request: PluginJsonRpcRequest) {
