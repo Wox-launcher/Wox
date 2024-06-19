@@ -291,6 +291,11 @@ func ConvertIcon(ctx context.Context, image WoxImage, pluginDirectory string) (n
 }
 
 func resizeImage(ctx context.Context, image WoxImage, size int) (newImage WoxImage) {
+	// skip emoji images
+	if image.ImageType == WoxImageTypeEmoji {
+		return image
+	}
+
 	newImage = image
 
 	imgHash := image.Hash()
@@ -327,6 +332,11 @@ func resizeImage(ctx context.Context, image WoxImage, size int) (newImage WoxIma
 }
 
 func cropPngTransparentPaddings(ctx context.Context, woxImage WoxImage) (newImage WoxImage) {
+	// skip emoji images
+	if woxImage.ImageType == WoxImageTypeEmoji {
+		return woxImage
+	}
+
 	//try load from cache first
 	imgHash := woxImage.Hash()
 	cropImgPath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("crop_padding_%s.png", imgHash))
