@@ -17,7 +17,7 @@ Features
 --------
 
 - Search for applications, folders, files and more
-- Plenty of Plugins and Themes
+- Plenty of [Plugins](https://wox-launcher.github.io/Wox/#/plugin_store) and [AI Themes](https://wox-launcher.github.io/Wox/#/ai_theme)
 - Single executable file, no installation required
 - Develop plugins with Javascript, Python, C#
 
