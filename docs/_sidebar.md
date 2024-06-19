@@ -24,4 +24,7 @@
     - [Install Theme](theme.md)
     - [Create Theme with AI](ai_theme.md)
 
+- Misc
+    - [Development](development.md)
+
 - [Github](https://github.com/Wox-launcher/Wox)
