@@ -60,19 +60,40 @@ func GetSelected() (Selection, error) {
 		return Selection{}, errors.New("error simulate ctrl c")
 	}
 
-	// wait for clipboard data to be updated
-	time.Sleep(200 * time.Millisecond)
+	// loop to wait for clipboard data to be updated, so that we can get the clipboard data as soon as possible if the clipboard data is updated
+	// because sometimes clipboard data is not updated immediately after simulated ctrl c, small text data is updated immediately, but large file data is not
+	var clipboardDataAfter clipboard.Data
+	loopTimes := 10
+	for i := 0; i < loopTimes; i++ {
+		isLastLoop := loopTimes-1 == i
 
-	simulateEndTimestamp := GetSystemTimestamp()
+		// wait for clipboard data to be updated
+		time.Sleep(50 * time.Millisecond)
 
-	clipboardDataAfter, err := clipboard.ReadFilesAndText()
-	if err != nil {
-		return Selection{}, err
+		clipboardData, err := clipboard.ReadFilesAndText()
+		if err != nil {
+			if isLastLoop {
+				return Selection{}, err
+			} else {
+				continue
+			}
+		}
+
+		// clipboard data must be updated between simulateStartTimestamp and simulateEndTimestamp
+		// otherwise, it means that the clipboard data is not updated by the simulated ctrl c
+		if lastClipboardChangeTimestamp < simulateStartTimestamp {
+			if isLastLoop {
+				return Selection{}, noSelection
+			} else {
+				continue
+			}
+		}
+
+		clipboardDataAfter = clipboardData
+		break
 	}
 
-	// clipboard data must be updated between simulateStartTimestamp and simulateEndTimestamp
-	// otherwise, it means that the clipboard data is not updated by the simulated ctrl c
-	if lastClipboardChangeTimestamp < simulateStartTimestamp || lastClipboardChangeTimestamp > simulateEndTimestamp {
+	if clipboardDataAfter == nil {
 		return Selection{}, noSelection
 	}
 

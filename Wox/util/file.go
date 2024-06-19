@@ -13,8 +13,8 @@ func IsFileExecAny(mode os.FileMode) bool {
 }
 
 func IsFileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
+	stat, err := os.Stat(path)
+	return err == nil && !stat.IsDir()
 }
 
 func IsDirExists(path string) bool {

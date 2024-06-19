@@ -83,7 +83,7 @@ func (i *SelectionPlugin) queryForSelectionText(ctx context.Context, text string
 	})
 
 	if util.IsFileExists(strings.TrimSpace(text)) {
-		results = append(results, i.queryForFile(ctx, text)...)
+		results = append(results, i.queryForFile(ctx, strings.TrimSpace(text))...)
 	}
 
 	return results
@@ -127,7 +127,9 @@ func (i *SelectionPlugin) queryForSelectionFile(ctx context.Context, filePaths [
 }
 
 func (i *SelectionPlugin) queryForFile(ctx context.Context, filePath string) (results []plugin.QueryResult) {
-	trimmedText := strings.TrimSpace(filePath)
+	if !util.IsFileExists(filePath) {
+		return
+	}
 
 	results = append(results, plugin.QueryResult{
 		Title: "Open containing folder",
@@ -136,33 +138,28 @@ func (i *SelectionPlugin) queryForFile(ctx context.Context, filePath string) (re
 			{
 				Name: "Open containing folder",
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					util.ShellOpen(path.Dir(trimmedText))
+					util.ShellOpen(path.Dir(filePath))
 				},
 			},
 		},
 	})
 
-	// preview if file is image
-	if util.IsImageFile(trimmedText) {
-		woxImage := plugin.NewWoxImageAbsolutePath(trimmedText)
-		results = append(results, plugin.QueryResult{
-			Title: "Preview",
-			Score: 1000,
-			Icon:  plugin.NewWoxImageSvg(`<svg t="1713248218693" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1465" width="200" height="200"><path d="M929.5 185.3c-0.2-25.1-9.9-48.5-27.5-66.1-3.7-3.7-7.6-7-11.8-10-14-10.1-30.4-16.1-47.8-17.5H841.8c-2.2-0.2-4.3-0.2-6.5-0.2H188.7c-2.2 0-4.3 0.1-6.5 0.2H181.6c-17.4 1.3-33.8 7.4-47.8 17.5-4.2 3-8.1 6.3-11.8 10-17.7 17.7-27.5 41.4-27.5 66.7v652.3c0 52 42.3 94.3 94.4 94.3h164.6c19.3 0 35-15.7 35-35s-15.7-35-35-35H188.9c-13.5 0-24.4-10.9-24.4-24.3V185.9c0-6.4 2.6-12.7 7.3-17.4 4.5-4.5 10.6-7 17.1-7h646.2c6.5 0 12.6 2.5 17.1 7 4.7 4.7 7.3 11 7.3 17.4v652.3c0 13.4-10.9 24.3-24.4 24.3H670.5c-19.3 0-35 15.7-35 35s15.7 35 35 35h164.6c52.1 0 94.4-42.3 94.4-94.3V185.9v-0.6z" fill="#1296db" p-id="1466"></path><path d="M512 380.9c-72.3 0-131.1 58.8-131.1 131.1S439.7 643.1 512 643.1 643.1 584.3 643.1 512 584.3 380.9 512 380.9z m0 218.5c-48.3 0-87.4-39.1-87.4-87.4 0-48.3 39.1-87.4 87.4-87.4s87.4 39.1 87.4 87.4-39.1 87.4-87.4 87.4z" fill="#1296db" p-id="1467"></path><path d="M795 449.6c-10.8-17.9-30-45.3-60.4-73.9-29-27.3-61.1-49.2-95.3-64.9-40.8-18.7-83.6-28.2-127.3-28.2s-86.6 9.6-127.3 28.4c-34.2 15.8-66.3 37.8-95.3 65.3-30.3 28.7-49.6 56-60.4 73.9-10.5 17.3-23 42.1-23 61.9s12.5 44.6 23 61.9c10.8 17.9 30.1 45.2 60.4 73.9 29 27.5 61.1 49.4 95.3 65.3 40.8 18.8 83.6 28.4 127.3 28.4s86.5-9.5 127.3-28.2c34.2-15.7 66.3-37.6 95.3-64.9 30.4-28.7 49.6-56 60.4-73.9 10.5-17.4 22.9-42.3 22.9-62.4 0.1-20.3-12.4-45.3-22.9-62.6z m-90.4 167c-39.3 37-104.6 81.2-192.6 81.2-87.8 0-153.2-44.4-192.6-81.7-49.6-46.9-69.7-92.8-69.7-104.1 0-11.2 20-57.1 69.7-104.1 39.4-37.3 104.8-81.7 192.6-81.7 88 0 153.3 44.2 192.6 81.2 49.6 46.8 69.7 93.1 69.7 104.6s-20.1 57.8-69.7 104.6z" fill="#1296db" p-id="1468"></path></svg>`),
-			Actions: []plugin.QueryResultAction{
-				{
-					Name: "Preview",
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					},
+	results = append(results, plugin.QueryResult{
+		Title: "Preview",
+		Score: 1000,
+		Icon:  plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><path fill="#5366f9" d="M5 21q-.825 0-1.412-.587T3 19V5q0-.825.588-1.412T5 3h14q.825 0 1.413.588T21 5v14q0 .825-.587 1.413T19 21zm0-2h14V7H5zm7-2q-2.05 0-3.662-1.112T6 13q.725-1.775 2.338-2.887T12 9t3.663 1.113T18 13q-.725 1.775-2.337 2.888T12 17m0-2.5q-.625 0-1.062-.437T10.5 13t.438-1.062T12 11.5t1.063.438T13.5 13t-.437 1.063T12 14.5m0 1q1.05 0 1.775-.725T14.5 13t-.725-1.775T12 10.5t-1.775.725T9.5 13t.725 1.775T12 15.5"/></svg>`),
+		Actions: []plugin.QueryResultAction{
+			{
+				Name: "Preview",
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				},
 			},
-			Preview: plugin.WoxPreview{
-				PreviewType: plugin.WoxPreviewTypeImage,
-				PreviewData: woxImage.String(),
-			},
-		})
-
-	}
+		},
+		Preview: plugin.WoxPreview{
+			PreviewType: plugin.WoxPreviewTypeFile,
+			PreviewData: filePath,
+		},
+	})
 
 	return
 }

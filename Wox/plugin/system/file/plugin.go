@@ -3,6 +3,7 @@ package file
 import (
 	"context"
 	"github.com/samber/lo"
+	"path"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
@@ -66,6 +67,12 @@ func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryRe
 					Name: "Open",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						util.ShellOpen(item.Path)
+					},
+				},
+				{
+					Name: "Open containing folder",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						util.ShellOpen(path.Dir(item.Path))
 					},
 				},
 			},

@@ -74,7 +74,6 @@ export interface Query {
   IsGlobalQuery(): boolean
 }
 
-
 export interface Result {
   Id?: string
   Title: string
@@ -208,7 +207,7 @@ export interface WoxImage {
   ImageData: string
 }
 
-export type WoxPreviewType = "markdown" | "text" | "image" | "url" | "pdf"
+export type WoxPreviewType = "markdown" | "text" | "image" | "url" | "file"
 
 export interface WoxPreview {
   PreviewType: WoxPreviewType
@@ -223,8 +222,8 @@ export declare interface Context {
   Exists: (key: string) => boolean
 }
 
-export function NewContext(): Context;
+export function NewContext(): Context
 
-export function NewContextWithValue(key: string, value: string): Context;
+export function NewContextWithValue(key: string, value: string): Context
 
-export function NewBase64WoxImage(imageData: string): WoxImage;
+export function NewBase64WoxImage(imageData: string): WoxImage

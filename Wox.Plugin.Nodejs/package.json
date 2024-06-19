@@ -1,6 +1,6 @@
 {
   "name": "@wox-launcher/wox-plugin",
-  "version": "0.0.67",
+  "version": "0.0.68",
   "description": "All nodejs plugin for Wox should use types in this package",
   "repository": {
     "type": "git",
@@ -21,12 +21,12 @@
     "pub": "pnpm build && pnpm version patch && pnpm publish --no-git-checks --access public"
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^6.6.0",
-    "@typescript-eslint/parser": "^6.6.0",
-    "eslint": "^8.49.0",
-    "eslint-config-prettier": "9.0.0",
-    "prettier": "3.0.2",
-    "typescript": "^5.2.2"
+    "@typescript-eslint/eslint-plugin": "^7.13.1",
+    "@typescript-eslint/parser": "^7.13.1",
+    "eslint": "^9.5.0",
+    "eslint-config-prettier": "9.1.0",
+    "prettier": "3.3.2",
+    "typescript": "^5.4.5"
   },
   "dependencies": {}
 }

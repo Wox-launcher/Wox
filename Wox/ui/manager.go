@@ -208,7 +208,9 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 	managerInstance.selectionHotkey = &hotkey.Hotkey{}
 	return m.selectionHotkey.Register(ctx, combineKey, func() {
 		newCtx := util.NewTraceContext()
+		start := util.GetSystemTimestamp()
 		selection, err := util.GetSelected()
+		logger.Debug(newCtx, fmt.Sprintf("took %d ms to get selection", util.GetSystemTimestamp()-start))
 		if err != nil {
 			logger.Error(newCtx, fmt.Sprintf("failed to get selected: %s", err.Error()))
 			return

@@ -35,7 +35,7 @@ dependencies:
     git:
       url: https://github.com/qianlifeng/window_manager.git
       ref: db8b4c7f348311dbd5ce4cec8635f0c2cf048775
-  web_socket_channel: ^2.4.0
+  web_socket_channel: ^3.0.0
   flutter_acrylic: ^1.1.0
   get: ^4.6.6
   logger: ^2.0.2+1
@@ -48,7 +48,7 @@ dependencies:
   path: ^1.8.3
   chinese_font_library: ^1.1.0
   lpinyin: ^2.0.3
-  syncfusion_flutter_pdfviewer: ^25.1.41
+  syncfusion_flutter_pdfviewer: ^26.1.38
   desktop_drop: ^0.4.4
   file_picker: ^8.0.2
   fluent_ui: ^4.8.7
@@ -57,6 +57,9 @@ dependencies:
   flutter_image_slideshow: ^0.1.6
   dynamic_tabbar: ^1.0.6
   protocol_handler: ^0.2.0
+  flutter_code_editor: ^0.3.1
+  flutter_highlight: ^0.7.0
+  highlight: ^0.7.0
 
 dev_dependencies:
   flutter_test:
@@ -67,7 +70,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^3.0.1
+  flutter_lints: ^4.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
