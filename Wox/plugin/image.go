@@ -7,6 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/disintegration/imaging"
+	"github.com/forPelevin/gomoji"
+	"github.com/srwiley/oksvg"
+	"github.com/srwiley/rasterx"
 	"image"
 	"image/png"
 	"os"
@@ -69,7 +72,16 @@ func (w *WoxImage) ToPng() (image.Image, error) {
 	}
 
 	if w.ImageType == WoxImageTypeSvg {
-		//TODO: convert svg to png
+		img, imgErr := w.ToImage()
+		if imgErr != nil {
+			return nil, imgErr
+		}
+
+		buf := new(bytes.Buffer)
+		encodeErr := png.Encode(buf, img)
+		if encodeErr != nil {
+			return nil, encodeErr
+		}
 	}
 
 	return nil, notPngErr
@@ -89,12 +101,93 @@ func (w *WoxImage) ToImage() (image.Image, error) {
 		imgReader := bytes.NewReader(decodedData)
 		return png.Decode(imgReader)
 	}
+	if w.ImageType == WoxImageTypeSvg {
+		width, height := 32, 32
+		icon, err := oksvg.ReadIconStream(strings.NewReader(w.ImageData), oksvg.WarnErrorMode)
+		if err != nil {
+			return nil, err
+		}
+		icon.SetTarget(0, 0, float64(width), float64(height))
+
+		rgba := image.NewRGBA(image.Rect(0, 0, width, height))
+		icon.Draw(rasterx.NewDasher(width, height, rasterx.NewScannerGV(width, height, rgba, rgba.Bounds())), 1)
+		//finalImg := cropTransparentPaddings(rgba)
+		return rgba, nil
+	}
+	if w.ImageType == WoxImageTypeEmoji {
+		emojiInfo, getErr := gomoji.GetInfo(w.ImageData)
+		if getErr != nil {
+			return nil, getErr
+		}
+
+		// load from cache first
+		codePoint := strings.ToLower(emojiInfo.CodePoint)
+		emojiPath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("emoji_%s.png", codePoint))
+		if _, err := os.Stat(emojiPath); err == nil {
+			return imaging.Open(emojiPath)
+		}
+
+		//download emoji image and cache it
+		url := fmt.Sprintf("https://cdn.jsdelivr.net/gh/twitter/twemoji@v11.0.0/36x36/%s.png", codePoint)
+		err := util.HttpDownload(util.NewTraceContext(), url, emojiPath)
+		if err != nil {
+			return nil, err
+		}
+
+		return imaging.Open(emojiPath)
+	}
 
 	return nil, fmt.Errorf("unsupported image type: %s", w.ImageType)
 }
 
 func (w *WoxImage) Hash() string {
 	return util.Md5([]byte(w.ImageType + w.ImageData))
+}
+
+func (w *WoxImage) Overlay(overlay WoxImage, size int, x, y int) WoxImage {
+	backgroundImg, backErr := w.ToImage()
+	if backErr != nil {
+		return *w
+	}
+
+	overlayImage, overlayErr := overlay.ToImage()
+	if overlayErr != nil {
+		return *w
+	}
+
+	resizedOverlayImg := imaging.Resize(overlayImage, size, size, imaging.Lanczos)
+	finalImg := imaging.Overlay(backgroundImg, resizedOverlayImg, image.Pt(x, y), 1)
+	overlayWoxImg, overlayWoxImgErr := NewWoxImage(finalImg)
+	if overlayWoxImgErr != nil {
+		return *w
+	}
+
+	return overlayWoxImg
+}
+
+func (w *WoxImage) OverlayFullPercentage(overlay WoxImage, percentage float64) WoxImage {
+	backgroundImg, backErr := w.ToImage()
+	if backErr != nil {
+		return *w
+	}
+
+	overlayImage, overlayErr := overlay.ToImage()
+	if overlayErr != nil {
+		return *w
+	}
+
+	width := int(float64(backgroundImg.Bounds().Dx()) * percentage)
+	height := int(float64(backgroundImg.Bounds().Dy()) * percentage)
+	pt := image.Pt((backgroundImg.Bounds().Dx()-width)/2, (backgroundImg.Bounds().Dy()-height)/2)
+
+	resizedOverlayImg := imaging.Resize(overlayImage, width, height, imaging.Lanczos)
+	finalImg := imaging.Overlay(backgroundImg, resizedOverlayImg, pt, 1)
+	overlayWoxImg, overlayWoxImgErr := NewWoxImage(finalImg)
+	if overlayWoxImgErr != nil {
+		return *w
+	}
+
+	return overlayWoxImg
 }
 
 func NewWoxImageSvg(svg string) WoxImage {
@@ -250,6 +343,19 @@ func cropPngTransparentPaddings(ctx context.Context, woxImage WoxImage) (newImag
 	}
 
 	start := util.GetSystemTimestamp()
+	cropImg := cropTransparentPaddings(pngImg)
+	saveErr := imaging.Save(cropImg, cropImgPath)
+	if saveErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to save crop image: %s", saveErr.Error()))
+		return woxImage
+	} else {
+		logger.Info(ctx, fmt.Sprintf("saved crop image: %s, cost %d ms", cropImgPath, util.GetSystemTimestamp()-start))
+	}
+
+	return NewWoxImageAbsolutePath(cropImgPath)
+}
+
+func cropTransparentPaddings(pngImg image.Image) image.Image {
 	bounds := pngImg.Bounds()
 	minX, minY, maxX, maxY := bounds.Max.X, bounds.Max.Y, bounds.Min.X, bounds.Min.Y
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
@@ -279,16 +385,7 @@ func cropPngTransparentPaddings(ctx context.Context, woxImage WoxImage) (newImag
 		maxY = bounds.Max.Y
 	}
 
-	cropImg := imaging.Crop(pngImg, image.Rect(minX, minY, maxX, maxY))
-	saveErr := imaging.Save(cropImg, cropImgPath)
-	if saveErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to save crop image: %s", saveErr.Error()))
-		return woxImage
-	} else {
-		logger.Info(ctx, fmt.Sprintf("saved crop image: %s, cost %d ms", cropImgPath, util.GetSystemTimestamp()-start))
-	}
-
-	return NewWoxImageAbsolutePath(cropImgPath)
+	return imaging.Crop(pngImg, image.Rect(minX, minY, maxX, maxY))
 }
 
 func ConvertRelativePathToAbsolutePath(ctx context.Context, image WoxImage, pluginDirectory string) (newImage WoxImage) {

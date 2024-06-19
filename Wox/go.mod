@@ -10,6 +10,7 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/djherbis/buffer v1.2.0
 	github.com/djherbis/nio/v3 v3.0.1
+	github.com/forPelevin/gomoji v1.2.0
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/gen2brain/beeep v0.0.0-20240112042604-c7bb2cd88fea
 	github.com/go-resty/resty/v2 v2.12.0
@@ -27,7 +28,6 @@ require (
 	github.com/otiai10/copy v1.14.0
 	github.com/parsiya/golnk v0.0.0-20221103095132-740a4c27c4ff
 	github.com/petermattis/goid v0.0.0-20240327183114-c42a807a84ba
-	github.com/pkg/errors v0.9.1
 	github.com/robotn/gohook v0.41.0
 	github.com/rs/cors v1.10.1
 	github.com/sahilm/fuzzy v0.1.1
@@ -35,6 +35,8 @@ require (
 	github.com/saracen/fastzip v0.1.11
 	github.com/sashabaranov/go-openai v1.20.4
 	github.com/shopspring/decimal v1.3.1
+	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
+	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/stretchr/testify v1.9.0
 	github.com/tidwall/gjson v1.17.1
 	github.com/tidwall/pretty v1.2.1
@@ -74,7 +76,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/pkoukk/tiktoken-go v0.1.6 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/rivo/uniseg v0.2.0 // indirect
+	github.com/rivo/uniseg v0.4.3 // indirect
 	github.com/saracen/zipextra v0.0.0-20220303013732-0187cb0159ea // indirect
 	github.com/tadvi/systray v0.0.0-20190226123456-11a2b8fa57af // indirect
 	github.com/tidwall/match v1.1.1 // indirect

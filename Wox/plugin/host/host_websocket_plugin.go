@@ -50,7 +50,9 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 	})
 	if queryErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] query failed: %s", w.metadata.Name, queryErr.Error()))
-		return []plugin.QueryResult{}
+		return []plugin.QueryResult{
+			plugin.GetPluginManager().GetResultForFailedQuery(ctx, w.metadata, query, queryErr),
+		}
 	}
 
 	var results []plugin.QueryResult

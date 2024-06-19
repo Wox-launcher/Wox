@@ -371,7 +371,15 @@ func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance,
 	return true
 }
 
-func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) []QueryResult {
+func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) (results []QueryResult) {
+	defer util.GoRecover(ctx, fmt.Sprintf("<%s> query panic", pluginInstance.Metadata.Name), func(err error) {
+		// if plugin query panic, return error result
+		failedResult := m.GetResultForFailedQuery(ctx, pluginInstance.Metadata, query, err)
+		results = []QueryResult{
+			m.PolishResult(ctx, pluginInstance, query, failedResult),
+		}
+	})
+
 	logger.Info(ctx, fmt.Sprintf("<%s> start query: %s", pluginInstance.Metadata.Name, query.RawQuery))
 	start := util.GetSystemTimestamp()
 
@@ -393,7 +401,7 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	}
 	query.Env = newEnv
 
-	results := pluginInstance.Plugin.Query(ctx, query)
+	results = pluginInstance.Plugin.Query(ctx, query)
 	logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms", pluginInstance.Metadata.Name, len(results), util.GetSystemTimestamp()-start))
 
 	for i := range results {
@@ -409,6 +417,22 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	}
 
 	return results
+}
+
+func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Metadata, query Query, err error) QueryResult {
+	overlayIcon := NewWoxImageEmoji("🚫")
+	pluginIcon := ParseWoxImageOrDefault(pluginMetadata.Icon, overlayIcon)
+	icon := pluginIcon.OverlayFullPercentage(overlayIcon, 0.6)
+
+	return QueryResult{
+		Title:    fmt.Sprintf("%s query failed", pluginMetadata.Name),
+		SubTitle: util.Ellipsis(err.Error(), 20),
+		Icon:     icon,
+		Preview: WoxPreview{
+			PreviewType: WoxPreviewTypeText,
+			PreviewData: err.Error(),
+		},
+	}
 }
 
 func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult) QueryResult {

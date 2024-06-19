@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/disintegration/imaging"
 	"github.com/olahol/melody"
 	"github.com/rs/cors"
 	"github.com/samber/lo"
-	"image"
 	"net/http"
 	"strconv"
 	"strings"
@@ -142,17 +140,8 @@ func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) (results 
 		}
 
 		icon := chromeIcon
-		if tabIconImg, err := getWebsiteIconWithCache(ctx, tab.Url); err == nil {
-			if backgroundImg, backgroundImgErr := chromeIcon.ToImage(); backgroundImgErr == nil {
-				if tabImage, tabImageErr := tabIconImg.ToImage(); tabImageErr == nil {
-					resizedImg := imaging.Resize(tabImage, 16, 16, imaging.Lanczos)
-					overlayImg := imaging.Overlay(backgroundImg, resizedImg, image.Pt(30, 30), 1)
-					overlayWoxImg, overlayWoxImgErr := plugin.NewWoxImage(overlayImg)
-					if overlayWoxImgErr == nil {
-						icon = overlayWoxImg
-					}
-				}
-			}
+		if tabIcon, err := getWebsiteIconWithCache(ctx, tab.Url); err == nil {
+			icon = chromeIcon.Overlay(tabIcon, 16, 30, 30)
 		}
 
 		results = append(results, plugin.QueryResult{
