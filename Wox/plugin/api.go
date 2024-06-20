@@ -7,8 +7,8 @@ import (
 	"github.com/samber/lo"
 	"io"
 	"path"
+	"wox/ai"
 	"wox/i18n"
-	"wox/plugin/llm"
 	"wox/setting"
 	"wox/setting/definition"
 	"wox/share"
@@ -36,7 +36,7 @@ type API interface {
 	OnSettingChanged(ctx context.Context, callback func(key string, value string))
 	OnGetDynamicSetting(ctx context.Context, callback func(key string) definition.PluginSettingDefinitionItem)
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
-	LLMStream(ctx context.Context, conversations []llm.Conversation, callback llm.ChatStreamFunc) error
+	AIChatStream(ctx context.Context, model ai.Model, conversations []ai.Conversation, callback ai.ChatStreamFunc) error
 }
 
 type APIImpl struct {
@@ -156,15 +156,15 @@ func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []Metadata
 	a.pluginInstance.SaveSetting(ctx)
 }
 
-func (a *APIImpl) LLMStream(ctx context.Context, conversations []llm.Conversation, callback llm.ChatStreamFunc) error {
+func (a *APIImpl) AIChatStream(ctx context.Context, model ai.Model, conversations []ai.Conversation, callback ai.ChatStreamFunc) error {
 	//check if plugin has the feature permission
-	if !a.pluginInstance.Metadata.IsSupportFeature(MetadataFeatureLLM) {
-		return fmt.Errorf("plugin has no access to llm feature")
+	if !a.pluginInstance.Metadata.IsSupportFeature(MetadataFeatureAI) {
+		return fmt.Errorf("plugin has no access to ai feature")
 	}
 
-	provider, model := llm.GetInstance()
-	if provider == nil {
-		return fmt.Errorf("no LLM provider found")
+	provider, providerErr := GetPluginManager().GetAIProvider(ctx, model.Provider)
+	if providerErr != nil {
+		return providerErr
 	}
 
 	stream, err := provider.ChatStream(ctx, model, conversations)
@@ -173,23 +173,23 @@ func (a *APIImpl) LLMStream(ctx context.Context, conversations []llm.Conversatio
 	}
 
 	if callback != nil {
-		util.Go(ctx, "llm chat stream", func() {
+		util.Go(ctx, "ai chat stream", func() {
 			for {
 				util.GetLogger().Info(ctx, fmt.Sprintf("reading chat stream"))
 				response, streamErr := stream.Receive(ctx)
 				if errors.Is(streamErr, io.EOF) {
 					util.GetLogger().Info(ctx, "read stream completed")
-					callback(llm.ChatStreamTypeFinished, "")
+					callback(ai.ChatStreamTypeFinished, "")
 					return
 				}
 
 				if streamErr != nil {
 					util.GetLogger().Info(ctx, fmt.Sprintf("failed to read stream: %s", streamErr.Error()))
-					callback(llm.ChatStreamTypeError, streamErr.Error())
+					callback(ai.ChatStreamTypeError, streamErr.Error())
 					return
 				}
 
-				callback(llm.ChatStreamTypeStreaming, response)
+				callback(ai.ChatStreamTypeStreaming, response)
 			}
 		})
 	}

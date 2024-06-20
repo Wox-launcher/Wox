@@ -1,13 +1,14 @@
-package llm
+package ai
 
 import (
 	"context"
 	"github.com/sashabaranov/go-openai"
 	"io"
+	"wox/setting"
 )
 
 type OpenAIProvider struct {
-	connectContext ProviderConnectContext
+	connectContext setting.AIProvider
 	client         *openai.Client
 }
 
@@ -16,7 +17,7 @@ type OpenAIProviderStream struct {
 	conversations []Conversation
 }
 
-func NewOpenAIClient(ctx context.Context, connectContext ProviderConnectContext) Provider {
+func NewOpenAIClient(ctx context.Context, connectContext setting.AIProvider) Provider {
 	return &OpenAIProvider{connectContext: connectContext}
 }
 
@@ -52,9 +53,8 @@ func (o *OpenAIProvider) ChatStream(ctx context.Context, model Model, conversati
 func (o *OpenAIProvider) Models(ctx context.Context) ([]Model, error) {
 	return []Model{
 		{
-			DisplayName: "chatgpt-3.5-turbo",
-			Name:        "gpt-3.5-turbo",
-			Provider:    ModelProviderNameOpenAI,
+			Name:     "gpt-3.5-turbo",
+			Provider: ProviderNameOpenAI,
 		},
 	}, nil
 }

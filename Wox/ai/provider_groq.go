@@ -1,4 +1,4 @@
-package llm
+package ai
 
 import (
 	"context"
@@ -10,11 +10,12 @@ import (
 	"github.com/tmc/langchaingo/llms/openai"
 	"github.com/tmc/langchaingo/schema"
 	"io"
+	"wox/setting"
 	"wox/util"
 )
 
 type GroqProvider struct {
-	connectContext ProviderConnectContext
+	connectContext setting.AIProvider
 	client         *openai.LLM
 }
 
@@ -23,7 +24,7 @@ type GroqProviderStream struct {
 	reader        io.Reader
 }
 
-func NewGroqProvider(ctx context.Context, connectContext ProviderConnectContext) Provider {
+func NewGroqProvider(ctx context.Context, connectContext setting.AIProvider) Provider {
 	return &GroqProvider{connectContext: connectContext}
 }
 
@@ -57,24 +58,20 @@ func (g *GroqProvider) ChatStream(ctx context.Context, model Model, conversation
 func (g *GroqProvider) Models(ctx context.Context) (models []Model, err error) {
 	return []Model{
 		{
-			Name:        "llama3-8b-8192",
-			DisplayName: "llama3-8b-8192",
-			Provider:    ModelProviderNameGroq,
+			Name:     "llama3-8b-8192",
+			Provider: ProviderNameGroq,
 		},
 		{
-			Name:        "llama3-70b-8192",
-			DisplayName: "llama3-70b-8192",
-			Provider:    ModelProviderNameGroq,
+			Name:     "llama3-70b-8192",
+			Provider: ProviderNameGroq,
 		},
 		{
-			Name:        "mixtral-8x7b-32768",
-			DisplayName: "mixtral-8x7b-32768",
-			Provider:    ModelProviderNameGroq,
+			Name:     "mixtral-8x7b-32768",
+			Provider: ProviderNameGroq,
 		},
 		{
-			Name:        "gemma-7b-it",
-			DisplayName: "gemma-7b-it",
-			Provider:    ModelProviderNameGroq,
+			Name:     "gemma-7b-it",
+			Provider: ProviderNameGroq,
 		},
 	}, nil
 }

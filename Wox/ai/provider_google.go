@@ -1,4 +1,4 @@
-package llm
+package ai
 
 import (
 	"context"
@@ -8,10 +8,11 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"io"
+	"wox/setting"
 )
 
 type GoogleProvider struct {
-	connectContext ProviderConnectContext
+	connectContext setting.AIProvider
 	client         *genai.Client
 }
 
@@ -20,7 +21,7 @@ type GoogleProviderStream struct {
 	conversations []Conversation
 }
 
-func NewGoogleProvider(ctx context.Context, connectContext ProviderConnectContext) Provider {
+func NewGoogleProvider(ctx context.Context, connectContext setting.AIProvider) Provider {
 	return &GoogleProvider{connectContext: connectContext}
 }
 
@@ -60,14 +61,12 @@ func (g *GoogleProvider) ChatStream(ctx context.Context, model Model, conversati
 func (g *GoogleProvider) Models(ctx context.Context) ([]Model, error) {
 	return []Model{
 		{
-			DisplayName: "google-gemini-1.0-pro",
-			Name:        "gemini-1.0-pro",
-			Provider:    ModelProviderNameGoogle,
+			Name:     "gemini-1.0-pro",
+			Provider: ProviderNameGoogle,
 		},
 		{
-			DisplayName: "google-gemini-1.5-pro",
-			Name:        "gemini-1.5-pro",
-			Provider:    ModelProviderNameGoogle,
+			Name:     "gemini-1.5-pro",
+			Provider: ProviderNameGoogle,
 		},
 	}, nil
 }

@@ -11,8 +11,8 @@ import (
 	"os"
 	"path"
 	"sync"
+	"wox/ai"
 	"wox/plugin"
-	"wox/plugin/llm"
 	"wox/setting"
 	"wox/util"
 )
@@ -98,15 +98,16 @@ func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (plugin.Wox
 }
 
 func createLLMOnRefreshHandler(ctx context.Context,
-	chatStream func(ctx context.Context, conversations []llm.Conversation, callback llm.ChatStreamFunc) error,
-	conversations []llm.Conversation,
+	chatStreamAPI func(ctx context.Context, model ai.Model, conversations []ai.Conversation, callback ai.ChatStreamFunc) error,
+	model ai.Model,
+	conversations []ai.Conversation,
 	shouldStartAnswering func() bool,
 	onAnswering func(plugin.RefreshableResult, string, bool) plugin.RefreshableResult,
 	onAnswerErr func(plugin.RefreshableResult, error) plugin.RefreshableResult) func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
 
 	var isStreamCreated bool
 	var locker sync.Locker = &sync.Mutex{}
-	var chatStreamDataTypeBuffer llm.ChatStreamDataType
+	var chatStreamDataTypeBuffer ai.ChatStreamDataType
 	var responseBuffer string
 	return func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
 		if !shouldStartAnswering() {
@@ -116,13 +117,13 @@ func createLLMOnRefreshHandler(ctx context.Context,
 		if !isStreamCreated {
 			isStreamCreated = true
 			util.GetLogger().Info(ctx, "creating stream")
-			err := chatStream(ctx, conversations, func(chatStreamDataType llm.ChatStreamDataType, response string) {
+			err := chatStreamAPI(ctx, model, conversations, func(chatStreamDataType ai.ChatStreamDataType, response string) {
 				locker.Lock()
 				chatStreamDataTypeBuffer = chatStreamDataType
-				if chatStreamDataType == llm.ChatStreamTypeStreaming || chatStreamDataTypeBuffer == llm.ChatStreamTypeFinished {
+				if chatStreamDataType == ai.ChatStreamTypeStreaming || chatStreamDataTypeBuffer == ai.ChatStreamTypeFinished {
 					responseBuffer += response
 				}
-				if chatStreamDataType == llm.ChatStreamTypeError {
+				if chatStreamDataType == ai.ChatStreamTypeError {
 					responseBuffer = response
 				}
 				util.GetLogger().Info(ctx, fmt.Sprintf("stream buffered: %s", responseBuffer))
@@ -134,7 +135,7 @@ func createLLMOnRefreshHandler(ctx context.Context,
 			}
 		}
 
-		if chatStreamDataTypeBuffer == llm.ChatStreamTypeFinished {
+		if chatStreamDataTypeBuffer == ai.ChatStreamTypeFinished {
 			util.GetLogger().Info(ctx, "stream finished")
 			locker.Lock()
 			buf := responseBuffer
@@ -142,7 +143,7 @@ func createLLMOnRefreshHandler(ctx context.Context,
 			locker.Unlock()
 			return onAnswering(current, buf, true)
 		}
-		if chatStreamDataTypeBuffer == llm.ChatStreamTypeError {
+		if chatStreamDataTypeBuffer == ai.ChatStreamTypeError {
 			util.GetLogger().Info(ctx, fmt.Sprintf("stream error: %s", responseBuffer))
 			locker.Lock()
 			err := fmt.Errorf(responseBuffer)
@@ -150,7 +151,7 @@ func createLLMOnRefreshHandler(ctx context.Context,
 			locker.Unlock()
 			return onAnswerErr(current, err)
 		}
-		if chatStreamDataTypeBuffer == llm.ChatStreamTypeStreaming {
+		if chatStreamDataTypeBuffer == ai.ChatStreamTypeStreaming {
 			util.GetLogger().Info(ctx, fmt.Sprintf("streaming: %s", responseBuffer))
 			locker.Lock()
 			buf := responseBuffer

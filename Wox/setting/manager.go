@@ -201,6 +201,14 @@ func (m *Manager) UpdateWoxSetting(ctx context.Context, key, value string) error
 		}
 
 		m.woxSetting.QueryShortcuts = queryShortcuts
+	} else if key == "AIProviders" {
+		// value is a json string
+		var aiModels []AIProvider
+		if unmarshalErr := json.Unmarshal([]byte(value), &aiModels); unmarshalErr != nil {
+			return unmarshalErr
+		}
+
+		m.woxSetting.AIProviders = aiModels
 	} else {
 		return fmt.Errorf("unknown key: %s", key)
 	}

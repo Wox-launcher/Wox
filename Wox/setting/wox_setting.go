@@ -22,6 +22,7 @@ type WoxSetting struct {
 	QueryHotkeys         PlatformSettingValue[[]QueryHotkey]
 	QueryShortcuts       []QueryShortcut
 	LastQueryMode        LastQueryMode
+	AIProviders          []AIProvider
 
 	// UI related
 	AppWidth int
@@ -46,6 +47,12 @@ func (q *QueryShortcut) HasPlaceholder() bool {
 
 func (q *QueryShortcut) PlaceholderCount() int {
 	return len(regexp.MustCompile(`(?m){\d}`).FindAllString(q.Query, -1))
+}
+
+type AIProvider struct {
+	Name   string // see ai.ProviderName
+	ApiKey string
+	Host   string
 }
 
 type QueryHotkey struct {

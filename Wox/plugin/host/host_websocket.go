@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 	"time"
+	"wox/ai"
 	"wox/plugin"
-	"wox/plugin/llm"
 	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
@@ -381,26 +381,38 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 
 		pluginInstance.API.RegisterQueryCommands(ctx, commands)
 		w.sendResponseToHost(ctx, request, "")
-	case "LLMStream":
+	case "AIChatStream":
 		callbackId, exist := request.Params["callbackId"]
 		if !exist {
-			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] LLMStream method must have a callbackId parameter", request.PluginName))
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] AIChatStream method must have a callbackId parameter", request.PluginName))
 			return
 		}
 		conversationsStr, exist := request.Params["conversations"]
 		if !exist {
-			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] LLMStream method must have a conversations parameter", request.PluginName))
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] AIChatStream method must have a conversations parameter", request.PluginName))
 			return
 		}
 
-		var conversations []llm.Conversation
-		unmarshalErr := json.Unmarshal([]byte(conversationsStr), &conversations)
+		var model ai.Model
+		modelStr, modelExist := request.Params["model"]
+		if !modelExist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] AIChatStream method must have a model parameter", request.PluginName))
+			return
+		}
+		unmarshalErr := json.Unmarshal([]byte(modelStr), &model)
+		if unmarshalErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal model: %s", request.PluginName, unmarshalErr))
+			return
+		}
+
+		var conversations []ai.Conversation
+		unmarshalErr = json.Unmarshal([]byte(conversationsStr), &conversations)
 		if unmarshalErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal conversations: %s", request.PluginName, unmarshalErr))
 			return
 		}
 
-		llmErr := pluginInstance.API.LLMStream(ctx, conversations, func(streamType llm.ChatStreamDataType, data string) {
+		llmErr := pluginInstance.API.AIChatStream(ctx, model, conversations, func(streamType ai.ChatStreamDataType, data string) {
 			w.invokeMethod(ctx, pluginInstance.Metadata, "onLLMStream", map[string]string{
 				"CallbackId": callbackId,
 				"StreamType": string(streamType),

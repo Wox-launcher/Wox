@@ -18,6 +18,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"wox/ai"
 	"wox/i18n"
 	"wox/setting"
 	"wox/share"
@@ -39,6 +40,7 @@ type Manager struct {
 	ui                 share.UI
 	resultCache        *util.HashMap[string, *QueryResultCache]
 	debounceQueryTimer *util.HashMap[string, *debounceTimer]
+	aiProviders        *util.HashMap[ai.ProviderName, ai.Provider]
 
 	activeBrowserUrl string //active browser url before wox is activated
 }
@@ -48,6 +50,7 @@ func GetPluginManager() *Manager {
 		managerInstance = &Manager{
 			resultCache:        util.NewHashMap[string, *QueryResultCache](),
 			debounceQueryTimer: util.NewHashMap[string, *debounceTimer](),
+			aiProviders:        util.NewHashMap[ai.ProviderName, ai.Provider](),
 		}
 		logger = util.GetLogger()
 	})
@@ -961,4 +964,29 @@ func (m *Manager) IsHostStarted(ctx context.Context, runtime Runtime) bool {
 	}
 
 	return false
+}
+
+func (m *Manager) GetAIProvider(ctx context.Context, provider ai.ProviderName) (ai.Provider, error) {
+	if v, exist := m.aiProviders.Load(provider); exist {
+		return v, nil
+	}
+
+	//check if provider has setting
+	aiProviderSettings := setting.GetSettingManager().GetWoxSetting(ctx).AIProviders
+	providerSetting, providerSettingExist := lo.Find(aiProviderSettings, func(item setting.AIProvider) bool {
+		if item.Name == string(provider) {
+			return true
+		}
+		return false
+	})
+	if !providerSettingExist {
+		return nil, fmt.Errorf("ai provider setting not found: %s", provider)
+	}
+
+	newProvider, newProviderErr := ai.NewProvider(ctx, providerSetting)
+	if newProviderErr != nil {
+		return nil, newProviderErr
+	}
+	m.aiProviders.Store(provider, newProvider)
+	return newProvider, nil
 }

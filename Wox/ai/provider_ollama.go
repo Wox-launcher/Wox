@@ -1,4 +1,4 @@
-package llm
+package ai
 
 import (
 	"context"
@@ -11,11 +11,12 @@ import (
 	"github.com/tmc/langchaingo/llms/ollama"
 	"github.com/tmc/langchaingo/schema"
 	"io"
+	"wox/setting"
 	"wox/util"
 )
 
 type OllamaProvider struct {
-	connectContext ProviderConnectContext
+	connectContext setting.AIProvider
 	client         *ollama.LLM
 }
 
@@ -24,7 +25,7 @@ type OllamaProviderStream struct {
 	reader        io.Reader
 }
 
-func NewOllamaProvider(ctx context.Context, connectContext ProviderConnectContext) Provider {
+func NewOllamaProvider(ctx context.Context, connectContext setting.AIProvider) Provider {
 	return &OllamaProvider{connectContext: connectContext}
 }
 
@@ -63,9 +64,8 @@ func (o *OllamaProvider) Models(ctx context.Context) (models []Model, err error)
 
 	gjson.Get(string(body), "models.#.name").ForEach(func(key, value gjson.Result) bool {
 		models = append(models, Model{
-			DisplayName: value.String(),
-			Name:        value.String(),
-			Provider:    ModelProviderNameOllama,
+			Name:     value.String(),
+			Provider: ProviderNameOllama,
 		})
 		return true
 	})

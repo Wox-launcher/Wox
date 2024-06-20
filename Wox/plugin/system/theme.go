@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
+	"wox/ai"
 	"wox/plugin"
-	"wox/plugin/llm"
 	"wox/resource"
 	"wox/share"
 	"wox/util"
@@ -46,7 +46,7 @@ func (c *ThemePlugin) GetMetadata() plugin.Metadata {
 		},
 		Features: []plugin.MetadataFeature{
 			{
-				Name: plugin.MetadataFeatureLLM,
+				Name: plugin.MetadataFeatureAI,
 			},
 		},
 		SupportedOS: []string{
@@ -111,9 +111,9 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 
 	exampleThemeJson := embedThemes[0]
 
-	var conversations []llm.Conversation
-	conversations = append(conversations, llm.Conversation{
-		Role: llm.ConversationRoleUser,
+	var conversations []ai.Conversation
+	conversations = append(conversations, ai.Conversation{
+		Role: ai.ConversationRoleUser,
 		Text: `
 我正在编写Wox的主题，该主题是由一段json组成，例如：` + exampleThemeJson + `
 
@@ -178,7 +178,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 			Icon:            themeIcon,
 			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
 			RefreshInterval: 100,
-			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.LLMStream, conversations, func() bool {
+			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, ai.Model{}, conversations, func() bool {
 				return startGenerate
 			}, onAnswering, onAnswerErr),
 			Actions: []plugin.QueryResultAction{
