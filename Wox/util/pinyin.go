@@ -42,6 +42,13 @@ func getPinYin(term string) []string {
 
 	var heteronymTerms [][]string
 	for _, pinyinTerm := range newPinyinTerms {
+		// if pinyinTerm is too long, only use first letter, otherwise it will generate too many terms and cost too much time
+		if len(pinyinTerms) > 10 {
+			if len(pinyinTerm) > 1 {
+				pinyinTerm = pinyinTerm[:1]
+			}
+		}
+
 		heteronymTerms = multiplyTerms(heteronymTerms, pinyinTerm)
 	}
 

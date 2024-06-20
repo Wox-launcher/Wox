@@ -44,3 +44,10 @@ func TestIsStringMatchScore(t *testing.T) {
 	assert.True(t, match)
 	assert.GreaterOrEqual(t, score, int64(1))
 }
+
+func TestIsStringMatchScoreLong(t *testing.T) {
+	start := GetSystemTimestamp()
+	IsStringMatchScore("X 上的 Johnny Bi：“好多推友关注清迈的物价，刚好今天和老婆去超市，随手拍了一些价格，给小伙伴们分享一下。 今天去的是Makro，是杭东这边比较大的超市，也是我们最经常去的超市，价格一般，比BigC便宜，但是和各种市场比起来偏贵。… https:/2OP” / X htt198644", "github", true)
+	elapsed := GetSystemTimestamp() - start
+	assert.Less(t, elapsed, int64(1000))
+}
