@@ -39,6 +39,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
   final allCodeLanguages = {
     ...allLanguages,
     "txt": Mode(),
+    "conf": Mode(),
     "js": javascript,
     "ts": typescript,
     "yml": yaml,

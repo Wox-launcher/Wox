@@ -158,6 +158,11 @@ func (i *SelectionPlugin) queryForFile(ctx context.Context, filePath string) (re
 		Preview: plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeFile,
 			PreviewData: filePath,
+			PreviewProperties: map[string]string{
+				"Created At":  util.GetFileCreatedAt(filePath),
+				"Modified At": util.GetFileModifiedAt(filePath),
+				"Size":        util.GetFileSize(filePath),
+			},
 		},
 	})
 
