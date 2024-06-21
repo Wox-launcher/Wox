@@ -17,6 +17,7 @@ type WoxSettingDto struct {
 	QueryHotkeys         []setting.QueryHotkey
 	QueryShortcuts       []setting.QueryShortcut
 	LastQueryMode        setting.LastQueryMode
+	AIProviders          []setting.AIProvider
 
 	// UI related
 	AppWidth int

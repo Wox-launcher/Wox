@@ -10,6 +10,7 @@ class WoxSetting {
   late List<QueryHotkey> queryHotkeys;
   late List<QueryShortcut> queryShortcuts;
   late String lastQueryMode;
+  late List<AIProvider> aiProviders;
   late int appWidth;
   late String themeId;
 
@@ -25,6 +26,7 @@ class WoxSetting {
     required this.queryHotkeys,
     required this.queryShortcuts,
     required this.lastQueryMode,
+    required this.aiProviders,
     required this.appWidth,
     required this.themeId,
   });
@@ -58,6 +60,16 @@ class WoxSetting {
     }
 
     lastQueryMode = json['LastQueryMode'];
+
+    if (json['AIProviders'] != null) {
+      aiProviders = <AIProvider>[];
+      json['AIProviders'].forEach((v) {
+        aiProviders.add(AIProvider.fromJson(v));
+      });
+    } else {
+      aiProviders = <AIProvider>[];
+    }
+
     appWidth = json['AppWidth'];
     themeId = json['ThemeId'];
   }
@@ -75,6 +87,7 @@ class WoxSetting {
     data['QueryHotkeys'] = queryHotkeys;
     data['QueryShortcuts'] = queryShortcuts;
     data['LastQueryMode'] = lastQueryMode;
+    data['AIProviders'] = aiProviders;
     data['AppWidth'] = appWidth;
     data['ThemeId'] = themeId;
     return data;
@@ -134,5 +147,28 @@ class SettingWindowContext {
   SettingWindowContext.fromJson(Map<String, dynamic> json) {
     path = json['Path'];
     param = json['Param'];
+  }
+}
+
+class AIProvider {
+  late String name;
+  late String apiKey;
+
+  late String host;
+
+  AIProvider({required this.name, required this.apiKey, required this.host});
+
+  AIProvider.fromJson(Map<String, dynamic> json) {
+    name = json['Name'];
+    apiKey = json['ApiKey'];
+    host = json['Host'];
+  }
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['Name'] = name;
+    data['ApiKey'] = apiKey;
+    data['Host'] = host;
+    return data;
   }
 }

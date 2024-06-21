@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:wox/modules/setting/views/wox_setting_ai_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_theme_view.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 
@@ -44,6 +45,11 @@ class WoxSettingView extends GetView<WoxSettingController> {
                       icon: const Icon(FluentIcons.settings),
                       title: const Text('General'),
                       body: const WoxSettingGeneralView(),
+                    ),
+                    PaneItem(
+                      icon: const Icon(Icons.grain),
+                      title: const Text('AI'),
+                      body: const WoxSettingAIView(),
                     ),
                     PaneItemExpander(
                         icon: const Icon(FluentIcons.app_icon_default_add),

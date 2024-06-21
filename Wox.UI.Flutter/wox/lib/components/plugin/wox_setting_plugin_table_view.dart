@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:flutter/material.dart' as material;
@@ -169,6 +170,20 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
         children: [
           WoxImageView(woxImage: woxImage, width: 24, height: 24),
         ],
+      );
+    }
+    if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeSelect) {
+      var selectOption = column.selectOptions.firstWhere((element) => element.value == value, orElse: () => PluginSettingValueSelectOption.fromJson(<String, dynamic>{}));
+      return columnWidth(
+        column: column,
+        isHeader: false,
+        isOperation: false,
+        child: Text(
+          selectOption.label,
+          style: const TextStyle(
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       );
     }
 

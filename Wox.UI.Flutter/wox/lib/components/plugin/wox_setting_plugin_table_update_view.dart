@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:fluent_ui/l10n/generated/fluent_localizations_en.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
