@@ -1,11 +1,14 @@
 package system
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
+	"encoding/base64"
 	"fmt"
 	"github.com/disintegration/imaging"
 	"github.com/mat/besticon/besticon"
+	"image/png"
 	"io"
 	"net/url"
 	"os"
@@ -15,6 +18,7 @@ import (
 	"wox/plugin"
 	"wox/setting"
 	"wox/util"
+	"wox/util/window"
 )
 
 type cacheResult struct {
@@ -162,4 +166,20 @@ func createLLMOnRefreshHandler(ctx context.Context,
 
 		return current
 	}
+}
+
+func getActiveWindowIcon(ctx context.Context) (plugin.WoxImage, error) {
+	icon, err := window.GetActiveWindowIcon()
+	if err != nil {
+		return plugin.WoxImage{}, err
+	}
+
+	var buf bytes.Buffer
+	encodeErr := png.Encode(&buf, icon)
+	if encodeErr != nil {
+		return plugin.WoxImage{}, encodeErr
+	}
+
+	base64Str := base64.StdEncoding.EncodeToString(buf.Bytes())
+	return plugin.NewWoxImageBase64(fmt.Sprintf("data:image/png;base64,%s", base64Str)), nil
 }

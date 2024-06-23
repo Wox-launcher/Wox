@@ -1,16 +1,13 @@
 package system
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/cdfmlr/ellipsis"
 	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
 	"image"
-	"image/png"
 	"os"
 	"slices"
 	"strconv"
@@ -21,7 +18,6 @@ import (
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/keyboard"
-	"wox/util/window"
 )
 
 var clipboardIcon = plugin.NewWoxImageBase64(`data:image/png;base64,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`)
@@ -258,7 +254,7 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 				return
 			}
 
-			if iconImage, iconErr := c.getActiveWindowIcon(ctx); iconErr == nil {
+			if iconImage, iconErr := getActiveWindowIcon(ctx); iconErr == nil {
 				icon = iconImage
 			}
 		}
@@ -526,22 +522,6 @@ func (c *ClipboardPlugin) moveHistoryToTop(ctx context.Context, id string) {
 	slices.SortStableFunc(c.history, func(i, j ClipboardHistory) int {
 		return int(i.Timestamp - j.Timestamp)
 	})
-}
-
-func (c *ClipboardPlugin) getActiveWindowIcon(ctx context.Context) (plugin.WoxImage, error) {
-	icon, err := window.GetActiveWindowIcon()
-	if err != nil {
-		return plugin.WoxImage{}, err
-	}
-
-	var buf bytes.Buffer
-	encodeErr := png.Encode(&buf, icon)
-	if encodeErr != nil {
-		return plugin.WoxImage{}, encodeErr
-	}
-
-	base64Str := base64.StdEncoding.EncodeToString(buf.Bytes())
-	return plugin.NewWoxImageBase64(fmt.Sprintf("data:image/png;base64,%s", base64Str)), nil
 }
 
 func (c *ClipboardPlugin) saveHistory(ctx context.Context) {
