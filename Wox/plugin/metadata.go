@@ -94,12 +94,19 @@ func (m *Metadata) GetFeatureParamsForQueryEnv() (MetadataFeatureParamsQueryEnv,
 		if strings.ToLower(feature.Name) == strings.ToLower(MetadataFeatureQueryEnv) {
 			params := MetadataFeatureParamsQueryEnv{
 				RequireActiveWindowName: false,
+				RequireActiveWindowPid:  false,
 				RequireActiveBrowserUrl: false,
 			}
 
 			if v, ok := feature.Params["requireActiveWindowName"]; ok {
 				if v == "true" {
 					params.RequireActiveWindowName = true
+				}
+			}
+
+			if v, ok := feature.Params["requireActiveWindowPid"]; ok {
+				if v == "true" {
+					params.RequireActiveWindowPid = true
 				}
 			}
 
