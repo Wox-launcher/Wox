@@ -30,7 +30,7 @@ func (i *MenusPlugin) GetMetadata() plugin.Metadata {
 		Icon:          menusIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
-			"menus",
+			"*", "menus",
 		},
 		SupportedOS: []string{
 			"Macos",
@@ -69,7 +69,7 @@ func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 
 	filteredMenus := lo.Filter(menuNames, func(menu string, _ int) bool {
 		match, _ := IsStringMatchScore(ctx, menu, query.Search)
-		return match || query.Search == ""
+		return match || (!query.IsGlobalQuery() && query.Search == "")
 	})
 
 	return lo.Map(filteredMenus, func(menu string, _ int) plugin.QueryResult {

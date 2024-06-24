@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/ollama"
 	"github.com/tmc/langchaingo/schema"
+	"image/png"
 	"io"
 	"wox/setting"
 	"wox/util"
@@ -75,12 +77,25 @@ func (o *OllamaProvider) Models(ctx context.Context) (models []Model, err error)
 
 func (o *OllamaProvider) convertConversations(conversations []Conversation) (chatMessages []llms.MessageContent) {
 	for _, conversation := range conversations {
+		var msg llms.MessageContent
 		if conversation.Role == ConversationRoleUser {
-			chatMessages = append(chatMessages, llms.TextParts(schema.ChatMessageTypeHuman, conversation.Text))
+			msg = llms.TextParts(schema.ChatMessageTypeHuman, conversation.Text)
 		}
 		if conversation.Role == ConversationRoleSystem {
-			chatMessages = append(chatMessages, llms.TextParts(schema.ChatMessageTypeSystem, conversation.Text))
+			msg = llms.TextParts(schema.ChatMessageTypeSystem, conversation.Text)
 		}
+
+		for _, image := range conversation.Images {
+			buf := new(bytes.Buffer)
+			err := png.Encode(buf, image)
+			if err != nil {
+				util.GetLogger().Error(util.NewTraceContext(), err.Error())
+				continue
+			}
+			msg.Parts = append(msg.Parts, llms.BinaryPart("image/png", buf.Bytes()))
+		}
+
+		chatMessages = append(chatMessages, msg)
 	}
 
 	return chatMessages
