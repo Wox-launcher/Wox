@@ -21,18 +21,19 @@ var aiCommandIcon = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoA
 var aiCommandLabelWidth = 60
 
 type commandSetting struct {
-	Name     string `json:"name"`
-	Command  string `json:"command"`
-	Model    string `json:"model"`
-	Provider string `json:"provider"`
-	Prompt   string `json:"prompt"`
+	Name    string `json:"name"`
+	Command string `json:"command"`
+	Model   string `json:"model"`
+	Prompt  string `json:"prompt"`
 }
 
-func (c *commandSetting) AIModel() ai.Model {
-	return ai.Model{
-		Name:     c.Model,
-		Provider: ai.ProviderName(c.Provider),
+func (c *commandSetting) AIModel() (model ai.Model) {
+	err := json.Unmarshal([]byte(c.Model), &model)
+	if err != nil {
+		return ai.Model{}
 	}
+
+	return model
 }
 
 func init() {
@@ -65,62 +66,6 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
-				Type: definition.PluginSettingDefinitionTypeSelect,
-				Value: &definition.PluginSettingValueSelect{
-					Key:          "provider",
-					Label:        "Provider",
-					Tooltip:      "The LLM service provider",
-					DefaultValue: string(ai.ProviderNameOpenAI),
-					Options: []definition.PluginSettingValueSelectOption{
-						{
-							Label: "OpenAI",
-							Value: string(ai.ProviderNameOpenAI),
-						},
-						{
-							Label: "Google",
-							Value: string(ai.ProviderNameGoogle),
-						},
-						{
-							Label: "Ollama",
-							Value: string(ai.ProviderNameOllama),
-						},
-						{
-							Label: "Groq",
-							Value: string(ai.ProviderNameGroq),
-						},
-					},
-					Style: definition.PluginSettingValueStyle{
-						LabelWidth: aiCommandLabelWidth,
-					},
-				},
-			},
-			{
-				Type:  definition.PluginSettingDefinitionTypeNewLine,
-				Value: &definition.PluginSettingValueNewLine{},
-			},
-			{
-				Type: definition.PluginSettingDefinitionTypeDynamic,
-				Value: &definition.PluginSettingValueDynamic{
-					Key: "dynamic_models",
-				},
-			},
-			{
-				Type:  definition.PluginSettingDefinitionTypeNewLine,
-				Value: &definition.PluginSettingValueNewLine{},
-			},
-			{
-				Type: definition.PluginSettingDefinitionTypeDynamic,
-				Value: &definition.PluginSettingValueDynamic{
-					Key: "dynamic_host",
-				},
-			},
-			{
-				Type: definition.PluginSettingDefinitionTypeDynamic,
-				Value: &definition.PluginSettingValueDynamic{
-					Key: "dynamic_api_key",
-				},
-			},
-			{
 				Type: definition.PluginSettingDefinitionTypeTable,
 				Value: &definition.PluginSettingValueTable{
 					Key:     "commands",
@@ -142,9 +87,11 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 							Tooltip: "The command to run. E.g. `translate`, user will type `ai translate` to run this command",
 						},
 						{
-							Key:   "model",
-							Label: "Model",
-							Type:  definition.PluginSettingValueTableColumnTypeSelect,
+							Key:     "model",
+							Label:   "Model",
+							Type:    definition.PluginSettingValueTableColumnTypeSelectAIModel,
+							Width:   100,
+							Tooltip: "The ai model to use.",
 						},
 						{
 							Key:          "prompt",
@@ -373,7 +320,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 
 	return []plugin.QueryResult{{
 		Title:           fmt.Sprintf("Chat with %s", aiCommandSetting.Name),
-		SubTitle:        fmt.Sprintf("%s - %s", aiCommandSetting.Provider, aiCommandSetting.Model),
+		SubTitle:        fmt.Sprintf("%s - %s", aiCommandSetting.AIModel().Provider, aiCommandSetting.AIModel().Name),
 		Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
 		Icon:            aiCommandIcon,
 		RefreshInterval: 100,

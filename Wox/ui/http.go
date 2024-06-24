@@ -178,16 +178,21 @@ func convertPluginDto(ctx context.Context, pluginDto dto.PluginDto, pluginInstan
 		var removedKeys []string
 		for i, settingDefinition := range pluginDto.SettingDefinitions {
 			if settingDefinition.Type == definition.PluginSettingDefinitionTypeDynamic {
+				replaced := false
 				for _, callback := range pluginInstance.DynamicSettingCallbacks {
 					newSettingDefinition := callback(settingDefinition.Value.GetKey())
 					if newSettingDefinition.Value != nil && newSettingDefinition.Type != definition.PluginSettingDefinitionTypeDynamic {
 						logger.Debug(ctx, fmt.Sprintf("dynamic setting replaced: %s(%s) -> %s(%s)", settingDefinition.Value.GetKey(), settingDefinition.Type, newSettingDefinition.Value.GetKey(), newSettingDefinition.Type))
 						pluginDto.SettingDefinitions[i] = newSettingDefinition
-					} else {
-						logger.Error(ctx, fmt.Sprintf("dynamic setting not valid: %+v", newSettingDefinition))
-						//remove invalid dynamic setting
-						removedKeys = append(removedKeys, settingDefinition.Value.GetKey())
+						replaced = true
+						break
 					}
+				}
+
+				if !replaced {
+					logger.Error(ctx, "dynamic setting not replaced")
+					//remove invalid dynamic setting
+					removedKeys = append(removedKeys, settingDefinition.Value.GetKey())
 				}
 			}
 		}

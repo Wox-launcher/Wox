@@ -7,6 +7,7 @@ import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
+import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:flutter/material.dart' as material;
 
@@ -16,12 +17,12 @@ import 'wox_setting_plugin_table_update_view.dart';
 class WoxSettingPluginTable extends WoxSettingPluginItem {
   final PluginSettingValueTable item;
   static const String rowUniqueIdKey = "wox_table_row_id";
-  final tableWidth = 650.0;
+  final double tableWidth;
   final operationWidth = 75.0;
   final columnSpacing = 10.0;
   final columnTooltipWidth = 20.0;
 
-  const WoxSettingPluginTable({super.key, required this.item, required super.value, required super.onUpdate});
+  const WoxSettingPluginTable({super.key, required this.item, required super.value, required super.onUpdate, this.tableWidth = 650.0});
 
   double calculateColumnWidthForZeroWidth(PluginSettingValueTableColumn column) {
     // if there are multiple columns which have width set to 0, we will set the max width to 100 for each column
@@ -180,6 +181,20 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
         isOperation: false,
         child: Text(
           selectOption.label,
+          style: const TextStyle(
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      );
+    }
+    if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeSelectAIModel) {
+      var model = AIModel.fromJson(json.decode(value));
+      return columnWidth(
+        column: column,
+        isHeader: false,
+        isOperation: false,
+        child: Text(
+          "${model.provider} - ${model.name}",
           style: const TextStyle(
             overflow: TextOverflow.ellipsis,
           ),

@@ -7,7 +7,7 @@ import (
 	"wox/util/menus"
 )
 
-var menusIcon = plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><g fill="#53b9f9"><path d="M8 6.983a1 1 0 1 0 0 2h8a1 1 0 1 0 0-2zM7 12a1 1 0 0 1 1-1h8a1 1 0 1 1 0 2H8a1 1 0 0 1-1-1m1 3.017a1 1 0 1 0 0 2h8a1 1 0 1 0 0-2z"/><path fill-rule="evenodd" d="M22 12c0 5.523-4.477 10-10 10S2 17.523 2 12S6.477 2 12 2s10 4.477 10 10m-2 0a8 8 0 1 1-16 0a8 8 0 0 1 16 0" clip-rule="evenodd"/></g></svg>`)
+var menusIcon = plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><path fill="#53b9f9" d="M12 22c-4.714 0-7.071 0-8.536-1.465C2 19.072 2 16.714 2 12s0-7.071 1.464-8.536C4.93 2 7.286 2 12 2c4.714 0 7.071 0 8.535 1.464C22 4.93 22 7.286 22 12c0 4.714 0 7.071-1.465 8.535C19.072 22 16.714 22 12 22" opacity="0.5"/><path fill="#53b9f9" d="M18.75 8a.75.75 0 0 1-.75.75H6a.75.75 0 0 1 0-1.5h12a.75.75 0 0 1 .75.75m0 4a.75.75 0 0 1-.75.75H6a.75.75 0 0 1 0-1.5h12a.75.75 0 0 1 .75.75m0 4a.75.75 0 0 1-.75.75H6a.75.75 0 0 1 0-1.5h12a.75.75 0 0 1 .75.75"/></svg>`)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &MenusPlugin{})
@@ -30,7 +30,7 @@ func (i *MenusPlugin) GetMetadata() plugin.Metadata {
 		Icon:          menusIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
-			"*",
+			"menus",
 		},
 		SupportedOS: []string{
 			"Macos",
@@ -57,13 +57,8 @@ func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 	}
 
 	if query.Env.ActiveWindowPid == 0 {
-		return []plugin.QueryResult{
-			{
-				Title:    "No active window",
-				SubTitle: "No active window found",
-				Icon:     icon,
-			},
-		}
+		i.api.Log(ctx, plugin.LogLevelError, "Active window pid is not available")
+		return []plugin.QueryResult{}
 	}
 
 	menuNames, err := menus.GetAppMenuTitles(query.Env.ActiveWindowPid)
@@ -73,15 +68,14 @@ func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 	}
 
 	filteredMenus := lo.Filter(menuNames, func(menu string, _ int) bool {
-		match, score := IsStringMatchScore(ctx, menu, query.Search)
-		return match && score > 0
+		match, _ := IsStringMatchScore(ctx, menu, query.Search)
+		return match || query.Search == ""
 	})
 
 	return lo.Map(filteredMenus, func(menu string, _ int) plugin.QueryResult {
 		return plugin.QueryResult{
-			Title:    menu,
-			SubTitle: "Press Enter to execute",
-			Icon:     icon,
+			Title: menu,
+			Icon:  icon,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Execute",

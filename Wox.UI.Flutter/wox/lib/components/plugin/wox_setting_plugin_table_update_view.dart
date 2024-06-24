@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:fluent_ui/l10n/generated/fluent_localizations_en.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/utils/picker.dart';
@@ -111,6 +114,13 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     return max > 0 ? max : 100;
   }
 
+  Future<List<PluginSettingValueSelectOption>> getSelectionAIModelOptions() async {
+    final models = await WoxApi.instance.findAIModels();
+    return models.map((e) {
+      return PluginSettingValueSelectOption(value: jsonEncode(e), label: "${e.provider} - ${e.name}");
+    }).toList();
+  }
+
   Widget buildColumn(PluginSettingValueTableColumn column) {
     switch (column.type) {
       case PluginSettingValueType.pluginSettingValueTableColumnTypeText:
@@ -201,6 +211,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             value: getValue(column.key),
             onChanged: (value) {
               updateValue(column.key, value);
+              setState(() {});
             },
             items: column.selectOptions.map((e) {
               return ComboBoxItem(
@@ -208,6 +219,31 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 child: Text(e.label),
               );
             }).toList(),
+          ),
+        );
+      case PluginSettingValueType.pluginSettingValueTableColumnTypeSelectAIModel:
+        return Expanded(
+          child: FutureBuilder(
+            future: getSelectionAIModelOptions(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.done) {
+                return ComboBox<String>(
+                  value: getValue(column.key),
+                  onChanged: (value) {
+                    updateValue(column.key, value);
+                    setState(() {});
+                  },
+                  items: snapshot.data?.map((e) {
+                    return ComboBoxItem(
+                      value: e.value,
+                      child: Text(e.label),
+                    );
+                  }).toList(),
+                );
+              } else {
+                return const SizedBox();
+              }
+            },
           ),
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeWoxImage:
@@ -321,100 +357,103 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
 
   @override
   Widget build(BuildContext context) {
-    return ContentDialog(
-      constraints: const BoxConstraints(maxWidth: 800, maxHeight: 600),
-      content: SingleChildScrollView(
-        child: Column(children: [
-          for (var column in columns)
-            if (!column.hideInUpdate)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        SizedBox(
-                          width: getMaxColumnWidth(),
+    return FluentApp(
+      debugShowCheckedModeBanner: false,
+      home: ContentDialog(
+        constraints: const BoxConstraints(maxWidth: 800, maxHeight: 600),
+        content: SingleChildScrollView(
+          child: Column(children: [
+            for (var column in columns)
+              if (!column.hideInUpdate)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: getMaxColumnWidth(),
+                            child: Text(
+                              column.label,
+                              style: const TextStyle(overflow: TextOverflow.ellipsis),
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          buildColumn(column),
+                        ],
+                      ),
+                      if (column.tooltip != "")
+                        Padding(
+                          padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
                           child: Text(
-                            column.label,
-                            style: const TextStyle(overflow: TextOverflow.ellipsis),
-                            textAlign: TextAlign.right,
+                            column.tooltip,
+                            style: TextStyle(color: Colors.grey[90], fontSize: 12),
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        buildColumn(column),
-                      ],
-                    ),
-                    if (column.tooltip != "")
-                      Padding(
-                        padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
-                        child: Text(
-                          column.tooltip,
-                          style: TextStyle(color: Colors.grey[90], fontSize: 12),
+                      if (fieldValidationErrors.containsKey(column.key))
+                        Padding(
+                          padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
+                          child: Text(
+                            fieldValidationErrors[column.key]!,
+                            style: TextStyle(color: Colors.red, fontSize: 12),
+                          ),
                         ),
-                      ),
-                    if (fieldValidationErrors.containsKey(column.key))
-                      Padding(
-                        padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
-                        child: Text(
-                          fieldValidationErrors[column.key]!,
-                          style: TextStyle(color: Colors.red, fontSize: 12),
-                        ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
+          ]),
+        ),
+        actions: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Button(
+                child: const Text('Cancel'),
+                onPressed: () => Navigator.pop(context),
               ),
-        ]),
-      ),
-      actions: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Button(
-              child: const Text('Cancel'),
-              onPressed: () => Navigator.pop(context),
-            ),
-            const SizedBox(width: 16),
-            FilledButton(
-              child: const Text('Confirm'),
-              onPressed: () {
-                // validate
-                for (var column in columns) {
-                  if (column.validators.isNotEmpty) {
-                    for (var element in column.validators) {
-                      var errMsg = element.validator.validate(getValue(column.key));
-                      if (errMsg != "") {
-                        fieldValidationErrors[column.key] = errMsg;
-                      } else {
-                        fieldValidationErrors.remove(column.key);
+              const SizedBox(width: 16),
+              FilledButton(
+                child: const Text('Confirm'),
+                onPressed: () {
+                  // validate
+                  for (var column in columns) {
+                    if (column.validators.isNotEmpty) {
+                      for (var element in column.validators) {
+                        var errMsg = element.validator.validate(getValue(column.key));
+                        if (errMsg != "") {
+                          fieldValidationErrors[column.key] = errMsg;
+                        } else {
+                          fieldValidationErrors.remove(column.key);
+                        }
                       }
                     }
                   }
-                }
-                if (fieldValidationErrors.isNotEmpty) {
-                  setState(() {});
-                  return;
-                }
+                  if (fieldValidationErrors.isNotEmpty) {
+                    setState(() {});
+                    return;
+                  }
 
-                // remove empty text list
-                for (var column in columns) {
-                  if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeTextList) {
-                    var columnValues = getValue(column.key);
-                    if (columnValues is List) {
-                      columnValues.removeWhere((element) => element == "");
+                  // remove empty text list
+                  for (var column in columns) {
+                    if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeTextList) {
+                      var columnValues = getValue(column.key);
+                      if (columnValues is List) {
+                        columnValues.removeWhere((element) => element == "");
+                      }
                     }
                   }
-                }
 
-                widget.onUpdate(widget.item.key, values);
+                  widget.onUpdate(widget.item.key, values);
 
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        )
-      ],
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          )
+        ],
+      ),
     );
   }
 }

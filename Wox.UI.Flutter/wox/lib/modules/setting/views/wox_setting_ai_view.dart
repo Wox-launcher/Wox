@@ -68,6 +68,7 @@ class WoxSettingAIView extends GetView<WoxSettingController> {
               child: Obx(() {
                 return WoxSettingPluginTable(
                   value: json.encode(controller.woxSetting.value.aiProviders),
+                  tableWidth: 750,
                   item: PluginSettingValueTable.fromJson({
                     "Key": "AIProviders",
                     "Columns": [
@@ -98,7 +99,13 @@ class WoxSettingAIView extends GetView<WoxSettingController> {
                           {"Type": "not_empty"}
                         ],
                       },
-                      {"Key": "Host", "Label": "Host", "Tooltip": "The host of the AI provider.", "Width": 60, "Type": "text"}
+                      {
+                        "Key": "Host",
+                        "Label": "Host",
+                        "Tooltip": "The host of the AI provider.",
+                        "Width": 200,
+                        "Type": "text",
+                      }
                     ],
                     "SortColumnKey": "Name"
                   }),

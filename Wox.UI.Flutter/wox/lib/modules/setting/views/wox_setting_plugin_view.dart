@@ -492,6 +492,13 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   'E.g. you are using google chrome to view webpages, you activate Wox and this plugin will get the active window name as "Google Chrome"',
                 );
               }
+              if (e == "requireActiveWindowPid") {
+                return privacyItem(
+                  material.Icons.window,
+                  'Active window process id',
+                  'E.g. you are using google chrome to view webpages, you activate Wox and this plugin will get the active window process id as "1234"',
+                );
+              }
               if (e == "requireActiveBrowserUrl") {
                 return privacyItem(
                   material.Icons.web_sharp,

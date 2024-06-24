@@ -1,5 +1,6 @@
 import 'dart:core';
 
+import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_query.dart';
@@ -103,5 +104,9 @@ class WoxApi {
       "command": command,
       "arguments": arguments,
     });
+  }
+
+  Future<List<AIModel>> findAIModels() async {
+    return await WoxHttpUtil.instance.postData("/ai/models", null);
   }
 }

@@ -1,3 +1,4 @@
+import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_preview.dart';
@@ -19,6 +20,8 @@ class EntityFactory {
       return (json as List).map((e) => PluginDetail.fromJson(e)).toList() as T;
     } else if (T.toString() == "List<WoxSettingTheme>") {
       return (json as List).map((e) => WoxSettingTheme.fromJson(e)).toList() as T;
+    } else if (T.toString() == "List<AIModel>") {
+      return (json as List).map((e) => AIModel.fromJson(e)).toList() as T;
     } else {
       return json as T;
     }

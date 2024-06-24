@@ -40,6 +40,7 @@ class PluginSettingValueType {
   static const pluginSettingValueTableColumnTypeCheckbox = "checkbox";
   static const pluginSettingValueTableColumnTypeDirPath = "dirPath";
   static const pluginSettingValueTableColumnTypeSelect = "select";
+  static const pluginSettingValueTableColumnTypeSelectAIModel = "selectAIModel";
   static const pluginSettingValueTableColumnTypeWoxImage = "woxImage";
   static const pluginSettingValueTableColumnTypeHotkey = "hotkey";
 }

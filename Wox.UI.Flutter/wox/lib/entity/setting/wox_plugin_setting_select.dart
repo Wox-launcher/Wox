@@ -42,6 +42,8 @@ class PluginSettingValueSelectOption {
   late String label;
   late String value;
 
+  PluginSettingValueSelectOption({required this.label, required this.value});
+
   PluginSettingValueSelectOption.fromJson(Map<String, dynamic> json) {
     label = json['Label'];
     value = json['Value'];

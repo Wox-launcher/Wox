@@ -8,12 +8,13 @@ import (
 type PluginSettingValueTableColumnType = string
 
 const (
-	PluginSettingValueTableColumnTypeText     PluginSettingValueTableColumnType = "text"
-	PluginSettingValueTableColumnTypeTextList PluginSettingValueTableColumnType = "textList"
-	PluginSettingValueTableColumnTypeCheckbox PluginSettingValueTableColumnType = "checkbox"
-	PluginSettingValueTableColumnTypeDirPath  PluginSettingValueTableColumnType = "dirPath"
-	PluginSettingValueTableColumnTypeSelect   PluginSettingValueTableColumnType = "select"
-	PluginSettingValueTableColumnTypeWoxImage PluginSettingValueTableColumnType = "woxImage"
+	PluginSettingValueTableColumnTypeText          PluginSettingValueTableColumnType = "text"
+	PluginSettingValueTableColumnTypeTextList      PluginSettingValueTableColumnType = "textList"
+	PluginSettingValueTableColumnTypeCheckbox      PluginSettingValueTableColumnType = "checkbox"
+	PluginSettingValueTableColumnTypeDirPath       PluginSettingValueTableColumnType = "dirPath"
+	PluginSettingValueTableColumnTypeSelect        PluginSettingValueTableColumnType = "select"
+	PluginSettingValueTableColumnTypeSelectAIModel PluginSettingValueTableColumnType = "selectAIModel"
+	PluginSettingValueTableColumnTypeWoxImage      PluginSettingValueTableColumnType = "woxImage"
 )
 
 const (

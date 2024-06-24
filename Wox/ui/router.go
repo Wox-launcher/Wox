@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"wox/ai"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
@@ -49,6 +50,9 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	// lang
 	"/lang/change": handleLangChange,
 	"/lang/json":   handleLangJson,
+
+	// ai
+	"/ai/models": handleAIModels,
 
 	// others
 	"/":                 handleHome,
@@ -749,4 +753,30 @@ func handleDeeplink(w http.ResponseWriter, r *http.Request) {
 	GetUIManager().PostDeeplink(ctx, commandResult.String(), arguments)
 
 	writeSuccessResponse(w, "")
+}
+
+func handleAIModels(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+
+	var results []ai.Model
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	for _, providerSetting := range woxSetting.AIProviders {
+		provider, err := ai.NewProvider(ctx, providerSetting)
+		if err != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to new ai provider: %s", err.Error()))
+			continue
+		}
+
+		models, modelsErr := provider.Models(ctx)
+		if modelsErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to get models for provider %s: %s", providerSetting.Name, modelsErr.Error()))
+			continue
+		}
+
+		for i := range models {
+			results = append(results, models[i])
+		}
+	}
+
+	writeSuccessResponse(w, results)
 }
