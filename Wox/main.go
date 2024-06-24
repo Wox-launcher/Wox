@@ -16,6 +16,7 @@ import (
 	"wox/ui"
 	"wox/util"
 	"wox/util/hotkey"
+	"wox/util/window"
 )
 
 import _ "wox/plugin/host" // import all hosts
@@ -124,7 +125,7 @@ func main() {
 		t.Register(ctx, "ctrl+ctrl", func() {
 			//files := plugin.GetPluginManager().GetUI().PickFiles(ctx, share.PickFilesParams{IsDirectory: true})
 			//ui.GetUIManager().GetUI(ctx).Notify(ctx, "Picked files", fmt.Sprintf("%v", files))
-			//util.GetLogger().Info(ctx, window.GetActiveWindowName())
+			util.GetLogger().Info(ctx, window.GetActiveWindowName())
 		})
 		if util.IsProd() {
 			util.Go(ctx, "start ui", func() {

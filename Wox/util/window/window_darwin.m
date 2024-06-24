@@ -42,3 +42,14 @@ char* getActiveWindowName() {
         return strdup([[activeApp localizedName] UTF8String]);
     }
 }
+
+int getActiveWindowPid() {
+    @autoreleasepool {
+        NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        if (!activeApp) {
+            return -1;
+        }
+
+        return [activeApp processIdentifier];
+    }
+}

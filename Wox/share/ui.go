@@ -40,8 +40,8 @@ type UI interface {
 	Notify(ctx context.Context, title string, description string)
 	OpenSettingWindow(ctx context.Context, windowContext SettingWindowContext)
 	PickFiles(ctx context.Context, params PickFilesParams) []string
-
 	GetActiveWindowName() string
+	GetActiveWindowPid() int
 	GetServerPort(ctx context.Context) int
 	GetAllThemes(ctx context.Context) []Theme
 	ChangeTheme(ctx context.Context, theme Theme)

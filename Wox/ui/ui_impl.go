@@ -31,11 +31,13 @@ func (u *uiImpl) HideApp(ctx context.Context) {
 
 func (u *uiImpl) ShowApp(ctx context.Context, showContext share.ShowContext) {
 	GetUIManager().SetActiveWindowName(window.GetActiveWindowName())
+	GetUIManager().SetActiveWindowPid(window.GetActiveWindowPid())
 	u.invokeWebsocketMethod(ctx, "ShowApp", getShowAppParams(ctx, showContext.SelectAll))
 }
 
 func (u *uiImpl) ToggleApp(ctx context.Context) {
 	GetUIManager().SetActiveWindowName(window.GetActiveWindowName())
+	GetUIManager().SetActiveWindowPid(window.GetActiveWindowPid())
 	u.invokeWebsocketMethod(ctx, "ToggleApp", getShowAppParams(ctx, true))
 }
 
@@ -90,6 +92,10 @@ func (u *uiImpl) PickFiles(ctx context.Context, params share.PickFilesParams) []
 
 func (u *uiImpl) GetActiveWindowName() string {
 	return GetUIManager().GetActiveWindowName()
+}
+
+func (u *uiImpl) GetActiveWindowPid() int {
+	return GetUIManager().GetActiveWindowPid()
 }
 
 func (u *uiImpl) invokeWebsocketMethod(ctx context.Context, method string, data any) (responseData any, responseErr error) {

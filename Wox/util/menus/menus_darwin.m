@@ -60,11 +60,10 @@ void getMenuItemTitles(AXUIElementRef menuItem, NSMutableArray *titles, NSString
     }
 }
 
-char** getMenuItems(int* count) {
-    @autoreleasepool {
-        NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
-        pid_t pid = [activeApp processIdentifier];
 
+char** getMenuItems(int pid, int* count) {
+    @autoreleasepool {
+        // 直接使用传入的pid创建AXUIElementRef
         AXUIElementRef app = AXUIElementCreateApplication(pid);
         if (!app) {
             NSLog(@"Failed to create AXUIElementRef for app with pid %d", pid);
@@ -113,13 +112,11 @@ char** getMenuItems(int* count) {
     }
 }
 
-void performMenuAction(const char* title) {
+void performMenuAction(int pid, const char* title) {
     @autoreleasepool {
         NSString *menuPath = [NSString stringWithUTF8String:title];
 
-        NSRunningApplication *activeApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
-        pid_t pid = [activeApp processIdentifier];
-
+        // 直接使用传入的pid创建AXUIElementRef
         AXUIElementRef app = AXUIElementCreateApplication(pid);
         if (app == NULL) {
             NSLog(@"Failed to create AXUIElementRef for app with pid %d", pid);

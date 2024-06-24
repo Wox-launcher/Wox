@@ -105,7 +105,6 @@ char* getActiveWindowIcon(unsigned char **iconData, int *iconSize, int *width, i
     return result;
 }
 
-
 char* getActiveWindowName() {
     HWND hwnd = GetForegroundWindow();
     if (!hwnd) {
@@ -126,4 +125,15 @@ char* getActiveWindowName() {
     WideCharToMultiByte(CP_UTF8, 0, windowTitle, -1, windowTitleA, len, NULL, NULL);
 
     return windowTitleA;
+}
+
+int getActiveWindowPid() {
+    HWND hwnd = GetForegroundWindow();
+    if (!hwnd) {
+        return 0;
+    }
+
+    DWORD processId;
+    GetWindowThreadProcessId(hwnd, &processId);
+    return processId;
 }

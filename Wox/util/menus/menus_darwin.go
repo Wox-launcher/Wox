@@ -5,17 +5,17 @@ package menus
 #cgo LDFLAGS: -framework Foundation -framework Cocoa -framework AppKit
 #include <stdlib.h>
 
-char** getMenuItems(int* count);
-void performMenuAction(const char* title);
+char** getMenuItems(int pid, int* count);
+void performMenuAction(int pid, const char* title);
 */
 import "C"
 import (
 	"unsafe"
 )
 
-func GetActiveAppMenuTitles() []string {
+func GetAppMenuTitles(pid int) ([]string, error) {
 	var count C.int
-	cItems := C.getMenuItems(&count)
+	cItems := C.getMenuItems(C.int(pid), &count)
 	defer C.free(unsafe.Pointer(cItems))
 
 	items := make([]string, int(count))
@@ -26,12 +26,12 @@ func GetActiveAppMenuTitles() []string {
 		C.free(unsafe.Pointer(cItemsSlice[i]))
 	}
 
-	return items
+	return items, nil
 }
 
-func ExecuteActiveAppMenu(title string) {
+func ExecuteActiveAppMenu(pid int, title string) {
 	cTitle := C.CString(title)
 	defer C.free(unsafe.Pointer(cTitle))
 
-	C.performMenuAction(cTitle)
+	C.performMenuAction(C.int(pid), cTitle)
 }

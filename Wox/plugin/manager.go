@@ -23,7 +23,6 @@ import (
 	"wox/setting"
 	"wox/share"
 	"wox/util"
-	"wox/util/window"
 )
 
 var managerInstance *Manager
@@ -396,6 +395,9 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 		} else {
 			if queryEnvParams.RequireActiveWindowName {
 				newEnv.ActiveWindowTitle = currentEnv.ActiveWindowTitle
+			}
+			if queryEnvParams.RequireActiveWindowPid {
+				newEnv.ActiveWindowPid = currentEnv.ActiveWindowPid
 			}
 			if queryEnvParams.RequireActiveBrowserUrl {
 				newEnv.ActiveBrowserUrl = currentEnv.ActiveBrowserUrl
@@ -779,6 +781,7 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery share.PlainQuery) (Qu
 		}
 		query, instance := newQueryInputWithPlugins(newQuery, GetPluginManager().GetPluginInstances())
 		query.Env.ActiveWindowTitle = m.GetUI().GetActiveWindowName()
+		query.Env.ActiveWindowPid = m.GetUI().GetActiveWindowPid()
 		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
 		return query, instance, nil
 	}
@@ -790,7 +793,8 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery share.PlainQuery) (Qu
 			Search:    plainQuery.QueryText,
 			Selection: plainQuery.QuerySelection,
 		}
-		query.Env.ActiveWindowTitle = window.GetActiveWindowName()
+		query.Env.ActiveWindowTitle = m.GetUI().GetActiveWindowName()
+		query.Env.ActiveWindowPid = m.GetUI().GetActiveWindowPid()
 		query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
 		return query, nil, nil
 	}

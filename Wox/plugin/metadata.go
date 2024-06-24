@@ -141,5 +141,6 @@ type MetadataFeatureParamsDebounce struct {
 
 type MetadataFeatureParamsQueryEnv struct {
 	RequireActiveWindowName bool
+	RequireActiveWindowPid  bool
 	RequireActiveBrowserUrl bool
 }

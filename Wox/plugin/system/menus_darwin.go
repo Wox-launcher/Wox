@@ -35,6 +35,14 @@ func (i *MenusPlugin) GetMetadata() plugin.Metadata {
 		SupportedOS: []string{
 			"Macos",
 		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureQueryEnv,
+				Params: map[string]string{
+					"RequireActiveWindowPid": "true",
+				},
+			},
+		},
 	}
 }
 
@@ -48,7 +56,23 @@ func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 		icon = iconImage
 	}
 
-	filteredMenus := lo.Filter(menus.GetActiveAppMenuTitles(), func(menu string, _ int) bool {
+	if query.Env.ActiveWindowPid == 0 {
+		return []plugin.QueryResult{
+			{
+				Title:    "No active window",
+				SubTitle: "No active window found",
+				Icon:     icon,
+			},
+		}
+	}
+
+	menuNames, err := menus.GetAppMenuTitles(query.Env.ActiveWindowPid)
+	if err != nil {
+		i.api.Log(ctx, plugin.LogLevelError, err.Error())
+		return []plugin.QueryResult{}
+	}
+
+	filteredMenus := lo.Filter(menuNames, func(menu string, _ int) bool {
 		match, score := IsStringMatchScore(ctx, menu, query.Search)
 		return match && score > 0
 	})
@@ -62,7 +86,7 @@ func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 				{
 					Name: "Execute",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						menus.ExecuteActiveAppMenu(menu)
+						menus.ExecuteActiveAppMenu(query.Env.ActiveWindowPid, menu)
 					},
 				},
 			},

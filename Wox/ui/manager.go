@@ -39,6 +39,7 @@ type Manager struct {
 	isUIReadyHandled bool
 
 	activeWindowName string //active window name before wox is activated
+	activeWindowPid  int    //active window pid before wox is activated
 }
 
 func GetUIManager() *Manager {
@@ -480,6 +481,14 @@ func (m *Manager) SetActiveWindowName(name string) {
 
 func (m *Manager) GetActiveWindowName() string {
 	return m.activeWindowName
+}
+
+func (m *Manager) SetActiveWindowPid(pid int) {
+	m.activeWindowPid = pid
+}
+
+func (m *Manager) GetActiveWindowPid() int {
+	return m.activeWindowPid
 }
 
 func (m *Manager) PostDeeplink(ctx context.Context, command string, arguments map[string]string) {

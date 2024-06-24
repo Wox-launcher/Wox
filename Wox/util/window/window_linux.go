@@ -10,3 +10,7 @@ func GetActiveWindowIcon() (image.Image, error) {
 func GetActiveWindowName() string {
 	return ""
 }
+
+func GetActiveWindowPid() int {
+	return -1
+}
