@@ -5,6 +5,7 @@ import 'setting/wox_plugin_setting_head.dart';
 import 'setting/wox_plugin_setting_label.dart';
 import 'setting/wox_plugin_setting_newline.dart';
 import 'setting/wox_plugin_setting_select.dart';
+import 'setting/wox_plugin_setting_select_ai_model.dart';
 import 'setting/wox_plugin_setting_textbox.dart';
 
 class PluginSettingDefinitionItem {
@@ -32,6 +33,8 @@ class PluginSettingDefinitionItem {
       value = PluginSettingValueNewLine.fromJson(<String, dynamic>{});
     } else if (type == "select") {
       value = PluginSettingValueSelect.fromJson(json['Value']);
+    } else if (type == "selectAIModel") {
+      value = PluginSettingValueSelectAIModel.fromJson(json['Value']);
     } else if (type == "table") {
       value = PluginSettingValueTable.fromJson(json['Value']);
     } else if (type == "textbox") {
