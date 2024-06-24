@@ -106,6 +106,7 @@ func createLLMOnRefreshHandler(ctx context.Context,
 	model ai.Model,
 	conversations []ai.Conversation,
 	shouldStartAnswering func() bool,
+	onPreparing func(plugin.RefreshableResult) plugin.RefreshableResult,
 	onAnswering func(plugin.RefreshableResult, string, bool) plugin.RefreshableResult,
 	onAnswerErr func(plugin.RefreshableResult, error) plugin.RefreshableResult) func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
 
@@ -121,6 +122,9 @@ func createLLMOnRefreshHandler(ctx context.Context,
 		if !isStreamCreated {
 			isStreamCreated = true
 			util.GetLogger().Info(ctx, "creating stream")
+			if onPreparing != nil {
+				current = onPreparing(current)
+			}
 			err := chatStreamAPI(ctx, model, conversations, func(chatStreamDataType ai.ChatStreamDataType, response string) {
 				locker.Lock()
 				chatStreamDataTypeBuffer = chatStreamDataType

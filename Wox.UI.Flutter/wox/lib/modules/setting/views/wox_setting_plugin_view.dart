@@ -8,11 +8,13 @@ import 'package:get/get.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_head_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_label_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_newline_view.dart';
+import 'package:wox/components/plugin/wox_setting_plugin_select_ai_model_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_select_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_label.dart';
+import 'package:wox/entity/setting/wox_plugin_setting_select_ai_model.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_checkbox.dart';
@@ -397,6 +399,16 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     return WoxSettingPluginSelect(
                       value: plugin.setting.settings[e.value.key] ?? "",
                       item: e.value as PluginSettingValueSelect,
+                      onUpdate: (key, value) async {
+                        await controller.updatePluginSetting(plugin.id, key, value);
+                        controller.refreshPluginList();
+                      },
+                    );
+                  }
+                  if (e.type == "selectAIModel") {
+                    return WoxSettingPluginSelectAIModel(
+                      value: plugin.setting.settings[e.value.key] ?? "",
+                      item: e.value as PluginSettingValueSelectAIModel,
                       onUpdate: (key, value) async {
                         await controller.updatePluginSetting(plugin.id, key, value);
                         controller.refreshPluginList();

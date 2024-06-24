@@ -149,19 +149,7 @@ func (c *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 
 func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	if query.Type == plugin.QueryTypeSelection {
-		commands, commandsErr := c.getAllCommands(ctx)
-		if commandsErr != nil {
-			return []plugin.QueryResult{}
-		}
-
-		if query.Selection.Type == util.SelectionTypeFile {
-			return c.querySelectionFile(ctx, query, commands)
-		}
-		if query.Selection.Type == util.SelectionTypeText {
-			return c.querySelectionText(ctx, query, commands)
-		}
-
-		return []plugin.QueryResult{}
+		return c.querySelection(ctx, query)
 	}
 
 	if query.Command == "" {
@@ -171,11 +159,29 @@ func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryRe
 	return c.queryCommand(ctx, query)
 }
 
-func (c *Plugin) querySelectionFile(ctx context.Context, query plugin.Query, commands []commandSetting) []plugin.QueryResult {
+func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	commands, commandsErr := c.getAllCommands(ctx)
+	if commandsErr != nil {
+		return []plugin.QueryResult{}
+	}
+
 	var results []plugin.QueryResult
 	for _, command := range commands {
-		if !command.Vision {
-			continue
+		if query.Selection.Type == util.SelectionTypeFile {
+			if !command.Vision {
+				continue
+			}
+		}
+		if query.Selection.Type == util.SelectionTypeText {
+			if command.Vision {
+				continue
+			}
+		}
+
+		onPreparing := func(current plugin.RefreshableResult) plugin.RefreshableResult {
+			current.Preview.PreviewData = "Answering..."
+			current.SubTitle = "Answering..."
+			return current
 		}
 
 		isFirstAnswer := true
@@ -202,30 +208,38 @@ func (c *Plugin) querySelectionFile(ctx context.Context, query plugin.Query, com
 		}
 
 		var conversations []ai.Conversation
-		var images []image.Image
-		for _, imagePath := range query.Selection.FilePaths {
-			img, imgErr := imaging.Open(imagePath)
-			if imgErr != nil {
-				continue
+		if query.Selection.Type == util.SelectionTypeFile {
+			var images []image.Image
+			for _, imagePath := range query.Selection.FilePaths {
+				img, imgErr := imaging.Open(imagePath)
+				if imgErr != nil {
+					continue
+				}
+				images = append(images, img)
 			}
-			images = append(images, img)
+			conversations = append(conversations, ai.Conversation{
+				Role:   ai.ConversationRoleUser,
+				Text:   command.Prompt,
+				Images: images,
+			})
 		}
-		conversations = append(conversations, ai.Conversation{
-			Role:   ai.ConversationRoleUser,
-			Text:   command.Prompt,
-			Images: images,
-		})
+		if query.Selection.Type == util.SelectionTypeText {
+			conversations = append(conversations, ai.Conversation{
+				Role: ai.ConversationRoleUser,
+				Text: fmt.Sprintf(command.Prompt, query.Selection.Text),
+			})
+		}
 
 		startGenerate := false
 		results = append(results, plugin.QueryResult{
-			Title:           command.Command,
-			SubTitle:        command.Name,
+			Title:           command.Name,
+			SubTitle:        fmt.Sprintf("%s - %s", command.AIModel().Provider, command.AIModel().Name),
 			Icon:            aiCommandIcon,
 			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeText, PreviewData: "Enter to start chat"},
 			RefreshInterval: 100,
 			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, command.AIModel(), conversations, func() bool {
 				return startGenerate
-			}, onAnswering, onAnswerErr),
+			}, onPreparing, onAnswering, onAnswerErr),
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "Run",
@@ -245,6 +259,12 @@ func (c *Plugin) querySelectionText(ctx context.Context, query plugin.Query, com
 	for _, command := range commands {
 		if command.Vision {
 			continue
+		}
+
+		onPreparing := func(current plugin.RefreshableResult) plugin.RefreshableResult {
+			current.Preview.PreviewData = "Answering..."
+			current.SubTitle = "Answering..."
+			return current
 		}
 
 		isFirstAnswer := true
@@ -278,14 +298,14 @@ func (c *Plugin) querySelectionText(ctx context.Context, query plugin.Query, com
 
 		startGenerate := false
 		results = append(results, plugin.QueryResult{
-			Title:           command.Command,
-			SubTitle:        command.Name,
+			Title:           command.Name,
+			SubTitle:        fmt.Sprintf("%s - %s", command.AIModel().Provider, command.AIModel().Name),
 			Icon:            aiCommandIcon,
-			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeText, PreviewData: query.Selection.Text},
+			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeText, PreviewData: "Enter to start chat"},
 			RefreshInterval: 100,
 			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, command.AIModel(), conversations, func() bool {
 				return startGenerate
-			}, onAnswering, onAnswerErr),
+			}, onPreparing, onAnswering, onAnswerErr),
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "Run",
@@ -445,7 +465,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 		RefreshInterval: 100,
 		OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, aiCommandSetting.AIModel(), conversations, func() bool {
 			return true
-		}, onAnswering, onAnswerErr),
+		}, nil, onAnswering, onAnswerErr),
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: "Copy",

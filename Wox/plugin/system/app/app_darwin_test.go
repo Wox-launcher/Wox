@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/stretchr/testify/require"
 	"testing"
+	"wox/ai"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/share"
@@ -48,7 +49,7 @@ func (e emptyAPIImpl) OnSettingChanged(ctx context.Context, callback func(key st
 func (e emptyAPIImpl) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
 }
 
-func (e emptyAPIImpl) LLMStream(ctx context.Context, conversations []ai.Conversation, callback ai.ChatStreamFunc) error {
+func (e emptyAPIImpl) AIChatStream(ctx context.Context, model ai.Model, conversations []ai.Conversation, callback ai.ChatStreamFunc) error {
 	return nil
 }
 

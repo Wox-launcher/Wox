@@ -11,13 +11,14 @@ import (
 type PluginSettingDefinitionType string
 
 const (
-	PluginSettingDefinitionTypeHead     PluginSettingDefinitionType = "head"
-	PluginSettingDefinitionTypeTextBox  PluginSettingDefinitionType = "textbox"
-	PluginSettingDefinitionTypeCheckBox PluginSettingDefinitionType = "checkbox"
-	PluginSettingDefinitionTypeSelect   PluginSettingDefinitionType = "select"
-	PluginSettingDefinitionTypeLabel    PluginSettingDefinitionType = "label"
-	PluginSettingDefinitionTypeNewLine  PluginSettingDefinitionType = "newline"
-	PluginSettingDefinitionTypeTable    PluginSettingDefinitionType = "table"
+	PluginSettingDefinitionTypeHead          PluginSettingDefinitionType = "head"
+	PluginSettingDefinitionTypeTextBox       PluginSettingDefinitionType = "textbox"
+	PluginSettingDefinitionTypeCheckBox      PluginSettingDefinitionType = "checkbox"
+	PluginSettingDefinitionTypeSelect        PluginSettingDefinitionType = "select"
+	PluginSettingDefinitionTypeSelectAIModel PluginSettingDefinitionType = "selectAIModel"
+	PluginSettingDefinitionTypeLabel         PluginSettingDefinitionType = "label"
+	PluginSettingDefinitionTypeNewLine       PluginSettingDefinitionType = "newline"
+	PluginSettingDefinitionTypeTable         PluginSettingDefinitionType = "table"
 
 	// dynamic setting will be replaced by the actual setting when retrieved
 	// this is useful when the setting is dynamic. E.g. a list of plugins for select

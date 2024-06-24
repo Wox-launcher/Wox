@@ -9,6 +9,7 @@ import (
 	"wox/ai"
 	"wox/plugin"
 	"wox/resource"
+	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
 )
@@ -42,6 +43,16 @@ func (c *ThemePlugin) GetMetadata() plugin.Metadata {
 			{
 				Command:     "ai",
 				Description: "Generate a new theme with AI",
+			},
+		},
+		SettingDefinitions: definition.PluginSettingDefinitions{
+			{
+				Type: definition.PluginSettingDefinitionTypeSelectAIModel,
+				Value: &definition.PluginSettingValueSelectAiModel{
+					Key:     "model",
+					Label:   "AI model",
+					Tooltip: `AI model to use for generating theme.`,
+				},
 			},
 		},
 		Features: []plugin.MetadataFeature{
@@ -90,6 +101,40 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 }
 
 func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	modelStr := c.api.GetSetting(ctx, "model")
+	if modelStr == "" {
+		return []plugin.QueryResult{
+			{
+				Title: "Please select an AI model in theme settings",
+				Icon:  themeIcon,
+				Actions: []plugin.QueryResultAction{
+					{
+						Name:                   "Open theme settings",
+						PreventHideAfterAction: true,
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+							plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, share.SettingWindowContext{
+								Path:  "/plugin/setting",
+								Param: c.GetMetadata().Name,
+							})
+						},
+					},
+				},
+			},
+		}
+	}
+	var aiModel ai.Model
+	unmarshalErr := json.Unmarshal([]byte(modelStr), &aiModel)
+	if unmarshalErr != nil {
+		c.api.Notify(ctx, "Failed to unmarshal model", unmarshalErr.Error())
+		return []plugin.QueryResult{
+			{
+				Title:    "Failed to unmarshal model",
+				SubTitle: unmarshalErr.Error(),
+				Icon:     themeIcon,
+			},
+		}
+	}
+
 	if query.Search == "" {
 		return []plugin.QueryResult{
 			{
@@ -115,15 +160,15 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 	conversations = append(conversations, ai.Conversation{
 		Role: ai.ConversationRoleUser,
 		Text: `
-我正在编写Wox的主题，该主题是由一段json组成，例如：` + exampleThemeJson + `
+					我正在编写Wox的主题，该主题是由一段json组成，例如：` + exampleThemeJson + `
 
-现在我想让你根据上面的格式生成一个新的主题，主题的要求是：` + query.Search + `。
+					现在我想让你根据上面的格式生成一个新的主题，主题的要求是：` + query.Search + `。
 
-有一些注意点需要你遵守：
-1. 你的回答结果必须是JSON格式,以{开头,以}结尾. 忽略解释，注释等信息
-2. 主题名称你自己决定,但是必须有意义
-3. 背景跟字体需要有区分度，不要让背景跟字体颜色太接近(这里包括正常未选中的结果与被高亮选中的结果)
-`,
+					有一些注意点需要你遵守：
+					1. 你的回答结果必须是JSON格式, 以{开头, 以}结尾.忽略解释，注释等信息
+					2. 主题名称你自己决定, 但是必须有意义
+					3. 背景跟字体需要有区分度，不要让背景跟字体颜色太接近(这里包括正常未选中的结果与被高亮选中的结果)
+					`,
 	})
 
 	onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
@@ -178,9 +223,9 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 			Icon:            themeIcon,
 			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
 			RefreshInterval: 100,
-			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, ai.Model{}, conversations, func() bool {
+			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, aiModel, conversations, func() bool {
 				return startGenerate
-			}, onAnswering, onAnswerErr),
+			}, nil, onAnswering, onAnswerErr),
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "Apply",
