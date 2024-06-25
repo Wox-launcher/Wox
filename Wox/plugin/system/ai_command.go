@@ -178,9 +178,11 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 			}
 		}
 
+		var startAnsweringTime int64
 		onPreparing := func(current plugin.RefreshableResult) plugin.RefreshableResult {
 			current.Preview.PreviewData = "Answering..."
 			current.SubTitle = "Answering..."
+			startAnsweringTime = util.GetSystemTimestamp()
 			return current
 		}
 
@@ -197,7 +199,7 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 
 			if isFinished {
 				current.RefreshInterval = 0 // stop refreshing
-				current.SubTitle = "Answered"
+				current.SubTitle = fmt.Sprintf("Answered, cost %d ms", util.GetSystemTimestamp()-startAnsweringTime)
 			}
 			return current
 		}
@@ -229,72 +231,6 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 				Text: fmt.Sprintf(command.Prompt, query.Selection.Text),
 			})
 		}
-
-		startGenerate := false
-		results = append(results, plugin.QueryResult{
-			Title:           command.Name,
-			SubTitle:        fmt.Sprintf("%s - %s", command.AIModel().Provider, command.AIModel().Name),
-			Icon:            aiCommandIcon,
-			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeText, PreviewData: "Enter to start chat"},
-			RefreshInterval: 100,
-			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, command.AIModel(), conversations, func() bool {
-				return startGenerate
-			}, onPreparing, onAnswering, onAnswerErr),
-			Actions: []plugin.QueryResultAction{
-				{
-					Name:                   "Run",
-					PreventHideAfterAction: true,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						startGenerate = true
-					},
-				},
-			},
-		})
-	}
-	return results
-}
-
-func (c *Plugin) querySelectionText(ctx context.Context, query plugin.Query, commands []commandSetting) []plugin.QueryResult {
-	var results []plugin.QueryResult
-	for _, command := range commands {
-		if command.Vision {
-			continue
-		}
-
-		onPreparing := func(current plugin.RefreshableResult) plugin.RefreshableResult {
-			current.Preview.PreviewData = "Answering..."
-			current.SubTitle = "Answering..."
-			return current
-		}
-
-		isFirstAnswer := true
-		onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
-			if isFirstAnswer {
-				current.Preview.PreviewData = ""
-				isFirstAnswer = false
-			}
-
-			current.SubTitle = "Answering..."
-			current.Preview.PreviewData += deltaAnswer
-			current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
-
-			if isFinished {
-				current.RefreshInterval = 0 // stop refreshing
-				current.SubTitle = "Answered"
-			}
-			return current
-		}
-		onAnswerErr := func(current plugin.RefreshableResult, err error) plugin.RefreshableResult {
-			current.Preview.PreviewData += fmt.Sprintf("\n\nError: %s", err.Error())
-			current.RefreshInterval = 0 // stop refreshing
-			return current
-		}
-
-		var conversations []ai.Conversation
-		conversations = append(conversations, ai.Conversation{
-			Role: ai.ConversationRoleUser,
-			Text: fmt.Sprintf(command.Prompt, query.Selection.Text),
-		})
 
 		startGenerate := false
 		results = append(results, plugin.QueryResult{

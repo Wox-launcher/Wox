@@ -44,7 +44,13 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
 
     if (values.isEmpty) {
       for (var column in columns) {
-        values[column.key] = "";
+        if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeTextList) {
+          values[column.key] = [];
+        } else if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeCheckbox) {
+          values[column.key] = false;
+        } else {
+          values[column.key] = "";
+        }
       }
     } else {
       isUpdate = true;

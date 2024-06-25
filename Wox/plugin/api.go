@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/disintegration/imaging"
 	"github.com/samber/lo"
 	"io"
 	"path"
@@ -165,6 +166,19 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model ai.Model, conversation
 	provider, providerErr := GetPluginManager().GetAIProvider(ctx, model.Provider)
 	if providerErr != nil {
 		return providerErr
+	}
+
+	// resize images in the conversation
+	for i, conversation := range conversations {
+		for j, image := range conversation.Images {
+			// resize image if it's too large
+			maxWidth := 600
+			if image.Bounds().Dx() > maxWidth {
+				start := util.GetSystemTimestamp()
+				conversations[i].Images[j] = imaging.Resize(image, maxWidth, 0, imaging.Lanczos)
+				a.Log(ctx, LogLevelDebug, fmt.Sprintf("resizing image (%d -> %d) in ai chat, cost %d ms", image.Bounds().Dx(), maxWidth, util.GetSystemTimestamp()-start))
+			}
+		}
 	}
 
 	stream, err := provider.ChatStream(ctx, model, conversations)

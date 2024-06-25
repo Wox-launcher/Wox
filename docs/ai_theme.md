@@ -1,6 +1,6 @@
 # Create Theme with AI
 
-> Please note that this feature requires the configuration of LLM settings to be used. If you have not configured LLM settings, please refer to the [LLM settings](llm_settings.md)
+> Please note that this feature requires the configuration of AI settings to be used. If you have not configured AI settings, please refer to the [AI settings](ai_settings.md)
 > documentation.
 
 Wox provides a unique feature that allows you to create themes using AI. This feature can be accessed using the `theme ai` command followed by your theme description. The AI will

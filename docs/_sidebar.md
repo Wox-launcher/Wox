@@ -24,6 +24,9 @@
     - [Install Theme](theme.md)
     - [Create Theme with AI](ai_theme.md)
 
+- Use cases
+    - [Auto git commit msg](usecase_auto_write_git_commit_msg.md)
+
 - Misc
     - [Development](development.md)
 

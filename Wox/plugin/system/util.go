@@ -27,6 +27,7 @@ type cacheResult struct {
 }
 
 var pinyinMatchCache = util.NewHashMap[string, cacheResult]()
+var windowIconCache = util.NewHashMap[string, plugin.WoxImage]()
 
 func IsStringMatchScore(ctx context.Context, term string, subTerm string) (bool, int64) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
@@ -173,6 +174,11 @@ func createLLMOnRefreshHandler(ctx context.Context,
 }
 
 func getActiveWindowIcon(ctx context.Context) (plugin.WoxImage, error) {
+	cacheKey := fmt.Sprintf("%s-%d", window.GetActiveWindowName(), window.GetActiveWindowPid())
+	if icon, ok := windowIconCache.Load(cacheKey); ok {
+		return icon, nil
+	}
+
 	icon, err := window.GetActiveWindowIcon()
 	if err != nil {
 		return plugin.WoxImage{}, err
@@ -185,5 +191,7 @@ func getActiveWindowIcon(ctx context.Context) (plugin.WoxImage, error) {
 	}
 
 	base64Str := base64.StdEncoding.EncodeToString(buf.Bytes())
-	return plugin.NewWoxImageBase64(fmt.Sprintf("data:image/png;base64,%s", base64Str)), nil
+	woxIcon := plugin.NewWoxImageBase64(fmt.Sprintf("data:image/png;base64,%s", base64Str))
+	windowIconCache.Store(cacheKey, woxIcon)
+	return woxIcon, nil
 }
