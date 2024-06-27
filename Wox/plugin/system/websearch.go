@@ -56,6 +56,11 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureQuerySelection,
+			},
+		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
 			{
 				Type:               definition.PluginSettingDefinitionTypeTable,
@@ -194,6 +199,10 @@ func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []we
 }
 
 func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
+	if query.Type == plugin.QueryTypeSelection {
+		return r.querySelection(ctx, query)
+	}
+
 	queries := strings.Split(query.RawQuery, " ")
 	if len(queries) <= 1 {
 		return
@@ -256,6 +265,37 @@ func (r *WebSearchPlugin) QueryFallback(ctx context.Context, query plugin.Query)
 	}
 
 	return results
+}
+
+func (r *WebSearchPlugin) querySelection(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
+	//only support text selection
+	if query.Selection.Type == util.SelectionTypeFile {
+		return []plugin.QueryResult{}
+	}
+
+	for _, search := range r.webSearches {
+		// only show fallback searches
+		if !search.IsFallback || !search.Enabled {
+			continue
+		}
+
+		results = append(results, plugin.QueryResult{Title: r.replaceVariables(ctx, search.Title, query.Selection.Text),
+			Icon: search.Icon,
+			Actions: []plugin.QueryResultAction{
+				{
+					Name: "Search",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						for _, url := range search.Urls {
+							util.ShellOpen(r.replaceVariables(ctx, url, query.Selection.Text))
+							time.Sleep(time.Millisecond * 100)
+						}
+					},
+				},
+			},
+		})
+	}
+
+	return
 }
 
 func (r *WebSearchPlugin) replaceVariables(ctx context.Context, text string, query string) string {

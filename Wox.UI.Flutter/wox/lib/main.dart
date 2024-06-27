@@ -166,7 +166,8 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
     for (var argument in arguments) {
       var key = argument.split("=")[0];
       var value = argument.split("=")[1];
-      argumentMap[key] = value;
+      // url decode value
+      argumentMap[key] = Uri.decodeComponent(value);
     }
 
     WoxApi.instance.onProtocolUrlReceived(command, argumentMap);
