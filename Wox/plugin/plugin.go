@@ -14,7 +14,8 @@ type SystemPlugin interface {
 	GetMetadata() Metadata
 }
 
-type FallbackPlugin interface {
+// When there is no result from the plugin in global query, Wox will call QueryFallback
+type FallbackSearcher interface {
 	QueryFallback(ctx context.Context, query Query) []QueryResult
 }
 

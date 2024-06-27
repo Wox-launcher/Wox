@@ -711,25 +711,55 @@ func (m *Manager) QuerySilent(ctx context.Context, query Query) bool {
 	}
 }
 
-func (m *Manager) QueryFallback(ctx context.Context, query Query) (results []QueryResultUI) {
-	if !query.IsGlobalQuery() {
-		return
-	}
-
-	for _, instance := range m.instances {
-		pluginInstance := instance
-		if v, ok := pluginInstance.Plugin.(FallbackPlugin); ok {
-			queryResults := v.QueryFallback(ctx, query)
-			for i := range queryResults {
-				queryResults[i] = m.PolishResult(ctx, pluginInstance, query, queryResults[i])
+func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *Instance) (results []QueryResultUI) {
+	var queryResults []QueryResult
+	if query.IsGlobalQuery() {
+		for _, instance := range m.instances {
+			pluginInstance := instance
+			if v, ok := pluginInstance.Plugin.(FallbackSearcher); ok {
+				queryResults = v.QueryFallback(ctx, query)
+				for i := range queryResults {
+					queryResults[i] = m.PolishResult(ctx, pluginInstance, query, queryResults[i])
+				}
 			}
-			queryResultsUI := lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
-				return item.ToUI()
-			})
-			results = append(results, queryResultsUI...)
+		}
+	} else {
+		if query.Command != "" {
+			return results
+		}
+
+		// search query commands
+		commands := lo.Filter(queryPlugin.GetQueryCommands(), func(item MetadataCommand, index int) bool {
+			return strings.Contains(item.Command, query.Search) || query.Search == ""
+		})
+		queryResults = lo.Map(commands, func(item MetadataCommand, index int) QueryResult {
+			return QueryResult{
+				Title:    item.Command,
+				SubTitle: item.Description,
+				Icon:     ParseWoxImageOrDefault(queryPlugin.Metadata.Icon, NewWoxImageEmoji("🔍")),
+				Actions: []QueryResultAction{
+					{
+						Name:                   "Execute",
+						PreventHideAfterAction: true,
+						Action: func(ctx context.Context, actionContext ActionContext) {
+							m.ui.ChangeQuery(ctx, share.PlainQuery{
+								QueryType: QueryTypeInput,
+								QueryText: fmt.Sprintf("%s %s ", query.TriggerKeyword, item.Command),
+							})
+						},
+					},
+				},
+			}
+		})
+		for i := range queryResults {
+			queryResults[i] = m.PolishResult(ctx, queryPlugin, query, queryResults[i])
 		}
 	}
 
+	queryResultsUI := lo.Map(queryResults, func(item QueryResult, index int) QueryResultUI {
+		return item.ToUI()
+	})
+	results = append(results, queryResultsUI...)
 	return results
 }
 

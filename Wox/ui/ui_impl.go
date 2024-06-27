@@ -275,14 +275,12 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 		return
 	}
 
-	query, _, queryErr := plugin.GetPluginManager().NewQuery(ctx, changedQuery)
+	query, queryPlugin, queryErr := plugin.GetPluginManager().NewQuery(ctx, changedQuery)
 	if queryErr != nil {
 		logger.Error(ctx, queryErr.Error())
 		responseUIError(ctx, request, queryErr.Error())
 		return
 	}
-
-	//logger.Info(ctx, fmt.Sprintf("active window title: %s", query.Env.ActiveWindowTitle))
 
 	var totalResultCount int
 	var startTimestamp = util.GetSystemTimestamp()
@@ -307,9 +305,9 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 		case <-doneChan:
 			logger.Info(ctx, fmt.Sprintf("query done, total results: %d, cost %d ms", totalResultCount, util.GetSystemTimestamp()-startTimestamp))
 
-			// if there is no result, show fallback websearch
+			// if there is no result, show fallback search
 			if totalResultCount == 0 {
-				fallbackResults := plugin.GetPluginManager().QueryFallback(ctx, query)
+				fallbackResults := plugin.GetPluginManager().QueryFallback(ctx, query, queryPlugin)
 				if len(fallbackResults) > 0 {
 					lo.ForEach(fallbackResults, func(_ plugin.QueryResultUI, index int) {
 						fallbackResults[index].QueryId = queryId
