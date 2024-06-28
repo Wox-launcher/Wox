@@ -657,7 +657,12 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 }
 
 func (w *WPMPlugin) saveLocalPluginDirectories(ctx context.Context) {
-	data, marshalErr := json.Marshal(w.localPluginDirectories)
+	var localPluginDirs []LocalPlugin
+	for _, directory := range w.localPluginDirectories {
+		localPluginDirs = append(localPluginDirs, LocalPlugin{Path: directory})
+	}
+
+	data, marshalErr := json.Marshal(localPluginDirs)
 	if marshalErr != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to marshal local plugin directories: %s", marshalErr.Error()))
 		return

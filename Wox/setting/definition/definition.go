@@ -54,9 +54,12 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 	if !value.Exists() {
 		return errors.New("setting must have Type property")
 	}
+
 	contentResult := gjson.GetBytes(b, "Value")
-	if !contentResult.Exists() {
-		return errors.New("setting type must have Value property")
+	if value.String() != "newline" {
+		if !contentResult.Exists() {
+			return errors.New("setting type must have Value property")
+		}
 	}
 
 	switch value.String() {
