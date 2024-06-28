@@ -8,6 +8,8 @@ import (
 	"github.com/parsiya/golnk"
 	"image"
 	"image/color"
+	"os/user"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -37,9 +39,26 @@ func (a *WindowsRetriever) GetPlatform() string {
 }
 
 func (a *WindowsRetriever) GetAppDirectories(ctx context.Context) []appDirectory {
+	// get the start menu and program files directories for current user
+	usr, _ := user.Current()
 	return []appDirectory{
 		{
+			Path:           usr.HomeDir + "\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs",
+			Recursive:      true,
+			RecursiveDepth: 2,
+		},
+		{
 			Path:           "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs",
+			Recursive:      true,
+			RecursiveDepth: 2,
+		},
+		{
+			Path:           "C:\\Program Files",
+			Recursive:      true,
+			RecursiveDepth: 2,
+		},
+		{
+			Path:           "C:\\Program Files (x86)",
 			Recursive:      true,
 			RecursiveDepth: 2,
 		},
@@ -54,12 +73,15 @@ func (a *WindowsRetriever) ParseAppInfo(ctx context.Context, path string) (appIn
 	if strings.HasSuffix(path, ".lnk") {
 		return a.parseShortcut(ctx, path)
 	}
+	if strings.HasSuffix(path, ".exe") {
+		return a.parseExe(ctx, path)
+	}
 
 	return appInfo{}, errors.New("not implemented")
 }
 
-func (a *WindowsRetriever) parseShortcut(ctx context.Context, path string) (appInfo, error) {
-	f, lnkErr := lnk.File(path)
+func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (appInfo, error) {
+	f, lnkErr := lnk.File(appPath)
 	if lnkErr != nil {
 		return appInfo{}, lnkErr
 	}
@@ -79,7 +101,7 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, path string) (appI
 	icon := appIcon
 	img, iconErr := a.GetAppIcon(ctx, targetPath)
 	if iconErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("Error getting icon for %s: %s", targetPath, iconErr.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("Error getting icon for %s, use default icon: %s", targetPath, iconErr.Error()))
 	} else {
 		woxIcon, imgErr := plugin.NewWoxImage(img)
 		if imgErr != nil {
@@ -90,8 +112,30 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, path string) (appI
 	}
 
 	return appInfo{
-		Name: f.StringData.NameString,
+		Name: strings.TrimSuffix(filepath.Base(appPath), filepath.Ext(appPath)),
 		Path: targetPath,
+		Icon: icon,
+	}, nil
+}
+
+func (a *WindowsRetriever) parseExe(ctx context.Context, appPath string) (appInfo, error) {
+	// use default icon if no icon is found
+	icon := appIcon
+	img, iconErr := a.GetAppIcon(ctx, appPath)
+	if iconErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("Error getting icon for %s: %s", appPath, iconErr.Error()))
+	} else {
+		woxIcon, imgErr := plugin.NewWoxImage(img)
+		if imgErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("Error converting icon for %s: %s", appPath, imgErr.Error()))
+		} else {
+			icon = woxIcon
+		}
+	}
+
+	return appInfo{
+		Name: strings.TrimSuffix(filepath.Base(appPath), filepath.Ext(appPath)),
+		Path: appPath,
 		Icon: icon,
 	}, nil
 }
@@ -168,5 +212,10 @@ func (a *WindowsRetriever) GetAppIcon(ctx context.Context, path string) (image.I
 }
 
 func (a *WindowsRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
-	return []appInfo{}, nil
+	uwpApps := a.GetUWPApps(ctx)
+	return uwpApps, nil
+}
+
+func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
+	return []appInfo{}
 }
