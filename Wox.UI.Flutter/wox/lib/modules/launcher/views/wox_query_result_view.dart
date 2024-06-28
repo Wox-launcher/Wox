@@ -178,6 +178,19 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
             }
           }
 
+          if (event is KeyRepeatEvent) {
+            if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+              controller.changeResultActionScrollPosition(
+                  const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+              controller.changeResultActionScrollPosition(
+                  const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
+              return KeyEventResult.handled;
+            }
+          }
+
           return KeyEventResult.ignored;
         },
         child: Padding(

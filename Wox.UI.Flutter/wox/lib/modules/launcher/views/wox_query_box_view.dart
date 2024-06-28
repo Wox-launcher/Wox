@@ -58,6 +58,17 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                     }
                   }
 
+                  if (event is KeyRepeatEvent) {
+                    switch (event.logicalKey) {
+                      case LogicalKeyboardKey.arrowDown:
+                        controller.handleQueryBoxArrowDown();
+                        return KeyEventResult.handled;
+                      case LogicalKeyboardKey.arrowUp:
+                        controller.handleQueryBoxArrowUp();
+                        return KeyEventResult.handled;
+                    }
+                  }
+
                   return KeyEventResult.ignored;
                 },
                 child: SizedBox(
