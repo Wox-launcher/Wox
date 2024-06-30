@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ffi';
 
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/cupertino.dart';
@@ -21,8 +22,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final operationWidth = 75.0;
   final columnSpacing = 10.0;
   final columnTooltipWidth = 20.0;
+  final bool readonly;
 
-  const WoxSettingPluginTable({super.key, required this.item, required super.value, required super.onUpdate, this.tableWidth = 650.0});
+  const WoxSettingPluginTable({super.key, required this.item, required super.value, required super.onUpdate, this.tableWidth = 650.0, this.readonly = false});
 
   double calculateColumnWidthForZeroWidth(PluginSettingValueTableColumn column) {
     // if there are multiple columns which have width set to 0, we will set the max width to 100 for each column
@@ -397,26 +399,27 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 child: buildHeaderCell(column),
               ),
             ),
-        material.DataColumn(
-          label: columnWidth(
-            column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
-              "Key": "Operation",
-              "Label": "Operation",
-              "Tooltip": "",
-              "Width": operationWidth.toInt(),
-              "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText,
-              "TextMaxLines": 1,
-            }),
-            isHeader: true,
-            isOperation: true,
-            child: const Text(
-              "Operation",
-              style: TextStyle(
-                overflow: TextOverflow.ellipsis,
+        if (!readonly)
+          material.DataColumn(
+            label: columnWidth(
+              column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
+                "Key": "Operation",
+                "Label": "Operation",
+                "Tooltip": "",
+                "Width": operationWidth.toInt(),
+                "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText,
+                "TextMaxLines": 1,
+              }),
+              isHeader: true,
+              isOperation: true,
+              child: const Text(
+                "Operation",
+                style: TextStyle(
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
           ),
-        ),
       ],
       rows: [
         for (var row in rows)
@@ -427,8 +430,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                   material.DataCell(
                     buildRowCell(column, row),
                   ),
-              // operation cell
-              buildOperationCell(context, row, rows),
+              if (!readonly)
+                // operation cell
+                buildOperationCell(context, row, rows),
             ],
           ),
       ],
@@ -456,37 +460,38 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                   ],
                 ),
               ),
-              HyperlinkButton(
-                  onPressed: () {
-                    showDialog(
-                        context: context,
-                        builder: (context) {
-                          return WoxSettingPluginTableUpdate(
-                            item: item,
-                            row: const {},
-                            onUpdate: (key, row) {
-                              var rowsJson = getSetting(key);
-                              if (rowsJson == "") {
-                                rowsJson = "[]";
-                              }
-                              var rows = json.decode(rowsJson);
-                              rows.add(row);
-                              //remove the unique key
-                              rows.forEach((element) {
-                                element.remove(rowUniqueIdKey);
-                              });
+              if (!readonly)
+                HyperlinkButton(
+                    onPressed: () {
+                      showDialog(
+                          context: context,
+                          builder: (context) {
+                            return WoxSettingPluginTableUpdate(
+                              item: item,
+                              row: const {},
+                              onUpdate: (key, row) {
+                                var rowsJson = getSetting(key);
+                                if (rowsJson == "") {
+                                  rowsJson = "[]";
+                                }
+                                var rows = json.decode(rowsJson);
+                                rows.add(row);
+                                //remove the unique key
+                                rows.forEach((element) {
+                                  element.remove(rowUniqueIdKey);
+                                });
 
-                              updateConfig(key, json.encode(rows));
-                            },
-                          );
-                        });
-                  },
-                  child: const Row(
-                    children: [
-                      Icon(material.Icons.add),
-                      Text("Add"),
-                    ],
-                  )),
+                                updateConfig(key, json.encode(rows));
+                              },
+                            );
+                          });
+                    },
+                    child: const Row(
+                      children: [
+                        Icon(material.Icons.add),
+                        Text("Add"),
+                      ],
+                    )),
             ],
           ),
           // full width the datatable

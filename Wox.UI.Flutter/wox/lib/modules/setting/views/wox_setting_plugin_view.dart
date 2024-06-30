@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dynamic_tabbar/dynamic_tabbar.dart' as dt;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' as material;
@@ -295,23 +297,37 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
               labelColor: SettingPrimaryColor,
               indicatorColor: SettingPrimaryColor,
               dynamicTabs: [
-                dt.TabData(
-                  index: 0,
-                  title: const material.Tab(
-                    child: Text('Description'),
-                  ),
-                  content: pluginTabDescription(),
-                ),
                 if (controller.shouldShowSettingTab())
                   dt.TabData(
-                    index: 1,
+                    index: 0,
                     title: const material.Tab(
                       child: Text('Settings'),
                     ),
                     content: pluginTabSetting(),
                   ),
                 dt.TabData(
+                  index: 1,
+                  title: const material.Tab(
+                    child: Text('Trigger Keywords'),
+                  ),
+                  content: pluginTabTriggerKeywords(),
+                ),
+                dt.TabData(
                   index: 2,
+                  title: const material.Tab(
+                    child: Text('Commands'),
+                  ),
+                  content: pluginTabCommand(),
+                ),
+                dt.TabData(
+                  index: 3,
+                  title: const material.Tab(
+                    child: Text('Description'),
+                  ),
+                  content: pluginTabDescription(),
+                ),
+                dt.TabData(
+                  index: 4,
                   title: const material.Tab(
                     child: Text('Privacy'),
                   ),
@@ -454,6 +470,98 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         ),
       );
     });
+  }
+
+  Widget pluginTabTriggerKeywords() {
+    var plugin = controller.activePluginDetail.value;
+    if (plugin.triggerKeywords.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('This plugin has no trigger keywords'),
+          ],
+        ),
+      );
+    }
+
+    return WoxSettingPluginTable(
+      value: json.encode(plugin.triggerKeywords.map((e) => {"keyword": e}).toList()),
+      tableWidth: 680,
+      item: PluginSettingValueTable.fromJson({
+        "Key": "_triggerKeywords",
+        "Columns": [
+          {
+            "Key": "keyword",
+            "Label": "Keyword",
+            "Tooltip": "The keyword that triggers this plugin. * presents no keyword, any input will trigger this plugin.",
+            "Type": "text",
+            "TextMaxLines": 1,
+            "Validators": [
+              {"Type": "not_empty"}
+            ],
+          },
+        ],
+        "SortColumnKey": "keyword"
+      }),
+      onUpdate: (key, value) {
+        final List<String> triggerKeywords = [];
+        for (var item in json.decode(value)) {
+          triggerKeywords.add(item["keyword"]);
+        }
+        plugin.triggerKeywords = triggerKeywords;
+        controller.updatePluginTriggerKeywords(plugin.id, triggerKeywords);
+        controller.refreshPluginList();
+      },
+    );
+  }
+
+  Widget pluginTabCommand() {
+    var plugin = controller.activePluginDetail.value;
+    if (plugin.commands.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('This plugin has no command'),
+          ],
+        ),
+      );
+    }
+
+    return WoxSettingPluginTable(
+      value: json.encode(plugin.commands),
+      tableWidth: 680,
+      readonly: true,
+      item: PluginSettingValueTable.fromJson({
+        "Key": "_commands",
+        "Columns": [
+          {
+            "Key": "Command",
+            "Label": "Name",
+            "Width": 120,
+            "Type": "text",
+            "TextMaxLines": 1,
+            "Validators": [
+              {"Type": "not_empty"}
+            ],
+          },
+          {
+            "Key": "Description",
+            "Label": "Description",
+            "Type": "text",
+            "TextMaxLines": 1,
+            "Validators": [
+              {"Type": "not_empty"}
+            ],
+          }
+        ],
+        "SortColumnKey": "Command"
+      }),
+      onUpdate: (key, value) {},
+    );
   }
 
   Widget pluginTabPrivacy() {

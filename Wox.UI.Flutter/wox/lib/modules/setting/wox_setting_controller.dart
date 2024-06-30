@@ -129,6 +129,10 @@ class WoxSettingController extends GetxController {
     Logger.instance.info(const UuidV4().generate(), 'plugin setting updated: $key=$value');
   }
 
+  Future<void> updatePluginTriggerKeywords(String pluginId, List<String> triggerKeywords) async {
+    await updatePluginSetting(pluginId, "TriggerKeywords", triggerKeywords.join(","));
+  }
+
   bool shouldShowSettingTab() {
     return activePluginDetail.value.isInstalled && activePluginDetail.value.settingDefinitions.isNotEmpty;
   }

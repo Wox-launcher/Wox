@@ -59,8 +59,8 @@ class PluginSettingValueTableColumn {
 
   PluginSettingValueTableColumn.fromJson(Map<String, dynamic> json) {
     key = json['Key'];
-    label = json['Label'];
-    tooltip = json['Tooltip'];
+    label = json['Label'] ?? "";
+    tooltip = json['Tooltip'] ?? "";
     width = json['Width'] ?? 0;
     type = json['Type'];
     if (json['SelectOptions'] != null) {
