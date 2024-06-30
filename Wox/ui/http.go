@@ -224,6 +224,7 @@ func convertPluginDto(ctx context.Context, pluginDto dto.PluginDto, pluginInstan
 		//only return user pre-defined settings
 		pluginDto.Setting.Settings = definitionSettings
 		pluginDto.Features = pluginInstance.Metadata.Features
+		pluginDto.TriggerKeywords = pluginInstance.GetTriggerKeywords()
 	}
 
 	return pluginDto

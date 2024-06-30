@@ -159,7 +159,6 @@ func handlePluginInstalled(w http.ResponseWriter, r *http.Request) {
 		installedPlugin.IsDev = pluginInstance.IsDevPlugin
 		installedPlugin.IsInstalled = true
 		installedPlugin.IsDisable = pluginInstance.Setting.Disabled
-		installedPlugin.TriggerKeywords = pluginInstance.GetTriggerKeywords()
 
 		//load screenshot urls from store if exist
 		storePlugin, foundErr := plugin.GetStoreManager().GetStorePluginManifestById(getCtx, pluginInstance.Metadata.Id)

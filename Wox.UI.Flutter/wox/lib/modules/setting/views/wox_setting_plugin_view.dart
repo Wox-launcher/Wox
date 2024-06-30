@@ -37,9 +37,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 20),
-          child: RawKeyboardListener(
-            focusNode: FocusNode(onKey: (FocusNode node, RawKeyEvent event) {
-              if (event is RawKeyDownEvent) {
+          child: KeyboardListener(
+            focusNode: FocusNode(onKeyEvent: (FocusNode node, KeyEvent event) {
+              if (event is KeyDownEvent) {
                 switch (event.logicalKey) {
                   case LogicalKeyboardKey.escape:
                     controller.hideWindow();
