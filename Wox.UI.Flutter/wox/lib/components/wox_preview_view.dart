@@ -203,6 +203,13 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
             contentWidget = buildText("Image file not found: ${widget.woxPreview.previewData}");
           }
         } else if (allCodeLanguages.containsKey(fileExtension)) {
+          // if file is bigger than 1MB, do not preview
+          var file = File(widget.woxPreview.previewData);
+          if (file.lengthSync() > 1 * 1024 * 1024) {
+            contentWidget = buildText("File too big to preview, current size: ${(file.lengthSync() / 1024 / 1024).toInt()} MB");
+            return contentWidget;
+          }
+
           if (File(widget.woxPreview.previewData).existsSync()) {
             contentWidget = buildCode(widget.woxPreview.previewData, fileExtension);
           } else {
