@@ -219,3 +219,7 @@ func (a *WindowsRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) 
 func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 	return []appInfo{}
 }
+
+func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {
+	return 0
+}

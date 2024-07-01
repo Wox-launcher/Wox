@@ -38,3 +38,7 @@ func (a *LinuxRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo
 func (a *LinuxRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
 	return []appInfo{}, nil
 }
+
+func (a *LinuxRetriever) GetPid(ctx context.Context, app appInfo) int {
+	return 0
+}

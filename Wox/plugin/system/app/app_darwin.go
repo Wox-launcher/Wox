@@ -4,8 +4,11 @@ package app
 #cgo CFLAGS: -x objective-c
 #cgo LDFLAGS: -framework Foundation -framework Cocoa
 #include <stdlib.h>
+#include <sys/sysctl.h>
 
 const unsigned char *GetPrefPaneIcon(const char *prefPanePath, size_t *length);
+int get_process_list(struct kinfo_proc **procList, size_t *procCount);
+char* get_process_path(pid_t pid);
 */
 import "C"
 import (
@@ -32,8 +35,15 @@ import (
 
 var appRetriever = &MacRetriever{}
 
+type processInfo struct {
+	Pid  int
+	Path string
+}
+
 type MacRetriever struct {
-	api plugin.API
+	runningProcesses      []processInfo
+	lastProcessUpdateTime int64
+	api                   plugin.API
 }
 
 func (a *MacRetriever) UpdateAPI(api plugin.API) {
@@ -334,4 +344,51 @@ func (a *MacRetriever) parseMacAppIconFromCgo(ctx context.Context, appPath strin
 	}
 
 	return "", errors.New("no icon found with system api")
+}
+
+func (a *MacRetriever) GetPid(ctx context.Context, app appInfo) int {
+	if util.GetSystemTimestamp()-a.lastProcessUpdateTime > 1000 {
+		a.lastProcessUpdateTime = util.GetSystemTimestamp()
+		a.runningProcesses = a.getRunningProcesses()
+	}
+
+	for _, proc := range a.runningProcesses {
+		if strings.HasPrefix(proc.Path, app.Path) {
+			return proc.Pid
+		}
+	}
+
+	return 0
+}
+
+func (a *MacRetriever) getRunningProcesses() (infos []processInfo) {
+	var procList *C.struct_kinfo_proc
+	var procCount C.size_t
+
+	if C.get_process_list(&procList, &procCount) == -1 {
+		return
+	}
+	defer C.free(unsafe.Pointer(procList))
+
+	slice := (*[1 << 30]C.struct_kinfo_proc)(unsafe.Pointer(procList))[:procCount:procCount]
+
+	for _, proc := range slice {
+		pid := proc.kp_proc.p_pid
+		ppid := proc.kp_eproc.e_ppid
+		if ppid > 1 {
+			//only show user process
+			continue
+		}
+		appPath := C.GoString(C.get_process_path(pid))
+		if appPath == "" {
+			continue
+		}
+
+		infos = append(infos, processInfo{
+			Pid:  int(pid),
+			Path: appPath,
+		})
+	}
+
+	return
 }
