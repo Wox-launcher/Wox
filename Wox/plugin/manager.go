@@ -1024,3 +1024,19 @@ func (m *Manager) GetAIProvider(ctx context.Context, provider ai.ProviderName) (
 	m.aiProviders.Store(provider, newProvider)
 	return newProvider, nil
 }
+
+func (m *Manager) ExecutePluginDeeplink(ctx context.Context, pluginId string, arguments map[string]string) {
+	pluginInstance, exist := lo.Find(m.instances, func(item *Instance) bool {
+		return item.Metadata.Id == pluginId
+	})
+	if !exist {
+		logger.Error(ctx, fmt.Sprintf("plugin not found: %s", pluginId))
+		return
+	}
+
+	for _, callback := range pluginInstance.DeepLinkCallbacks {
+		util.Go(ctx, fmt.Sprintf("[%s] execute deeplink callback", pluginInstance.Metadata.Name), func() {
+			callback(arguments)
+		})
+	}
+}

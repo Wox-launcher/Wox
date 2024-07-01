@@ -1,4 +1,4 @@
-import { ChangeQueryParam, Context, PublicAPI } from "@wox-launcher/wox-plugin"
+import { ChangeQueryParam, Context, MapString, PublicAPI } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import { PluginJsonRpcRequest, PluginJsonRpcTypeRequest } from "./jsonrpc"
 import * as crypto from "crypto"
@@ -14,6 +14,7 @@ export class PluginAPI implements PublicAPI {
   pluginName: string
   settingChangeCallbacks: Map<string, (key: string, value: string) => void>
   getDynamicSettingCallbacks: Map<string, (key: string) => PluginSettingDefinitionItem>
+  deepLinkCallbacks: Map<string, (params: MapString) => void>
   llmStreamCallbacks: Map<string, llm.ChatStreamFunc>
 
   constructor(ws: WebSocket, pluginId: string, pluginName: string) {
@@ -22,6 +23,7 @@ export class PluginAPI implements PublicAPI {
     this.pluginName = pluginName
     this.settingChangeCallbacks = new Map<string, (key: string, value: string) => void>()
     this.getDynamicSettingCallbacks = new Map<string, (key: string) => PluginSettingDefinitionItem>()
+    this.deepLinkCallbacks = new Map<string, (params: MapString) => void>()
     this.llmStreamCallbacks = new Map<string, llm.ChatStreamFunc>()
   }
 
@@ -99,6 +101,12 @@ export class PluginAPI implements PublicAPI {
     const callbackId = crypto.randomUUID()
     this.getDynamicSettingCallbacks.set(callbackId, callback)
     await this.invokeMethod(ctx, "OnGetDynamicSetting", { callbackId })
+  }
+
+  async OnDeepLink(ctx: Context, callback: (params: MapString) => void): Promise<void> {
+    const callbackId = crypto.randomUUID()
+    this.deepLinkCallbacks.set(callbackId, callback)
+    await this.invokeMethod(ctx, "OnDeepLink", { callbackId })
   }
 
   async RegisterQueryCommands(ctx: Context, commands: MetadataCommand[]): Promise<void> {

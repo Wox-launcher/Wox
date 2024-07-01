@@ -1,7 +1,7 @@
 import { logger } from "./logger"
 import path from "path"
 import { PluginAPI } from "./pluginAPI"
-import { Context, Plugin, PluginInitParams, Query, QueryEnv, RefreshableResult, Result, ResultAction, Selection } from "@wox-launcher/wox-plugin"
+import { Context, MapString, Plugin, PluginInitParams, Query, QueryEnv, RefreshableResult, Result, ResultAction, Selection } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { llm } from "@wox-launcher/wox-plugin/types/llm"
@@ -27,9 +27,7 @@ export interface PluginJsonRpcRequest {
   PluginName: string
   Type: string
   Method: string
-  Params: {
-    [key: string]: string
-  }
+  Params: MapString
 }
 
 export interface PluginJsonRpcResponse {
@@ -63,6 +61,8 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
       return onPluginSettingChange(ctx, request)
     case "onGetDynamicSetting":
       return onGetDynamicSetting(ctx, request)
+    case "onDeepLink":
+      return onDeepLink(ctx, request)
     case "onLLMStream":
       return onLLMStream(ctx, request)
     default:
@@ -163,6 +163,18 @@ async function onGetDynamicSetting(ctx: Context, request: PluginJsonRpcRequest) 
   }
 
   return setting
+}
+
+async function onDeepLink(ctx: Context, request: PluginJsonRpcRequest) {
+  const plugin = pluginInstances.get(request.PluginId)
+  if (plugin === undefined || plugin === null) {
+    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+  }
+
+  const callbackId = request.Params.CallbackId
+  const params = JSON.parse(request.Params.Arguments) as MapString
+  plugin.API.deepLinkCallbacks.get(callbackId)?.(params)
 }
 
 async function onLLMStream(ctx: Context, request: PluginJsonRpcRequest) {

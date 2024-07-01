@@ -10,11 +10,9 @@ optional parameters.
 
 Currently, Wox supports the following command for deep linking:
 
-### Query
-
-The `query` command allows you to execute a specific query in Wox. The format for this command is `wox://query?q=your%20query`. The `%20` is a URL-encoded space character, allowing
-you to include spaces in your query.
-
-For example, if you want to execute the query "search files", you would use the URL <a href="wox://query?q=search%20files" target="_blank">wox://query?q=search%20files</a>.
+| Command  | Description                             | example URL                                                                                                                |
+|----------|-----------------------------------------|----------------------------------------------------------------------------------------------------------------------------|
+| `query`  | Execute a specific query in Wox         | `wox://query?q=<your query with url encoded>`  <a href="wox://query?q=search%20files" target="_blank">click me to try</a>. |
+| `plugin` | Execute a specific plugin action in Wox | `wox://plugin/<plugin_id>?anyKey=anyValue`                                                                                 |
 
 Please note that deep linking in Wox is case-sensitive, so ensure that your commands and parameters are correctly formatted.

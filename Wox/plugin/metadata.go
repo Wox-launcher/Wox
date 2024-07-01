@@ -28,6 +28,9 @@ const (
 
 	// enable this feature to chat with ai in plugin
 	MetadataFeatureAI MetadataFeatureName = "ai"
+
+	// enable this feature to execute custom deep link in plugin
+	MetadataFeatureDeepLink MetadataFeatureName = "deepLink"
 )
 
 // Metadata parsed from plugin.json, see `Plugin.json.md` for more detail

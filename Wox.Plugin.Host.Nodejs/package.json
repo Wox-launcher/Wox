@@ -32,7 +32,7 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@wox-launcher/wox-plugin": "^0.0.68",
+    "@wox-launcher/wox-plugin": "^0.0.70",
     "dayjs": "^1.11.9",
     "promise-deferred": "^2.0.4",
     "winston": "^3.10.0",

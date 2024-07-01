@@ -1,6 +1,8 @@
 import { llm } from "./llm.js"
 import { MetadataCommand, PluginSettingDefinitionItem } from "./setting.js"
 
+export type MapString = { [key: string]: string }
+
 export type Platform = "windows" | "darwin" | "linux"
 
 export interface Plugin {
@@ -188,6 +190,11 @@ export interface PublicAPI {
    * Get dynamic setting definition
    */
   OnGetDynamicSetting: (ctx: Context, callback: (key: string) => PluginSettingDefinitionItem) => Promise<void>
+
+  /**
+   * Register deep link callback
+   */
+  OnDeepLink: (ctx: Context, callback: (arguments: MapString) => void) => Promise<void>
 
   /**
    * Register query commands

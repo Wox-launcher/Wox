@@ -46,6 +46,9 @@ func (e emptyAPIImpl) SaveSetting(ctx context.Context, key string, value string,
 func (e emptyAPIImpl) OnSettingChanged(ctx context.Context, callback func(key string, value string)) {
 }
 
+func (e emptyAPIImpl) OnDeepLink(ctx context.Context, callback func(arguments map[string]string)) {
+}
+
 func (e emptyAPIImpl) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
 }
 

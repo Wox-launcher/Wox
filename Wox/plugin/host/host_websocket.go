@@ -371,6 +371,28 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 
 			return setting
 		})
+	case "OnDeepLink":
+		callbackId, exist := request.Params["callbackId"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] OnDeepLink method must have a callbackId parameter", request.PluginName))
+			return
+		}
+
+		metadata := pluginInstance.Metadata
+		pluginInstance.API.OnDeepLink(ctx, func(arguments map[string]string) {
+			args, marshalErr := json.Marshal(arguments)
+			if marshalErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal deep link arguments: %s", request.PluginName, marshalErr))
+				return
+			}
+
+			w.invokeMethod(ctx, metadata, "onDeepLink", map[string]string{
+				"CallbackId": callbackId,
+				"Arguments":  string(args),
+			})
+
+			w.sendResponseToHost(ctx, request, "")
+		})
 	case "RegisterQueryCommands":
 		var commands []plugin.MetadataCommand
 		unmarshalErr := json.Unmarshal([]byte(request.Params["commands"]), &commands)

@@ -504,4 +504,11 @@ func (m *Manager) PostDeeplink(ctx context.Context, command string, arguments ma
 			m.ui.ShowApp(ctx, share.ShowContext{SelectAll: false})
 		}
 	}
+
+	if strings.HasPrefix(command, "plugin/") {
+		pluginID := strings.TrimPrefix(command, "plugin/")
+		if pluginID != "" {
+			plugin.GetPluginManager().ExecutePluginDeeplink(ctx, pluginID, arguments)
+		}
+	}
 }

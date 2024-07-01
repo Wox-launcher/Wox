@@ -36,15 +36,14 @@ type API interface {
 	SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool)
 	OnSettingChanged(ctx context.Context, callback func(key string, value string))
 	OnGetDynamicSetting(ctx context.Context, callback func(key string) definition.PluginSettingDefinitionItem)
+	OnDeepLink(ctx context.Context, callback func(arguments map[string]string))
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
 	AIChatStream(ctx context.Context, model ai.Model, conversations []ai.Conversation, callback ai.ChatStreamFunc) error
 }
 
 type APIImpl struct {
-	pluginInstance          *Instance
-	logger                  *util.Log
-	settingChangeCallbacks  []func(key string, value string)
-	dynamicSettingCallbacks []func(key string) definition.PluginSettingDefinitionItem
+	pluginInstance *Instance
+	logger         *util.Log
 }
 
 func (a *APIImpl) ChangeQuery(ctx context.Context, query share.PlainQuery) {
@@ -133,18 +132,27 @@ func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string, isP
 	}
 
 	if !exist || (existValue != value) {
-		for _, callback := range a.settingChangeCallbacks {
+		for _, callback := range a.pluginInstance.SettingChangeCallbacks {
 			callback(key, value)
 		}
 	}
 }
 
 func (a *APIImpl) OnSettingChanged(ctx context.Context, callback func(key string, value string)) {
-	a.settingChangeCallbacks = append(a.settingChangeCallbacks, callback)
+	a.pluginInstance.SettingChangeCallbacks = append(a.pluginInstance.SettingChangeCallbacks, callback)
 }
 
 func (a *APIImpl) OnGetDynamicSetting(ctx context.Context, callback func(key string) definition.PluginSettingDefinitionItem) {
 	a.pluginInstance.DynamicSettingCallbacks = append(a.pluginInstance.DynamicSettingCallbacks, callback)
+}
+
+func (a *APIImpl) OnDeepLink(ctx context.Context, callback func(arguments map[string]string)) {
+	if !a.pluginInstance.Metadata.IsSupportFeature(MetadataFeatureDeepLink) {
+		a.Log(ctx, LogLevelError, "plugin has no access to deep link feature")
+		return
+	}
+
+	a.pluginInstance.DeepLinkCallbacks = append(a.pluginInstance.DeepLinkCallbacks, callback)
 }
 
 func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []MetadataCommand) {
