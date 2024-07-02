@@ -371,6 +371,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 
 			return setting
 		})
+		w.sendResponseToHost(ctx, request, "")
 	case "OnDeepLink":
 		callbackId, exist := request.Params["callbackId"]
 		if !exist {
@@ -390,9 +391,8 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 				"CallbackId": callbackId,
 				"Arguments":  string(args),
 			})
-
-			w.sendResponseToHost(ctx, request, "")
 		})
+		w.sendResponseToHost(ctx, request, "")
 	case "RegisterQueryCommands":
 		var commands []plugin.MetadataCommand
 		unmarshalErr := json.Unmarshal([]byte(request.Params["commands"]), &commands)
