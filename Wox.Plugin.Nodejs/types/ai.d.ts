@@ -1,4 +1,4 @@
-export namespace llm {
+export namespace AI {
   export type ConversationRole = "user" | "system"
   export type ChatStreamDataType = "streaming" | "finished" | "error"
 

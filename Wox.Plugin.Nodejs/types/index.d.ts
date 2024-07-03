@@ -1,5 +1,5 @@
-import { llm } from "./llm.js"
 import { MetadataCommand, PluginSettingDefinitionItem } from "./setting.js"
+import { AI } from "./ai.js"
 
 export type MapString = { [key: string]: string }
 
@@ -83,6 +83,8 @@ export interface Result {
   Icon: WoxImage
   Preview?: WoxPreview
   Score?: number
+  Group?: string
+  GroupScore?: number
   ContextData?: string
   Actions?: ResultAction[]
   // refresh result after specified interval, in milliseconds. If this value is 0, Wox will not refresh this result
@@ -204,7 +206,7 @@ export interface PublicAPI {
   /**
    * Chat using LLM
    */
-  LLMStream: (ctx: Context, conversations: llm.Conversation[], callback: llm.ChatStreamFunc) => Promise<void>
+  LLMStream: (ctx: Context, conversations: AI.Conversation[], callback: AI.ChatStreamFunc) => Promise<void>
 }
 
 export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url" | "emoji"

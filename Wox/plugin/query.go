@@ -89,7 +89,10 @@ type QueryResult struct {
 	SubTitle string
 	Icon     WoxImage
 	Preview  WoxPreview
-	Score    int64
+	// Score of the result, the higher the score, the more relevant the result is, more likely to be displayed on top
+	Score      int64
+	Group      string
+	GroupScore int64
 	// Additional data associate with this result, can be retrieved in Action function
 	ContextData string
 	Actions     []QueryResultAction
@@ -128,6 +131,8 @@ func (q *QueryResult) ToUI() QueryResultUI {
 		Icon:        q.Icon,
 		Preview:     q.Preview,
 		Score:       q.Score,
+		Group:       q.Group,
+		GroupScore:  q.GroupScore,
 		ContextData: q.ContextData,
 		Actions: lo.Map(q.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
 			return QueryResultActionUI{
@@ -150,6 +155,8 @@ type QueryResultUI struct {
 	Icon            WoxImage
 	Preview         WoxPreview
 	Score           int64
+	Group           string
+	GroupScore      int64
 	ContextData     string
 	Actions         []QueryResultActionUI
 	RefreshInterval int

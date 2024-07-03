@@ -4,7 +4,7 @@ import { PluginAPI } from "./pluginAPI"
 import { Context, MapString, Plugin, PluginInitParams, Query, QueryEnv, RefreshableResult, Result, ResultAction, Selection } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
-import { llm } from "@wox-launcher/wox-plugin/types/llm"
+import { AI } from "@wox-launcher/wox-plugin/types/ai"
 
 const pluginInstances = new Map<PluginJsonRpcRequest["PluginId"], PluginInstance>()
 
@@ -193,7 +193,7 @@ async function onLLMStream(ctx: Context, request: PluginJsonRpcRequest) {
     throw new Error(`llm stream callback not found: ${callbackId}`)
   }
 
-  callbackFunc(<llm.ChatStreamDataType>streamType, data)
+  callbackFunc(<AI.ChatStreamDataType>streamType, data)
 }
 
 async function query(ctx: Context, request: PluginJsonRpcRequest) {

@@ -89,9 +89,14 @@ class WoxQueryResult {
   late Rx<WoxImage> icon;
   late WoxPreview preview;
   late int score;
+  late String group;
+  late int groupScore;
   late String contextData;
   late List<WoxResultAction> actions;
   late int refreshInterval;
+
+  // Used by the frontend to determine if this result is a group
+  late bool isGroup;
 
   WoxQueryResult(
       {required this.queryId,
@@ -101,9 +106,28 @@ class WoxQueryResult {
       required this.icon,
       required this.preview,
       required this.score,
+      required this.group,
+      required this.groupScore,
       required this.contextData,
       required this.actions,
-      required this.refreshInterval});
+      required this.refreshInterval,
+      required this.isGroup});
+
+  WoxQueryResult.empty() {
+    queryId = "";
+    id = "";
+    title = "".obs;
+    subTitle = "".obs;
+    icon = WoxImage.empty().obs;
+    preview = WoxPreview.empty();
+    score = 0;
+    group = "";
+    groupScore = 0;
+    contextData = "";
+    actions = <WoxResultAction>[];
+    refreshInterval = 0;
+    isGroup = false;
+  }
 
   WoxQueryResult.fromJson(Map<String, dynamic> json) {
     queryId = json['QueryId'];
@@ -113,6 +137,8 @@ class WoxQueryResult {
     icon = (json['Icon'] != null ? WoxImage.fromJson(json['Icon']).obs : null)!;
     preview = (json['Preview'] != null ? WoxPreview.fromJson(json['Preview']) : null)!;
     score = json['Score'];
+    group = json['Group'];
+    groupScore = json['GroupScore'];
     contextData = json['ContextData'];
     if (json['Actions'] != null) {
       actions = <WoxResultAction>[];
@@ -121,6 +147,7 @@ class WoxQueryResult {
       });
     }
     refreshInterval = json['RefreshInterval'];
+    isGroup = false;
   }
 
   Map<String, dynamic> toJson() {
@@ -132,6 +159,8 @@ class WoxQueryResult {
     data['Icon'] = icon.toJson();
     data['Preview'] = preview.toJson();
     data['Score'] = score;
+    data['Group'] = group;
+    data['GroupScore'] = groupScore;
     data['ContextData'] = contextData;
     data['Actions'] = actions.map((v) => v.toJson()).toList();
     data['RefreshInterval'] = refreshInterval;

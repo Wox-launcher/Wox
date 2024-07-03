@@ -5,8 +5,8 @@ import * as crypto from "crypto"
 import { waitingForResponse } from "./index"
 import Deferred from "promise-deferred"
 import { logger } from "./logger"
-import { llm } from "@wox-launcher/wox-plugin/types/llm"
 import { MetadataCommand, PluginSettingDefinitionItem } from "@wox-launcher/wox-plugin/types/setting"
+import { AI } from "@wox-launcher/wox-plugin/types/ai"
 
 export class PluginAPI implements PublicAPI {
   ws: WebSocket
@@ -15,7 +15,7 @@ export class PluginAPI implements PublicAPI {
   settingChangeCallbacks: Map<string, (key: string, value: string) => void>
   getDynamicSettingCallbacks: Map<string, (key: string) => PluginSettingDefinitionItem>
   deepLinkCallbacks: Map<string, (params: MapString) => void>
-  llmStreamCallbacks: Map<string, llm.ChatStreamFunc>
+  llmStreamCallbacks: Map<string, AI.ChatStreamFunc>
 
   constructor(ws: WebSocket, pluginId: string, pluginName: string) {
     this.ws = ws
@@ -24,7 +24,7 @@ export class PluginAPI implements PublicAPI {
     this.settingChangeCallbacks = new Map<string, (key: string, value: string) => void>()
     this.getDynamicSettingCallbacks = new Map<string, (key: string) => PluginSettingDefinitionItem>()
     this.deepLinkCallbacks = new Map<string, (params: MapString) => void>()
-    this.llmStreamCallbacks = new Map<string, llm.ChatStreamFunc>()
+    this.llmStreamCallbacks = new Map<string, AI.ChatStreamFunc>()
   }
 
   async invokeMethod(ctx: Context, method: string, params: { [key: string]: string }): Promise<unknown> {
@@ -113,7 +113,7 @@ export class PluginAPI implements PublicAPI {
     await this.invokeMethod(ctx, "RegisterQueryCommands", { commands: JSON.stringify(commands) })
   }
 
-  async LLMStream(ctx: Context, conversations: llm.Conversation[], callback: llm.ChatStreamFunc): Promise<void> {
+  async LLMStream(ctx: Context, conversations: AI.Conversation[], callback: AI.ChatStreamFunc): Promise<void> {
     const callbackId = crypto.randomUUID()
     this.llmStreamCallbacks.set(callbackId, callback)
     await this.invokeMethod(ctx, "LLMStream", { callbackId, conversations: JSON.stringify(conversations) })

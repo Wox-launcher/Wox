@@ -34,13 +34,15 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
               itemBuilder: (context, index) {
                 WoxResultAction woxResultAction = controller.getQueryResultActionByIndex(index);
                 return WoxListItemView(
-                    key: controller.getResultActionItemGlobalKeyByIndex(index),
-                    woxTheme: controller.woxTheme.value,
-                    icon: woxResultAction.icon,
-                    title: woxResultAction.name,
-                    subTitle: "".obs,
-                    isActive: controller.isResultActionActiveByIndex(index),
-                    listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code);
+                  key: controller.getResultActionItemGlobalKeyByIndex(index),
+                  woxTheme: controller.woxTheme.value,
+                  icon: woxResultAction.icon,
+                  title: woxResultAction.name,
+                  subTitle: "".obs,
+                  isActive: controller.isResultActionActiveByIndex(index),
+                  listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code,
+                  isGroup: false,
+                );
               },
             )));
   }
@@ -117,13 +119,15 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                       itemBuilder: (context, index) {
                         WoxQueryResult woxQueryResult = controller.getQueryResultByIndex(index);
                         return WoxListItemView(
-                            key: controller.getResultItemGlobalKeyByIndex(index),
-                            woxTheme: controller.woxTheme.value,
-                            icon: woxQueryResult.icon,
-                            title: woxQueryResult.title,
-                            subTitle: woxQueryResult.subTitle,
-                            isActive: controller.isQueryResultActiveByIndex(index),
-                            listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code);
+                          key: controller.getResultItemGlobalKeyByIndex(index),
+                          woxTheme: controller.woxTheme.value,
+                          icon: woxQueryResult.icon,
+                          title: woxQueryResult.title,
+                          subTitle: woxQueryResult.subTitle,
+                          isActive: controller.isQueryResultActiveByIndex(index),
+                          listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code,
+                          isGroup: woxQueryResult.isGroup,
+                        );
                       },
                     ),
                   ),

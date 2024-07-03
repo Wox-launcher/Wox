@@ -515,9 +515,11 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		}
 	}
 
-	// if query is input and trigger keyword is global, disable preview
+	// if query is input and trigger keyword is global, disable preview and group
 	if query.IsGlobalQuery() {
 		result.Preview = WoxPreview{}
+		result.Group = ""
+		result.GroupScore = 0
 	}
 
 	// store preview for ui invoke later
