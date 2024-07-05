@@ -1,6 +1,7 @@
 package util
 
 import (
+	"fmt"
 	"os/exec"
 )
 
@@ -24,6 +25,10 @@ func ShellRunOutput(name string, arg ...string) ([]byte, error) {
 	cmd := exec.Command(name, arg...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if output != nil {
+			return nil, fmt.Errorf("%s: %s", err, output)
+		}
+
 		return nil, err
 	} else {
 		return output, nil

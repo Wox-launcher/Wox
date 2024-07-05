@@ -58,6 +58,7 @@ func (e emptyAPIImpl) AIChatStream(ctx context.Context, model ai.Model, conversa
 
 func TestMacRetriever_ParseAppInfo(t *testing.T) {
 	if util.IsMacOS() {
+		util.GetLocation().Init()
 		appRetriever.UpdateAPI(emptyAPIImpl{})
 		_, err := appRetriever.ParseAppInfo(nil, "/System/Applications/Siri.app")
 		require.NoError(t, err)

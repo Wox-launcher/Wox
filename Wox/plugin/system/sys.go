@@ -140,8 +140,19 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 				})
 			},
 		})
-	}
 
+		r.commands = append(r.commands, SysCommand{
+			Title: "Delete all image cache",
+			Icon:  plugin.NewWoxImageEmoji("🗑️"),
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				location := util.GetLocation()
+				imageCacheDirectory := location.GetImageCacheDirectory()
+				if _, err := os.Stat(imageCacheDirectory); err == nil {
+					os.RemoveAll(imageCacheDirectory)
+				}
+			},
+		})
+	}
 }
 
 func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {

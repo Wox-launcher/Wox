@@ -69,7 +69,7 @@ func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 
 	filteredMenus := lo.Filter(menuNames, func(menu string, _ int) bool {
 		match, score := IsStringMatchScore(ctx, menu, query.Search)
-		return (match && score > 15) || (!query.IsGlobalQuery() && query.Search == "")
+		return (match && score > 20) || (!query.IsGlobalQuery() && query.Search == "")
 	})
 
 	return lo.Map(filteredMenus, func(menu string, _ int) plugin.QueryResult {
