@@ -5,6 +5,7 @@ type RefreshableResult struct {
 	SubTitle        string
 	Icon            WoxImage
 	Preview         WoxPreview
+	Tails           []QueryResultTail
 	ContextData     string
 	RefreshInterval int // set to 0 if you don't want to refresh this result anymore
 }
@@ -15,6 +16,7 @@ type RefreshableResultWithResultId struct {
 	SubTitle        string
 	Icon            WoxImage
 	Preview         WoxPreview
+	Tails           []QueryResultTail
 	ContextData     string
 	RefreshInterval int
 }

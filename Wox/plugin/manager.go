@@ -596,10 +596,22 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, sub
 func (m *Manager) PolishRefreshableResult(ctx context.Context, pluginInstance *Instance, resultId string, result RefreshableResult) RefreshableResult {
 	// convert icon
 	result.Icon = ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
+	for i := range result.Tails {
+		if result.Tails[i].Type == QueryResultTailTypeImage {
+			result.Tails[i].Image = ConvertIcon(ctx, result.Tails[i].Image, pluginInstance.PluginDirectory)
+		}
+	}
+
 	// translate title
 	result.Title = m.translatePlugin(ctx, pluginInstance, result.Title)
 	// translate subtitle
 	result.SubTitle = m.translatePlugin(ctx, pluginInstance, result.SubTitle)
+	// translate tail text
+	for i := range result.Tails {
+		if result.Tails[i].Type == QueryResultTailTypeText {
+			result.Tails[i].Text = m.translatePlugin(ctx, pluginInstance, result.Tails[i].Text)
+		}
+	}
 	// translate preview properties
 	var previewProperties = make(map[string]string)
 	for key, value := range result.Preview.PreviewProperties {
@@ -928,6 +940,7 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 		Title:           newResult.Title,
 		SubTitle:        newResult.SubTitle,
 		Icon:            newResult.Icon,
+		Tails:           newResult.Tails,
 		Preview:         newResult.Preview,
 		ContextData:     newResult.ContextData,
 		RefreshInterval: newResult.RefreshInterval,

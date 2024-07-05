@@ -38,10 +38,10 @@ require (
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/stretchr/testify v1.9.0
+	github.com/struCoder/pidusage v0.2.1
 	github.com/tidwall/gjson v1.17.1
 	github.com/tidwall/pretty v1.2.1
 	github.com/tmc/langchaingo v0.1.8
-	github.com/webview/webview_go v0.0.0-20240220051247-56f456ca3a43
 	github.com/wissance/stringFormatter v1.2.0
 	go.uber.org/zap v1.27.0
 	golang.design/x/hotkey v0.4.1

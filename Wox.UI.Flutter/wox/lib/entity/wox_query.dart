@@ -91,7 +91,9 @@ class WoxQueryResult {
   late int score;
   late String group;
   late int groupScore;
+  late RxList<WoxQueryResultTail> tails;
   late String contextData;
+
   late List<WoxResultAction> actions;
   late int refreshInterval;
 
@@ -108,6 +110,7 @@ class WoxQueryResult {
       required this.score,
       required this.group,
       required this.groupScore,
+      required this.tails,
       required this.contextData,
       required this.actions,
       required this.refreshInterval,
@@ -123,6 +126,7 @@ class WoxQueryResult {
     score = 0;
     group = "";
     groupScore = 0;
+    tails = RxList<WoxQueryResultTail>();
     contextData = "";
     actions = <WoxResultAction>[];
     refreshInterval = 0;
@@ -140,12 +144,25 @@ class WoxQueryResult {
     group = json['Group'];
     groupScore = json['GroupScore'];
     contextData = json['ContextData'];
+
+    if (json['Tails'] != null) {
+      tails = RxList();
+      json['Tails'].forEach((v) {
+        tails.add(WoxQueryResultTail.fromJson(v));
+      });
+    } else {
+      tails = RxList();
+    }
+
     if (json['Actions'] != null) {
       actions = <WoxResultAction>[];
       json['Actions'].forEach((v) {
         actions.add(WoxResultAction.fromJson(v));
       });
+    } else {
+      actions = <WoxResultAction>[];
     }
+
     refreshInterval = json['RefreshInterval'];
     isGroup = false;
   }
@@ -164,6 +181,28 @@ class WoxQueryResult {
     data['ContextData'] = contextData;
     data['Actions'] = actions.map((v) => v.toJson()).toList();
     data['RefreshInterval'] = refreshInterval;
+    return data;
+  }
+}
+
+class WoxQueryResultTail {
+  late String type;
+  late String text;
+  late WoxImage image;
+
+  WoxQueryResultTail({required this.type, required this.text, required this.image});
+
+  WoxQueryResultTail.fromJson(Map<String, dynamic> json) {
+    type = json['Type'];
+    text = json['Text'];
+    image = WoxImage.fromJson(json['Image']);
+  }
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['Type'] = type;
+    data['Text'] = text;
+    data['Image'] = image.toJson();
     return data;
   }
 }
@@ -257,11 +296,20 @@ class WoxRefreshableResult {
   late String subTitle;
   late WoxImage icon;
   late WoxPreview preview;
+  late List<WoxQueryResultTail> tails;
   late String contextData;
   late int refreshInterval;
 
-  WoxRefreshableResult(
-      {required this.resultId, required this.title, required this.subTitle, required this.icon, required this.preview, required this.contextData, required this.refreshInterval});
+  WoxRefreshableResult({
+    required this.resultId,
+    required this.title,
+    required this.subTitle,
+    required this.icon,
+    required this.preview,
+    required this.tails,
+    required this.contextData,
+    required this.refreshInterval,
+  });
 
   WoxRefreshableResult.fromJson(Map<String, dynamic> json) {
     resultId = json['ResultId'];
@@ -269,6 +317,12 @@ class WoxRefreshableResult {
     subTitle = json['SubTitle'] ?? "";
     icon = WoxImage.fromJson(json['Icon']);
     preview = WoxPreview.fromJson(json['Preview']);
+    tails = <WoxQueryResultTail>[];
+    if (json['Tails'] != null) {
+      json['Tails'].forEach((v) {
+        tails.add(WoxQueryResultTail.fromJson(v));
+      });
+    }
     contextData = json['ContextData'];
     refreshInterval = json['RefreshInterval'];
   }
@@ -280,6 +334,7 @@ class WoxRefreshableResult {
     data['SubTitle'] = subTitle;
     data['Icon'] = icon.toJson();
     data['Preview'] = preview.toJson();
+    data['Tails'] = tails.map((v) => v.toJson()).toList();
     data['ContextData'] = contextData;
     data['RefreshInterval'] = refreshInterval;
     return data;

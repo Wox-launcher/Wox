@@ -7,6 +7,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
+	"github.com/struCoder/pidusage"
 	"github.com/tidwall/pretty"
 	"os"
 	"path"
@@ -133,16 +134,18 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 		isNameMatch, nameScore := system.IsStringMatchScore(ctx, info.Name, query.Search)
 		isPathNameMatch, pathNameScore := system.IsStringMatchScore(ctx, filepath.Base(info.Path), query.Search)
 		if isNameMatch || isPathNameMatch {
-			subTitle := info.Path
+			var tails []plugin.QueryResultTail
+			// get cpu and mem info
 			if info.IsRunning() {
-				subTitle = fmt.Sprintf("%s, pid: %d", subTitle, info.Pid)
+				tails = a.getRunningProcessResult(info.Pid)
 			}
 
 			result := plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    info.Name,
-				SubTitle: subTitle,
+				SubTitle: info.Path,
 				Icon:     info.Icon,
+				Tails:    tails,
 				Score:    util.MaxInt64(nameScore, pathNameScore),
 				Preview: plugin.WoxPreview{
 					PreviewType: plugin.WoxPreviewTypeText,
@@ -188,18 +191,25 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 					Icon: plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 20 20"><path fill="#f33939" d="M2.93 17.07A10 10 0 1 1 17.07 2.93A10 10 0 0 1 2.93 17.07m1.41-1.41A8 8 0 1 0 15.66 4.34A8 8 0 0 0 4.34 15.66m9.9-8.49L11.41 10l2.83 2.83l-1.41 1.41L10 11.41l-2.83 2.83l-1.41-1.41L8.59 10L5.76 7.17l1.41-1.41L10 8.59l2.83-2.83z"/></svg>`),
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						// peacefully kill the process
-						process, getErr := os.FindProcess(info.Pid)
+						p, getErr := os.FindProcess(info.Pid)
 						if getErr != nil {
 							a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error finding process %d: %s", info.Pid, getErr.Error()))
 							return
 						}
 
-						killErr := process.Kill()
+						killErr := p.Kill()
 						if killErr != nil {
 							a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error killing process %d: %s", info.Pid, killErr.Error()))
 						}
 					},
 				})
+
+				// refresh cpu and mem
+				result.RefreshInterval = 1000
+				result.OnRefresh = func(ctx context.Context, result plugin.RefreshableResult) plugin.RefreshableResult {
+					result.Tails = a.getRunningProcessResult(info.Pid)
+					return result
+				}
 			}
 
 			results = append(results, result)
@@ -207,6 +217,45 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 	}
 
 	return results
+}
+
+func (a *ApplicationPlugin) getRunningProcessResult(pid int) (tails []plugin.QueryResultTail) {
+	stat, err := pidusage.GetStat(pid)
+	if err != nil {
+		a.api.Log(context.Background(), plugin.LogLevelError, fmt.Sprintf("error getting process %d stat: %s", pid, err.Error()))
+		return
+	}
+
+	tails = append(tails, plugin.QueryResultTail{
+		Type: plugin.QueryResultTailTypeText,
+		Text: fmt.Sprintf("CPU: %.1f%%", stat.CPU),
+	})
+
+	memSize := stat.Memory
+	// if mem size is too large, it's probably in bytes, convert it to MB
+	unit := "B"
+	if memSize > 1024*1024*1024 {
+		memSize = memSize / 1024 / 1024 / 1024 // convert to GB
+		unit = "GB"
+	} else if memSize > 1024*1024 {
+		memSize = memSize / 1024 / 1024 // convert to MB
+		unit = "MB"
+	} else if memSize > 1024 {
+		memSize = memSize / 1024 // convert to KB
+		unit = "KB"
+	}
+
+	tails = append(tails, plugin.QueryResultTail{
+		Type: plugin.QueryResultTailTypeText,
+		Text: fmt.Sprintf("Mem: %.1f %s", memSize, unit),
+	})
+
+	tails = append(tails, plugin.QueryResultTail{
+		Type:  plugin.QueryResultTailTypeImage,
+		Image: plugin.NewWoxImageEmoji(`🖥️`),
+	})
+
+	return
 }
 
 func (a *ApplicationPlugin) getRetriever(ctx context.Context) Retriever {

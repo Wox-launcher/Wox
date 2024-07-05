@@ -85,6 +85,7 @@ export interface Result {
   Score?: number
   Group?: string
   GroupScore?: number
+  Tails?: ResultTail[]
   ContextData?: string
   Actions?: ResultAction[]
   // refresh result after specified interval, in milliseconds. If this value is 0, Wox will not refresh this result
@@ -93,6 +94,12 @@ export interface Result {
   RefreshInterval?: number
   // refresh result by calling OnRefresh function
   OnRefresh?: (current: RefreshableResult) => Promise<RefreshableResult>
+}
+
+export interface ResultTail {
+  Type: "text" | "image"
+  Text: string
+  Image: WoxImage
 }
 
 export interface RefreshableResult {

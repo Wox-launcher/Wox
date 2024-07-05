@@ -9,6 +9,7 @@ import (
 
 type QueryType = string
 type QueryVariable = string
+type QueryResultTailType = string
 
 const (
 	QueryTypeInput     QueryType = "input"     // user input query
@@ -18,6 +19,11 @@ const (
 const (
 	QueryVariableSelectedText     QueryVariable = "{wox:selected_text}"
 	QueryVariableActiveBrowserUrl QueryVariable = "{wox:active_browser_url}"
+)
+
+const (
+	QueryResultTailTypeText  QueryResultTailType = "text"  // string type
+	QueryResultTailTypeImage QueryResultTailType = "image" // WoxImage type
 )
 
 // Query from Wox. See "Doc/Query.md" for details.
@@ -90,9 +96,13 @@ type QueryResult struct {
 	Icon     WoxImage
 	Preview  WoxPreview
 	// Score of the result, the higher the score, the more relevant the result is, more likely to be displayed on top
-	Score      int64
-	Group      string
+	Score int64
+	// Group results, Wox will group results by group name
+	Group string
+	// Score of the group, the higher the score, the more relevant the group is, more likely to be displayed on top
 	GroupScore int64
+	// Tails are additional results associate with this result, can be displayed in result detail view
+	Tails []QueryResultTail
 	// Additional data associate with this result, can be retrieved in Action function
 	ContextData string
 	Actions     []QueryResultAction
@@ -102,6 +112,12 @@ type QueryResult struct {
 	RefreshInterval int
 	// refresh result by calling OnRefresh function
 	OnRefresh func(ctx context.Context, current RefreshableResult) RefreshableResult
+}
+
+type QueryResultTail struct {
+	Type  QueryResultTailType
+	Text  string   // only available when type is QueryResultTailTypeText
+	Image WoxImage // only available when type is QueryResultTailTypeImage
 }
 
 type QueryResultAction struct {
@@ -133,6 +149,7 @@ func (q *QueryResult) ToUI() QueryResultUI {
 		Score:       q.Score,
 		Group:       q.Group,
 		GroupScore:  q.GroupScore,
+		Tails:       q.Tails,
 		ContextData: q.ContextData,
 		Actions: lo.Map(q.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
 			return QueryResultActionUI{
@@ -157,6 +174,7 @@ type QueryResultUI struct {
 	Score           int64
 	Group           string
 	GroupScore      int64
+	Tails           []QueryResultTail
 	ContextData     string
 	Actions         []QueryResultActionUI
 	RefreshInterval int

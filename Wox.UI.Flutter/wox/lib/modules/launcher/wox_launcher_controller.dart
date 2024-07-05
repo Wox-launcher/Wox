@@ -645,6 +645,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
                 subTitle: result.subTitle.value,
                 icon: result.icon.value,
                 preview: result.preview,
+                tails: result.tails,
                 contextData: result.contextData,
                 refreshInterval: result.refreshInterval,
               ).toJson(),
@@ -669,6 +670,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
             result.subTitle.value = refreshResult.subTitle;
             result.icon.value = refreshResult.icon;
             result.preview = refreshResult.preview;
+            result.tails.assignAll(refreshResult.tails);
 
             // only update preview data when current result is active
             final resultIndex = queryResults.indexWhere((element) => element.id == result.id);

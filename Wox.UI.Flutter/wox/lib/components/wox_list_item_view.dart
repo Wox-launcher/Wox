@@ -4,15 +4,19 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
+import 'package:wox/entity/wox_query.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
+import 'package:wox/enums/wox_result_tail_type_enum.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/wox_setting_util.dart';
 
 class WoxListItemView extends StatelessWidget {
   final bool isActive;
   final Rx<WoxImage> icon;
   final Rx<String> title;
   final Rx<String> subTitle;
+  final RxList<WoxQueryResultTail> tails;
   final WoxTheme woxTheme;
   final WoxListViewType listViewType;
   final bool isGroup;
@@ -23,6 +27,7 @@ class WoxListItemView extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subTitle,
+    required this.tails,
     required this.isActive,
     required this.listViewType,
     required this.isGroup,
@@ -114,6 +119,51 @@ class WoxListItemView extends StatelessWidget {
               }),
             ]),
           ),
+          // Tails
+          if (tails.isNotEmpty)
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: WoxSettingUtil.instance.currentSetting.appWidth / 2),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 10.0, right: 5.0),
+                child: Obx(() {
+                  if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view $key - tails");
+
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final tail in tails)
+                          if (tail.type == WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_TEXT.code && tail.text.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 10.0),
+                              child: Text(
+                                tail.text,
+                                style: TextStyle(
+                                  color: fromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
+                                  fontSize: 13,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                strutStyle: const StrutStyle(
+                                  forceStrutHeight: true,
+                                ),
+                              ),
+                            )
+                          else if (tail.type == WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_IMAGE.code && tail.image.imageData.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 10.0),
+                              child: WoxImageView(
+                                woxImage: tail.image,
+                                width: 14,
+                                height: 14,
+                              ),
+                            ),
+                      ],
+                    ),
+                  );
+                }),
+              ),
+            ),
         ],
       ),
     );
