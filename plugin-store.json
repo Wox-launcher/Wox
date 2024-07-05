@@ -117,5 +117,22 @@
     ],
     "DateCreated": "2024-06-06 23:51:00",
     "DateUpdated": "2024-06-06 23:51:00"
+  },
+  {
+    "Id": "aeb94d3d-9c39-4917-9cd0-a4cde95433a2",
+    "Name": "Spotify",
+    "Author": "Wox-launcher",
+    "Version": "0.0.1",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "nodejs",
+    "Description": "Spotify integration",
+    "IconUrl": "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Spotify/main/images/app.png",
+    "Website": "https://github.com/Wox-launcher/Wox.Plugin.Spotify",
+    "DownloadUrl": "https://github.com/Wox-launcher/Wox.Plugin.Spotify/releases/latest/download/Wox.Plugin.Spotify.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Spotify/main/prev.png"
+    ],
+    "DateCreated": "2024-07-05 15:00:00",
+    "DateUpdated": "2024-07-05 15:00:00"
   }
 ]

@@ -9,7 +9,6 @@ import 'package:lpinyin/lpinyin.dart';
 import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
-import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_query.dart';
@@ -302,6 +301,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   @override
   void changeResultScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
+    final prevResultIndex = _activeResultIndex.value;
     _resetActiveResultIndex(direction);
     if (queryResults.length < MAX_LIST_VIEW_ITEM_COUNT) {
       queryResults.refresh();
@@ -309,24 +309,26 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     }
 
     if (direction == WoxDirectionEnum.WOX_DIRECTION_DOWN.code) {
-      if (_activeResultIndex.value == 0) {
+      if (_activeResultIndex.value < prevResultIndex) {
         resultListViewScrollController.jumpTo(0);
       } else {
         bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code
             ? _isResultItemAtBottom(_activeResultIndex.value - 1)
             : !_isResultItemAtBottom(queryResults.length - 1);
         if (shouldJump) {
-          resultListViewScrollController.jumpTo(resultListViewScrollController.offset.ceil() + WoxThemeUtil.instance.getResultListViewHeightByCount(1));
+          resultListViewScrollController
+              .jumpTo(resultListViewScrollController.offset.ceil() + WoxThemeUtil.instance.getResultItemHeight() * (_activeResultIndex.value - prevResultIndex).abs());
         }
       }
     }
     if (direction == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
-      if (_activeResultIndex.value == queryResults.length - 1) {
+      if (_activeResultIndex.value > prevResultIndex) {
         resultListViewScrollController.jumpTo(WoxThemeUtil.instance.getResultListViewHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
       } else {
         bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code ? _isResultItemAtTop(_activeResultIndex.value + 1) : !_isResultItemAtTop(0);
         if (shouldJump) {
-          resultListViewScrollController.jumpTo(resultListViewScrollController.offset.ceil() - WoxThemeUtil.instance.getResultListViewHeightByCount(1));
+          resultListViewScrollController
+              .jumpTo(resultListViewScrollController.offset.ceil() - WoxThemeUtil.instance.getResultItemHeight() * (_activeResultIndex.value - prevResultIndex).abs());
         }
       }
     }
@@ -406,7 +408,9 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   bool _isResultItemAtBottom(int index) {
     RenderBox? renderBox = _resultItemGlobalKeys[index].currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox?.localToGlobal(Offset.zero).dy.ceil() ==
+    if (renderBox == null) return false;
+
+    if (renderBox.localToGlobal(Offset.zero).dy.ceil() >=
         WoxThemeUtil.instance.getQueryBoxHeight() + WoxThemeUtil.instance.getResultListViewHeightByCount(MAX_LIST_VIEW_ITEM_COUNT - 1)) {
       return true;
     }
@@ -418,7 +422,9 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       return false;
     }
     RenderBox? renderBox = _resultItemGlobalKeys[index].currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox?.localToGlobal(Offset.zero).dy.ceil() == WoxThemeUtil.instance.getQueryBoxHeight()) {
+    if (renderBox == null) return false;
+
+    if (renderBox.localToGlobal(Offset.zero).dy.ceil() <= WoxThemeUtil.instance.getQueryBoxHeight()) {
       return true;
     }
     return false;
@@ -443,8 +449,27 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     //merge and sort results
     final currentQueryResults = queryResults.where((item) => item.queryId == _query.value.queryId).toList();
     final finalResults = List<WoxQueryResult>.from(currentQueryResults)..addAll(results);
-    finalResults.sort((a, b) => b.score.compareTo(a.score));
-    queryResults.assignAll(finalResults);
+    // wrap group into WoxQueryResult
+    final groups = finalResults.map((e) => e.group).toSet().toList();
+    // sort groups by group score
+    groups.sort((a, b) {
+      return finalResults.firstWhere((element) => element.group == a).score.compareTo(finalResults.firstWhere((element) => element.group == b).score);
+    });
+
+    var finalResultsSorted = <WoxQueryResult>[];
+    for (var group in groups) {
+      final groupResults = finalResults.where((element) => element.group == group).toList();
+      final groupResultsSorted = groupResults..sort((a, b) => b.score.compareTo(a.score));
+      if (group != "") {
+        finalResultsSorted.add(WoxQueryResult.empty()
+          ..title.value = group
+          ..isGroup = true
+          ..score = groupResultsSorted.first.groupScore);
+      }
+      finalResultsSorted.addAll(groupResultsSorted);
+    }
+
+    queryResults.assignAll(finalResultsSorted);
     for (var _ in queryResults) {
       _resultItemGlobalKeys.add(GlobalKey());
     }
@@ -462,7 +487,11 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   void _resetActiveResult() {
-    _activeResultIndex.value = 0;
+    if (queryResults[0].isGroup) {
+      _activeResultIndex.value = 1;
+    } else {
+      _activeResultIndex.value = 0;
+    }
     if (resultListViewScrollController.hasClients) {
       resultListViewScrollController.jumpTo(0);
     }
@@ -510,17 +539,31 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       return;
     }
     if (woxDirection == WoxDirectionEnum.WOX_DIRECTION_DOWN.code) {
-      if (_activeResultIndex.value == queryResults.length - 1) {
+      // select next none group result
+      _activeResultIndex.value++;
+      if (_activeResultIndex.value == queryResults.length) {
         _activeResultIndex.value = 0;
-      } else {
+      }
+      while (queryResults[_activeResultIndex.value].isGroup) {
         _activeResultIndex.value++;
+        if (_activeResultIndex.value == queryResults.length) {
+          _activeResultIndex.value = 0;
+          break;
+        }
       }
     }
     if (woxDirection == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
-      if (_activeResultIndex.value == 0) {
+      // select previous none group result
+      _activeResultIndex.value--;
+      if (_activeResultIndex.value == -1) {
         _activeResultIndex.value = queryResults.length - 1;
-      } else {
+      }
+      while (queryResults[_activeResultIndex.value].isGroup) {
         _activeResultIndex.value--;
+        if (_activeResultIndex.value == -1) {
+          _activeResultIndex.value = queryResults.length - 1;
+          break;
+        }
       }
     }
     currentPreview.value = queryResults[_activeResultIndex.value].preview;

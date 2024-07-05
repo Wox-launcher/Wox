@@ -15,6 +15,7 @@ class WoxListItemView extends StatelessWidget {
   final Rx<String> subTitle;
   final WoxTheme woxTheme;
   final WoxListViewType listViewType;
+  final bool isGroup;
 
   const WoxListItemView({
     super.key,
@@ -24,6 +25,7 @@ class WoxListItemView extends StatelessWidget {
     required this.subTitle,
     required this.isActive,
     required this.listViewType,
+    required this.isGroup,
   });
 
   bool isAction() {
@@ -56,17 +58,19 @@ class WoxListItemView extends StatelessWidget {
             ),
       child: Row(
         children: [
-          Padding(
-              padding: const EdgeInsets.only(left: 5.0, right: 10.0),
-              child: Obx(() {
-                if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view $key - icon");
+          isGroup
+              ? const SizedBox()
+              : Padding(
+                  padding: const EdgeInsets.only(left: 5.0, right: 10.0),
+                  child: Obx(() {
+                    if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view $key - icon");
 
-                return WoxImageView(
-                  woxImage: icon.value,
-                  width: 30,
-                  height: 30,
-                );
-              })),
+                    return WoxImageView(
+                      woxImage: icon.value,
+                      width: 30,
+                      height: 30,
+                    );
+                  })),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
               Obx(() {
