@@ -29,6 +29,7 @@ const (
 	WoxImageTypeRelativePath = "relative"
 	WoxImageTypeBase64       = "base64"
 	WoxImageTypeSvg          = "svg"
+	WoxImageTypeLottie       = "lottie" // only support lottie json data
 	WoxImageTypeEmoji        = "emoji"
 	WoxImageTypeUrl          = "url"
 )
@@ -190,6 +191,10 @@ func (w *WoxImage) OverlayFullPercentage(overlay WoxImage, percentage float64) W
 	return overlayWoxImg
 }
 
+func (w *WoxImage) IsGif() bool {
+	return strings.HasSuffix(w.ImageData, ".gif")
+}
+
 func NewWoxImageSvg(svg string) WoxImage {
 	return WoxImage{
 		ImageType: WoxImageTypeSvg,
@@ -232,6 +237,13 @@ func NewWoxImageEmoji(emoji string) WoxImage {
 	return WoxImage{
 		ImageType: WoxImageTypeEmoji,
 		ImageData: emoji,
+	}
+}
+
+func NewWoxImageLottie(lottieJson string) WoxImage {
+	return WoxImage{
+		ImageType: WoxImageTypeLottie,
+		ImageData: lottieJson,
 	}
 }
 
@@ -295,6 +307,9 @@ func resizeImage(ctx context.Context, image WoxImage, size int) (newImage WoxIma
 	if image.ImageType == WoxImageTypeEmoji {
 		return image
 	}
+	if image.IsGif() {
+		return image
+	}
 
 	newImage = image
 
@@ -334,6 +349,9 @@ func resizeImage(ctx context.Context, image WoxImage, size int) (newImage WoxIma
 func cropPngTransparentPaddings(ctx context.Context, woxImage WoxImage) (newImage WoxImage) {
 	// skip emoji images
 	if woxImage.ImageType == WoxImageTypeEmoji {
+		return woxImage
+	}
+	if woxImage.IsGif() {
 		return woxImage
 	}
 

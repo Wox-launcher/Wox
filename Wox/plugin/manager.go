@@ -456,6 +456,11 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 
 	// convert icon
 	result.Icon = ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
+	for i := range result.Tails {
+		if result.Tails[i].Type == QueryResultTailTypeImage {
+			result.Tails[i].Image = ConvertIcon(ctx, result.Tails[i].Image, pluginInstance.PluginDirectory)
+		}
+	}
 
 	// add default preview for selection query if no preview is set
 	if query.Type == QueryTypeSelection && result.Preview.PreviewType == "" {

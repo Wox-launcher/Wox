@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
+import 'package:lottie/lottie.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
 
@@ -31,6 +32,9 @@ class WoxImageView extends StatelessWidget {
       return SvgPicture.string(woxImage.imageData, width: width, height: height);
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
       return Text(woxImage.imageData, style: TextStyle(fontSize: width));
+    } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_LOTTIE.code) {
+      final bytes = utf8.encode(woxImage.imageData);
+      return Lottie.memory(bytes, width: width, height: height);
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code) {
       if (!woxImage.imageData.contains(";base64,")) {
         return Text("Invalid image data: ${woxImage.imageData}", style: const TextStyle(color: Colors.red));

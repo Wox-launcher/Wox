@@ -98,8 +98,8 @@ export interface Result {
 
 export interface ResultTail {
   Type: "text" | "image"
-  Text: string
-  Image: WoxImage
+  Text?: string
+  Image?: WoxImage
 }
 
 export interface RefreshableResult {
@@ -216,7 +216,7 @@ export interface PublicAPI {
   LLMStream: (ctx: Context, conversations: AI.Conversation[], callback: AI.ChatStreamFunc) => Promise<void>
 }
 
-export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url" | "emoji"
+export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url" | "emoji" | "lottie"
 
 export interface WoxImage {
   ImageType: WoxImageType

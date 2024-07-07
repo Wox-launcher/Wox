@@ -147,13 +147,6 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 				Icon:     info.Icon,
 				Tails:    tails,
 				Score:    util.MaxInt64(nameScore, pathNameScore),
-				Preview: plugin.WoxPreview{
-					PreviewType: plugin.WoxPreviewTypeText,
-					PreviewData: info.Path,
-					PreviewProperties: map[string]string{
-						"Path": info.Path,
-					},
-				},
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_app_open",
@@ -248,11 +241,6 @@ func (a *ApplicationPlugin) getRunningProcessResult(pid int) (tails []plugin.Que
 	tails = append(tails, plugin.QueryResultTail{
 		Type: plugin.QueryResultTailTypeText,
 		Text: fmt.Sprintf("Mem: %.1f %s", memSize, unit),
-	})
-
-	tails = append(tails, plugin.QueryResultTail{
-		Type:  plugin.QueryResultTailTypeImage,
-		Image: plugin.NewWoxImageEmoji(`🖥️`),
 	})
 
 	return

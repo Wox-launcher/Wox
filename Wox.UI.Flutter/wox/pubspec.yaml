@@ -60,6 +60,7 @@ dependencies:
   flutter_code_editor: ^0.3.1
   flutter_highlight: ^0.7.0
   highlight: ^0.7.0
+  lottie: ^3.1.2
 
 dev_dependencies:
   flutter_test:

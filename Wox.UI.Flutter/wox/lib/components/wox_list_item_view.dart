@@ -6,6 +6,7 @@ import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/entity/wox_theme.dart';
+import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/enums/wox_result_tail_type_enum.dart';
 import 'package:wox/utils/log.dart';
@@ -35,6 +36,14 @@ class WoxListItemView extends StatelessWidget {
 
   bool isAction() {
     return listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code;
+  }
+
+  double getImageSize(WoxImage img, double defaultSize) {
+    if (img.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
+      return defaultSize - 10;
+    } else {
+      return defaultSize;
+    }
   }
 
   @override
@@ -72,8 +81,8 @@ class WoxListItemView extends StatelessWidget {
 
                     return WoxImageView(
                       woxImage: icon.value,
-                      width: 30,
-                      height: 30,
+                      width: getImageSize(icon.value, 30),
+                      height: getImageSize(icon.value, 30),
                     );
                   })),
           Expanded(
@@ -140,7 +149,7 @@ class WoxListItemView extends StatelessWidget {
                                 tail.text,
                                 style: TextStyle(
                                   color: fromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
-                                  fontSize: 13,
+                                  fontSize: 12,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -154,8 +163,8 @@ class WoxListItemView extends StatelessWidget {
                               padding: const EdgeInsets.only(left: 10.0),
                               child: WoxImageView(
                                 woxImage: tail.image,
-                                width: 14,
-                                height: 14,
+                                width: getImageSize(tail.image, 24),
+                                height: getImageSize(tail.image, 24),
                               ),
                             ),
                       ],
