@@ -451,10 +451,8 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     final finalResults = List<WoxQueryResult>.from(currentQueryResults)..addAll(results);
     // wrap group into WoxQueryResult
     final groups = finalResults.map((e) => e.group).toSet().toList();
-    // sort groups by group score
-    groups.sort((a, b) {
-      return finalResults.firstWhere((element) => element.group == a).score.compareTo(finalResults.firstWhere((element) => element.group == b).score);
-    });
+    // sort groups by group score desc
+    groups.sort((a, b) => finalResults.where((element) => element.group == b).first.groupScore.compareTo(finalResults.where((element) => element.group == a).first.groupScore));
 
     var finalResultsSorted = <WoxQueryResult>[];
     for (var group in groups) {

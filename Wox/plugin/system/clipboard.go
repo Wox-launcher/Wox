@@ -7,8 +7,10 @@ import (
 	"github.com/cdfmlr/ellipsis"
 	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 	"image"
 	"os"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -31,8 +33,7 @@ var primaryActionValuePaste = "paste"
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ClipboardPlugin{
-		maxHistoryCount:   5000,
-		historyImageCache: util.NewHashMap[string, clipboardImageCache](),
+		maxHistoryCount: 5000,
 	})
 }
 
@@ -122,10 +123,10 @@ type clipboardImageCache struct {
 }
 
 type ClipboardPlugin struct {
-	api               plugin.API
-	history           []ClipboardHistory
-	historyImageCache *util.HashMap[string, clipboardImageCache]
-	maxHistoryCount   int
+	api             plugin.API
+	history         []ClipboardHistory
+	favHistory      []ClipboardHistory
+	maxHistoryCount int
 }
 
 func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
@@ -293,7 +294,7 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		}
 
 		if data.GetType() == clipboard.ClipboardTypeImage {
-			c.generateHistoryImageCache(ctx, history)
+			c.generateHistoryPreviewAndIconImage(ctx, history)
 		}
 
 		c.history = append(c.history, history)
@@ -305,29 +306,34 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 	var results []plugin.QueryResult
 
 	if query.Command == "fav" {
-		for i := len(c.history) - 1; i >= 0; i-- {
-			history := c.history[i]
-			if history.IsFavorite {
-				results = append(results, c.convertClipboardData(ctx, history))
-			}
+		for i := range c.favHistory {
+			results = append(results, c.convertClipboardData(ctx, c.favHistory[i]))
 		}
 		return results
 	}
 
 	if query.Search == "" {
+		// return all favorite clipboard history
+		for i := range c.favHistory {
+			results = append(results, c.convertClipboardData(ctx, c.favHistory[i]))
+		}
+
 		//return top 50 clipboard history order by desc
 		var count = 0
 		for i := len(c.history) - 1; i >= 0; i-- {
 			history := c.history[i]
-			startTimestamp := util.GetSystemTimestamp()
-			results = append(results, c.convertClipboardData(ctx, history))
-			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("convert clipboard data cost %d ms", util.GetSystemTimestamp()-startTimestamp))
-			count++
 
-			if count >= 50 {
-				break
+			// favorite history already in result, skip it
+			if !history.IsFavorite {
+				results = append(results, c.convertClipboardData(ctx, history))
+				count++
+
+				if count >= 50 {
+					break
+				}
 			}
 		}
+
 		return results
 	}
 
@@ -395,6 +401,15 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 						if c.history[i].Id == history.Id {
 							c.history[i].IsFavorite = true
 							needSave = true
+
+							// if history is not in favorite list, add it
+							_, exist := lo.Find(c.favHistory, func(i ClipboardHistory) bool {
+								return i.Id == history.Id
+							})
+							if !exist {
+								c.favHistory = append(c.favHistory, c.history[i])
+							}
+
 							break
 						}
 					}
@@ -414,6 +429,15 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 						if c.history[i].Id == history.Id {
 							c.history[i].IsFavorite = false
 							needSave = true
+
+							// if history is in favorite list, remove it
+							_, index, _ := lo.FindIndexOf(c.favHistory, func(i ClipboardHistory) bool {
+								return i.Id == history.Id
+							})
+							if index != -1 {
+								c.favHistory = append(c.favHistory[:index], c.favHistory[index+1:]...)
+							}
+
 							break
 						}
 					}
@@ -425,9 +449,12 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 			})
 		}
 
+		group, groupScore := c.getResultGroup(ctx, history)
 		return plugin.QueryResult{
-			Title: strings.TrimSpace(ellipsis.Centering(historyData.Text, 80)),
-			Icon:  history.Icon,
+			Title:      strings.TrimSpace(ellipsis.Centering(historyData.Text, 80)),
+			Icon:       history.Icon,
+			Group:      group,
+			GroupScore: groupScore,
 			Preview: plugin.WoxPreview{
 				PreviewType: plugin.WoxPreviewTypeText,
 				PreviewData: historyData.Text,
@@ -443,18 +470,14 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 
 	if history.Data.GetType() == clipboard.ClipboardTypeImage {
 		historyData := history.Data.(*clipboard.ImageData)
+		previewWoxImage, iconWoxImage := c.generateHistoryPreviewAndIconImage(ctx, history)
 
-		var previewWoxImage, iconWoxImage plugin.WoxImage
-		if v, ok := c.historyImageCache.Load(history.Id); ok {
-			previewWoxImage = v.preview
-			iconWoxImage = v.icon
-		} else {
-			previewWoxImage, iconWoxImage = c.generateHistoryImageCache(ctx, history)
-		}
-
+		group, groupScore := c.getResultGroup(ctx, history)
 		return plugin.QueryResult{
-			Title: fmt.Sprintf("Image (%d*%d) (%s)", historyData.Image.Bounds().Dx(), historyData.Image.Bounds().Dy(), c.getImageSize(ctx, historyData.Image)),
-			Icon:  iconWoxImage,
+			Title:      fmt.Sprintf("Image (%d*%d) (%s)", historyData.Image.Bounds().Dx(), historyData.Image.Bounds().Dy(), c.getImageSize(ctx, historyData.Image)),
+			Icon:       iconWoxImage,
+			Group:      group,
+			GroupScore: groupScore,
 			Preview: plugin.WoxPreview{
 				PreviewType: plugin.WoxPreviewTypeImage,
 				PreviewData: previewWoxImage.String(),
@@ -481,9 +504,31 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 	}
 }
 
-func (c *ClipboardPlugin) generateHistoryImageCache(ctx context.Context, history ClipboardHistory) (previewImg, iconImg plugin.WoxImage) {
-	historyData := history.Data.(*clipboard.ImageData)
+func (c *ClipboardPlugin) getResultGroup(ctx context.Context, history ClipboardHistory) (string, int64) {
+	if history.IsFavorite {
+		return "Favorites", 100
+	}
 
+	if util.GetSystemTimestamp()-history.Timestamp < 1000*60*60*24 {
+		return "Today", 90
+	}
+	if util.GetSystemTimestamp()-history.Timestamp < 1000*60*60*24*2 {
+		return "Yesterday", 80
+	}
+
+	return "History", 10
+}
+
+func (c *ClipboardPlugin) generateHistoryPreviewAndIconImage(ctx context.Context, history ClipboardHistory) (previewImg, iconImg plugin.WoxImage) {
+	imagePreviewFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_preview.png", history.Id))
+	imageIconFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_icon.png", history.Id))
+	if util.IsFileExists(imagePreviewFile) {
+		previewImg = plugin.NewWoxImageAbsolutePath(imagePreviewFile)
+		iconImg = plugin.NewWoxImageAbsolutePath(imageIconFile)
+		return
+	}
+
+	historyData := history.Data.(*clipboard.ImageData)
 	compressedPreviewImg := imaging.Resize(historyData.Image, 400, 0, imaging.Lanczos)
 	compressedIconImg := imaging.Resize(historyData.Image, 40, 0, imaging.Lanczos)
 	previewImage, err := plugin.NewWoxImage(compressedPreviewImg)
@@ -495,10 +540,12 @@ func (c *ClipboardPlugin) generateHistoryImageCache(ctx context.Context, history
 		iconImage = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAACi0lEQVR4nO3U/0sTcRzH8f0calFmmvltc04jixLcyvwhKsgstv6hfllQWhSSVGLfZOlEHSJhRBRBy775Uz8Ytem8brvb5mat7eYtmnvFHUrFduFtt7sb3Bue3E8b9/jc3Vun00YbbbRR5VwIotdGI2CjASWz0vDbaPSIBmz8ECqJFA1QwU3j7zSATXsC4A/hUiQJL0OBZZf5qz2SLJ1XiLt5pHxZXY4mSwPAnXgugIehSgOwxhI5AWssURqAkn8CdoFvwL6FD1kVgE0Ed+IsS/BXxbfQiY8sOl7E0PEyhpMLqaKgbcUAWCmg0/0DLa7wP3W9Z9QPsFIZ/sSNk6GcHX2TUC/ASmVw5Pl3NE+E/ptFYoROCoDVn8Ghp6swjAe3lGUunvUfpxZSsLjjMLvjOP3pp3yA8+Q62mcj0I/RojK/3kBQQPc8wx/AwSeraJ+N4sDjKLrnZdhC54h1tM1E0DhK51WnO47jHxgcfvYtC7B/JoKud0zxAL2+NExTYTQ4qIJqnV4RBLRNr+DYW0Z6wNmlNL9V6kcCkmRyhQUBrS4OkZAOcMbzC3pnEHUPA5JmnAwLAkxTYcEVLBrAPfba+/6iZJwICQJauBU8lygcsPcuiWJmcAYFAc3jIVg2t1e+gJphEsVO7wwKAgxjQZhfxfMHVA99hRw1jdKCAP2jPwjRgD13CMhVgyMgCGhy0PzrJBqw+xYBOavn1qwAoHGEEg+oHFyG3NU9CEgH2HXTByXad4+UBrBzwAelqh0mCwfsuLEEJasZIgsDbL++CKWr5tZsvoCKa4tQQ1W3ifwA5f1ef3m/F2qoapCIiQZsu/K5p6zvi7+szwMlq7jqTVcO+C6KBmijjTba6OSY31QFs+h9sYumAAAAAElFTkSuQmCC`)
 	}
 
-	c.historyImageCache.Store(history.Id, clipboardImageCache{
-		preview: previewImage,
-		icon:    iconImage,
-	})
+	if saveErr := imaging.Save(compressedPreviewImg, imagePreviewFile); saveErr != nil {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("save clipboard image preview cache failed, err=%s", saveErr.Error()))
+	}
+	if saveErr := imaging.Save(compressedIconImg, imageIconFile); saveErr != nil {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("save clipboard image icon cache failed, err=%s", saveErr.Error()))
+	}
 
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("generate history image preview and icon cache, id=%s", history.Id))
 	return previewImage, iconImage
@@ -589,6 +636,24 @@ func (c *ClipboardPlugin) loadHistory(ctx context.Context) {
 
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("load clipboard history, count=%d, cost=%dms", len(history), util.GetSystemTimestamp()-startTimestamp))
 	c.history = history
+
+	//load favorite history
+	var favHistory []ClipboardHistory
+	for i := len(c.history) - 1; i >= 0; i-- {
+		if c.history[i].IsFavorite {
+			favHistory = append(favHistory, c.history[i])
+		}
+	}
+	c.favHistory = favHistory
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("load favorite clipboard history, count=%d", len(c.favHistory)))
+
+	util.Go(ctx, "convert favorite history image", func() {
+		for i := range c.favHistory {
+			if c.favHistory[i].Data.GetType() == clipboard.ClipboardTypeImage {
+				c.generateHistoryPreviewAndIconImage(ctx, c.favHistory[i])
+			}
+		}
+	})
 }
 
 func (c *ClipboardPlugin) getDefaultTextIcon() plugin.WoxImage {

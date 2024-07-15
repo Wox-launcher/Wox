@@ -115,6 +115,7 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 									Value: &validator.PluginSettingValidatorNotEmpty{},
 								},
 							},
+							Width: 60,
 						},
 						{
 							Key:   "Enabled",
