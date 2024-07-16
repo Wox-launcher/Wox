@@ -431,7 +431,7 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 
 	return QueryResult{
 		Title:    fmt.Sprintf("%s query failed", pluginMetadata.Name),
-		SubTitle: util.Ellipsis(err.Error(), 20),
+		SubTitle: util.EllipsisEnd(err.Error(), 20),
 		Icon:     icon,
 		Preview: WoxPreview{
 			PreviewType: WoxPreviewTypeText,
@@ -960,6 +960,12 @@ func (m *Manager) GetResultPreview(ctx context.Context, resultId string) (WoxPre
 	}
 
 	preview := m.polishPreview(ctx, resultCache.Preview)
+
+	// if preview text is too long, ellipsis it, otherwise UI maybe freeze when render
+	if preview.PreviewType == WoxPreviewTypeText {
+		preview.PreviewData = util.EllipsisMiddle(preview.PreviewData, 2000)
+	}
+
 	return preview, nil
 }
 

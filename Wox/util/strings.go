@@ -14,7 +14,7 @@ func LeftPad(s string, n int, r rune) string {
 	return strings.Repeat(string(r), n-len(s)) + s
 }
 
-func Ellipsis(s string, maxLen int) string {
+func EllipsisEnd(s string, maxLen int) string {
 	runes := []rune(s)
 	if len(runes) <= maxLen {
 		return s
@@ -23,6 +23,19 @@ func Ellipsis(s string, maxLen int) string {
 		maxLen = 3
 	}
 	return string(runes[0:maxLen-3]) + "..."
+}
+
+func EllipsisMiddle(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	if maxLen < 3 {
+		maxLen = 3
+	}
+	half := maxLen / 2
+	return string(runes[0:half-1]) + "..." + string(runes[len(runes)-half+2:])
+
 }
 
 func IsStringMatch(term string, subTerm string, usePinYin bool) bool {
