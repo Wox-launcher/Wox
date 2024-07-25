@@ -421,6 +421,8 @@ func handleThemeUninstall(w http.ResponseWriter, r *http.Request) {
 	if uninstallErr != nil {
 		writeErrorResponse(w, "can't uninstall theme: "+uninstallErr.Error())
 		return
+	} else {
+		GetUIManager().ChangeToDefaultTheme(ctx)
 	}
 
 	writeSuccessResponse(w, "")

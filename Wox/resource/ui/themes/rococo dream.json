@@ -51,5 +51,9 @@
   "PreviewSplitLineColor": "#999999",
   "PreviewPropertyTitleColor": "#663300",
   "PreviewPropertyContentColor": "#663300",
-  "PreviewTextSelectionColor": "rgba(255, 215, 0, 0.8)"
+  "PreviewTextSelectionColor": "rgba(255, 215, 0, 0.8)",
+  "ToolbarFontColor": "#663300",
+  "ToolbarBackgroundColor": "rgba(245, 245, 220, 0.4)",
+  "ToolbarPaddingLeft": 10,
+  "ToolbarPaddingRight": 10
 }

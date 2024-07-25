@@ -73,6 +73,10 @@ func (u *uiImpl) GetAllThemes(ctx context.Context) []share.Theme {
 	return GetUIManager().GetAllThemes(ctx)
 }
 
+func (u *uiImpl) RestoreTheme(ctx context.Context) {
+	GetUIManager().RestoreTheme(ctx)
+}
+
 func (u *uiImpl) PickFiles(ctx context.Context, params share.PickFilesParams) []string {
 	respData, err := u.invokeWebsocketMethod(ctx, "PickFiles", params)
 	if err != nil {

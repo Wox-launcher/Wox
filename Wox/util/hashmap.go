@@ -100,6 +100,20 @@ func (h *HashMap[K, V]) Range(f func(K, V) bool) {
 	}
 }
 
+func (h *HashMap[K, V]) FilterList(f func(K, V) bool) []V {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+
+	var list []V
+	for k, v := range h.inner {
+		if f(k, v) {
+			list = append(list, v)
+		}
+	}
+
+	return list
+}
+
 func (h *HashMap[K, V]) String() (s string) {
 	h.Range(func(k K, v V) bool {
 		s += fmt.Sprintf("{%+v:%+v}, ", k, v)

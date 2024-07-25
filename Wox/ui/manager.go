@@ -328,9 +328,24 @@ func (m *Manager) AddTheme(ctx context.Context, theme share.Theme) {
 
 func (m *Manager) RemoveTheme(ctx context.Context, theme share.Theme) {
 	m.themes.Delete(theme.ThemeId)
+}
+
+func (m *Manager) ChangeToDefaultTheme(ctx context.Context) {
 	if v, ok := m.themes.Load("53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03"); ok {
 		m.ChangeTheme(ctx, v)
 	}
+}
+
+func (m *Manager) RestoreTheme(ctx context.Context) {
+	var uninstallThemes = m.themes.FilterList(func(key string, theme share.Theme) bool {
+		return !theme.IsSystem
+	})
+
+	for _, theme := range uninstallThemes {
+		GetStoreManager().Uninstall(ctx, theme)
+	}
+
+	m.ChangeToDefaultTheme(ctx)
 }
 
 func (m *Manager) GetThemeById(themeId string) share.Theme {

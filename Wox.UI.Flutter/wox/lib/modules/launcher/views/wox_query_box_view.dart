@@ -4,15 +4,9 @@ import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_image_view.dart';
-import 'package:wox/entity/wox_image.dart';
-import 'package:wox/enums/wox_image_type_enum.dart';
-import 'package:wox/enums/wox_query_type_enum.dart';
-import 'package:wox/enums/wox_selection_type_enum.dart';
+import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/log.dart';
-
-import '../wox_launcher_controller.dart';
 
 class WoxQueryBoxView extends GetView<WoxLauncherController> {
   const WoxQueryBoxView({super.key});

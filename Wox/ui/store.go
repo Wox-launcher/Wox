@@ -120,6 +120,8 @@ func (s *Store) Install(ctx context.Context, theme share.Theme) error {
 }
 
 func (s *Store) Uninstall(ctx context.Context, theme share.Theme) error {
+	logger.Info(ctx, fmt.Sprintf("uninstalling theme: %s", theme.ThemeName))
+
 	if GetUIManager().IsSystemTheme(theme.ThemeId) {
 		return fmt.Errorf("can't uninstall system theme")
 	}

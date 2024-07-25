@@ -30,6 +30,10 @@ class WoxThemeUtil {
     return RESULT_ITEM_BASE_HEIGHT + currentTheme.resultItemPaddingTop + currentTheme.resultItemPaddingBottom;
   }
 
+  double getResultTipHeight() {
+    return RESULT_BOTTOM_TIP_BASE_HEIGHT;
+  }
+
   double getResultListViewHeightByCount(int count) {
     if (count == 0) {
       return 0;

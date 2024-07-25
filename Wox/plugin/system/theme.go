@@ -9,6 +9,7 @@ import (
 	"wox/ai"
 	"wox/plugin"
 	"wox/resource"
+	"wox/setting"
 	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
@@ -44,6 +45,10 @@ func (c *ThemePlugin) GetMetadata() plugin.Metadata {
 				Command:     "ai",
 				Description: "Generate a new theme with AI",
 			},
+			{
+				Command:     "restore",
+				Description: "Remove all custom themes and restore to default",
+			},
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
@@ -76,12 +81,15 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 	if query.Command == "ai" {
 		return c.queryAI(ctx, query)
 	}
+	if query.Command == "restore" {
+		return c.queryRestore(ctx, query)
+	}
 
 	ui := plugin.GetPluginManager().GetUI()
 	return lo.FilterMap(ui.GetAllThemes(ctx), func(theme share.Theme, _ int) (plugin.QueryResult, bool) {
 		match, _ := IsStringMatchScore(ctx, theme.ThemeName, query.Search)
 		if match {
-			return plugin.QueryResult{
+			result := plugin.QueryResult{
 				Title: theme.ThemeName,
 				Icon:  themeIcon,
 				Actions: []plugin.QueryResultAction{
@@ -93,7 +101,23 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 						},
 					},
 				},
-			}, true
+			}
+			if theme.IsSystem {
+				result.Tails = append(result.Tails, plugin.QueryResultTail{
+					Type: plugin.QueryResultTailTypeText,
+					Text: "System",
+				})
+			}
+			currentThemeId := setting.GetSettingManager().GetWoxSetting(ctx).ThemeId
+			if currentThemeId == theme.ThemeId {
+				result.Group = "Current"
+				result.GroupScore = 100
+			} else {
+				result.Group = "Available"
+				result.GroupScore = 50
+			}
+
+			return result, true
 		} else {
 			return plugin.QueryResult{}, false
 		}
@@ -232,6 +256,24 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						startGenerate = true
+					},
+				},
+			},
+		},
+	}
+}
+
+func (c *ThemePlugin) queryRestore(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	return []plugin.QueryResult{
+		{
+			Title: "Remove all custom themes and restore to default",
+			Icon:  themeIcon,
+			Actions: []plugin.QueryResultAction{
+				{
+					Name:                   "Restore",
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						plugin.GetPluginManager().GetUI().RestoreTheme(ctx)
 					},
 				},
 			},

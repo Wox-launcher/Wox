@@ -51,6 +51,10 @@ class WoxTheme {
   late String previewPropertyTitleColor;
   late String previewPropertyContentColor;
   late String previewTextSelectionColor;
+  late String toolbarFontColor;
+  late String toolbarBackgroundColor;
+  late int toolbarPaddingLeft;
+  late int toolbarPaddingRight;
 
   WoxTheme(
       {themeId,
@@ -100,7 +104,11 @@ class WoxTheme {
       previewSplitLineColor,
       previewPropertyTitleColor,
       previewPropertyContentColor,
-      previewTextSelectionColor});
+      previewTextSelectionColor,
+      toolbarFontColor,
+      toolbarBackgroundColor,
+      toolbarPaddingLeft,
+      toolbarPaddingRight});
 
   WoxTheme.fromJson(Map<String, dynamic> json) {
     themeId = json['ThemeId'];
@@ -153,6 +161,10 @@ class WoxTheme {
     previewPropertyTitleColor = json['PreviewPropertyTitleColor'];
     previewPropertyContentColor = json['PreviewPropertyContentColor'];
     previewTextSelectionColor = json['PreviewTextSelectionColor'];
+    toolbarFontColor = json['ToolbarFontColor'];
+    toolbarBackgroundColor = json['ToolbarBackgroundColor'];
+    toolbarPaddingLeft = json['ToolbarPaddingLeft'];
+    toolbarPaddingRight = json['ToolbarPaddingRight'];
   }
 
   Map<String, dynamic> toJson() {
@@ -207,6 +219,10 @@ class WoxTheme {
     data['PreviewPropertyTitleColor'] = previewPropertyTitleColor;
     data['PreviewPropertyContentColor'] = previewPropertyContentColor;
     data['PreviewTextSelectionColor'] = previewTextSelectionColor;
+    data['ToolbarFontColor'] = toolbarFontColor;
+    data['ToolbarBackgroundColor'] = toolbarBackgroundColor;
+    data['ToolbarPaddingLeft'] = toolbarPaddingLeft;
+    data['ToolbarPaddingRight'] = toolbarPaddingRight;
     return data;
   }
 }

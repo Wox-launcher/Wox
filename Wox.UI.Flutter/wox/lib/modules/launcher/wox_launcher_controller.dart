@@ -160,6 +160,10 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     resizeHeight();
   }
 
+  getActiveQueryResult() {
+    return queryResults[_activeResultIndex.value];
+  }
+
   @override
   Future<void> executeResultAction(String traceId) async {
     if (queryResults.isEmpty) {
@@ -167,7 +171,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     }
 
     Logger.instance.debug(traceId, "user execute result action");
-    WoxQueryResult woxQueryResult = queryResults[_activeResultIndex.value];
+    WoxQueryResult woxQueryResult = getActiveQueryResult();
     WoxResultAction woxResultAction = WoxResultAction.empty();
     if (isShowActionPanel.value) {
       if (filterResultActions.isNotEmpty) {
@@ -508,9 +512,11 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     if (isShowActionPanel.value || isShowPreviewPanel.value) {
       resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(10);
     }
-    final totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() +
-        resultHeight +
-        (queryResults.isNotEmpty ? woxTheme.value.resultContainerPaddingTop + woxTheme.value.resultContainerPaddingBottom : 0);
+    if (queryResults.isNotEmpty) {
+      resultHeight += woxTheme.value.resultContainerPaddingTop + woxTheme.value.resultContainerPaddingBottom;
+      resultHeight += WoxThemeUtil.instance.getResultTipHeight();
+    }
+    final totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight;
     if (Platform.isWindows) {
       // on windows, if I set screen ratio to 2.0, then the window height should add more 4.5 pixel, otherwise it will show render error
       // still don't know why. here is the test result: ratio -> additional window height
