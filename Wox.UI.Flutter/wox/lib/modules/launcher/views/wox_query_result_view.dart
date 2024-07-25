@@ -66,6 +66,14 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                 decoration: BoxDecoration(
                   color: fromCssColor(controller.woxTheme.value.actionContainerBackgroundColor),
                   borderRadius: BorderRadius.circular(controller.woxTheme.value.actionQueryBoxBorderRadius.toDouble()),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      spreadRadius: 2,
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 320),
