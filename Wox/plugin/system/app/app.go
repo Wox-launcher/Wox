@@ -134,18 +134,11 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 		isNameMatch, nameScore := system.IsStringMatchScore(ctx, info.Name, query.Search)
 		isPathNameMatch, pathNameScore := system.IsStringMatchScore(ctx, filepath.Base(info.Path), query.Search)
 		if isNameMatch || isPathNameMatch {
-			var tails []plugin.QueryResultTail
-			// get cpu and mem info
-			if info.IsRunning() {
-				tails = a.getRunningProcessResult(info.Pid)
-			}
-
 			result := plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    info.Name,
 				SubTitle: info.Path,
 				Icon:     info.Icon,
-				Tails:    tails,
 				Score:    util.MaxInt64(nameScore, pathNameScore),
 				Actions: []plugin.QueryResultAction{
 					{

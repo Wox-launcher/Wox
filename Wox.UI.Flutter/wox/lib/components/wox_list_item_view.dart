@@ -129,15 +129,15 @@ class WoxListItemView extends StatelessWidget {
             ]),
           ),
           // Tails
-          if (tails.isNotEmpty)
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: WoxSettingUtil.instance.currentSetting.appWidth / 2),
-              child: Padding(
-                padding: const EdgeInsets.only(left: 10.0, right: 5.0),
-                child: Obx(() {
-                  if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view $key - tails");
+          Obx(() {
+            if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view $key - tails");
 
-                  return SingleChildScrollView(
+            if (tails.isNotEmpty) {
+              return ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: WoxSettingUtil.instance.currentSetting.appWidth / 2),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 10.0, right: 5.0),
+                  child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
@@ -169,10 +169,13 @@ class WoxListItemView extends StatelessWidget {
                             ),
                       ],
                     ),
-                  );
-                }),
-              ),
-            ),
+                  ),
+                ),
+              );
+            } else {
+              return const SizedBox();
+            }
+          }),
         ],
       ),
     );

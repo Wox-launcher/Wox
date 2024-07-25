@@ -181,6 +181,7 @@ class WoxQueryResult {
     data['ContextData'] = contextData;
     data['Actions'] = actions.map((v) => v.toJson()).toList();
     data['RefreshInterval'] = refreshInterval;
+    data['Tails'] = tails.map((v) => v.toJson()).toList();
     return data;
   }
 }
