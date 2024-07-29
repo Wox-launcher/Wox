@@ -37,8 +37,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 20),
-          child: KeyboardListener(
-            focusNode: FocusNode(onKeyEvent: (FocusNode node, KeyEvent event) {
+          child: Focus(
+            autofocus: true,
+            onKeyEvent: (FocusNode node, KeyEvent event) {
               if (event is KeyDownEvent) {
                 switch (event.logicalKey) {
                   case LogicalKeyboardKey.escape:
@@ -48,7 +49,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
               }
 
               return KeyEventResult.ignored;
-            }),
+            },
             child: Obx(() {
               return TextBox(
                 autofocus: true,

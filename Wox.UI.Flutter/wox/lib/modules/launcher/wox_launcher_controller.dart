@@ -149,8 +149,17 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   void showActionPanel() {
+    var actions = queryResults[_activeResultIndex.value].actions;
+    // move default action to the first
+    final defaultActionIndex = actions.indexWhere((element) => element.isDefault);
+    if (defaultActionIndex != -1) {
+      final defaultAction = actions[defaultActionIndex];
+      actions.removeAt(defaultActionIndex);
+      actions.insert(0, defaultAction);
+    }
+
     _activeActionIndex.value = 0;
-    _resultActions.value = queryResults[_activeResultIndex.value].actions;
+    _resultActions.value = actions;
     filterResultActions.value = _resultActions;
     for (var _ in filterResultActions) {
       _resultActionItemGlobalKeys.add(GlobalKey());

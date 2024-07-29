@@ -15,8 +15,9 @@ class WoxSettingView extends GetView<WoxSettingController> {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      return KeyboardListener(
-          focusNode: FocusNode(onKeyEvent: (FocusNode node, KeyEvent event) {
+      return Focus(
+          autofocus: true,
+          onKeyEvent: (FocusNode node, KeyEvent event) {
             if (event is KeyDownEvent) {
               switch (event.logicalKey) {
                 case LogicalKeyboardKey.escape:
@@ -26,7 +27,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
             }
 
             return KeyEventResult.ignored;
-          }),
+          },
           child: Scaffold(
             body: FluentApp(
               debugShowCheckedModeBanner: false,
