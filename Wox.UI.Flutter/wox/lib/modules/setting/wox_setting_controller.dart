@@ -27,6 +27,9 @@ class WoxSettingController extends GetxController {
   final activeTheme = WoxSettingTheme.empty().obs;
   final isStoreThemeList = true.obs;
 
+  //lang
+  var langMap = <String, String>{}.obs;
+
   void hideWindow() {
     Get.find<WoxLauncherController>().isInSettingView.value = false;
   }
@@ -36,6 +39,17 @@ class WoxSettingController extends GetxController {
     await WoxSettingUtil.instance.loadSetting();
     woxSetting.value = WoxSettingUtil.instance.currentSetting;
     Logger.instance.info(const UuidV4().generate(), 'Setting updated: $key=$value');
+  }
+
+  Future<void> updateLang(String langCode) async {
+    await updateConfig("LangCode", langCode);
+    langMap.value = await WoxApi.instance.getLangJson(langCode);
+  }
+
+  // get translation
+  String tr(String key) {
+    var uiKey = "ui_$key";
+    return langMap[uiKey] ?? key;
   }
 
   // ---------- Plugins ----------

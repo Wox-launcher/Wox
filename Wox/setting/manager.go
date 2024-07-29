@@ -181,7 +181,12 @@ func (m *Manager) UpdateWoxSetting(ctx context.Context, key, value string) error
 	} else if key == "ShowTray" {
 		m.woxSetting.ShowTray = value == "true"
 	} else if key == "LangCode" {
-		m.woxSetting.LangCode = i18n.LangCode(value)
+		newLangCode := i18n.LangCode(value)
+		langErr := i18n.GetI18nManager().UpdateLang(ctx, newLangCode)
+		if langErr != nil {
+			return langErr
+		}
+		m.woxSetting.LangCode = newLangCode
 	} else if key == "LastQueryMode" {
 		m.woxSetting.LastQueryMode = value
 	} else if key == "ThemeId" {

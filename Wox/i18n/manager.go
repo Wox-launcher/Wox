@@ -36,6 +36,10 @@ func GetI18nManager() *Manager {
 }
 
 func (m *Manager) UpdateLang(ctx context.Context, langCode LangCode) error {
+	if !IsSupportedLangCode(string(langCode)) {
+		return fmt.Errorf("unsupported lang code: %s", langCode)
+	}
+	
 	json, err := m.GetLangJson(ctx, langCode)
 	if err != nil {
 		return err

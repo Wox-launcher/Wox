@@ -48,8 +48,8 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/on/hide":       handleOnHide,
 
 	// lang
-	"/lang/change": handleLangChange,
-	"/lang/json":   handleLangJson,
+	"/lang/available": handleLangAvailable,
+	"/lang/json":      handleLangJson,
 
 	// ai
 	"/ai/models": handleAIModels,
@@ -604,29 +604,8 @@ func handleOnFocusLost(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "")
 }
 
-func handleLangChange(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
-
-	body, _ := io.ReadAll(r.Body)
-	langCodeResult := gjson.GetBytes(body, "langCode")
-	if !langCodeResult.Exists() {
-		writeErrorResponse(w, "langCode is empty")
-		return
-	}
-	langCode := langCodeResult.String()
-
-	if !i18n.IsSupportedLangCode(langCode) {
-		logger.Error(ctx, fmt.Sprintf("unsupported lang code: %s", langCode))
-		writeErrorResponse(w, fmt.Sprintf("unsupported lang code: %s", langCode))
-		return
-	}
-
-	langErr := i18n.GetI18nManager().UpdateLang(ctx, i18n.LangCode(langCode))
-	if langErr != nil {
-		logger.Error(ctx, langErr.Error())
-		writeErrorResponse(w, langErr.Error())
-		return
-	}
+func handleLangAvailable(w http.ResponseWriter, r *http.Request) {
+	writeSuccessResponse(w, i18n.GetSupportedLanguages())
 }
 
 func handleLangJson(w http.ResponseWriter, r *http.Request) {

@@ -15,9 +15,9 @@ class WoxSettingView extends GetView<WoxSettingController> {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      return RawKeyboardListener(
-          focusNode: FocusNode(onKey: (FocusNode node, RawKeyEvent event) {
-            if (event is RawKeyDownEvent) {
+      return KeyboardListener(
+          focusNode: FocusNode(onKeyEvent: (FocusNode node, KeyEvent event) {
+            if (event is KeyDownEvent) {
               switch (event.logicalKey) {
                 case LogicalKeyboardKey.escape:
                   controller.hideWindow();

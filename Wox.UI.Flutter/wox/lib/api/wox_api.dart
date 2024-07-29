@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:core';
 
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_image.dart';
+import 'package:wox/entity/wox_lang.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/entity/wox_setting.dart';
@@ -97,6 +99,20 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData("/query/icon", {
       "query": query.toJson(),
     });
+  }
+
+  Future<List<WoxLang>> getAllLanguages() async {
+    return await WoxHttpUtil.instance.postData("/lang/available", {});
+  }
+
+  Future<Map<String, String>> getLangJson(String langCode) async {
+    var langJsonStr = await WoxHttpUtil.instance.postData("/lang/json", {
+      "langCode": langCode,
+    });
+
+    //unmarshal json string to map
+    var jsonMap = json.decode(langJsonStr);
+    return jsonMap.cast<String, String>();
   }
 
   Future<void> onProtocolUrlReceived(String command, Map<String, String> arguments) async {

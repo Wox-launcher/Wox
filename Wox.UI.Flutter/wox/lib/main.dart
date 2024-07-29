@@ -56,7 +56,12 @@ Future<void> initialServices(List<String> arguments) async {
   await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://localhost:${Env.serverPort}/ws"), onMessageReceived: launcherController.handleWebSocketMessage);
   HeartbeatChecker().startChecking();
   Get.put(launcherController);
-  Get.put(WoxSettingController());
+  var woxSettingController = WoxSettingController();
+  Get.put(woxSettingController);
+
+  //load lang
+  var langCode = WoxSettingUtil.instance.currentSetting.langCode;
+  woxSettingController.updateLang(langCode);
 }
 
 Future<void> initDeepLink() async {
