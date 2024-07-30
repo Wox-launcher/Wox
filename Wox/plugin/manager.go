@@ -257,6 +257,9 @@ func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error 
 }
 
 func (m *Manager) UnloadPlugin(ctx context.Context, pluginInstance *Instance) {
+	for _, callback := range pluginInstance.UnloadCallbacks {
+		callback()
+	}
 	pluginInstance.Host.UnloadPlugin(ctx, pluginInstance.Metadata)
 
 	var newInstances []*Instance
@@ -550,7 +553,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	if !ignoreAutoScore {
 		score := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
 		if score > 0 {
-			logger.Info(ctx, fmt.Sprintf("<%s> result(%s) add score: %d", pluginInstance.Metadata.Name, result.Title, score))
+			logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) add score: %d", pluginInstance.Metadata.Name, result.Title, score))
 			result.Score += score
 		}
 	}

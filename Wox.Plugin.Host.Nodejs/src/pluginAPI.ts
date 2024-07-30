@@ -15,6 +15,7 @@ export class PluginAPI implements PublicAPI {
   settingChangeCallbacks: Map<string, (key: string, value: string) => void>
   getDynamicSettingCallbacks: Map<string, (key: string) => PluginSettingDefinitionItem>
   deepLinkCallbacks: Map<string, (params: MapString) => void>
+  unloadCallbacks: Map<string, () => Promise<void>>
   llmStreamCallbacks: Map<string, AI.ChatStreamFunc>
 
   constructor(ws: WebSocket, pluginId: string, pluginName: string) {
@@ -24,6 +25,7 @@ export class PluginAPI implements PublicAPI {
     this.settingChangeCallbacks = new Map<string, (key: string, value: string) => void>()
     this.getDynamicSettingCallbacks = new Map<string, (key: string) => PluginSettingDefinitionItem>()
     this.deepLinkCallbacks = new Map<string, (params: MapString) => void>()
+    this.unloadCallbacks = new Map<string, () => Promise<void>>()
     this.llmStreamCallbacks = new Map<string, AI.ChatStreamFunc>()
   }
 
@@ -32,7 +34,7 @@ export class PluginAPI implements PublicAPI {
     const traceId = ctx.Get("traceId") || crypto.randomUUID()
 
     if (method !== "Log") {
-      logger.info(ctx, `[${this.pluginName}] start invoke method to Wox: ${method}, id: ${requestId} parameters: ${JSON.stringify(params)}`)
+      logger.info(ctx, `<${this.pluginName}> start invoke method to Wox: ${method}, id: ${requestId}`)
     }
 
     this.ws.send(
@@ -107,6 +109,12 @@ export class PluginAPI implements PublicAPI {
     const callbackId = crypto.randomUUID()
     this.deepLinkCallbacks.set(callbackId, callback)
     await this.invokeMethod(ctx, "OnDeepLink", { callbackId })
+  }
+
+  async OnUnload(ctx: Context, callback: () => Promise<void>): Promise<void> {
+    const callbackId = crypto.randomUUID()
+    this.unloadCallbacks.set(callbackId, callback)
+    await this.invokeMethod(ctx, "OnUnload", { callbackId })
   }
 
   async RegisterQueryCommands(ctx: Context, commands: MetadataCommand[]): Promise<void> {

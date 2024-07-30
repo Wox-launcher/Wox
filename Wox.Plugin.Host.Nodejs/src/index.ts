@@ -94,7 +94,7 @@ wss.on("connection", function connection(ws) {
 
     const ctx = NewContextWithValue(TraceIdKey, jsonRpcRequest.TraceId)
 
-    logger.debug(ctx, `receive request from wox: ${JSON.stringify(jsonRpcRequest)}`)
+    logger.debug(ctx, `receive request from wox, plugin:${jsonRpcRequest.PluginName}, method: ${jsonRpcRequest.Method}`)
 
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore

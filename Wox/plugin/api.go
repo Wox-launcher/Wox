@@ -37,6 +37,7 @@ type API interface {
 	OnSettingChanged(ctx context.Context, callback func(key string, value string))
 	OnGetDynamicSetting(ctx context.Context, callback func(key string) definition.PluginSettingDefinitionItem)
 	OnDeepLink(ctx context.Context, callback func(arguments map[string]string))
+	OnUnload(ctx context.Context, callback func())
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
 	AIChatStream(ctx context.Context, model ai.Model, conversations []ai.Conversation, callback ai.ChatStreamFunc) error
 }
@@ -153,6 +154,10 @@ func (a *APIImpl) OnDeepLink(ctx context.Context, callback func(arguments map[st
 	}
 
 	a.pluginInstance.DeepLinkCallbacks = append(a.pluginInstance.DeepLinkCallbacks, callback)
+}
+
+func (a *APIImpl) OnUnload(ctx context.Context, callback func()) {
+	a.pluginInstance.UnloadCallbacks = append(a.pluginInstance.UnloadCallbacks, callback)
 }
 
 func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []MetadataCommand) {

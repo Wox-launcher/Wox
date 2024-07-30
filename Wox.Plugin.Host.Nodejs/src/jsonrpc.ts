@@ -42,7 +42,7 @@ export interface PluginJsonRpcResponse {
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcRequest, ws: WebSocket): unknown {
-  logger.info(ctx, `invoke <${request.PluginName}> method: ${request.Method}, parameters: ${JSON.stringify(request.Params)}`)
+  logger.info(ctx, `invoke <${request.PluginName}> method: ${request.Method}`)
 
   switch (request.Method) {
     case "loadPlugin":
@@ -63,6 +63,8 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
       return onGetDynamicSetting(ctx, request)
     case "onDeepLink":
       return onDeepLink(ctx, request)
+    case "onUnload":
+      return onUnload(ctx, request)
     case "onLLMStream":
       return onLLMStream(ctx, request)
     default:
@@ -78,11 +80,11 @@ async function loadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
 
   const module = await import(modulePath)
   if (module["plugin"] === undefined || module["plugin"] === null) {
-    logger.error(ctx, `[${request.PluginName}] plugin doesn't export plugin object`)
+    logger.error(ctx, `<${request.PluginName}> plugin doesn't export plugin object`)
     return
   }
 
-  logger.info(ctx, `[${request.PluginName}] load plugin successfully`)
+  logger.info(ctx, `<${request.PluginName}> load plugin successfully`)
   pluginInstances.set(request.PluginId, {
     Plugin: module["plugin"] as Plugin,
     API: {} as PluginAPI,
@@ -95,14 +97,14 @@ async function loadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
 function unloadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
   const pluginInstance = pluginInstances.get(request.PluginId)
   if (pluginInstance === undefined || pluginInstance === null) {
-    logger.error(ctx, `[${request.PluginName}] plugin instance not found: ${request.PluginName}`)
+    logger.error(ctx, `<${request.PluginName}> plugin instance not found: ${request.PluginName}`)
     throw new Error(`plugin instance not found: ${request.PluginName}`)
   }
 
   delete require.cache[require.resolve(pluginInstance.ModulePath)]
   pluginInstances.delete(request.PluginId)
 
-  logger.info(ctx, `[${request.PluginName}] unload plugin successfully`)
+  logger.info(ctx, `<${request.PluginName}> unload plugin successfully`)
 }
 
 function getMethod<M extends keyof Plugin>(ctx: Context, request: PluginJsonRpcRequest, methodName: M): Plugin[M] {
@@ -175,6 +177,17 @@ async function onDeepLink(ctx: Context, request: PluginJsonRpcRequest) {
   const callbackId = request.Params.CallbackId
   const params = JSON.parse(request.Params.Arguments) as MapString
   plugin.API.deepLinkCallbacks.get(callbackId)?.(params)
+}
+
+async function onUnload(ctx: Context, request: PluginJsonRpcRequest) {
+  const plugin = pluginInstances.get(request.PluginId)
+  if (plugin === undefined || plugin === null) {
+    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+  }
+
+  const callbackId = request.Params.CallbackId
+  await plugin.API.unloadCallbacks.get(callbackId)?.()
 }
 
 async function onLLMStream(ctx: Context, request: PluginJsonRpcRequest) {
@@ -259,7 +272,7 @@ async function action(ctx: Context, request: PluginJsonRpcRequest) {
 
   const pluginAction = plugin.Actions.get(request.Params.ActionId)
   if (pluginAction === undefined || pluginAction === null) {
-    logger.error(ctx, `[${request.PluginName}] plugin action not found: ${request.PluginName}`)
+    logger.error(ctx, `<${request.PluginName}> plugin action not found: ${request.PluginName}`)
     return
   }
 
@@ -277,7 +290,7 @@ async function refresh(ctx: Context, request: PluginJsonRpcRequest) {
 
   const pluginRefresh = plugin.Refreshes.get(request.Params.ResultId)
   if (pluginRefresh === undefined || pluginRefresh === null) {
-    logger.error(ctx, `[${request.PluginName}] plugin refresh not found: ${request.PluginName}`)
+    logger.error(ctx, `<${request.PluginName}> plugin refresh not found: ${request.PluginName}`)
     return
   }
 

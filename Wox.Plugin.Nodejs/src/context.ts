@@ -2,14 +2,16 @@ import { Context } from "../types/index.js"
 
 export function NewContext(): Context {
   return {
-    Values: {},
-    Get: function(key: string): string | undefined {
+    Values: {
+      traceId: crypto.randomUUID()
+    },
+    Get: function (key: string): string | undefined {
       return this.Values[key]
     },
-    Set: function(key: string, value: string): void {
+    Set: function (key: string, value: string): void {
       this.Values[key] = value
     },
-    Exists: function(key: string): boolean {
+    Exists: function (key: string): boolean {
       return this.Values[key] !== undefined
     }
   }

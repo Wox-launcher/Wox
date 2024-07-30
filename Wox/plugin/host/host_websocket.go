@@ -209,7 +209,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 		}
 	}
 	if pluginInstance == nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to find plugin instance", request.PluginName))
+		util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed to find plugin instance", request.PluginName))
 		return
 	}
 
@@ -390,6 +390,20 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			w.invokeMethod(ctx, metadata, "onDeepLink", map[string]string{
 				"CallbackId": callbackId,
 				"Arguments":  string(args),
+			})
+		})
+		w.sendResponseToHost(ctx, request, "")
+	case "OnUnload":
+		callbackId, exist := request.Params["callbackId"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] OnUnload method must have a callbackId parameter", request.PluginName))
+			return
+		}
+
+		metadata := pluginInstance.Metadata
+		pluginInstance.API.OnUnload(ctx, func() {
+			w.invokeMethod(ctx, metadata, "onUnload", map[string]string{
+				"CallbackId": callbackId,
 			})
 		})
 		w.sendResponseToHost(ctx, request, "")

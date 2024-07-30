@@ -18,58 +18,65 @@ call_lefthook()
     lefthook "$@"
   else
     dir="$(git rev-parse --show-toplevel)"
-    if test -f "$dir/node_modules/lefthook/bin/index.js"
+    osArch=$(uname | tr '[:upper:]' '[:lower:]')
+    cpuArch=$(uname -m | sed 's/aarch64/arm64/;s/x86_64/x64/')
+    if test -f "$dir/node_modules/lefthook-${osArch}-${cpuArch}/bin/lefthook"
+    then
+      "$dir/node_modules/lefthook-${osArch}-${cpuArch}/bin/lefthook" "$@"
+    elif test -f "$dir/node_modules/@evilmartians/lefthook/bin/lefthook-${osArch}-${cpuArch}/lefthook"
+    then
+      "$dir/node_modules/@evilmartians/lefthook/bin/lefthook-${osArch}-${cpuArch}/lefthook" "$@"
+    elif test -f "$dir/node_modules/@evilmartians/lefthook-installer/bin/lefthook"
+    then
+      "$dir/node_modules/@evilmartians/lefthook-installer/bin/lefthook" "$@"
+    elif test -f "$dir/node_modules/lefthook/bin/index.js"
     then
       "$dir/node_modules/lefthook/bin/index.js" "$@"
+    elif test -f "$dir/Wox.UI.React/node_modules/lefthook-${osArch}-${cpuArch}/bin/lefthook"
+    then
+      "$dir/Wox.UI.React/node_modules/lefthook-${osArch}-${cpuArch}/bin/lefthook" "$@"
+    elif test -f "$dir/Wox.UI.React/node_modules/@evilmartians/lefthook/bin/lefthook-${osArch}-${cpuArch}/lefthook"
+    then
+      "$dir/Wox.UI.React/node_modules/@evilmartians/lefthook/bin/lefthook-${osArch}-${cpuArch}/lefthook" "$@"
+    elif test -f "$dir/Wox.UI.React/node_modules/@evilmartians/lefthook-installer/bin/lefthook"
+    then
+      "$dir/Wox.UI.React/node_modules/@evilmartians/lefthook-installer/bin/lefthook" "$@"
+    elif test -f "$dir/Wox.UI.React/node_modules/lefthook/bin/index.js"
+    then
+      "$dir/Wox.UI.React/node_modules/lefthook/bin/index.js" "$@"
+    elif test -f "$dir/Wox/node_modules/lefthook-${osArch}-${cpuArch}/bin/lefthook"
+    then
+      "$dir/Wox/node_modules/lefthook-${osArch}-${cpuArch}/bin/lefthook" "$@"
+    elif test -f "$dir/Wox/node_modules/@evilmartians/lefthook/bin/lefthook-${osArch}-${cpuArch}/lefthook"
+    then
+      "$dir/Wox/node_modules/@evilmartians/lefthook/bin/lefthook-${osArch}-${cpuArch}/lefthook" "$@"
+    elif test -f "$dir/Wox/node_modules/@evilmartians/lefthook-installer/bin/lefthook"
+    then
+      "$dir/Wox/node_modules/@evilmartians/lefthook-installer/bin/lefthook" "$@"
+    elif test -f "$dir/Wox/node_modules/lefthook/bin/index.js"
+    then
+      "$dir/Wox/node_modules/lefthook/bin/index.js" "$@"
+    
+    elif bundle exec lefthook -h >/dev/null 2>&1
+    then
+      bundle exec lefthook "$@"
+    elif yarn lefthook -h >/dev/null 2>&1
+    then
+      yarn lefthook "$@"
+    elif pnpm lefthook -h >/dev/null 2>&1
+    then
+      pnpm lefthook "$@"
+    elif swift package plugin lefthook >/dev/null 2>&1
+    then
+      swift package --disable-sandbox plugin lefthook "$@"
+    elif command -v mint >/dev/null 2>&1
+    then
+      mint run csjones/lefthook-plugin "$@"
+    elif command -v npx >/dev/null 2>&1
+    then
+      npx lefthook "$@"
     else
-      osArch=$(uname | tr '[:upper:]' '[:lower:]')
-      cpuArch=$(uname -m | sed 's/aarch64/arm64/')
-      if test -f "$dir/node_modules/@evilmartians/lefthook/bin/lefthook_${osArch}_${cpuArch}/lefthook"
-      then
-        "$dir/node_modules/@evilmartians/lefthook/bin/lefthook_${osArch}_${cpuArch}/lefthook" "$@"
-      elif test -f "$dir/node_modules/@evilmartians/lefthook-installer/bin/lefthook_${osArch}_${cpuArch}/lefthook"
-      then
-        "$dir/node_modules/@evilmartians/lefthook-installer/bin/lefthook_${osArch}_${cpuArch}/lefthook" "$@"
-      elif test -f "$dir/Wox.UI.React/node_modules/lefthook/bin/index.js"
-      then
-        "$dir/Wox.UI.React/node_modules/lefthook/bin/index.js" "$@"
-      elif test -f "$dir/Wox.UI.React/node_modules/@evilmartians/lefthook/bin/lefthook_${osArch}_${cpuArch}/lefthook"
-      then
-        "$dir/Wox.UI.React/node_modules/@evilmartians/lefthook/bin/lefthook_${osArch}_${cpuArch}/lefthook" "$@"
-      elif test -f "$dir/Wox.UI.React/node_modules/@evilmartians/lefthook-installer/bin/lefthook_${osArch}_${cpuArch}/lefthook"
-      then
-        "$dir/Wox.UI.React/node_modules/@evilmartians/lefthook-installer/bin/lefthook_${osArch}_${cpuArch}/lefthook" "$@"
-      elif test -f "$dir/Wox/node_modules/lefthook/bin/index.js"
-      then
-        "$dir/Wox/node_modules/lefthook/bin/index.js" "$@"
-      elif test -f "$dir/Wox/node_modules/@evilmartians/lefthook/bin/lefthook_${osArch}_${cpuArch}/lefthook"
-      then
-        "$dir/Wox/node_modules/@evilmartians/lefthook/bin/lefthook_${osArch}_${cpuArch}/lefthook" "$@"
-      elif test -f "$dir/Wox/node_modules/@evilmartians/lefthook-installer/bin/lefthook_${osArch}_${cpuArch}/lefthook"
-      then
-        "$dir/Wox/node_modules/@evilmartians/lefthook-installer/bin/lefthook_${osArch}_${cpuArch}/lefthook" "$@"
-      
-      elif bundle exec lefthook -h >/dev/null 2>&1
-      then
-        bundle exec lefthook "$@"
-      elif yarn lefthook -h >/dev/null 2>&1
-      then
-        yarn lefthook "$@"
-      elif pnpm lefthook -h >/dev/null 2>&1
-      then
-        pnpm lefthook "$@"
-      elif swift package plugin lefthook >/dev/null 2>&1
-      then
-        swift package --disable-sandbox plugin lefthook "$@"
-      elif command -v mint >/dev/null 2>&1
-      then
-        mint run csjones/lefthook-plugin "$@"
-      elif command -v npx >/dev/null 2>&1
-      then
-        npx lefthook "$@"
-      else
-        echo "Can't find lefthook in PATH"
-      fi
+      echo "Can't find lefthook in PATH"
     fi
   fi
 }

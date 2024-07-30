@@ -206,6 +206,11 @@ export interface PublicAPI {
   OnDeepLink: (ctx: Context, callback: (arguments: MapString) => void) => Promise<void>
 
   /**
+   * Register on load event
+   */
+  OnUnload: (ctx: Context, callback: () => Promise<void>) => Promise<void>
+
+  /**
    * Register query commands
    */
   RegisterQueryCommands: (ctx: Context, commands: MetadataCommand[]) => Promise<void>

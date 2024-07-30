@@ -20,6 +20,7 @@ type Instance struct {
 	DynamicSettingCallbacks []func(key string) definition.PluginSettingDefinitionItem // dynamic setting callbacks
 	SettingChangeCallbacks  []func(key string, value string)
 	DeepLinkCallbacks       []func(arguments map[string]string)
+	UnloadCallbacks         []func()
 
 	// for measure performance
 	LoadStartTimestamp    int64
