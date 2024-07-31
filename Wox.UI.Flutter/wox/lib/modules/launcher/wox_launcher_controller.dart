@@ -24,21 +24,17 @@ import 'package:wox/enums/wox_msg_type_enum.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
-import 'package:wox/interfaces/wox_launcher_interface.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/picker.dart';
+import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 
-class WoxLauncherController extends GetxController implements WoxLauncherInterface {
-  final _query = PlainQuery.empty().obs;
+class WoxLauncherController extends GetxController {
+  final currentQuery = PlainQuery.empty().obs;
   final queryIcon = WoxImage.empty().obs;
-  final _activeResultIndex = 0.obs;
-  final _activeActionIndex = 0.obs;
-  final _resultItemGlobalKeys = <GlobalKey>[];
-  final _resultActionItemGlobalKeys = <GlobalKey>[];
   final queryBoxFocusNode = FocusNode();
   final resultActionFocusNode = FocusNode();
   final queryBoxTextFieldController = TextEditingController();
@@ -50,19 +46,90 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   final Rx<WoxTheme> woxTheme = WoxThemeUtil.instance.currentTheme.obs;
   final isShowActionPanel = false.obs;
   final isShowPreviewPanel = false.obs;
-  final queryResults = <WoxQueryResult>[].obs;
-  final _resultActions = <WoxResultAction>[].obs;
   final filterResultActions = <WoxResultAction>[].obs;
-  var _clearQueryResultsTimer = Timer(const Duration(milliseconds: 200), () => {});
   var refreshCounter = 0;
-  final latestQueryHistories = <QueryHistory>[];
-  var selectedQueryHistoryIndex = 0;
   var lastQueryMode = WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_PRESERVE.code;
-  var canArrowUpHistory = true;
   final isInSettingView = false.obs;
   var positionBeforeOpenSetting = const Offset(0, 0);
 
-  @override
+  /// The timer to clear query results.
+  /// On every query changed, it will reset the timer and will clear the query results after N ms.
+  /// If there is no this delay mechanism, the window will flicker for fast typing.
+  var clearQueryResultsTimer = Timer(const Duration(), () => {});
+
+  /// The list of query results.
+  final queryResults = <WoxQueryResult>[].obs;
+  final activeResultIndex = 0.obs;
+  final resultGlobalKeys = <GlobalKey>[]; // the global keys for each result item, used to calculate the position of the result item
+
+  /// The list of result actions for the active query result.
+  final resultActions = <WoxResultAction>[].obs;
+  final activeActionIndex = 0.obs;
+
+  /// This flag is used to control whether the user can arrow up to show history when the app is first shown.
+  var canArrowUpHistory = true;
+  final latestQueryHistories = <QueryHistory>[]; // the latest query histories
+  var currentQueryHistoryIndex = 0; //  query history index, used to navigate query history
+
+  /// Triggered when received query results from the server.
+  void onReceivedQueryResults(List<WoxQueryResult> results) {
+    if (results.isEmpty) {
+      return;
+    }
+
+    //ignore the results if the query id is not matched
+    if (currentQuery.value.queryId != results.first.queryId) {
+      return;
+    }
+
+    //cancel clear results timer
+    clearQueryResultsTimer.cancel();
+
+    //merge results
+    final currentQueryResults = queryResults.where((item) => item.queryId == currentQuery.value.queryId).toList();
+    final finalResults = List<WoxQueryResult>.from(currentQueryResults)..addAll(results);
+
+    //group results
+    var finalResultsSorted = <WoxQueryResult>[];
+    final groups = finalResults.map((e) => e.group).toSet().toList();
+    groups.sort((a, b) => finalResults.where((element) => element.group == b).first.groupScore.compareTo(finalResults.where((element) => element.group == a).first.groupScore));
+    for (var group in groups) {
+      final groupResults = finalResults.where((element) => element.group == group).toList();
+      final groupResultsSorted = groupResults..sort((a, b) => b.score.compareTo(a.score));
+      if (group != "") {
+        finalResultsSorted.add(WoxQueryResult.empty()
+          ..title.value = group
+          ..isGroup = true
+          ..score = groupResultsSorted.first.groupScore);
+      }
+      finalResultsSorted.addAll(groupResultsSorted);
+    }
+
+    // move default action to the first for every result
+    for (var element in finalResultsSorted) {
+      final defaultActionIndex = element.actions.indexWhere((element) => element.isDefault);
+      if (defaultActionIndex != -1) {
+        final defaultAction = element.actions[defaultActionIndex];
+        element.actions.removeAt(defaultActionIndex);
+        element.actions.insert(0, defaultAction);
+      }
+    }
+
+    queryResults.assignAll(finalResultsSorted);
+    for (var _ in queryResults) {
+      resultGlobalKeys.add(GlobalKey());
+    }
+
+    //reset active result and actions if current query has no results (this is the first time to receive results for the current query)
+    //if current query has results, then keep the active result and actions
+    if (currentQueryResults.isEmpty) {
+      resetActiveResult();
+      updateAndResetActiveAction();
+    }
+
+    resizeHeight();
+  }
+
   Future<void> toggleApp(String traceId, ShowAppParams params) async {
     var isVisible = await windowManager.isVisible();
     if (isVisible) {
@@ -77,17 +144,23 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     }
   }
 
-  @override
   Future<void> showApp(String traceId, ShowAppParams params) async {
-    if (_query.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
+    if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
       canArrowUpHistory = true;
+      if (lastQueryMode == WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_PRESERVE.code) {
+        //skip the first one, because it's the current query
+        currentQueryHistoryIndex = 0;
+      } else {
+        currentQueryHistoryIndex = -1;
+      }
     }
 
+    // update some properties to latest for later use
     latestQueryHistories.assignAll(params.queryHistories);
     lastQueryMode = params.lastQueryMode;
 
     if (params.selectAll) {
-      _selectQueryBoxAllText();
+      selectQueryBoxAllText();
     }
     if (params.position.type == WoxPositionTypeEnum.POSITION_TYPE_MOUSE_SCREEN.code) {
       await windowManager.setPosition(Offset(params.position.x.toDouble(), params.position.y.toDouble()));
@@ -104,31 +177,18 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     WoxApi.instance.onShow();
   }
 
-  @override
   Future<void> hideApp(String traceId) async {
     isShowActionPanel.value = false;
     await windowManager.hide();
 
-    if (lastQueryMode == WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_PRESERVE.code) {
-      //skip the first one, because it's the current query
-      selectedQueryHistoryIndex = 0;
-    } else {
-      selectedQueryHistoryIndex = -1;
-    }
-
     //clear query box text if query type is selection
-    if (getCurrentQuery().queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
+    if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
       onQueryChanged(traceId, PlainQuery.emptyInput(), "clear input after hide app");
     }
 
-    WoxApi.instance.onHide(_query.value);
+    WoxApi.instance.onHide(currentQuery.value);
   }
 
-  PlainQuery getCurrentQuery() {
-    return _query.value;
-  }
-
-  @override
   Future<void> toggleActionPanel(String traceId) async {
     if (queryResults.isEmpty) {
       return;
@@ -149,80 +209,71 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
   }
 
   void showActionPanel() {
-    var actions = queryResults[_activeResultIndex.value].actions;
-    // move default action to the first
-    final defaultActionIndex = actions.indexWhere((element) => element.isDefault);
-    if (defaultActionIndex != -1) {
-      final defaultAction = actions[defaultActionIndex];
-      actions.removeAt(defaultActionIndex);
-      actions.insert(0, defaultAction);
-    }
-
-    _activeActionIndex.value = 0;
-    _resultActions.value = actions;
-    filterResultActions.value = _resultActions;
-    for (var _ in filterResultActions) {
-      _resultActionItemGlobalKeys.add(GlobalKey());
-    }
     isShowActionPanel.value = true;
     resultActionFocusNode.requestFocus();
     resizeHeight();
   }
 
-  getActiveQueryResult() {
-    return queryResults[_activeResultIndex.value];
-  }
-
-  @override
-  Future<void> executeResultAction(String traceId) async {
-    if (queryResults.isEmpty) {
-      return;
+  WoxQueryResult? getActiveResult() {
+    if (activeResultIndex.value >= queryResults.length || activeResultIndex.value < 0 || queryResults.isEmpty) {
+      return null;
     }
 
+    return queryResults[activeResultIndex.value];
+  }
+
+  WoxResultAction? getActiveAction() {
+    if (filterResultActions.isEmpty || activeActionIndex.value >= filterResultActions.length || activeActionIndex.value < 0) {
+      return null;
+    }
+
+    return filterResultActions[activeActionIndex.value];
+  }
+
+  Future<void> executeAction(String traceId) async {
     Logger.instance.debug(traceId, "user execute result action");
-    WoxQueryResult woxQueryResult = getActiveQueryResult();
-    WoxResultAction woxResultAction = WoxResultAction.empty();
-    if (isShowActionPanel.value) {
-      if (filterResultActions.isNotEmpty) {
-        woxResultAction = filterResultActions[_activeActionIndex.value];
-      }
-    } else {
-      final defaultActionIndex = woxQueryResult.actions.indexWhere((element) => element.isDefault);
-      if (defaultActionIndex != -1) {
-        woxResultAction = woxQueryResult.actions[defaultActionIndex];
-      }
-    }
-    if (woxResultAction.id.isNotEmpty) {
-      final msg = WoxWebsocketMsg(
-          requestId: const UuidV4().generate(),
-          traceId: traceId,
-          type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
-          method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
-          data: {
-            "resultId": woxQueryResult.id,
-            "actionId": woxResultAction.id,
-          });
-      WoxWebsocketMsgUtil.instance.sendMessage(msg);
-      hideActionPanel();
-      if (!woxResultAction.preventHideAfterAction) {
-        hideApp(traceId);
-      }
-    }
-  }
 
-  @override
-  Future<void> autoCompleteQuery(String traceId) async {
-    if (queryResults.isEmpty) {
+    WoxQueryResult? woxQueryResult = getActiveResult();
+    if (woxQueryResult == null) {
+      Logger.instance.error(traceId, "active query result is null");
       return;
     }
 
-    final queryText = queryResults[_activeResultIndex.value].title;
+    WoxResultAction? activeAction = getActiveAction();
+    if (activeAction == null) {
+      Logger.instance.error(traceId, "active action is null");
+      return;
+    }
+
+    await WoxWebsocketMsgUtil.instance.sendMessage(WoxWebsocketMsg(
+      requestId: const UuidV4().generate(),
+      traceId: traceId,
+      type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+      method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
+      data: {
+        "resultId": woxQueryResult.id,
+        "actionId": activeAction.id,
+      },
+    ));
+
+    if (!activeAction.preventHideAfterAction) {
+      hideApp(traceId);
+    }
+    hideActionPanel();
+  }
+
+  Future<void> autoCompleteQuery(String traceId) async {
+    var activeResult = getActiveResult();
+    if (activeResult == null) {
+      return;
+    }
+
     onQueryChanged(
       traceId,
       PlainQuery(
         queryId: const UuidV4().generate(),
         queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
-        queryText: queryText.value,
+        queryText: activeResult.title.value,
         querySelection: Selection.empty(),
       ),
       "auto complete query",
@@ -241,30 +292,27 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     );
 
     // do filter if query type is selection
-    if (_query.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
+    if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
       plainQuery.queryType = WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code;
-      plainQuery.querySelection = _query.value.querySelection;
+      plainQuery.querySelection = currentQuery.value.querySelection;
     }
 
     onQueryChanged(const UuidV4().generate(), plainQuery, "user input changed");
   }
 
-  @override
   void onQueryChanged(String traceId, PlainQuery query, String changeReason, {bool moveCursorToEnd = false}) {
     Logger.instance.debug(traceId, "query changed: ${query.queryText}, reason: $changeReason");
 
-    changeQueryIcon(traceId, query);
+    if (query.queryId == "") {
+      query.queryId = const UuidV4().generate();
+    }
 
     //hide setting view if query changed
     if (isInSettingView.value) {
       isInSettingView.value = false;
     }
 
-    if (query.queryId == "") {
-      query.queryId = const UuidV4().generate();
-    }
-
-    _query.value = query;
+    currentQuery.value = query;
     isShowActionPanel.value = false;
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
       canArrowUpHistory = false;
@@ -276,22 +324,22 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     if (moveCursorToEnd) {
       moveQueryBoxCursorToEnd();
     }
+    changeQueryIcon(traceId, query);
     if (query.isEmpty) {
-      _clearQueryResults();
+      clearQueryResults();
       return;
     }
 
     // delay clear results, otherwise windows height will shrink immediately,
     // and then the query result is received which will expand the windows height. so it will causes window flicker
-    _clearQueryResultsTimer.cancel();
-    _clearQueryResultsTimer = Timer(
+    clearQueryResultsTimer.cancel();
+    clearQueryResultsTimer = Timer(
       const Duration(milliseconds: 100),
       () {
-        _clearQueryResults();
+        clearQueryResults();
       },
     );
-
-    final msg = WoxWebsocketMsg(
+    WoxWebsocketMsgUtil.instance.sendMessage(WoxWebsocketMsg(
       requestId: const UuidV4().generate(),
       traceId: traceId,
       type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
@@ -302,56 +350,69 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
         "queryText": query.queryText,
         "querySelection": query.querySelection.toJson(),
       },
-    );
-    WoxWebsocketMsgUtil.instance.sendMessage(msg);
+    ));
   }
 
-  @override
-  void onQueryActionChanged(String traceId, String queryAction) {
-    filterResultActions.value = _resultActions.where((element) => transferChineseToPinYin(element.name.toLowerCase()).contains(queryAction.toLowerCase())).toList().obs();
-    filterResultActions.refresh();
+  void onActionQueryBoxTextChanged(String traceId, String queryAction) {
+    // restore all actions if query is empty
+    if (queryAction.isEmpty) {
+      filterResultActions.assignAll(resultActions);
+      return;
+    }
+
+    var newFilteredActions = resultActions.where((element) {
+      if (WoxSettingUtil.instance.currentSetting.usePinYin) {
+        return transferChineseToPinYin(element.name.toLowerCase()).contains(queryAction.toLowerCase());
+      }
+
+      return element.name.toLowerCase().contains(queryAction.toLowerCase());
+    }).toList();
+
+    //if filtered actions is not changed, then return
+    if (newFilteredActions.length == filterResultActions.length && newFilteredActions.every((element) => filterResultActions.contains(element))) {
+      return;
+    }
+
+    filterResultActions.assignAll(newFilteredActions);
   }
 
-  @override
   void changeResultScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
-    final prevResultIndex = _activeResultIndex.value;
-    _resetActiveResultIndex(direction);
+    final prevResultIndex = activeResultIndex.value;
+    resetActiveResultIndex(direction);
     if (queryResults.length < MAX_LIST_VIEW_ITEM_COUNT) {
       queryResults.refresh();
       return;
     }
 
     if (direction == WoxDirectionEnum.WOX_DIRECTION_DOWN.code) {
-      if (_activeResultIndex.value < prevResultIndex) {
+      if (activeResultIndex.value < prevResultIndex) {
         resultListViewScrollController.jumpTo(0);
       } else {
         bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code
-            ? _isResultItemAtBottom(_activeResultIndex.value - 1)
-            : !_isResultItemAtBottom(queryResults.length - 1);
+            ? isResultItemAtBottom(activeResultIndex.value - 1)
+            : !isResultItemAtBottom(queryResults.length - 1);
         if (shouldJump) {
           resultListViewScrollController
-              .jumpTo(resultListViewScrollController.offset.ceil() + WoxThemeUtil.instance.getResultItemHeight() * (_activeResultIndex.value - prevResultIndex).abs());
+              .jumpTo(resultListViewScrollController.offset.ceil() + WoxThemeUtil.instance.getResultItemHeight() * (activeResultIndex.value - prevResultIndex).abs());
         }
       }
     }
     if (direction == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
-      if (_activeResultIndex.value > prevResultIndex) {
+      if (activeResultIndex.value > prevResultIndex) {
         resultListViewScrollController.jumpTo(WoxThemeUtil.instance.getResultListViewHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
       } else {
-        bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code ? _isResultItemAtTop(_activeResultIndex.value + 1) : !_isResultItemAtTop(0);
+        bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code ? isResultItemAtTop(activeResultIndex.value + 1) : !isResultItemAtTop(0);
         if (shouldJump) {
           resultListViewScrollController
-              .jumpTo(resultListViewScrollController.offset.ceil() - WoxThemeUtil.instance.getResultItemHeight() * (_activeResultIndex.value - prevResultIndex).abs());
+              .jumpTo(resultListViewScrollController.offset.ceil() - WoxThemeUtil.instance.getResultItemHeight() * (activeResultIndex.value - prevResultIndex).abs());
         }
       }
     }
     queryResults.refresh();
   }
 
-  @override
-  void changeResultActionScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
-    _resetActiveResultActionIndex(direction);
-    filterResultActions.refresh();
+  void changeActionScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
+    updateActiveAction(direction);
   }
 
   Future<void> handleWebSocketMessage(WoxWebsocketMsg msg) async {
@@ -402,7 +463,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
       }
       Logger.instance.info(msg.traceId, "Received message: ${msg.method}, results count: ${results.length}");
 
-      _onReceivedQueryResults(results);
+      onReceivedQueryResults(results);
     }
   }
 
@@ -419,8 +480,8 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     );
   }
 
-  bool _isResultItemAtBottom(int index) {
-    RenderBox? renderBox = _resultItemGlobalKeys[index].currentContext?.findRenderObject() as RenderBox?;
+  bool isResultItemAtBottom(int index) {
+    RenderBox? renderBox = resultGlobalKeys[index].currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return false;
 
     if (renderBox.localToGlobal(Offset.zero).dy.ceil() >=
@@ -430,11 +491,11 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     return false;
   }
 
-  bool _isResultItemAtTop(int index) {
+  bool isResultItemAtTop(int index) {
     if (index < 0) {
       return false;
     }
-    RenderBox? renderBox = _resultItemGlobalKeys[index].currentContext?.findRenderObject() as RenderBox?;
+    RenderBox? renderBox = resultGlobalKeys[index].currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return false;
 
     if (renderBox.localToGlobal(Offset.zero).dy.ceil() <= WoxThemeUtil.instance.getQueryBoxHeight()) {
@@ -443,65 +504,25 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     return false;
   }
 
-  void _clearQueryResults() {
+  void clearQueryResults() {
     queryResults.clear();
     isShowPreviewPanel.value = false;
     isShowActionPanel.value = false;
-    _resultItemGlobalKeys.clear();
-    resizeHeight();
-  }
-
-  void _onReceivedQueryResults(List<WoxQueryResult> results) {
-    if (results.isEmpty || _query.value.queryId != results.first.queryId) {
-      return;
-    }
-
-    //cancel clear results timer
-    _clearQueryResultsTimer.cancel();
-
-    //merge and sort results
-    final currentQueryResults = queryResults.where((item) => item.queryId == _query.value.queryId).toList();
-    final finalResults = List<WoxQueryResult>.from(currentQueryResults)..addAll(results);
-    // wrap group into WoxQueryResult
-    final groups = finalResults.map((e) => e.group).toSet().toList();
-    // sort groups by group score desc
-    groups.sort((a, b) => finalResults.where((element) => element.group == b).first.groupScore.compareTo(finalResults.where((element) => element.group == a).first.groupScore));
-
-    var finalResultsSorted = <WoxQueryResult>[];
-    for (var group in groups) {
-      final groupResults = finalResults.where((element) => element.group == group).toList();
-      final groupResultsSorted = groupResults..sort((a, b) => b.score.compareTo(a.score));
-      if (group != "") {
-        finalResultsSorted.add(WoxQueryResult.empty()
-          ..title.value = group
-          ..isGroup = true
-          ..score = groupResultsSorted.first.groupScore);
-      }
-      finalResultsSorted.addAll(groupResultsSorted);
-    }
-
-    queryResults.assignAll(finalResultsSorted);
-    for (var _ in queryResults) {
-      _resultItemGlobalKeys.add(GlobalKey());
-    }
-
-    //reset active result and preview
-    if (currentQueryResults.isEmpty) {
-      _resetActiveResult();
-    }
+    resultGlobalKeys.clear();
     resizeHeight();
   }
 
   // select all text in query box
-  void _selectQueryBoxAllText() {
+  void selectQueryBoxAllText() {
     queryBoxTextFieldController.selection = TextSelection(baseOffset: 0, extentOffset: queryBoxTextFieldController.text.length);
   }
 
-  void _resetActiveResult() {
+  /// reset and jump active result to top of the list
+  void resetActiveResult() {
     if (queryResults[0].isGroup) {
-      _activeResultIndex.value = 1;
+      activeResultIndex.value = 1;
     } else {
-      _activeResultIndex.value = 0;
+      activeResultIndex.value = 0;
     }
     if (resultListViewScrollController.hasClients) {
       resultListViewScrollController.jumpTo(0);
@@ -509,7 +530,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
     //reset preview
     if (queryResults.isNotEmpty) {
-      currentPreview.value = queryResults[_activeResultIndex.value].preview;
+      currentPreview.value = queryResults[activeResultIndex.value].preview;
     } else {
       currentPreview.value = WoxPreview.empty();
     }
@@ -547,58 +568,60 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     }
   }
 
-  void _resetActiveResultIndex(WoxDirection woxDirection) {
+  void resetActiveResultIndex(WoxDirection woxDirection) {
     if (queryResults.isEmpty) {
       return;
     }
     if (woxDirection == WoxDirectionEnum.WOX_DIRECTION_DOWN.code) {
       // select next none group result
-      _activeResultIndex.value++;
-      if (_activeResultIndex.value == queryResults.length) {
-        _activeResultIndex.value = 0;
+      activeResultIndex.value++;
+      if (activeResultIndex.value == queryResults.length) {
+        activeResultIndex.value = 0;
       }
-      while (queryResults[_activeResultIndex.value].isGroup) {
-        _activeResultIndex.value++;
-        if (_activeResultIndex.value == queryResults.length) {
-          _activeResultIndex.value = 0;
+      while (queryResults[activeResultIndex.value].isGroup) {
+        activeResultIndex.value++;
+        if (activeResultIndex.value == queryResults.length) {
+          activeResultIndex.value = 0;
           break;
         }
       }
     }
     if (woxDirection == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
       // select previous none group result
-      _activeResultIndex.value--;
-      if (_activeResultIndex.value == -1) {
-        _activeResultIndex.value = queryResults.length - 1;
+      activeResultIndex.value--;
+      if (activeResultIndex.value == -1) {
+        activeResultIndex.value = queryResults.length - 1;
       }
-      while (queryResults[_activeResultIndex.value].isGroup) {
-        _activeResultIndex.value--;
-        if (_activeResultIndex.value == -1) {
-          _activeResultIndex.value = queryResults.length - 1;
+      while (queryResults[activeResultIndex.value].isGroup) {
+        activeResultIndex.value--;
+        if (activeResultIndex.value == -1) {
+          activeResultIndex.value = queryResults.length - 1;
           break;
         }
       }
     }
-    currentPreview.value = queryResults[_activeResultIndex.value].preview;
+    currentPreview.value = queryResults[activeResultIndex.value].preview;
     isShowPreviewPanel.value = currentPreview.value.previewData != "";
+    updateAndResetActiveAction();
   }
 
-  void _resetActiveResultActionIndex(WoxDirection woxDirection) {
+  void updateActiveAction(WoxDirection woxDirection) {
     if (filterResultActions.isEmpty) {
       return;
     }
+
     if (woxDirection == WoxDirectionEnum.WOX_DIRECTION_DOWN.code) {
-      if (_activeActionIndex.value == filterResultActions.length - 1) {
-        _activeActionIndex.value = 0;
+      if (activeActionIndex.value == filterResultActions.length - 1) {
+        activeActionIndex.value = 0;
       } else {
-        _activeActionIndex.value++;
+        activeActionIndex.value++;
       }
     }
     if (woxDirection == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
-      if (_activeActionIndex.value == 0) {
-        _activeActionIndex.value = filterResultActions.length - 1;
+      if (activeActionIndex.value == 0) {
+        activeActionIndex.value = filterResultActions.length - 1;
       } else {
-        _activeActionIndex.value--;
+        activeActionIndex.value--;
       }
     }
   }
@@ -607,24 +630,36 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     return queryResults[index];
   }
 
-  WoxResultAction getQueryResultActionByIndex(int index) {
+  WoxResultAction geActionByIndex(int index) {
     return filterResultActions[index];
   }
 
   GlobalKey getResultItemGlobalKeyByIndex(int index) {
-    return _resultItemGlobalKeys[index];
+    return resultGlobalKeys[index];
   }
 
-  GlobalKey getResultActionItemGlobalKeyByIndex(int index) {
-    return _resultActionItemGlobalKeys[index];
+  bool isResultActiveByIndex(int index) {
+    return activeResultIndex.value == index;
   }
 
-  bool isQueryResultActiveByIndex(int index) {
-    return _activeResultIndex.value == index;
+  bool isActionActiveByIndex(int index) {
+    return activeActionIndex.value == index;
   }
 
-  bool isResultActionActiveByIndex(int index) {
-    return _activeActionIndex.value == index;
+  /// update active actions based on active result and reset active action index to 0
+  void updateAndResetActiveAction() {
+    Logger.instance.info(const UuidV4().generate(), "update active actions, current active result index: ${activeResultIndex.value}");
+
+    var activeQueryResult = getActiveResult();
+    if (activeQueryResult == null) {
+      return;
+    }
+
+    var actions = activeQueryResult.actions;
+
+    activeActionIndex.value = 0;
+    resultActions.assignAll(actions);
+    filterResultActions.assignAll(actions);
   }
 
   startRefreshSchedule() {
@@ -687,7 +722,7 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
             // only update preview data when current result is active
             final resultIndex = queryResults.indexWhere((element) => element.id == result.id);
-            if (isQueryResultActiveByIndex(resultIndex)) {
+            if (isResultActiveByIndex(resultIndex)) {
               currentPreview.value = result.preview;
             }
 
@@ -758,12 +793,12 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
 
   void handleQueryBoxArrowUp() {
     if (canArrowUpHistory) {
-      if (selectedQueryHistoryIndex < latestQueryHistories.length - 1) {
-        selectedQueryHistoryIndex = selectedQueryHistoryIndex + 1;
-        var changedQuery = latestQueryHistories[selectedQueryHistoryIndex].query;
+      if (currentQueryHistoryIndex < latestQueryHistories.length - 1) {
+        currentQueryHistoryIndex = currentQueryHistoryIndex + 1;
+        var changedQuery = latestQueryHistories[currentQueryHistoryIndex].query;
         if (changedQuery != null) {
           onQueryChanged(const UuidV4().generate(), changedQuery, "user arrow up history");
-          _selectQueryBoxAllText();
+          selectQueryBoxAllText();
         }
       }
       return;
@@ -803,22 +838,16 @@ class WoxLauncherController extends GetxController implements WoxLauncherInterfa
     onQueryChanged(const UuidV4().generate(), woxChangeQuery, "user drop files");
   }
 
+  /// Change the query icon based on the query
   Future<void> changeQueryIcon(String traceId, PlainQuery query) async {
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
       if (query.querySelection.type == WoxSelectionTypeEnum.WOX_SELECTION_TYPE_FILE.code) {
-        queryIcon.value = WoxImage(
-            imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code,
-            imageData:
-                '<svg t="1704957058350" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4383" width="200" height="200"><path d="M127.921872 233.342828H852.118006c24.16765 0 43.960122 19.792472 43.960122 43.960122v522.104578c0 24.16765-19.792472 43.960122-43.960122 43.960122H172.090336c-24.16765 0-43.960122-19.792472-43.960122-43.960122L127.921872 233.342828z" fill="#FFB300" p-id="4384"></path><path d="M156.4647 180.63235h312.721058c15.625636 0 28.334486 13.125534 28.334486 29.376195V233.342828H127.921872v-23.334283c0-16.250661 12.917192-29.376195 28.542828-29.376195z" fill="#FFA000" p-id="4385"></path><path d="M361.889725 258.343845h348.347508v535.855138H312.512716V303.137335z" fill="#FFFFFF" p-id="4386"></path><path d="M170.631943 372.723499h282.719837l59.7941-47.918616H852.118006c23.542625 0 42.710071 19.792472 42.710071 43.960122v430.642523c0 24.16765-19.167447 43.960122-42.710071 43.960122H170.631943c-23.542625 0-42.710071-19.792472-42.710071-43.960122V416.683622c0-24.16765 19.375788-43.960122 42.710071-43.960123z" fill="#FFD54F" p-id="4387"></path><path d="M361.473042 303.76236l-48.960326-0.625025 48.960326-44.79349z" fill="#BDBDBD" p-id="4388"></path></svg>');
-        return;
+        queryIcon.value = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: QUERY_ICON_SELECTION_FILE);
       }
       if (query.querySelection.type == WoxSelectionTypeEnum.WOX_SELECTION_TYPE_TEXT.code) {
-        queryIcon.value = WoxImage(
-            imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code,
-            imageData:
-                '<svg t="1704958243895" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="5762" width="200" height="200"><path d="M925.48105 1024H98.092461a98.51895 98.51895 0 0 1-97.879217-98.945439V98.732195A98.732195 98.732195 0 0 1 98.092461 0.426489h827.388589a98.732195 98.732195 0 0 1 98.305706 98.305706v826.322366a98.51895 98.51895 0 0 1-98.305706 98.945439z m-829.094544-959.600167a33.052895 33.052895 0 0 0-32.199917 32.626406v829.734277a32.83965 32.83965 0 0 0 32.199917 33.26614h831.653477a32.83965 32.83965 0 0 0 31.773428-33.26614V97.026239a33.266139 33.266139 0 0 0-32.626406-32.626406z" fill="#0077F0" p-id="5763"></path><path d="M281.69596 230.943773h460.60808v73.569347h-187.655144v488.969596h-85.297792V304.51312h-187.655144z" fill="#0077F0" opacity=".5" p-id="5764"></path></svg>');
-        return;
+        queryIcon.value = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: QUERY_ICON_SELECTION_TEXT);
       }
+      return;
     }
 
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {

@@ -19,33 +19,36 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   const WoxQueryResultView({super.key});
 
   Widget getActionListView() {
-    return Scrollbar(
-        controller: controller.resultActionListViewScrollController,
-        child: Listener(
-            onPointerSignal: (event) {
-              if (event is PointerScrollEvent) {}
-            },
-            child: ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              controller: controller.resultActionListViewScrollController,
-              itemCount: controller.filterResultActions.length,
-              itemExtent: 40,
-              itemBuilder: (context, index) {
-                WoxResultAction woxResultAction = controller.getQueryResultActionByIndex(index);
-                return WoxListItemView(
-                  key: controller.getResultActionItemGlobalKeyByIndex(index),
-                  woxTheme: controller.woxTheme.value,
-                  icon: woxResultAction.icon,
-                  title: woxResultAction.name,
-                  tails: RxList<WoxQueryResultTail>(),
-                  subTitle: "".obs,
-                  isActive: controller.isResultActionActiveByIndex(index),
-                  listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code,
-                  isGroup: false,
-                );
+    return Obx(() {
+      if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: action list view container");
+
+      return Scrollbar(
+          controller: controller.resultActionListViewScrollController,
+          child: Listener(
+              onPointerSignal: (event) {
+                if (event is PointerScrollEvent) {}
               },
-            )));
+              child: ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                controller: controller.resultActionListViewScrollController,
+                itemCount: controller.filterResultActions.length,
+                itemExtent: 40,
+                itemBuilder: (context, index) {
+                  WoxResultAction woxResultAction = controller.geActionByIndex(index);
+                  return WoxListItemView(
+                    woxTheme: controller.woxTheme.value,
+                    icon: woxResultAction.icon,
+                    title: woxResultAction.name,
+                    tails: RxList<WoxQueryResultTail>(),
+                    subTitle: "".obs,
+                    isActive: controller.isActionActiveByIndex(index),
+                    listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code,
+                    isGroup: false,
+                  );
+                },
+              )));
+    });
   }
 
   Widget getActionPanelView() {
@@ -134,7 +137,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                           title: woxQueryResult.title,
                           tails: woxQueryResult.tails,
                           subTitle: woxQueryResult.subTitle,
-                          isActive: controller.isQueryResultActiveByIndex(index),
+                          isActive: controller.isResultActiveByIndex(index),
                           listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code,
                           isGroup: woxQueryResult.isGroup,
                         );
@@ -173,17 +176,17 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-              controller.changeResultActionScrollPosition(
+              controller.changeActionScrollPosition(
                   const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-              controller.changeResultActionScrollPosition(
+              controller.changeActionScrollPosition(
                   const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.enter) {
-              controller.executeResultAction(const UuidV4().generate());
+              controller.executeAction(const UuidV4().generate());
               return KeyEventResult.handled;
             }
             if ((HardwareKeyboard.instance.isMetaPressed || HardwareKeyboard.instance.isAltPressed) && event.logicalKey == LogicalKeyboardKey.keyJ) {
@@ -194,12 +197,12 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
 
           if (event is KeyRepeatEvent) {
             if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-              controller.changeResultActionScrollPosition(
+              controller.changeActionScrollPosition(
                   const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-              controller.changeResultActionScrollPosition(
+              controller.changeActionScrollPosition(
                   const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
               return KeyEventResult.handled;
             }
@@ -236,7 +239,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
               focusNode: controller.resultActionFocusNode,
               controller: controller.resultActionTextFieldController,
               onChanged: (value) {
-                controller.onQueryActionChanged(const UuidV4().generate(), value);
+                controller.onActionQueryBoxTextChanged(const UuidV4().generate(), value);
               },
             ),
           ),

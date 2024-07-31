@@ -12,9 +12,14 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
   }
 
   Widget rightTip() {
+    var action = controller.getActiveAction();
+    if (action == null) {
+      return const SizedBox();
+    }
+
     return Row(
       children: [
-        Text("Actions Command + J", style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor))),
+        Text(action.name.value, style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor))),
       ],
     );
   }

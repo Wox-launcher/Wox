@@ -33,7 +33,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         controller.handleQueryBoxArrowUp();
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.enter:
-                        controller.executeResultAction(const UuidV4().generate());
+                        controller.executeAction(const UuidV4().generate());
                         return KeyEventResult.handled;
                       case LogicalKeyboardKey.tab:
                         controller.autoCompleteQuery(const UuidV4().generate());
