@@ -71,7 +71,7 @@ class Logger {
 
 class LoggerSwitch {
   static bool enablePaintLog = false;
-  static bool enableSizeAndPositionLog = false;
+  static bool enableSizeAndPositionLog = true;
 }
 
 class WoxFileOutput extends xlogger.LogOutput {

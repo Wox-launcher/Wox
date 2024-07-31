@@ -23,7 +23,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
       if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: action list view container");
 
       return Scrollbar(
-          controller: controller.resultActionListViewScrollController,
+          controller: controller.actionScrollerController,
           child: Listener(
               onPointerSignal: (event) {
                 if (event is PointerScrollEvent) {}
@@ -31,8 +31,8 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
               child: ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                controller: controller.resultActionListViewScrollController,
-                itemCount: controller.filterResultActions.length,
+                controller: controller.actionScrollerController,
+                itemCount: controller.actions.length,
                 itemExtent: 40,
                 itemBuilder: (context, index) {
                   WoxResultAction woxResultAction = controller.geActionByIndex(index);
@@ -101,7 +101,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
     if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: result view container");
 
     return Obx(
-      () => controller.queryResults.isNotEmpty
+      () => controller.results.isNotEmpty
           ? Expanded(
               child: Container(
                 padding: EdgeInsets.only(
@@ -111,7 +111,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                   left: controller.woxTheme.value.resultContainerPaddingLeft.toDouble(),
                 ),
                 child: Scrollbar(
-                  controller: controller.resultListViewScrollController,
+                  controller: controller.resultScrollerController,
                   child: Listener(
                     onPointerSignal: (event) {
                       if (event is PointerScrollEvent) {
@@ -125,8 +125,8 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                     child: ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      controller: controller.resultListViewScrollController,
-                      itemCount: controller.queryResults.length,
+                      controller: controller.resultScrollerController,
+                      itemCount: controller.results.length,
                       itemExtent: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
                       itemBuilder: (context, index) {
                         WoxQueryResult woxQueryResult = controller.getQueryResultByIndex(index);
@@ -236,8 +236,8 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
               ),
               cursorColor: fromCssColor(controller.woxTheme.value.queryBoxCursorColor),
               autofocus: true,
-              focusNode: controller.resultActionFocusNode,
-              controller: controller.resultActionTextFieldController,
+              focusNode: controller.actionFocusNode,
+              controller: controller.actionTextFieldController,
               onChanged: (value) {
                 controller.onActionQueryBoxTextChanged(const UuidV4().generate(), value);
               },

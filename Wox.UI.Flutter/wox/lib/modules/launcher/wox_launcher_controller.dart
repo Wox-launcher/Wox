@@ -33,52 +33,57 @@ import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 
 class WoxLauncherController extends GetxController {
+  //query related variables
   final currentQuery = PlainQuery.empty().obs;
-  final queryIcon = WoxImage.empty().obs;
   final queryBoxFocusNode = FocusNode();
-  final resultActionFocusNode = FocusNode();
   final queryBoxTextFieldController = TextEditingController();
   final queryBoxScrollController = ScrollController(initialScrollOffset: 0.0);
-  final resultActionTextFieldController = TextEditingController();
-  final resultListViewScrollController = ScrollController(initialScrollOffset: 0.0);
-  final resultActionListViewScrollController = ScrollController(initialScrollOffset: 0.0);
+  final queryIcon = WoxImage.empty().obs;
+
+  //preview related variables
   final currentPreview = WoxPreview.empty().obs;
-  final Rx<WoxTheme> woxTheme = WoxThemeUtil.instance.currentTheme.obs;
-  final isShowActionPanel = false.obs;
   final isShowPreviewPanel = false.obs;
-  final filterResultActions = <WoxResultAction>[].obs;
-  var refreshCounter = 0;
-  var lastQueryMode = WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_PRESERVE.code;
-  final isInSettingView = false.obs;
-  var positionBeforeOpenSetting = const Offset(0, 0);
+
+  // result related variables
+  /// The list of query results.
+  final results = <WoxQueryResult>[].obs;
+  final activeResultIndex = 0.obs;
+  final resultGlobalKeys = <GlobalKey>[]; // the global keys for each result item, used to calculate the position of the result item
+  final resultScrollerController = ScrollController(initialScrollOffset: 0.0);
 
   /// The timer to clear query results.
   /// On every query changed, it will reset the timer and will clear the query results after N ms.
   /// If there is no this delay mechanism, the window will flicker for fast typing.
   var clearQueryResultsTimer = Timer(const Duration(), () => {});
 
-  /// The list of query results.
-  final queryResults = <WoxQueryResult>[].obs;
-  final activeResultIndex = 0.obs;
-  final resultGlobalKeys = <GlobalKey>[]; // the global keys for each result item, used to calculate the position of the result item
-
+  // action related variables
   /// The list of result actions for the active query result.
-  final resultActions = <WoxResultAction>[].obs;
+  final actions = <WoxResultAction>[].obs;
   final activeActionIndex = 0.obs;
+  final isShowActionPanel = false.obs;
+  final actionTextFieldController = TextEditingController();
+  final actionFocusNode = FocusNode();
+  final actionScrollerController = ScrollController(initialScrollOffset: 0.0);
 
   /// This flag is used to control whether the user can arrow up to show history when the app is first shown.
   var canArrowUpHistory = true;
   final latestQueryHistories = <QueryHistory>[]; // the latest query histories
   var currentQueryHistoryIndex = 0; //  query history index, used to navigate query history
 
+  final Rx<WoxTheme> woxTheme = WoxThemeUtil.instance.currentTheme.obs;
+  var refreshCounter = 0;
+  var lastQueryMode = WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_PRESERVE.code;
+  final isInSettingView = false.obs;
+  var positionBeforeOpenSetting = const Offset(0, 0);
+
   /// Triggered when received query results from the server.
-  void onReceivedQueryResults(List<WoxQueryResult> results) {
-    if (results.isEmpty) {
+  void onReceivedQueryResults(List<WoxQueryResult> receivedResults) {
+    if (receivedResults.isEmpty) {
       return;
     }
 
     //ignore the results if the query id is not matched
-    if (currentQuery.value.queryId != results.first.queryId) {
+    if (currentQuery.value.queryId != receivedResults.first.queryId) {
       return;
     }
 
@@ -86,8 +91,8 @@ class WoxLauncherController extends GetxController {
     clearQueryResultsTimer.cancel();
 
     //merge results
-    final currentQueryResults = queryResults.where((item) => item.queryId == currentQuery.value.queryId).toList();
-    final finalResults = List<WoxQueryResult>.from(currentQueryResults)..addAll(results);
+    final currentQueryResults = results.where((item) => item.queryId == currentQuery.value.queryId).toList();
+    final finalResults = List<WoxQueryResult>.from(currentQueryResults)..addAll(receivedResults);
 
     //group results
     var finalResultsSorted = <WoxQueryResult>[];
@@ -115,8 +120,8 @@ class WoxLauncherController extends GetxController {
       }
     }
 
-    queryResults.assignAll(finalResultsSorted);
-    for (var _ in queryResults) {
+    results.assignAll(finalResultsSorted);
+    for (var _ in results) {
       resultGlobalKeys.add(GlobalKey());
     }
 
@@ -190,7 +195,7 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> toggleActionPanel(String traceId) async {
-    if (queryResults.isEmpty) {
+    if (results.isEmpty) {
       return;
     }
 
@@ -203,31 +208,31 @@ class WoxLauncherController extends GetxController {
 
   void hideActionPanel() {
     isShowActionPanel.value = false;
-    resultActionTextFieldController.text = "";
+    actionTextFieldController.text = "";
     queryBoxFocusNode.requestFocus();
     resizeHeight();
   }
 
   void showActionPanel() {
     isShowActionPanel.value = true;
-    resultActionFocusNode.requestFocus();
+    actionFocusNode.requestFocus();
     resizeHeight();
   }
 
   WoxQueryResult? getActiveResult() {
-    if (activeResultIndex.value >= queryResults.length || activeResultIndex.value < 0 || queryResults.isEmpty) {
+    if (activeResultIndex.value >= results.length || activeResultIndex.value < 0 || results.isEmpty) {
       return null;
     }
 
-    return queryResults[activeResultIndex.value];
+    return results[activeResultIndex.value];
   }
 
   WoxResultAction? getActiveAction() {
-    if (filterResultActions.isEmpty || activeActionIndex.value >= filterResultActions.length || activeActionIndex.value < 0) {
+    if (actions.isEmpty || activeActionIndex.value >= actions.length || activeActionIndex.value < 0) {
       return null;
     }
 
-    return filterResultActions[activeActionIndex.value];
+    return actions[activeActionIndex.value];
   }
 
   Future<void> executeAction(String traceId) async {
@@ -355,12 +360,17 @@ class WoxLauncherController extends GetxController {
 
   void onActionQueryBoxTextChanged(String traceId, String queryAction) {
     // restore all actions if query is empty
-    if (queryAction.isEmpty) {
-      filterResultActions.assignAll(resultActions);
+    var activeResult = getActiveResult();
+    if (activeResult == null) {
       return;
     }
 
-    var newFilteredActions = resultActions.where((element) {
+    if (queryAction.isEmpty) {
+      actions.assignAll(activeResult.actions);
+      return;
+    }
+
+    var filteredActions = activeResult.actions.where((element) {
       if (WoxSettingUtil.instance.currentSetting.usePinYin) {
         return transferChineseToPinYin(element.name.toLowerCase()).contains(queryAction.toLowerCase());
       }
@@ -369,50 +379,49 @@ class WoxLauncherController extends GetxController {
     }).toList();
 
     //if filtered actions is not changed, then return
-    if (newFilteredActions.length == filterResultActions.length && newFilteredActions.every((element) => filterResultActions.contains(element))) {
+    if (filteredActions.length == actions.length && filteredActions.every((element) => actions.contains(element))) {
       return;
     }
 
-    filterResultActions.assignAll(newFilteredActions);
+    actions.assignAll(filteredActions);
   }
 
   void changeResultScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
     final prevResultIndex = activeResultIndex.value;
     resetActiveResultIndex(direction);
-    if (queryResults.length < MAX_LIST_VIEW_ITEM_COUNT) {
-      queryResults.refresh();
+    if (results.length < MAX_LIST_VIEW_ITEM_COUNT) {
+      results.refresh();
       return;
     }
 
     if (direction == WoxDirectionEnum.WOX_DIRECTION_DOWN.code) {
       if (activeResultIndex.value < prevResultIndex) {
-        resultListViewScrollController.jumpTo(0);
+        resultScrollerController.jumpTo(0);
       } else {
         bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code
             ? isResultItemAtBottom(activeResultIndex.value - 1)
-            : !isResultItemAtBottom(queryResults.length - 1);
+            : !isResultItemAtBottom(results.length - 1);
         if (shouldJump) {
-          resultListViewScrollController
-              .jumpTo(resultListViewScrollController.offset.ceil() + WoxThemeUtil.instance.getResultItemHeight() * (activeResultIndex.value - prevResultIndex).abs());
+          resultScrollerController.jumpTo(resultScrollerController.offset.ceil() + WoxThemeUtil.instance.getResultItemHeight() * (activeResultIndex.value - prevResultIndex).abs());
         }
       }
     }
     if (direction == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
       if (activeResultIndex.value > prevResultIndex) {
-        resultListViewScrollController.jumpTo(WoxThemeUtil.instance.getResultListViewHeightByCount(queryResults.length - MAX_LIST_VIEW_ITEM_COUNT));
+        resultScrollerController.jumpTo(WoxThemeUtil.instance.getResultListViewHeightByCount(results.length - MAX_LIST_VIEW_ITEM_COUNT));
       } else {
         bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code ? isResultItemAtTop(activeResultIndex.value + 1) : !isResultItemAtTop(0);
         if (shouldJump) {
-          resultListViewScrollController
-              .jumpTo(resultListViewScrollController.offset.ceil() - WoxThemeUtil.instance.getResultItemHeight() * (activeResultIndex.value - prevResultIndex).abs());
+          resultScrollerController.jumpTo(resultScrollerController.offset.ceil() - WoxThemeUtil.instance.getResultItemHeight() * (activeResultIndex.value - prevResultIndex).abs());
         }
       }
     }
-    queryResults.refresh();
+    results.refresh();
   }
 
   void changeActionScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
     updateActiveAction(direction);
+    actions.refresh();
   }
 
   Future<void> handleWebSocketMessage(WoxWebsocketMsg msg) async {
@@ -505,7 +514,7 @@ class WoxLauncherController extends GetxController {
   }
 
   void clearQueryResults() {
-    queryResults.clear();
+    results.clear();
     isShowPreviewPanel.value = false;
     isShowActionPanel.value = false;
     resultGlobalKeys.clear();
@@ -519,34 +528,42 @@ class WoxLauncherController extends GetxController {
 
   /// reset and jump active result to top of the list
   void resetActiveResult() {
-    if (queryResults[0].isGroup) {
+    if (results[0].isGroup) {
       activeResultIndex.value = 1;
     } else {
       activeResultIndex.value = 0;
     }
-    if (resultListViewScrollController.hasClients) {
-      resultListViewScrollController.jumpTo(0);
+    if (resultScrollerController.hasClients) {
+      resultScrollerController.jumpTo(0);
     }
 
     //reset preview
-    if (queryResults.isNotEmpty) {
-      currentPreview.value = queryResults[activeResultIndex.value].preview;
+    if (results.isNotEmpty) {
+      currentPreview.value = results[activeResultIndex.value].preview;
     } else {
       currentPreview.value = WoxPreview.empty();
     }
     isShowPreviewPanel.value = currentPreview.value.previewData != "";
   }
 
-  void resizeHeight() {
-    double resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(queryResults.length > 10 ? 10 : queryResults.length);
+  Future<void> resizeHeight() async {
+    double resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(results.length > 10 ? 10 : results.length);
     if (isShowActionPanel.value || isShowPreviewPanel.value) {
       resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(10);
     }
-    if (queryResults.isNotEmpty) {
+    if (results.isNotEmpty) {
       resultHeight += woxTheme.value.resultContainerPaddingTop + woxTheme.value.resultContainerPaddingBottom;
       resultHeight += WoxThemeUtil.instance.getResultTipHeight();
     }
     final totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight;
+
+    //if the window height is same as the total height, then no need to resize
+    var currentSize = await windowManager.getSize();
+    if (currentSize.height == totalHeight) {
+      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: want to resize but the height is same as current height");
+      return;
+    }
+
     if (Platform.isWindows) {
       // on windows, if I set screen ratio to 2.0, then the window height should add more 4.5 pixel, otherwise it will show render error
       // still don't know why. here is the test result: ratio -> additional window height
@@ -560,27 +577,27 @@ class WoxLauncherController extends GetxController {
       // 3.0-> 3
 
       final totalHeightFinal = totalHeight.toDouble() + (10 / PlatformDispatcher.instance.views.first.devicePixelRatio).ceil();
-      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize window height to $totalHeightFinal");
+      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window height to $totalHeightFinal");
       windowManager.setSize(Size(800, totalHeightFinal));
     } else {
-      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize window height to $totalHeight");
+      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window height to $totalHeight");
       windowManager.setSize(Size(800, totalHeight.toDouble()));
     }
   }
 
   void resetActiveResultIndex(WoxDirection woxDirection) {
-    if (queryResults.isEmpty) {
+    if (results.isEmpty) {
       return;
     }
     if (woxDirection == WoxDirectionEnum.WOX_DIRECTION_DOWN.code) {
       // select next none group result
       activeResultIndex.value++;
-      if (activeResultIndex.value == queryResults.length) {
+      if (activeResultIndex.value == results.length) {
         activeResultIndex.value = 0;
       }
-      while (queryResults[activeResultIndex.value].isGroup) {
+      while (results[activeResultIndex.value].isGroup) {
         activeResultIndex.value++;
-        if (activeResultIndex.value == queryResults.length) {
+        if (activeResultIndex.value == results.length) {
           activeResultIndex.value = 0;
           break;
         }
@@ -590,28 +607,28 @@ class WoxLauncherController extends GetxController {
       // select previous none group result
       activeResultIndex.value--;
       if (activeResultIndex.value == -1) {
-        activeResultIndex.value = queryResults.length - 1;
+        activeResultIndex.value = results.length - 1;
       }
-      while (queryResults[activeResultIndex.value].isGroup) {
+      while (results[activeResultIndex.value].isGroup) {
         activeResultIndex.value--;
         if (activeResultIndex.value == -1) {
-          activeResultIndex.value = queryResults.length - 1;
+          activeResultIndex.value = results.length - 1;
           break;
         }
       }
     }
-    currentPreview.value = queryResults[activeResultIndex.value].preview;
+    currentPreview.value = results[activeResultIndex.value].preview;
     isShowPreviewPanel.value = currentPreview.value.previewData != "";
     updateAndResetActiveAction();
   }
 
   void updateActiveAction(WoxDirection woxDirection) {
-    if (filterResultActions.isEmpty) {
+    if (actions.isEmpty) {
       return;
     }
 
     if (woxDirection == WoxDirectionEnum.WOX_DIRECTION_DOWN.code) {
-      if (activeActionIndex.value == filterResultActions.length - 1) {
+      if (activeActionIndex.value == actions.length - 1) {
         activeActionIndex.value = 0;
       } else {
         activeActionIndex.value++;
@@ -619,7 +636,7 @@ class WoxLauncherController extends GetxController {
     }
     if (woxDirection == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
       if (activeActionIndex.value == 0) {
-        activeActionIndex.value = filterResultActions.length - 1;
+        activeActionIndex.value = actions.length - 1;
       } else {
         activeActionIndex.value--;
       }
@@ -627,11 +644,11 @@ class WoxLauncherController extends GetxController {
   }
 
   WoxQueryResult getQueryResultByIndex(int index) {
-    return queryResults[index];
+    return results[index];
   }
 
   WoxResultAction geActionByIndex(int index) {
-    return filterResultActions[index];
+    return actions[index];
   }
 
   GlobalKey getResultItemGlobalKeyByIndex(int index) {
@@ -655,11 +672,8 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
-    var actions = activeQueryResult.actions;
-
     activeActionIndex.value = 0;
-    resultActions.assignAll(actions);
-    filterResultActions.assignAll(actions);
+    actions.assignAll(activeQueryResult.actions);
   }
 
   startRefreshSchedule() {
@@ -671,7 +685,7 @@ class WoxLauncherController extends GetxController {
       }
 
       refreshCounter = refreshCounter + 100;
-      for (var result in queryResults) {
+      for (var result in results) {
         if (result.refreshInterval > 0 && refreshCounter % result.refreshInterval == 0) {
           if (isRequesting.containsKey(result.id)) {
             continue;
@@ -707,7 +721,7 @@ class WoxLauncherController extends GetxController {
             }
 
             // check result id, because the result may be removed during the refresh
-            if (!queryResults.any((element) => element.id == result.id)) {
+            if (!results.any((element) => element.id == result.id)) {
               isRequesting.remove(result.id);
               Logger.instance.info(traceId, "result <${result.title}> (resultId: ${result.id}) is removed (maybe caused by new query) during refresh, skip update result");
               return;
@@ -721,7 +735,7 @@ class WoxLauncherController extends GetxController {
             result.tails.assignAll(refreshResult.tails);
 
             // only update preview data when current result is active
-            final resultIndex = queryResults.indexWhere((element) => element.id == result.id);
+            final resultIndex = results.indexWhere((element) => element.id == result.id);
             if (isResultActiveByIndex(resultIndex)) {
               currentPreview.value = result.preview;
             }
@@ -739,7 +753,7 @@ class WoxLauncherController extends GetxController {
   void dispose() {
     queryBoxFocusNode.dispose();
     queryBoxTextFieldController.dispose();
-    resultListViewScrollController.dispose();
+    resultScrollerController.dispose();
     super.dispose();
   }
 
