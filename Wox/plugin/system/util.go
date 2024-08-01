@@ -17,6 +17,7 @@ import (
 	"wox/ai"
 	"wox/plugin"
 	"wox/setting"
+	"wox/share"
 	"wox/util"
 	"wox/util/window"
 )
@@ -194,4 +195,15 @@ func getActiveWindowIcon(ctx context.Context) (plugin.WoxImage, error) {
 	woxIcon := plugin.NewWoxImageBase64(fmt.Sprintf("data:image/png;base64,%s", base64Str))
 	windowIconCache.Store(cacheKey, woxIcon)
 	return woxIcon, nil
+}
+
+func refreshQuery(ctx context.Context, api plugin.API, query plugin.Query) {
+	if query.Type == plugin.QueryTypeSelection {
+		return
+	}
+
+	api.ChangeQuery(ctx, share.PlainQuery{
+		QueryType: query.Type,
+		QueryText: query.RawQuery,
+	})
 }

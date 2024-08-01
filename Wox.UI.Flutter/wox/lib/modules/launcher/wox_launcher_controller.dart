@@ -210,6 +210,7 @@ class WoxLauncherController extends GetxController {
     isShowActionPanel.value = false;
     actionTextFieldController.text = "";
     queryBoxFocusNode.requestFocus();
+    updateAndResetActiveAction();
     resizeHeight();
   }
 
