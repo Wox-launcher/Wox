@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_list_item_view.dart';
 import 'package:wox/components/wox_preview_view.dart';
+import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_event_device_type_enum.dart';
@@ -17,6 +18,17 @@ import '../wox_launcher_controller.dart';
 
 class WoxQueryResultView extends GetView<WoxLauncherController> {
   const WoxQueryResultView({super.key});
+
+  RxList<WoxQueryResultTail> getHotkeyTails(WoxResultAction action) {
+    var tails = <WoxQueryResultTail>[];
+    if (action.hotkey != "") {
+      var hotkey = WoxHotkey.parseHotkeyFromString(action.hotkey);
+      if (hotkey != null) {
+        tails.add(WoxQueryResultTail.hotkey(hotkey));
+      }
+    }
+    return tails.obs;
+  }
 
   Widget getActionListView() {
     return Obx(() {
@@ -40,7 +52,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                     woxTheme: controller.woxTheme.value,
                     icon: woxResultAction.icon,
                     title: woxResultAction.name,
-                    tails: RxList<WoxQueryResultTail>(),
+                    tails: getHotkeyTails(woxResultAction),
                     subTitle: "".obs,
                     isActive: controller.isActionActiveByIndex(index),
                     listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code,
@@ -170,42 +182,58 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   Widget getActionQueryBox() {
     return Focus(
         onKeyEvent: (FocusNode node, KeyEvent event) {
-          if (event is KeyDownEvent) {
-            if (event.logicalKey == LogicalKeyboardKey.escape) {
-              controller.toggleActionPanel(const UuidV4().generate());
-              return KeyEventResult.handled;
+          var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
+          if (!isAnyModifierPressed) {
+            if (event is KeyDownEvent) {
+              switch (event.logicalKey) {
+                case LogicalKeyboardKey.escape:
+                  controller.toggleActionPanel(const UuidV4().generate());
+                  return KeyEventResult.handled;
+                case LogicalKeyboardKey.arrowDown:
+                  controller.changeActionScrollPosition(
+                      const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+                  return KeyEventResult.handled;
+                case LogicalKeyboardKey.arrowUp:
+                  controller.changeActionScrollPosition(
+                      const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
+                  return KeyEventResult.handled;
+                case LogicalKeyboardKey.enter:
+                  controller.executeActiveAction(const UuidV4().generate());
+                  return KeyEventResult.handled;
+              }
             }
-            if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-              controller.changeActionScrollPosition(
-                  const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-              controller.changeActionScrollPosition(
-                  const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.enter) {
-              controller.executeAction(const UuidV4().generate());
-              return KeyEventResult.handled;
-            }
-            if ((HardwareKeyboard.instance.isMetaPressed || HardwareKeyboard.instance.isAltPressed) && event.logicalKey == LogicalKeyboardKey.keyJ) {
-              controller.toggleActionPanel(const UuidV4().generate());
-              return KeyEventResult.handled;
+
+            if (event is KeyRepeatEvent) {
+              switch (event.logicalKey) {
+                case LogicalKeyboardKey.arrowDown:
+                  controller.changeActionScrollPosition(
+                      const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+                  return KeyEventResult.handled;
+                case LogicalKeyboardKey.arrowUp:
+                  controller.changeActionScrollPosition(
+                      const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
+                  return KeyEventResult.handled;
+              }
             }
           }
 
-          if (event is KeyRepeatEvent) {
-            if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-              controller.changeActionScrollPosition(
-                  const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-              controller.changeActionScrollPosition(
-                  const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
-              return KeyEventResult.handled;
-            }
+          var pressedHotkey = WoxHotkey.parseHotkeyFromEvent(event);
+          if (pressedHotkey == null) {
+            return KeyEventResult.ignored;
+          }
+
+          // list all actions
+          if (WoxHotkey.equals(pressedHotkey, WoxHotkey.parseHotkeyFromString("cmd+J"))) {
+            controller.toggleActionPanel(const UuidV4().generate());
+            return KeyEventResult.handled;
+          }
+
+          // check if the pressed hotkey is the action hotkey
+          var result = controller.getActiveResult();
+          var action = controller.getActionByHotkey(result, pressedHotkey);
+          if (action != null) {
+            controller.executeAction(const UuidV4().generate(), result, action);
+            return KeyEventResult.handled;
           }
 
           return KeyEventResult.ignored;

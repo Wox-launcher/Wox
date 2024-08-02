@@ -178,7 +178,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeHotkey:
         return WoxHotkeyRecorder(
-          hotkey: WoxHotkey.parseHotkey(getValue(column.key)),
+          hotkey: WoxHotkey.parseHotkeyFromString(getValue(column.key)),
           onHotKeyRecorded: (hotkey) {
             updateValue(column.key, hotkey);
             setState(() {});

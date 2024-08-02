@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
+/// A hotkey in Wox at least consists of a modifier and a key.
 class WoxHotkey {
-  static HotKey? parseHotkey(String value) {
+  static HotKey? parseHotkeyFromString(String value) {
     final modifiers = <HotKeyModifier>[];
     LogicalKeyboardKey? key;
     value.split("+").forEach((element) {
@@ -166,13 +169,182 @@ class WoxHotkey {
       }
     });
 
-    if (modifiers.isEmpty || key == null) {
+    if (key == null) {
       return null;
     }
 
     return HotKey(
       key: key!,
-      modifiers: modifiers,
+      modifiers: modifiers.isEmpty ? null : modifiers,
     );
+  }
+
+  static HotKey? parseHotkeyFromEvent(KeyEvent event) {
+    if (event is KeyUpEvent) return null;
+
+    if (!WoxHotkey.isAllowedKey(event.physicalKey)) {
+      return null;
+    }
+
+    List<HotKeyModifier> modifiers = [];
+    if (HardwareKeyboard.instance.isAltPressed) {
+      modifiers.add(HotKeyModifier.alt);
+    }
+    if (HardwareKeyboard.instance.isControlPressed) {
+      modifiers.add(HotKeyModifier.control);
+    }
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      modifiers.add(HotKeyModifier.shift);
+    }
+    if (HardwareKeyboard.instance.isMetaPressed) {
+      modifiers.add(HotKeyModifier.meta);
+    }
+
+    if (modifiers.isEmpty) {
+      return null;
+    }
+
+    return HotKey(key: event.physicalKey, modifiers: modifiers, scope: HotKeyScope.system);
+  }
+
+  static bool isAnyModifierPressed() {
+    return HardwareKeyboard.instance.physicalKeysPressed.any((element) => HotKeyModifier.values.any((e) => e.physicalKeys.contains(element)));
+  }
+
+  static List<HotKeyModifier> getPressedModifiers() {
+    final modifiers = <HotKeyModifier>[];
+    if (HardwareKeyboard.instance.isAltPressed) {
+      modifiers.add(HotKeyModifier.alt);
+    }
+    if (HardwareKeyboard.instance.isControlPressed) {
+      modifiers.add(HotKeyModifier.control);
+    }
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      modifiers.add(HotKeyModifier.shift);
+    }
+    if (HardwareKeyboard.instance.isMetaPressed) {
+      modifiers.add(HotKeyModifier.meta);
+    }
+
+    return modifiers;
+  }
+
+  static bool isAllowedKey(PhysicalKeyboardKey key) {
+    var allowedKeys = [
+      PhysicalKeyboardKey.keyA,
+      PhysicalKeyboardKey.keyB,
+      PhysicalKeyboardKey.keyC,
+      PhysicalKeyboardKey.keyD,
+      PhysicalKeyboardKey.keyE,
+      PhysicalKeyboardKey.keyF,
+      PhysicalKeyboardKey.keyG,
+      PhysicalKeyboardKey.keyH,
+      PhysicalKeyboardKey.keyI,
+      PhysicalKeyboardKey.keyJ,
+      PhysicalKeyboardKey.keyK,
+      PhysicalKeyboardKey.keyL,
+      PhysicalKeyboardKey.keyM,
+      PhysicalKeyboardKey.keyN,
+      PhysicalKeyboardKey.keyO,
+      PhysicalKeyboardKey.keyP,
+      PhysicalKeyboardKey.keyQ,
+      PhysicalKeyboardKey.keyR,
+      PhysicalKeyboardKey.keyS,
+      PhysicalKeyboardKey.keyT,
+      PhysicalKeyboardKey.keyU,
+      PhysicalKeyboardKey.keyV,
+      PhysicalKeyboardKey.keyW,
+      PhysicalKeyboardKey.keyX,
+      PhysicalKeyboardKey.keyY,
+      PhysicalKeyboardKey.keyZ,
+      PhysicalKeyboardKey.digit1,
+      PhysicalKeyboardKey.digit2,
+      PhysicalKeyboardKey.digit3,
+      PhysicalKeyboardKey.digit4,
+      PhysicalKeyboardKey.digit5,
+      PhysicalKeyboardKey.digit6,
+      PhysicalKeyboardKey.digit7,
+      PhysicalKeyboardKey.digit8,
+      PhysicalKeyboardKey.digit9,
+      PhysicalKeyboardKey.digit0,
+      PhysicalKeyboardKey.space,
+      PhysicalKeyboardKey.enter,
+      PhysicalKeyboardKey.backspace,
+      PhysicalKeyboardKey.delete,
+      PhysicalKeyboardKey.arrowLeft,
+      PhysicalKeyboardKey.arrowDown,
+      PhysicalKeyboardKey.arrowRight,
+      PhysicalKeyboardKey.arrowUp,
+    ];
+
+    return allowedKeys.contains(key);
+  }
+
+  static bool equals(HotKey? a, HotKey? b) {
+    if (a == null || b == null) {
+      return false;
+    }
+
+    return a.key.keyLabel == b.key.keyLabel && isModifiersEquals(a.modifiers, b.modifiers);
+  }
+
+  static bool isModifiersEquals(List<HotKeyModifier>? a, List<HotKeyModifier>? b) {
+    if (a == null || b == null) {
+      return false;
+    }
+
+    if (a.length != b.length) {
+      return false;
+    }
+
+    // check if all elements in a are in b
+    // and all elements in b are in a
+    return a.every((element) => b.map((o) => o.name).contains(element.name)) && b.every((element) => a.map((o) => o.name).contains(element.name));
+  }
+
+  static String toStr(HotKey hotKey) {
+    var modifiers = [];
+    if (hotKey.modifiers != null) {
+      for (var modifier in hotKey.modifiers!) {
+        if (modifier == HotKeyModifier.shift) {
+          modifiers.add("shift");
+        } else if (modifier == HotKeyModifier.control) {
+          modifiers.add("ctrl");
+        } else if (modifier == HotKeyModifier.alt) {
+          if (Platform.isMacOS) {
+            modifiers.add("option");
+          } else {
+            modifiers.add("alt");
+          }
+        } else if (modifier == HotKeyModifier.meta) {
+          if (Platform.isMacOS) {
+            modifiers.add("cmd");
+          } else {
+            modifiers.add("win");
+          }
+        }
+      }
+    }
+
+    var keyStr = hotKey.key.keyLabel.toLowerCase();
+    if (hotKey.key == PhysicalKeyboardKey.space) {
+      keyStr = "space";
+    } else if (hotKey.key == PhysicalKeyboardKey.enter) {
+      keyStr = "enter";
+    } else if (hotKey.key == PhysicalKeyboardKey.backspace) {
+      keyStr = "backspace";
+    } else if (hotKey.key == PhysicalKeyboardKey.delete) {
+      keyStr = "delete";
+    } else if (hotKey.key == PhysicalKeyboardKey.arrowLeft) {
+      keyStr = "left";
+    } else if (hotKey.key == PhysicalKeyboardKey.arrowDown) {
+      keyStr = "down";
+    } else if (hotKey.key == PhysicalKeyboardKey.arrowRight) {
+      keyStr = "right";
+    } else if (hotKey.key == PhysicalKeyboardKey.arrowUp) {
+      keyStr = "up";
+    }
+
+    return "${modifiers.join("+")}+$keyStr";
   }
 }

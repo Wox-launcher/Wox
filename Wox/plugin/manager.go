@@ -503,6 +503,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	})
 	if defaultActionCount == 0 && len(result.Actions) > 0 {
 		result.Actions[0].IsDefault = true
+		result.Actions[0].Hotkey = "Enter"
 	}
 
 	var resultCache = &QueryResultCache{
@@ -516,8 +517,26 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	}
 
 	// store actions for ui invoke later
-	for actionId := range result.Actions {
-		var action = result.Actions[actionId]
+	for actionIndex := range result.Actions {
+		var action = result.Actions[actionIndex]
+
+		// if default action's hotkey is empty, set it as Enter
+		if action.IsDefault && action.Hotkey == "" {
+			result.Actions[actionIndex].Hotkey = "Enter"
+		}
+
+		// replace hotkey modifiers for platform specific, E.g. replace win to cmd on macos, replace cmd to win on windows
+		if util.IsMacOS() {
+			result.Actions[actionIndex].Hotkey = strings.ReplaceAll(result.Actions[actionIndex].Hotkey, "win", "cmd")
+			result.Actions[actionIndex].Hotkey = strings.ReplaceAll(result.Actions[actionIndex].Hotkey, "windows", "cmd")
+			result.Actions[actionIndex].Hotkey = strings.ReplaceAll(result.Actions[actionIndex].Hotkey, "alt", "option")
+		}
+		if util.IsWindows() || util.IsLinux() {
+			result.Actions[actionIndex].Hotkey = strings.ReplaceAll(result.Actions[actionIndex].Hotkey, "cmd", "win")
+			result.Actions[actionIndex].Hotkey = strings.ReplaceAll(result.Actions[actionIndex].Hotkey, "command", "win")
+			result.Actions[actionIndex].Hotkey = strings.ReplaceAll(result.Actions[actionIndex].Hotkey, "option", "alt")
+		}
+
 		if action.Action != nil {
 			resultCache.Actions.Store(action.Id, action.Action)
 		}

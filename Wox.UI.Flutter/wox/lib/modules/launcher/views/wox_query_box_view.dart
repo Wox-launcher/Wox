@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/log.dart';
 
@@ -21,46 +22,63 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
             child: Focus(
                 autofocus: true,
                 onKeyEvent: (FocusNode node, KeyEvent event) {
-                  if (event is KeyDownEvent) {
-                    switch (event.logicalKey) {
-                      case LogicalKeyboardKey.escape:
-                        controller.hideApp(const UuidV4().generate());
-                        return KeyEventResult.handled;
-                      case LogicalKeyboardKey.arrowDown:
-                        controller.handleQueryBoxArrowDown();
-                        return KeyEventResult.handled;
-                      case LogicalKeyboardKey.arrowUp:
-                        controller.handleQueryBoxArrowUp();
-                        return KeyEventResult.handled;
-                      case LogicalKeyboardKey.enter:
-                        controller.executeAction(const UuidV4().generate());
-                        return KeyEventResult.handled;
-                      case LogicalKeyboardKey.tab:
-                        controller.autoCompleteQuery(const UuidV4().generate());
-                        return KeyEventResult.handled;
-                      case LogicalKeyboardKey.home:
-                        controller.moveQueryBoxCursorToStart();
-                        return KeyEventResult.handled;
-                      case LogicalKeyboardKey.end:
-                        controller.moveQueryBoxCursorToEnd();
-                        return KeyEventResult.handled;
-                      case LogicalKeyboardKey.keyJ:
-                        if (HardwareKeyboard.instance.isMetaPressed || HardwareKeyboard.instance.isAltPressed) {
-                          controller.toggleActionPanel(const UuidV4().generate());
+                  var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
+                  if (!isAnyModifierPressed) {
+                    if (event is KeyDownEvent) {
+                      switch (event.logicalKey) {
+                        case LogicalKeyboardKey.escape:
+                          controller.hideApp(const UuidV4().generate());
                           return KeyEventResult.handled;
-                        }
+                        case LogicalKeyboardKey.arrowDown:
+                          controller.handleQueryBoxArrowDown();
+                          return KeyEventResult.handled;
+                        case LogicalKeyboardKey.arrowUp:
+                          controller.handleQueryBoxArrowUp();
+                          return KeyEventResult.handled;
+                        case LogicalKeyboardKey.enter:
+                          controller.executeActiveAction(const UuidV4().generate());
+                          return KeyEventResult.handled;
+                        case LogicalKeyboardKey.tab:
+                          controller.autoCompleteQuery(const UuidV4().generate());
+                          return KeyEventResult.handled;
+                        case LogicalKeyboardKey.home:
+                          controller.moveQueryBoxCursorToStart();
+                          return KeyEventResult.handled;
+                        case LogicalKeyboardKey.end:
+                          controller.moveQueryBoxCursorToEnd();
+                          return KeyEventResult.handled;
+                      }
+                    }
+
+                    if (event is KeyRepeatEvent) {
+                      switch (event.logicalKey) {
+                        case LogicalKeyboardKey.arrowDown:
+                          controller.handleQueryBoxArrowDown();
+                          return KeyEventResult.handled;
+                        case LogicalKeyboardKey.arrowUp:
+                          controller.handleQueryBoxArrowUp();
+                          return KeyEventResult.handled;
+                      }
                     }
                   }
 
-                  if (event is KeyRepeatEvent) {
-                    switch (event.logicalKey) {
-                      case LogicalKeyboardKey.arrowDown:
-                        controller.handleQueryBoxArrowDown();
-                        return KeyEventResult.handled;
-                      case LogicalKeyboardKey.arrowUp:
-                        controller.handleQueryBoxArrowUp();
-                        return KeyEventResult.handled;
-                    }
+                  var pressedHotkey = WoxHotkey.parseHotkeyFromEvent(event);
+                  if (pressedHotkey == null) {
+                    return KeyEventResult.ignored;
+                  }
+
+                  // list all actions
+                  if (WoxHotkey.equals(pressedHotkey, WoxHotkey.parseHotkeyFromString("cmd+J"))) {
+                    controller.toggleActionPanel(const UuidV4().generate());
+                    return KeyEventResult.handled;
+                  }
+
+                  // check if the pressed hotkey is the action hotkey
+                  var result = controller.getActiveResult();
+                  var action = controller.getActionByHotkey(result, pressedHotkey);
+                  if (action != null) {
+                    controller.executeAction(const UuidV4().generate(), result, action);
+                    return KeyEventResult.handled;
                   }
 
                   return KeyEventResult.ignored;

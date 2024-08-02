@@ -1,9 +1,12 @@
 import 'package:get/get.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
+import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/enums/wox_last_query_mode_enum.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
+import 'package:wox/enums/wox_result_tail_type_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
 
 class PlainQuery {
@@ -188,23 +191,67 @@ class WoxQueryResult {
 
 class WoxQueryResultTail {
   late String type;
-  late String text;
-  late WoxImage image;
+  late String? text;
+  late WoxImage? image;
+  late HotKey? hotkey;
 
-  WoxQueryResultTail({required this.type, required this.text, required this.image});
+  WoxQueryResultTail({required this.type, this.text, this.image, this.hotkey});
 
   WoxQueryResultTail.fromJson(Map<String, dynamic> json) {
     type = json['Type'];
-    text = json['Text'];
-    image = WoxImage.fromJson(json['Image']);
+    if (json['Text'] != null) {
+      text = json['Text'];
+    } else {
+      text = null;
+    }
+
+    if (json['Image'] != null) {
+      image = WoxImage.fromJson(json['Image']);
+    } else {
+      image = null;
+    }
+
+    if (json['Hotkey'] != null) {
+      hotkey = WoxHotkey.parseHotkeyFromString(json['Hotkey']);
+    } else {
+      hotkey = null;
+    }
   }
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
     data['Type'] = type;
-    data['Text'] = text;
-    data['Image'] = image.toJson();
+
+    if (text != null) {
+      data['Text'] = text;
+    } else {
+      data['Text'] = null;
+    }
+
+    if (image != null) {
+      data['Image'] = image!.toJson();
+    } else {
+      data['Image'] = null;
+    }
+
+    if (hotkey != null) {
+      data['Hotkey'] = hotkey!.toString();
+    } else {
+      data['Hotkey'] = null;
+    }
     return data;
+  }
+
+  factory WoxQueryResultTail.text(String text) {
+    return WoxQueryResultTail(type: WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_TEXT.code, text: text);
+  }
+
+  factory WoxQueryResultTail.hotkey(HotKey hotkey) {
+    return WoxQueryResultTail(type: WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_HOTKEY.code, hotkey: hotkey);
+  }
+
+  factory WoxQueryResultTail.image(WoxImage image) {
+    return WoxQueryResultTail(type: WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_IMAGE.code, image: image);
   }
 }
 
@@ -214,8 +261,9 @@ class WoxResultAction {
   late Rx<WoxImage> icon;
   late bool isDefault;
   late bool preventHideAfterAction;
+  late String hotkey;
 
-  WoxResultAction({required this.id, required this.name, required this.icon, required this.isDefault, required this.preventHideAfterAction});
+  WoxResultAction({required this.id, required this.name, required this.icon, required this.isDefault, required this.preventHideAfterAction, required this.hotkey});
 
   WoxResultAction.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
@@ -223,6 +271,9 @@ class WoxResultAction {
     icon = (json['Icon'] != null ? WoxImage.fromJson(json['Icon']).obs : null)!;
     isDefault = json['IsDefault'];
     preventHideAfterAction = json['PreventHideAfterAction'];
+    if (json['Hotkey'] != null) {
+      hotkey = json['Hotkey'];
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -232,11 +283,12 @@ class WoxResultAction {
     data['Icon'] = icon.toJson();
     data['IsDefault'] = isDefault;
     data['PreventHideAfterAction'] = preventHideAfterAction;
+    data['Hotkey'] = hotkey;
     return data;
   }
 
   static WoxResultAction empty() {
-    return WoxResultAction(id: "", name: "".obs, icon: WoxImage.empty().obs, isDefault: false, preventHideAfterAction: false);
+    return WoxResultAction(id: "", name: "".obs, icon: WoxImage.empty().obs, isDefault: false, preventHideAfterAction: false, hotkey: "");
   }
 }
 

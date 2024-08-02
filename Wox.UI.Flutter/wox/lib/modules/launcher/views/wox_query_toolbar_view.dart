@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
-import 'package:wox/components/wox_image_view.dart';
-import 'package:wox/entity/wox_image.dart';
-import 'package:wox/enums/wox_image_type_enum.dart';
+import 'package:wox/components/wox_hotkey_view.dart';
+import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
@@ -22,10 +19,11 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
       return const SizedBox();
     }
 
+    var hotkey = WoxHotkey.parseHotkeyFromString(action.hotkey) ?? WoxHotkey.parseHotkeyFromString("enter");
     return Row(
       children: [
-        WoxImageView(woxImage: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "↩️")),
         Text(action.name.value, style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor))),
+        WoxHotkeyView(hotkey: hotkey!),
       ],
     );
   }

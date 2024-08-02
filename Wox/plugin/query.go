@@ -132,6 +132,10 @@ type QueryResultAction struct {
 	// If true, Wox will not hide after user select this result
 	PreventHideAfterAction bool
 	Action                 func(ctx context.Context, actionContext ActionContext)
+	// Hotkey to trigger this action. E.g. "ctrl+Shift+Space", "Ctrl+1", "Command+K"
+	// Case insensitive, space insensitive
+	// If IsDefault is true, Hotkey will be set to enter key by default
+	Hotkey string
 }
 
 type ActionContext struct {
@@ -158,6 +162,7 @@ func (q *QueryResult) ToUI() QueryResultUI {
 				Icon:                   action.Icon,
 				IsDefault:              action.IsDefault,
 				PreventHideAfterAction: action.PreventHideAfterAction,
+				Hotkey:                 action.Hotkey,
 			}
 		}),
 		RefreshInterval: q.RefreshInterval,
@@ -186,6 +191,7 @@ type QueryResultActionUI struct {
 	Icon                   WoxImage
 	IsDefault              bool
 	PreventHideAfterAction bool
+	Hotkey                 string
 }
 
 // store latest result value after query/refresh, so we can retrieve data later in action/refresh

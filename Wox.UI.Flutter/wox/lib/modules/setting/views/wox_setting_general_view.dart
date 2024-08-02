@@ -72,7 +72,7 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                 label: controller.tr("hotkey"),
                 tips: controller.tr("hotkey_tips"),
                 child: WoxHotkeyRecorder(
-                  hotkey: WoxHotkey.parseHotkey(controller.woxSetting.value.mainHotkey),
+                  hotkey: WoxHotkey.parseHotkeyFromString(controller.woxSetting.value.mainHotkey),
                   onHotKeyRecorded: (hotkey) {
                     controller.updateConfig("MainHotkey", hotkey);
                   },
@@ -82,7 +82,7 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                 label: controller.tr("selection_hotkey"),
                 tips: controller.tr("selection_hotkey_tips"),
                 child: WoxHotkeyRecorder(
-                  hotkey: WoxHotkey.parseHotkey(controller.woxSetting.value.selectionHotkey),
+                  hotkey: WoxHotkey.parseHotkeyFromString(controller.woxSetting.value.selectionHotkey),
                   onHotKeyRecorded: (hotkey) {
                     controller.updateConfig("SelectionHotkey", hotkey);
                   },

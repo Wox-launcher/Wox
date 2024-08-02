@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
@@ -11,6 +12,8 @@ import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/enums/wox_result_tail_type_enum.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_setting_util.dart';
+
+import 'wox_hotkey_view.dart';
 
 class WoxListItemView extends StatelessWidget {
   final bool isActive;
@@ -44,6 +47,53 @@ class WoxListItemView extends StatelessWidget {
     } else {
       return defaultSize;
     }
+  }
+
+  Widget buildTails() {
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: WoxSettingUtil.instance.currentSetting.appWidth / 2),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 10.0, right: 5.0),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final tail in tails)
+                if (tail.type == WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_TEXT.code && tail.text != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 10.0),
+                    child: Text(
+                      tail.text!,
+                      style: TextStyle(
+                        color: fromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      strutStyle: const StrutStyle(
+                        forceStrutHeight: true,
+                      ),
+                    ),
+                  )
+                else if (tail.type == WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_HOTKEY.code && tail.hotkey != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 10.0),
+                    child: WoxHotkeyView(hotkey: tail.hotkey!),
+                  )
+                else if (tail.type == WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_IMAGE.code && tail.image != null && tail.image!.imageData.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 10.0),
+                    child: WoxImageView(
+                      woxImage: tail.image!,
+                      width: getImageSize(tail.image!, 24),
+                      height: getImageSize(tail.image!, 24),
+                    ),
+                  ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -131,47 +181,8 @@ class WoxListItemView extends StatelessWidget {
           // Tails
           Obx(() {
             if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view $key - tails");
-
             if (tails.isNotEmpty) {
-              return ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: WoxSettingUtil.instance.currentSetting.appWidth / 2),
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 10.0, right: 5.0),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        for (final tail in tails)
-                          if (tail.type == WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_TEXT.code && tail.text.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 10.0),
-                              child: Text(
-                                tail.text,
-                                style: TextStyle(
-                                  color: fromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
-                                  fontSize: 12,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                strutStyle: const StrutStyle(
-                                  forceStrutHeight: true,
-                                ),
-                              ),
-                            )
-                          else if (tail.type == WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_IMAGE.code && tail.image.imageData.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 10.0),
-                              child: WoxImageView(
-                                woxImage: tail.image,
-                                width: getImageSize(tail.image, 24),
-                                height: getImageSize(tail.image, 24),
-                              ),
-                            ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
+              return buildTails();
             } else {
               return const SizedBox();
             }

@@ -5,10 +5,12 @@ import 'dart:ui';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:lpinyin/lpinyin.dart';
 import 'package:uuid/v4.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
+import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_query.dart';
@@ -236,17 +238,40 @@ class WoxLauncherController extends GetxController {
     return actions[activeActionIndex.value];
   }
 
-  Future<void> executeAction(String traceId) async {
-    Logger.instance.debug(traceId, "user execute result action");
+  /// given a hotkey, find the action in the result
+  WoxResultAction? getActionByHotkey(WoxQueryResult? result, HotKey hotkey) {
+    if (result == null) {
+      return null;
+    }
 
-    WoxQueryResult? woxQueryResult = getActiveResult();
-    if (woxQueryResult == null) {
+    var filteredActions = result.actions.where((action) {
+      var actionHotkey = WoxHotkey.parseHotkeyFromString(action.hotkey);
+      if (WoxHotkey.equals(actionHotkey, hotkey)) {
+        return true;
+      }
+
+      return false;
+    });
+
+    if (filteredActions.isEmpty) {
+      return null;
+    }
+
+    return filteredActions.first;
+  }
+
+  Future<void> executeActiveAction(String traceId) async {
+    executeAction(traceId, getActiveResult(), getActiveAction());
+  }
+
+  Future<void> executeAction(String traceId, WoxQueryResult? result, WoxResultAction? action) async {
+    Logger.instance.debug(traceId, "user execute result action: ${action?.name}");
+
+    if (result == null) {
       Logger.instance.error(traceId, "active query result is null");
       return;
     }
-
-    WoxResultAction? activeAction = getActiveAction();
-    if (activeAction == null) {
+    if (action == null) {
       Logger.instance.error(traceId, "active action is null");
       return;
     }
@@ -257,12 +282,12 @@ class WoxLauncherController extends GetxController {
       type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
       method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
       data: {
-        "resultId": woxQueryResult.id,
-        "actionId": activeAction.id,
+        "resultId": result.id,
+        "actionId": action.id,
       },
     ));
 
-    if (!activeAction.preventHideAfterAction) {
+    if (!action.preventHideAfterAction) {
       hideApp(traceId);
     }
     hideActionPanel();
