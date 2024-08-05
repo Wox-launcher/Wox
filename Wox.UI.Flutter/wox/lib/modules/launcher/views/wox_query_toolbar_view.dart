@@ -32,10 +32,11 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
   Widget build(BuildContext context) {
     return Obx(() {
       return SizedBox(
-        height: WoxThemeUtil.instance.getResultTipHeight(),
+        height: WoxThemeUtil.instance.getToolbarHeight(),
         child: Container(
           decoration: BoxDecoration(
             color: fromCssColor(controller.woxTheme.value.toolbarBackgroundColor),
+            //add some shadow to the top of the toolbar
           ),
           child: Padding(
             padding: EdgeInsets.only(left: controller.woxTheme.value.toolbarPaddingLeft.toDouble(), right: controller.woxTheme.value.toolbarPaddingRight.toDouble()),

@@ -579,7 +579,7 @@ class WoxLauncherController extends GetxController {
     }
     if (results.isNotEmpty) {
       resultHeight += woxTheme.value.resultContainerPaddingTop + woxTheme.value.resultContainerPaddingBottom;
-      resultHeight += WoxThemeUtil.instance.getResultTipHeight();
+      resultHeight += WoxThemeUtil.instance.getToolbarHeight();
     }
     final totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight;
 
