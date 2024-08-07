@@ -58,8 +58,8 @@ default:
     cp ../Assets/mac/Info.plist {{name}}.app/Contents/Info.plist && \
     cp ../Assets/mac/app.icns {{name}}.app/Contents/Resources/app.icns && \
     mv {{name}}.app Wox.app && \
-    create-dmg Wox.app && \
-    mv "Wox 2.0.0.dmg" {{name}}.dmg
+    create-dmg --codesign "-null-" Wox.dmg Wox.app && \
+    mv "Wox.dmg" {{name}}.dmg
 
 @test:
     just dev
