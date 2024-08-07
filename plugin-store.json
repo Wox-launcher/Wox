@@ -134,5 +134,22 @@
     ],
     "DateCreated": "2024-07-05 15:00:00",
     "DateUpdated": "2024-07-05 15:00:00"
+  },
+  {
+    "Id": "9575a1fc-d81b-4947-bcce-bd075f118f3e",
+    "Name": "RSS Reader",
+    "Author": "qianlifeng",
+    "Version": "0.0.1",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "nodejs",
+    "Description": "Read RSS feeds",
+    "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.RSSReader/main/images/app.png",
+    "Website": "https://github.com/qianlifeng/Wox.Plugin.RSSReader",
+    "DownloadUrl": "https://github.com/qianlifeng/Wox.Plugin.RSSReader/releases/latest/download/wox.plugin.rssreader.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.RSSReader/main/prev.png"
+    ],
+    "DateCreated": "2024-08-07 14:00:00",
+    "DateUpdated": "2024-08-07 14:00:00"
   }
 ]
