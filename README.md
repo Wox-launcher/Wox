@@ -21,17 +21,23 @@ Features
 - Single executable file, no installation required
 - Develop plugins with Javascript, Python, C#
 
-Run
+Install and Run
 ------------
 
+- Manual
+
 Download from [releases](https://github.com/Wox-launcher/Wox/releases) and run the single executable file
+
+- Homebrew
+
+`brew tap wox-launcher/wox`  
+`brew install wox --no-quarantine`
 
 Usage
 -----
 
 - Launch: <kbd>Alt</kbd>/<kbd>Command</kbd>+<kbd>Space</kbd>
 - Cancel/Return: <kbd>Esc</kbd>
-- Install/Uninstall plugin: type `wpm install/uninstall`
 
 Contribution
 ------------
