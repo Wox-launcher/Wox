@@ -6,4 +6,5 @@
 - Install [Python](https://python.org/downloads) and [pip](https://pip.pypa.io/en/stable/installation/)
 - Install [Flutter](https://docs.flutter.dev/get-started/install)
 - For MacOS, you also need to install `cocoapods` via `brew install cocoapods`
-- Run `just dev` to build dependencies and start Wox in development mode
+- Run `just dev` to build dependencies 
+- Run `go run main.go` in `Wox` directory and start Wox built in the previous step
