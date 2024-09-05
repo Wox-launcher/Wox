@@ -4,11 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/fsnotify/fsnotify"
-	"github.com/google/uuid"
-	"github.com/samber/lo"
-	"github.com/struCoder/pidusage"
-	"github.com/tidwall/pretty"
 	"os"
 	"path"
 	"path/filepath"
@@ -20,6 +15,12 @@ import (
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
+
+	"github.com/fsnotify/fsnotify"
+	"github.com/google/uuid"
+	"github.com/samber/lo"
+	"github.com/struCoder/pidusage"
+	"github.com/tidwall/pretty"
 )
 
 var appIcon = plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><path fill="#0091ea" d="M14.1,42h19.8c4.474,0,8.1-3.627,8.1-8.1V27H6v6.9C6,38.373,9.626,42,14.1,42z"></path><rect width="36" height="11" x="6" y="16" fill="#00b0ff"></rect><path fill="#40c4ff" d="M33.9,6H14.1C9.626,6,6,9.626,6,14.1V16h36v-1.9C42,9.626,38.374,6,33.9,6z"></path><path fill="#fff" d="M22.854,18.943l1.738-2.967l-1.598-2.727c-0.418-0.715-1.337-0.954-2.052-0.536	c-0.715,0.418-0.955,1.337-0.536,2.052L22.854,18.943z"></path><path fill="#fff" d="M26.786,12.714c-0.716-0.419-1.635-0.179-2.052,0.536L16.09,28h3.477l7.754-13.233	C27.74,14.052,27.5,13.133,26.786,12.714z"></path><path fill="#fff" d="M34.521,32.92l-7.611-12.987l-0.763,1.303c-0.444,0.95-0.504,2.024-0.185,3.011l5.972,10.191	c0.279,0.476,0.78,0.741,1.295,0.741c0.257,0,0.519-0.066,0.757-0.206C34.701,34.554,34.94,33.635,34.521,32.92z"></path><path fill="#fff" d="M25.473,27.919l-0.171-0.289c-0.148-0.224-0.312-0.434-0.498-0.621H12.3	c-0.829,0-1.5,0.665-1.5,1.484s0.671,1.484,1.5,1.484h13.394C25.888,29.324,25.835,28.595,25.473,27.919z"></path><path fill="#fff" d="M16.66,32.961c-0.487-0.556-1.19-0.934-2.03-0.959l-0.004,0c-0.317-0.009-0.628,0.026-0.932,0.087	l-0.487,0.831c-0.419,0.715-0.179,1.634,0.536,2.053c0.238,0.14,0.5,0.206,0.757,0.206c0.515,0,1.017-0.266,1.295-0.741	L16.66,32.961z"></path><path fill="#fff" d="M30.196,27.009H35.7c0.829,0,1.5,0.665,1.5,1.484s-0.671,1.484-1.5,1.484h-5.394	C30.112,29.324,30.01,27.196,30.196,27.009z"></path></svg>`)
@@ -155,7 +156,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 						Name: "i18n:plugin_app_open_containing_folder",
 						Icon: plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="48" height="48" viewBox="0 0 48 48"><path fill="#FFA000" d="M40,12H22l-4-4H8c-2.2,0-4,1.8-4,4v8h40v-4C44,13.8,42.2,12,40,12z"></path><path fill="#FFCA28" d="M40,12H8c-2.2,0-4,1.8-4,4v20c0,2.2,1.8,4,4,4h32c2.2,0,4-1.8,4-4V16C44,13.8,42.2,12,40,12z"></path></svg>`),
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							runErr := util.ShellOpen(filepath.Dir(info.Path))
+							runErr := util.ShellOpenFileInFolder(info.Path)
 							if runErr != nil {
 								a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", info.Path, runErr.Error()))
 							}

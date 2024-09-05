@@ -34,3 +34,7 @@ func ShellRunOutput(name string, arg ...string) ([]byte, error) {
 		return output, nil
 	}
 }
+
+func ShellOpenFileInFolder(path string) error {
+	return exec.Command("open", "-R", path).Start()
+}

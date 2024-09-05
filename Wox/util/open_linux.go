@@ -22,3 +22,7 @@ func ShellRunOutput(name string, arg ...string) ([]byte, error) {
 	cmd := exec.Command(name, arg...)
 	return cmd.Output()
 }
+
+func ShellOpenFileInFolder(path string) error {
+	return exec.Command("xdg-open", path).Start()
+}

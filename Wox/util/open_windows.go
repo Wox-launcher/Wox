@@ -27,3 +27,7 @@ func ShellRunOutput(name string, arg ...string) ([]byte, error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true} // Hide the window
 	return cmd.Output()
 }
+
+func ShellOpenFileInFolder(path string) error {
+	return exec.Command("cmd", "/C", "start", "explorer.exe", path).Start()
+}

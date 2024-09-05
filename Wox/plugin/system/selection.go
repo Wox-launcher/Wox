@@ -2,7 +2,6 @@ package system
 
 import (
 	"context"
-	"path"
 	"strings"
 	"wox/plugin"
 	"wox/util"
@@ -138,7 +137,7 @@ func (i *SelectionPlugin) queryForFile(ctx context.Context, filePath string) (re
 			{
 				Name: "Open containing folder",
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					util.ShellOpen(path.Dir(filePath))
+					util.ShellOpenFileInFolder(filePath)
 				},
 			},
 		},
