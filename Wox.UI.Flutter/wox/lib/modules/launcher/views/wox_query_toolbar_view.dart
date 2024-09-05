@@ -23,7 +23,13 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
     return Row(
       children: [
         Text(action.name.value, style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor))),
-        WoxHotkeyView(hotkey: hotkey!),
+        const SizedBox(width: 8),
+        WoxHotkeyView(
+          hotkey: hotkey!,
+          backgroundColor: fromCssColor(controller.woxTheme.value.toolbarBackgroundColor),
+          borderColor: fromCssColor(controller.woxTheme.value.toolbarFontColor),
+          textColor: fromCssColor(controller.woxTheme.value.toolbarFontColor),
+        )
       ],
     );
   }

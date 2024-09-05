@@ -4,17 +4,41 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 
 class WoxHotkeyView extends StatelessWidget {
   final HotKey hotkey;
+  final Color backgroundColor;
+  final Color borderColor;
+  final Color textColor;
 
-  const WoxHotkeyView({super.key, required this.hotkey});
+  const WoxHotkeyView({
+    super.key,
+    required this.hotkey,
+    required this.backgroundColor,
+    required this.borderColor,
+    required this.textColor,
+  });
 
-  Widget buildSingleView(String key) {
+  Widget buildSingleKey(String key) {
     return Container(
-      constraints: BoxConstraints.tight(const Size(24, 24)),
-      decoration: BoxDecoration(color: Colors.grey[200], border: Border.all(color: Colors.grey[400]!), borderRadius: BorderRadius.circular(5)),
+      constraints: BoxConstraints.tight(const Size(28, 22)),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
       child: Center(
         child: Text(
           key,
-          style: const TextStyle(fontSize: 10),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: textColor,
+          ),
         ),
       ),
     );
@@ -92,16 +116,13 @@ class WoxHotkeyView extends StatelessWidget {
   Widget build(BuildContext context) {
     var hotkeyWidgets = <Widget>[];
     if (hotkey.modifiers != null) {
-      hotkeyWidgets.addAll(hotkey.modifiers!.map((o) => buildSingleView(getModifierName(o))));
+      hotkeyWidgets.addAll(hotkey.modifiers!.map((o) => buildSingleKey(getModifierName(o))));
     }
-    hotkeyWidgets.add(buildSingleView(getKeyName(hotkey.key)));
+    hotkeyWidgets.add(buildSingleKey(getKeyName(hotkey.key)));
 
-    return Row(children: [
-      for (final widget in hotkeyWidgets)
-        Padding(
-          padding: const EdgeInsets.only(left: 10.0),
-          child: widget,
-        )
-    ]);
+    return Wrap(
+      spacing: 4,
+      children: hotkeyWidgets,
+    );
   }
 }

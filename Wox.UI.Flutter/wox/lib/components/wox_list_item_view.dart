@@ -78,7 +78,12 @@ class WoxListItemView extends StatelessWidget {
                 else if (tail.type == WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_HOTKEY.code && tail.hotkey != null)
                   Padding(
                     padding: const EdgeInsets.only(left: 10.0),
-                    child: WoxHotkeyView(hotkey: tail.hotkey!),
+                    child: WoxHotkeyView(
+                      hotkey: tail.hotkey!,
+                      backgroundColor: isActive ? fromCssColor(woxTheme.resultItemActiveBackgroundColor) : fromCssColor(woxTheme.actionContainerBackgroundColor),
+                      borderColor: fromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
+                      textColor: fromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
+                    ),
                   )
                 else if (tail.type == WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_IMAGE.code && tail.image != null && tail.image!.imageData.isNotEmpty)
                   Padding(
@@ -144,9 +149,7 @@ class WoxListItemView extends StatelessWidget {
                   title.value,
                   style: TextStyle(
                     fontSize: 16,
-                    color: isAction()
-                        ? fromCssColor(isActive ? woxTheme.actionItemActiveFontColor : woxTheme.actionItemFontColor)
-                        : fromCssColor(isActive ? woxTheme.resultItemActiveTitleColor : woxTheme.resultItemTitleColor),
+                    color: isAction() ? fromCssColor(isActive ? woxTheme.actionItemActiveFontColor : woxTheme.actionItemFontColor) : fromCssColor(isActive ? woxTheme.resultItemActiveTitleColor : woxTheme.resultItemTitleColor),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
