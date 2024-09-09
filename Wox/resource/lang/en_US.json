@@ -53,5 +53,8 @@
   "ui_query_hotkeys": "Query Hotkeys",
   "ui_query_shortcuts": "Query Shortcuts",
   "ui_general": "General",
-  "ui_ai": "AI"
+  "ui_ai": "AI",
+  "selection_no_files_selected": "No files selected",
+  "selection_selected_files_count": "Selected %d files:",
+  "selection_remaining_files_not_shown": "... %d more files not shown"
 }

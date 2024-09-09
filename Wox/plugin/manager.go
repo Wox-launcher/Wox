@@ -5,11 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Masterminds/semver/v3"
-	"github.com/google/uuid"
-	"github.com/jinzhu/copier"
-	"github.com/samber/lo"
-	"github.com/wissance/stringFormatter"
 	"math"
 	"os"
 	"path"
@@ -23,6 +18,12 @@ import (
 	"wox/setting"
 	"wox/share"
 	"wox/util"
+
+	"github.com/Masterminds/semver/v3"
+	"github.com/google/uuid"
+	"github.com/jinzhu/copier"
+	"github.com/samber/lo"
+	"github.com/wissance/stringFormatter"
 )
 
 var managerInstance *Manager
@@ -476,7 +477,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		if query.Selection.Type == util.SelectionTypeFile {
 			result.Preview = WoxPreview{
 				PreviewType: WoxPreviewTypeMarkdown,
-				PreviewData: strings.Join(query.Selection.FilePaths, "\n"),
+				PreviewData: m.formatFileListPreview(ctx, query.Selection.FilePaths),
 			}
 		}
 	}
@@ -580,6 +581,31 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	m.resultCache.Store(result.Id, resultCache)
 
 	return result
+}
+
+func (m *Manager) formatFileListPreview(ctx context.Context, filePaths []string) string {
+	totalFiles := len(filePaths)
+	if totalFiles == 0 {
+		return i18n.GetI18nManager().TranslateWox(ctx, "i18n:selection_no_files_selected")
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "i18n:selection_selected_files_count"), totalFiles))
+	sb.WriteString("\n\n")
+
+	maxDisplayFiles := 10
+	for i, filePath := range filePaths {
+		if i < maxDisplayFiles {
+			sb.WriteString(fmt.Sprintf("- `%s`\n", filePath))
+		} else {
+			remainingFiles := totalFiles - maxDisplayFiles
+			sb.WriteString("\n")
+			sb.WriteString(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "i18n:selection_remaining_files_not_shown"), remainingFiles))
+			break
+		}
+	}
+
+	return sb.String()
 }
 
 func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string) int64 {

@@ -51,13 +51,6 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
         child: Container(
           decoration: BoxDecoration(
             color: fromCssColor(controller.woxTheme.value.toolbarBackgroundColor),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 4,
-                offset: Offset(0, 2),
-              ),
-            ],
           ),
           child: Padding(
             padding: EdgeInsets.only(left: controller.woxTheme.value.toolbarPaddingLeft.toDouble(), right: controller.woxTheme.value.toolbarPaddingRight.toDouble()),

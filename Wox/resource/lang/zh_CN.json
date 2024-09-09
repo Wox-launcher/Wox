@@ -53,5 +53,8 @@
   "ui_query_hotkeys": "查询快捷键",
   "ui_query_shortcuts": "查询缩写",
   "ui_general": "通用",
-  "ui_ai": "AI"
+  "ui_ai": "AI",
+  "selection_no_files_selected": "未选择文件",
+  "selection_selected_files_count": "已选择 %d 个文件：",
+  "selection_remaining_files_not_shown": "... 还有 %d 个文件未显示"
 }
