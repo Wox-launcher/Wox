@@ -49,6 +49,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                 itemBuilder: (context, index) {
                   WoxResultAction woxResultAction = controller.geActionByIndex(index);
                   return WoxListItemView(
+                    key: ValueKey(woxResultAction.id),
                     woxTheme: controller.woxTheme.value,
                     icon: woxResultAction.icon,
                     title: woxResultAction.name,
@@ -95,12 +96,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("Actions", style: TextStyle(color: fromCssColor(controller.woxTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
-                      const Divider(),
-                      getActionListView(),
-                      getActionQueryBox()
-                    ],
+                    children: [Text("Actions", style: TextStyle(color: fromCssColor(controller.woxTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)), const Divider(), getActionListView(), getActionQueryBox()],
                   ),
                 ),
               ),
@@ -190,12 +186,10 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                   controller.toggleActionPanel(const UuidV4().generate());
                   return KeyEventResult.handled;
                 case LogicalKeyboardKey.arrowDown:
-                  controller.changeActionScrollPosition(
-                      const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+                  controller.changeActionScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
                   return KeyEventResult.handled;
                 case LogicalKeyboardKey.arrowUp:
-                  controller.changeActionScrollPosition(
-                      const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
+                  controller.changeActionScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
                   return KeyEventResult.handled;
                 case LogicalKeyboardKey.enter:
                   controller.executeActiveAction(const UuidV4().generate());
@@ -206,12 +200,10 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
             if (event is KeyRepeatEvent) {
               switch (event.logicalKey) {
                 case LogicalKeyboardKey.arrowDown:
-                  controller.changeActionScrollPosition(
-                      const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+                  controller.changeActionScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
                   return KeyEventResult.handled;
                 case LogicalKeyboardKey.arrowUp:
-                  controller.changeActionScrollPosition(
-                      const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
+                  controller.changeActionScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
                   return KeyEventResult.handled;
               }
             }

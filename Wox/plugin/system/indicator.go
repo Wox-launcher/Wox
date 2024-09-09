@@ -3,11 +3,12 @@ package system
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/samber/lo"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/share"
+
+	"github.com/google/uuid"
+	"github.com/samber/lo"
 )
 
 var indicatorIcon = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAACXBIWXMAAAsTAAALEwEAmpwYAAACVklEQVR4nO2cQUrdUBSG30aae1Md5RZUcFSecCaOWtfRtw+ltHYB2g2cXWgp4kTX4CKqzlOS+AqVQqG+l//05fvgzIQcv48kjwzubAYAAAAAAAAAAAAAAAAAsBZSbq5TXdoXTy5Xm7SLjJUIqIfZpF1kLP+Bt8ff/3nSioNE2EVGJAkp0C4yIklIgXaREUlCCrSLjEgSUqBdZESSkALtIiOShBRol7Xyqi5HVd18S3XzuMrf+um/muaxqpvLqi7vpTGqXD7qZZRQU+XmRHZn9Ets77S7iy/t/PymNb+b5MzPb9rdxWnvoo+iuFOGx1TpF1ELsSCzt/g83Cm5XIweJOXy0F384OutXIQFmc7F8Ngq9+MHeXpmqiVYsFl6CRVka/9w9Jfp1v7hX/d4/jcv2fNP1wsbZMqTCHInj0AQ14sniOtlE8T1ggnieqkECSDSCKKXZwTRCzOC6CUZQfRijCB6GRZg+HTi+ggEcb14grheNkFcL5ggrpdKkAAijSB6eUYQvTAjiF6SEUQvxgiil2EBhk8nro9AENeLJ4jrZRPE9YIJ4nqpBAkg0giil2cE0QszguglGUH0YowgehkWYPh04voIBHG9eIK4XjZBXC+YIK6XSpAAIm2TgygODkgBDioIG2TKk2RBng6fmfKxTPZs5me/Dp/5MXqQ7gS17uLdkURqERZk9j580h3P1B3S1V98e6ePMuU7ZX52O8RYHmD2+s270YP0UXJzon65pnDTHEti/Han5HKxfKdMcnJ56BzI7gwAAAAAAAAAAAAAAAAAAJitgZ+lmGHcVGx/0gAAAABJRU5ErkJggg==`)
@@ -62,7 +63,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 				Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
 				Actions: []plugin.QueryResultAction{
 					{
-						Name:                   "activate",
+						Name:                   "i18n:plugin_indicator_activate",
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							i.api.ChangeQuery(ctx, share.PlainQuery{
@@ -84,7 +85,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 					Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
 					Actions: []plugin.QueryResultAction{
 						{
-							Name:                   "activate",
+							Name:                   "i18n:plugin_indicator_activate",
 							PreventHideAfterAction: true,
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								i.api.ChangeQuery(ctx, share.PlainQuery{

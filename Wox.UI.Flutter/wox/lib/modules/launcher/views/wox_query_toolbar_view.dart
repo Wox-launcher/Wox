@@ -10,7 +10,16 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
   const WoxQueryToolbarView({super.key});
 
   Widget leftTip() {
-    return const SizedBox();
+    return Obx(() {
+      final tipText = controller.toolbarTip.value;
+      if (tipText.isEmpty) {
+        return const SizedBox();
+      }
+      return Text(
+        tipText,
+        style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor)),
+      );
+    });
   }
 
   Widget rightTip() {
@@ -42,7 +51,13 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
         child: Container(
           decoration: BoxDecoration(
             color: fromCssColor(controller.woxTheme.value.toolbarBackgroundColor),
-            //add some shadow to the top of the toolbar
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
           ),
           child: Padding(
             padding: EdgeInsets.only(left: controller.woxTheme.value.toolbarPaddingLeft.toDouble(), right: controller.woxTheme.value.toolbarPaddingRight.toDouble()),

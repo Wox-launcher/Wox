@@ -78,6 +78,9 @@ class WoxLauncherController extends GetxController {
   final isInSettingView = false.obs;
   var positionBeforeOpenSetting = const Offset(0, 0);
 
+  /// toolbar related variables
+  final toolbarTip = ''.obs;
+
   /// Triggered when received query results from the server.
   void onReceivedQueryResults(List<WoxQueryResult> receivedResults) {
     if (receivedResults.isEmpty) {
@@ -424,9 +427,7 @@ class WoxLauncherController extends GetxController {
       if (activeResultIndex.value < prevResultIndex) {
         resultScrollerController.jumpTo(0);
       } else {
-        bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code
-            ? isResultItemAtBottom(activeResultIndex.value - 1)
-            : !isResultItemAtBottom(results.length - 1);
+        bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code ? isResultItemAtBottom(activeResultIndex.value - 1) : !isResultItemAtBottom(results.length - 1);
         if (shouldJump) {
           resultScrollerController.jumpTo(resultScrollerController.offset.ceil() + WoxThemeUtil.instance.getResultItemHeight() * (activeResultIndex.value - prevResultIndex).abs());
         }
@@ -519,8 +520,7 @@ class WoxLauncherController extends GetxController {
     RenderBox? renderBox = resultGlobalKeys[index].currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return false;
 
-    if (renderBox.localToGlobal(Offset.zero).dy.ceil() >=
-        WoxThemeUtil.instance.getQueryBoxHeight() + WoxThemeUtil.instance.getResultListViewHeightByCount(MAX_LIST_VIEW_ITEM_COUNT - 1)) {
+    if (renderBox.localToGlobal(Offset.zero).dy.ceil() >= WoxThemeUtil.instance.getQueryBoxHeight() + WoxThemeUtil.instance.getResultListViewHeightByCount(MAX_LIST_VIEW_ITEM_COUNT - 1)) {
       return true;
     }
     return false;
@@ -897,5 +897,9 @@ class WoxLauncherController extends GetxController {
     }
 
     queryIcon.value = WoxImage.empty();
+  }
+
+  void showToolbarTips(String tip) {
+    toolbarTip.value = tip;
   }
 }

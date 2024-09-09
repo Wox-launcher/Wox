@@ -15,6 +15,7 @@
   "plugin_clipboard_primary_action": "主要操作",
   "plugin_clipboard_primary_action_copy_to_clipboard": "复制到剪贴板",
   "plugin_clipboard_primary_action_paste_to_active_app": "粘贴到活动应用程序",
+  "plugin_indicator_activate": "激活",
   "plugin_indicator_activate_plugin": "激活%s插件",
   "plugin_sys_empty_trash": "清空回收站",
   "plugin_sys_lock_computer": "锁定电脑",

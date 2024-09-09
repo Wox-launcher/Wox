@@ -21,21 +21,27 @@ class WoxLauncherView extends GetView<WoxLauncherController> {
           },
           child: Column(
             children: [
-              Padding(
-                padding: EdgeInsets.only(
-                  top: controller.woxTheme.value.appPaddingTop.toDouble(),
-                  right: controller.woxTheme.value.appPaddingRight.toDouble(),
-                  bottom: controller.woxTheme.value.appPaddingBottom.toDouble(),
-                  left: controller.woxTheme.value.appPaddingLeft.toDouble(),
-                ),
-                child: const Column(
-                  children: [
-                    WoxQueryBoxView(),
-                    WoxQueryResultView(),
-                  ],
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    top: controller.woxTheme.value.appPaddingTop.toDouble(),
+                    right: controller.woxTheme.value.appPaddingRight.toDouble(),
+                    bottom: controller.woxTheme.value.appPaddingBottom.toDouble(),
+                    left: controller.woxTheme.value.appPaddingLeft.toDouble(),
+                  ),
+                  child: const Column(
+                    children: [
+                      WoxQueryBoxView(),
+                      Expanded(child: WoxQueryResultView()),
+                    ],
+                  ),
                 ),
               ),
-              controller.results.isNotEmpty ? const WoxQueryToolbarView() : const SizedBox(),
+              if (controller.results.isNotEmpty)
+                const SizedBox(
+                  height: 40,
+                  child: WoxQueryToolbarView(),
+                ),
             ],
           ),
         ),

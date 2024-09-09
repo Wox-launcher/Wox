@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';

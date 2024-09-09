@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/olahol/melody"
-	"github.com/rs/cors"
-	"github.com/samber/lo"
 	"net/http"
 	"strings"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/ui/dto"
 	"wox/util"
+
+	"github.com/olahol/melody"
+	"github.com/rs/cors"
+	"github.com/samber/lo"
 )
 
 var m *melody.Melody
