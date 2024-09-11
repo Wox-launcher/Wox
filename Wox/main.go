@@ -25,6 +25,7 @@ import _ "wox/plugin/system"
 import _ "wox/plugin/system/app"
 import _ "wox/plugin/system/calculator"
 import _ "wox/plugin/system/file"
+import _ "wox/plugin/system/keyninja"
 
 func main() {
 	// logger depends on location, so location must be initialized first
