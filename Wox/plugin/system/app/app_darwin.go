@@ -17,20 +17,22 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"github.com/disintegration/imaging"
-	"github.com/mitchellh/go-homedir"
-	"github.com/tidwall/gjson"
-	"howett.net/plist"
 	"image"
 	"io"
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"unsafe"
 	"wox/plugin"
 	"wox/util"
+
+	"github.com/disintegration/imaging"
+	"github.com/mitchellh/go-homedir"
+	"github.com/tidwall/gjson"
+	"howett.net/plist"
 )
 
 var appRetriever = &MacRetriever{}
@@ -88,6 +90,10 @@ func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, 
 	}
 
 	appName := strings.TrimSpace(string(out))
+	if appName == "(null)" {
+		appName = filepath.Base(path)
+		a.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to get app name from mdls(%s), using filename instead", path))
+	}
 	for _, extension := range a.GetAppExtensions(ctx) {
 		if strings.HasSuffix(appName, "."+extension) {
 			appName = appName[:len(appName)-len(extension)-1]
