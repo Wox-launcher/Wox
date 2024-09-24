@@ -73,7 +73,6 @@ SPEC CHECKSUMS:
   hotkey_manager_macos: 1e2edb0c7ae4fe67108af44a9d3445de41404160
   macos_window_utils: 933f91f64805e2eb91a5bd057cf97cd097276663
   path_provider_foundation: 2b6b4c569c0fb62ec74538f866245ac84301af46
-  protocol_handler_macos: d10a6c01d6373389ffd2278013ab4c47ed6d6daa
   screen_retriever: 59634572a57080243dd1bf715e55b6c54f241a38
   syncfusion_pdfviewer_macos: e9194851581cad04b28b53913d0636d39a4ed4b2
   url_launcher_macos: 5f437abeda8c85500ceb03f5c1938a8c5a705399

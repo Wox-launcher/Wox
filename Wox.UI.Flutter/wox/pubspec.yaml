@@ -35,32 +35,24 @@ dependencies:
     git:
       url: https://github.com/qianlifeng/window_manager.git
       ref: db8b4c7f348311dbd5ce4cec8635f0c2cf048775
-  web_socket_channel: ^3.0.0
-  flutter_acrylic: ^1.1.0
+  web_socket_channel: ^3.0.1
+  flutter_acrylic: ^1.1.4
   get: ^4.6.6
-  logger: ^2.0.2+1
-  uuid: ^4.0.0
-  flutter_svg: ^2.0.9
-  flutter_markdown: ^0.7.1
-  path_provider: ^2.1.1
-  dio: ^5.4.0
+  logger: ^2.4.0
+  uuid: ^4.5.0
+  flutter_svg: ^2.0.10+1
+  flutter_markdown: ^0.7.3+1
+  path_provider: ^2.1.4
+  dio: ^5.7.0
   from_css_color: ^2.0.0
-  path: ^1.8.3
-  chinese_font_library: ^1.1.0
+  path: ^1.9.0
+  chinese_font_library: ^1.2.0
   lpinyin: ^2.0.3
-  syncfusion_flutter_pdfviewer: ^26.1.38
-  desktop_drop: ^0.4.4
-  file_picker: ^8.0.2
-  fluent_ui: ^4.9.0
-  hotkey_manager: ^0.2.1
-  url_launcher: ^6.2.5
-  flutter_image_slideshow: ^0.1.6
-  dynamic_tabbar: ^1.0.6
-  protocol_handler: ^0.2.0
-  flutter_code_editor: ^0.3.1
-  flutter_highlight: ^0.7.0
-  highlight: ^0.7.0
-  lottie: ^3.1.2
+  syncfusion_flutter_pdfviewer: ^27.1.48
+  desktop_drop: ^0.5.0
+  file_picker: ^8.1.2
+  fluent_ui: ^4.9.1
+  hotkey_manager: ^0.2.3
 
 dev_dependencies:
   flutter_test:
