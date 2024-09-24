@@ -53,6 +53,14 @@ dependencies:
   file_picker: ^8.1.2
   fluent_ui: ^4.9.1
   hotkey_manager: ^0.2.3
+  url_launcher: ^6.2.5
+  flutter_image_slideshow: ^0.1.6
+  dynamic_tabbar: ^1.0.6
+  protocol_handler: ^0.2.0
+  flutter_code_editor: ^0.3.1
+  flutter_highlight: ^0.7.0
+  highlight: ^0.7.0
+  lottie: ^3.1.2
 
 dev_dependencies:
   flutter_test:
