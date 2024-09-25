@@ -5,10 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Masterminds/semver/v3"
-	"github.com/fsnotify/fsnotify"
-	"github.com/google/uuid"
-	"github.com/samber/lo"
 	"os"
 	"path"
 	"strings"
@@ -18,9 +14,15 @@ import (
 	"wox/setting"
 	"wox/share"
 	"wox/util"
+	"wox/util/autostart"
 	"wox/util/hotkey"
 	"wox/util/ime"
 	"wox/util/tray"
+
+	"github.com/Masterminds/semver/v3"
+	"github.com/fsnotify/fsnotify"
+	"github.com/google/uuid"
+	"github.com/samber/lo"
 )
 
 var managerInstance *Manager
@@ -478,6 +480,13 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key, value string) {
 		queryHotkeys := setting.GetSettingManager().GetWoxSetting(ctx).QueryHotkeys.Get()
 		for _, queryHotkey := range queryHotkeys {
 			m.RegisterQueryHotkey(ctx, queryHotkey)
+		}
+	}
+	if key == "EnableAutostart" {
+		enabled := value == "true"
+		err := autostart.SetAutostart(ctx, enabled)
+		if err != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to set autostart: %s", err.Error()))
 		}
 	}
 }

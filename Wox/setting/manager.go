@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/tidwall/pretty"
 	"os"
 	"path"
 	"slices"
@@ -14,6 +13,8 @@ import (
 	"wox/share"
 	"wox/util"
 	"wox/util/hotkey"
+
+	"github.com/tidwall/pretty"
 )
 
 var managerInstance *Manager
@@ -156,7 +157,9 @@ func (m *Manager) UpdateWoxSetting(ctx context.Context, key, value string) error
 		return fmt.Errorf("key is empty")
 	}
 
-	if key == "MainHotkey" {
+	if key == "EnableAutostart" {
+		m.woxSetting.EnableAutostart.Set(value == "true")
+	} else if key == "MainHotkey" {
 		if value != "" {
 			isAvailable := hotkey.IsHotkeyAvailable(ctx, value)
 			if !isAvailable {

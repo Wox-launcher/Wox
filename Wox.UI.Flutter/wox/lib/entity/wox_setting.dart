@@ -1,4 +1,5 @@
 class WoxSetting {
+  late bool enableAutostart;
   late String mainHotkey;
   late String selectionHotkey;
   late bool usePinYin;
@@ -15,6 +16,7 @@ class WoxSetting {
   late String themeId;
 
   WoxSetting({
+    required this.enableAutostart,
     required this.mainHotkey,
     required this.selectionHotkey,
     required this.usePinYin,
@@ -32,13 +34,14 @@ class WoxSetting {
   });
 
   WoxSetting.fromJson(Map<String, dynamic> json) {
+    enableAutostart = json['EnableAutostart'] ?? false;
     mainHotkey = json['MainHotkey'];
     selectionHotkey = json['SelectionHotkey'];
-    usePinYin = json['UsePinYin'];
-    switchInputMethodABC = json['SwitchInputMethodABC'];
-    hideOnStart = json['HideOnStart'];
+    usePinYin = json['UsePinYin'] ?? false;
+    switchInputMethodABC = json['SwitchInputMethodABC'] ?? false;
+    hideOnStart = json['HideOnStart'] ?? false;
     hideOnLostFocus = json['HideOnLostFocus'];
-    showTray = json['ShowTray'];
+    showTray = json['ShowTray'] ?? false;
     langCode = json['LangCode'];
 
     if (json['QueryHotkeys'] != null) {
@@ -76,6 +79,7 @@ class WoxSetting {
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
+    data['EnableAutostart'] = enableAutostart;
     data['MainHotkey'] = mainHotkey;
     data['SelectionHotkey'] = selectionHotkey;
     data['UsePinYin'] = usePinYin;

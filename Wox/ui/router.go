@@ -3,9 +3,6 @@ package ui
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/jinzhu/copier"
-	"github.com/samber/lo"
-	"github.com/tidwall/gjson"
 	"io"
 	"net/http"
 	"os"
@@ -18,6 +15,10 @@ import (
 	"wox/ui/dto"
 	"wox/util"
 	"wox/util/hotkey"
+
+	"github.com/jinzhu/copier"
+	"github.com/samber/lo"
+	"github.com/tidwall/gjson"
 )
 
 var routers = map[string]func(w http.ResponseWriter, r *http.Request){
@@ -438,6 +439,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	settingDto.EnableAutostart = woxSetting.EnableAutostart.Get()
 	settingDto.MainHotkey = woxSetting.MainHotkey.Get()
 	settingDto.SelectionHotkey = woxSetting.SelectionHotkey.Get()
 	settingDto.QueryHotkeys = woxSetting.QueryHotkeys.Get()

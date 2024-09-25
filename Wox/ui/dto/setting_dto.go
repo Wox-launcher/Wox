@@ -6,6 +6,7 @@ import (
 )
 
 type WoxSettingDto struct {
+	EnableAutostart      bool
 	MainHotkey           string
 	SelectionHotkey      string
 	UsePinYin            bool

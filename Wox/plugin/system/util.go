@@ -6,8 +6,6 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 	"fmt"
-	"github.com/disintegration/imaging"
-	"github.com/mat/besticon/besticon"
 	"image/png"
 	"io"
 	"net/url"
@@ -20,6 +18,9 @@ import (
 	"wox/share"
 	"wox/util"
 	"wox/util/window"
+
+	"github.com/disintegration/imaging"
+	"github.com/mat/besticon/besticon"
 )
 
 type cacheResult struct {

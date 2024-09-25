@@ -11,6 +11,7 @@ import (
 )
 
 type WoxSetting struct {
+	EnableAutostart      PlatformSettingValue[bool]
 	MainHotkey           PlatformSettingValue[string]
 	SelectionHotkey      PlatformSettingValue[string]
 	UsePinYin            bool
@@ -90,6 +91,11 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 		LastQueryMode:        LastQueryModeEmpty,
 		AppWidth:             800,
 		ThemeId:              "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03",
+		EnableAutostart: PlatformSettingValue[bool]{
+			WinValue:   false,
+			MacValue:   false,
+			LinuxValue: false,
+		},
 	}
 }
 

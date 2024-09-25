@@ -69,6 +69,16 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
             padding: const EdgeInsets.all(20),
             child: form(width: 850, children: [
               formField(
+                label: controller.tr("autostart"),
+                tips: controller.tr("autostart_tips"),
+                child: ToggleSwitch(
+                  checked: controller.woxSetting.value.enableAutostart,
+                  onChanged: (bool value) {
+                    controller.updateConfig("EnableAutostart", value.toString());
+                  },
+                ),
+              ),
+              formField(
                 label: controller.tr("hotkey"),
                 tips: controller.tr("hotkey_tips"),
                 child: WoxHotkeyRecorder(
