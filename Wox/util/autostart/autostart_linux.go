@@ -59,3 +59,22 @@ X-GNOME-Autostart-enabled=true
 
 	return nil
 }
+
+func isAutostart() (bool, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return false, fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	desktopFilePath := filepath.Join(homeDir, ".config", "autostart", "wox-launcher.desktop")
+
+	_, err = os.Stat(desktopFilePath)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("failed to check autostart file: %w", err)
+	}
+
+	return true, nil
+}

@@ -12,6 +12,7 @@ import (
 	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
+	"wox/util/autostart"
 	"wox/util/hotkey"
 
 	"github.com/tidwall/pretty"
@@ -52,6 +53,22 @@ func (m *Manager) Init(ctx context.Context) error {
 	}
 
 	m.StartAutoBackup(ctx)
+
+	//check autostart status, if not match, update the setting
+	actualAutostart, err := autostart.IsAutostart(ctx)
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("Failed to check autostart status: %s", err.Error()))
+	} else {
+		configAutostart := m.woxSetting.EnableAutostart.Get()
+		if actualAutostart != configAutostart {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("Autostart setting mismatch: config %v, actual %v. Updating config.", configAutostart, actualAutostart))
+			m.woxSetting.EnableAutostart.Set(actualAutostart)
+			err := m.SaveWoxSetting(ctx)
+			if err != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("Failed to save updated autostart setting: %s", err.Error()))
+			}
+		}
+	}
 
 	return nil
 }

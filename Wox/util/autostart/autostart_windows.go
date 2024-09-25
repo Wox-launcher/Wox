@@ -38,3 +38,26 @@ func setAutostart(enable bool) error {
 
 	return nil
 }
+
+func isAutostart() (bool, error) {
+	key, _, err := registry.CreateKey(
+		registry.CURRENT_USER,
+		`Software\Microsoft\Windows\CurrentVersion\Run`,
+		registry.QUERY_VALUE,
+	)
+	if err != nil {
+		return false, fmt.Errorf("failed to access registry: %w", err)
+	}
+	defer key.Close()
+
+	valueName := "WoxLauncher"
+	_, _, err = key.GetStringValue(valueName)
+	if err == registry.ErrNotExist {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("failed to get registry value: %w", err)
+	}
+
+	return true, nil
+}
