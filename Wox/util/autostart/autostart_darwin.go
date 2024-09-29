@@ -30,7 +30,6 @@ const plistTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 </plist>`
 
 func setAutostart(enable bool) error {
-	// 获取.app包的路径，而不是可执行文件的路径
 	appPath := filepath.Dir(filepath.Dir(filepath.Dir(os.Args[0])))
 	if !strings.HasSuffix(appPath, ".app") {
 		return fmt.Errorf("not running from an .app bundle")
