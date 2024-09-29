@@ -5,7 +5,7 @@
         <key>CFBundleIconFile</key>
         <string>app.icns</string>
         <key>CFBundleIdentifier</key>
-        <string>com.identifier</string>
+        <string>com.github.wox</string>
         <key>CFBundleName</key>
         <string>Wox</string>
         <key>CFBundleVersion</key>

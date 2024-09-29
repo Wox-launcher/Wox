@@ -3,26 +3,68 @@ package autostart
 import (
 	"fmt"
 	"os"
-	"os/exec"
+	"path/filepath"
+	"strings"
+	"text/template"
 )
 
+const plistTemplate = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.github.wox</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>{{.AppPath}}</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Interactive</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>CFBundleIconFile</key>
+	<string>app.icns</string>
+</dict>
+</plist>`
+
 func setAutostart(enable bool) error {
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to get executable path: %w", err)
+	// 获取.app包的路径，而不是可执行文件的路径
+	appPath := filepath.Dir(filepath.Dir(filepath.Dir(os.Args[0])))
+	if !strings.HasSuffix(appPath, ".app") {
+		return fmt.Errorf("not running from an .app bundle")
 	}
 
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", "com.github.wox.plist")
+
 	if enable {
-		cmd := exec.Command("osascript", "-e", fmt.Sprintf(`tell application "System Events" to make login item at end with properties {path:"%s", hidden:false}`, exePath))
-		err = cmd.Run()
+		// Create plist file
+		tmpl, err := template.New("plist").Parse(plistTemplate)
 		if err != nil {
-			return fmt.Errorf("failed to add login item: %w", err)
+			return fmt.Errorf("failed to parse plist template: %w", err)
+		}
+
+		file, err := os.Create(plistPath)
+		if err != nil {
+			return fmt.Errorf("failed to create plist file: %w", err)
+		}
+		defer file.Close()
+
+		err = tmpl.Execute(file, struct{ AppPath string }{AppPath: appPath})
+		if err != nil {
+			return fmt.Errorf("failed to write plist file: %w", err)
 		}
 	} else {
-		cmd := exec.Command("osascript", "-e", fmt.Sprintf(`tell application "System Events" to delete login item "%s"`, exePath))
-		err = cmd.Run()
-		if err != nil {
-			return fmt.Errorf("failed to remove login item: %w", err)
+		// Remove plist file
+		err := os.Remove(plistPath)
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove plist file: %w", err)
 		}
 	}
 
@@ -30,16 +72,18 @@ func setAutostart(enable bool) error {
 }
 
 func isAutostart() (bool, error) {
-	exePath, err := os.Executable()
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return false, fmt.Errorf("failed to get executable path: %w", err)
+		return false, fmt.Errorf("failed to get user home directory: %w", err)
 	}
 
-	cmd := exec.Command("osascript", "-e", fmt.Sprintf(`tell application "System Events" to get the name of every login item whose path contains "%s"`, exePath))
-	output, err := cmd.Output()
-	if err != nil {
-		return false, fmt.Errorf("failed to check login items: %w", err)
+	plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", "com.github.wox.plist")
+	_, err = os.Stat(plistPath)
+	if err == nil {
+		return true, nil
 	}
-
-	return len(output) > 0, nil
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, fmt.Errorf("failed to check plist file: %w", err)
 }
