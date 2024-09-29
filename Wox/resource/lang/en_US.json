@@ -53,7 +53,7 @@
   "ui_query_hotkeys": "Query Hotkeys",
   "ui_query_shortcuts": "Query Shortcuts",
   "ui_general": "General",
-  "ui_ai": "AI",  
+  "ui_ai": "AI",
   "ui_autostart": "Autostart",
   "ui_autostart_tips": "When selected, Wox will start automatically when the computer starts",
   "selection_no_files_selected": "No files selected",
