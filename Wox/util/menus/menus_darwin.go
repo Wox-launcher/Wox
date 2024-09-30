@@ -10,6 +10,7 @@ void performMenuAction(int pid, const char* title);
 */
 import "C"
 import (
+	"errors"
 	"unsafe"
 )
 
@@ -17,6 +18,13 @@ func GetAppMenuTitles(pid int) ([]string, error) {
 	var count C.int
 	cItems := C.getMenuItems(C.int(pid), &count)
 	defer C.free(unsafe.Pointer(cItems))
+
+	if count == 0 {
+		return nil, errors.New("no menu items found")
+	}
+	if cItems == nil {
+		return nil, errors.New("failed to get menu items")
+	}
 
 	items := make([]string, int(count))
 	cItemsSlice := (*[1 << 30]*C.char)(unsafe.Pointer(cItems))[:count:count]

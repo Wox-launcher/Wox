@@ -215,7 +215,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
           }
 
           // list all actions
-          if (WoxHotkey.equals(pressedHotkey, WoxHotkey.parseHotkeyFromString("cmd+J"))) {
+          if (WoxHotkey.equals(pressedHotkey, WoxHotkey.parseHotkeyFromString("cmd+J")) || WoxHotkey.equals(pressedHotkey, WoxHotkey.parseHotkeyFromString("ctrl+J"))) {
             controller.toggleActionPanel(const UuidV4().generate());
             return KeyEventResult.handled;
           }
