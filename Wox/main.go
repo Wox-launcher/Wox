@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"golang.design/x/hotkey/mainthread"
 	"os"
 	"runtime"
 	"strconv"
@@ -15,17 +14,24 @@ import (
 	"wox/setting"
 	"wox/ui"
 	"wox/util"
-	"wox/util/hotkey"
+
+	"golang.design/x/hotkey/mainthread"
+
+	_ "wox/plugin/host"
+
+	// import all hosts
+
+	// import all system plugins
+	_ "wox/plugin/system"
+
+	_ "wox/plugin/system/app"
+
+	_ "wox/plugin/system/calculator"
+
+	_ "wox/plugin/system/file"
+
+	_ "wox/plugin/system/keyninja"
 )
-
-import _ "wox/plugin/host" // import all hosts
-
-// import all system plugins
-import _ "wox/plugin/system"
-import _ "wox/plugin/system/app"
-import _ "wox/plugin/system/calculator"
-import _ "wox/plugin/system/file"
-import _ "wox/plugin/system/keyninja"
 
 func main() {
 	// logger depends on location, so location must be initialized first
@@ -121,12 +127,6 @@ func main() {
 			}
 		}
 
-		t := hotkey.Hotkey{}
-		t.Register(ctx, "ctrl+ctrl", func() {
-			//files := plugin.GetPluginManager().GetUI().PickFiles(ctx, share.PickFilesParams{IsDirectory: true})
-			//ui.GetUIManager().GetUI(ctx).Notify(ctx, "Picked files", fmt.Sprintf("%v", files))
-			//util.GetLogger().Info(ctx, window.GetActiveWindowName())
-		})
 		if util.IsProd() {
 			util.Go(ctx, "start ui", func() {
 				time.Sleep(time.Millisecond * 200) // wait websocket server start

@@ -3,8 +3,9 @@ package hotkey
 import (
 	"context"
 	"fmt"
-	"golang.design/x/hotkey"
 	"wox/util"
+
+	"golang.design/x/hotkey"
 )
 
 type Hotkey struct {

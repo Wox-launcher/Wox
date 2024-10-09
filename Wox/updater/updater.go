@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Masterminds/semver/v3"
 	"wox/util"
+
+	"github.com/Masterminds/semver/v3"
 )
 
 const versionManifestUrl = "https://raw.githubusercontent.com/Wox-launcher/Wox/v2/updater.json"
@@ -49,7 +50,11 @@ func CheckUpdate(ctx context.Context) (info UpdateInfo, err error) {
 	}
 	if existingVersion.LessThan(newVersion) || existingVersion.Equal(newVersion) {
 		logger.Info(ctx, fmt.Sprintf("no new version available, current: %s, latest: %s", existingVersion.String(), newVersion.String()))
-		return UpdateInfo{}, errors.New("no new version available")
+		return UpdateInfo{
+			CurrentVersion: existingVersion.String(),
+			LatestVersion:  newVersion.String(),
+			ReleaseNotes:   latestVersion.ReleaseNotes,
+		}, errors.New("no new version available")
 	}
 
 	logger.Info(ctx, fmt.Sprintf("new version available, current: %s, latest: %s", existingVersion.String(), newVersion.String()))
