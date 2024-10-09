@@ -58,7 +58,15 @@ default:
     cp ../Assets/mac/Info.plist {{name}}.app/Contents/Info.plist && \
     cp ../Assets/mac/app.icns {{name}}.app/Contents/Resources/app.icns && \
     mv {{name}}.app Wox.app && \
-    create-dmg --codesign "-null-" Wox.dmg Wox.app && \
+    create-dmg  --volname "Wox Installer" \
+        --volicon "../Assets/mac/app.icns" \
+        --window-pos 200 120 \
+        --window-size 800 400 \
+        --icon-size 100 \
+        --icon "Wox.app" 200 190 \
+        --hide-extension "Wox.app" \
+        --app-drop-link 600 185 \
+        Wox.dmg Wox.app && \
     mv "Wox.dmg" {{name}}.dmg
 
 @test:
