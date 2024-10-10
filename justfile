@@ -58,7 +58,8 @@ default:
     cp ../Assets/mac/Info.plist {{name}}.app/Contents/Info.plist && \
     cp ../Assets/mac/app.icns {{name}}.app/Contents/Resources/app.icns && \
     mv {{name}}.app Wox.app && \
-    create-dmg  --volname "Wox Installer" \
+    codesign --force --deep --sign "Developer ID Application: jiajuan mao (AGYCFD2ZGN)" Wox.app/Contents/MacOS/wox && \
+    create-dmg --codesign "Developer ID Application: jiajuan mao (AGYCFD2ZGN)" --notarize "wox" --volname "Wox Installer" \
         --volicon "../Assets/mac/app.icns" \
         --window-pos 200 120 \
         --window-size 800 400 \
