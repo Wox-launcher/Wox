@@ -31,7 +31,7 @@ Download from [releases](https://github.com/Wox-launcher/Wox/releases) and run t
 - Homebrew
 
 `brew tap wox-launcher/wox`  
-`brew install wox --no-quarantine`
+`brew install wox`
 
 Usage
 -----
