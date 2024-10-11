@@ -51,7 +51,7 @@ default:
     cp ../Assets/mac/Info.plist {{name}}.app/Contents/Info.plist && \
     cp ../Assets/mac/app.icns {{name}}.app/Contents/Resources/app.icns && \
     mv {{name}}.app Wox.app && \
-    security unlock-keychain -p ${{ secrets.KEYCHAINPWD }} login.keychain && \
+    security unlock-keychain -p $KEYCHAINPWD login.keychain && \
     codesign --options=runtime --force --deep --sign "Developer ID Application: jiajuan mao (AGYCFD2ZGN)" Wox.app/Contents/MacOS/wox && \
     create-dmg --codesign "Developer ID Application: jiajuan mao (AGYCFD2ZGN)" --notarize "wox" --volname "Wox Installer" \
         --volicon "../Assets/mac/app.icns" \
