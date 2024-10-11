@@ -15,13 +15,6 @@ default:
 @precommit:
     cd Wox.UI.React && pnpm build && cd ..
 
-@plugins:
-    # build plugins
-    #just _build_dev_nodejs_plugin Wox.Plugin.ProcessKiller ~/.wox/wox-user/plugins
-
-    just _build_dev_nodejs_plugin Wox.Plugin.ProcessKiller ~/icloud/wox/plugins
-    just _build_dev_nodejs_plugin_chatgpt Wox.Plugin.Chatgpt ~/icloud/wox/plugins
-
 @ci_plugin:
     cd ci && go run plugin.go
 
@@ -58,6 +51,7 @@ default:
     cp ../Assets/mac/Info.plist {{name}}.app/Contents/Info.plist && \
     cp ../Assets/mac/app.icns {{name}}.app/Contents/Resources/app.icns && \
     mv {{name}}.app Wox.app && \
+    security unlock-keychain -p ${{ secrets.KEYCHAINPWD }} login.keychain && \
     codesign --options=runtime --force --deep --sign "Developer ID Application: jiajuan mao (AGYCFD2ZGN)" Wox.app/Contents/MacOS/wox && \
     create-dmg --codesign "Developer ID Application: jiajuan mao (AGYCFD2ZGN)" --notarize "wox" --volname "Wox Installer" \
         --volicon "../Assets/mac/app.icns" \
@@ -74,37 +68,12 @@ default:
     just dev
     cd Wox && go test ./...
 
-@_build_dev_nodejs_plugin pluginName directory:
-    rm -rf {{directory}}/{{pluginName}}
-    cd Plugins/{{pluginName}} && pnpm install && pnpm run build && cd ..
-    mkdir -p {{directory}}/{{pluginName}}
-    cp -r Plugins/{{pluginName}}/dist/* {{directory}}/{{pluginName}}/
-    cp Plugins/{{pluginName}}/plugin.json {{directory}}/{{pluginName}}/plugin.json
-    cp -r Plugins/{{pluginName}}/images {{directory}}/{{pluginName}}/images
-
-@_build_dev_nodejs_plugin_chatgpt pluginName directory:
-    rm -rf {{directory}}/{{pluginName}}
-    cd Plugins/{{pluginName}} && just build && cd ..
-    mkdir -p {{directory}}/{{pluginName}}
-    cp -r Plugins/{{pluginName}}/dist/* {{directory}}/{{pluginName}}/
-    cp Plugins/{{pluginName}}/Wox.Plugin.Chatgpt.Server/plugin.json {{directory}}/{{pluginName}}/plugin.json
-    cp -r Plugins/{{pluginName}}/Wox.Plugin.Chatgpt.Server/images {{directory}}/{{pluginName}}/images
-
 @_build_hosts:
     # build hosts
     rm -rf Wox/resource/hosts
     mkdir Wox/resource/hosts
     just _build_nodejs_host Wox/resource/hosts
     just _build_python_host Wox/resource/hosts
-
-@_build_electron:
-    cd Wox.UI.React && pnpm install && pnpm build && cd ..
-
-    # electron
-    rm -rf Wox/resource/ui/electron
-    mkdir -p Wox/resource/ui/electron
-    cp Wox.UI.Electron/main.js Wox/resource/ui/electron/main.js
-    cp Wox.UI.Electron/preload.js Wox/resource/ui/electron/preload.js
 
 @_build_flutter:
     # flutter
