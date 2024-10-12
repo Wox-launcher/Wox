@@ -5,7 +5,7 @@ import (
 	"wox/plugin"
 )
 
-var doctorIcon = plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><path fill="#06ac11" d="m10.6 16.2l7.05-7.05l-1.4-1.4l-5.65 5.65l-2.85-2.85l-1.4 1.4zM5 21q-.825 0-1.412-.587T3 19V5q0-.825.588-1.412T5 3h14q.825 0 1.413.588T21 5v14q0 .825-.587 1.413T19 21z"/></svg>`)
+var doctorIcon = plugin.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 26 26"><path fill="#e93a3a" d="M10 1C8.355 1 7 2.355 7 4v2h2V4c0-.563.437-1 1-1h6c.563 0 1 .437 1 1v2h2V4c0-1.645-1.355-3-3-3zM3 7a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h20c1.656 0 3-1.344 3-3V10a3 3 0 0 0-3-3zm10 2.906A6.09 6.09 0 0 1 19.094 16A6.09 6.09 0 0 1 13 22.094A6.09 6.09 0 0 1 6.906 16A6.09 6.09 0 0 1 13 9.906M12 13v2h-2v2h2v2h2v-2h2v-2h-2v-2z"/></svg>`)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &DoctorPlugin{})
