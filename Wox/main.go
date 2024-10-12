@@ -57,6 +57,7 @@ func main() {
 		serverPort = availablePort
 	}
 	util.GetLogger().Info(ctx, fmt.Sprintf("server port: %d", serverPort))
+	ui.GetUIManager().UpdateServerPort(serverPort)
 
 	// check if there is existing instance running
 	if existingPort := getExistingInstancePort(ctx); existingPort > 0 {
@@ -130,7 +131,7 @@ func main() {
 		if util.IsProd() {
 			util.Go(ctx, "start ui", func() {
 				time.Sleep(time.Millisecond * 200) // wait websocket server start
-				appErr := ui.GetUIManager().StartUIApp(ctx, serverPort)
+				appErr := ui.GetUIManager().StartUIApp(ctx)
 				if appErr != nil {
 					util.GetLogger().Error(ctx, fmt.Sprintf("failed to start ui app: %s", appErr.Error()))
 					return
@@ -138,7 +139,7 @@ func main() {
 			})
 		}
 
-		ui.GetUIManager().StartWebsocketAndWait(ctx, serverPort)
+		ui.GetUIManager().StartWebsocketAndWait(ctx)
 	})
 }
 

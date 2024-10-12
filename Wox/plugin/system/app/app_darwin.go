@@ -79,17 +79,19 @@ func (a *MacRetriever) GetAppExtensions(ctx context.Context) []string {
 }
 
 func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, error) {
-	out, err := util.ShellRunOutput("mdls", "-name", "kMDItemDisplayName", "-raw", path)
-	if err != nil {
-		msg := fmt.Sprintf("failed to get app name from mdls(%s): %s", path, err.Error())
-		var exitError *exec.ExitError
-		if errors.As(err, &exitError) {
-			msg = fmt.Sprintf("failed to get app name from mdls(%s): %s", path, exitError.Stderr)
-		}
-		return appInfo{}, errors.New(msg)
+	var appName string
+	var err error
+
+	if strings.HasSuffix(path, ".prefPane") {
+		appName, err = a.getPrefPaneName(path)
+	} else {
+		appName, err = a.getAppNameFromMdls(path)
 	}
 
-	appName := strings.TrimSpace(string(out))
+	if err != nil {
+		return appInfo{}, err
+	}
+
 	if appName == "(null)" {
 		appName = filepath.Base(path)
 		a.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to get app name from mdls(%s), using filename instead", path))
@@ -111,6 +113,45 @@ func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, 
 	info.Icon = icon
 
 	return info, nil
+}
+
+func (a *MacRetriever) getPrefPaneName(path string) (string, error) {
+	plistPath := filepath.Join(path, "Contents", "Info.plist")
+	plistFile, err := os.Open(plistPath)
+	if err != nil {
+		return "", err
+	}
+	defer plistFile.Close()
+
+	var plistData map[string]interface{}
+	decoder := plist.NewDecoder(plistFile)
+	if err := decoder.Decode(&plistData); err != nil {
+		return "", err
+	}
+
+	if name, ok := plistData["CFBundleName"].(string); ok && name != "" {
+		return name, nil
+	}
+
+	if name, ok := plistData["NSPrefPaneIconLabel"].(string); ok && name != "" {
+		return name, nil
+	}
+
+	return filepath.Base(path), nil
+}
+
+func (a *MacRetriever) getAppNameFromMdls(path string) (string, error) {
+	out, err := util.ShellRunOutput("mdls", "-name", "kMDItemDisplayName", "-raw", path)
+	if err != nil {
+		msg := fmt.Sprintf("failed to get app name from mdls(%s): %s", path, err.Error())
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) {
+			msg = fmt.Sprintf("failed to get app name from mdls(%s): %s", path, exitError.Stderr)
+		}
+		return "", errors.New(msg)
+	}
+
+	return strings.TrimSpace(string(out)), nil
 }
 
 func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (plugin.WoxImage, error) {

@@ -267,12 +267,15 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 	return nil
 }
 
-func (m *Manager) StartWebsocketAndWait(ctx context.Context, port int) {
-	m.serverPort = port
-	serveAndWait(ctx, port)
+func (m *Manager) StartWebsocketAndWait(ctx context.Context) {
+	serveAndWait(ctx, m.serverPort)
 }
 
-func (m *Manager) StartUIApp(ctx context.Context, port int) error {
+func (m *Manager) UpdateServerPort(port int) {
+	m.serverPort = port
+}
+
+func (m *Manager) StartUIApp(ctx context.Context) error {
 	var appPath = util.GetLocation().GetUIAppPath()
 	if fileInfo, statErr := os.Stat(appPath); os.IsNotExist(statErr) {
 		logger.Info(ctx, "UI app not exist")
@@ -290,9 +293,9 @@ func (m *Manager) StartUIApp(ctx context.Context, port int) error {
 		}
 	}
 
-	logger.Info(ctx, fmt.Sprintf("start ui, path=%s, port=%d, pid=%d", appPath, port, os.Getpid()))
+	logger.Info(ctx, fmt.Sprintf("start ui, path=%s, port=%d, pid=%d", appPath, m.serverPort, os.Getpid()))
 	cmd, cmdErr := util.ShellRun(appPath,
-		fmt.Sprintf("%d", port),
+		fmt.Sprintf("%d", m.serverPort),
 		fmt.Sprintf("%d", os.Getpid()),
 		fmt.Sprintf("%t", util.IsDev()),
 	)
