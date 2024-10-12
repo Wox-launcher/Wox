@@ -52,7 +52,11 @@ Future<void> initialServices(List<String> arguments) async {
   await initArgs(arguments);
   await WoxThemeUtil.instance.loadTheme();
   await WoxSettingUtil.instance.loadSetting();
-  var launcherController = WoxLauncherController()..startRefreshSchedule();
+  
+  var launcherController = WoxLauncherController();
+  launcherController.startRefreshSchedule();
+  launcherController.startDoctorCheckSchedule();
+
   await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://localhost:${Env.serverPort}/ws"), onMessageReceived: launcherController.handleWebSocketMessage);
   HeartbeatChecker().startChecking();
   Get.put(launcherController);

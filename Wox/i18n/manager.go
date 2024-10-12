@@ -3,18 +3,18 @@ package i18n
 import (
 	"context"
 	"fmt"
-	"github.com/tidwall/gjson"
 	"os"
 	"path"
 	"strings"
 	"sync"
 	"wox/resource"
 	"wox/util"
+
+	"github.com/tidwall/gjson"
 )
 
 var managerInstance *Manager
 var managerOnce sync.Once
-var logger *util.Log
 
 type Manager struct {
 	currentLangCode   LangCode
@@ -30,7 +30,6 @@ func GetI18nManager() *Manager {
 		}
 		json, _ := resource.GetLangJson(util.NewTraceContext(), string(LangCodeEnUs))
 		managerInstance.enUsLangJson = string(json)
-		logger = util.GetLogger()
 	})
 	return managerInstance
 }
@@ -39,7 +38,7 @@ func (m *Manager) UpdateLang(ctx context.Context, langCode LangCode) error {
 	if !IsSupportedLangCode(string(langCode)) {
 		return fmt.Errorf("unsupported lang code: %s", langCode)
 	}
-	
+
 	json, err := m.GetLangJson(ctx, langCode)
 	if err != nil {
 		return err
@@ -102,13 +101,13 @@ func (m *Manager) TranslatePlugin(ctx context.Context, key string, pluginDirecto
 
 	jsonPath := path.Join(pluginDirectory, "lang", fmt.Sprintf("%s.json", m.currentLangCode))
 	if _, err := os.Stat(jsonPath); os.IsNotExist(err) {
-		logger.Error(ctx, fmt.Sprintf("lang file not found: %s", jsonPath))
+		util.GetLogger().Error(ctx, fmt.Sprintf("lang file not found: %s", jsonPath))
 		return key
 	}
 
 	json, err := os.ReadFile(jsonPath)
 	if err != nil {
-		logger.Error(ctx, fmt.Sprintf("error reading lang file(%s): %s", jsonPath, err.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("error reading lang file(%s): %s", jsonPath, err.Error()))
 		return key
 	}
 

@@ -40,7 +40,7 @@ class WoxLauncherController extends GetxController {
   final queryBoxFocusNode = FocusNode();
   final queryBoxTextFieldController = TextEditingController();
   final queryBoxScrollController = ScrollController(initialScrollOffset: 0.0);
-  final queryIcon = WoxImage.empty().obs;
+  final queryIcon = QueryIconInfo.empty().obs;
 
   //preview related variables
   final currentPreview = WoxPreview.empty().obs;
@@ -80,6 +80,9 @@ class WoxLauncherController extends GetxController {
 
   /// toolbar related variables
   final toolbarTip = ''.obs;
+
+  /// The result of the doctor check.
+  var doctorCheckPassed = true;
 
   /// Triggered when received query results from the server.
   void onReceivedQueryResults(List<WoxQueryResult> receivedResults) {
@@ -775,6 +778,13 @@ class WoxLauncherController extends GetxController {
     });
   }
 
+  startDoctorCheckSchedule() {
+    Timer.periodic(const Duration(minutes: 1), (timer) async {
+      doctorCheckPassed = await WoxApi.instance.doctorCheck();
+      Logger.instance.debug(const UuidV4().generate(), "doctor check result: $doctorCheckPassed");
+    });
+  }
+
   @override
   void dispose() {
     queryBoxFocusNode.dispose();
@@ -880,23 +890,40 @@ class WoxLauncherController extends GetxController {
 
   /// Change the query icon based on the query
   Future<void> changeQueryIcon(String traceId, PlainQuery query) async {
+    //if doctor check is not passed and query is empty, show doctor icon
+    if (query.isEmpty && !doctorCheckPassed) {
+      queryIcon.value = QueryIconInfo(
+        icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: QUERY_ICON_DOCTOR_WARNING),
+        onPressed: () {
+          onQueryChanged(traceId, PlainQuery.text("doctor "), "user click query icon");
+        },
+      );
+      return;
+    }
+
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
       if (query.querySelection.type == WoxSelectionTypeEnum.WOX_SELECTION_TYPE_FILE.code) {
-        queryIcon.value = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: QUERY_ICON_SELECTION_FILE);
+        queryIcon.value = QueryIconInfo(
+          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: QUERY_ICON_SELECTION_FILE),
+        );
       }
       if (query.querySelection.type == WoxSelectionTypeEnum.WOX_SELECTION_TYPE_TEXT.code) {
-        queryIcon.value = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: QUERY_ICON_SELECTION_TEXT);
+        queryIcon.value = QueryIconInfo(
+          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: QUERY_ICON_SELECTION_TEXT),
+        );
       }
       return;
     }
 
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
       var img = await WoxApi.instance.getQueryIcon(query);
-      queryIcon.value = img;
+      queryIcon.value = QueryIconInfo(
+        icon: img,
+      );
       return;
     }
 
-    queryIcon.value = WoxImage.empty();
+    queryIcon.value = QueryIconInfo.empty();
   }
 
   void showToolbarTips(String tip) {

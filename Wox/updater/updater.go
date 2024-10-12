@@ -12,8 +12,6 @@ import (
 
 const versionManifestUrl = "https://raw.githubusercontent.com/Wox-launcher/Wox/v2/updater.json"
 
-var logger = util.GetLogger()
-
 type VersionManifest struct {
 	Version            string
 	MacDownloadUrl     string
@@ -30,26 +28,26 @@ type UpdateInfo struct {
 }
 
 func CheckUpdate(ctx context.Context) (info UpdateInfo, err error) {
-	logger.Info(ctx, "start checking for updates")
+	util.GetLogger().Info(ctx, "start checking for updates")
 	latestVersion, err := getLatestVersion(ctx)
 	if err != nil {
-		logger.Error(ctx, err.Error())
+		util.GetLogger().Error(ctx, err.Error())
 		return UpdateInfo{}, err
 	}
 
 	// compare with current version
 	existingVersion, existingErr := semver.NewVersion(CURRENT_VERSION)
 	if existingErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to parse current version: %s", existingErr.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to parse current version: %s", existingErr.Error()))
 		return UpdateInfo{}, fmt.Errorf("failed to parse current version: %w", existingErr)
 	}
 	newVersion, newErr := semver.NewVersion(latestVersion.Version)
 	if newErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to parse latest version: %s", newErr.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to parse latest version: %s", newErr.Error()))
 		return UpdateInfo{}, fmt.Errorf("failed to parse latest version: %w", newErr)
 	}
 	if existingVersion.LessThan(newVersion) || existingVersion.Equal(newVersion) {
-		logger.Info(ctx, fmt.Sprintf("no new version available, current: %s, latest: %s", existingVersion.String(), newVersion.String()))
+		util.GetLogger().Info(ctx, fmt.Sprintf("no new version available, current: %s, latest: %s", existingVersion.String(), newVersion.String()))
 		return UpdateInfo{
 			CurrentVersion: existingVersion.String(),
 			LatestVersion:  newVersion.String(),
@@ -57,7 +55,7 @@ func CheckUpdate(ctx context.Context) (info UpdateInfo, err error) {
 		}, errors.New("no new version available")
 	}
 
-	logger.Info(ctx, fmt.Sprintf("new version available, current: %s, latest: %s", existingVersion.String(), newVersion.String()))
+	util.GetLogger().Info(ctx, fmt.Sprintf("new version available, current: %s, latest: %s", existingVersion.String(), newVersion.String()))
 
 	var downloadUrl string
 	if util.IsMacOS() {
@@ -70,7 +68,7 @@ func CheckUpdate(ctx context.Context) (info UpdateInfo, err error) {
 		downloadUrl = latestVersion.LinuxDownloadUrl
 	}
 	if downloadUrl == "" {
-		logger.Error(ctx, "no download url found")
+		util.GetLogger().Error(ctx, "no download url found")
 		return UpdateInfo{}, errors.New("no download url found")
 	}
 

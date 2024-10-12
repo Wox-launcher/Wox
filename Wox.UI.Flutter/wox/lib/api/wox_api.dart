@@ -125,4 +125,8 @@ class WoxApi {
   Future<List<AIModel>> findAIModels() async {
     return await WoxHttpUtil.instance.postData("/ai/models", null);
   }
+
+  Future<bool> doctorCheck() async {
+    return await WoxHttpUtil.instance.postData("/doctor/check", null);
+  }
 }

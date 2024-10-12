@@ -39,6 +39,10 @@ class PlainQuery {
     return PlainQuery(queryId: "", queryType: "", queryText: "", querySelection: Selection.empty());
   }
 
+  static PlainQuery text(String text) {
+    return PlainQuery(queryId: "", queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code, queryText: text, querySelection: Selection.empty());
+  }
+
   static PlainQuery emptyInput() {
     return PlainQuery(queryId: "", queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code, queryText: "", querySelection: Selection.empty());
   }
@@ -391,5 +395,20 @@ class WoxRefreshableResult {
     data['ContextData'] = contextData;
     data['RefreshInterval'] = refreshInterval;
     return data;
+  }
+}
+
+
+class QueryIconInfo {
+  final WoxImage icon;
+  final Function()? onPressed;
+
+  QueryIconInfo({
+    required this.icon,
+    this.onPressed,
+  });
+
+  static QueryIconInfo empty() {
+    return QueryIconInfo(icon: WoxImage.empty());
   }
 }

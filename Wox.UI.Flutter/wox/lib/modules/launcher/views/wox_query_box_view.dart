@@ -141,7 +141,16 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
             color: Colors.transparent,
             child: Padding(
               padding: const EdgeInsets.all(8.0),
-              child: WoxImageView(woxImage: controller.queryIcon.value, width: 24, height: 24),
+              child: MouseRegion(
+                cursor: controller.queryIcon.value.onPressed != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+                child: GestureDetector(
+                  onTap: () {
+                    controller.queryIcon.value.onPressed?.call();
+                    controller.queryBoxFocusNode.requestFocus();
+                  },
+                  child: WoxImageView(woxImage: controller.queryIcon.value.icon, width: 24, height: 24),
+                ),
+              ),
             ),
           )),
         ),

@@ -15,7 +15,6 @@ import (
 	"wox/ui/dto"
 	"wox/util"
 	"wox/util/hotkey"
-	"wox/util/permission"
 
 	"github.com/jinzhu/copier"
 	"github.com/samber/lo"
@@ -56,9 +55,8 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	// ai
 	"/ai/models": handleAIModels,
 
-	// permission
-	"/permission/accessibility":       handlePermissionAccessibility,
-	"/permission/accessibility/grant": handlePermissionAccessibilityGrant,
+	// doctor
+	"/doctor/check": handleDoctorCheck,
 
 	// others
 	"/":                 handleHome,
@@ -769,14 +767,15 @@ func handleAIModels(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, results)
 }
 
-func handlePermissionAccessibility(w http.ResponseWriter, r *http.Request) {
+func handleDoctorCheck(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
-	hasAccessibilityPermission := permission.HasAccessibilityPermission(ctx)
-	writeSuccessResponse(w, hasAccessibilityPermission)
-}
-
-func handlePermissionAccessibilityGrant(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
-	permission.GrantAccessibilityPermission(ctx)
-	writeSuccessResponse(w, "")
+	results := plugin.RunDoctorChecks(ctx)
+	allPassed := true
+	for _, result := range results {
+		if !result.Status {
+			allPassed = false
+			break
+		}
+	}
+	writeSuccessResponse(w, allPassed)
 }

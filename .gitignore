@@ -19,3 +19,4 @@ node_modules/
 __pycache__/
 Release/
 __debug_bin*
+Wox/log/
