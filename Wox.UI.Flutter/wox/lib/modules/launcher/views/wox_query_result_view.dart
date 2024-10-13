@@ -192,7 +192,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                   controller.changeActionScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
                   return KeyEventResult.handled;
                 case LogicalKeyboardKey.enter:
-                  controller.executeActiveAction(const UuidV4().generate());
+                  controller.onEnter(const UuidV4().generate());
                   return KeyEventResult.handled;
               }
             }
@@ -253,6 +253,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                 ),
                 filled: true,
                 fillColor: fromCssColor(controller.woxTheme.value.actionQueryBoxBackgroundColor),
+                hoverColor: fromCssColor(controller.woxTheme.value.actionQueryBoxBackgroundColor),
               ),
               cursorColor: fromCssColor(controller.woxTheme.value.queryBoxCursorColor),
               autofocus: true,

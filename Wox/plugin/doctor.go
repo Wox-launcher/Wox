@@ -29,7 +29,7 @@ func RunDoctorChecks(ctx context.Context) []DoctorCheckResult {
 
 	//sort by status, false first
 	sort.Slice(results, func(i, j int) bool {
-		return results[i].Status && !results[j].Status
+		return !results[i].Status && results[j].Status
 	})
 
 	return results

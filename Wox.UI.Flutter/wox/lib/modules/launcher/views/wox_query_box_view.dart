@@ -36,7 +36,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                           controller.handleQueryBoxArrowUp();
                           return KeyEventResult.handled;
                         case LogicalKeyboardKey.enter:
-                          controller.executeActiveAction(const UuidV4().generate());
+                          controller.onEnter(const UuidV4().generate());
                           return KeyEventResult.handled;
                         case LogicalKeyboardKey.tab:
                           controller.autoCompleteQuery(const UuidV4().generate());
@@ -143,10 +143,10 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: MouseRegion(
-                cursor: controller.queryIcon.value.onPressed != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+                cursor: controller.queryIcon.value.action != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
                 child: GestureDetector(
                   onTap: () {
-                    controller.queryIcon.value.onPressed?.call();
+                    controller.queryIcon.value.action?.call();
                     controller.queryBoxFocusNode.requestFocus();
                   },
                   child: WoxImageView(woxImage: controller.queryIcon.value.icon, width: 24, height: 24),

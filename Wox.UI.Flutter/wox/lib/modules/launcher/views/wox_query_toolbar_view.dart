@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/wox_hotkey_view.dart';
+import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/wox_theme_util.dart';
@@ -11,27 +12,33 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
 
   Widget leftTip() {
     return Obx(() {
-      final tipText = controller.toolbarTip.value;
-      if (tipText.isEmpty) {
-        return const SizedBox();
-      }
-      return Text(
-        tipText,
-        style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor)),
+      final toolbarInfo = controller.toolbar.value;
+      return Row(
+        children: [
+          if (toolbarInfo.icon != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: WoxImageView(woxImage: toolbarInfo.icon!, width: 24, height: 24),
+            ),
+          Text(
+            toolbarInfo.text ?? '',
+            style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor)),
+          ),
+        ],
       );
     });
   }
 
   Widget rightTip() {
-    var action = controller.getActiveAction();
-    if (action == null) {
+    final toolbarInfo = controller.toolbar.value;
+    if (toolbarInfo.hotkey == null || toolbarInfo.hotkey!.isEmpty) {
       return const SizedBox();
     }
 
-    var hotkey = WoxHotkey.parseHotkeyFromString(action.hotkey) ?? WoxHotkey.parseHotkeyFromString("enter");
+    var hotkey = WoxHotkey.parseHotkeyFromString(toolbarInfo.hotkey!);
     return Row(
       children: [
-        Text(action.name.value, style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor))),
+        Text(toolbarInfo.actionName ?? '', style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor))),
         const SizedBox(width: 8),
         WoxHotkeyView(
           hotkey: hotkey!,
@@ -42,7 +49,6 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
       ],
     );
   }
-
   @override
   Widget build(BuildContext context) {
     return Obx(() {
@@ -51,6 +57,12 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
         child: Container(
           decoration: BoxDecoration(
             color: fromCssColor(controller.woxTheme.value.toolbarBackgroundColor),
+            border: Border(
+              top: BorderSide(
+                color: fromCssColor(controller.woxTheme.value.toolbarFontColor).withOpacity(0.1),
+                width: 1,
+              ),
+            ),
           ),
           child: Padding(
             padding: EdgeInsets.only(left: controller.woxTheme.value.toolbarPaddingLeft.toDouble(), right: controller.woxTheme.value.toolbarPaddingRight.toDouble()),

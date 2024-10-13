@@ -16,6 +16,7 @@ import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
+import 'package:wox/entity/wox_toolbar.dart';
 import 'package:wox/entity/wox_websocket_msg.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_event_device_type_enum.dart';
@@ -40,7 +41,6 @@ class WoxLauncherController extends GetxController {
   final queryBoxFocusNode = FocusNode();
   final queryBoxTextFieldController = TextEditingController();
   final queryBoxScrollController = ScrollController(initialScrollOffset: 0.0);
-  final queryIcon = QueryIconInfo.empty().obs;
 
   //preview related variables
   final currentPreview = WoxPreview.empty().obs;
@@ -78,14 +78,17 @@ class WoxLauncherController extends GetxController {
   final isInSettingView = false.obs;
   var positionBeforeOpenSetting = const Offset(0, 0);
 
-  /// toolbar related variables
-  final toolbarTip = ''.obs;
+  /// toolbar at bottom of launcher
+  final toolbar = ToolbarInfo.empty().obs;
+
+  /// The icon at end of query box.
+  final queryIcon = QueryIconInfo.empty().obs;
 
   /// The result of the doctor check.
   var doctorCheckPassed = true;
 
   /// Triggered when received query results from the server.
-  void onReceivedQueryResults(List<WoxQueryResult> receivedResults) {
+  void onReceivedQueryResults(String traceId, List<WoxQueryResult> receivedResults) {
     if (receivedResults.isEmpty) {
       return;
     }
@@ -99,8 +102,8 @@ class WoxLauncherController extends GetxController {
     clearQueryResultsTimer.cancel();
 
     //merge results
-    final currentQueryResults = results.where((item) => item.queryId == currentQuery.value.queryId).toList();
-    final finalResults = List<WoxQueryResult>.from(currentQueryResults)..addAll(receivedResults);
+    final existingQueryResults = results.where((item) => item.queryId == currentQuery.value.queryId).toList();
+    final finalResults = List<WoxQueryResult>.from(existingQueryResults)..addAll(receivedResults);
 
     //group results
     var finalResultsSorted = <WoxQueryResult>[];
@@ -135,9 +138,9 @@ class WoxLauncherController extends GetxController {
 
     //reset active result and actions if current query has no results (this is the first time to receive results for the current query)
     //if current query has results, then keep the active result and actions
-    if (currentQueryResults.isEmpty) {
+    if (existingQueryResults.isEmpty) {
       resetActiveResult();
-      updateAndResetActiveAction();
+      resetActiveAction(traceId, "receive first results of current query: ${currentQuery.value.queryText}");
     }
 
     resizeHeight();
@@ -208,21 +211,21 @@ class WoxLauncherController extends GetxController {
     }
 
     if (isShowActionPanel.value) {
-      hideActionPanel();
+      hideActionPanel(traceId);
     } else {
-      showActionPanel();
+      showActionPanel(traceId);
     }
   }
 
-  void hideActionPanel() {
+  void hideActionPanel(String traceId) {
     isShowActionPanel.value = false;
     actionTextFieldController.text = "";
     queryBoxFocusNode.requestFocus();
-    updateAndResetActiveAction();
+    resetActiveAction(traceId, "hide action panel");
     resizeHeight();
   }
 
-  void showActionPanel() {
+  void showActionPanel(String traceId) {
     isShowActionPanel.value = true;
     actionFocusNode.requestFocus();
     resizeHeight();
@@ -266,8 +269,8 @@ class WoxLauncherController extends GetxController {
     return filteredActions.first;
   }
 
-  Future<void> executeActiveAction(String traceId) async {
-    executeAction(traceId, getActiveResult(), getActiveAction());
+  Future<void> onEnter(String traceId) async {
+    toolbar.value.action?.call();
   }
 
   Future<void> executeAction(String traceId, WoxQueryResult? result, WoxResultAction? action) async {
@@ -296,7 +299,9 @@ class WoxLauncherController extends GetxController {
     if (!action.preventHideAfterAction) {
       hideApp(traceId);
     }
-    hideActionPanel();
+    if (isShowActionPanel.value) {
+      hideActionPanel(traceId);
+    }
   }
 
   Future<void> autoCompleteQuery(String traceId) async {
@@ -361,7 +366,8 @@ class WoxLauncherController extends GetxController {
     if (moveCursorToEnd) {
       moveQueryBoxCursorToEnd();
     }
-    changeQueryIcon(traceId, query);
+    updateQueryIconOnQueryChanged(traceId, query);
+    updateToolbarOnQueryChanged(traceId, query);
     if (query.isEmpty) {
       clearQueryResults();
       return;
@@ -420,7 +426,7 @@ class WoxLauncherController extends GetxController {
 
   void changeResultScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
     final prevResultIndex = activeResultIndex.value;
-    resetActiveResultIndex(direction);
+    updateActiveResultIndex(traceId, direction);
     if (results.length < MAX_LIST_VIEW_ITEM_COUNT) {
       results.refresh();
       return;
@@ -450,7 +456,7 @@ class WoxLauncherController extends GetxController {
   }
 
   void changeActionScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
-    updateActiveAction(direction);
+    updateActiveAction(traceId,direction);
     actions.refresh();
   }
 
@@ -502,7 +508,7 @@ class WoxLauncherController extends GetxController {
       }
       Logger.instance.info(msg.traceId, "Received message: ${msg.method}, results count: ${results.length}");
 
-      onReceivedQueryResults(results);
+      onReceivedQueryResults(msg.traceId, results);
     }
   }
 
@@ -582,6 +588,8 @@ class WoxLauncherController extends GetxController {
     }
     if (results.isNotEmpty) {
       resultHeight += woxTheme.value.resultContainerPaddingTop + woxTheme.value.resultContainerPaddingBottom;
+    }
+    if (toolbar.value.isNotEmpty()) {
       resultHeight += WoxThemeUtil.instance.getToolbarHeight();
     }
     final totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight;
@@ -614,7 +622,7 @@ class WoxLauncherController extends GetxController {
     }
   }
 
-  void resetActiveResultIndex(WoxDirection woxDirection) {
+  void updateActiveResultIndex(String traceId, WoxDirection woxDirection) {
     if (results.isEmpty) {
       return;
     }
@@ -648,10 +656,10 @@ class WoxLauncherController extends GetxController {
     }
     currentPreview.value = results[activeResultIndex.value].preview;
     isShowPreviewPanel.value = currentPreview.value.previewData != "";
-    updateAndResetActiveAction();
+    resetActiveAction(traceId, "update active result index, direction: $woxDirection");
   }
 
-  void updateActiveAction(WoxDirection woxDirection) {
+  void updateActiveAction(String traceId, WoxDirection woxDirection) {
     if (actions.isEmpty) {
       return;
     }
@@ -670,6 +678,8 @@ class WoxLauncherController extends GetxController {
         activeActionIndex.value--;
       }
     }
+
+    updateToolbarByActiveAction(traceId);
   }
 
   WoxQueryResult getQueryResultByIndex(int index) {
@@ -693,16 +703,20 @@ class WoxLauncherController extends GetxController {
   }
 
   /// update active actions based on active result and reset active action index to 0
-  void updateAndResetActiveAction() {
-    Logger.instance.info(const UuidV4().generate(), "update active actions, current active result index: ${activeResultIndex.value}");
-
+  void resetActiveAction(String traceId, String reason) {
     var activeQueryResult = getActiveResult();
     if (activeQueryResult == null) {
+      Logger.instance.info(traceId, "update active actions, reason: $reason, current active result: null");
+      activeActionIndex.value = -1;
+      actions.clear();
       return;
+    } else {
+      Logger.instance.info(traceId, "update active actions, reason: $reason, current active result: ${activeQueryResult.title.value}");
+      activeActionIndex.value = 0;
+      actions.assignAll(activeQueryResult.actions);
     }
 
-    activeActionIndex.value = 0;
-    actions.assignAll(activeQueryResult.actions);
+    updateToolbarByActiveAction(traceId);
   }
 
   startRefreshSchedule() {
@@ -889,12 +903,12 @@ class WoxLauncherController extends GetxController {
   }
 
   /// Change the query icon based on the query
-  Future<void> changeQueryIcon(String traceId, PlainQuery query) async {
+  Future<void> updateQueryIconOnQueryChanged(String traceId, PlainQuery query) async {
     //if doctor check is not passed and query is empty, show doctor icon
     if (query.isEmpty && !doctorCheckPassed) {
       queryIcon.value = QueryIconInfo(
         icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: QUERY_ICON_DOCTOR_WARNING),
-        onPressed: () {
+        action: () {
           onQueryChanged(traceId, PlainQuery.text("doctor "), "user click query icon");
         },
       );
@@ -926,7 +940,41 @@ class WoxLauncherController extends GetxController {
     queryIcon.value = QueryIconInfo.empty();
   }
 
-  void showToolbarTips(String tip) {
-    toolbarTip.value = tip;
+  void updateToolbarOnQueryChanged(String traceId, PlainQuery query) {
+    //if doctor check is not passed and query is empty, show doctor tip
+    if (query.isEmpty && !doctorCheckPassed) {
+        Logger.instance.debug(traceId, "update toolbar to doctor warning, query is empty and doctor check not passed");
+        toolbar.value = ToolbarInfo(
+          text: "Doctor check not passed",
+        icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: QUERY_ICON_DOCTOR_WARNING),
+        hotkey: "enter",
+        actionName: "Check",
+        action: () {
+          onQueryChanged(traceId, PlainQuery.text("doctor "), "user click query icon");
+        },
+      );
+      return;
+    }
+
+    Logger.instance.debug(traceId, "update toolbar to empty because of query changed");
+    toolbar.value = ToolbarInfo.empty();
+  }
+
+  /// Update the toolbar based on the active action
+  void updateToolbarByActiveAction(String traceId) {
+    var activeAction = getActiveAction();
+    if (activeAction != null) {
+      Logger.instance.debug(traceId, "update toolbar to active action: ${activeAction.name.value}");
+      toolbar.value = ToolbarInfo(
+        hotkey: "enter",
+        actionName: activeAction.name.value,
+        action: () {
+          executeAction(traceId,  getActiveResult(), activeAction);
+        },
+      );
+    } else {
+      Logger.instance.debug(traceId, "update toolbar to empty, no active action");
+      toolbar.value = ToolbarInfo.empty();
+    }
   }
 }

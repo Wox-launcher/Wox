@@ -75,6 +75,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 			Icon:  calculatorIcon,
 			Actions: []plugin.QueryResultAction{
 				{
+					Name: "Copy result",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						c.histories = append(c.histories, CalculatorHistory{
 							Expression: query.Search,

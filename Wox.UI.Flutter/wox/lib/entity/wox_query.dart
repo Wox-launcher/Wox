@@ -401,11 +401,11 @@ class WoxRefreshableResult {
 
 class QueryIconInfo {
   final WoxImage icon;
-  final Function()? onPressed;
+  final Function()? action;
 
   QueryIconInfo({
     required this.icon,
-    this.onPressed,
+    this.action,
   });
 
   static QueryIconInfo empty() {
