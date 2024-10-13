@@ -11,7 +11,7 @@ Wox
 
 > Wox v2 is under active development, if you use windows, please check v1 release
 
-![Snapshot](https://raw.githubusercontent.com/Wox-launcher/Wox/v2/docs/images/wox.png)
+![Snapshot](https://raw.githubusercontent.com/Wox-launcher/Wox/v2/docs/images/app.png)
 
 Features
 --------
