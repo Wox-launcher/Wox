@@ -20,5 +20,5 @@ jobs:
           title: "[Bot] Update plugin store manifests"
           commit-message: "[Bot] Update plugin store manifests"
           branch: update-plugin-store
-          add-paths: plugin-store.json
+          add-paths: store-plugin.json
           reviewers: qianlifeng

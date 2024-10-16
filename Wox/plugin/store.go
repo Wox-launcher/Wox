@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Masterminds/semver/v3"
-	"github.com/samber/lo"
 	"os"
 	"path"
 	"strings"
 	"sync"
 	"time"
 	"wox/util"
+
+	"github.com/Masterminds/semver/v3"
+	"github.com/samber/lo"
 )
 
 type storeManifest struct {
@@ -53,7 +54,7 @@ func (s *Store) getStoreManifests(ctx context.Context) []storeManifest {
 	return []storeManifest{
 		{
 			Name: "Wox Official Plugin Store",
-			Url:  "https://raw.githubusercontent.com/Wox-launcher/Wox/v2/plugin-store.json",
+			Url:  "https://raw.githubusercontent.com/Wox-launcher/Wox/v2/store-plugin.json",
 		},
 	}
 }

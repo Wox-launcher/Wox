@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/samber/lo"
-	"github.com/tidwall/pretty"
 	"os"
 	"path"
 	"sync"
 	"time"
 	"wox/share"
 	"wox/util"
+
+	"github.com/samber/lo"
+	"github.com/tidwall/pretty"
 )
 
 type storeManifest struct {
@@ -37,7 +38,7 @@ func (s *Store) getStoreManifests(ctx context.Context) []storeManifest {
 	return []storeManifest{
 		{
 			Name: "Wox Official Theme Store",
-			Url:  "https://raw.githubusercontent.com/Wox-launcher/Wox/v2/theme-store.json",
+			Url:  "https://raw.githubusercontent.com/Wox-launcher/Wox/v2/store-theme.json",
 		},
 	}
 }

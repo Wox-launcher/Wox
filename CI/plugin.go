@@ -3,13 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Masterminds/semver/v3"
-	"github.com/imroc/req/v3"
-	"github.com/tidwall/pretty"
 	"os"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/Masterminds/semver/v3"
+	"github.com/imroc/req/v3"
+	"github.com/tidwall/pretty"
 )
 
 type storePluginManifest struct {
@@ -37,7 +38,7 @@ func main() {
 }
 
 func checkPluginNewVersion() error {
-	fileStr, err := os.ReadFile("../plugin-store.json")
+	fileStr, err := os.ReadFile("../store-plugin.json")
 	if err != nil {
 		return err
 	}
@@ -89,7 +90,7 @@ func checkPluginNewVersion() error {
 		if marshalErr != nil {
 			return fmt.Errorf("marshal plugin store json err: %s", marshalErr.Error())
 		}
-		return os.WriteFile("../plugin-store.json", pretty.Pretty(marshal), 0644)
+		return os.WriteFile("../store-plugin.json", pretty.Pretty(marshal), 0644)
 	}
 
 	return nil

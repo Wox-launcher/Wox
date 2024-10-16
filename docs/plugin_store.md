@@ -3,7 +3,7 @@
 </div>
 
 <script type="application/javascript">
-fetch('https://raw.githubusercontent.com/Wox-launcher/Wox/v2/plugin-store.json')
+fetch('https://raw.githubusercontent.com/Wox-launcher/Wox/v2/store-plugin.json')
     .then(response => response.json())
     .then(data => {
         let table = document.createElement('table');
