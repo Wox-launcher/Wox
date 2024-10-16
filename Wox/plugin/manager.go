@@ -447,24 +447,26 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 
 func (m *Manager) addDefaultActions(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult) QueryResult {
 	if query.Type == QueryTypeInput {
-		if setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle) {
-			// add "Remove from favorite" action
-			result.Actions = append(result.Actions, QueryResultAction{
-				Name: "Remove from favorite",
-				Icon: RemoveFromFavIcon,
-				Action: func(ctx context.Context, actionContext ActionContext) {
-					setting.GetSettingManager().RemoveFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
-				},
-			})
-		} else {
-			// add "Add to favorite" action
-			result.Actions = append(result.Actions, QueryResultAction{
-				Name: "Add to favorite",
-				Icon: AddToFavIcon,
-				Action: func(ctx context.Context, actionContext ActionContext) {
-					setting.GetSettingManager().AddFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
-				},
-			})
+		if result.Group == "" {
+			if setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle) {
+				// add "Remove from favorite" action
+				result.Actions = append(result.Actions, QueryResultAction{
+					Name: "Remove from favorite",
+					Icon: RemoveFromFavIcon,
+					Action: func(ctx context.Context, actionContext ActionContext) {
+						setting.GetSettingManager().RemoveFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
+					},
+				})
+			} else {
+				// add "Add to favorite" action
+				result.Actions = append(result.Actions, QueryResultAction{
+					Name: "Add to favorite",
+					Icon: AddToFavIcon,
+					Action: func(ctx context.Context, actionContext ActionContext) {
+						setting.GetSettingManager().AddFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
+					},
+				})
+			}
 		}
 	}
 

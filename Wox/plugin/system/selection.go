@@ -91,11 +91,12 @@ func (i *SelectionPlugin) queryForSelectionText(ctx context.Context, text string
 func (i *SelectionPlugin) queryForSelectionFile(ctx context.Context, filePaths []string) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	results = append(results, plugin.QueryResult{
-		Title: "Copy path to clipboard",
-		Icon:  plugin.CopyToClipboadIcon,
+		Title: "Copy path",
+		Icon:  plugin.CopyIcon,
 		Actions: []plugin.QueryResultAction{
 			{
-				Name: "Copy to clipboard",
+				Name: "Copy",
+				Icon: plugin.CopyIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					clipboard.WriteText(strings.Join(filePaths, "\n"))
 				},
@@ -113,7 +114,8 @@ func (i *SelectionPlugin) queryForSelectionFile(ctx context.Context, filePaths [
 			Icon:  plugin.AirdropIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "AirDrop",
+					Name: "Share",
+					Icon: plugin.AirdropIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						airdrop.Airdrop(filePaths)
 					},
@@ -136,6 +138,7 @@ func (i *SelectionPlugin) queryForFile(ctx context.Context, filePath string) (re
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: "Open containing folder",
+				Icon: plugin.OpenContainingFolderIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					util.ShellOpenFileInFolder(filePath)
 				},
@@ -150,6 +153,7 @@ func (i *SelectionPlugin) queryForFile(ctx context.Context, filePath string) (re
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: "Preview",
+				Icon: plugin.PreviewIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				},
 			},

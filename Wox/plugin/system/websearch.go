@@ -223,6 +223,7 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "Search",
+						Icon: plugin.SearchIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							util.Go(ctx, "open urls", func() {
 								for _, url := range search.Urls {
@@ -256,6 +257,7 @@ func (r *WebSearchPlugin) QueryFallback(ctx context.Context, query plugin.Query)
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Search",
+					Icon: plugin.SearchIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						for _, url := range search.Urls {
 							util.ShellOpen(r.replaceVariables(ctx, url, query.RawQuery))
@@ -287,6 +289,7 @@ func (r *WebSearchPlugin) querySelection(ctx context.Context, query plugin.Query
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Search",
+					Icon: plugin.SearchIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						for _, url := range search.Urls {
 							util.ShellOpen(r.replaceVariables(ctx, url, query.Selection.Text))

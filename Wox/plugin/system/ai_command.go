@@ -14,6 +14,7 @@ import (
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/keyboard"
+	"wox/util/window"
 
 	"github.com/disintegration/imaging"
 	"github.com/samber/lo"
@@ -394,7 +395,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 		return current
 	}
 
-	return []plugin.QueryResult{{
+	result := plugin.QueryResult{
 		Title:           fmt.Sprintf("Chat with %s", aiCommandSetting.Name),
 		SubTitle:        fmt.Sprintf("%s - %s", aiCommandSetting.AIModel().Provider, aiCommandSetting.AIModel().Name),
 		Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
@@ -406,16 +407,27 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: "Copy",
+				Icon: plugin.CopyIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					clipboard.WriteText(actionContext.ContextData)
 				},
 			},
-			{
-				Name: "Copy and Paste to active app",
+		},
+	}
+
+	// paste to active window
+	windowName := window.GetActiveWindowName()
+	windowIcon, windowIconErr := window.GetActiveWindowIcon()
+	if windowIconErr == nil && windowName != "" {
+		windowIconImage, err := plugin.NewWoxImage(windowIcon)
+		if err == nil {
+			result.Actions = append(result.Actions, plugin.QueryResultAction{
+				Name: "Paste to " + windowName,
+				Icon: windowIconImage,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					clipboard.WriteText(actionContext.ContextData)
-					util.Go(context.Background(), "clipboard to copy", func() {
-						time.Sleep(time.Millisecond * 100)
+					util.Go(ctx, "ai command paste", func() {
+						time.Sleep(time.Millisecond * 150)
 						err := keyboard.SimulatePaste()
 						if err != nil {
 							c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("simulate paste clipboard failed, err=%s", err.Error()))
@@ -424,7 +436,9 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 						}
 					})
 				},
-			},
-		},
-	}}
+			})
+		}
+	}
+
+	return []plugin.QueryResult{result}
 }

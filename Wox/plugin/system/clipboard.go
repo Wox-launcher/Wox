@@ -16,6 +16,7 @@ import (
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/keyboard"
+	"wox/util/window"
 
 	"github.com/cdfmlr/ellipsis"
 	"github.com/disintegration/imaging"
@@ -370,30 +371,42 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 		actions := []plugin.QueryResultAction{
 			{
 				Name:      "Copy to clipboard",
+				Icon:      plugin.CopyIcon,
 				IsDefault: primaryActionValueCopy == primaryActionCode,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					c.moveHistoryToTop(ctx, history.Id)
 					clipboard.Write(history.Data)
 				},
 			},
-			{
-				Name:      "Paste to active app",
-				IsDefault: primaryActionValuePaste == primaryActionCode,
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					c.moveHistoryToTop(ctx, history.Id)
-					clipboard.Write(history.Data)
-					util.Go(context.Background(), "clipboard history copy", func() {
-						time.Sleep(time.Millisecond * 100)
-						err := keyboard.SimulatePaste()
-						if err != nil {
-							c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("simulate paste clipboard failed, err=%s", err.Error()))
-						} else {
-							c.api.Log(ctx, plugin.LogLevelInfo, "simulate paste clipboard success")
-						}
-					})
-				},
-			},
 		}
+
+		// paste to active window
+		windowName := window.GetActiveWindowName()
+		windowIcon, windowIconErr := window.GetActiveWindowIcon()
+		if windowIconErr == nil && windowName != "" {
+			windowIconImage, err := plugin.NewWoxImage(windowIcon)
+			if err == nil {
+				actions = append(actions, plugin.QueryResultAction{
+					Name:      "Paste to " + windowName,
+					IsDefault: primaryActionValuePaste == primaryActionCode,
+					Icon:      windowIconImage,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						c.moveHistoryToTop(ctx, history.Id)
+						clipboard.Write(history.Data)
+						util.Go(context.Background(), "clipboard history copy", func() {
+							time.Sleep(time.Millisecond * 150)
+							err := keyboard.SimulatePaste()
+							if err != nil {
+								c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("simulate paste clipboard failed, err=%s", err.Error()))
+							} else {
+								c.api.Log(ctx, plugin.LogLevelInfo, "simulate paste clipboard success")
+							}
+						})
+					},
+				})
+			}
+		}
+
 		if !history.IsFavorite {
 			actions = append(actions, plugin.QueryResultAction{
 				Name:                   "Mark as favorite",
