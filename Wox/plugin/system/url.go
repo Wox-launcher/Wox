@@ -2,21 +2,32 @@ package system
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 	"wox/plugin"
 	"wox/util"
+
+	"github.com/samber/lo"
 )
 
-var urlIcon = plugin.NewWoxImageSvg(`<svg t="1700799478746" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="6302" width="200" height="200"><path d="M102.4 205.687467v612.625066A103.424 103.424 0 0 0 205.994667 921.6h611.908266a103.424 103.424 0 0 0 103.594667-103.287467V205.687467A103.424 103.424 0 0 0 817.902933 102.4H205.994667A103.424 103.424 0 0 0 102.4 205.687467z m476.023467 423.594666l-106.2912 106.2912c-26.282667 26.180267-62.634667 42.154667-99.089067 42.154667a125.610667 125.610667 0 0 1-88.814933-36.352c-26.180267-26.180267-39.355733-61.1328-36.386134-96.119467 1.501867-34.952533 16.008533-67.037867 42.2912-93.184l42.257067-42.257066a34.304 34.304 0 0 1 48.0256 0 34.304 34.304 0 0 1 0 48.0256l-42.257067 42.257066c-13.073067 13.1072-21.845333 30.583467-21.845333 48.059734 0 11.707733 1.467733 29.184 15.9744 43.690666 13.073067 13.073067 29.149867 15.9744 40.7552 15.9744 17.476267 0 36.352-8.704 50.926933-21.879466l106.325334-106.325334c26.146133-26.146133 29.149867-67.003733 5.802666-90.282666a34.304 34.304 0 0 1 0-48.059734 34.304 34.304 0 0 1 48.0256 0c24.7808 24.7808 36.386133 55.330133 36.386134 88.814934 0.068267 35.054933-14.404267 71.509333-42.0864 99.191466z m198.007466-251.938133c-1.501867 34.952533-15.9744 67.037867-42.257066 93.184l-14.472534 14.506667-27.648 29.149866a34.304 34.304 0 0 1-48.093866 0c-14.574933-13.073067-15.9744-34.952533-2.901334-48.0256l43.690667-43.690666c13.073067-13.073067 21.845333-29.149867 23.2448-46.523734 0-11.707733-1.467733-29.184-15.9744-43.690666-13.073067-13.073067-29.149867-15.9744-40.7552-15.9744a73.045333 73.045333 0 0 0-50.961067 21.879466l-106.3936 106.120534c-26.180267 26.146133-29.149867 67.037867-5.802666 90.282666a34.304 34.304 0 0 1 0 48.059734 34.304 34.304 0 0 1-48.0256 0c-24.7808-24.7808-36.386133-55.330133-36.386134-88.814934 0-34.952533 14.609067-71.338667 42.257067-98.986666l106.325333-106.2912c26.146133-26.180267 62.634667-42.257067 98.986667-42.257067 33.450667 0 65.536 13.073067 88.814933 36.352a127.010133 127.010133 0 0 1 36.352 94.72z" fill="#1296db" p-id="6303"></path></svg>`)
+var urlIcon = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAEEUlEQVR4nO2Yz28TRxTHX9omjSqSS5XEO2NDVXKsqlYJSPkDeuHUc1X12FtSVBLv2G5iRClqA5EgCoJkdwvqvf9CBSGJWxrieGdoKkPizihATyC1Un6UiKlmTfjhHRsveGMj+SuNVs7m7X7eezPvzSxAU0011VRQGdN39iOHp7DDF7Aj/sY230G2uIdtMY9tnkQ/rsegEXXgUqEdO2ICOWILO0KWG8gWm9jhp3vP5d+GRlG3tdqDHJ6pBI59gy/0/HS7u0HgBQsGL4rZcHimrpk4cKkQwbZYeRl4/DQT4w0Hj2y+gRwxGrvMD/ZNL7aqK3LEmPq7bk1ELwvcOPCOuB+1xGGdHbLXB3ROYIeThoE3LN5XyR45YkyzFq6+FvBKajppbO/AXlSbV4VXUlVHY78FYTepcnU+CLxS1BK9e54B1WFrAa+EbJHWVK0rEJY6Tv0xgCy+U/pSw/rrYXvy+gyYi/urfVbUEoe1VcjmZu3J04V2GLo22XEy+9AXMYvLtvi8hKMZCfHcJpjsNAxW7qiGxftUxnQ9o/Z9IOH2QHzpVxiak12Ted/U6fg2K+GrOQUvgbDiMNkCmNn3gsDjYvR/qD08oQziyxKGZmXkYsH30re+npUwfOMp/JPh/guD+c7q4cV8bfdCwywCJlvxYJQDg1e96VL64pbBKxJGshoHvExcrxJ+RZXmcOA9B3JlM9D53dIncCx7HAjb8DtBJSTd/sjF2/2V4FVTDA/ei6QrH68B/yJ2xJhnl3A/1WXhzRTLGFPsAbZ5neB3I3l04UHX1K0L2t2mvT7g2Zvsl1Lb1m9yj4xzyxJbhXrBe+M+jNzoV2fY4jHQ74QxvXq8PU2/KLV9I0mlcTYrsbUWIryqNpXgifukw2Kbn9F24ulVGZn43WffQpg0zi5JNLMWErxqUoRmqoFXUocSbItZnwMX8rJr3O/AbgaQ5wD/M2ZzBDWVSSeqhd+VOoA//lRSdMBak8ZkTu474S+nbaM57x6yVjO1LZVKKRoDQreCwD+/FebjaGZtE00x+e73i7Il4Q/EvhPZHTxJJ8I5sBOa0sBvAKGHqn0EOn8r1nly6eeWBNVkkcp3TrlHIDSZbE7jwGiwZ7ifg0kf6Tsx/Q1CFaH3NHuY96u2N9lnZeEJ+6d0L1R7mXTb9+I0a6tB5LchsfwBhC6iycAwPfhKkVfww+wj2BMRek2zgxx7PeCVTJrUVyG3uLcp1cjNI5Xh3Q9hT5WiMTDpptYJlQnCer3joboSltZvmesR+WdF6JkyVaS6UVd4pS8XW8Gksy/nwM1tMPMfQ911bLnbO4gHirz6/wA9I3Spua4+iejXxLNTRt0ff9Gnk/opnouCyYg3rUx6Fwj7z7t6vxnx7jfVVFNNQUD9D+AcOX6Kbv2UAAAAAElFTkSuQmCC`)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &UrlPlugin{})
 }
 
+type UrlHistory struct {
+	Url   string
+	Icon  plugin.WoxImage
+	Title string
+}
+
 type UrlPlugin struct {
-	api plugin.API
-	reg *regexp.Regexp
+	api        plugin.API
+	reg        *regexp.Regexp
+	recentUrls []UrlHistory
 }
 
 func (r *UrlPlugin) GetMetadata() plugin.Metadata {
@@ -46,6 +57,23 @@ func (r *UrlPlugin) GetMetadata() plugin.Metadata {
 func (r *UrlPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.api = initParams.API
 	r.reg = r.getReg()
+	r.recentUrls = r.loadRecentUrls(ctx)
+}
+
+func (r *UrlPlugin) loadRecentUrls(ctx context.Context) []UrlHistory {
+	urlsJson := r.api.GetSetting(ctx, "recentUrls")
+	if urlsJson == "" {
+		return []UrlHistory{}
+	}
+
+	var urls []UrlHistory
+	err := json.Unmarshal([]byte(urlsJson), &urls)
+	if err != nil {
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("load recent urls error: %s", err.Error()))
+		return []UrlHistory{}
+	}
+
+	return urls
 }
 
 func (r *UrlPlugin) getReg() *regexp.Regexp {
@@ -54,20 +82,61 @@ func (r *UrlPlugin) getReg() *regexp.Regexp {
 }
 
 func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
+	//check if search is in recentUrls
+	if len(query.Search) >= 2 {
+		existingUrlHistory := lo.Filter(r.recentUrls, func(item UrlHistory, index int) bool {
+			return strings.Contains(item.Url, query.Search)
+		})
+
+		for _, history := range existingUrlHistory {
+			results = append(results, plugin.QueryResult{
+				Title:    history.Url,
+				SubTitle: history.Title,
+				Score:    100,
+				Icon:     history.Icon.Overlay(urlIcon, 0.4, 0.6, 0.6),
+				Actions: []plugin.QueryResultAction{
+					{
+						Name: "Open",
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+							openErr := util.ShellOpen(history.Url)
+							if openErr != nil {
+								r.api.Log(ctx, "Error opening URL", openErr.Error())
+							}
+						},
+					},
+					{
+						Name: "Remove from url history",
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+							r.removeRecentUrl(ctx, history.Url)
+						},
+					},
+				},
+			})
+		}
+	}
+
 	if len(r.reg.FindStringIndex(query.Search)) > 0 {
 		results = append(results, plugin.QueryResult{
 			Title:    query.Search,
-			SubTitle: "Open in browser",
+			SubTitle: "Open in Browser",
 			Score:    100,
 			Icon:     urlIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "Open in browser",
+					Name: "Open",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						if strings.HasPrefix(query.Search, "http") == false {
-							query.Search = "https://" + query.Search
+						url := query.Search
+						if !strings.HasPrefix(url, "http") {
+							url = "https://" + url
 						}
-						util.ShellOpen(query.Search)
+						openErr := util.ShellOpen(url)
+						if openErr != nil {
+							r.api.Log(ctx, "Error opening URL", openErr.Error())
+						} else {
+							util.Go(ctx, "saveRecentUrl", func() {
+								r.saveRecentUrl(ctx, url)
+							})
+						}
 					},
 				},
 			},
@@ -75,4 +144,58 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 	}
 
 	return
+}
+
+func (r *UrlPlugin) saveRecentUrl(ctx context.Context, url string) {
+	icon, err := getWebsiteIconWithCache(ctx, url)
+	if err != nil {
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("get url icon error: %s", err.Error()))
+		icon = urlIcon
+	}
+
+	title := ""
+	body, err := util.HttpGet(ctx, url)
+	if err == nil {
+		titleStart := strings.Index(string(body), "<title>")
+		titleEnd := strings.Index(string(body), "</title>")
+		if titleStart != -1 && titleEnd != -1 {
+			title = string(body[titleStart+7 : titleEnd])
+		}
+	} else {
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("get url title error: %s", err.Error()))
+	}
+
+	newHistory := UrlHistory{
+		Url:   url,
+		Icon:  icon,
+		Title: title,
+	}
+
+	// remove duplicate urls
+	r.recentUrls = lo.Filter(r.recentUrls, func(item UrlHistory, index int) bool {
+		return item.Url != url
+	})
+	r.recentUrls = append([]UrlHistory{newHistory}, r.recentUrls...)
+
+	urlsJson, err := json.Marshal(r.recentUrls)
+	if err != nil {
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("save url setting error: %s", err.Error()))
+		return
+	}
+
+	r.api.SaveSetting(ctx, "recentUrls", string(urlsJson), false)
+}
+
+func (r *UrlPlugin) removeRecentUrl(ctx context.Context, url string) {
+	r.recentUrls = lo.Filter(r.recentUrls, func(item UrlHistory, index int) bool {
+		return item.Url != url
+	})
+
+	urlsJson, err := json.Marshal(r.recentUrls)
+	if err != nil {
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("save url setting error: %s", err.Error()))
+		return
+	}
+
+	r.api.SaveSetting(ctx, "recentUrls", string(urlsJson), false)
 }

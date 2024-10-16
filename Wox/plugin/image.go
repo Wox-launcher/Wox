@@ -149,7 +149,7 @@ func (w *WoxImage) Hash() string {
 	return util.Md5([]byte(w.ImageType + w.ImageData))
 }
 
-func (w *WoxImage) Overlay(overlay WoxImage, size int, x, y int) WoxImage {
+func (w *WoxImage) Overlay(overlay WoxImage, sizePercent, xPercent, yPercent float64) WoxImage {
 	backgroundImg, backErr := w.ToImage()
 	if backErr != nil {
 		return *w
@@ -159,6 +159,13 @@ func (w *WoxImage) Overlay(overlay WoxImage, size int, x, y int) WoxImage {
 	if overlayErr != nil {
 		return *w
 	}
+
+	bgWidth := backgroundImg.Bounds().Dx()
+	bgHeight := backgroundImg.Bounds().Dy()
+
+	size := int(float64(bgWidth) * sizePercent)
+	x := int(float64(bgWidth) * xPercent)
+	y := int(float64(bgHeight) * yPercent)
 
 	resizedOverlayImg := imaging.Resize(overlayImage, size, size, imaging.Lanczos)
 	finalImg := imaging.Overlay(backgroundImg, resizedOverlayImg, image.Pt(x, y), 1)
