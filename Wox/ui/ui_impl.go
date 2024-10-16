@@ -5,16 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gen2brain/beeep"
-	"github.com/google/uuid"
-	"github.com/samber/lo"
-	"github.com/tidwall/gjson"
 	"time"
 	"wox/plugin"
 	"wox/setting"
 	"wox/share"
 	"wox/util"
 	"wox/util/window"
+
+	"github.com/gen2brain/beeep"
+	"github.com/google/uuid"
+	"github.com/samber/lo"
+	"github.com/tidwall/gjson"
 )
 
 type uiImpl struct {
@@ -63,6 +64,12 @@ func (u *uiImpl) ChangeTheme(ctx context.Context, theme share.Theme) {
 func (u *uiImpl) InstallTheme(ctx context.Context, theme share.Theme) {
 	logger.Info(ctx, fmt.Sprintf("install theme: %s", theme.ThemeName))
 	GetStoreManager().Install(ctx, theme)
+}
+
+func (u *uiImpl) UninstallTheme(ctx context.Context, theme share.Theme) {
+	logger.Info(ctx, fmt.Sprintf("uninstall theme: %s", theme.ThemeName))
+	GetStoreManager().Uninstall(ctx, theme)
+	GetUIManager().ChangeToDefaultTheme(ctx)
 }
 
 func (u *uiImpl) OpenSettingWindow(ctx context.Context, windowContext share.SettingWindowContext) {

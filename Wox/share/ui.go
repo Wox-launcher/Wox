@@ -46,6 +46,7 @@ type UI interface {
 	GetAllThemes(ctx context.Context) []Theme
 	ChangeTheme(ctx context.Context, theme Theme)
 	InstallTheme(ctx context.Context, theme Theme)
+	UninstallTheme(ctx context.Context, theme Theme)
 	RestoreTheme(ctx context.Context)
 }
 

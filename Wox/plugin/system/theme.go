@@ -92,7 +92,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 		if match {
 			result := plugin.QueryResult{
 				Title: theme.ThemeName,
-				Icon:  themeIcon,
+				Icon:  plugin.NewWoxImageTheme(theme),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   "Change theme",
@@ -107,6 +107,18 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 				result.Tails = append(result.Tails, plugin.QueryResultTail{
 					Type: plugin.QueryResultTailTypeText,
 					Text: "System",
+				})
+			} else {
+				result.Actions = append(result.Actions, plugin.QueryResultAction{
+					Name:                   "Uninstall theme",
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						ui.UninstallTheme(ctx, theme)
+						c.api.ChangeQuery(ctx, share.PlainQuery{
+							QueryType: plugin.QueryTypeInput,
+							QueryText: fmt.Sprintf("%s ", query.TriggerKeyword),
+						})
+					},
 				})
 			}
 			currentThemeId := setting.GetSettingManager().GetWoxSetting(ctx).ThemeId

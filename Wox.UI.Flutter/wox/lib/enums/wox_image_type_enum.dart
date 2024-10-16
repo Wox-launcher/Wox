@@ -7,6 +7,7 @@ enum WoxImageTypeEnum {
   WOX_IMAGE_TYPE_SVG("svg", "svg"),
   WOX_IMAGE_TYPE_LOTTIE("lottie", "lottie"),
   WOX_IMAGE_TYPE_EMOJI("emoji", "emoji"),
+  WOX_IMAGE_TYPE_THEME("theme", "theme"),
   WOX_IMAGE_TYPE_URL("url", "url");
 
   final String code;

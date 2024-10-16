@@ -4,18 +4,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/disintegration/imaging"
-	"github.com/forPelevin/gomoji"
-	"github.com/srwiley/oksvg"
-	"github.com/srwiley/rasterx"
 	"image"
 	"image/png"
 	"os"
 	"path"
 	"strings"
+	"wox/share"
 	"wox/util"
+
+	"github.com/disintegration/imaging"
+	"github.com/forPelevin/gomoji"
+	"github.com/srwiley/oksvg"
+	"github.com/srwiley/rasterx"
 )
 
 var localImageMap = util.NewHashMap[string, string]()
@@ -32,6 +35,7 @@ const (
 	WoxImageTypeLottie       = "lottie" // only support lottie json data
 	WoxImageTypeEmoji        = "emoji"
 	WoxImageTypeUrl          = "url"
+	WoxImageTypeTheme        = "theme"
 )
 
 type WoxImage struct {
@@ -244,6 +248,18 @@ func NewWoxImageLottie(lottieJson string) WoxImage {
 	return WoxImage{
 		ImageType: WoxImageTypeLottie,
 		ImageData: lottieJson,
+	}
+}
+
+func NewWoxImageTheme(theme share.Theme) WoxImage {
+	themeJson, err := json.Marshal(theme)
+	if err != nil {
+		return WoxImage{}
+	}
+
+	return WoxImage{
+		ImageType: WoxImageTypeTheme,
+		ImageData: string(themeJson),
 	}
 }
 

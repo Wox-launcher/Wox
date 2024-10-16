@@ -405,6 +405,7 @@ class WoxLauncherController extends GetxController {
 
     if (queryAction.isEmpty) {
       actions.assignAll(activeResult.actions);
+      updateToolbarByActiveAction(traceId);
       return;
     }
 
@@ -422,6 +423,7 @@ class WoxLauncherController extends GetxController {
     }
 
     actions.assignAll(filteredActions);
+    updateToolbarByActiveAction(traceId);
   }
 
   void changeResultScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
