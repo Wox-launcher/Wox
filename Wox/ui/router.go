@@ -303,10 +303,7 @@ func handlePluginEnable(w http.ResponseWriter, r *http.Request) {
 
 	plugins := plugin.GetPluginManager().GetPluginInstances()
 	findPlugin, exist := lo.Find(plugins, func(item *plugin.Instance) bool {
-		if item.Metadata.Id == pluginId {
-			return true
-		}
-		return false
+		return item.Metadata.Id == pluginId
 	})
 	if !exist {
 		writeErrorResponse(w, "can't find plugin")
@@ -327,7 +324,7 @@ func handleThemeStore(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
 
 	storeThemes := GetStoreManager().GetThemes()
-	var themes = make([]dto.SettingTheme, len(storeThemes))
+	var themes = make([]dto.ThemeDto, len(storeThemes))
 	copyErr := copier.Copy(&themes, &storeThemes)
 	if copyErr != nil {
 		writeErrorResponse(w, copyErr.Error())
@@ -350,7 +347,7 @@ func handleThemeInstalled(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
 
 	installedThemes := GetUIManager().GetAllThemes(ctx)
-	var themes = make([]dto.SettingTheme, len(installedThemes))
+	var themes = make([]dto.ThemeDto, len(installedThemes))
 	copyErr := copier.Copy(&themes, &installedThemes)
 	if copyErr != nil {
 		writeErrorResponse(w, copyErr.Error())

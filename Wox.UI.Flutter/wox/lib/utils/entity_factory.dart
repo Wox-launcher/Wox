@@ -21,8 +21,8 @@ class EntityFactory {
       return WoxLang.fromJson(json) as T;
     } else if (T.toString() == "List<PluginDetail>") {
       return (json as List).map((e) => PluginDetail.fromJson(e)).toList() as T;
-    } else if (T.toString() == "List<WoxSettingTheme>") {
-      return (json as List).map((e) => WoxSettingTheme.fromJson(e)).toList() as T;
+    } else if (T.toString() == "List<WoxTheme>") {
+      return (json as List).map((e) => WoxTheme.fromJson(e)).toList() as T;
     } else if (T.toString() == "List<AIModel>") {
       return (json as List).map((e) => AIModel.fromJson(e)).toList() as T;
     } else if (T.toString() == "List<WoxLang>") {

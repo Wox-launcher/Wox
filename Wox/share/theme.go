@@ -1,15 +1,14 @@
 package share
 
 type Theme struct {
-	ThemeId        string
-	ThemeName      string
-	ThemeAuthor    string
-	ThemeUrl       string
-	Version        string
-	Description    string
-	ScreenshotUrls []string
-	IsSystem       bool
-	IsInstalled    bool
+	ThemeId     string
+	ThemeName   string
+	ThemeAuthor string
+	ThemeUrl    string
+	Version     string
+	Description string
+	IsSystem    bool
+	IsInstalled bool
 
 	AppBackgroundColor              string
 	AppPaddingLeft                  int

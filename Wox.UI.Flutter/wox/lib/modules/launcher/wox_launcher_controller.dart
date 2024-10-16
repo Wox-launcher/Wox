@@ -456,7 +456,7 @@ class WoxLauncherController extends GetxController {
   }
 
   void changeActionScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
-    updateActiveAction(traceId,direction);
+    updateActiveAction(traceId, direction);
     actions.refresh();
   }
 
@@ -943,9 +943,9 @@ class WoxLauncherController extends GetxController {
   void updateToolbarOnQueryChanged(String traceId, PlainQuery query) {
     //if doctor check is not passed and query is empty, show doctor tip
     if (query.isEmpty && !doctorCheckPassed) {
-        Logger.instance.debug(traceId, "update toolbar to doctor warning, query is empty and doctor check not passed");
-        toolbar.value = ToolbarInfo(
-          text: "Doctor check not passed",
+      Logger.instance.debug(traceId, "update toolbar to doctor warning, query is empty and doctor check not passed");
+      toolbar.value = ToolbarInfo(
+        text: "Doctor check not passed",
         icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: QUERY_ICON_DOCTOR_WARNING),
         hotkey: "enter",
         actionName: "Check",
@@ -969,7 +969,7 @@ class WoxLauncherController extends GetxController {
         hotkey: "enter",
         actionName: activeAction.name.value,
         action: () {
-          executeAction(traceId,  getActiveResult(), activeAction);
+          executeAction(traceId, getActiveResult(), activeAction);
         },
       );
     } else {

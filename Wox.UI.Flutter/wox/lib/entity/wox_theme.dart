@@ -5,6 +5,9 @@ class WoxTheme {
   late String themeUrl;
   late String version;
   late String description;
+  late bool isSystem;
+  late bool isInstalled;
+  late bool isUpgradable;
 
   late String appBackgroundColor;
   late int appPaddingLeft;
@@ -56,59 +59,64 @@ class WoxTheme {
   late int toolbarPaddingLeft;
   late int toolbarPaddingRight;
 
-  WoxTheme(
-      {themeId,
-      themeName,
-      themeAuthor,
-      themeUrl,
-      version,
-      appBackgroundColor,
-      appPaddingLeft,
-      appPaddingTop,
-      appPaddingRight,
-      appPaddingBottom,
-      resultContainerPaddingLeft,
-      resultContainerPaddingTop,
-      resultContainerPaddingRight,
-      resultContainerPaddingBottom,
-      resultItemBorderRadius,
-      resultItemPaddingLeft,
-      resultItemPaddingTop,
-      resultItemPaddingRight,
-      resultItemPaddingBottom,
-      resultItemTitleColor,
-      resultItemSubTitleColor,
-      resultItemBorderLeft,
-      resultItemActiveBackgroundColor,
-      resultItemActiveTitleColor,
-      resultItemActiveSubTitleColor,
-      resultItemActiveBorderLeft,
-      queryBoxFontColor,
-      queryBoxBackgroundColor,
-      queryBoxBorderRadius,
-      queryBoxCursorColor,
-      queryBoxTextSelectionColor,
-      actionContainerBackgroundColor,
-      actionContainerHeaderFontColor,
-      actionContainerPaddingLeft,
-      actionContainerPaddingTop,
-      actionContainerPaddingRight,
-      actionContainerPaddingBottom,
-      actionItemActiveBackgroundColor,
-      actionItemActiveFontColor,
-      actionItemFontColor,
-      actionQueryBoxFontColor,
-      actionQueryBoxBackgroundColor,
-      actionQueryBoxBorderRadius,
-      previewFontColor,
-      previewSplitLineColor,
-      previewPropertyTitleColor,
-      previewPropertyContentColor,
-      previewTextSelectionColor,
-      toolbarFontColor,
-      toolbarBackgroundColor,
-      toolbarPaddingLeft,
-      toolbarPaddingRight});
+  WoxTheme({
+    themeId,
+    themeName,
+    themeAuthor,
+    themeUrl,
+    version,
+    description,
+    isSystem,
+    isInstalled,
+    isUpgradable, 
+    appBackgroundColor,
+    appPaddingLeft,
+    appPaddingTop,
+    appPaddingRight,
+    appPaddingBottom,
+    resultContainerPaddingLeft,
+    resultContainerPaddingTop,
+    resultContainerPaddingRight,
+    resultContainerPaddingBottom,
+    resultItemBorderRadius,
+    resultItemPaddingLeft,
+    resultItemPaddingTop,
+    resultItemPaddingRight,
+    resultItemPaddingBottom,
+    resultItemTitleColor,
+    resultItemSubTitleColor,
+    resultItemBorderLeft,
+    resultItemActiveBackgroundColor,
+    resultItemActiveTitleColor,
+    resultItemActiveSubTitleColor,
+    resultItemActiveBorderLeft,
+    queryBoxFontColor,
+    queryBoxBackgroundColor,
+    queryBoxBorderRadius,
+    queryBoxCursorColor,
+    queryBoxTextSelectionColor,
+    actionContainerBackgroundColor,
+    actionContainerHeaderFontColor,
+    actionContainerPaddingLeft,
+    actionContainerPaddingTop,
+    actionContainerPaddingRight,
+    actionContainerPaddingBottom,
+    actionItemActiveBackgroundColor,
+    actionItemActiveFontColor,
+    actionItemFontColor,
+    actionQueryBoxFontColor,
+    actionQueryBoxBackgroundColor,
+    actionQueryBoxBorderRadius,
+    previewFontColor,
+    previewSplitLineColor,
+    previewPropertyTitleColor,
+    previewPropertyContentColor,
+    previewTextSelectionColor,
+    toolbarFontColor,
+    toolbarBackgroundColor,
+    toolbarPaddingLeft,
+    toolbarPaddingRight,
+  });
 
   WoxTheme.fromJson(Map<String, dynamic> json) {
     themeId = json['ThemeId'];
@@ -116,6 +124,10 @@ class WoxTheme {
     themeAuthor = json['ThemeAuthor'];
     themeUrl = json['ThemeUrl'];
     version = json['Version'];
+    description = json['Description'];
+    isSystem = json['IsSystem'] ?? false;
+    isInstalled = json['IsInstalled'] ?? false;
+    isUpgradable = json['IsUpgradable'] ?? false;
     appBackgroundColor = json['AppBackgroundColor'];
     appPaddingLeft = json['AppPaddingLeft'];
     appPaddingTop = json['AppPaddingTop'];
@@ -174,6 +186,10 @@ class WoxTheme {
     data['ThemeAuthor'] = themeAuthor;
     data['ThemeUrl'] = themeUrl;
     data['Version'] = version;
+    data['Description'] = description;
+    data['IsSystem'] = isSystem;
+    data['IsInstalled'] = isInstalled;
+    data['IsUpgradable'] = isUpgradable;
     data['AppBackgroundColor'] = appBackgroundColor;
     data['AppPaddingLeft'] = appPaddingLeft;
     data['AppPaddingTop'] = appPaddingTop;
@@ -225,38 +241,8 @@ class WoxTheme {
     data['ToolbarPaddingRight'] = toolbarPaddingRight;
     return data;
   }
-}
 
-class WoxSettingTheme {
-  late String themeId;
-  late String themeName;
-  late String themeAuthor;
-  late String themeUrl;
-  late String version;
-  late String description;
-  late List<String> screenshotUrls;
-  late bool isSystem;
-  late bool isInstalled;
-  late bool isUpgradable;
-
-  WoxSettingTheme.fromJson(Map<String, dynamic> json) {
-    themeId = json['ThemeId'];
-    themeName = json['ThemeName'];
-    themeAuthor = json['ThemeAuthor'];
-    themeUrl = json['ThemeUrl'];
-    version = json['Version'];
-    description = json['Description'];
-    isSystem = json['IsSystem'];
-    isInstalled = json['IsInstalled'];
-    isUpgradable = json['IsUpgradable'];
-    if (json['ScreenshotUrls'] != null) {
-      screenshotUrls = List<String>.from(json['ScreenshotUrls']);
-    } else {
-      screenshotUrls = <String>[];
-    }
-  }
-
-  WoxSettingTheme.empty() {
+  WoxTheme.empty() { 
     themeId = '';
     themeName = '';
     themeAuthor = '';
@@ -266,19 +252,5 @@ class WoxSettingTheme {
     isSystem = false;
     isInstalled = false;
     isUpgradable = false;
-    screenshotUrls = <String>[];
-  }
-
-  WoxSettingTheme.fromWoxSettingTheme(WoxSettingTheme woxSettingTheme) {
-    themeId = woxSettingTheme.themeId;
-    themeName = woxSettingTheme.themeName;
-    themeAuthor = woxSettingTheme.themeAuthor;
-    themeUrl = woxSettingTheme.themeUrl;
-    version = woxSettingTheme.version;
-    description = woxSettingTheme.description;
-    isSystem = woxSettingTheme.isSystem;
-    isInstalled = woxSettingTheme.isInstalled;
-    isUpgradable = woxSettingTheme.isUpgradable;
-    screenshotUrls = woxSettingTheme.screenshotUrls;
   }
 }

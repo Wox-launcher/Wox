@@ -1,8 +1,11 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' as base;
 import 'package:flutter/services.dart';
-import 'package:flutter_image_slideshow/flutter_image_slideshow.dart';
+import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
+import 'package:wox/components/wox_theme_icon_view.dart';
+import 'package:wox/components/wox_theme_preview.dart';
+import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 import 'package:wox/utils/colors.dart';
 
@@ -63,7 +66,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                             controller.activeTheme.value = theme;
                           },
                           child: base.ListTile(
-                            //ellipsis: true,
+                            leading: WoxThemeIconView(theme: theme, width: 32, height: 32),
                             title: Text(theme.themeName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -208,7 +211,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
           ),
           Expanded(
             child: base.DefaultTabController(
-              length: theme.isInstalled ? 2 : 1,
+              length: 2,
               child: Column(
                 children: [
                   const base.TabBar(
@@ -218,6 +221,9 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                     indicatorColor: SettingPrimaryColor,
                     tabs: [
                       base.Tab(
+                        child: Text('Preview'),
+                      ),
+                      base.Tab(
                         child: Text('Description'),
                       ),
                     ],
@@ -225,6 +231,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                   Expanded(
                     child: base.TabBarView(
                       children: [
+                        themeTabPreview(theme),
                         themeTabDescription(),
                       ],
                     ),
@@ -238,6 +245,14 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
     );
   }
 
+  Widget themeTabPreview(WoxTheme theme) {
+    if (theme.themeId.isEmpty) {
+      return const Text('Theme data is empty');
+    }
+
+    return WoxThemePreview(theme: theme);
+  }
+
   Widget themeTabDescription() {
     return base.Padding(
       padding: const EdgeInsets.all(16),
@@ -247,17 +262,6 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
           Text(
             controller.activeTheme.value.description,
           ),
-          const SizedBox(height: 20),
-          controller.activeTheme.value.screenshotUrls.isNotEmpty
-              ? ImageSlideshow(
-                  width: double.infinity,
-                  height: 400,
-                  indicatorColor: SettingPrimaryColor,
-                  children: [
-                    ...controller.activeTheme.value.screenshotUrls.map((e) => base.Image.network(e)),
-                  ],
-                )
-              : const SizedBox(),
         ],
       ),
     );

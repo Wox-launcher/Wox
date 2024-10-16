@@ -22,9 +22,9 @@ class WoxSettingController extends GetxController {
   late TabController activePluginTabController;
 
   //themes
-  final themeList = <WoxSettingTheme>[];
-  final filteredThemeList = <WoxSettingTheme>[].obs;
-  final activeTheme = WoxSettingTheme.empty().obs;
+  final themeList = <WoxTheme>[];
+  final filteredThemeList = <WoxTheme>[].obs;
+  final activeTheme = WoxTheme.empty().obs;
   final isStoreThemeList = true.obs;
 
   //lang
@@ -165,7 +165,7 @@ class WoxSettingController extends GetxController {
     storeThemes.sort((a, b) => a.themeName.compareTo(b.themeName));
     themeList.clear();
     for (var theme in storeThemes) {
-      themeList.add(WoxSettingTheme.fromWoxSettingTheme(theme));
+      themeList.add(theme);
     }
     filteredThemeList.clear();
     filteredThemeList.addAll(themeList);
@@ -176,19 +176,19 @@ class WoxSettingController extends GetxController {
     installThemes.sort((a, b) => a.themeName.compareTo(b.themeName));
     themeList.clear();
     for (var theme in installThemes) {
-      themeList.add(WoxSettingTheme.fromWoxSettingTheme(theme));
+      themeList.add(theme);
     }
     filteredThemeList.clear();
     filteredThemeList.addAll(themeList);
   }
 
-  Future<void> installTheme(WoxSettingTheme theme) async {
+  Future<void> installTheme(WoxTheme theme) async {
     Logger.instance.info(const UuidV4().generate(), 'Installing theme: ${theme.themeId}');
     await WoxApi.instance.installTheme(theme.themeId);
     await refreshThemeList();
   }
 
-  Future<void> uninstallTheme(WoxSettingTheme theme) async {
+  Future<void> uninstallTheme(WoxTheme theme) async {
     Logger.instance.info(const UuidV4().generate(), 'Uninstalling theme: ${theme.themeId}');
     await WoxApi.instance.uninstallTheme(theme.themeId);
     await refreshThemeList();
@@ -223,7 +223,7 @@ class WoxSettingController extends GetxController {
   Future<void> switchToThemeList(bool isStoreTheme) async {
     activePaneIndex.value = isStoreTheme ? 6 : 7;
     isStoreThemeList.value = isStoreTheme;
-    activeTheme.value = WoxSettingTheme.empty();
+    activeTheme.value = WoxTheme.empty();
     await refreshThemeList();
     setFirstFilteredThemeActive();
   }

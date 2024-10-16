@@ -57,11 +57,11 @@ class WoxApi {
     await WoxHttpUtil.instance.postData("/plugin/enable", {"id": id});
   }
 
-  Future<List<WoxSettingTheme>> findStoreThemes() async {
+  Future<List<WoxTheme>> findStoreThemes() async {
     return await WoxHttpUtil.instance.postData("/theme/store", null);
   }
 
-  Future<List<WoxSettingTheme>> findInstalledThemes() async {
+  Future<List<WoxTheme>> findInstalledThemes() async {
     return await WoxHttpUtil.instance.postData("/theme/installed", null);
   }
 
