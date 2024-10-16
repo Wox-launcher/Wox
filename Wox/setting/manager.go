@@ -154,6 +154,9 @@ func (m *Manager) loadWoxAppData(ctx context.Context) error {
 	if woxAppData.ActionedResults == nil {
 		woxAppData.ActionedResults = util.NewHashMap[ResultHash, []ActionedResult]()
 	}
+	if woxAppData.FavoriteResults == nil {
+		woxAppData.FavoriteResults = util.NewHashMap[ResultHash, bool]()
+	}
 
 	// sort query histories by timestamp asc
 	slices.SortFunc(woxAppData.QueryHistories, func(i, j QueryHistory) int {
@@ -389,4 +392,23 @@ func (m *Manager) AddActionedResult(ctx context.Context, pluginId string, result
 	}
 
 	m.saveWoxAppData(ctx, "add actioned result")
+}
+
+func (m *Manager) AddFavoriteResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string) {
+	util.GetLogger().Info(ctx, fmt.Sprintf("add favorite result: %s, %s", resultTitle, resultSubTitle))
+	resultHash := NewResultHash(pluginId, resultTitle, resultSubTitle)
+	m.woxAppData.FavoriteResults.Store(resultHash, true)
+	m.saveWoxAppData(ctx, "add favorite result")
+}
+
+func (m *Manager) IsFavoriteResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string) bool {
+	resultHash := NewResultHash(pluginId, resultTitle, resultSubTitle)
+	return m.woxAppData.FavoriteResults.Exist(resultHash)
+}
+
+func (m *Manager) RemoveFavoriteResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string) {
+	util.GetLogger().Info(ctx, fmt.Sprintf("remove favorite result: %s, %s", resultTitle, resultSubTitle))
+	resultHash := NewResultHash(pluginId, resultTitle, resultSubTitle)
+	m.woxAppData.FavoriteResults.Delete(resultHash)
+	m.saveWoxAppData(ctx, "remove favorite result")
 }

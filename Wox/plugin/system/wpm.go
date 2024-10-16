@@ -4,10 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/fsnotify/fsnotify"
-	"github.com/google/uuid"
-	cp "github.com/otiai10/copy"
-	"github.com/samber/lo"
 	"os"
 	"path"
 	"strings"
@@ -16,9 +12,14 @@ import (
 	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
+
+	"github.com/fsnotify/fsnotify"
+	"github.com/google/uuid"
+	cp "github.com/otiai10/copy"
+	"github.com/samber/lo"
 )
 
-var wpmIcon = plugin.NewWoxImageBase64(`data:image/png;base64,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`)
+var wpmIcon = plugin.PluginWPMIcon
 var localPluginDirectoriesKey = "local_plugin_directories"
 var pluginTemplates = []pluginTemplate{
 	{

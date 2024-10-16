@@ -15,7 +15,7 @@ import (
 
 var webSearchesSettingKey = "webSearches"
 
-var webSearchIcon = plugin.NewWoxImageSvg(`<svg t="1700799533400" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="8846" width="200" height="200"><path d="M869.484748 1024a96.009331 96.009331 0 0 1-76.327418-37.923686l-174.736982-228.982254a96.009331 96.009331 0 0 1 152.654836-116.651337l174.736982 228.982254a96.009331 96.009331 0 0 1-76.327418 154.094976z" fill="#D34233" p-id="8847"></path><path d="M770.595138 640.92277a96.009331 96.009331 0 0 0-100.809798-34.563359 240.023327 240.023327 0 0 1-57.605598 65.766391c-3.360327 2.400233-7.2007 4.32042-11.041074 6.720653a96.009331 96.009331 0 0 0 16.801633 79.687745l70.566859 92.649004a432.041989 432.041989 0 0 0 39.843872-26.882612A429.161709 429.161709 0 0 0 826.760596 715.810048z" fill="#C1211A" p-id="8848"></path><path d="M490.727938 864.144464a432.041989 432.041989 0 1 1 261.625427-88.328584A432.041989 432.041989 0 0 1 490.727938 864.144464zM490.727938 192.079148a240.023327 240.023327 0 1 0 192.018662 96.009331 240.023327 240.023327 0 0 0-192.018662-96.009331z" fill="#F16A54" p-id="8849"></path></svg>`)
+var webSearchIcon = plugin.PluginWebsearchIcon
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &WebSearchPlugin{})
@@ -224,10 +224,12 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 					{
 						Name: "Search",
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							for _, url := range search.Urls {
-								util.ShellOpen(r.replaceVariables(ctx, url, otherQuery))
-								time.Sleep(time.Millisecond * 100)
-							}
+							util.Go(ctx, "open urls", func() {
+								for _, url := range search.Urls {
+									util.ShellOpen(r.replaceVariables(ctx, url, otherQuery))
+									time.Sleep(time.Millisecond * 100)
+								}
+							})
 						},
 					},
 				},

@@ -12,6 +12,7 @@ type ResultHash string
 type WoxAppData struct {
 	QueryHistories  []QueryHistory
 	ActionedResults *util.HashMap[ResultHash, []ActionedResult]
+	FavoriteResults *util.HashMap[ResultHash, bool]
 }
 
 type QueryHistory struct {
@@ -31,5 +32,6 @@ func GetDefaultWoxAppData(ctx context.Context) WoxAppData {
 	return WoxAppData{
 		QueryHistories:  []QueryHistory{},
 		ActionedResults: util.NewHashMap[ResultHash, []ActionedResult](),
+		FavoriteResults: util.NewHashMap[ResultHash, bool](),
 	}
 }

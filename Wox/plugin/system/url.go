@@ -12,7 +12,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var urlIcon = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAEEUlEQVR4nO2Yz28TRxTHX9omjSqSS5XEO2NDVXKsqlYJSPkDeuHUc1X12FtSVBLv2G5iRClqA5EgCoJkdwvqvf9CBSGJWxrieGdoKkPizihATyC1Un6UiKlmTfjhHRsveGMj+SuNVs7m7X7eezPvzSxAU0011VRQGdN39iOHp7DDF7Aj/sY230G2uIdtMY9tnkQ/rsegEXXgUqEdO2ICOWILO0KWG8gWm9jhp3vP5d+GRlG3tdqDHJ6pBI59gy/0/HS7u0HgBQsGL4rZcHimrpk4cKkQwbZYeRl4/DQT4w0Hj2y+gRwxGrvMD/ZNL7aqK3LEmPq7bk1ELwvcOPCOuB+1xGGdHbLXB3ROYIeThoE3LN5XyR45YkyzFq6+FvBKajppbO/AXlSbV4VXUlVHY78FYTepcnU+CLxS1BK9e54B1WFrAa+EbJHWVK0rEJY6Tv0xgCy+U/pSw/rrYXvy+gyYi/urfVbUEoe1VcjmZu3J04V2GLo22XEy+9AXMYvLtvi8hKMZCfHcJpjsNAxW7qiGxftUxnQ9o/Z9IOH2QHzpVxiak12Ted/U6fg2K+GrOQUvgbDiMNkCmNn3gsDjYvR/qD08oQziyxKGZmXkYsH30re+npUwfOMp/JPh/guD+c7q4cV8bfdCwywCJlvxYJQDg1e96VL64pbBKxJGshoHvExcrxJ+RZXmcOA9B3JlM9D53dIncCx7HAjb8DtBJSTd/sjF2/2V4FVTDA/ei6QrH68B/yJ2xJhnl3A/1WXhzRTLGFPsAbZ5neB3I3l04UHX1K0L2t2mvT7g2Zvsl1Lb1m9yj4xzyxJbhXrBe+M+jNzoV2fY4jHQ74QxvXq8PU2/KLV9I0mlcTYrsbUWIryqNpXgifukw2Kbn9F24ulVGZn43WffQpg0zi5JNLMWErxqUoRmqoFXUocSbItZnwMX8rJr3O/AbgaQ5wD/M2ZzBDWVSSeqhd+VOoA//lRSdMBak8ZkTu474S+nbaM57x6yVjO1LZVKKRoDQreCwD+/FebjaGZtE00x+e73i7Il4Q/EvhPZHTxJJ8I5sBOa0sBvAKGHqn0EOn8r1nly6eeWBNVkkcp3TrlHIDSZbE7jwGiwZ7ifg0kf6Tsx/Q1CFaH3NHuY96u2N9lnZeEJ+6d0L1R7mXTb9+I0a6tB5LchsfwBhC6iycAwPfhKkVfww+wj2BMRek2zgxx7PeCVTJrUVyG3uLcp1cjNI5Xh3Q9hT5WiMTDpptYJlQnCer3joboSltZvmesR+WdF6JkyVaS6UVd4pS8XW8Gksy/nwM1tMPMfQ911bLnbO4gHirz6/wA9I3Spua4+iejXxLNTRt0ff9Gnk/opnouCyYg3rUx6Fwj7z7t6vxnx7jfVVFNNQUD9D+AcOX6Kbv2UAAAAAElFTkSuQmCC`)
+var urlIcon = plugin.PluginUrlIcon
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &UrlPlugin{})
@@ -85,7 +85,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 	//check if search is in recentUrls
 	if len(query.Search) >= 2 {
 		existingUrlHistory := lo.Filter(r.recentUrls, func(item UrlHistory, index int) bool {
-			return strings.Contains(item.Url, query.Search)
+			return strings.Contains(strings.ToLower(item.Url), strings.ToLower(query.Search))
 		})
 
 		for _, history := range existingUrlHistory {
@@ -97,6 +97,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "Open",
+						Icon: plugin.OpenIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							openErr := util.ShellOpen(history.Url)
 							if openErr != nil {
@@ -106,6 +107,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 					},
 					{
 						Name: "Remove from url history",
+						Icon: plugin.TrashIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							r.removeRecentUrl(ctx, history.Url)
 						},
@@ -124,6 +126,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Open",
+					Icon: urlIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						url := query.Search
 						if !strings.HasPrefix(url, "http") {

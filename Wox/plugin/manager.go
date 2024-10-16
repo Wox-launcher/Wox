@@ -414,6 +414,7 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms", pluginInstance.Metadata.Name, len(results), util.GetSystemTimestamp()-start))
 
 	for i := range results {
+		results[i] = m.addDefaultActions(ctx, pluginInstance, query, results[i])
 		results[i] = m.PolishResult(ctx, pluginInstance, query, results[i])
 	}
 
@@ -444,6 +445,32 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 	}
 }
 
+func (m *Manager) addDefaultActions(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult) QueryResult {
+	if query.Type == QueryTypeInput {
+		if setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle) {
+			// add "Remove from favorite" action
+			result.Actions = append(result.Actions, QueryResultAction{
+				Name: "Remove from favorite",
+				Icon: RemoveFromFavIcon,
+				Action: func(ctx context.Context, actionContext ActionContext) {
+					setting.GetSettingManager().RemoveFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
+				},
+			})
+		} else {
+			// add "Add to favorite" action
+			result.Actions = append(result.Actions, QueryResultAction{
+				Name: "Add to favorite",
+				Icon: AddToFavIcon,
+				Action: func(ctx context.Context, actionContext ActionContext) {
+					setting.GetSettingManager().AddFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
+				},
+			})
+		}
+	}
+
+	return result
+}
+
 func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult) QueryResult {
 	// set default id
 	if result.Id == "" {
@@ -454,7 +481,8 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			result.Actions[actionIndex].Id = uuid.NewString()
 		}
 		if result.Actions[actionIndex].Icon.ImageType == "" {
-			result.Actions[actionIndex].Icon = NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAeCAYAAAA7MK6iAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAVklEQVR4nO3VQQqAMAxE0X88S29tb2K9hyJ0EQQhbirCf5BVFgOBISBNVIEd6ECZGdyBY8x227WwezPtq+A1E1xG+BW6pO8kJdjjyB7rn6r/OLDHEk9OW8N7ef+eTPQAAAAASUVORK5CYII=`)
+			// set default action icon if not present
+			result.Actions[actionIndex].Icon = DefaultActionIcon
 		}
 	}
 
@@ -609,11 +637,18 @@ func (m *Manager) formatFileListPreview(ctx context.Context, filePaths []string)
 }
 
 func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string) int64 {
+	var score int64 = 0
+
+	// check if result is favorite result
+	if setting.GetSettingManager().IsFavoriteResult(ctx, pluginId, title, subTitle) {
+		score += 100000
+	}
+
 	resultHash := setting.NewResultHash(pluginId, title, subTitle)
 	woxAppData := setting.GetSettingManager().GetWoxAppData(ctx)
 	actionResults, ok := woxAppData.ActionedResults.Load(resultHash)
 	if !ok {
-		return 0
+		return score
 	}
 
 	// actioned score are based on actioned counts, the more actioned, the more score
@@ -622,7 +657,6 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, sub
 	// that means, actions in day one, we will add weight 89, day two, we will add weight 55, day three, we will add weight 34, and so on
 	// E.g. if actioned 3 times in day one, 2 times in day two, 1 time in day three, the score will be: 89*3 + 55*2 + 34*1 = 450
 
-	var score int64 = 0
 	for _, actionResult := range actionResults {
 		var weight int64 = 2
 

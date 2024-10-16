@@ -29,8 +29,6 @@ import (
 	_ "wox/plugin/system/calculator"
 
 	_ "wox/plugin/system/file"
-
-	_ "wox/plugin/system/keyninja"
 )
 
 func main() {
