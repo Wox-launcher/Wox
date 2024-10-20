@@ -161,6 +161,7 @@ func responseUISuccess(ctx context.Context, request WebsocketMsg) {
 func responseUIError(ctx context.Context, request WebsocketMsg, errMsg string) {
 	responseUI(ctx, WebsocketMsg{
 		RequestId: request.RequestId,
+		TraceId:   util.GetContextTraceId(ctx),
 		Type:      WebsocketMsgTypeResponse,
 		Method:    request.Method,
 		Success:   false,

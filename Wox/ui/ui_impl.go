@@ -84,6 +84,10 @@ func (u *uiImpl) RestoreTheme(ctx context.Context) {
 	GetUIManager().RestoreTheme(ctx)
 }
 
+func (u *uiImpl) ShowToolbarMsg(ctx context.Context, msg share.ToolbarMsg) {
+	u.invokeWebsocketMethod(ctx, "ShowToolbarMsg", msg)
+}
+
 func (u *uiImpl) PickFiles(ctx context.Context, params share.PickFilesParams) []string {
 	respData, err := u.invokeWebsocketMethod(ctx, "PickFiles", params)
 	if err != nil {
@@ -356,7 +360,12 @@ func handleWebsocketAction(ctx context.Context, request WebsocketMsg) {
 		return
 	}
 
-	plugin.GetPluginManager().ExecuteAction(ctx, resultId, actionId)
+	executeErr := plugin.GetPluginManager().ExecuteAction(ctx, resultId, actionId)
+	if executeErr != nil {
+		logger.Error(ctx, executeErr.Error())
+		responseUIError(ctx, request, executeErr.Error())
+		return
+	}
 
 	responseUISuccess(ctx, request)
 }
@@ -417,7 +426,7 @@ func getWebsocketMsgParameter(ctx context.Context, msg WebsocketMsg, key string)
 
 	paramterData := gjson.GetBytes(jsonData, key)
 	if !paramterData.Exists() {
-		return "", errors.New(fmt.Sprintf("%s parameter not found", key))
+		return "", fmt.Errorf("%s parameter not found", key)
 	}
 
 	return paramterData.String(), nil

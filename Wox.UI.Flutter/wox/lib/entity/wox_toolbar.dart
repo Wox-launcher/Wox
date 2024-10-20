@@ -33,3 +33,23 @@ class ToolbarInfo {
     return !isEmpty();
   }
 }
+
+class ToolbarMsg {
+  final WoxImage? icon;
+  final String? text;
+  final int displaySeconds; // how long to display the message, 0 for forever
+
+  ToolbarMsg({
+    this.icon,
+    this.text,
+    this.displaySeconds = 10,
+  });
+
+  static ToolbarMsg fromJson(Map<String, dynamic> json) {
+    return ToolbarMsg(
+      icon: WoxImage.parse(json['Icon']),
+      text: json['Text'] ?? '',
+      displaySeconds: json['DisplaySeconds'] ?? 10,
+    );
+  }
+}

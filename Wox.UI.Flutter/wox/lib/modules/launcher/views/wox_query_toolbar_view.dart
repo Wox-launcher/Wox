@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/wox_hotkey_view.dart';
@@ -13,42 +14,103 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
   Widget leftTip() {
     return Obx(() {
       final toolbarInfo = controller.toolbar.value;
-      return Row(
-        children: [
-          if (toolbarInfo.icon != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: WoxImageView(woxImage: toolbarInfo.icon!, width: 24, height: 24),
+      return SizedBox(
+        width: 550,
+        child: Row(
+          children: [
+            if (toolbarInfo.icon != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: WoxImageView(woxImage: toolbarInfo.icon!, width: 24, height: 24),
+              ),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final textSpan = TextSpan(
+                    text: toolbarInfo.text ?? '',
+                    style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor)),
+                  );
+                  final textPainter = TextPainter(
+                    text: textSpan,
+                    maxLines: 1,
+                    textDirection: TextDirection.ltr,
+                  )..layout(maxWidth: constraints.maxWidth);
+
+                  final isTextOverflow = textPainter.didExceedMaxLines;
+
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          toolbarInfo.text ?? '',
+                          style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor)),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                      if (isTextOverflow)
+                        MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: GestureDetector(
+                            onTap: () {
+                              Clipboard.setData(ClipboardData(text: toolbarInfo.text ?? ''));
+                              controller.toolbarCopyText.value = 'Copied'; // 更新状态为 "Copied"
+                              Future.delayed(const Duration(seconds: 3), () {
+                                controller.toolbarCopyText.value = 'Copy'; // 3秒后恢复为 "Copy"
+                              });
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 8.0),
+                              child: Obx(() => Text(
+                                    controller.toolbarCopyText.value, // 使用状态变量
+                                    style: TextStyle(
+                                      color: fromCssColor(controller.woxTheme.value.toolbarFontColor),
+                                      fontSize: 12,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  )),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
             ),
-          Text(
-            toolbarInfo.text ?? '',
-            style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor)),
-          ),
-        ],
+          ],
+        ),
       );
     });
   }
 
   Widget rightTip() {
-    final toolbarInfo = controller.toolbar.value;
-    if (toolbarInfo.hotkey == null || toolbarInfo.hotkey!.isEmpty) {
-      return const SizedBox();
-    }
+    return Obx(() {
+      final toolbarInfo = controller.toolbar.value;
+      if (toolbarInfo.hotkey == null || toolbarInfo.hotkey!.isEmpty) {
+        return const SizedBox();
+      }
 
-    var hotkey = WoxHotkey.parseHotkeyFromString(toolbarInfo.hotkey!);
-    return Row(
-      children: [
-        Text(toolbarInfo.actionName ?? '', style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor))),
-        const SizedBox(width: 8),
-        WoxHotkeyView(
-          hotkey: hotkey!,
-          backgroundColor: fromCssColor(controller.woxTheme.value.toolbarBackgroundColor),
-          borderColor: fromCssColor(controller.woxTheme.value.toolbarFontColor),
-          textColor: fromCssColor(controller.woxTheme.value.toolbarFontColor),
-        )
-      ],
-    );
+      var hotkey = WoxHotkey.parseHotkeyFromString(toolbarInfo.hotkey!);
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Text(
+            toolbarInfo.actionName ?? '',
+            style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor)),
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(width: 8),
+          WoxHotkeyView(
+            hotkey: hotkey!,
+            backgroundColor: fromCssColor(controller.woxTheme.value.toolbarBackgroundColor),
+            borderColor: fromCssColor(controller.woxTheme.value.toolbarFontColor),
+            textColor: fromCssColor(controller.woxTheme.value.toolbarFontColor),
+          )
+        ],
+      );
+    });
   }
+
   @override
   Widget build(BuildContext context) {
     return Obx(() {

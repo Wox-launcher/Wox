@@ -984,16 +984,14 @@ func (m *Manager) expandQueryShortcut(ctx context.Context, query string, querySh
 	return newQuery
 }
 
-func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId string) {
+func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId string) error {
 	resultCache, found := m.resultCache.Load(resultId)
 	if !found {
-		logger.Error(ctx, fmt.Sprintf("result cache not found for result id (execute action): %s", resultId))
-		return
+		return fmt.Errorf("result cache not found for result id (execute action): %s", resultId)
 	}
 	action, exist := resultCache.Actions.Load(actionId)
 	if !exist {
-		logger.Error(ctx, fmt.Sprintf("action not found for result id: %s, action id: %s", resultId, actionId))
-		return
+		return fmt.Errorf("action not found for result id: %s, action id: %s", resultId, actionId)
 	}
 
 	action(ctx, ActionContext{
@@ -1001,6 +999,7 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 	})
 
 	setting.GetSettingManager().AddActionedResult(ctx, resultCache.PluginInstance.Metadata.Id, resultCache.ResultTitle, resultCache.ResultSubTitle)
+	return nil
 }
 
 func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId RefreshableResultWithResultId) (RefreshableResultWithResultId, error) {
@@ -1012,8 +1011,7 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 
 	resultCache, found := m.resultCache.Load(refreshableResultWithId.ResultId)
 	if !found {
-		logger.Error(ctx, fmt.Sprintf("result cache not found for result id (execute refresh): %s", refreshableResultWithId.ResultId))
-		return refreshableResultWithId, errors.New("result cache not found")
+		return refreshableResultWithId, fmt.Errorf("result cache not found for result id (execute refresh): %s", refreshableResultWithId.ResultId)
 	}
 
 	newResult := resultCache.Refresh(ctx, refreshableResult)
@@ -1039,8 +1037,7 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 func (m *Manager) GetResultPreview(ctx context.Context, resultId string) (WoxPreview, error) {
 	resultCache, found := m.resultCache.Load(resultId)
 	if !found {
-		logger.Error(ctx, fmt.Sprintf("result cache not found for result id (get preview): %s", resultId))
-		return WoxPreview{}, errors.New("result cache not found")
+		return WoxPreview{}, fmt.Errorf("result cache not found for result id (get preview): %s", resultId)
 	}
 
 	preview := m.polishPreview(ctx, resultCache.Preview)
@@ -1118,10 +1115,7 @@ func (m *Manager) GetAIProvider(ctx context.Context, provider ai.ProviderName) (
 	//check if provider has setting
 	aiProviderSettings := setting.GetSettingManager().GetWoxSetting(ctx).AIProviders
 	providerSetting, providerSettingExist := lo.Find(aiProviderSettings, func(item setting.AIProvider) bool {
-		if item.Name == string(provider) {
-			return true
-		}
-		return false
+		return item.Name == string(provider)
 	})
 	if !providerSettingExist {
 		return nil, fmt.Errorf("ai provider setting not found: %s", provider)

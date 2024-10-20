@@ -48,6 +48,7 @@ type UI interface {
 	InstallTheme(ctx context.Context, theme Theme)
 	UninstallTheme(ctx context.Context, theme Theme)
 	RestoreTheme(ctx context.Context)
+	ShowToolbarMsg(ctx context.Context, msg ToolbarMsg)
 }
 
 type ShowContext struct {
@@ -56,4 +57,10 @@ type ShowContext struct {
 
 type PickFilesParams struct {
 	IsDirectory bool
+}
+
+type ToolbarMsg struct {
+	Icon           string // WoxImage.String(), can be empty
+	Text           string // can be empty
+	DisplaySeconds int    // 0 means display forever
 }

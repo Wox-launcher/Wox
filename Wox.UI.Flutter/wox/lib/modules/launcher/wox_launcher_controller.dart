@@ -87,6 +87,8 @@ class WoxLauncherController extends GetxController {
   /// The result of the doctor check.
   var doctorCheckPassed = true;
 
+  final toolbarCopyText = 'Copy'.obs;
+
   /// Triggered when received query results from the server.
   void onReceivedQueryResults(String traceId, List<WoxQueryResult> receivedResults) {
     if (receivedResults.isEmpty) {
@@ -499,6 +501,9 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "OpenSettingWindow") {
       openSettingWindow(msg.traceId, SettingWindowContext.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "ShowToolbarMsg") {
+      showToolbarMsg(msg.traceId, ToolbarMsg.fromJson(msg.data));
+      responseWoxWebsocketRequest(msg, true, null);
     }
   }
 
@@ -508,7 +513,7 @@ class WoxLauncherController extends GetxController {
       for (var item in msg.data) {
         results.add(WoxQueryResult.fromJson(item));
       }
-      Logger.instance.info(msg.traceId, "Received message: ${msg.method}, results count: ${results.length}");
+      Logger.instance.info(msg.traceId, "Received websocket message: ${msg.method}, results count: ${results.length}");
 
       onReceivedQueryResults(msg.traceId, results);
     }
@@ -841,6 +846,30 @@ class WoxLauncherController extends GetxController {
             ));
       }
     });
+  }
+
+  void showToolbarMsg(String traceId, ToolbarMsg msg) {
+    toolbar.value = ToolbarInfo(
+      text: msg.text,
+      icon: msg.icon,
+      action: toolbar.value.action,
+      actionName: toolbar.value.actionName,
+      hotkey: toolbar.value.hotkey,
+    );
+    if (msg.displaySeconds > 0) {
+      Future.delayed(Duration(seconds: msg.displaySeconds), () {
+        // only hide toolbar msg when the text is the same as the one we are showing
+        if (toolbar.value.text == msg.text) {
+          toolbar.value = ToolbarInfo(
+            text: "",
+            icon: WoxImage.empty(),
+            action: toolbar.value.action,
+            actionName: toolbar.value.actionName,
+            hotkey: toolbar.value.hotkey,
+          );
+        }
+      });
+    }
   }
 
   void moveQueryBoxCursorToStart() {

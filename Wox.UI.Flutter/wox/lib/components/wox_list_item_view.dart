@@ -148,7 +148,9 @@ class WoxListItemView extends StatelessWidget {
                   title.value,
                   style: TextStyle(
                     fontSize: 16,
-                    color: isAction() ? fromCssColor(isActive ? woxTheme.actionItemActiveFontColor : woxTheme.actionItemFontColor) : fromCssColor(isActive ? woxTheme.resultItemActiveTitleColor : woxTheme.resultItemTitleColor),
+                    color: isAction()
+                        ? fromCssColor(isActive ? woxTheme.actionItemActiveFontColor : woxTheme.actionItemFontColor)
+                        : fromCssColor(isActive ? woxTheme.resultItemActiveTitleColor : woxTheme.resultItemTitleColor),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
