@@ -34,6 +34,7 @@ import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
+import 'package:fuzzywuzzy/fuzzywuzzy.dart';
 
 class WoxLauncherController extends GetxController {
   //query related variables
@@ -52,6 +53,7 @@ class WoxLauncherController extends GetxController {
   final activeResultIndex = 0.obs;
   final resultGlobalKeys = <GlobalKey>[]; // the global keys for each result item, used to calculate the position of the result item
   final resultScrollerController = ScrollController(initialScrollOffset: 0.0);
+  final originalResults = <WoxQueryResult>[]; // the original results, used to filter and restore selection results
 
   /// The timer to clear query results.
   /// On every query changed, it will reset the timer and will clear the query results after N ms.
@@ -139,6 +141,7 @@ class WoxLauncherController extends GetxController {
     }
 
     results.assignAll(finalResultsSorted);
+    originalResults.assignAll(results);
     for (var _ in results) {
       resultGlobalKeys.add(GlobalKey());
     }
@@ -333,20 +336,35 @@ class WoxLauncherController extends GetxController {
   void onQueryBoxTextChanged(String value) {
     canArrowUpHistory = false;
 
-    PlainQuery plainQuery = PlainQuery(
-      queryId: const UuidV4().generate(),
-      queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
-      queryText: value,
-      querySelection: Selection.empty(),
-    );
-
-    // do filter if query type is selection
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
-      plainQuery.queryType = WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code;
-      plainQuery.querySelection = currentQuery.value.querySelection;
+      // do local filter if query type is selection
+      filterSelectionResults(const UuidV4().generate(), value);
+    } else {
+      onQueryChanged(
+        const UuidV4().generate(),
+        PlainQuery(
+          queryId: const UuidV4().generate(),
+          queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
+          queryText: value,
+          querySelection: Selection.empty(),
+        ),
+        "user input changed",
+      );
+    }
+  }
+
+  void filterSelectionResults(String traceId, String filterText) {
+    if (filterText.isEmpty) {
+      results.assignAll(originalResults);
+    } else {
+      var matchedResults = originalResults.where((result) {
+        return isFuzzyMatch(traceId, result.title.value, filterText) || isFuzzyMatch(traceId, result.subTitle.value, filterText);
+      }).toList();
+      results.assignAll(matchedResults);
     }
 
-    onQueryChanged(const UuidV4().generate(), plainQuery, "user input changed");
+    resetActiveResult();
+    resetActiveAction(traceId, "filter selection results: $filterText");
   }
 
   void onQueryChanged(String traceId, PlainQuery query, String changeReason, {bool moveCursorToEnd = false}) {
@@ -417,11 +435,7 @@ class WoxLauncherController extends GetxController {
     }
 
     var filteredActions = activeResult.actions.where((element) {
-      if (WoxSettingUtil.instance.currentSetting.usePinYin) {
-        return transferChineseToPinYin(element.name.toLowerCase()).contains(queryAction.toLowerCase());
-      }
-
-      return element.name.toLowerCase().contains(queryAction.toLowerCase());
+      return isFuzzyMatch(traceId, element.name.value, queryAction);
     }).toList();
 
     //if filtered actions is not changed, then return
@@ -431,6 +445,19 @@ class WoxLauncherController extends GetxController {
 
     actions.assignAll(filteredActions);
     updateToolbarByActiveAction(traceId);
+  }
+
+  /// check if the query text is fuzzy match with the filter text based on the setting
+  bool isFuzzyMatch(String traceId, String queryText, String filterText) {
+    if (WoxSettingUtil.instance.currentSetting.usePinYin) {
+      queryText = transferChineseToPinYin(queryText).toLowerCase();
+    } else {
+      queryText = queryText.toLowerCase();
+    }
+
+    var score = weightedRatio(queryText, filterText.toLowerCase());
+    Logger.instance.debug(traceId, "calculate fuzzy match score, queryText: $queryText, filterText: $filterText, score: $score");
+    return score > 50;
   }
 
   void changeResultScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
@@ -575,13 +602,16 @@ class WoxLauncherController extends GetxController {
 
   /// reset and jump active result to top of the list
   void resetActiveResult() {
-    if (results[0].isGroup) {
-      activeResultIndex.value = 1;
-    } else {
-      activeResultIndex.value = 0;
-    }
-    if (resultScrollerController.hasClients) {
-      resultScrollerController.jumpTo(0);
+    // reset active result index
+    if (results.isNotEmpty) {
+      if (results[0].isGroup) {
+        activeResultIndex.value = 1;
+      } else {
+        activeResultIndex.value = 0;
+      }
+      if (resultScrollerController.hasClients) {
+        resultScrollerController.jumpTo(0);
+      }
     }
 
     //reset preview
