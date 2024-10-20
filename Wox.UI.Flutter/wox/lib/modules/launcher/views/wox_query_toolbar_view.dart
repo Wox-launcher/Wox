@@ -2,16 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_hotkey_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
+import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
 class WoxQueryToolbarView extends GetView<WoxLauncherController> {
   const WoxQueryToolbarView({super.key});
 
-  Widget leftTip() {
+  Widget leftPart() {
+    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: toolbar view - left part");
+
     return Obx(() {
       final toolbarInfo = controller.toolbar.value;
       return SizedBox(
@@ -83,7 +87,9 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
     });
   }
 
-  Widget rightTip() {
+  Widget rightPart() {
+    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: toolbar view  - right part");
+
     return Obx(() {
       final toolbarInfo = controller.toolbar.value;
       if (toolbarInfo.hotkey == null || toolbarInfo.hotkey!.isEmpty) {
@@ -113,6 +119,8 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
 
   @override
   Widget build(BuildContext context) {
+    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: query toolbar view - container");
+
     return Obx(() {
       return SizedBox(
         height: WoxThemeUtil.instance.getToolbarHeight(),
@@ -132,8 +140,8 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                leftTip(),
-                rightTip(),
+                leftPart(),
+                rightPart(),
               ],
             ),
           ),

@@ -102,7 +102,7 @@ class WoxListItemView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view $key - container");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view ${title.value} - container");
 
     return Container(
       decoration: BoxDecoration(
@@ -131,7 +131,7 @@ class WoxListItemView extends StatelessWidget {
               : Padding(
                   padding: const EdgeInsets.only(left: 5.0, right: 10.0),
                   child: Obx(() {
-                    if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view $key - icon");
+                    if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view ${title.value} - icon");
 
                     return WoxImageView(
                       woxImage: icon.value,
@@ -142,7 +142,7 @@ class WoxListItemView extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
               Obx(() {
-                if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view $key - title");
+                if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view ${title.value} - title");
 
                 return Text(
                   title.value,
@@ -160,7 +160,7 @@ class WoxListItemView extends StatelessWidget {
                 );
               }),
               Obx(() {
-                if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view $key - subtitle");
+                if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view ${title.value} - subtitle");
 
                 return subTitle.isNotEmpty
                     ? Padding(
@@ -184,7 +184,7 @@ class WoxListItemView extends StatelessWidget {
           ),
           // Tails
           Obx(() {
-            if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view $key - tails");
+            if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view ${title.value} - tails");
             if (tails.isNotEmpty) {
               return buildTails();
             } else {

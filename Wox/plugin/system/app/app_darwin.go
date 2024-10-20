@@ -69,6 +69,9 @@ func (a *MacRetriever) GetAppDirectories(ctx context.Context) []appDirectory {
 			Path: "/System/Applications", Recursive: true, RecursiveDepth: 2,
 		},
 		{
+			Path: "/System/Library/CoreServices/Applications", Recursive: false,
+		},
+		{
 			Path: "/System/Library/PreferencePanes", Recursive: false,
 		},
 	}

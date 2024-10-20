@@ -56,7 +56,8 @@ class WoxLauncherController extends GetxController {
   /// The timer to clear query results.
   /// On every query changed, it will reset the timer and will clear the query results after N ms.
   /// If there is no this delay mechanism, the window will flicker for fast typing.
-  var clearQueryResultsTimer = Timer(const Duration(), () => {});
+  Timer clearQueryResultsTimer = Timer(const Duration(), () => {});
+  final clearQueryResultDelay = 1000;
 
   // action related variables
   /// The list of result actions for the active query result.
@@ -78,16 +79,20 @@ class WoxLauncherController extends GetxController {
   final isInSettingView = false.obs;
   var positionBeforeOpenSetting = const Offset(0, 0);
 
-  /// toolbar at bottom of launcher
-  final toolbar = ToolbarInfo.empty().obs;
-
   /// The icon at end of query box.
   final queryIcon = QueryIconInfo.empty().obs;
 
   /// The result of the doctor check.
   var doctorCheckPassed = true;
 
+  // toolbar related variables
+  final toolbar = ToolbarInfo.empty().obs;
   final toolbarCopyText = 'Copy'.obs;
+  // The timer to clean the toolbar when query changed
+  // on every query changed, it will reset the timer and will clear the toolbar after N ms
+  // If there is no this delay mechanism, the toolbar will flicker for fast typing
+  Timer cleanToolbarTimer = Timer(const Duration(), () => {});
+  final cleanToolbarDelay = 1000;
 
   /// Triggered when received query results from the server.
   void onReceivedQueryResults(String traceId, List<WoxQueryResult> receivedResults) {
@@ -379,7 +384,7 @@ class WoxLauncherController extends GetxController {
     // and then the query result is received which will expand the windows height. so it will causes window flicker
     clearQueryResultsTimer.cancel();
     clearQueryResultsTimer = Timer(
-      const Duration(milliseconds: 100),
+      Duration(milliseconds: clearQueryResultDelay),
       () {
         clearQueryResults();
       },
@@ -849,6 +854,9 @@ class WoxLauncherController extends GetxController {
   }
 
   void showToolbarMsg(String traceId, ToolbarMsg msg) {
+    // cancel the timer if it is running
+    cleanToolbarTimer.cancel();
+
     toolbar.value = ToolbarInfo(
       text: msg.text,
       icon: msg.icon,
@@ -972,23 +980,34 @@ class WoxLauncherController extends GetxController {
   }
 
   void updateToolbarOnQueryChanged(String traceId, PlainQuery query) {
-    //if doctor check is not passed and query is empty, show doctor tip
-    if (query.isEmpty && !doctorCheckPassed) {
-      Logger.instance.debug(traceId, "update toolbar to doctor warning, query is empty and doctor check not passed");
-      toolbar.value = ToolbarInfo(
-        text: "Doctor check not passed",
-        icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: QUERY_ICON_DOCTOR_WARNING),
-        hotkey: "enter",
-        actionName: "Check",
-        action: () {
-          onQueryChanged(traceId, PlainQuery.text("doctor "), "user click query icon");
-        },
-      );
+    cleanToolbarTimer.cancel();
+
+    // if query is empty, we need to immediately update the toolbar
+    if (query.isEmpty) {
+      // if query is empty and doctor check is not passed, show doctor warning
+      if (!doctorCheckPassed) {
+        Logger.instance.debug(traceId, "update toolbar to doctor warning, query is empty and doctor check not passed");
+        toolbar.value = ToolbarInfo(
+          text: "Doctor check not passed",
+          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: QUERY_ICON_DOCTOR_WARNING),
+          hotkey: "enter",
+          actionName: "Check",
+          action: () {
+            onQueryChanged(traceId, PlainQuery.text("doctor "), "user click query icon");
+          },
+        );
+      } else {
+        Logger.instance.debug(traceId, "update toolbar to empty because of query changed and is empty");
+        toolbar.value = ToolbarInfo.empty();
+      }
       return;
     }
 
-    Logger.instance.debug(traceId, "update toolbar to empty because of query changed");
-    toolbar.value = ToolbarInfo.empty();
+    // if query is not empty, update the toolbar after 100ms to avoid flickering
+    cleanToolbarTimer = Timer(Duration(milliseconds: cleanToolbarDelay), () {
+      Logger.instance.debug(traceId, "update toolbar to empty because of query changed");
+      toolbar.value = ToolbarInfo.empty();
+    });
   }
 
   /// Update the toolbar based on the active action
@@ -996,13 +1015,20 @@ class WoxLauncherController extends GetxController {
     var activeAction = getActiveAction();
     if (activeAction != null) {
       Logger.instance.debug(traceId, "update toolbar to active action: ${activeAction.name.value}");
-      toolbar.value = ToolbarInfo(
-        hotkey: "enter",
-        actionName: activeAction.name.value,
-        action: () {
-          executeAction(traceId, getActiveResult(), activeAction);
-        },
-      );
+
+      // cancel the timer if it is running
+      cleanToolbarTimer.cancel();
+
+      // only update action and hotkey if it's different from the current one
+      if (toolbar.value.actionName != activeAction.name.value || toolbar.value.hotkey != activeAction.hotkey) {
+        toolbar.value = ToolbarInfo(
+          hotkey: "enter",
+          actionName: activeAction.name.value,
+          action: () {
+            executeAction(traceId, getActiveResult(), activeAction);
+          },
+        );
+      }
     } else {
       Logger.instance.debug(traceId, "update toolbar to empty, no active action");
       toolbar.value = ToolbarInfo.empty();
