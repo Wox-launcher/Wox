@@ -138,11 +138,11 @@ class WoxLauncherController extends GetxController {
       resultGlobalKeys.add(GlobalKey());
     }
 
-    //reset active result and actions if current query has no results (this is the first time to receive results for the current query)
-    //if current query has results, then keep the active result and actions
-    if (existingQueryResults.isEmpty) {
+    // if current query already has results and active result is not the first one, then do not reset active result and action
+    // this will prevent the active result from being reset to the first one when the query results are received
+    if (existingQueryResults.isEmpty || activeResultIndex.value == 0) {
       resetActiveResult();
-      resetActiveAction(traceId, "receive first results of current query: ${currentQuery.value.queryText}");
+      resetActiveAction(traceId, "receive query results: ${currentQuery.value.queryText}");
     }
 
     resizeHeight();
