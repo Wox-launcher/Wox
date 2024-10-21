@@ -4,16 +4,14 @@ package notifier
 #cgo LDFLAGS: -lX11
 #include <stdlib.h>
 
-void showNotification(const char* title, const char* message);
+void showNotification(const char* message);
 */
 import "C"
 import "unsafe"
 
-func ShowNotification(title, message string) {
-	cTitle := C.CString(title)
+func ShowNotification(message string) {
 	cMessage := C.CString(message)
-	defer C.free(unsafe.Pointer(cTitle))
 	defer C.free(unsafe.Pointer(cMessage))
 
-	C.showNotification(cTitle, cMessage)
+	C.showNotification(cMessage)
 }

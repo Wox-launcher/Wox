@@ -19,16 +19,16 @@ typedef struct {
     BOOL mouseInside;
 } NotificationWindow;
 
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void DrawRoundedRectangle(HDC hdc, RECT rect, int radius);
 
 void showNotification(const char* message) {
-    WNDCLASSEX wc = {0};
-    wc.cbSize = sizeof(WNDCLASSEX);
-    wc.lpfnWndProc = WindowProc;
+    WNDCLASSEXA wc = {0};
+    wc.cbSize = sizeof(WNDCLASSEXA);
+    wc.lpfnWndProc = NotificationWindowProc;
     wc.hInstance = GetModuleHandle(NULL);
-    wc.lpszClassName = L"WoxNotification";
-    RegisterClassEx(&wc);
+    wc.lpszClassName = "WoxNotification";
+    RegisterClassExA(&wc);
 
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
@@ -38,9 +38,9 @@ void showNotification(const char* message) {
     NotificationWindow* nw = (NotificationWindow*)malloc(sizeof(NotificationWindow));
     memset(nw, 0, sizeof(NotificationWindow));
 
-    nw->hwnd = CreateWindowEx(
+    nw->hwnd = CreateWindowExA(
         WS_EX_TOPMOST | WS_EX_LAYERED,
-        L"WoxNotification", L"",
+        "WoxNotification", "",
         WS_POPUP,
         xPos, yPos, WINDOW_WIDTH, WINDOW_HEIGHT,
         NULL, NULL, GetModuleHandle(NULL), NULL
@@ -48,8 +48,8 @@ void showNotification(const char* message) {
 
     SetWindowLongPtr(nw->hwnd, GWLP_USERDATA, (LONG_PTR)nw);
 
-    nw->messageFont = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    nw->messageFont = CreateFontA(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
 
     MultiByteToWideChar(CP_UTF8, 0, message, -1, nw->messageText, 1024);
 
@@ -58,9 +58,6 @@ void showNotification(const char* message) {
     ShowWindow(nw->hwnd, SW_SHOWNA);
     UpdateWindow(nw->hwnd);
 
-    ANIMATION_INFO ai = {sizeof(ANIMATION_INFO)};
-    ai.dwTime = 300;
-    ai.dwFlags = AW_BLEND;
     AnimateWindow(nw->hwnd, 300, AW_BLEND);
 
     nw->closeTimerId = SetTimer(nw->hwnd, CLOSE_TIMER, 3000, NULL);
@@ -74,7 +71,7 @@ void showNotification(const char* message) {
     free(nw);
 }
 
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     NotificationWindow* nw = (NotificationWindow*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
 
     switch (uMsg) {
@@ -98,9 +95,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             SetBkMode(memDC, TRANSPARENT);
             SetTextColor(memDC, RGB(255, 255, 255));
 
-            SelectObject(memDC, nw->messageFont);
+            char messageTextA[1024];
+            WideCharToMultiByte(CP_UTF8, 0, nw->messageText, -1, messageTextA, sizeof(messageTextA), NULL, NULL);
             RECT messageRect = {20, 20, clientRect.right - 20, clientRect.bottom - 20};
-            DrawText(memDC, nw->messageText, -1, &messageRect, DT_LEFT | DT_WORDBREAK);
+            DrawTextA(memDC, messageTextA, -1, &messageRect, DT_LEFT | DT_WORDBREAK);
 
             if (nw->mouseInside) {
                 HPEN pen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
