@@ -109,7 +109,7 @@ func (c *BrowserPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 	util.Go(ctx, "newWebsocketServer on init", func() {
 		err := c.newWebsocketServer(ctx)
 		if err != nil {
-			c.api.Notify(ctx, "Browser Plugin", fmt.Sprintf("Failed to start websocket server: %s", err.Error()))
+			c.api.Notify(ctx, fmt.Sprintf("Failed to start websocket server: %s", err.Error()))
 		}
 	})
 
@@ -118,7 +118,7 @@ func (c *BrowserPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 			util.Go(ctx, "newWebsocketServer on port changed", func() {
 				err := c.newWebsocketServer(ctx)
 				if err != nil {
-					c.api.Notify(ctx, "Browser Plugin", fmt.Sprintf("Failed to start websocket server: %s", err.Error()))
+					c.api.Notify(ctx, fmt.Sprintf("Failed to start websocket server: %s", err.Error()))
 				}
 			})
 		}

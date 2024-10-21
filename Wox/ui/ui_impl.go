@@ -10,9 +10,9 @@ import (
 	"wox/setting"
 	"wox/share"
 	"wox/util"
+	"wox/util/notifier"
 	"wox/util/window"
 
-	"github.com/gen2brain/beeep"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
@@ -42,11 +42,8 @@ func (u *uiImpl) ToggleApp(ctx context.Context) {
 	u.invokeWebsocketMethod(ctx, "ToggleApp", getShowAppParams(ctx, true))
 }
 
-func (u *uiImpl) Notify(ctx context.Context, title string, description string) {
-	err := beeep.Notify(title, description, "")
-	if err != nil {
-		logger.Error(ctx, fmt.Sprintf("notify error: %s", err.Error()))
-	}
+func (u *uiImpl) Notify(ctx context.Context, description string) {
+	notifier.Notify(description)
 }
 
 func (u *uiImpl) GetServerPort(ctx context.Context) int {
@@ -362,7 +359,6 @@ func handleWebsocketAction(ctx context.Context, request WebsocketMsg) {
 
 	executeErr := plugin.GetPluginManager().ExecuteAction(ctx, resultId, actionId)
 	if executeErr != nil {
-		logger.Error(ctx, executeErr.Error())
 		responseUIError(ctx, request, executeErr.Error())
 		return
 	}

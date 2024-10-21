@@ -189,6 +189,8 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 		}
 
 		isFirstAnswer := true
+		isAnwserFinished := false
+		answerText := ""
 		onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
 			if isFirstAnswer {
 				current.Preview.PreviewData = ""
@@ -201,7 +203,9 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 
 			if isFinished {
 				current.RefreshInterval = 0 // stop refreshing
-				current.SubTitle = fmt.Sprintf("Answered, cost %d ms", util.GetSystemTimestamp()-startAnsweringTime)
+				current.SubTitle = fmt.Sprintf("Answered, cost %d ms. Enter to copy", util.GetSystemTimestamp()-startAnsweringTime)
+				isAnwserFinished = true
+				answerText = current.Preview.PreviewData
 			}
 			return current
 		}
@@ -249,7 +253,12 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 					Name:                   "Run",
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						startGenerate = true
+						if isAnwserFinished {
+							clipboard.WriteText(answerText)
+							c.api.Notify(ctx, "Copied to clipboard")
+						} else {
+							startGenerate = true
+						}
 					},
 				},
 			},

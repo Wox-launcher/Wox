@@ -803,7 +803,7 @@ func (m *Manager) QuerySilent(ctx context.Context, query Query) bool {
 					}
 				}
 			} else {
-				m.GetUI().Notify(ctx, "Silent query failed", fmt.Sprintf("There shouldbe only one result, but got %d", len(results)))
+				m.GetUI().Notify(ctx, fmt.Sprintf("Silent query failed, there shouldbe only one result, but got %d", len(results)))
 			}
 
 			return false

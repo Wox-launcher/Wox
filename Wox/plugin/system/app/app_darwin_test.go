@@ -2,13 +2,14 @@ package app
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"testing"
 	"wox/ai"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
+
+	"github.com/stretchr/testify/require"
 )
 
 type emptyAPIImpl struct {
@@ -26,7 +27,7 @@ func (e emptyAPIImpl) HideApp(ctx context.Context) {
 func (e emptyAPIImpl) ShowApp(ctx context.Context) {
 }
 
-func (e emptyAPIImpl) Notify(ctx context.Context, title string, description string) {
+func (e emptyAPIImpl) Notify(ctx context.Context, message string) {
 }
 
 func (e emptyAPIImpl) Log(ctx context.Context, level plugin.LogLevel, msg string) {

@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/disintegration/imaging"
-	"github.com/samber/lo"
 	"io"
 	"path"
 	"wox/ai"
@@ -14,6 +12,9 @@ import (
 	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
+
+	"github.com/disintegration/imaging"
+	"github.com/samber/lo"
 )
 
 type LogLevel = string
@@ -29,7 +30,7 @@ type API interface {
 	ChangeQuery(ctx context.Context, query share.PlainQuery)
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context)
-	Notify(ctx context.Context, title string, description string)
+	Notify(ctx context.Context, description string)
 	Log(ctx context.Context, level LogLevel, msg string)
 	GetTranslation(ctx context.Context, key string) string
 	GetSetting(ctx context.Context, key string) string
@@ -61,8 +62,8 @@ func (a *APIImpl) ShowApp(ctx context.Context) {
 	})
 }
 
-func (a *APIImpl) Notify(ctx context.Context, title string, description string) {
-	GetPluginManager().GetUI().Notify(ctx, title, description)
+func (a *APIImpl) Notify(ctx context.Context, message string) {
+	GetPluginManager().GetUI().Notify(ctx, message)
 }
 
 func (a *APIImpl) Log(ctx context.Context, level LogLevel, msg string) {

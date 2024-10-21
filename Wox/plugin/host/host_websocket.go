@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/tidwall/gjson"
 	"os"
 	"strings"
 	"time"
@@ -14,6 +12,9 @@ import (
 	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
+
+	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 )
 
 type WebsocketHost struct {
@@ -260,13 +261,12 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 
 		w.sendResponseToHost(ctx, request, "")
 	case "Notify":
-		title, exist := request.Params["title"]
+		message, exist := request.Params["message"]
 		if !exist {
-			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] Notify method must have a title parameter", request.PluginName))
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] Notify method must have a message parameter", request.PluginName))
 			return
 		}
-		description := request.Params["description"]
-		pluginInstance.API.Notify(ctx, title, description)
+		pluginInstance.API.Notify(ctx, message)
 		w.sendResponseToHost(ctx, request, "")
 	case "Log":
 		msg, exist := request.Params["msg"]

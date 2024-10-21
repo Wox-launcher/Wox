@@ -402,7 +402,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
 						if installErr != nil {
-							w.api.Notify(ctx, "Failed to install plugin", installErr.Error())
+							w.api.Notify(ctx, installErr.Error())
 						}
 					},
 				},
@@ -456,7 +456,7 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						openErr := util.ShellOpen(lp.metadata.Directory)
 						if openErr != nil {
-							w.api.Notify(ctx, "Failed to open plugin directory", openErr.Error())
+							w.api.Notify(ctx, fmt.Sprintf("Failed to open plugin directory: %s", openErr.Error()))
 						}
 					},
 				},
@@ -516,14 +516,14 @@ func (w *WPMPlugin) addDevCommand(ctx context.Context, query plugin.Query) []plu
 	w.api.Log(ctx, plugin.LogLevelInfo, "Please choose a directory to add local plugin")
 	pluginDirectories := plugin.GetPluginManager().GetUI().PickFiles(ctx, share.PickFilesParams{IsDirectory: true})
 	if len(pluginDirectories) == 0 {
-		w.api.Notify(ctx, "Please choose a directory", "You need to choose a directory to add local plugin")
+		w.api.Notify(ctx, "You need to choose a directory to add local plugin")
 		return []plugin.QueryResult{}
 	}
 
 	pluginDirectory := pluginDirectories[0]
 
 	if lo.Contains(w.localPluginDirectories, pluginDirectory) {
-		w.api.Notify(ctx, "Already added", "The plugin directory has already been added")
+		w.api.Notify(ctx, "The plugin directory has already been added")
 		return []plugin.QueryResult{}
 	}
 
@@ -536,13 +536,13 @@ func (w *WPMPlugin) addDevCommand(ctx context.Context, query plugin.Query) []plu
 
 func (w *WPMPlugin) removeDevCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	if len(query.Search) == 0 {
-		w.api.Notify(ctx, "Please input a directory", "You need to input a directory to remove local plugin")
+		w.api.Notify(ctx, "You need to input a directory to remove local plugin")
 		return []plugin.QueryResult{}
 	}
 
 	pluginDirectory := query.Search
 	if !lo.Contains(w.localPluginDirectories, pluginDirectory) {
-		w.api.Notify(ctx, "Not found", "The plugin directory is not found")
+		w.api.Notify(ctx, "The plugin directory is not found")
 		return []plugin.QueryResult{}
 	}
 
@@ -583,7 +583,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 	w.creatingProcess = "Please choose a directory..."
 	pluginDirectories := plugin.GetPluginManager().GetUI().PickFiles(ctx, share.PickFilesParams{IsDirectory: true})
 	if len(pluginDirectories) == 0 {
-		w.api.Notify(ctx, "Please choose a directory", "You need to choose a directory to create the plugin")
+		w.api.Notify(ctx, "You need to choose a directory to create the plugin")
 		return
 	}
 	pluginDirectory := path.Join(pluginDirectories[0], pluginName)
@@ -691,6 +691,6 @@ func (w *WPMPlugin) reloadLocalDistPlugin(ctx context.Context, localPlugin plugi
 		w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Reloaded plugin: %s", localPlugin.Metadata.Name))
 	}
 
-	w.api.Notify(ctx, "Reloaded dev plugin", fmt.Sprintf("%s(%s)", localPlugin.Metadata.Name, reason))
+	w.api.Notify(ctx, fmt.Sprintf("Reloaded dev plugin %s(%s)", localPlugin.Metadata.Name, reason))
 	return nil
 }

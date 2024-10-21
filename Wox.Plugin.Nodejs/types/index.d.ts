@@ -171,7 +171,7 @@ export interface PublicAPI {
     /**
      * Notify message
      */
-    Notify: (ctx: Context, title: string, description?: string) => Promise<void>
+    Notify: (ctx: Context, message: string) => Promise<void>
 
     /**
      * Write log

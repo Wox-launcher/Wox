@@ -37,7 +37,7 @@ type UI interface {
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context, showContext ShowContext)
 	ToggleApp(ctx context.Context)
-	Notify(ctx context.Context, title string, description string)
+	Notify(ctx context.Context, message string)
 	OpenSettingWindow(ctx context.Context, windowContext SettingWindowContext)
 	PickFiles(ctx context.Context, params PickFilesParams) []string
 	GetActiveWindowName() string

@@ -162,7 +162,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 	var aiModel ai.Model
 	unmarshalErr := json.Unmarshal([]byte(modelStr), &aiModel)
 	if unmarshalErr != nil {
-		c.api.Notify(ctx, "Failed to unmarshal model", unmarshalErr.Error())
+		c.api.Notify(ctx, unmarshalErr.Error())
 		return []plugin.QueryResult{
 			{
 				Title:    "Failed to unmarshal model",
@@ -222,7 +222,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 				// use regex to get json snippet from the whole text
 				group := util.FindRegexGroup(`(?ms){(?P<json>.*?)}`, themeJson)
 				if len(group) == 0 {
-					c.api.Notify(ctx, "Failed to extract json", "")
+					c.api.Notify(ctx, "Failed to extract json")
 					return
 				}
 
@@ -230,7 +230,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 				var theme share.Theme
 				unmarshalErr := json.Unmarshal([]byte(jsonTheme), &theme)
 				if unmarshalErr != nil {
-					c.api.Notify(ctx, "Failed to unmarshal theme json", unmarshalErr.Error())
+					c.api.Notify(ctx, unmarshalErr.Error())
 					return
 				}
 

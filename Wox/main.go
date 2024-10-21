@@ -14,6 +14,8 @@ import (
 	"wox/setting"
 	"wox/ui"
 	"wox/util"
+	"wox/util/hotkey"
+	"wox/util/notifier"
 
 	"golang.design/x/hotkey/mainthread"
 
@@ -125,6 +127,13 @@ func main() {
 				util.GetLogger().Error(ctx, fmt.Sprintf("failed to register query hotkey: %s", registerQueryHotkeyErr.Error()))
 			}
 		}
+		(&hotkey.Hotkey{}).Register(ctx, "ctrl+ctrl", func() {
+			i := 1
+			for range time.NewTicker(time.Millisecond * 100).C {
+				notifier.Notify(fmt.Sprintf("Wox is running, Wox is running, Wox is running, Wox is running, Wox is running, Wox is running, Wox is running, Wox is running, Wox is running, Wox is running, Wox is running, %d", i))
+				i++
+			}
+		})
 
 		if util.IsProd() {
 			util.Go(ctx, "start ui", func() {

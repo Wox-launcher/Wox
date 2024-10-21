@@ -74,11 +74,8 @@ export class PluginAPI implements PublicAPI {
     await this.invokeMethod(ctx, "ShowApp", {})
   }
 
-  async Notify(ctx: Context, title: string, description: string | undefined): Promise<void> {
-    await this.invokeMethod(ctx, "Notify", {
-      title,
-      description: description === undefined ? "" : description
-    })
+  async Notify(ctx: Context, message: string): Promise<void> {
+    await this.invokeMethod(ctx, "Notify", { message })
   }
 
   async GetTranslation(ctx: Context, key: string): Promise<string> {
