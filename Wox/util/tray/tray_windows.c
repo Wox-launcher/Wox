@@ -4,6 +4,7 @@
 NOTIFYICONDATA nid;
 HMENU hMenu;
 UINT_PTR nextMenuId = 1;
+HWND hwnd; 
 
 void reportClick(UINT_PTR menuId);
 
@@ -13,13 +14,16 @@ void addMenuItem(UINT_PTR menuId, const char* title) {
 
 void setTrayIcon(const char* tooltip, HICON icon) {
 	nid.cbSize = sizeof(NOTIFYICONDATA);
-	nid.hWnd = GetConsoleWindow();
+	nid.hWnd = hwnd; 
 	nid.uID = 1;
 	nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
 	nid.uCallbackMessage = WM_APP + 1;
 	strncpy(nid.szTip, tooltip, sizeof(nid.szTip) / sizeof(*nid.szTip));
 	nid.hIcon = icon;
-	Shell_NotifyIcon(NIM_ADD, &nid);
+
+	if (!Shell_NotifyIcon(NIM_MODIFY, &nid)) {
+		Shell_NotifyIcon(NIM_ADD, &nid);
+	}
 }
 
 void removeTrayIcon() {
@@ -56,13 +60,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 HICON loadIcon(const char* iconName) {
-	return (HICON)LoadImage(NULL, iconName, IMAGE_ICON, 32, 32, LR_LOADFROMFILE);
+	HICON icon = (HICON)LoadImage(NULL, iconName, IMAGE_ICON, 32, 32, LR_LOADFROMFILE);
+	if (icon == NULL) {
+		icon = LoadIcon(NULL, IDI_APPLICATION);
+	}
+	return icon;
 }
 
 void init(const char* iconName, const char* tooltip) {
 	hMenu = CreatePopupMenu();
 	HICON icon = loadIcon(iconName);
-	setTrayIcon(tooltip, icon);
 
 	WNDCLASS wc = {0};
 	wc.lpfnWndProc = WindowProc;
@@ -70,8 +77,20 @@ void init(const char* iconName, const char* tooltip) {
 	wc.lpszClassName = "WoxWindowClass";
 	RegisterClass(&wc);
 
-	HWND hwnd = CreateWindowEx(0, "WoxWindowClass", "Wox", WS_OVERLAPPEDWINDOW,
+	hwnd = CreateWindowEx(0, "WoxWindowClass", "Wox", WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, wc.hInstance, NULL);
-	nid.hWnd = hwnd;
-	UpdateWindow(hwnd);
+
+	if (hwnd == NULL) {
+		return;
+	}
+
+	setTrayIcon(tooltip, icon);
+}
+
+void runMessageLoop() {
+	MSG msg;
+	while (GetMessage(&msg, NULL, 0, 0)) {
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
 }

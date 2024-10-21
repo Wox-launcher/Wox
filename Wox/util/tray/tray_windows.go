@@ -18,13 +18,15 @@ extern DWORD my_CreateIconFromResourceEx(
     int  cxDesired,
     int  cyDesired,
     UINT uFlags );
+extern void runMessageLoop();  // 声明 C 函数
 */
 import "C"
 import (
-	"golang.design/x/hotkey/mainthread"
 	"os"
 	"time"
 	"unsafe"
+
+	"golang.design/x/hotkey/mainthread"
 )
 
 // menuCallbacks maps menu item IDs to their callbacks.
@@ -62,11 +64,7 @@ func CreateTray(appIcon []byte, items ...MenuItem) {
 	go func() {
 		time.Sleep(time.Second)
 		mainthread.Call(func() {
-			var msg C.MSG
-			for C.GetMessage(&msg, nil, 0, 0) > 0 {
-				C.TranslateMessage(&msg)
-				C.DispatchMessage(&msg)
-			}
+			C.runMessageLoop()
 		})
 	}()
 }
