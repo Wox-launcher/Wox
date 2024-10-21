@@ -54,7 +54,7 @@
     "Id": "09ea2847-929c-440a-aa2c-9b74bcaae69f",
     "Name": "DeepL translator",
     "Author": "Wox-launcher",
-    "Version": "0.0.4",
+    "Version": "0.0.5",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "DeepL translation plugin for Wox",
@@ -65,7 +65,7 @@
       "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.DeepL/main/assets/snapshot.png"
     ],
     "DateCreated": "2024-02-23 19:09:00",
-    "DateUpdated": "2024-04-23 05:02:15"
+    "DateUpdated": "2024-10-21 14:03:00"
   },
   {
     "Id": "84cb8c8f-1156-489d-a490-6d04fbc85d52",
