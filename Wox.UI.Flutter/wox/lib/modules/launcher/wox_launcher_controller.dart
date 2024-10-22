@@ -636,13 +636,6 @@ class WoxLauncherController extends GetxController {
     }
     final totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight;
 
-    //if the window height is same as the total height, then no need to resize
-    var currentSize = await windowManager.getSize();
-    if (currentSize.height == totalHeight) {
-      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: want to resize but the height is same as current height");
-      return;
-    }
-
     if (Platform.isWindows) {
       // on windows, if I set screen ratio to 2.0, then the window height should add more 4.5 pixel, otherwise it will show render error
       // still don't know why. here is the test result: ratio -> additional window height

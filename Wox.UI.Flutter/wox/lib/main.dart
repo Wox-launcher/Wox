@@ -153,7 +153,11 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
     windowManager.addListener(this);
 
     // notify server that ui is ready
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
+    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+      launcherController.resizeHeight();
+      await windowManager.focus();
+      launcherController.queryBoxFocusNode.requestFocus();
+
       WoxApi.instance.onUIReady();
     });
   }
