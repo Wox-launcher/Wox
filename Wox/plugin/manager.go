@@ -18,6 +18,7 @@ import (
 	"wox/setting"
 	"wox/share"
 	"wox/util"
+	"wox/util/notifier"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
@@ -803,7 +804,7 @@ func (m *Manager) QuerySilent(ctx context.Context, query Query) bool {
 					}
 				}
 			} else {
-				m.GetUI().Notify(ctx, fmt.Sprintf("Silent query failed, there shouldbe only one result, but got %d", len(results)))
+				notifier.Notify(fmt.Sprintf("Silent query failed, there shouldbe only one result, but got %d", len(results)))
 			}
 
 			return false

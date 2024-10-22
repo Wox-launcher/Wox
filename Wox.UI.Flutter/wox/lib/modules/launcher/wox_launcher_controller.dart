@@ -536,6 +536,8 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "ShowToolbarMsg") {
       showToolbarMsg(msg.traceId, ToolbarMsg.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "GetCurrentQuery") {
+      responseWoxWebsocketRequest(msg, true, currentQuery.value.toJson());
     }
   }
 

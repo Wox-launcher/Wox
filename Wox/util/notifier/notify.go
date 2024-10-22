@@ -2,23 +2,16 @@ package notifier
 
 import (
 	"fmt"
-	"sync"
 	"time"
 	"wox/util"
-
-	"golang.design/x/hotkey/mainthread"
 )
 
 var (
 	lastNotificationTime time.Time
-	notificationMutex    sync.Mutex
 	throttleDuration     = 1 * time.Second
 )
 
 func Notify(message string) {
-	notificationMutex.Lock()
-	defer notificationMutex.Unlock()
-
 	// throttle notification
 	now := time.Now()
 	if now.Sub(lastNotificationTime) < throttleDuration {
@@ -27,7 +20,5 @@ func Notify(message string) {
 	}
 	lastNotificationTime = now
 
-	mainthread.Call(func() {
-		ShowNotification(message)
-	})
+	ShowNotification(message)
 }

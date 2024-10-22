@@ -10,6 +10,8 @@ void showNotification(const char* message);
 import "C"
 import (
 	"unsafe"
+
+	"golang.design/x/hotkey/mainthread"
 )
 
 func ShowNotification(message string) {
@@ -17,8 +19,10 @@ func ShowNotification(message string) {
 		return
 	}
 
-	cMessage := C.CString(message)
-	defer C.free(unsafe.Pointer(cMessage))
+	mainthread.Call(func() {
+		cMessage := C.CString(message)
+		defer C.free(unsafe.Pointer(cMessage))
 
-	C.showNotification(cMessage)
+		C.showNotification(cMessage)
+	})
 }

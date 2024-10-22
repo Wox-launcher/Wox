@@ -52,7 +52,7 @@ Future<void> initialServices(List<String> arguments) async {
   await initArgs(arguments);
   await WoxThemeUtil.instance.loadTheme();
   await WoxSettingUtil.instance.loadSetting();
-  
+
   var launcherController = WoxLauncherController();
   launcherController.startRefreshSchedule();
   launcherController.startDoctorCheckSchedule();
@@ -154,10 +154,11 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
 
     // notify server that ui is ready
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+      // Adjust the window height to match the query box height.
+      // This is necessary due to dynamic height calculations on Windows caused by DPI scaling issues.
       launcherController.resizeHeight();
-      await windowManager.focus();
-      launcherController.queryBoxFocusNode.requestFocus();
 
+      // Notify the backend that the UI is ready. The server-side will determine whether to display the UI window.
       WoxApi.instance.onUIReady();
     });
   }

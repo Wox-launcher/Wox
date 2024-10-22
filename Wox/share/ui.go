@@ -37,7 +37,6 @@ type UI interface {
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context, showContext ShowContext)
 	ToggleApp(ctx context.Context)
-	Notify(ctx context.Context, message string)
 	OpenSettingWindow(ctx context.Context, windowContext SettingWindowContext)
 	PickFiles(ctx context.Context, params PickFilesParams) []string
 	GetActiveWindowName() string
@@ -49,6 +48,8 @@ type UI interface {
 	UninstallTheme(ctx context.Context, theme Theme)
 	RestoreTheme(ctx context.Context)
 	ShowToolbarMsg(ctx context.Context, msg ToolbarMsg)
+	// Check if current query in the ui is the giving plugin specific query (not the global query)
+	IsPluginQuery(ctx context.Context, pluginId string) bool
 }
 
 type ShowContext struct {

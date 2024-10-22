@@ -10,7 +10,7 @@ char* getCurrentInputMethod() {
         TISInputSourceRef source = TISCopyCurrentKeyboardInputSource();
         CFStringRef sourceID = TISGetInputSourceProperty(source, kTISPropertyInputSourceID);
         NSString *inputMethodID = (__bridge NSString *)sourceID;
-        result = (char *)[inputMethodID UTF8String];
+        result = strdup([inputMethodID UTF8String]);
         [pool release];
     }
     @catch (NSException *exception) {

@@ -398,7 +398,6 @@ class WoxRefreshableResult {
   }
 }
 
-
 class QueryIconInfo {
   final WoxImage icon;
   final Function()? action;

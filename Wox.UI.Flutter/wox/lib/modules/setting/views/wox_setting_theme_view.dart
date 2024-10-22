@@ -1,7 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' as base;
 import 'package:flutter/services.dart';
-import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/wox_theme_icon_view.dart';
 import 'package:wox/components/wox_theme_preview.dart';

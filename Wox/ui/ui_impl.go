@@ -10,7 +10,6 @@ import (
 	"wox/setting"
 	"wox/share"
 	"wox/util"
-	"wox/util/notifier"
 	"wox/util/window"
 
 	"github.com/google/uuid"
@@ -40,10 +39,6 @@ func (u *uiImpl) ToggleApp(ctx context.Context) {
 	GetUIManager().SetActiveWindowName(window.GetActiveWindowName())
 	GetUIManager().SetActiveWindowPid(window.GetActiveWindowPid())
 	u.invokeWebsocketMethod(ctx, "ToggleApp", getShowAppParams(ctx, true))
-}
-
-func (u *uiImpl) Notify(ctx context.Context, description string) {
-	notifier.Notify(description)
 }
 
 func (u *uiImpl) GetServerPort(ctx context.Context) int {
@@ -83,6 +78,38 @@ func (u *uiImpl) RestoreTheme(ctx context.Context) {
 
 func (u *uiImpl) ShowToolbarMsg(ctx context.Context, msg share.ToolbarMsg) {
 	u.invokeWebsocketMethod(ctx, "ShowToolbarMsg", msg)
+}
+
+func (u *uiImpl) IsPluginQuery(ctx context.Context, pluginId string) bool {
+	respData, err := u.invokeWebsocketMethod(ctx, "GetCurrentQuery", nil)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("IsPluginQuery error: %s", err.Error()))
+		return false
+	}
+	//first marshal to json , then unmarshal to share.PlainQuery
+	jsonData, marshalErr := json.Marshal(respData)
+	if marshalErr != nil {
+		logger.Error(ctx, fmt.Sprintf("IsPluginQuery marshal error: %s", marshalErr.Error()))
+		return false
+	}
+	var currentQuery share.PlainQuery
+	unmarshalErr := json.Unmarshal(jsonData, &currentQuery)
+	if unmarshalErr != nil {
+		logger.Error(ctx, fmt.Sprintf("IsPluginQuery unmarshal error: %s", unmarshalErr.Error()))
+		return false
+	}
+
+	queryPlugin, pluginInstance, queryErr := plugin.GetPluginManager().NewQuery(ctx, currentQuery)
+	if queryErr != nil {
+		logger.Error(ctx, fmt.Sprintf("IsPluginQuery new query error: %s", queryErr.Error()))
+		return false
+	}
+
+	if !queryPlugin.IsGlobalQuery() && pluginInstance.Metadata.Id == pluginId {
+		return true
+	}
+
+	return false
 }
 
 func (u *uiImpl) PickFiles(ctx context.Context, params share.PickFilesParams) []string {

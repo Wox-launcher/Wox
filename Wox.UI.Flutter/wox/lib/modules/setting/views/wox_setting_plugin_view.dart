@@ -5,7 +5,6 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 import 'package:flutter_image_slideshow/flutter_image_slideshow.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_head_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_label_view.dart';
@@ -14,7 +13,6 @@ import 'package:wox/components/plugin/wox_setting_plugin_select_ai_model_view.da
 import 'package:wox/components/plugin/wox_setting_plugin_select_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_image_view.dart';
-import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_label.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select_ai_model.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
