@@ -135,7 +135,7 @@ class WoxQueryResult {
     groupScore = 0;
     tails = RxList<WoxQueryResultTail>();
     contextData = "";
-    actions = <WoxResultAction>[];
+    actions = RxList<WoxResultAction>();
     refreshInterval = 0;
     isGroup = false;
   }
@@ -162,12 +162,12 @@ class WoxQueryResult {
     }
 
     if (json['Actions'] != null) {
-      actions = <WoxResultAction>[];
+      actions = RxList<WoxResultAction>();
       json['Actions'].forEach((v) {
         actions.add(WoxResultAction.fromJson(v));
       });
     } else {
-      actions = <WoxResultAction>[];
+      actions = RxList<WoxResultAction>();
     }
 
     refreshInterval = json['RefreshInterval'];
@@ -283,8 +283,8 @@ class WoxResultAction {
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
     data['Id'] = id;
-    data['Name'] = name;
-    data['Icon'] = icon.toJson();
+    data['Name'] = name.value;
+    data['Icon'] = icon.value.toJson();
     data['IsDefault'] = isDefault;
     data['PreventHideAfterAction'] = preventHideAfterAction;
     data['Hotkey'] = hotkey;
@@ -356,6 +356,7 @@ class WoxRefreshableResult {
   late List<WoxQueryResultTail> tails;
   late String contextData;
   late int refreshInterval;
+  late List<WoxResultAction> actions;
 
   WoxRefreshableResult({
     required this.resultId,
@@ -366,6 +367,7 @@ class WoxRefreshableResult {
     required this.tails,
     required this.contextData,
     required this.refreshInterval,
+    required this.actions,
   });
 
   WoxRefreshableResult.fromJson(Map<String, dynamic> json) {
@@ -382,6 +384,12 @@ class WoxRefreshableResult {
     }
     contextData = json['ContextData'];
     refreshInterval = json['RefreshInterval'];
+    actions = <WoxResultAction>[];
+    if (json['Actions'] != null) {
+      json['Actions'].forEach((v) {
+        actions.add(WoxResultAction.fromJson(v));
+      });
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -394,6 +402,7 @@ class WoxRefreshableResult {
     data['Tails'] = tails.map((v) => v.toJson()).toList();
     data['ContextData'] = contextData;
     data['RefreshInterval'] = refreshInterval;
+    data['Actions'] = actions.map((v) => v.toJson()).toList();
     return data;
   }
 }

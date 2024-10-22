@@ -109,6 +109,7 @@ export interface RefreshableResult {
     Preview: WoxPreview
     ContextData: string
     RefreshInterval: number
+    Actions: ResultAction[]
 }
 
 export interface ResultAction {

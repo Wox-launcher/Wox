@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -538,6 +539,11 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		result.Actions[0].Hotkey = "Enter"
 	}
 
+	//move default action to first one of the actions
+	sort.Slice(result.Actions, func(i, j int) bool {
+		return result.Actions[i].IsDefault
+	})
+
 	var resultCache = &QueryResultCache{
 		ResultId:       result.Id,
 		ResultTitle:    result.Title,
@@ -683,7 +689,33 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, sub
 	return score
 }
 
-func (m *Manager) PolishRefreshableResult(ctx context.Context, pluginInstance *Instance, resultId string, result RefreshableResult) RefreshableResult {
+func (m *Manager) polishRefreshableResult(ctx context.Context, resultCache *QueryResultCache, result RefreshableResult) RefreshableResult {
+	pluginInstance := resultCache.PluginInstance
+
+	for actionIndex := range result.Actions {
+		if result.Actions[actionIndex].Id == "" {
+			result.Actions[actionIndex].Id = uuid.NewString()
+		}
+		if result.Actions[actionIndex].Icon.ImageType == "" {
+			// set default action icon if not present
+			result.Actions[actionIndex].Icon = DefaultActionIcon
+		}
+	}
+
+	// set first action as default if no default action is set
+	defaultActionCount := lo.CountBy(result.Actions, func(item QueryResultAction) bool {
+		return item.IsDefault
+	})
+	if defaultActionCount == 0 && len(result.Actions) > 0 {
+		result.Actions[0].IsDefault = true
+		result.Actions[0].Hotkey = "Enter"
+	}
+
+	//move default action to first one of the actions
+	sort.Slice(result.Actions, func(i, j int) bool {
+		return result.Actions[i].IsDefault
+	})
+
 	// convert icon
 	result.Icon = ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
 	for i := range result.Tails {
@@ -709,19 +741,30 @@ func (m *Manager) PolishRefreshableResult(ctx context.Context, pluginInstance *I
 		previewProperties[translatedKey] = value
 	}
 	result.Preview.PreviewProperties = previewProperties
+	// translate action names
+	for actionIndex := range result.Actions {
+		result.Actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, result.Actions[actionIndex].Name)
+	}
 
-	// store preview for ui invoke later
-	// because preview may contain some heavy data (E.g. image or large text), we will store preview in cache and only send preview to ui when user select the result
-	if result.Preview.PreviewType != "" && result.Preview.PreviewType != WoxPreviewTypeRemote {
-		// update preview in cache
-		if v, ok := m.resultCache.Load(resultId); ok {
-			v.Preview = result.Preview
-			m.resultCache.Store(resultId, v)
+	// update result cache
+	resultCache.ResultTitle = result.Title
+	resultCache.ResultSubTitle = result.SubTitle
+	resultCache.ContextData = result.ContextData
+	resultCache.Actions = util.NewHashMap[string, func(ctx context.Context, actionContext ActionContext)]()
+	for _, newAction := range result.Actions {
+		if newAction.Action != nil {
+			resultCache.Actions.Store(newAction.Id, newAction.Action)
 		}
+	}
 
+	// convert non-remote preview to remote preview
+	// because preview may contain some heavy data (E.g. image or large text),
+	// we will store preview in cache and only send preview to ui when user select the result
+	if result.Preview.PreviewType != "" && result.Preview.PreviewType != WoxPreviewTypeRemote {
+		resultCache.Preview = result.Preview
 		result.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,
-			PreviewData: fmt.Sprintf("/preview?id=%s", resultId),
+			PreviewData: fmt.Sprintf("/preview?id=%s", resultCache.ResultId),
 		}
 	}
 
@@ -1015,14 +1058,27 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 		return refreshableResultWithId, fmt.Errorf("result cache not found for result id (execute refresh): %s", refreshableResultWithId.ResultId)
 	}
 
+	//restore actions in cache
+	refreshableResult.Actions = []QueryResultAction{}
+	for _, action := range refreshableResultWithId.Actions {
+		// get actual action from cache
+		actionFunc, exist := resultCache.Actions.Load(action.Id)
+		if !exist {
+			continue
+		}
+		refreshableResult.Actions = append(refreshableResult.Actions, QueryResultAction{
+			Id:                     action.Id,
+			Name:                   action.Name,
+			Icon:                   action.Icon,
+			IsDefault:              action.IsDefault,
+			PreventHideAfterAction: action.PreventHideAfterAction,
+			Hotkey:                 action.Hotkey,
+			Action:                 actionFunc,
+		})
+	}
+
 	newResult := resultCache.Refresh(ctx, refreshableResult)
-	newResult = m.PolishRefreshableResult(ctx, resultCache.PluginInstance, refreshableResultWithId.ResultId, newResult)
-
-	// update result cache
-	resultCache.ResultTitle = newResult.Title
-	resultCache.ResultSubTitle = newResult.SubTitle
-	resultCache.ContextData = newResult.ContextData
-
+	newResult = m.polishRefreshableResult(ctx, resultCache, newResult)
 	return RefreshableResultWithResultId{
 		ResultId:        refreshableResultWithId.ResultId,
 		Title:           newResult.Title,
@@ -1032,6 +1088,16 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 		Preview:         newResult.Preview,
 		ContextData:     newResult.ContextData,
 		RefreshInterval: newResult.RefreshInterval,
+		Actions: lo.Map(newResult.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
+			return QueryResultActionUI{
+				Id:                     action.Id,
+				Name:                   action.Name,
+				Icon:                   action.Icon,
+				IsDefault:              action.IsDefault,
+				PreventHideAfterAction: action.PreventHideAfterAction,
+				Hotkey:                 action.Hotkey,
+			}
+		}),
 	}, nil
 }
 

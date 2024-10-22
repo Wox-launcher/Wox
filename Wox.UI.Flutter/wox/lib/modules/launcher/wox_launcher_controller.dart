@@ -421,21 +421,21 @@ class WoxLauncherController extends GetxController {
     ));
   }
 
-  void onActionQueryBoxTextChanged(String traceId, String queryAction) {
+  void onActionQueryBoxTextChanged(String traceId, String filteredActionName) {
     // restore all actions if query is empty
     var activeResult = getActiveResult();
     if (activeResult == null) {
       return;
     }
 
-    if (queryAction.isEmpty) {
+    if (filteredActionName.isEmpty) {
       actions.assignAll(activeResult.actions);
       updateToolbarByActiveAction(traceId);
       return;
     }
 
     var filteredActions = activeResult.actions.where((element) {
-      return isFuzzyMatch(traceId, element.name.value, queryAction);
+      return isFuzzyMatch(traceId, element.name.value, filteredActionName);
     }).toList();
 
     //if filtered actions is not changed, then return
@@ -790,6 +790,7 @@ class WoxLauncherController extends GetxController {
                 tails: result.tails,
                 contextData: result.contextData,
                 refreshInterval: result.refreshInterval,
+                actions: result.actions,
               ).toJson(),
             },
           );
@@ -813,11 +814,13 @@ class WoxLauncherController extends GetxController {
             result.icon.value = refreshResult.icon;
             result.preview = refreshResult.preview;
             result.tails.assignAll(refreshResult.tails);
+            result.actions.assignAll(refreshResult.actions);
 
-            // only update preview data when current result is active
+            // only update preview and toolbar  when current result is active
             final resultIndex = results.indexWhere((element) => element.id == result.id);
             if (isResultActiveByIndex(resultIndex)) {
               currentPreview.value = result.preview;
+              resetActiveAction(traceId, "refresh active result");
             }
 
             result.contextData = refreshResult.contextData;

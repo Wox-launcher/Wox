@@ -6,15 +6,12 @@ import (
 	"fmt"
 	"image"
 	"strings"
-	"time"
 	"wox/ai"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
 	"wox/util/clipboard"
-	"wox/util/keyboard"
-	"wox/util/window"
 
 	"github.com/disintegration/imaging"
 	"github.com/samber/lo"
@@ -189,7 +186,6 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 		}
 
 		isFirstAnswer := true
-		isAnwserFinished := false
 		answerText := ""
 		onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
 			if isFirstAnswer {
@@ -203,9 +199,25 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 
 			if isFinished {
 				current.RefreshInterval = 0 // stop refreshing
-				current.SubTitle = fmt.Sprintf("Answered, cost %d ms. Enter to copy", util.GetSystemTimestamp()-startAnsweringTime)
-				isAnwserFinished = true
+				current.SubTitle = fmt.Sprintf("Answered, cost %d ms", util.GetSystemTimestamp()-startAnsweringTime)
 				answerText = current.Preview.PreviewData
+
+				current.Actions = []plugin.QueryResultAction{
+					{
+						Name: "Copy",
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+							clipboard.WriteText(answerText)
+						},
+					},
+				}
+
+				// paste to active window
+				pasteToActiveWindowAction, pasteToActiveWindowErr := getPasteToActiveWindowAction(ctx, c.api, func() {
+					clipboard.WriteText(answerText)
+				})
+				if pasteToActiveWindowErr == nil {
+					current.Actions = append(current.Actions, pasteToActiveWindowAction)
+				}
 			}
 			return current
 		}
@@ -253,12 +265,7 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 					Name:                   "Run",
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						if isAnwserFinished {
-							clipboard.WriteText(answerText)
-							c.api.Notify(ctx, "Copied to clipboard")
-						} else {
-							startGenerate = true
-						}
+						startGenerate = true
 					},
 				},
 			},
@@ -425,28 +432,11 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	}
 
 	// paste to active window
-	windowName := window.GetActiveWindowName()
-	windowIcon, windowIconErr := window.GetActiveWindowIcon()
-	if windowIconErr == nil && windowName != "" {
-		windowIconImage, err := plugin.NewWoxImage(windowIcon)
-		if err == nil {
-			result.Actions = append(result.Actions, plugin.QueryResultAction{
-				Name: "Paste to " + windowName,
-				Icon: windowIconImage,
-				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					clipboard.WriteText(actionContext.ContextData)
-					util.Go(ctx, "ai command paste", func() {
-						time.Sleep(time.Millisecond * 150)
-						err := keyboard.SimulatePaste()
-						if err != nil {
-							c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("simulate paste clipboard failed, err=%s", err.Error()))
-						} else {
-							c.api.Log(ctx, plugin.LogLevelInfo, "simulate paste clipboard success")
-						}
-					})
-				},
-			})
-		}
+	pasteToActiveWindowAction, pasteToActiveWindowErr := getPasteToActiveWindowAction(ctx, c.api, func() {
+		clipboard.WriteText(result.ContextData)
+	})
+	if pasteToActiveWindowErr == nil {
+		result.Actions = append(result.Actions, pasteToActiveWindowAction)
 	}
 
 	return []plugin.QueryResult{result}

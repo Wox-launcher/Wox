@@ -2,9 +2,10 @@ package plugin
 
 import (
 	"context"
-	"github.com/samber/lo"
 	"strings"
 	"wox/util"
+
+	"github.com/samber/lo"
 )
 
 type QueryType = string

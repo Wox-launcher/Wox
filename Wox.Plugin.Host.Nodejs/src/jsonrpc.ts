@@ -295,5 +295,15 @@ async function refresh(ctx: Context, request: PluginJsonRpcRequest) {
   }
 
   const result = JSON.parse(request.Params.RefreshableResult) as RefreshableResult
-  return await pluginRefresh(result)
+  const refreshedResult = await pluginRefresh(result)
+
+  // add actions to cache
+  refreshedResult.Actions.forEach(action => {
+    if (action.Id === undefined || action.Id === null) {
+      action.Id = crypto.randomUUID()
+    }
+    plugin.Actions.set(action.Id, action.Action)
+  })
+
+  return refreshedResult
 }

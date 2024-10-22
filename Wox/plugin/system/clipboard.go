@@ -10,13 +10,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
-	"wox/util/keyboard"
-	"wox/util/window"
 
 	"github.com/cdfmlr/ellipsis"
 	"github.com/disintegration/imaging"
@@ -370,7 +367,7 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 
 		actions := []plugin.QueryResultAction{
 			{
-				Name:      "Copy to clipboard",
+				Name:      "Copy",
 				Icon:      plugin.CopyIcon,
 				IsDefault: primaryActionValueCopy == primaryActionCode,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -381,30 +378,12 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 		}
 
 		// paste to active window
-		windowName := window.GetActiveWindowName()
-		windowIcon, windowIconErr := window.GetActiveWindowIcon()
-		if windowIconErr == nil && windowName != "" {
-			windowIconImage, err := plugin.NewWoxImage(windowIcon)
-			if err == nil {
-				actions = append(actions, plugin.QueryResultAction{
-					Name:      "Paste to " + windowName,
-					IsDefault: primaryActionValuePaste == primaryActionCode,
-					Icon:      windowIconImage,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						c.moveHistoryToTop(ctx, history.Id)
-						clipboard.Write(history.Data)
-						util.Go(context.Background(), "clipboard history copy", func() {
-							time.Sleep(time.Millisecond * 150)
-							err := keyboard.SimulatePaste()
-							if err != nil {
-								c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("simulate paste clipboard failed, err=%s", err.Error()))
-							} else {
-								c.api.Log(ctx, plugin.LogLevelInfo, "simulate paste clipboard success")
-							}
-						})
-					},
-				})
-			}
+		pasteToActiveWindowAction, pasteToActiveWindowErr := getPasteToActiveWindowAction(ctx, c.api, func() {
+			c.moveHistoryToTop(ctx, history.Id)
+			clipboard.Write(history.Data)
+		})
+		if pasteToActiveWindowErr == nil {
+			actions = append(actions, pasteToActiveWindowAction)
 		}
 
 		if !history.IsFavorite {

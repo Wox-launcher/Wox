@@ -8,6 +8,7 @@ type RefreshableResult struct {
 	Tails           []QueryResultTail
 	ContextData     string
 	RefreshInterval int // set to 0 if you don't want to refresh this result anymore
+	Actions         []QueryResultAction
 }
 
 type RefreshableResultWithResultId struct {
@@ -19,4 +20,5 @@ type RefreshableResultWithResultId struct {
 	Tails           []QueryResultTail
 	ContextData     string
 	RefreshInterval int
+	Actions         []QueryResultActionUI
 }

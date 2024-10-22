@@ -12,11 +12,13 @@ import (
 	"os"
 	"path"
 	"sync"
+	"time"
 	"wox/ai"
 	"wox/plugin"
 	"wox/setting"
 	"wox/share"
 	"wox/util"
+	"wox/util/keyboard"
 	"wox/util/window"
 
 	"github.com/disintegration/imaging"
@@ -207,4 +209,35 @@ func refreshQuery(ctx context.Context, api plugin.API, query plugin.Query) {
 		QueryType: query.Type,
 		QueryText: query.RawQuery,
 	})
+}
+
+func getPasteToActiveWindowAction(ctx context.Context, api plugin.API, actionCallback func()) (plugin.QueryResultAction, error) {
+	windowName := window.GetActiveWindowName()
+	windowIcon, windowIconErr := window.GetActiveWindowIcon()
+	if windowIconErr == nil && windowName != "" {
+		windowIconImage, err := plugin.NewWoxImage(windowIcon)
+		if err == nil {
+			return plugin.QueryResultAction{
+				Name:      "Paste to " + windowName,
+				Icon:      windowIconImage,
+				IsDefault: true,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					if actionCallback != nil {
+						actionCallback()
+					}
+					util.Go(ctx, "ai command paste", func() {
+						time.Sleep(time.Millisecond * 150)
+						err := keyboard.SimulatePaste()
+						if err != nil {
+							api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("simulate paste clipboard failed, err=%s", err.Error()))
+						} else {
+							api.Log(ctx, plugin.LogLevelInfo, "simulate paste clipboard success")
+						}
+					})
+				},
+			}, nil
+		}
+	}
+
+	return plugin.QueryResultAction{}, fmt.Errorf("no active window")
 }
