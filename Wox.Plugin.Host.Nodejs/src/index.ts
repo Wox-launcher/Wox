@@ -1,11 +1,12 @@
 import "winston-daily-rotate-file"
 import { WebSocketServer } from "ws"
-import { handleRequestFromWox, PluginJsonRpcRequest, PluginJsonRpcResponse, PluginJsonRpcTypeRequest, PluginJsonRpcTypeResponse } from "./jsonrpc"
+import { handleRequestFromWox,PluginJsonRpcTypeRequest, PluginJsonRpcTypeResponse } from "./jsonrpc"
 import { logger } from "./logger"
 import * as crypto from "crypto"
 import Deferred from "promise-deferred"
 import { NewTraceContext, TraceIdKey } from "./trace"
 import { NewContextWithValue } from "@wox-launcher/wox-plugin"
+import { PluginJsonRpcRequest, PluginJsonRpcResponse } from "./types"
 
 if (process.argv.length < 5) {
   console.error("Usage: node node.js <port> <logDirectory> <woxPid>")

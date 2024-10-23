@@ -107,6 +107,7 @@ export interface RefreshableResult {
     SubTitle: string
     Icon: WoxImage
     Preview: WoxPreview
+    Tails: ResultTail[]
     ContextData: string
     RefreshInterval: number
     Actions: ResultAction[]

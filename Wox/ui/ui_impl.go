@@ -431,10 +431,6 @@ func handleWebsocketRefresh(ctx context.Context, request WebsocketMsg) {
 	}
 
 	newResult, refreshErr := plugin.GetPluginManager().ExecuteRefresh(ctx, result)
-	if len(newResult.Actions) > 1 {
-		logger.Debug(ctx, fmt.Sprintf("result %s has %d actions, will show notification", result.ResultId, len(newResult.Actions)))
-	}
-
 	logger.Debug(ctx, fmt.Sprintf("finished refresh %s, cost: %dms", result.ResultId, util.GetSystemTimestamp()-startTime))
 	if refreshErr != nil {
 		logger.Error(ctx, refreshErr.Error())

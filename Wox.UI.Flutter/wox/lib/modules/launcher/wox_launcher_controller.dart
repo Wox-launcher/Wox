@@ -295,6 +295,9 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
+    var preventHideAfterAction = action.preventHideAfterAction;
+    Logger.instance.debug(traceId, "execute action: ${action.name}, prevent hide after action: $preventHideAfterAction");
+
     await WoxWebsocketMsgUtil.instance.sendMessage(WoxWebsocketMsg(
       requestId: const UuidV4().generate(),
       traceId: traceId,
@@ -306,7 +309,7 @@ class WoxLauncherController extends GetxController {
       },
     ));
 
-    if (!action.preventHideAfterAction) {
+    if (!preventHideAfterAction) {
       hideApp(traceId);
     }
     if (isShowActionPanel.value) {
@@ -742,13 +745,13 @@ class WoxLauncherController extends GetxController {
   /// update active actions based on active result and reset active action index to 0
   void resetActiveAction(String traceId, String reason) {
     var activeQueryResult = getActiveResult();
-    if (activeQueryResult == null) {
+    if (activeQueryResult == null || activeQueryResult.actions.isEmpty) {
       Logger.instance.info(traceId, "update active actions, reason: $reason, current active result: null");
       activeActionIndex.value = -1;
       actions.clear();
       return;
     } else {
-      Logger.instance.info(traceId, "update active actions, reason: $reason, current active result: ${activeQueryResult.title.value}");
+      Logger.instance.info(traceId, "update active actions, reason: $reason, current active result: ${activeQueryResult.title.value}, active action: ${activeQueryResult.actions.first.name.value}");
       activeActionIndex.value = 0;
       actions.assignAll(activeQueryResult.actions);
     }

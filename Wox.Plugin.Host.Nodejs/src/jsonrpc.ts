@@ -5,39 +5,13 @@ import { Context, MapString, Plugin, PluginInitParams, Query, QueryEnv, Refresha
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { AI } from "@wox-launcher/wox-plugin/types/ai"
+import { PluginInstance, PluginJsonRpcRequest, RefreshableResultWithResultId, ResultActionUI } from "./types"
 
 const pluginInstances = new Map<PluginJsonRpcRequest["PluginId"], PluginInstance>()
 
 export const PluginJsonRpcTypeRequest: string = "WOX_JSONRPC_REQUEST"
 export const PluginJsonRpcTypeResponse: string = "WOX_JSONRPC_RESPONSE"
 export const PluginJsonRpcTypeSystemLog: string = "WOX_JSONRPC_SYSTEM_LOG"
-
-export interface PluginInstance {
-  Plugin: Plugin
-  API: PluginAPI
-  ModulePath: string
-  Actions: Map<Result["Id"], ResultAction["Action"]>
-  Refreshes: Map<Result["Id"], Result["OnRefresh"]>
-}
-
-export interface PluginJsonRpcRequest {
-  TraceId: string
-  Id: string
-  PluginId: string
-  PluginName: string
-  Type: string
-  Method: string
-  Params: MapString
-}
-
-export interface PluginJsonRpcResponse {
-  TraceId: string
-  Id: string
-  Method: string
-  Type: string
-  Error?: string
-  Result?: unknown
-}
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -294,8 +268,16 @@ async function refresh(ctx: Context, request: PluginJsonRpcRequest) {
     return
   }
 
-  const result = JSON.parse(request.Params.RefreshableResult) as RefreshableResult
-  const refreshedResult = await pluginRefresh(result)
+  const result = JSON.parse(request.Params.RefreshableResult) as RefreshableResultWithResultId
+  const refreshableResult = {
+    ...result,
+    Actions: result.Actions.map(action => ({
+      ...action,
+      Action: plugin.Actions.get(action.Id)
+    }))
+  } as RefreshableResult
+
+  const refreshedResult = await pluginRefresh(refreshableResult)
 
   // add actions to cache
   refreshedResult.Actions.forEach(action => {
@@ -305,5 +287,22 @@ async function refresh(ctx: Context, request: PluginJsonRpcRequest) {
     plugin.Actions.set(action.Id, action.Action)
   })
 
-  return refreshedResult
+  return {
+    ResultId: result.ResultId,
+    Title: refreshedResult.Title,
+    SubTitle: refreshedResult.SubTitle,
+    Icon: refreshedResult.Icon,
+    Preview: refreshedResult.Preview,
+    Tails: refreshedResult.Tails,
+    ContextData: refreshedResult.ContextData,
+    RefreshInterval: refreshedResult.RefreshInterval,
+    Actions: refreshedResult.Actions.map(action => ({
+      Id: action.Id,
+      Name: action.Name,
+      Icon: action.Icon,
+      IsDefault: action.IsDefault,
+      PreventHideAfterAction: action.PreventHideAfterAction,
+      Hotkey: action.Hotkey,
+    } as ResultActionUI))
+  } as RefreshableResultWithResultId
 }

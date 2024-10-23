@@ -1,12 +1,13 @@
 import { ChangeQueryParam, Context, MapString, PublicAPI } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
-import { PluginJsonRpcRequest, PluginJsonRpcTypeRequest } from "./jsonrpc"
 import * as crypto from "crypto"
 import { waitingForResponse } from "./index"
 import Deferred from "promise-deferred"
 import { logger } from "./logger"
 import { MetadataCommand, PluginSettingDefinitionItem } from "@wox-launcher/wox-plugin/types/setting"
 import { AI } from "@wox-launcher/wox-plugin/types/ai"
+import { PluginJsonRpcTypeRequest } from "./jsonrpc"
+import { PluginJsonRpcRequest } from "./types"
 
 export class PluginAPI implements PublicAPI {
   ws: WebSocket
