@@ -96,7 +96,12 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [Text("Actions", style: TextStyle(color: fromCssColor(controller.woxTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)), const Divider(), getActionListView(), getActionQueryBox()],
+                    children: [
+                      Text("Actions", style: TextStyle(color: fromCssColor(controller.woxTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
+                      const Divider(),
+                      getActionListView(),
+                      getActionQueryBox()
+                    ],
                   ),
                 ),
               ),
@@ -138,16 +143,39 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                       itemExtent: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
                       itemBuilder: (context, index) {
                         WoxQueryResult woxQueryResult = controller.getQueryResultByIndex(index);
-                        return WoxListItemView(
-                          key: controller.getResultItemGlobalKeyByIndex(index),
-                          woxTheme: controller.woxTheme.value,
-                          icon: woxQueryResult.icon,
-                          title: woxQueryResult.title,
-                          tails: woxQueryResult.tails,
-                          subTitle: woxQueryResult.subTitle,
-                          isActive: controller.isResultActiveByIndex(index),
-                          listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code,
-                          isGroup: woxQueryResult.isGroup,
+                        return MouseRegion(
+                          onEnter: (_) {
+                            if (controller.isMouseMoved) {
+                              controller.setActiveResultIndex(index);
+                            }
+                          },
+                          onHover: (_) {
+                            if (!controller.isMouseMoved) {
+                              controller.isMouseMoved = true;
+                              controller.setActiveResultIndex(index);
+                            }
+                          },
+                          child: GestureDetector(
+                            onTap: () {
+                              // request focus to action query box since it will lose focus when tap
+                              controller.queryBoxFocusNode.requestFocus();
+                            },
+                            onDoubleTap: () {
+                              controller.onEnter(const UuidV4().generate());
+                              controller.queryBoxFocusNode.requestFocus();
+                            },
+                            child: WoxListItemView(
+                              key: controller.getResultItemGlobalKeyByIndex(index),
+                              woxTheme: controller.woxTheme.value,
+                              icon: woxQueryResult.icon,
+                              title: woxQueryResult.title,
+                              tails: woxQueryResult.tails,
+                              subTitle: woxQueryResult.subTitle,
+                              isActive: controller.isResultActiveByIndex(index),
+                              listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code,
+                              isGroup: woxQueryResult.isGroup,
+                            ),
+                          ),
                         );
                       },
                     ),

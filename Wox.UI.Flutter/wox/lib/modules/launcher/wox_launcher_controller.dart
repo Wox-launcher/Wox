@@ -96,6 +96,10 @@ class WoxLauncherController extends GetxController {
   Timer cleanToolbarTimer = Timer(const Duration(), () => {});
   final cleanToolbarDelay = 1000;
 
+  /// This flag is used to control whether the result item is selected by mouse hover.
+  /// This is used to prevent the result item from being selected when the mouse is just hovering over the item in the result list.
+  var isMouseMoved = false;
+
   /// Triggered when received query results from the server.
   void onReceivedQueryResults(String traceId, List<WoxQueryResult> receivedResults) {
     if (receivedResults.isEmpty) {
@@ -338,6 +342,7 @@ class WoxLauncherController extends GetxController {
 
   void onQueryBoxTextChanged(String value) {
     canArrowUpHistory = false;
+    isMouseMoved = false;
 
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
       // do local filter if query type is selection
@@ -740,6 +745,14 @@ class WoxLauncherController extends GetxController {
 
   bool isActionActiveByIndex(int index) {
     return activeActionIndex.value == index;
+  }
+
+  void setActiveResultIndex(int index) {
+    activeResultIndex.value = index;
+    currentPreview.value = results[index].preview;
+    isShowPreviewPanel.value = currentPreview.value.previewData != "";
+    resetActiveAction(const UuidV4().generate(), "mouse hover");
+    results.refresh();
   }
 
   /// update active actions based on active result and reset active action index to 0
