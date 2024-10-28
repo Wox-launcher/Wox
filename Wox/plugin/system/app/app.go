@@ -25,11 +25,27 @@ import (
 
 var appIcon = plugin.PluginAppIcon
 
+type AppType = string
+
+const (
+	AppTypeDesktop AppType = "desktop"
+	AppTypeUWP     AppType = "uwp"
+)
+
 type appInfo struct {
 	Name string
 	Path string
 	Icon plugin.WoxImage
-	Pid  int `json:"-"`
+	Type AppType
+
+	Pid int `json:"-"`
+}
+
+func (a *appInfo) GetDisplayPath() string {
+	if a.Type == AppTypeUWP {
+		return "UWP App"
+	}
+	return a.Path
 }
 
 func (a *appInfo) IsRunning() bool {
@@ -135,10 +151,13 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 		isNameMatch, nameScore := system.IsStringMatchScore(ctx, info.Name, query.Search)
 		isPathNameMatch, pathNameScore := system.IsStringMatchScore(ctx, filepath.Base(info.Path), query.Search)
 		if isNameMatch || isPathNameMatch {
+			// 确定要显示的路径
+			displayPath := info.GetDisplayPath()
+
 			result := plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    info.Name,
-				SubTitle: info.Path,
+				SubTitle: displayPath,
 				Icon:     info.Icon,
 				Score:    util.MaxInt64(nameScore, pathNameScore),
 				Actions: []plugin.QueryResultAction{
@@ -156,9 +175,8 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 						Name: "i18n:plugin_app_open_containing_folder",
 						Icon: plugin.OpenContainingFolderIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							runErr := util.ShellOpenFileInFolder(info.Path)
-							if runErr != nil {
-								a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", info.Path, runErr.Error()))
+							if err := a.retriever.OpenAppFolder(ctx, info); err != nil {
+								a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening folder: %s", err.Error()))
 							}
 						},
 					},

@@ -13,4 +13,5 @@ type Retriever interface {
 	ParseAppInfo(ctx context.Context, path string) (appInfo, error)
 	GetExtraApps(ctx context.Context) ([]appInfo, error)
 	GetPid(ctx context.Context, app appInfo) int
+	OpenAppFolder(ctx context.Context, app appInfo) error
 }

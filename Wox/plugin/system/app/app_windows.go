@@ -1,13 +1,16 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/csv"
 	"errors"
 	"fmt"
-	win "github.com/lxn/win"
-	"github.com/parsiya/golnk"
 	"image"
 	"image/color"
+	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -15,6 +18,9 @@ import (
 	"unsafe"
 	"wox/plugin"
 	"wox/util"
+
+	win "github.com/lxn/win"
+	lnk "github.com/parsiya/golnk"
 )
 
 var (
@@ -115,6 +121,7 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 		Name: strings.TrimSuffix(filepath.Base(appPath), filepath.Ext(appPath)),
 		Path: targetPath,
 		Icon: icon,
+		Type: AppTypeDesktop, // 使用常量
 	}, nil
 }
 
@@ -137,17 +144,18 @@ func (a *WindowsRetriever) parseExe(ctx context.Context, appPath string) (appInf
 		Name: strings.TrimSuffix(filepath.Base(appPath), filepath.Ext(appPath)),
 		Path: appPath,
 		Icon: icon,
+		Type: AppTypeDesktop, // 使用常量
 	}, nil
 }
 
 func (a *WindowsRetriever) GetAppIcon(ctx context.Context, path string) (image.Image, error) {
-	// 将文件路径转换为UTF16
+	// Convert file path to UTF16
 	lpIconPath, err := syscall.UTF16PtrFromString(path)
 	if err != nil {
 		return nil, err
 	}
 
-	// 使用ExtractIconEx获取图标句柄
+	// Get icon handle using ExtractIconEx
 	var largeIcon win.HICON
 	var smallIcon win.HICON
 	ret, _, _ := extractIconEx.Call(
@@ -160,9 +168,9 @@ func (a *WindowsRetriever) GetAppIcon(ctx context.Context, path string) (image.I
 	if ret == 0 {
 		return nil, fmt.Errorf("no icons found in file")
 	}
-	defer win.DestroyIcon(largeIcon) // 确保释放图标资源
+	defer win.DestroyIcon(largeIcon) // Ensure icon resources are released
 
-	// 获取图标信息
+	// Get icon information
 	var iconInfo win.ICONINFO
 	if win.GetIconInfo(largeIcon, &iconInfo) == false {
 		return nil, fmt.Errorf("failed to get icon info")
@@ -170,19 +178,19 @@ func (a *WindowsRetriever) GetAppIcon(ctx context.Context, path string) (image.I
 	defer win.DeleteObject(win.HGDIOBJ(iconInfo.HbmColor))
 	defer win.DeleteObject(win.HGDIOBJ(iconInfo.HbmMask))
 
-	// 创建设备无关位图(DIB)来接收图像数据
+	// Create device-independent bitmap (DIB) to receive image data
 	hdc := win.GetDC(0)
 	defer win.ReleaseDC(0, hdc)
 
 	var bmpInfo win.BITMAPINFO
 	bmpInfo.BmiHeader.BiSize = uint32(unsafe.Sizeof(bmpInfo.BmiHeader))
 	bmpInfo.BmiHeader.BiWidth = int32(iconInfo.XHotspot * 2)
-	bmpInfo.BmiHeader.BiHeight = -int32(iconInfo.YHotspot * 2) // 负值表示自顶向下的DIB
+	bmpInfo.BmiHeader.BiHeight = -int32(iconInfo.YHotspot * 2) // Negative value indicates top-down DIB
 	bmpInfo.BmiHeader.BiPlanes = 1
 	bmpInfo.BmiHeader.BiBitCount = 32
 	bmpInfo.BmiHeader.BiCompression = win.BI_RGB
 
-	// 分配内存来存储位图数据
+	// Allocate memory to store bitmap data
 	bits := make([]byte, iconInfo.XHotspot*2*iconInfo.YHotspot*2*4)
 	if win.GetDIBits(hdc, win.HBITMAP(iconInfo.HbmColor), 0, uint32(iconInfo.YHotspot*2), &bits[0], &bmpInfo, win.DIB_RGB_COLORS) == 0 {
 		return nil, fmt.Errorf("failed to get DIB bits")
@@ -213,13 +221,222 @@ func (a *WindowsRetriever) GetAppIcon(ctx context.Context, path string) (image.I
 
 func (a *WindowsRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
 	uwpApps := a.GetUWPApps(ctx)
+	util.GetLogger().Info(ctx, fmt.Sprintf("Found %d UWP apps", len(uwpApps)))
+
 	return uwpApps, nil
 }
 
+func (a *WindowsRetriever) OpenAppFolder(ctx context.Context, app appInfo) error {
+	if app.Type != AppTypeUWP {
+		return util.ShellOpenFileInFolder(app.Path)
+	}
+
+	// Extract AppID from Path (format: "shell:AppsFolder\PackageFamilyName!AppId")
+	appID := strings.TrimPrefix(app.Path, "shell:AppsFolder\\")
+	if appID == "" {
+		return fmt.Errorf("invalid UWP app path: %s", app.Path)
+	}
+
+	// Get app installation location using PowerShell
+	cmd := exec.Command("powershell", "-Command", fmt.Sprintf(`
+		$packageFamilyName = ($('%s' -split '!')[0])
+		$package = Get-AppxPackage | Where-Object { $_.PackageFamilyName -eq $packageFamilyName }
+		if ($package) {
+			Write-Output $package.InstallLocation
+		}
+	`, appID))
+
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to get UWP app install location: %v", err)
+	}
+
+	installLocation := strings.TrimSpace(string(output))
+	if installLocation == "" {
+		return fmt.Errorf("UWP app install location not found for: %s", appID)
+	}
+
+	return util.ShellOpenFileInFolder(installLocation)
+}
+
 func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
-	return []appInfo{}
+	var apps []appInfo
+
+	// Modify PowerShell command, add more properties and use UTF-8 encoding
+	powershellCmd := `
+		[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+		Get-StartApps | Where-Object { $_.AppID -like '*!*' } | Select-Object Name, AppID | ConvertTo-Csv -NoTypeInformation
+	`
+
+	// Set command encoding to UTF-8
+	cmd := exec.Command("powershell", "-Command", powershellCmd)
+	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8")
+
+	// Capture command output
+	var out bytes.Buffer
+	cmd.Stdout = &out
+
+	if err := cmd.Run(); err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("Execution of PowerShell command failed: %v", err))
+		return apps
+	}
+
+	// Parse CSV output
+	reader := csv.NewReader(strings.NewReader(out.String()))
+	records, err := reader.ReadAll()
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("Error parsing CSV output: %v", err))
+		return apps
+	}
+
+	// Skip header row
+	for i := 1; i < len(records); i++ {
+		record := records[i]
+		if len(record) < 2 {
+			continue
+		}
+
+		name := record[0]
+		appID := record[1]
+
+		if strings.Contains(appID, "!") {
+			app := appInfo{
+				Name: name,
+				Path: "shell:AppsFolder\\" + appID,
+				Icon: appIcon,
+				Type: AppTypeUWP, // 使用常量
+			}
+
+			// Get app icon
+			icon, err := a.GetUWPAppIcon(ctx, appID)
+			if err == nil {
+				app.Icon = icon
+			}
+
+			apps = append(apps, app)
+			util.GetLogger().Info(ctx, fmt.Sprintf("Found UWP app: %s, AppID: %s", name, appID))
+		}
+	}
+
+	util.GetLogger().Info(ctx, fmt.Sprintf("Found %d UWP apps", len(apps)))
+	return apps
 }
 
 func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {
+	// Get pid of the app
 	return 0
+}
+
+func (a *WindowsRetriever) GetUWPAppIcon(ctx context.Context, appID string) (plugin.WoxImage, error) {
+	powershellCmd := fmt.Sprintf(`
+		[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+		$packageFamilyName = ($('%s' -split '!')[0])
+		$package = Get-AppxPackage | Where-Object { $_.PackageFamilyName -eq $packageFamilyName }
+		if ($package) {
+			$manifest = Get-AppxPackageManifest $package
+			$logo = $manifest.Package.Properties.Logo
+			if (!$logo) {
+				$visual = $manifest.Package.Applications.Application.VisualElements
+				if ($visual.Square44x44Logo) {
+					$logo = $visual.Square44x44Logo
+				} elseif ($visual.Square150x150Logo) {
+					$logo = $visual.Square150x150Logo
+				} elseif ($visual.Logo) {
+					$logo = $visual.Logo
+				}
+			}
+			if ($logo) {
+				$logoPath = Join-Path $package.InstallLocation $logo
+				$directory = Split-Path $logoPath
+				$filename = Split-Path $logoPath -Leaf
+				$baseFilename = [System.IO.Path]::GetFileNameWithoutExtension($filename)
+				$extension = [System.IO.Path]::GetExtension($filename)
+				
+				# Add more scaling versions and target sizes
+				$scales = @('scale-200', 'scale-100', 'scale-150', 'scale-125', 'scale-400', '')
+				$targetSizes = @('44', '48', '24', '32', '64', '256', '16')
+				
+				# First try filenames with sizes
+				foreach ($size in $targetSizes) {
+					foreach ($scale in $scales) {
+						$targetPath = if ($scale) {
+							Join-Path $directory "$baseFilename.targetsize-$size.$scale$extension"
+						} else {
+							Join-Path $directory "$baseFilename.targetsize-$size$extension"
+						}
+						if (Test-Path $targetPath) {
+							Write-Output "Found icon: $targetPath"
+							Write-Output $targetPath
+							exit
+						}
+					}
+				}
+				
+				# Then try scaled versions
+				foreach ($scale in $scales) {
+					$scaledPath = if ($scale) {
+						Join-Path $directory "$baseFilename.$scale$extension"
+					} else {
+						$logoPath
+					}
+					if (Test-Path $scaledPath) {
+						Write-Output "Found icon: $scaledPath"
+						Write-Output $scaledPath
+						exit
+					}
+				}
+				
+				# If nothing found, return original path
+				if (Test-Path $logoPath) {
+					Write-Output "Using original path: $logoPath"
+					Write-Output $logoPath
+				}
+			}
+			Write-Output "Package info: $($package.PackageFullName)"
+			Write-Output "Install location: $($package.InstallLocation)"
+		}
+	`, appID)
+
+	cmd := exec.Command("powershell", "-Command", powershellCmd)
+	output, err := cmd.Output()
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("Execution of PowerShell command failed: %v", err))
+		return plugin.WoxImage{}, err
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) == 0 {
+		util.GetLogger().Error(ctx, "No icon path found")
+		return plugin.WoxImage{}, fmt.Errorf("No icon path found")
+	}
+
+	// Last line is the icon path
+	iconPath := strings.TrimSpace(lines[len(lines)-1])
+	if iconPath == "" {
+		util.GetLogger().Error(ctx, "Icon path is empty")
+		return plugin.WoxImage{}, fmt.Errorf("Icon path is empty")
+	}
+
+	iconData, err := os.ReadFile(iconPath)
+	if err != nil {
+		return plugin.WoxImage{}, err
+	}
+
+	// Determine icon type based on file extension
+	ext := strings.ToLower(filepath.Ext(iconPath))
+	var mimeType string
+	switch ext {
+	case ".png":
+		mimeType = "image/png"
+	case ".jpg", ".jpeg":
+		mimeType = "image/jpeg"
+	case ".ico":
+		mimeType = "image/x-icon"
+	default:
+		return plugin.WoxImage{}, fmt.Errorf("Unsupported icon format: %s", ext)
+	}
+
+	// Convert to base64
+	base64Icon := fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(iconData))
+	return plugin.NewWoxImageBase64(base64Icon), nil
 }

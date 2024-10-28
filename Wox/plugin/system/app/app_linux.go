@@ -42,3 +42,7 @@ func (a *LinuxRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
 func (a *LinuxRetriever) GetPid(ctx context.Context, app appInfo) int {
 	return 0
 }
+
+func (a *LinuxRetriever) OpenAppFolder(ctx context.Context, app appInfo) error {
+	return util.ShellOpenFileInFolder(app.Path)
+}

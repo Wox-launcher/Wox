@@ -11,6 +11,7 @@ require (
 	github.com/forPelevin/gomoji v1.2.0
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/gen2brain/beeep v0.0.0-20240112042604-c7bb2cd88fea
+	github.com/go-ole/go-ole v1.2.6
 	github.com/go-resty/resty/v2 v2.12.0
 	github.com/google/generative-ai-go v0.10.0
 	github.com/google/uuid v1.6.0
