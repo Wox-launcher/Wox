@@ -1,18 +1,20 @@
 package notifier
 
-/*
-#cgo pkg-config: cairo
-#cgo LDFLAGS: -lX11
-#include <stdlib.h>
-
-void showNotification(const char* message);
-*/
-import "C"
-import "unsafe"
+import (
+	"github.com/godbus/dbus/v5"
+)
 
 func ShowNotification(message string) {
-	cMessage := C.CString(message)
-	defer C.free(unsafe.Pointer(cMessage))
+	conn, err := dbus.SessionBus()
+	if err != nil {
+		return
+	}
+	defer conn.Close()
 
-	C.showNotification(cMessage)
+	obj := conn.Object("org.freedesktop.Notifications", "/org/freedesktop/Notifications")
+	call := obj.Call("org.freedesktop.Notifications.Notify", 0, "Wox", uint32(0),
+		"", "Wox", message, []string{}, map[string]dbus.Variant{}, int32(5000))
+	if call.Err != nil {
+		return
+	}
 }
