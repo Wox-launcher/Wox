@@ -1,6 +1,7 @@
 package notifier
 
 /*
+#cgo pkg-config: cairo
 #cgo LDFLAGS: -lX11
 #include <stdlib.h>
 
