@@ -443,6 +443,6 @@ func (a *MacRetriever) getRunningProcesses() (infos []processInfo) {
 	return
 }
 
-func (a *DarwinRetriever) OpenAppFolder(ctx context.Context, app appInfo) error {
+func (a *MacRetriever) OpenAppFolder(ctx context.Context, app appInfo) error {
 	return util.ShellOpenFileInFolder(app.Path)
 }
