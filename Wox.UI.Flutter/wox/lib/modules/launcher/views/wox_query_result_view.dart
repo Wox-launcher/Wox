@@ -145,24 +145,28 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                         WoxQueryResult woxQueryResult = controller.getQueryResultByIndex(index);
                         return MouseRegion(
                           onEnter: (_) {
-                            if (controller.isMouseMoved) {
+                            if (controller.isMouseMoved && !woxQueryResult.isGroup) {
                               controller.setActiveResultIndex(index);
                             }
                           },
                           onHover: (_) {
-                            if (!controller.isMouseMoved) {
+                            if (!controller.isMouseMoved && !woxQueryResult.isGroup) {
                               controller.isMouseMoved = true;
                               controller.setActiveResultIndex(index);
                             }
                           },
                           child: GestureDetector(
                             onTap: () {
-                              // request focus to action query box since it will lose focus when tap
-                              controller.queryBoxFocusNode.requestFocus();
+                              if (!woxQueryResult.isGroup) {
+                                // request focus to action query box since it will lose focus when tap
+                                controller.queryBoxFocusNode.requestFocus();
+                              }
                             },
                             onDoubleTap: () {
-                              controller.onEnter(const UuidV4().generate());
-                              controller.queryBoxFocusNode.requestFocus();
+                              if (!woxQueryResult.isGroup) {
+                                controller.onEnter(const UuidV4().generate());
+                                controller.queryBoxFocusNode.requestFocus();
+                              }
                             },
                             child: WoxListItemView(
                               key: controller.getResultItemGlobalKeyByIndex(index),
