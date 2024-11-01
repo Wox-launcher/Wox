@@ -7,7 +7,7 @@
   "ui_hotkey_tips": "Hotkeys to open or hide Wox",
   "ui_selection_hotkey": "Selection Hotkey",
   "ui_selection_hotkey_tips": "Hotkeys to do actions on selected text or files",
-  "ui_use_pinyin": "Use Pinyin",
+  "ui_use_pinyin": "Would you like to use Pinyin? \n\nPinyin is a Latin alphabet used to facilitate transcriptions from Standard Chinese to Latin alphabet",
   "ui_use_pinyin_tips": "When selected, Wox will convert Chinese into Pinyin",
   "ui_hide_on_lost_focus": "Hide on lost focus",
   "ui_hide_on_lost_focus_tips": "When selected, Wox will hide when it loses focus",
