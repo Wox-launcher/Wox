@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path"
 	"runtime/pprof"
@@ -108,7 +109,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 
 	if util.IsDev() {
 		r.commands = append(r.commands, SysCommand{
-			Title: "Performance CPU profiling",
+			Title: "i18n:plugin_sys_performance_cpu_profiling",
 			Icon:  plugin.CPUProfileIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				cpuProfPath := path.Join(util.GetLocation().GetWoxDataDirectory(), "cpu.prof")
@@ -133,7 +134,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		})
 
 		r.commands = append(r.commands, SysCommand{
-			Title: "Delete all image cache",
+			Title: "i18n:plugin_sys_delete_image_cache",
 			Icon:  plugin.NewWoxImageEmoji("🗑️"),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				location := util.GetLocation()
@@ -184,12 +185,12 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 				}
 
 				results = append(results, plugin.QueryResult{
-					Title: "Open " + instance.Metadata.Name + " settings",
+					Title: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_sys_open_plugin_settings"), instance.Metadata.Name),
 					Score: score,
 					Icon:  pluginIcon,
 					Actions: []plugin.QueryResultAction{
 						{
-							Name: "Open plugin settings",
+							Name: "i18n:plugin_sys_execute",
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, share.SettingWindowContext{
 									Path:  "/plugin/setting",

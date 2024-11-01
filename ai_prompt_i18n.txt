@@ -1,0 +1,13 @@
+参考一下 @wpm.go @lang 文件中关于i18n的用法, 把 @ai_command.go 的i18n实现一下, 要求如下:
+
+- 不要更改任何原有逻辑, 仅仅实现i18n
+- 实现i18n的时候, 不要在i18n后面添加注释 
+- Log信息不需要添加翻译
+- plugin.Metadata的name,author不需要添加翻译
+- plugin.MetadataCommand的Description需要翻译
+- api.Notify需要翻译
+- plugin.QueryResult里面的title, subtitle需要翻译
+- definition.PluginSettingDefinitions里面的需要翻译
+- plugin.QueryResultAction的Name需要翻译
+- 对于有变量的字符串, 使用  fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_sys_open_plugin_settings"), instance.Metadata.Name) 这种形式
+- 对于纯字符串的翻译, 直接使用 i18n:前缀的形式

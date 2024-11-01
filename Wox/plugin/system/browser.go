@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/setting/validator"
@@ -84,8 +85,8 @@ func (c *BrowserPlugin) GetMetadata() plugin.Metadata {
 				Value: &definition.PluginSettingValueTextBox{
 					Key:          browserWebsocketPortSettingKey,
 					DefaultValue: "34988",
-					Label:        "Server Port",
-					Tooltip:      "The port for the websocket server to communicate with the browser extension. Default is 34988. ",
+					Label:        "i18n:plugin_browser_server_port",
+					Tooltip:      "i18n:plugin_browser_server_port_tooltip",
 					Style: definition.PluginSettingValueStyle{
 						PaddingRight: 10,
 					},
@@ -109,7 +110,7 @@ func (c *BrowserPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 	util.Go(ctx, "newWebsocketServer on init", func() {
 		err := c.newWebsocketServer(ctx)
 		if err != nil {
-			c.api.Notify(ctx, fmt.Sprintf("Failed to start websocket server: %s", err.Error()))
+			c.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_browser_server_start_error"), err.Error()))
 		}
 	})
 
@@ -118,7 +119,7 @@ func (c *BrowserPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 			util.Go(ctx, "newWebsocketServer on port changed", func() {
 				err := c.newWebsocketServer(ctx)
 				if err != nil {
-					c.api.Notify(ctx, fmt.Sprintf("Failed to start websocket server: %s", err.Error()))
+					c.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_browser_server_start_error"), err.Error()))
 				}
 			})
 		}
@@ -151,7 +152,7 @@ func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) (results 
 			Icon:     icon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "Open",
+					Name: "i18n:plugin_browser_open_tab",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						c.m.Broadcast([]byte(fmt.Sprintf(`{"method":"highlightTab","data":"{\"tabId\":%d,\"windowId\":%d,\"tabIndex\": %d}"}`, tab.TabId, tab.WindowId, tab.TabIndex)))
 					},
@@ -229,7 +230,6 @@ func (c *BrowserPlugin) newWebsocketServer(ctx context.Context) error {
 		})
 	})
 
-	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("browser websocket server start at：ws://localhost:%d", port))
 	c.server = &http.Server{Addr: fmt.Sprintf("localhost:%d", port), Handler: cors.Default().Handler(mux)}
 	err := c.server.ListenAndServe()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {

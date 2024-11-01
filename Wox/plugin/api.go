@@ -64,6 +64,9 @@ func (a *APIImpl) ShowApp(ctx context.Context) {
 }
 
 func (a *APIImpl) Notify(ctx context.Context, message string) {
+	// translate message
+	message = a.GetTranslation(ctx, message)
+
 	if GetPluginManager().GetUI().IsPluginQuery(ctx, a.pluginInstance.Metadata.Id) {
 		GetPluginManager().GetUI().ShowToolbarMsg(ctx, share.ToolbarMsg{
 			Text:           message,

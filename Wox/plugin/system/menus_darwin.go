@@ -79,7 +79,7 @@ func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 			Icon:  icon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "Execute",
+					Name: "i18n:plugin_menus_execute",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						menus.ExecuteActiveAppMenu(query.Env.ActiveWindowPid, menu)
 					},

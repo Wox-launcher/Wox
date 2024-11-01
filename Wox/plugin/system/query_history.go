@@ -57,14 +57,14 @@ func (i *QueryHistoryPlugin) Query(ctx context.Context, query plugin.Query) (res
 	for k := len(queryHistories) - 1; k >= 0; k-- {
 		var history = queryHistories[k]
 
-		if query.Search == "" || strings.Contains(history.Query.String(), query.Search) {
+		if strings.Contains(history.Query.String(), query.Search) {
 			results = append(results, plugin.QueryResult{
 				Title:    history.Query.String(),
 				SubTitle: util.FormatTimestamp(history.Timestamp),
 				Icon:     queryHistoryIcon,
 				Actions: []plugin.QueryResultAction{
 					{
-						Name:                   "Use",
+						Name:                   "i18n:plugin_query_history_use",
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							i.api.ChangeQuery(ctx, history.Query)

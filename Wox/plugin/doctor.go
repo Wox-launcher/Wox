@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"wox/i18n"
 	"wox/updater"
 	"wox/util"
 	"wox/util/permission"
@@ -40,9 +41,9 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 	if err != nil {
 		if latestVersion.LatestVersion == updater.CURRENT_VERSION {
 			return DoctorCheckResult{
-				Name:        "Version",
+				Name:        "i18n:plugin_doctor_version",
 				Status:      true,
-				Description: "Already using the latest version",
+				Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_latest"), latestVersion.LatestVersion),
 				ActionName:  "",
 				Action: func(ctx context.Context) {
 				},
@@ -50,7 +51,7 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 		}
 
 		return DoctorCheckResult{
-			Name:        "Version",
+			Name:        "i18n:plugin_doctor_version",
 			Status:      true,
 			Description: err.Error(),
 			ActionName:  "",
@@ -60,12 +61,12 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 	}
 
 	return DoctorCheckResult{
-		Name:        "Version",
+		Name:        "i18n:plugin_doctor_version",
 		Status:      false,
-		Description: fmt.Sprintf("New version available: %s", latestVersion),
-		ActionName:  "Check for updates",
+		Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_update_available"), latestVersion.CurrentVersion, latestVersion.LatestVersion),
+		ActionName:  "i18n:plugin_doctor_version_download",
 		Action: func(ctx context.Context) {
-			//updater.OpenUpdatePage(ctx)
+			util.ShellOpen(latestVersion.DownloadUrl)
 		},
 	}
 }
@@ -74,10 +75,10 @@ func checkAccessibilityPermission(ctx context.Context) DoctorCheckResult {
 	hasPermission := permission.HasAccessibilityPermission(ctx)
 	if !hasPermission {
 		return DoctorCheckResult{
-			Name:        "Accessibility",
+			Name:        "i18n:plugin_doctor_accessibility",
 			Status:      false,
-			Description: "You need to grant Wox Accessibility permission to use this plugin",
-			ActionName:  "Open Accessibility Settings",
+			Description: "i18n:plugin_doctor_accessibility_required",
+			ActionName:  "i18n:plugin_doctor_accessibility_open_settings",
 			Action: func(ctx context.Context) {
 				permission.GrantAccessibilityPermission(ctx)
 			},
@@ -85,9 +86,9 @@ func checkAccessibilityPermission(ctx context.Context) DoctorCheckResult {
 	}
 
 	return DoctorCheckResult{
-		Name:        "Accessibility",
+		Name:        "i18n:plugin_doctor_accessibility",
 		Status:      hasPermission,
-		Description: "You have granted Wox Accessibility permission",
+		Description: "i18n:plugin_doctor_accessibility_granted",
 		ActionName:  "",
 		Action: func(ctx context.Context) {
 		},

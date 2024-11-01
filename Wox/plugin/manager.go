@@ -529,6 +529,10 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	for actionIndex := range result.Actions {
 		result.Actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, result.Actions[actionIndex].Name)
 	}
+	// translate preview data if preview type is text
+	if result.Preview.PreviewType == WoxPreviewTypeText {
+		result.Preview.PreviewData = m.translatePlugin(ctx, pluginInstance, result.Preview.PreviewData)
+	}
 
 	// set first action as default if no default action is set
 	defaultActionCount := lo.CountBy(result.Actions, func(item QueryResultAction) bool {

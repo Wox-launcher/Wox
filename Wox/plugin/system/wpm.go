@@ -8,6 +8,7 @@ import (
 	"path"
 	"strings"
 	"time"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/share"
@@ -81,31 +82,31 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 		Commands: []plugin.MetadataCommand{
 			{
 				Command:     "install",
-				Description: "Install Wox plugins",
+				Description: "i18n:plugin_wpm_command_install",
 			},
 			{
 				Command:     "uninstall",
-				Description: "Uninstall Wox plugins",
+				Description: "i18n:plugin_wpm_command_uninstall",
 			},
 			{
 				Command:     "create",
-				Description: "Create Wox plugin",
+				Description: "i18n:plugin_wpm_command_create",
 			},
 			{
 				Command:     "dev.list",
-				Description: "List local Wox plugins",
+				Description: "i18n:plugin_wpm_command_dev_list",
 			},
 			{
 				Command:     "dev.add",
-				Description: "Add existing Wox plugin directory",
+				Description: "i18n:plugin_wpm_command_dev_add",
 			},
 			{
 				Command:     "dev.remove",
-				Description: "Remove local Wox plugin, followed by a directory",
+				Description: "i18n:plugin_wpm_command_dev_remove",
 			},
 			{
 				Command:     "dev.reload",
-				Description: "Reload all dev plugins",
+				Description: "i18n:plugin_wpm_command_dev_reload",
 			},
 		},
 		SupportedOS: []string{
@@ -118,12 +119,12 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 				Type: definition.PluginSettingDefinitionTypeTable,
 				Value: &definition.PluginSettingValueTable{
 					Key:     localPluginDirectoriesKey,
-					Title:   "Local Plugin Directories",
-					Tooltip: "The directories to load local plugins, useful for plugin development",
+					Title:   "i18n:plugin_wpm_local_plugin_directories",
+					Tooltip: "i18n:plugin_wpm_local_plugin_directories_tooltip",
 					Columns: []definition.PluginSettingValueTableColumn{
 						{
 							Key:   "path",
-							Label: "Path",
+							Label: "i18n:plugin_wpm_path",
 							Type:  definition.PluginSettingValueTableColumnTypeDirPath,
 						},
 					},
@@ -247,7 +248,7 @@ func (w *WPMPlugin) parseMetadata(ctx context.Context, directory string) (plugin
 
 func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	if query.Command == "create" {
-		return w.createCommand(query)
+		return w.createCommand(ctx, query)
 	}
 
 	if query.Command == "install" {
@@ -277,13 +278,13 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 	return []plugin.QueryResult{}
 }
 
-func (w *WPMPlugin) createCommand(query plugin.Query) []plugin.QueryResult {
+func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	if w.creatingProcess != "" {
 		return []plugin.QueryResult{
 			{
 				Id:              uuid.NewString(),
 				Title:           w.creatingProcess,
-				SubTitle:        "Please wait...",
+				SubTitle:        "i18n:plugin_wpm_please_wait",
 				Icon:            wpmIcon,
 				RefreshInterval: 300,
 				OnRefresh: func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
@@ -298,12 +299,12 @@ func (w *WPMPlugin) createCommand(query plugin.Query) []plugin.QueryResult {
 	for _, template := range pluginTemplates {
 		results = append(results, plugin.QueryResult{
 			Id:       uuid.NewString(),
-			Title:    "Create " + string(template.Runtime) + " plugin",
-			SubTitle: fmt.Sprintf("Name: %s", query.Search),
+			Title:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_create_plugin"), string(template.Runtime)),
+			SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_plugin_name"), query.Search),
 			Icon:     wpmIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name:                   "create",
+					Name:                   "i18n:plugin_wpm_create",
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						pluginName := query.Search
@@ -348,7 +349,7 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 			Icon:     icon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "uninstall",
+					Name: "i18n:plugin_wpm_uninstall",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						plugin.GetStoreManager().Uninstall(ctx, pluginInstance)
 					},
@@ -398,11 +399,11 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 			},
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "install",
+					Name: "i18n:plugin_wpm_install",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
 						if installErr != nil {
-							w.api.Notify(ctx, installErr.Error())
+							w.api.Notify(ctx, "i18n:plugin_wpm_install_failed")
 						}
 					},
 				},
@@ -445,23 +446,23 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 			},
 			Actions: []plugin.QueryResultAction{
 				{
-					Name:      "Reload",
+					Name:      "i18n:plugin_wpm_reload",
 					IsDefault: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						w.reloadLocalDistPlugin(ctx, lp.metadata, "reload by user")
 					},
 				},
 				{
-					Name: "Open plugin directory",
+					Name: "i18n:plugin_wpm_open_directory",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						openErr := util.ShellOpen(lp.metadata.Directory)
 						if openErr != nil {
-							w.api.Notify(ctx, fmt.Sprintf("Failed to open plugin directory: %s", openErr.Error()))
+							w.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_open_directory_failed"), openErr.Error()))
 						}
 					},
 				},
 				{
-					Name: "Remove",
+					Name: "i18n:plugin_wpm_remove",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						w.localPluginDirectories = lo.Filter(w.localPluginDirectories, func(directory string, _ int) bool {
 							return directory != lp.metadata.Directory
@@ -470,7 +471,7 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 					},
 				},
 				{
-					Name: "Remove and delete plugin directory",
+					Name: "i18n:plugin_wpm_remove_and_delete",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						deleteErr := os.RemoveAll(lp.metadata.Directory)
 						if deleteErr != nil {
@@ -492,11 +493,11 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 func (w *WPMPlugin) reloadDevCommand(ctx context.Context) []plugin.QueryResult {
 	return []plugin.QueryResult{
 		{
-			Title: "Reload all dev plugins",
+			Title: "i18n:plugin_wpm_reload_all_plugins",
 			Icon:  wpmIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "Reload",
+					Name: "i18n:plugin_wpm_reload",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						w.reloadAllDevPlugins(ctx)
 						util.Go(ctx, "reload dev plugins in dist", func() {
@@ -516,14 +517,14 @@ func (w *WPMPlugin) addDevCommand(ctx context.Context, query plugin.Query) []plu
 	w.api.Log(ctx, plugin.LogLevelInfo, "Please choose a directory to add local plugin")
 	pluginDirectories := plugin.GetPluginManager().GetUI().PickFiles(ctx, share.PickFilesParams{IsDirectory: true})
 	if len(pluginDirectories) == 0 {
-		w.api.Notify(ctx, "You need to choose a directory to add local plugin")
+		w.api.Notify(ctx, "i18n:plugin_wpm_choose_directory")
 		return []plugin.QueryResult{}
 	}
 
 	pluginDirectory := pluginDirectories[0]
 
 	if lo.Contains(w.localPluginDirectories, pluginDirectory) {
-		w.api.Notify(ctx, "The plugin directory has already been added")
+		w.api.Notify(ctx, "i18n:plugin_wpm_directory_already_added")
 		return []plugin.QueryResult{}
 	}
 
@@ -536,13 +537,13 @@ func (w *WPMPlugin) addDevCommand(ctx context.Context, query plugin.Query) []plu
 
 func (w *WPMPlugin) removeDevCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	if len(query.Search) == 0 {
-		w.api.Notify(ctx, "You need to input a directory to remove local plugin")
+		w.api.Notify(ctx, "i18n:plugin_wpm_input_directory")
 		return []plugin.QueryResult{}
 	}
 
 	pluginDirectory := query.Search
 	if !lo.Contains(w.localPluginDirectories, pluginDirectory) {
-		w.api.Notify(ctx, "The plugin directory is not found")
+		w.api.Notify(ctx, "i18n:plugin_wpm_directory_not_found")
 		return []plugin.QueryResult{}
 	}
 
@@ -554,33 +555,33 @@ func (w *WPMPlugin) removeDevCommand(ctx context.Context, query plugin.Query) []
 }
 
 func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, pluginName string, query plugin.Query) {
-	w.creatingProcess = "Downloading template..."
+	w.creatingProcess = "i18n:plugin_wpm_downloading_template"
 
 	tempPluginDirectory := path.Join(os.TempDir(), uuid.NewString())
 	if err := util.GetLocation().EnsureDirectoryExist(tempPluginDirectory); err != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create temp plugin directory: %s", err.Error()))
-		w.creatingProcess = fmt.Sprintf("Failed to create temp plugin directory: %s", err.Error())
+		w.creatingProcess = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_create_temp_dir_failed"), err.Error())
 		return
 	}
 
-	w.creatingProcess = fmt.Sprintf("Downloading %s template to %s", template.Runtime, tempPluginDirectory)
+	w.creatingProcess = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_downloading_template_to"), template.Runtime, tempPluginDirectory)
 	tempZipPath := path.Join(tempPluginDirectory, "template.zip")
 	err := util.HttpDownload(ctx, template.Url, tempZipPath)
 	if err != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to download template: %s", err.Error()))
-		w.creatingProcess = fmt.Sprintf("Failed to download template: %s", err.Error())
+		w.creatingProcess = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_download_template_failed"), err.Error())
 		return
 	}
 
-	w.creatingProcess = "Extracting template..."
+	w.creatingProcess = "i18n:plugin_wpm_extracting_template"
 	err = util.Unzip(tempZipPath, tempPluginDirectory)
 	if err != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to extract template: %s", err.Error()))
-		w.creatingProcess = fmt.Sprintf("Failed to extract template: %s", err.Error())
+		w.creatingProcess = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_extract_template_failed"), err.Error())
 		return
 	}
 
-	w.creatingProcess = "Please choose a directory..."
+	w.creatingProcess = "i18n:plugin_wpm_choose_directory_prompt"
 	pluginDirectories := plugin.GetPluginManager().GetUI().PickFiles(ctx, share.PickFilesParams{IsDirectory: true})
 	if len(pluginDirectories) == 0 {
 		w.api.Notify(ctx, "You need to choose a directory to create the plugin")
@@ -691,6 +692,6 @@ func (w *WPMPlugin) reloadLocalDistPlugin(ctx context.Context, localPlugin plugi
 		w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Reloaded plugin: %s", localPlugin.Metadata.Name))
 	}
 
-	w.api.Notify(ctx, fmt.Sprintf("Reloaded dev plugin %s(%s)", localPlugin.Metadata.Name, reason))
+	w.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_reload_success"), localPlugin.Metadata.Name, reason))
 	return nil
 }

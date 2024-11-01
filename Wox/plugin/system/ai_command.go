@@ -7,6 +7,7 @@ import (
 	"image"
 	"strings"
 	"wox/ai"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/share"
@@ -54,7 +55,7 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Make your daily tasks easier with AI commands",
+		Description:   "i18n:plugin_ai_command_description",
 		Icon:          aiCommandIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
@@ -70,43 +71,43 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 				Type: definition.PluginSettingDefinitionTypeTable,
 				Value: &definition.PluginSettingValueTable{
 					Key:     "commands",
-					Title:   "Commands",
-					Tooltip: "The commands to run.\r\nE.g. `translate`, user will type `ai translate` to run translate based on the prompt",
+					Title:   "i18n:plugin_ai_command_commands",
+					Tooltip: "i18n:plugin_ai_command_commands_tooltip",
 					Columns: []definition.PluginSettingValueTableColumn{
 						{
 							Key:     "name",
-							Label:   "Name",
+							Label:   "i18n:plugin_ai_command_name",
 							Type:    definition.PluginSettingValueTableColumnTypeText,
 							Width:   100,
-							Tooltip: "The name of the ai command. E.g. `Translator`",
+							Tooltip: "i18n:plugin_ai_command_name_tooltip",
 						},
 						{
 							Key:     "command",
-							Label:   "Command",
+							Label:   "i18n:plugin_ai_command_command",
 							Type:    definition.PluginSettingValueTableColumnTypeText,
 							Width:   80,
-							Tooltip: "The command to run. E.g. `translate`, user will type `ai translate` to run this command",
+							Tooltip: "i18n:plugin_ai_command_command_tooltip",
 						},
 						{
 							Key:     "model",
-							Label:   "Model",
+							Label:   "i18n:plugin_ai_command_model",
 							Type:    definition.PluginSettingValueTableColumnTypeSelectAIModel,
 							Width:   100,
-							Tooltip: "The ai model to use.",
+							Tooltip: "i18n:plugin_ai_command_model_tooltip",
 						},
 						{
 							Key:          "prompt",
-							Label:        "Prompt",
+							Label:        "i18n:plugin_ai_command_prompt",
 							Type:         definition.PluginSettingValueTableColumnTypeText,
 							TextMaxLines: 10,
-							Tooltip:      "The prompt to send to the ai. %s will be replaced with the user input",
+							Tooltip:      "i18n:plugin_ai_command_prompt_tooltip",
 						},
 						{
 							Key:     "vision",
-							Label:   "Vision",
+							Label:   "i18n:plugin_ai_command_vision",
 							Type:    definition.PluginSettingValueTableColumnTypeCheckbox,
 							Width:   60,
-							Tooltip: "Does the command interact with vision?",
+							Tooltip: "i18n:plugin_ai_command_vision_tooltip",
 						},
 					},
 				},
@@ -179,8 +180,8 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 
 		var startAnsweringTime int64
 		onPreparing := func(current plugin.RefreshableResult) plugin.RefreshableResult {
-			current.Preview.PreviewData = "Answering..."
-			current.SubTitle = "Answering..."
+			current.Preview.PreviewData = "i18n:plugin_ai_command_answering"
+			current.SubTitle = "i18n:plugin_ai_command_answering"
 			startAnsweringTime = util.GetSystemTimestamp()
 			return current
 		}
@@ -199,12 +200,12 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 
 			if isFinished {
 				current.RefreshInterval = 0 // stop refreshing
-				current.SubTitle = fmt.Sprintf("Answered, cost %d ms", util.GetSystemTimestamp()-startAnsweringTime)
+				current.SubTitle = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_answered_cost"), util.GetSystemTimestamp()-startAnsweringTime)
 				answerText = current.Preview.PreviewData
 
 				current.Actions = []plugin.QueryResultAction{
 					{
-						Name: "Copy",
+						Name: "i18n:plugin_ai_command_copy",
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							clipboard.WriteText(answerText)
 						},
@@ -255,14 +256,14 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 			Title:           command.Name,
 			SubTitle:        fmt.Sprintf("%s - %s", command.AIModel().Provider, command.AIModel().Name),
 			Icon:            aiCommandIcon,
-			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeText, PreviewData: "Enter to start chat"},
+			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeText, PreviewData: "i18n:plugin_ai_command_enter_to_start"},
 			RefreshInterval: 100,
 			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, command.AIModel(), conversations, func() bool {
 				return startGenerate
 			}, onPreparing, onAnswering, onAnswerErr),
 			Actions: []plugin.QueryResultAction{
 				{
-					Name:                   "Run",
+					Name:                   "i18n:plugin_ai_command_run",
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						startGenerate = true
@@ -289,7 +290,7 @@ func (c *Plugin) listAllCommands(ctx context.Context, query plugin.Query) []plug
 	if len(commands) == 0 {
 		return []plugin.QueryResult{
 			{
-				Title: "No ai commands found",
+				Title: "i18n:plugin_ai_command_no_commands",
 				Icon:  aiCommandIcon,
 			},
 		}
@@ -303,7 +304,7 @@ func (c *Plugin) listAllCommands(ctx context.Context, query plugin.Query) []plug
 			Icon:     aiCommandIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name:                   "Run",
+					Name:                   "i18n:plugin_ai_command_run",
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						c.api.ChangeQuery(ctx, share.PlainQuery{
@@ -332,7 +333,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	if query.Search == "" {
 		return []plugin.QueryResult{
 			{
-				Title: "Type to start chat",
+				Title: "i18n:plugin_ai_command_type_to_start",
 				Icon:  aiCommandIcon,
 			},
 		}
@@ -351,7 +352,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	if len(commands) == 0 {
 		return []plugin.QueryResult{
 			{
-				Title: "No ai commands found",
+				Title: "i18n:plugin_ai_command_no_commands",
 				Icon:  aiCommandIcon,
 			},
 		}
@@ -363,7 +364,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	if !commandExist {
 		return []plugin.QueryResult{
 			{
-				Title: "No ai command found",
+				Title: "i18n:plugin_ai_command_not_found",
 				Icon:  aiCommandIcon,
 			},
 		}
@@ -372,7 +373,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	if aiCommandSetting.Prompt == "" {
 		return []plugin.QueryResult{
 			{
-				Title: "Prompt is empty for this ai command",
+				Title: "i18n:plugin_ai_command_empty_prompt",
 				Icon:  aiCommandIcon,
 			},
 		}
@@ -412,7 +413,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	}
 
 	result := plugin.QueryResult{
-		Title:           fmt.Sprintf("Chat with %s", aiCommandSetting.Name),
+		Title:           fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_chat_with"), aiCommandSetting.Name),
 		SubTitle:        fmt.Sprintf("%s - %s", aiCommandSetting.AIModel().Provider, aiCommandSetting.AIModel().Name),
 		Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
 		Icon:            aiCommandIcon,
@@ -422,7 +423,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 		}, nil, onAnswering, onAnswerErr),
 		Actions: []plugin.QueryResultAction{
 			{
-				Name: "Copy",
+				Name: "i18n:plugin_ai_command_copy",
 				Icon: plugin.CopyIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					clipboard.WriteText(actionContext.ContextData)

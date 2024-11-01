@@ -82,7 +82,6 @@ func (r *UrlPlugin) getReg() *regexp.Regexp {
 }
 
 func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
-	//check if search is in recentUrls
 	if len(query.Search) >= 2 {
 		existingUrlHistory := lo.Filter(r.recentUrls, func(item UrlHistory, index int) bool {
 			return strings.Contains(strings.ToLower(item.Url), strings.ToLower(query.Search))
@@ -96,7 +95,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 				Icon:     history.Icon.Overlay(urlIcon, 0.4, 0.6, 0.6),
 				Actions: []plugin.QueryResultAction{
 					{
-						Name: "Open",
+						Name: "i18n:plugin_url_open",
 						Icon: plugin.OpenIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							openErr := util.ShellOpen(history.Url)
@@ -106,7 +105,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 						},
 					},
 					{
-						Name: "Remove from url history",
+						Name: "i18n:plugin_url_remove",
 						Icon: plugin.TrashIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							r.removeRecentUrl(ctx, history.Url)
@@ -120,12 +119,12 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 	if len(r.reg.FindStringIndex(query.Search)) > 0 {
 		results = append(results, plugin.QueryResult{
 			Title:    query.Search,
-			SubTitle: "Open in Browser",
+			SubTitle: "i18n:plugin_url_open_in_browser",
 			Score:    100,
 			Icon:     urlIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "Open",
+					Name: "i18n:plugin_url_open",
 					Icon: urlIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						url := query.Search
@@ -145,7 +144,6 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 			},
 		})
 	}
-
 	return
 }
 

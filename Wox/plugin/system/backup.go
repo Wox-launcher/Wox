@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
 	"wox/util"
@@ -59,18 +60,18 @@ func (c *BackupPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Q
 func (c *BackupPlugin) backup(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	return []plugin.QueryResult{
 		{
-			Title:    "Backup now",
-			SubTitle: "Backup Wox settings",
+			Title:    "i18n:plugin_backup_now",
+			SubTitle: "i18n:plugin_backup_subtitle",
 			Icon:     backupIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "Backup",
+					Name: "i18n:plugin_backup_action",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						backupErr := setting.GetSettingManager().Backup(ctx, setting.BackupTypeManual)
 						if backupErr != nil {
 							c.api.Notify(ctx, backupErr.Error())
 						} else {
-							c.api.Notify(ctx, "Wox settings backed up")
+							c.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_backup_success"))
 						}
 					},
 				},
@@ -84,7 +85,7 @@ func (c *BackupPlugin) restore(ctx context.Context, query plugin.Query) []plugin
 	if err != nil {
 		return []plugin.QueryResult{
 			{
-				Title:    "Error",
+				Title:    "i18n:plugin_backup_error",
 				SubTitle: err.Error(),
 				Icon:     backupIcon,
 			},
@@ -104,13 +105,13 @@ func (c *BackupPlugin) restore(ctx context.Context, query plugin.Query) []plugin
 			Icon:     backupIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "Restore",
+					Name: "i18n:plugin_backup_restore",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						restoreErr := setting.GetSettingManager().Restore(ctx, backup.Id)
 						if restoreErr != nil {
 							c.api.Notify(ctx, restoreErr.Error())
 						} else {
-							c.api.Notify(ctx, "Wox settings restored")
+							c.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_backup_restore_success"))
 						}
 					},
 				},

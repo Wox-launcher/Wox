@@ -75,7 +75,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 			Icon:  calculatorIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "Copy result",
+					Name: "i18n:plugin_calculator_copy_result",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						c.histories = append(c.histories, CalculatorHistory{
 							Expression: query.Search,
@@ -99,6 +99,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 				Icon:  calculatorIcon,
 				Actions: []plugin.QueryResultAction{
 					{
+						Name: "i18n:plugin_calculator_copy_result",
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							c.histories = append(c.histories, CalculatorHistory{
 								Expression: query.Search,
@@ -129,14 +130,14 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 					Icon:     calculatorIcon,
 					Actions: []plugin.QueryResultAction{
 						{
-							Name:      "Copy result",
+							Name:      "i18n:plugin_calculator_copy_result",
 							IsDefault: true,
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								clipboard.WriteText(h.Result)
 							},
 						},
 						{
-							Name: "Recalculate",
+							Name: "i18n:plugin_calculator_recalculate",
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								c.api.ChangeQuery(ctx, share.PlainQuery{
 									QueryType: plugin.QueryTypeInput,
@@ -151,7 +152,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 
 		if len(results) == 0 {
 			results = append(results, plugin.QueryResult{
-				Title:   "Input expression to calculate",
+				Title:   "i18n:plugin_calculator_input_expression",
 				Icon:    calculatorIcon,
 				Actions: []plugin.QueryResultAction{},
 			})

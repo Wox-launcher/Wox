@@ -64,13 +64,13 @@ func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryRe
 			Icon:     fileIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "Open",
+					Name: "i18n:plugin_file_open",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						util.ShellOpen(item.Path)
 					},
 				},
 				{
-					Name: "Open containing folder",
+					Name: "i18n:plugin_file_open_containing_folder",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						util.ShellOpenFileInFolder(item.Path)
 					},
