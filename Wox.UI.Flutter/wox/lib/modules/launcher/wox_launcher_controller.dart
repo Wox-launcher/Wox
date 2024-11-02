@@ -764,17 +764,42 @@ class WoxLauncherController extends GetxController {
   }
 
   /// update active actions based on active result and reset active action index to 0
-  void resetActiveAction(String traceId, String reason) {
+  void resetActiveAction(String traceId, String reason, {bool remainIndex = false}) {
     var activeQueryResult = getActiveResult();
     if (activeQueryResult == null || activeQueryResult.actions.isEmpty) {
       Logger.instance.info(traceId, "update active actions, reason: $reason, current active result: null");
       activeActionIndex.value = -1;
       actions.clear();
       return;
+    }
+
+    Logger.instance.info(traceId, "update active actions, reason: $reason, current active result: ${activeQueryResult.title.value}, active action: ${activeQueryResult.actions.first.name.value}");
+
+    String? previousActionName;
+    if (remainIndex && actions.isNotEmpty && activeActionIndex.value >= 0 && activeActionIndex.value < actions.length) {
+      previousActionName = actions[activeActionIndex.value].name.value;
+    }
+
+    final filterText = actionTextFieldController.text;
+    if (filterText.isNotEmpty) {
+      var filteredActions = activeQueryResult.actions.where((element) {
+        return isFuzzyMatch(traceId, element.name.value, filterText);
+      }).toList();
+      actions.assignAll(filteredActions);
     } else {
-      Logger.instance.info(traceId, "update active actions, reason: $reason, current active result: ${activeQueryResult.title.value}, active action: ${activeQueryResult.actions.first.name.value}");
-      activeActionIndex.value = 0;
       actions.assignAll(activeQueryResult.actions);
+    }
+
+    // remain the same action index
+    if (remainIndex && previousActionName != null) {
+      final newIndex = actions.indexWhere((action) => action.name.value == previousActionName);
+      if (newIndex != -1) {
+        activeActionIndex.value = newIndex;
+      } else {
+        activeActionIndex.value = 0;
+      }
+    } else {
+      activeActionIndex.value = 0;
     }
 
     updateToolbarByActiveAction(traceId);
@@ -840,11 +865,11 @@ class WoxLauncherController extends GetxController {
             result.tails.assignAll(refreshResult.tails);
             result.actions.assignAll(refreshResult.actions);
 
-            // only update preview and toolbar  when current result is active
+            // only update preview and toolbar when current result is active
             final resultIndex = results.indexWhere((element) => element.id == result.id);
             if (isResultActiveByIndex(resultIndex)) {
               currentPreview.value = result.preview;
-              resetActiveAction(traceId, "refresh active result");
+              resetActiveAction(traceId, "refresh active result", remainIndex: true);
             }
 
             result.contextData = refreshResult.contextData;

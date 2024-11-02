@@ -137,5 +137,9 @@
   "plugin_calculator_recalculate": "重新计算",
   "plugin_calculator_input_expression": "输入表达式进行计算",
   "plugin_file_open": "打开",
-  "plugin_file_open_containing_folder": "打开所在文件夹"
+  "plugin_file_open_containing_folder": "打开所在文件夹",
+  "plugin_manager_query_failed": "%s 查询失败",
+  "plugin_manager_remove_from_favorite": "从收藏夹移除",
+  "plugin_manager_add_to_favorite": "添加到收藏夹",
+  "plugin_manager_invalid_query_type": "无效的查询类型"
 }

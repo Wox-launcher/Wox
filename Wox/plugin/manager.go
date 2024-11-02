@@ -437,7 +437,7 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 	icon := pluginIcon.OverlayFullPercentage(overlayIcon, 0.6)
 
 	return QueryResult{
-		Title:    fmt.Sprintf("%s query failed", pluginMetadata.Name),
+		Title:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_manager_query_failed"), pluginMetadata.Name),
 		SubTitle: util.EllipsisEnd(err.Error(), 20),
 		Icon:     icon,
 		Preview: WoxPreview{
@@ -451,18 +451,16 @@ func (m *Manager) addDefaultActions(ctx context.Context, pluginInstance *Instanc
 	if query.Type == QueryTypeInput {
 		if result.Group == "" {
 			if setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle) {
-				// add "Remove from favorite" action
 				result.Actions = append(result.Actions, QueryResultAction{
-					Name: "Remove from favorite",
+					Name: "i18n:plugin_manager_remove_from_favorite",
 					Icon: RemoveFromFavIcon,
 					Action: func(ctx context.Context, actionContext ActionContext) {
 						setting.GetSettingManager().RemoveFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
 					},
 				})
 			} else {
-				// add "Add to favorite" action
 				result.Actions = append(result.Actions, QueryResultAction{
-					Name: "Add to favorite",
+					Name: "i18n:plugin_manager_add_to_favorite",
 					Icon: AddToFavIcon,
 					Action: func(ctx context.Context, actionContext ActionContext) {
 						setting.GetSettingManager().AddFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
@@ -471,7 +469,6 @@ func (m *Manager) addDefaultActions(ctx context.Context, pluginInstance *Instanc
 			}
 		}
 	}
-
 	return result
 }
 
@@ -627,11 +624,11 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 func (m *Manager) formatFileListPreview(ctx context.Context, filePaths []string) string {
 	totalFiles := len(filePaths)
 	if totalFiles == 0 {
-		return i18n.GetI18nManager().TranslateWox(ctx, "i18n:selection_no_files_selected")
+		return i18n.GetI18nManager().TranslateWox(ctx, "selection_no_files_selected")
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "i18n:selection_selected_files_count"), totalFiles))
+	sb.WriteString(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "selection_selected_files_count"), totalFiles))
 	sb.WriteString("\n\n")
 
 	maxDisplayFiles := 10
@@ -641,7 +638,7 @@ func (m *Manager) formatFileListPreview(ctx context.Context, filePaths []string)
 		} else {
 			remainingFiles := totalFiles - maxDisplayFiles
 			sb.WriteString("\n")
-			sb.WriteString(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "i18n:selection_remaining_files_not_shown"), remainingFiles))
+			sb.WriteString(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "selection_remaining_files_not_shown"), remainingFiles))
 			break
 		}
 	}
