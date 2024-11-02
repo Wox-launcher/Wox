@@ -37,6 +37,10 @@ const (
 	LastQueryModeEmpty    LastQueryMode = "empty"    // empty last query
 )
 
+const (
+	DefaultThemeId = "e4006bd3-6bfe-4020-8d1c-4c32a8e567e5"
+)
+
 type QueryShortcut struct {
 	Shortcut string // support index placeholder, e.g. shortcut "wi" => "wpm install {0} to {1}", when user input "wi 1 2", the query will be "wpm install 1 to 2"
 	Query    string
@@ -90,7 +94,7 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 		LangCode:             langCode,
 		LastQueryMode:        LastQueryModeEmpty,
 		AppWidth:             800,
-		ThemeId:              "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03",
+		ThemeId:              DefaultThemeId,
 		EnableAutostart: PlatformSettingValue[bool]{
 			WinValue:   false,
 			MacValue:   false,

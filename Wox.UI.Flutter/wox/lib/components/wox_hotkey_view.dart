@@ -35,6 +35,7 @@ class WoxHotkeyView extends StatelessWidget {
         child: Text(
           key,
           style: TextStyle(
+            fontFamily: 'SFProDisplay',
             fontSize: 11,
             fontWeight: FontWeight.w500,
             color: textColor,
