@@ -231,6 +231,14 @@ class WoxLauncherController extends GetxController {
     }
   }
 
+  bool isActionHotkey(HotKey hotkey) {
+    if (Platform.isMacOS) {
+      return WoxHotkey.equals(hotkey, WoxHotkey.parseHotkeyFromString("cmd+J"));
+    } else {
+      return WoxHotkey.equals(hotkey, WoxHotkey.parseHotkeyFromString("alt+J"));
+    }
+  }
+
   void hideActionPanel(String traceId) {
     isShowActionPanel.value = false;
     actionTextFieldController.text = "";

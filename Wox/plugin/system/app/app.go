@@ -43,7 +43,7 @@ type appInfo struct {
 
 func (a *appInfo) GetDisplayPath() string {
 	if a.Type == AppTypeUWP {
-		return "UWP App"
+		return ""
 	}
 	return a.Path
 }

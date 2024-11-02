@@ -94,7 +94,7 @@ class WoxThemePreview extends StatelessWidget {
             Container(
               height: WoxThemeUtil.instance.getToolbarHeight(),
               decoration: BoxDecoration(
-                color: fromCssColor(theme.toolbarBackgroundColor),
+                color: fromCssColor(theme.toolbarBackgroundColor.isEmpty ? theme.appBackgroundColor : theme.toolbarBackgroundColor),
                 border: Border(
                   top: BorderSide(
                     color: fromCssColor(theme.toolbarFontColor).withOpacity(0.1),

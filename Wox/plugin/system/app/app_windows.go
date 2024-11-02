@@ -3,8 +3,8 @@ package app
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -34,6 +34,8 @@ var appRetriever = &WindowsRetriever{}
 
 type WindowsRetriever struct {
 	api plugin.API
+
+	uwpIconCache map[string]string // appID -> icon path
 }
 
 func (a *WindowsRetriever) UpdateAPI(api plugin.API) {
@@ -260,6 +262,26 @@ func (a *WindowsRetriever) OpenAppFolder(ctx context.Context, app appInfo) error
 }
 
 func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
+	// preload icon cache
+	if a.uwpIconCache == nil {
+		a.uwpIconCache = make(map[string]string)
+	}
+	iconCachePath := filepath.Join(util.GetLocation().GetCacheDirectory(), "app-uwp-icons.json")
+	if _, err := os.Stat(iconCachePath); !os.IsNotExist(err) {
+		iconCache, err := os.ReadFile(iconCachePath)
+		if err != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("Error reading uwp icon cache: %v", err))
+		} else {
+			// parse json
+			jsonErr := json.Unmarshal(iconCache, &a.uwpIconCache)
+			if jsonErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("Error parsing uwp icon cache: %v", jsonErr))
+			} else {
+				util.GetLogger().Info(ctx, fmt.Sprintf("Loaded %d uwp icon cache", len(a.uwpIconCache)))
+			}
+		}
+	}
+
 	var apps []appInfo
 
 	// Modify PowerShell command, add more properties and use UTF-8 encoding
@@ -311,11 +333,21 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 			icon, err := a.GetUWPAppIcon(ctx, appID)
 			if err == nil {
 				app.Icon = icon
+				a.uwpIconCache[appID] = icon.ImageData
 			}
 
 			apps = append(apps, app)
 			util.GetLogger().Info(ctx, fmt.Sprintf("Found UWP app: %s, AppID: %s", name, appID))
 		}
+	}
+
+	// save icon cache
+	iconCache, err := json.Marshal(a.uwpIconCache)
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("Error marshalling uwp icon cache: %v", err))
+	} else {
+		os.WriteFile(iconCachePath, iconCache, 0644)
+		util.GetLogger().Info(ctx, fmt.Sprintf("Saved %d uwp icon cache", len(a.uwpIconCache)))
 	}
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("Found %d UWP apps", len(apps)))
@@ -328,6 +360,10 @@ func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {
 }
 
 func (a *WindowsRetriever) GetUWPAppIcon(ctx context.Context, appID string) (plugin.WoxImage, error) {
+	if iconPath, ok := a.uwpIconCache[appID]; ok {
+		return plugin.NewWoxImageAbsolutePath(iconPath), nil
+	}
+
 	powershellCmd := fmt.Sprintf(`
 		[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 		$packageFamilyName = ($('%s' -split '!')[0])
@@ -417,26 +453,5 @@ func (a *WindowsRetriever) GetUWPAppIcon(ctx context.Context, appID string) (plu
 		return plugin.WoxImage{}, fmt.Errorf("Icon path is empty")
 	}
 
-	iconData, err := os.ReadFile(iconPath)
-	if err != nil {
-		return plugin.WoxImage{}, err
-	}
-
-	// Determine icon type based on file extension
-	ext := strings.ToLower(filepath.Ext(iconPath))
-	var mimeType string
-	switch ext {
-	case ".png":
-		mimeType = "image/png"
-	case ".jpg", ".jpeg":
-		mimeType = "image/jpeg"
-	case ".ico":
-		mimeType = "image/x-icon"
-	default:
-		return plugin.WoxImage{}, fmt.Errorf("Unsupported icon format: %s", ext)
-	}
-
-	// Convert to base64
-	base64Icon := fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(iconData))
-	return plugin.NewWoxImageBase64(base64Icon), nil
+	return plugin.NewWoxImageAbsolutePath(iconPath), nil
 }
