@@ -9,6 +9,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/resource"
 	"wox/setting"
@@ -442,12 +443,17 @@ func (m *Manager) ShowTray() {
 
 	tray.CreateTray(resource.GetAppIcon(),
 		tray.MenuItem{
-			Title: "Toggle Wox",
+			Title: i18n.GetI18nManager().TranslateWox(ctx, "ui_tray_toggle_app"),
 			Callback: func() {
 				m.GetUI(ctx).ToggleApp(ctx)
 			},
 		}, tray.MenuItem{
-			Title: "Quit",
+			Title: i18n.GetI18nManager().TranslateWox(ctx, "ui_tray_open_setting_window"),
+			Callback: func() {
+				m.GetUI(ctx).OpenSettingWindow(ctx, share.SettingWindowContext{})
+			},
+		}, tray.MenuItem{
+			Title: i18n.GetI18nManager().TranslateWox(ctx, "ui_tray_quit"),
 			Callback: func() {
 				m.ExitApp(util.NewTraceContext())
 			},
