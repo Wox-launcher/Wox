@@ -1,3 +1,5 @@
+#define UNICODE
+#define _UNICODE
 #include <windows.h>
 #include <shellapi.h>
 
@@ -9,16 +11,26 @@ HWND hwnd;
 void reportClick(UINT_PTR menuId);
 
 void addMenuItem(UINT_PTR menuId, const char* title) {
-	AppendMenu(hMenu, MF_STRING, menuId, title);
+	int len = MultiByteToWideChar(CP_UTF8, 0, title, -1, NULL, 0);
+	wchar_t* wTitle = (wchar_t*)malloc(len * sizeof(wchar_t));
+	MultiByteToWideChar(CP_UTF8, 0, title, -1, wTitle, len);
+	
+	AppendMenuW(hMenu, MF_STRING, menuId, wTitle);
+	free(wTitle);
 }
 
 void setTrayIcon(const char* tooltip, HICON icon) {
 	nid.cbSize = sizeof(NOTIFYICONDATA);
-	nid.hWnd = hwnd; 
+	nid.hWnd = hwnd;
 	nid.uID = 1;
 	nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
 	nid.uCallbackMessage = WM_APP + 1;
-	strncpy(nid.szTip, tooltip, sizeof(nid.szTip) / sizeof(*nid.szTip));
+	
+	int len = MultiByteToWideChar(CP_UTF8, 0, tooltip, -1, NULL, 0);
+	wchar_t wTooltip[128]; 
+	MultiByteToWideChar(CP_UTF8, 0, tooltip, -1, wTooltip, len);
+	wcsncpy(nid.szTip, wTooltip, sizeof(nid.szTip) / sizeof(wchar_t));
+	
 	nid.hIcon = icon;
 
 	if (!Shell_NotifyIcon(NIM_MODIFY, &nid)) {
@@ -60,7 +72,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 HICON loadIcon(const char* iconName) {
-	HICON icon = (HICON)LoadImage(NULL, iconName, IMAGE_ICON, 32, 32, LR_LOADFROMFILE);
+	int len = MultiByteToWideChar(CP_UTF8, 0, iconName, -1, NULL, 0);
+	wchar_t* wIconName = (wchar_t*)malloc(len * sizeof(wchar_t));
+	MultiByteToWideChar(CP_UTF8, 0, iconName, -1, wIconName, len);
+	
+	HICON icon = (HICON)LoadImageW(NULL, wIconName, IMAGE_ICON, 32, 32, LR_LOADFROMFILE);
+	free(wIconName);
+	
 	if (icon == NULL) {
 		icon = LoadIcon(NULL, IDI_APPLICATION);
 	}
@@ -71,13 +89,13 @@ void init(const char* iconName, const char* tooltip) {
 	hMenu = CreatePopupMenu();
 	HICON icon = loadIcon(iconName);
 
-	WNDCLASS wc = {0};
+	WNDCLASSW wc = {0};
 	wc.lpfnWndProc = WindowProc;
 	wc.hInstance = GetModuleHandle(NULL);
-	wc.lpszClassName = "WoxWindowClass";
-	RegisterClass(&wc);
+	wc.lpszClassName = L"WoxWindowClass";
+	RegisterClassW(&wc);
 
-	hwnd = CreateWindowEx(0, "WoxWindowClass", "Wox", WS_OVERLAPPEDWINDOW,
+	hwnd = CreateWindowExW(0, L"WoxWindowClass", L"Wox", WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, wc.hInstance, NULL);
 
 	if (hwnd == NULL) {
