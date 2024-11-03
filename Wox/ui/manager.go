@@ -412,12 +412,6 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 
 func (m *Manager) PostOnHide(ctx context.Context, query share.PlainQuery) {
 	setting.GetSettingManager().AddQueryHistory(ctx, query)
-	if setting.GetSettingManager().GetWoxSetting(ctx).LastQueryMode == setting.LastQueryModeEmpty {
-		GetUIManager().GetUI(ctx).ChangeQuery(ctx, share.PlainQuery{
-			QueryType: plugin.QueryTypeInput,
-			QueryText: "",
-		})
-	}
 }
 
 func (m *Manager) IsSystemTheme(id string) bool {

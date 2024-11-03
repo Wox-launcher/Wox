@@ -210,7 +210,15 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
   }
 
   @override
-  void onWindowBlur() {
+  void onWindowBlur() async {
+    // if windows is already hidden, return
+    // in Windows, when the window is hidden, the onWindowBlur event will be triggered which will cause
+    // resize function to be called, and then the focus will be got again.
+    // User will not be able to input anything because the focus is lost.
+    if (!(await windowManager.isVisible())) {
+      return;
+    }
+
     WoxApi.instance.onFocusLost();
   }
 

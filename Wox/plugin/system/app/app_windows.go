@@ -433,7 +433,14 @@ func (a *WindowsRetriever) GetUWPAppIcon(ctx context.Context, appID string) (plu
 		}
 	`, appID)
 
-	cmd := exec.Command("powershell", "-Command", powershellCmd)
+	cmd := exec.Command("powershell", "-WindowStyle", "Hidden", "-NonInteractive", "-NoProfile", "-Command", powershellCmd)
+
+	// 添加启动信息来隐藏窗口
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: 0x08000000, // CREATE_NO_WINDOW flag
+	}
+
 	output, err := cmd.Output()
 	if err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Execution of PowerShell command failed: %v", err))

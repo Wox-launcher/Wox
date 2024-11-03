@@ -59,7 +59,7 @@ class WoxLauncherController extends GetxController {
   /// On every query changed, it will reset the timer and will clear the query results after N ms.
   /// If there is no this delay mechanism, the window will flicker for fast typing.
   Timer clearQueryResultsTimer = Timer(const Duration(), () => {});
-  final clearQueryResultDelay = 1000;
+  final clearQueryResultDelay = 100;
 
   // action related variables
   /// The list of result actions for the active query result.
@@ -200,7 +200,7 @@ class WoxLauncherController extends GetxController {
       // on windows, it is somehow necessary to invoke show twice to make the window show
       // otherwise, the window will not show up if it is the first time to invoke showApp
       await windowManager.show();
-    }
+    } 
     await windowManager.focus();
     queryBoxFocusNode.requestFocus();
 
@@ -208,15 +208,17 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> hideApp(String traceId) async {
-    isShowActionPanel.value = false;
     await windowManager.hide();
 
-    //clear query box text if query type is selection
-    if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
-      onQueryChanged(traceId, PlainQuery.emptyInput(), "clear input after hide app");
+    //clear query box text if query type is selection or last query mode is empty
+    if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code || lastQueryMode == WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_EMPTY.code) {
+      currentQuery.value = PlainQuery.emptyInput();
+      queryBoxTextFieldController.clear();
+      actionTextFieldController.clear();
+      await clearQueryResults();
     }
 
-    WoxApi.instance.onHide(currentQuery.value);
+    await WoxApi.instance.onHide(currentQuery.value);
   }
 
   Future<void> toggleActionPanel(String traceId) async {
@@ -605,12 +607,14 @@ class WoxLauncherController extends GetxController {
     return false;
   }
 
-  void clearQueryResults() {
+  Future<void> clearQueryResults() async {
     results.clear();
+    actions.clear();
+    toolbar.value = ToolbarInfo.empty();
     isShowPreviewPanel.value = false;
     isShowActionPanel.value = false;
     resultGlobalKeys.clear();
-    resizeHeight();
+    await resizeHeight();
   }
 
   // select all text in query box
@@ -668,10 +672,10 @@ class WoxLauncherController extends GetxController {
 
       final totalHeightFinal = totalHeight.toDouble() + (10 / PlatformDispatcher.instance.views.first.devicePixelRatio).ceil();
       if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window height to $totalHeightFinal");
-      windowManager.setSize(Size(800, totalHeightFinal));
+      await windowManager.setSize(Size(800, totalHeightFinal));
     } else {
       if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window height to $totalHeight");
-      windowManager.setSize(Size(800, totalHeight.toDouble()));
+      await windowManager.setSize(Size(800, totalHeight.toDouble()));
     }
   }
 
