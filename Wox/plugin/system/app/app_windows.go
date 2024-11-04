@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -10,7 +9,6 @@ import (
 	"image"
 	"image/color"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -240,15 +238,13 @@ func (a *WindowsRetriever) OpenAppFolder(ctx context.Context, app appInfo) error
 	}
 
 	// Get app installation location using PowerShell
-	cmd := exec.Command("powershell", "-Command", fmt.Sprintf(`
+	output, err := util.ShellRunOutput("powershell", "-Command", fmt.Sprintf(`
 		$packageFamilyName = ($('%s' -split '!')[0])
 		$package = Get-AppxPackage | Where-Object { $_.PackageFamilyName -eq $packageFamilyName }
 		if ($package) {
 			Write-Output $package.InstallLocation
 		}
 	`, appID))
-
-	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to get UWP app install location: %v", err)
 	}
@@ -291,20 +287,14 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 	`
 
 	// Set command encoding to UTF-8
-	cmd := exec.Command("powershell", "-Command", powershellCmd)
-	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8")
-
-	// Capture command output
-	var out bytes.Buffer
-	cmd.Stdout = &out
-
-	if err := cmd.Run(); err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("Execution of PowerShell command failed: %v", err))
+	output, err := util.ShellRunOutput("powershell", "-Command", powershellCmd)
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("Error running powershell command: %v", err))
 		return apps
 	}
 
 	// Parse CSV output
-	reader := csv.NewReader(strings.NewReader(out.String()))
+	reader := csv.NewReader(strings.NewReader(string(output)))
 	records, err := reader.ReadAll()
 	if err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Error parsing CSV output: %v", err))
@@ -433,17 +423,9 @@ func (a *WindowsRetriever) GetUWPAppIcon(ctx context.Context, appID string) (plu
 		}
 	`, appID)
 
-	cmd := exec.Command("powershell", "-WindowStyle", "Hidden", "-NonInteractive", "-NoProfile", "-Command", powershellCmd)
-
-	// 添加启动信息来隐藏窗口
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow:    true,
-		CreationFlags: 0x08000000, // CREATE_NO_WINDOW flag
-	}
-
-	output, err := cmd.Output()
+	output, err := util.ShellRunOutput("powershell", "-Command", powershellCmd)
 	if err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("Execution of PowerShell command failed: %v", err))
+		util.GetLogger().Error(ctx, fmt.Sprintf("Error running powershell command: %v", err))
 		return plugin.WoxImage{}, err
 	}
 
