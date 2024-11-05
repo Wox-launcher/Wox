@@ -5,16 +5,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image/png"
+	"io"
+	"wox/setting"
+	"wox/util"
+
 	"github.com/djherbis/buffer"
 	"github.com/djherbis/nio/v3"
 	"github.com/tidwall/gjson"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/ollama"
-	"github.com/tmc/langchaingo/schema"
-	"image/png"
-	"io"
-	"wox/setting"
-	"wox/util"
 )
 
 type OllamaProvider struct {
@@ -79,10 +79,10 @@ func (o *OllamaProvider) convertConversations(conversations []Conversation) (cha
 	for _, conversation := range conversations {
 		var msg llms.MessageContent
 		if conversation.Role == ConversationRoleUser {
-			msg = llms.TextParts(schema.ChatMessageTypeHuman, conversation.Text)
+			msg = llms.TextParts(llms.ChatMessageTypeHuman, conversation.Text)
 		}
-		if conversation.Role == ConversationRoleSystem {
-			msg = llms.TextParts(schema.ChatMessageTypeSystem, conversation.Text)
+		if conversation.Role == ConversationRoleAI {
+			msg = llms.TextParts(llms.ChatMessageTypeAI, conversation.Text)
 		}
 
 		for _, image := range conversation.Images {

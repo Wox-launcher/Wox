@@ -2,9 +2,10 @@ package ai
 
 import (
 	"context"
-	"github.com/sashabaranov/go-openai"
 	"io"
 	"wox/setting"
+
+	"github.com/sashabaranov/go-openai"
 )
 
 type OpenAIProvider struct {
@@ -85,7 +86,7 @@ func (o *OpenAIProvider) convertConversations(conversations []Conversation) []op
 		if conversation.Role == ConversationRoleUser {
 			role = openai.ChatMessageRoleUser
 		}
-		if conversation.Role == ConversationRoleSystem {
+		if conversation.Role == ConversationRoleAI {
 			role = openai.ChatMessageRoleSystem
 		}
 		if role == "" {

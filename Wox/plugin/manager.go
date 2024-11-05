@@ -1043,7 +1043,10 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 		ContextData: resultCache.ContextData,
 	})
 
-	setting.GetSettingManager().AddActionedResult(ctx, resultCache.PluginInstance.Metadata.Id, resultCache.ResultTitle, resultCache.ResultSubTitle)
+	util.Go(ctx, fmt.Sprintf("[%s] add actioned result", resultCache.PluginInstance.Metadata.Name), func() {
+		setting.GetSettingManager().AddActionedResult(ctx, resultCache.PluginInstance.Metadata.Id, resultCache.ResultTitle, resultCache.ResultSubTitle)
+	})
+
 	return nil
 }
 

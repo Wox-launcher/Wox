@@ -3,12 +3,13 @@ package ai
 import (
 	"context"
 	"errors"
+	"io"
+	"wox/setting"
+
 	"github.com/google/generative-ai-go/genai"
 	"github.com/googleapis/gax-go/v2/apierror"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
-	"io"
-	"wox/setting"
 )
 
 type GoogleProvider struct {
@@ -110,7 +111,7 @@ func (g *GoogleProvider) convertConversations(conversations []Conversation) (msg
 		if conversation.Role == ConversationRoleUser {
 			role = "user"
 		}
-		if conversation.Role == ConversationRoleSystem {
+		if conversation.Role == ConversationRoleAI {
 			role = "model"
 		}
 		if role == "" {

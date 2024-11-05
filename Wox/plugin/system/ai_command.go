@@ -194,12 +194,12 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 				isFirstAnswer = false
 			}
 
-			current.SubTitle = "Answering..."
+			current.SubTitle = "i18n:plugin_ai_command_answering"
 			current.Preview.PreviewData += deltaAnswer
 			current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
 
 			if isFinished {
-				current.RefreshInterval = 0 // stop refreshing
+				current.RefreshInterval = 0
 				current.SubTitle = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_answered_cost"), util.GetSystemTimestamp()-startAnsweringTime)
 				answerText = current.Preview.PreviewData
 
@@ -390,7 +390,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 			})
 		} else {
 			conversations = append(conversations, ai.Conversation{
-				Role: ai.ConversationRoleSystem,
+				Role: ai.ConversationRoleAI,
 				Text: msg,
 			})
 		}

@@ -7,8 +7,8 @@ import (
 type ConversationRole string
 
 var (
-	ConversationRoleUser   ConversationRole = "user"
-	ConversationRoleSystem ConversationRole = "system"
+	ConversationRoleUser ConversationRole = "user"
+	ConversationRoleAI   ConversationRole = "ai"
 )
 
 type Conversation struct {

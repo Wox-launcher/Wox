@@ -4,14 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"wox/setting"
+	"wox/util"
+
 	"github.com/djherbis/buffer"
 	"github.com/djherbis/nio/v3"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/openai"
-	"github.com/tmc/langchaingo/schema"
-	"io"
-	"wox/setting"
-	"wox/util"
 )
 
 type GroqProvider struct {
@@ -87,10 +87,10 @@ func (g *GroqProvider) Models(ctx context.Context) (models []Model, err error) {
 func (g *GroqProvider) convertConversations(conversations []Conversation) (chatMessages []llms.MessageContent) {
 	for _, conversation := range conversations {
 		if conversation.Role == ConversationRoleUser {
-			chatMessages = append(chatMessages, llms.TextParts(schema.ChatMessageTypeHuman, conversation.Text))
+			chatMessages = append(chatMessages, llms.TextParts(llms.ChatMessageTypeHuman, conversation.Text))
 		}
-		if conversation.Role == ConversationRoleSystem {
-			chatMessages = append(chatMessages, llms.TextParts(schema.ChatMessageTypeSystem, conversation.Text))
+		if conversation.Role == ConversationRoleAI {
+			chatMessages = append(chatMessages, llms.TextParts(llms.ChatMessageTypeAI, conversation.Text))
 		}
 	}
 

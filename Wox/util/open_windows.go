@@ -1,6 +1,7 @@
 package util
 
 import (
+	"os"
 	"os/exec"
 	"syscall"
 )
@@ -14,6 +15,7 @@ func ShellRun(name string, arg ...string) (*exec.Cmd, error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true} // Hide the window
 	cmd.Stdout = GetLogger().GetWriter()
 	cmd.Stderr = GetLogger().GetWriter()
+	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8")
 	cmdErr := cmd.Start()
 	if cmdErr != nil {
 		return nil, cmdErr
