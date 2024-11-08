@@ -3,15 +3,17 @@ package util
 import (
 	"context"
 	"fmt"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"io"
 	"log"
 	"os"
 	"path"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var logInstance *Log
@@ -26,8 +28,19 @@ func GetLogger() *Log {
 	logOnce.Do(func() {
 		logFolder := GetLocation().GetLogDirectory()
 		logInstance = CreateLogger(logFolder)
+		setCrashOutput()
 	})
 	return logInstance
+}
+
+func setCrashOutput() {
+	logFile := path.Join(GetLocation().GetLogDirectory(), "crash.log")
+	crashFile, err := os.Create(logFile)
+	if err != nil {
+		panic(err)
+	}
+
+	debug.SetCrashOutput(crashFile, debug.CrashOptions{})
 }
 
 func CreateLogger(logFolder string) *Log {
