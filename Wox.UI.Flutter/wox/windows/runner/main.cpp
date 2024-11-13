@@ -45,8 +45,16 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
   window.SetQuitOnClose(true);
 
-  ::MSG msg;
-  while (::GetMessage(&msg, nullptr, 0, 0)) {
+  ::MSG msg = { };
+  while (::GetMessage(&msg, nullptr, 0, 0) > 0) {
+    // prevent the error/beep sound when alt+number/letter is pressed
+    if (msg.message == WM_SYSKEYDOWN) {
+      msg.message = WM_KEYDOWN;  
+      ::TranslateMessage(&msg);
+      ::DispatchMessage(&msg);
+      continue;
+    }
+    
     ::TranslateMessage(&msg);
     ::DispatchMessage(&msg);
   }
