@@ -10,6 +10,9 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}/Wox",
+            "env": {
+                "CGO_ENABLED": "1"
+            }
         },
         {
             "name": "Run Flutter",
