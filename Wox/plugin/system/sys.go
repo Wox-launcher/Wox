@@ -67,6 +67,9 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 				if util.IsMacOS() {
 					util.ShellRun("osascript", "-e", "tell application \"System Events\" to keystroke \"q\" using {control down, command down}")
 				}
+				if util.IsWindows() {
+					util.ShellRun("rundll32.exe", "user32.dll,LockWorkStation")
+				}
 			},
 		},
 		{
@@ -75,6 +78,9 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if util.IsMacOS() {
 					util.ShellRun("osascript", "-e", "tell application \"Finder\" to empty trash")
+				}
+				if util.IsWindows() {
+					util.ShellRun("powershell.exe", "-Command", "Clear-RecycleBin -Force")
 				}
 			},
 		},
@@ -101,7 +107,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 					util.ShellRun("open", "-a", "System Preferences")
 				}
 				if util.IsWindows() {
-					util.ShellRun("desk.cpl")
+					util.ShellRun("control.exe", "desk.cpl")
 				}
 			},
 		},
