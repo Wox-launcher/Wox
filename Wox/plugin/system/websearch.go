@@ -17,6 +17,8 @@ var webSearchesSettingKey = "webSearches"
 
 var webSearchIcon = plugin.PluginWebsearchIcon
 
+var defaultWebSearchAddedKey = "defaultWebSearchAdded"
+
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &WebSearchPlugin{})
 }
@@ -172,6 +174,11 @@ func (r *WebSearchPlugin) indexIcons(ctx context.Context) {
 }
 
 func (r *WebSearchPlugin) indexWebSearchIcon(ctx context.Context, search webSearch) plugin.WoxImage {
+	// if search url is google, return google icon
+	if strings.Contains(search.Urls[0], "google.com") {
+		return plugin.GoogleIcon
+	}
+
 	//sort urls, so that we can get the same icon between different runs
 	slices.Sort(search.Urls)
 
@@ -187,6 +194,23 @@ func (r *WebSearchPlugin) indexWebSearchIcon(ctx context.Context, search webSear
 func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []webSearch) {
 	webSearchesJson := r.api.GetSetting(ctx, webSearchesSettingKey)
 	if webSearchesJson == "" {
+		defaultAdded := r.api.GetSetting(ctx, defaultWebSearchAddedKey)
+		if defaultAdded == "" {
+			webSearches = []webSearch{
+				{
+					Urls:       []string{"https://www.google.com/search?q={query}"},
+					Title:      "Search Google for {query}",
+					Keyword:    "g",
+					IsFallback: true,
+					Enabled:    true,
+					Icon:       plugin.GoogleIcon,
+				},
+			}
+			if marshal, err := json.Marshal(webSearches); err == nil {
+				r.api.SaveSetting(ctx, webSearchesSettingKey, string(marshal), false)
+				r.api.SaveSetting(ctx, defaultWebSearchAddedKey, "true", false)
+			}
+		}
 		return
 	}
 
