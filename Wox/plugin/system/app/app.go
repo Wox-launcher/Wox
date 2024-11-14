@@ -92,17 +92,6 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
 			{
-				Type: definition.PluginSettingDefinitionTypeCheckBox,
-				Value: &definition.PluginSettingValueCheckBox{
-					Key:          "UsePinYin",
-					Label:        "Use pinyin to search",
-					DefaultValue: "false",
-				},
-			},
-			{
-				Type: definition.PluginSettingDefinitionTypeNewLine,
-			},
-			{
 				Type: definition.PluginSettingDefinitionTypeTable,
 				Value: &definition.PluginSettingValueTable{
 					Key: "AppDirectories",
@@ -141,6 +130,12 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 			for i := range a.apps {
 				a.apps[i].Pid = a.retriever.GetPid(ctx, a.apps[i])
 			}
+		}
+	})
+
+	a.api.OnSettingChanged(ctx, func(key string, value string) {
+		if key == "AppDirectories" {
+			a.indexApps(ctx)
 		}
 	})
 }
@@ -263,7 +258,7 @@ func (a *ApplicationPlugin) getRetriever(ctx context.Context) Retriever {
 }
 
 func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
-	var appDirectories = a.retriever.GetAppDirectories(ctx)
+	var appDirectories = a.getAppDirectories(ctx)
 	var appExtensions = a.retriever.GetAppExtensions(ctx)
 	for _, d := range appDirectories {
 		var directory = d
@@ -338,8 +333,32 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("indexed %d apps, cost %d ms", len(a.apps), util.GetSystemTimestamp()-startTimestamp))
 }
 
+func (a *ApplicationPlugin) getUserAddedPaths(ctx context.Context) []appDirectory {
+	userAddedPaths := a.api.GetSetting(ctx, "AppDirectories")
+	if userAddedPaths == "" {
+		return []appDirectory{}
+	}
+
+	var appDirectories []appDirectory
+	unmarshalErr := json.Unmarshal([]byte(userAddedPaths), &appDirectories)
+	if unmarshalErr != nil {
+		return []appDirectory{}
+	}
+
+	for i := range appDirectories {
+		appDirectories[i].Recursive = true
+		appDirectories[i].RecursiveDepth = 3
+	}
+
+	return appDirectories
+}
+
+func (a *ApplicationPlugin) getAppDirectories(ctx context.Context) []appDirectory {
+	return append(a.getUserAddedPaths(ctx), a.getRetriever(ctx).GetAppDirectories(ctx)...)
+}
+
 func (a *ApplicationPlugin) indexAppsByDirectory(ctx context.Context) []appInfo {
-	appDirectories := a.getRetriever(ctx).GetAppDirectories(ctx)
+	appDirectories := a.getAppDirectories(ctx)
 	appPaths := a.getAppPaths(ctx, appDirectories)
 
 	// split into groups, so we can index apps in parallel
