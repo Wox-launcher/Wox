@@ -219,6 +219,12 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
       return;
     }
 
+    // switch to the launcher view if in setting view
+    var launcherController = Get.find<WoxLauncherController>();
+    if (launcherController.isInSettingView.value) {
+      launcherController.isInSettingView.value = false;
+    }
+
     WoxApi.instance.onFocusLost();
   }
 
