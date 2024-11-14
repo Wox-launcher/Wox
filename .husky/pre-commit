@@ -32,18 +32,6 @@ call_lefthook()
     elif test -f "$dir/node_modules/lefthook/bin/index.js"
     then
       "$dir/node_modules/lefthook/bin/index.js" "$@"
-    elif test -f "$dir/Wox.UI.React/node_modules/lefthook-${osArch}-${cpuArch}/bin/lefthook"
-    then
-      "$dir/Wox.UI.React/node_modules/lefthook-${osArch}-${cpuArch}/bin/lefthook" "$@"
-    elif test -f "$dir/Wox.UI.React/node_modules/@evilmartians/lefthook/bin/lefthook-${osArch}-${cpuArch}/lefthook"
-    then
-      "$dir/Wox.UI.React/node_modules/@evilmartians/lefthook/bin/lefthook-${osArch}-${cpuArch}/lefthook" "$@"
-    elif test -f "$dir/Wox.UI.React/node_modules/@evilmartians/lefthook-installer/bin/lefthook"
-    then
-      "$dir/Wox.UI.React/node_modules/@evilmartians/lefthook-installer/bin/lefthook" "$@"
-    elif test -f "$dir/Wox.UI.React/node_modules/lefthook/bin/index.js"
-    then
-      "$dir/Wox.UI.React/node_modules/lefthook/bin/index.js" "$@"
     elif test -f "$dir/Wox/node_modules/lefthook-${osArch}-${cpuArch}/bin/lefthook"
     then
       "$dir/Wox/node_modules/lefthook-${osArch}-${cpuArch}/bin/lefthook" "$@"

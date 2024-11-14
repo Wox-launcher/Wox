@@ -1,5 +1,4 @@
-import winston, { format } from "winston"
-import dayjs from "dayjs"
+import winston from "winston"
 import WebSocket from "ws"
 import { PluginJsonRpcTypeSystemLog } from "./jsonrpc"
 import crypto from "crypto"
@@ -11,7 +10,6 @@ let ws: WebSocket | undefined = undefined
 
 const winstonLogger = winston.createLogger({
   level: "info",
-  format: format.combine(format.printf(i => `${dayjs(i.timestamp).format("YYYY-MM-DD HH:mm:ss.SSS")} ${i.message}`)),
   transports: [new winston.transports.File({ filename: "node.log", dirname: logDirectory })]
 })
 

@@ -33,9 +33,9 @@
   },
   "dependencies": {
     "@wox-launcher/wox-plugin": "^0.0.82",
-    "dayjs": "^1.11.9",
+    "dayjs": "^1.11.13",
     "promise-deferred": "^2.0.4",
-    "winston": "^3.10.0",
+    "winston": "^3.17.0",
     "winston-daily-rotate-file": "^4.7.1",
     "ws": "^8.14.1"
   },
