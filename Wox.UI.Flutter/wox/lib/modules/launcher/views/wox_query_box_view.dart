@@ -109,7 +109,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         ),
                         filled: true,
                         fillColor: fromCssColor(controller.woxTheme.value.queryBoxBackgroundColor),
-                        hoverColor: fromCssColor(controller.woxTheme.value.queryBoxBackgroundColor),
+                        hoverColor: Colors.transparent,
                       ),
                       cursorColor: fromCssColor(controller.woxTheme.value.queryBoxCursorColor),
                       autofocus: true,

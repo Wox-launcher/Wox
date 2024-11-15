@@ -285,7 +285,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                 ),
                 filled: true,
                 fillColor: fromCssColor(controller.woxTheme.value.actionQueryBoxBackgroundColor),
-                hoverColor: fromCssColor(controller.woxTheme.value.actionQueryBoxBackgroundColor),
+                hoverColor: Colors.transparent,
               ),
               cursorColor: fromCssColor(controller.woxTheme.value.queryBoxCursorColor),
               autofocus: true,
