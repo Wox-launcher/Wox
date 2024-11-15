@@ -3,6 +3,7 @@ package util
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 )
 
@@ -31,5 +32,14 @@ func ShellRunOutput(name string, arg ...string) ([]byte, error) {
 }
 
 func ShellOpenFileInFolder(path string) error {
-	return exec.Command("cmd", "/C", "start", "explorer.exe", path).Start()
+	if _, err := os.Stat(path); err != nil {
+		return err
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+
+	return exec.Command("explorer.exe", "/select,", absPath).Start()
 }
