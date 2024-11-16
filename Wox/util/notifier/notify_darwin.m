@@ -66,7 +66,7 @@
 }
 
 - (void)mouseDragged:(NSEvent *)event {
-    NSPoint currentLocation = [self convertBaseToScreen:[event locationInWindow]];
+    NSPoint currentLocation = [self convertPointToScreen:[event locationInWindow]];
     NSPoint newOrigin = NSMakePoint(currentLocation.x - self.initialLocation.x,
                                     currentLocation.y - self.initialLocation.y);
     [self setFrameOrigin:newOrigin];
@@ -115,7 +115,7 @@ void showNotification(const char *message) {
     if (@available(macOS 10.14, *)) {
       backgroundView.material = NSVisualEffectMaterialHUDWindow;
     } else {
-      backgroundView.material = NSVisualEffectMaterialDark;
+      backgroundView.material = NSVisualEffectMaterialPopover;
     }
     backgroundView.state = NSVisualEffectStateActive;
     backgroundView.blendingMode = NSVisualEffectBlendingModeBehindWindow;
