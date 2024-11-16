@@ -25,10 +25,10 @@ default:
 
     if [ "{{target}}" = "windows" ]; then \
       cd Wox && CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-windows-amd64.exe && cd ..; \
-      upx --brute Release/wox-windows-amd64.exe; \
+      upx Release/wox-windows-amd64.exe; \
     elif [ "{{target}}" = "linux" ]; then \
       cd Wox && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-linux-amd64 && cd ..; \
-      upx --brute Release/wox-linux-amd64; \
+      upx Release/wox-linux-amd64; \
       chmod +x Release/wox-linux-amd64; \
     elif [ "{{target}}" = "darwin-arm64" ]; then \
       cd Wox && CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 CGO_CFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="-mmacosx-version-min=10.15" go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o ../Release/wox-mac-arm64 && cd ..; \

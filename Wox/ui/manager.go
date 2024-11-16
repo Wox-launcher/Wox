@@ -108,7 +108,7 @@ func (m *Manager) Start(ctx context.Context) error {
 				return
 			}
 
-			if e.Op == fsnotify.Write {
+			if e.Op == fsnotify.Write || e.Op == fsnotify.Create {
 				logger.Info(ctx, fmt.Sprintf("user theme changed: %s", themePath))
 				themeData, readThemeErr := os.ReadFile(themePath)
 				if readThemeErr != nil {
@@ -122,11 +122,10 @@ func (m *Manager) Start(ctx context.Context) error {
 					return
 				}
 
-				//replace theme
+				//replace theme if current theme is the same
 				if _, ok := m.themes.Load(changedTheme.ThemeId); ok {
 					m.themes.Store(changedTheme.ThemeId, changedTheme)
 					logger.Info(ctx, fmt.Sprintf("theme updated: %s", changedTheme.ThemeName))
-
 					if m.GetCurrentTheme(ctx).ThemeId == changedTheme.ThemeId {
 						m.ChangeTheme(ctx, changedTheme)
 					}
