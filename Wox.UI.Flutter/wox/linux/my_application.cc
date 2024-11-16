@@ -50,6 +50,9 @@ static void my_application_activate(GApplication* application) {
   gtk_window_set_default_size(window, 1280, 720);
   gtk_widget_realize(GTK_WIDGET(window));
 
+  gtk_window_set_type_hint(window, GDK_WINDOW_TYPE_HINT_NORMAL);
+  gtk_window_set_keep_above(window, TRUE);
+
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(project, self->dart_entrypoint_arguments);
 
