@@ -37,6 +37,8 @@ import (
 
 var appRetriever = &MacRetriever{}
 
+var defaultAppIcon = "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns"
+
 type processInfo struct {
 	Pid  int
 	Path string
@@ -174,7 +176,12 @@ func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (plugi
 
 	rawImagePath, iconErr := a.getMacAppIconImagePath(ctx, appPath)
 	if iconErr != nil {
-		return plugin.WoxImage{}, iconErr
+		// use default icon if no icon is found, and don't cache
+		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get app icon for path: %s, %s", appPath, iconErr.Error()))
+		return plugin.WoxImage{
+			ImageType: plugin.WoxImageTypeAbsolutePath,
+			ImageData: defaultAppIcon,
+		}, nil
 	}
 
 	if strings.HasSuffix(rawImagePath, ".icns") {
@@ -303,8 +310,7 @@ func (a *MacRetriever) getMacAppIconImagePath(ctx context.Context, appPath strin
 		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("get icon from cgo fail, return default icon path=%s, err=%s", appPath, cgoErr.Error()))
 	}
 
-	//return default icon
-	return "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns", nil
+	return "", fmt.Errorf("info plist err: %s, cgo err: %s", infoPlistErr.Error(), cgoErr.Error())
 }
 
 func (a *MacRetriever) parseMacAppIconFromInfoPlist(ctx context.Context, appPath string) (string, error) {
