@@ -1,4 +1,5 @@
 #include "my_application.h"
+#include "gtk_window.h"
 
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
@@ -6,6 +7,8 @@
 #endif
 
 #include "flutter/generated_plugin_registrant.h"
+#include <gtk/gtk.h>
+#include <cstdint>
 
 struct _MyApplication {
   GtkApplication parent_instance;
@@ -13,6 +16,56 @@ struct _MyApplication {
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+static void method_call_cb(FlMethodChannel* channel, FlMethodCall* method_call, gpointer user_data) {
+  const gchar* method = fl_method_call_get_name(method_call);
+  
+  if (strcmp(method, "setSize") == 0) {
+  
+
+    FlValue* args = fl_method_call_get_args(method_call);
+    
+    if (fl_value_get_type(args) == FL_VALUE_TYPE_MAP) {
+      FlValue* width_value = fl_value_lookup_string(args, "width");
+      FlValue* height_value = fl_value_lookup_string(args, "height");
+      
+      if (width_value == nullptr || height_value == nullptr) {
+        g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(
+            fl_method_error_response_new("INVALID_ARGUMENTS",
+                                       "Width or height is missing",
+                                       nullptr));
+        fl_method_call_respond(method_call, response, nullptr);
+        return;
+      }
+
+      double width = fl_value_get_float(width_value);
+      double height = fl_value_get_float(height_value);
+      
+      MyApplication* self = MY_APPLICATION(user_data);
+      GtkWindow* window = GTK_WINDOW(gtk_application_get_active_window(GTK_APPLICATION(self)));
+      
+      if (window == nullptr) {
+        g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(fl_method_error_response_new("WINDOW_ERROR", "Window is null", nullptr));
+        fl_method_call_respond(method_call, response, nullptr);
+        return;
+      }
+
+    if (is_gtk_available()) {
+        resize_gtk_window(window, (int)width, (int)height);
+      }
+      
+      g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+      fl_method_call_respond(method_call, response, nullptr);
+    } else {
+      g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(
+          fl_method_error_response_new("INVALID_ARGUMENTS", "Expected width and height", nullptr));
+      fl_method_call_respond(method_call, response, nullptr);
+    }
+  } else {
+    g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(fl_method_error_response_new("NOT_IMPLEMENTED","Method not implemented",nullptr));
+    fl_method_call_respond(method_call, response, nullptr);
+  }
+}
 
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
@@ -62,6 +115,15 @@ static void my_application_activate(GApplication* application) {
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
+  // Add channel setup BEFORE showing the window
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  g_autoptr(FlMethodChannel) channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      "com.wox.window_manager",
+      FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(channel, method_call_cb, self, nullptr);
+
+  gtk_widget_show(GTK_WIDGET(window));
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 

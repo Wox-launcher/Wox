@@ -35,6 +35,7 @@ import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 import 'package:fuzzywuzzy/fuzzywuzzy.dart';
+import 'package:wox/utils/linux_window_manager.dart';
 
 class WoxLauncherController extends GetxController {
   //query related variables
@@ -659,20 +660,13 @@ class WoxLauncherController extends GetxController {
     final totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight;
 
     if (Platform.isWindows) {
-      // on windows, if I set screen ratio to 2.0, then the window height should add more 4.5 pixel, otherwise it will show render error
-      // still don't know why. here is the test result: ratio -> additional window height
-      // 1.0 -> 9
-      // 1.25-> 7.8
-      // 1.5-> 6.3
-      // 1.75-> 5.3
-      // 2.0-> 4.5
-      // 2.25-> 4.3
-      // 2.5-> 3.8
-      // 3.0-> 3
-
       final totalHeightFinal = totalHeight.toDouble() + (10 / PlatformDispatcher.instance.views.first.devicePixelRatio).ceil();
       if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window height to $totalHeightFinal");
       await windowManager.setSize(Size(800, totalHeightFinal));
+    } else if (Platform.isLinux) {
+      // window manager setSize is not working on linux, so we need to implement it by ourselves
+      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window height to $totalHeight");
+      await LinuxWindowManager.instance.setSize(800, totalHeight.toDouble());
     } else {
       if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window height to $totalHeight");
       await windowManager.setSize(Size(800, totalHeight.toDouble()));
