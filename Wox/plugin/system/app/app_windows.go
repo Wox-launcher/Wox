@@ -54,6 +54,11 @@ func (a *WindowsRetriever) GetAppDirectories(ctx context.Context) []appDirectory
 			RecursiveDepth: 2,
 		},
 		{
+			Path:           usr.HomeDir + "\\AppData\\Local",
+			Recursive:      true,
+			RecursiveDepth: 4,
+		},
+		{
 			Path:           "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs",
 			Recursive:      true,
 			RecursiveDepth: 2,
@@ -119,9 +124,9 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 
 	return appInfo{
 		Name: strings.TrimSuffix(filepath.Base(appPath), filepath.Ext(appPath)),
-		Path: targetPath,
+		Path: filepath.Clean(targetPath),
 		Icon: icon,
-		Type: AppTypeDesktop, // 使用常量
+		Type: AppTypeDesktop,
 	}, nil
 }
 
@@ -142,7 +147,7 @@ func (a *WindowsRetriever) parseExe(ctx context.Context, appPath string) (appInf
 
 	return appInfo{
 		Name: strings.TrimSuffix(filepath.Base(appPath), filepath.Ext(appPath)),
-		Path: appPath,
+		Path: filepath.Clean(appPath),
 		Icon: icon,
 		Type: AppTypeDesktop, // 使用常量
 	}, nil
