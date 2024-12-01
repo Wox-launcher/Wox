@@ -237,7 +237,7 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 	otherQuery := strings.Join(queries[1:], " ")
 
 	for _, search := range r.webSearches {
-		if search.IsFallback || !search.Enabled {
+		if !search.Enabled {
 			continue
 		}
 		if strings.ToLower(search.Keyword) == strings.ToLower(triggerKeyword) {
