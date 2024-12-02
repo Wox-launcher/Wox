@@ -10,8 +10,10 @@ void switchInputMethod(const char *inputMethodID);
 */
 import "C"
 import (
+	"context"
 	"errors"
 	"unsafe"
+	"wox/util"
 
 	"golang.design/x/hotkey/mainthread"
 )
@@ -23,6 +25,10 @@ func SwitchInputMethodABC() error {
 	errorChan := make(chan error)
 
 	mainthread.Call(func() {
+		defer util.GoRecover(context.Background(), "switch input method panic", func(err error) {
+			errorChan <- err
+		})
+
 		inputMethod := C.GoString(C.getCurrentInputMethod())
 		if inputMethod == "" {
 			errorChan <- errors.New("failed to get current input method")

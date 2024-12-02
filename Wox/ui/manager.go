@@ -405,7 +405,10 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if woxSetting.SwitchInputMethodABC {
 		util.GetLogger().Info(ctx, "switch input method to ABC")
-		ime.SwitchInputMethodABC()
+		switchErr := ime.SwitchInputMethodABC()
+		if switchErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to switch input method to ABC: %s", switchErr.Error()))
+		}
 	}
 }
 

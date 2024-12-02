@@ -38,6 +38,10 @@ func main() {
 		panic(locationErr)
 	}
 
+	defer util.GoRecover(context.Background(), "main panic", func(err error) {
+		util.GetLogger().Error(context.Background(), fmt.Sprintf("main panic: %s", err.Error()))
+	})
+
 	ctx := util.NewTraceContext()
 	util.GetLogger().Info(ctx, "------------------------------")
 	util.GetLogger().Info(ctx, "Wox starting")

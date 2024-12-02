@@ -74,7 +74,14 @@ func serveAndWait(ctx context.Context, port int) {
 	mux := http.NewServeMux()
 
 	for path, callback := range routers {
-		mux.HandleFunc(path, callback)
+		//add panic handler
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			defer util.GoRecover(ctx, "http request panic", func(err error) {
+				writeErrorResponse(w, err.Error())
+			})
+
+			callback(w, r)
+		})
 	}
 
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
