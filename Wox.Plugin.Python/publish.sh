@@ -1,0 +1,1 @@
+python publish.py patch

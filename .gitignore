@@ -20,3 +20,5 @@ __pycache__/
 Release/
 __debug_bin*
 Wox/log/
+Wox.Plugin.Python/dist/
+Wox.Plugin.Python/wox_plugin.egg-info/

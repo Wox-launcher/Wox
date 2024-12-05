@@ -141,8 +141,7 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 	}
 	logger.Info(ctx, fmt.Sprintf("start loading user plugins, found %d user plugins", len(metaDataList)))
 
-	for _, h := range AllHosts {
-		host := h
+	for _, host := range AllHosts {
 		util.Go(ctx, fmt.Sprintf("[%s] start host", host.GetRuntime(ctx)), func() {
 			newCtx := util.NewTraceContext()
 			hostErr := host.Start(newCtx)
