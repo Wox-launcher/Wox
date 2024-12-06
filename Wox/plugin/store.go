@@ -1,12 +1,13 @@
 package plugin
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path"
-	"strings"
 	"sync"
 	"time"
 	"wox/util"
@@ -127,11 +128,9 @@ func (s *Store) GetStorePluginManifest(ctx context.Context, store storeManifest)
 		return nil, unmarshalErr
 	}
 
-	var finalStorePluginManifests []StorePluginManifest
 	for i := range storePluginManifests {
 		if IsSupportedRuntime(string(storePluginManifests[i].Runtime)) {
-			storePluginManifests[i].Runtime = Runtime(strings.ToUpper(string(storePluginManifests[i].Runtime)))
-			finalStorePluginManifests = append(finalStorePluginManifests, storePluginManifests[i])
+			storePluginManifests[i].Runtime = ConvertToRuntime(string(storePluginManifests[i].Runtime))
 		}
 	}
 
@@ -245,6 +244,112 @@ func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error
 	if removeErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to remove plugin zip %s: %s", pluginZipPath, removeErr.Error()))
 		return fmt.Errorf("failed to remove plugin zip %s: %s", pluginZipPath, removeErr.Error())
+	}
+
+	return nil
+}
+
+func (s *Store) ParsePluginManifestFromLocal(ctx context.Context, filePath string) (Metadata, error) {
+	reader, err := zip.OpenReader(filePath)
+	if err != nil {
+		return Metadata{}, fmt.Errorf("failed to open wox plugin file: %s", err.Error())
+	}
+	defer reader.Close()
+
+	var pluginMetadata Metadata
+	for _, file := range reader.File {
+		if file.Name != "plugin.json" {
+			continue
+		}
+
+		rc, err := file.Open()
+		if err != nil {
+			return Metadata{}, fmt.Errorf("failed to read plugin.json: %s", err.Error())
+		}
+		defer rc.Close()
+
+		bytes, err := io.ReadAll(rc)
+		if err != nil {
+			return Metadata{}, fmt.Errorf("failed to read plugin.json content: %s", err.Error())
+		}
+
+		err = json.Unmarshal(bytes, &pluginMetadata)
+		if err != nil {
+			return Metadata{}, fmt.Errorf("failed to parse plugin.json: %s", err.Error())
+		}
+
+		break
+	}
+
+	if pluginMetadata.Id == "" {
+		return Metadata{}, fmt.Errorf("plugin.json not found or invalid")
+	}
+
+	return pluginMetadata, nil
+}
+
+func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
+	pluginMetadata, err := s.ParsePluginManifestFromLocal(ctx, filePath)
+	if err != nil {
+		return err
+	}
+
+	// check if plugin's runtime is started
+	if !GetPluginManager().IsHostStarted(ctx, ConvertToRuntime(pluginMetadata.Runtime)) {
+		logger.Error(ctx, fmt.Sprintf("%s runtime is not started, please start first", pluginMetadata.Runtime))
+		return fmt.Errorf("%s runtime is not started, please start first", pluginMetadata.Runtime)
+	}
+
+	// check if installed newer version
+	installedPlugin, exist := lo.Find(GetPluginManager().GetPluginInstances(), func(item *Instance) bool {
+		return item.Metadata.Id == pluginMetadata.Id
+	})
+	if exist {
+		logger.Info(ctx, fmt.Sprintf("found this plugin has installed %s(%s)", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version))
+		installedVersion, installedErr := semver.NewVersion(installedPlugin.Metadata.Version)
+		currentVersion, currentErr := semver.NewVersion(pluginMetadata.Version)
+		if installedErr == nil && currentErr == nil {
+			if installedVersion.GreaterThan(currentVersion) {
+				logger.Info(ctx, fmt.Sprintf("skip %s(%s) from %s store, because it's already installed(%s)", pluginMetadata.Name, pluginMetadata.Version, pluginMetadata.Name, installedPlugin.Metadata.Version))
+				return fmt.Errorf("skip %s(%s) from %s store, because it's already installed(%s)", pluginMetadata.Name, pluginMetadata.Version, pluginMetadata.Name, installedPlugin.Metadata.Version)
+			}
+		}
+
+		uninstallErr := s.Uninstall(ctx, installedPlugin)
+		if uninstallErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version, uninstallErr.Error()))
+			return fmt.Errorf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version, uninstallErr.Error())
+		}
+	}
+
+	pluginDirectory := path.Join(util.GetLocation().GetPluginDirectory(), fmt.Sprintf("%s_%s@%s", pluginMetadata.Id, pluginMetadata.Name, pluginMetadata.Version))
+	directoryErr := util.GetLocation().EnsureDirectoryExist(pluginDirectory)
+	if directoryErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to create plugin directory %s: %s", pluginDirectory, directoryErr.Error()))
+		return fmt.Errorf("failed to create plugin directory %s: %s", pluginDirectory, directoryErr.Error())
+	}
+
+	//unzip plugin
+	logger.Info(ctx, fmt.Sprintf("start to unzip plugin %s(%s)", pluginMetadata.Name, pluginMetadata.Version))
+	unzipErr := util.Unzip(filePath, pluginDirectory)
+	if unzipErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to unzip plugin %s(%s): %s", pluginMetadata.Name, pluginMetadata.Version, unzipErr.Error()))
+		return fmt.Errorf("failed to unzip plugin %s(%s): %s", pluginMetadata.Name, pluginMetadata.Version, unzipErr.Error())
+	}
+
+	//load plugin
+	logger.Info(ctx, fmt.Sprintf("start to load plugin %s(%s)", pluginMetadata.Name, pluginMetadata.Version))
+	loadErr := GetPluginManager().LoadPlugin(ctx, pluginDirectory)
+	if loadErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to load plugin %s(%s): %s", pluginMetadata.Name, pluginMetadata.Version, loadErr.Error()))
+
+		// remove plugin directory
+		removeErr := os.RemoveAll(pluginDirectory)
+		if removeErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to remove plugin directory %s: %s", pluginDirectory, removeErr.Error()))
+		}
+
+		return fmt.Errorf("failed to load plugin %s(%s): %s", pluginMetadata.Name, pluginMetadata.Version, loadErr.Error())
 	}
 
 	return nil

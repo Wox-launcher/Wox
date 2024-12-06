@@ -1,8 +1,10 @@
 import json
 import importlib.util
+from os import path
 import sys
 from typing import Any, Dict, Optional
 import uuid
+import zipimport
 import websockets
 import logger
 from wox_plugin import (
@@ -49,16 +51,25 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
     entry = request["Params"]["Entry"]
     plugin_id = request["PluginId"]
     plugin_name = request["PluginName"]
+
+    await logger.info(ctx["Values"]["traceId"], f"<{plugin_name}> load plugin, directory: {plugin_directory}, entry: {entry}")
     
     try:
         # Add plugin directory to Python path
         if plugin_directory not in sys.path:
             sys.path.append(plugin_directory)
         
+        deps_dir = path.join(plugin_directory, "dependencies")
+        if path.exists(deps_dir) and deps_dir not in sys.path:
+            sys.path.append(deps_dir)
+
+        # Combine plugin directory and entry file to get full path
+        full_entry_path = path.join(plugin_directory, entry)
+        
         # Import the plugin module
-        spec = importlib.util.spec_from_file_location("plugin", entry)
+        spec = importlib.util.spec_from_file_location("plugin", full_entry_path)
         if spec is None or spec.loader is None:
-            raise ImportError(f"Could not load plugin from {entry}")
+            raise ImportError(f"Could not load plugin from {full_entry_path}")
         
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)

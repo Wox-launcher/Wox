@@ -10,6 +10,7 @@ import (
 	"wox/setting"
 	"wox/share"
 	"wox/util"
+	"wox/util/notifier"
 	"wox/util/window"
 
 	"github.com/google/uuid"
@@ -76,32 +77,54 @@ func (u *uiImpl) RestoreTheme(ctx context.Context) {
 	GetUIManager().RestoreTheme(ctx)
 }
 
-func (u *uiImpl) ShowToolbarMsg(ctx context.Context, msg share.ToolbarMsg) {
-	u.invokeWebsocketMethod(ctx, "ShowToolbarMsg", msg)
+func (u *uiImpl) Notify(ctx context.Context, msg share.NotifyMsg) {
+	if u.isNotifyInToolbar(ctx, msg.PluginId) {
+		u.invokeWebsocketMethod(ctx, "ShowToolbarMsg", msg)
+	} else {
+		notifier.Notify(msg.Text)
+	}
 }
 
-func (u *uiImpl) IsPluginQuery(ctx context.Context, pluginId string) bool {
+func (u *uiImpl) isNotifyInToolbar(ctx context.Context, pluginId string) bool {
+	isVisible, err := u.invokeWebsocketMethod(ctx, "IsVisible", nil)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("isNotifyInToolbar isVisible error: %s", err.Error()))
+		return false
+	}
+	if !isVisible.(bool) {
+		return false
+	}
+
 	respData, err := u.invokeWebsocketMethod(ctx, "GetCurrentQuery", nil)
 	if err != nil {
-		logger.Error(ctx, fmt.Sprintf("IsPluginQuery error: %s", err.Error()))
+		logger.Error(ctx, fmt.Sprintf("isNotifyInToolbar error: %s", err.Error()))
 		return false
 	}
 	//first marshal to json , then unmarshal to share.PlainQuery
 	jsonData, marshalErr := json.Marshal(respData)
 	if marshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("IsPluginQuery marshal error: %s", marshalErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("isNotifyInToolbar marshal error: %s", marshalErr.Error()))
 		return false
 	}
 	var currentQuery share.PlainQuery
 	unmarshalErr := json.Unmarshal(jsonData, &currentQuery)
 	if unmarshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("IsPluginQuery unmarshal error: %s", unmarshalErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("isNotifyInToolbar unmarshal error: %s", unmarshalErr.Error()))
 		return false
+	}
+
+	// if current query is plugin specific query, we show notify in toolbar
+	if currentQuery.QueryType == plugin.QueryTypeSelection {
+		return true
 	}
 
 	queryPlugin, pluginInstance, queryErr := plugin.GetPluginManager().NewQuery(ctx, currentQuery)
 	if queryErr != nil {
-		logger.Error(ctx, fmt.Sprintf("IsPluginQuery new query error: %s", queryErr.Error()))
+		logger.Error(ctx, fmt.Sprintf("isNotifyInToolbar new query error: %s", queryErr.Error()))
+		return false
+	}
+	if pluginInstance == nil {
+		logger.Error(ctx, "isNotifyInToolbar plugin instance not found")
 		return false
 	}
 

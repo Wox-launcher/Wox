@@ -12,7 +12,6 @@ import (
 	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
-	"wox/util/notifier"
 
 	"github.com/disintegration/imaging"
 	"github.com/samber/lo"
@@ -64,17 +63,11 @@ func (a *APIImpl) ShowApp(ctx context.Context) {
 }
 
 func (a *APIImpl) Notify(ctx context.Context, message string) {
-	// translate message
-	message = a.GetTranslation(ctx, message)
-
-	if GetPluginManager().GetUI().IsPluginQuery(ctx, a.pluginInstance.Metadata.Id) {
-		GetPluginManager().GetUI().ShowToolbarMsg(ctx, share.ToolbarMsg{
-			Text:           message,
-			DisplaySeconds: 3,
-		})
-	} else {
-		notifier.Notify(message)
-	}
+	GetPluginManager().GetUI().Notify(ctx, share.NotifyMsg{
+		PluginId:       a.pluginInstance.Metadata.Id,
+		Text:           a.GetTranslation(ctx, message),
+		DisplaySeconds: 3,
+	})
 }
 
 func (a *APIImpl) Log(ctx context.Context, level LogLevel, msg string) {

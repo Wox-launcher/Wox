@@ -97,9 +97,12 @@ default:
 
 @_build_python_host directory:
     cd Wox.Plugin.Host.Python && \
+    source .venv/bin/activate && \
     rm -rf python-host && \
     rm -rf python-host.pyz && \
-    {{python_command}} -m pip install -r requirements.txt --target python-host && \
+    uv pip freeze > requirements.txt && \
+    uv pip install -r requirements.txt --target python-host && \
+    rm requirements.txt && \
     cp *.py python-host && \
     {{python_command}} -m zipapp -p "interpreter" python-host && \
     rm -rf python-host && \

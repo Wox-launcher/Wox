@@ -47,9 +47,7 @@ type UI interface {
 	InstallTheme(ctx context.Context, theme Theme)
 	UninstallTheme(ctx context.Context, theme Theme)
 	RestoreTheme(ctx context.Context)
-	ShowToolbarMsg(ctx context.Context, msg ToolbarMsg)
-	// Check if current query in the ui is the giving plugin specific query (not the global query)
-	IsPluginQuery(ctx context.Context, pluginId string) bool
+	Notify(ctx context.Context, msg NotifyMsg)
 }
 
 type ShowContext struct {
@@ -60,7 +58,8 @@ type PickFilesParams struct {
 	IsDirectory bool
 }
 
-type ToolbarMsg struct {
+type NotifyMsg struct {
+	PluginId       string // can be empty
 	Icon           string // WoxImage.String(), can be empty
 	Text           string // can be empty
 	DisplaySeconds int    // 0 means display forever

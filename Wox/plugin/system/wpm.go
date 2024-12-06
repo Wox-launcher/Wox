@@ -363,10 +363,7 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	pluginManifests := plugin.GetStoreManager().Search(ctx, query.Search)
-	for _, pluginManifestShadow := range pluginManifests {
-		// action will be executed in another go routine, so we need to copy the variable
-		pluginManifest := pluginManifestShadow
-
+	for _, pluginManifest := range pluginManifests {
 		screenShotsMarkdown := lo.Map(pluginManifest.ScreenshotUrls, func(screenshot string, _ int) string {
 			return fmt.Sprintf("![screenshot](%s)", screenshot)
 		})

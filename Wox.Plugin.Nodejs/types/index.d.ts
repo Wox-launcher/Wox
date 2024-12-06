@@ -23,6 +23,15 @@ export interface QueryEnv {
      * Active window title when user query
      */
     ActiveWindowTitle: string
+
+    /**
+     * Active window pid when user query, 0 if not available
+     */
+    ActiveWindowPid: number
+
+	// active browser url when user query
+	// Only available when active window is browser and https://github.com/Wox-launcher/Wox.Chrome.Extension is installed
+	ActiveBrowserUrl: string
 }
 
 export interface Query {

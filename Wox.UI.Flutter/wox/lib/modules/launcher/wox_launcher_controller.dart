@@ -557,6 +557,9 @@ class WoxLauncherController extends GetxController {
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "GetCurrentQuery") {
       responseWoxWebsocketRequest(msg, true, currentQuery.value.toJson());
+    } else if (msg.method == "IsVisible") {
+      var isVisible = await windowManager.isVisible();
+      responseWoxWebsocketRequest(msg, true, isVisible);
     }
   }
 

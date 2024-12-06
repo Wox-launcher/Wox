@@ -90,5 +90,10 @@ def main():
     print("Package can be installed with:")
     print(f"pip install wox-plugin=={new_version}")
 
+    # remove build directory
+    if run_command("rm -rf dist wox_plugin_python.egg-info"):
+        print("Error: Failed to remove build directory")
+        sys.exit(1)
+
 if __name__ == "__main__":
     main() 

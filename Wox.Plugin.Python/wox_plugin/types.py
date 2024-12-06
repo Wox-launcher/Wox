@@ -11,6 +11,10 @@ Platform = Literal["windows", "darwin", "linux"]
 class Context(TypedDict):
     Values: Dict[str, str]
 
+    # get traceId from context
+    def get_trace_id(self) -> str:
+        return self["Values"]["traceId"]
+
 def new_context() -> Context:
     return {"Values": {"traceId": str(uuid.uuid4())}}
 
@@ -33,7 +37,21 @@ class Selection:
 # Query Environment
 @dataclass
 class QueryEnv:
+    """
+    Active window title when user query
+    """
     ActiveWindowTitle: str
+    
+    """
+    Active window pid when user query, 0 if not available
+    """
+    ActiveWindowPid: int
+
+    """
+    active browser url when user query
+    Only available when active window is browser and https://github.com/Wox-launcher/Wox.Chrome.Extension is installed
+    """
+    ActiveBrowserUrl: str
 
 # Query
 class QueryType(str, Enum):
