@@ -11,7 +11,7 @@ def run_command(command: str) -> int:
     return subprocess.call(command, shell=True)
 
 def update_version(version_type: str) -> str:
-    """Update version number
+    """Update version number in setup.py, pyproject.toml and __init__.py
     version_type: major, minor, or patch
     """
     # Read setup.py
@@ -46,6 +46,16 @@ def update_version(version_type: str) -> str:
         content
     )
     setup_path.write_text(new_content)
+    
+    # Update pyproject.toml
+    pyproject_path = Path("pyproject.toml")
+    pyproject_content = pyproject_path.read_text()
+    new_pyproject_content = re.sub(
+        r'version = "(\d+)\.(\d+)\.(\d+)"',
+        f'version = "{new_version}"',
+        pyproject_content
+    )
+    pyproject_path.write_text(new_pyproject_content)
     
     # Update __init__.py
     init_path = Path("wox_plugin/__init__.py")

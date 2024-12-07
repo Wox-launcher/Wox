@@ -422,8 +422,8 @@ wheels = [
 ]
 
 [[package]]
-name = "wox-plugin-python"
-version = "0.1.0"
+name = "wox-plugin"
+version = "0.0.20"
 source = { virtual = "." }
 
 [package.optional-dependencies]

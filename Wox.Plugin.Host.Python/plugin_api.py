@@ -14,7 +14,8 @@ from wox_plugin import (
     Conversation,
     ChatStreamFunc,
 )
-from jsonrpc import PLUGIN_JSONRPC_TYPE_REQUEST, waiting_for_response
+from constants import PLUGIN_JSONRPC_TYPE_REQUEST
+from plugin_manager import waiting_for_response
 
 class PluginAPI(PublicAPI):
     def __init__(self, ws: websockets.WebSocketServerProtocol, plugin_id: str, plugin_name: str):

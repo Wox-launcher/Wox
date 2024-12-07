@@ -1,3 +1,0 @@
-loguru==0.7.2
-websockets==14.1
-wox-plugin==0.1.0

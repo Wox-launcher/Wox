@@ -4,6 +4,7 @@ import asyncio
 import json
 import uuid
 from typing import Dict, Any
+import traceback
 
 import websockets
 import logger
@@ -14,9 +15,13 @@ from jsonrpc import handle_request_from_wox
 
 async def handle_message(ws: websockets.WebSocketServerProtocol, message: str):
     """Handle incoming WebSocket message"""
+
+    trace_id = str(uuid.uuid4())
     try:
         msg_data = json.loads(message)
-        trace_id = msg_data.get("TraceId", str(uuid.uuid4()))
+        if msg_data.get("TraceId"):
+            trace_id = msg_data.get("TraceId")
+
         ctx = new_context_with_value("traceId", trace_id)
 
         if PLUGIN_JSONRPC_TYPE_RESPONSE in message:
@@ -24,9 +29,9 @@ async def handle_message(ws: websockets.WebSocketServerProtocol, message: str):
             if msg_data.get("Id") in waiting_for_response:
                 deferred = waiting_for_response[msg_data["Id"]]
                 if msg_data.get("Error"):
-                    deferred.reject(msg_data["Error"])
+                    deferred.set_exception(Exception(msg_data["Error"]))
                 else:
-                    deferred.resolve(msg_data.get("Result"))
+                    deferred.set_result(msg_data.get("Result"))
                 del waiting_for_response[msg_data["Id"]]
         elif PLUGIN_JSONRPC_TYPE_REQUEST in message:
             # Handle request from Wox
@@ -39,8 +44,9 @@ async def handle_message(ws: websockets.WebSocketServerProtocol, message: str):
                     "Type": PLUGIN_JSONRPC_TYPE_RESPONSE,
                     "Result": result
                 }
-                await ws.send(json.dumps(response))
+                await ws.send(json.dumps(response, default=lambda o: '<not serializable>'))
             except Exception as e:
+                error_stack = traceback.format_exc()
                 error_response = {
                     "TraceId": trace_id,
                     "Id": msg_data["Id"],
@@ -48,24 +54,29 @@ async def handle_message(ws: websockets.WebSocketServerProtocol, message: str):
                     "Type": PLUGIN_JSONRPC_TYPE_RESPONSE,
                     "Error": str(e)
                 }
-                await logger.error(trace_id, f"handle request failed: {str(e)}")
-                await ws.send(json.dumps(error_response))
+                await logger.error(trace_id, f"handle request failed: {str(e)}\nStack trace:\n{error_stack}")
+                await ws.send(json.dumps(error_response, default=lambda o: '<not serializable>'))
         else:
             await logger.error(trace_id, f"unknown message type: {message}")
     except Exception as e:
-        await logger.error(str(uuid.uuid4()), f"receive and handle msg error: {message}, err: {str(e)}")
+        error_stack = traceback.format_exc()
+        await logger.error(trace_id, f"receive and handle msg error: {message}, err: {str(e)}\nStack trace:\n{error_stack}")
 
 async def handler(websocket: websockets.WebSocketServerProtocol):
     """WebSocket connection handler"""
     logger.update_websocket(websocket)
     
     try:
-        async for message in websocket:
-            await handle_message(websocket, message)
-    except websockets.exceptions.ConnectionClosed:
-        await logger.info(str(uuid.uuid4()), "connection closed")
-    except Exception as e:
-        await logger.error(str(uuid.uuid4()), f"connection error: {str(e)}")
+        while True:
+            try:
+                message = await websocket.recv()
+                asyncio.create_task(handle_message(websocket, message))
+            except websockets.exceptions.ConnectionClosed:
+                await logger.info(str(uuid.uuid4()), "connection closed")
+                break
+            except Exception as e:
+                error_stack = traceback.format_exc()
+                await logger.error(str(uuid.uuid4()), f"connection error: {str(e)}\nStack trace:\n{error_stack}")
     finally:
         logger.update_websocket(None)
 

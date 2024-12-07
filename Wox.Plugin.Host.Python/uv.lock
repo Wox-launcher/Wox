@@ -12,15 +12,15 @@ wheels = [
 
 [[package]]
 name = "loguru"
-version = "0.7.2"
+version = "0.7.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "win32-setctime", marker = "sys_platform == 'win32'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9e/30/d87a423766b24db416a46e9335b9602b054a72b96a88a241f2b09b560fa8/loguru-0.7.2.tar.gz", hash = "sha256:e671a53522515f34fd406340ee968cb9ecafbc4b36c679da03c18fd8d0bd51ac", size = 145103 }
+sdist = { url = "https://files.pythonhosted.org/packages/3a/05/a1dae3dffd1116099471c643b8924f5aa6524411dc6c63fdae648c4f1aca/loguru-0.7.3.tar.gz", hash = "sha256:19480589e77d47b8d85b2c827ad95d49bf31b0dcde16593892eb51dd18706eb6", size = 63559 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/03/0a/4f6fed21aa246c6b49b561ca55facacc2a44b87d65b8b92362a8e99ba202/loguru-0.7.2-py3-none-any.whl", hash = "sha256:003d71e3d3ed35f0f8984898359d65b79e5b21943f78af86aa5491210429b8eb", size = 62549 },
+    { url = "https://files.pythonhosted.org/packages/0c/29/0348de65b8cc732daa3e33e67806420b2ae89bdce2b04af740289c5c6c8c/loguru-0.7.3-py3-none-any.whl", hash = "sha256:31a33c10c8e1e10422bfd431aeb5d351c7cf7fa671e3c4df004162264b28220c", size = 61595 },
 ]
 
 [[package]]
@@ -93,11 +93,11 @@ wheels = [
 
 [[package]]
 name = "wox-plugin"
-version = "0.1.0"
+version = "0.0.24"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/c9/8c/a956b1c7ce61baeb1edd17c51527dfb1060d301ae04067fe3f6645783ca8/wox_plugin-0.1.0.tar.gz", hash = "sha256:b447e793dae81c5de073537f22c432ce11da87e56738483916d1ffba539ed753", size = 4011 }
+sdist = { url = "https://files.pythonhosted.org/packages/41/75/12281bce4270c4712ec8c77f5024bcf86b0ee7ff695be31798fbc36d8368/wox_plugin-0.0.24.tar.gz", hash = "sha256:2f0a10330ec8d380ffc952b57b7803fbc38d4416123f28333ee2d9f9bbcf15cb", size = 4592 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cf/b0/2ac0c4796dc50f198a4ebb06b5d73021d741cf0022473d469e9e2f467ccd/wox_plugin-0.1.0-py3-none-any.whl", hash = "sha256:6b048f7ae55df7bf4901cd34f24f96c21341ddd2b6707184d9970f279d35f3b0", size = 4067 },
+    { url = "https://files.pythonhosted.org/packages/0c/80/6b2f988cefea7f6dd34b10f28ed9cdc534a178b01aca477802b5cb2363ae/wox_plugin-0.0.24-py3-none-any.whl", hash = "sha256:730c39117b752b521e70f9f5acffc18af2ab70e8985c66f17dba9d450cc21b50", size = 4751 },
 ]
 
 [[package]]
@@ -114,5 +114,5 @@ dependencies = [
 requires-dist = [
     { name = "loguru" },
     { name = "websockets" },
-    { name = "wox-plugin", specifier = ">=0.1.0" },
+    { name = "wox-plugin", specifier = "==0.0.24" },
 ]

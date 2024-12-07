@@ -5,7 +5,7 @@ description = "Python host for Wox plugins"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "wox-plugin>=0.1.0",
     "loguru",
     "websockets",
+    "wox-plugin==0.0.24",
 ]

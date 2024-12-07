@@ -250,9 +250,11 @@ async function action(ctx: Context, request: PluginJsonRpcRequest) {
     return
   }
 
-  return pluginAction({
+  pluginAction({
     ContextData: request.Params.ContextData
   })
+  
+  return
 }
 
 async function refresh(ctx: Context, request: PluginJsonRpcRequest) {

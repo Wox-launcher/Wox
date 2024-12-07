@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="wox-plugin",
-    version="0.0.18",
+    version="0.0.24",
     description="All Python plugins for Wox should use types in this package",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
@@ -10,6 +10,7 @@ setup(
     author_email="",
     url="https://github.com/Wox-launcher/Wox",
     packages=find_packages(),
+    package_data={"wox_plugin": ["py.typed"]},
     install_requires=[
         "typing_extensions>=4.0.0; python_version < '3.8'"
     ],

@@ -7,6 +7,7 @@ import uuid
 import zipimport
 import websockets
 import logger
+import inspect
 from wox_plugin import (
     Context,
     Plugin,
@@ -18,9 +19,10 @@ from wox_plugin import (
     new_context_with_value,
     PluginInitParams
 )
-from constants import PLUGIN_JSONRPC_TYPE_REQUEST, PLUGIN_JSONRPC_TYPE_RESPONSE
-from plugin_manager import plugin_instances, waiting_for_response
+from plugin_manager import plugin_instances
 from plugin_api import PluginAPI
+import traceback
+import asyncio
 
 async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: websockets.WebSocketServerProtocol) -> Any:
     """Handle incoming request from Wox"""
@@ -88,7 +90,8 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
         
         await logger.info(ctx["Values"]["traceId"], f"<{plugin_name}> load plugin successfully")
     except Exception as e:
-        await logger.error(ctx["Values"]["traceId"], f"<{plugin_name}> load plugin failed: {str(e)}")
+        error_stack = traceback.format_exc()
+        await logger.error(ctx["Values"]["traceId"], f"<{plugin_name}> load plugin failed: {str(e)}\nStack trace:\n{error_stack}")
         raise e
 
 async def init_plugin(ctx: Context, request: Dict[str, Any], ws: websockets.WebSocketServerProtocol) -> None:
@@ -102,6 +105,8 @@ async def init_plugin(ctx: Context, request: Dict[str, Any], ws: websockets.WebS
         # Create plugin API instance
         api = PluginAPI(ws, plugin_id, plugin["name"])
         plugin["api"] = api
+        plugin["actions"] = {}  # Add actions cache
+        plugin["refreshes"] = {}  # Add refreshes cache
         
         # Call plugin's init method if it exists
         if hasattr(plugin["plugin"], "init"):
@@ -110,7 +115,8 @@ async def init_plugin(ctx: Context, request: Dict[str, Any], ws: websockets.WebS
         
         await logger.info(ctx["Values"]["traceId"], f"<{plugin['name']}> init plugin successfully")
     except Exception as e:
-        await logger.error(ctx["Values"]["traceId"], f"<{plugin['name']}> init plugin failed: {str(e)}")
+        error_stack = traceback.format_exc()
+        await logger.error(ctx["Values"]["traceId"], f"<{plugin['name']}> init plugin failed: {str(e)}\nStack trace:\n{error_stack}")
         raise e
 
 async def query(ctx: Context, request: Dict[str, Any]) -> list:
@@ -124,6 +130,10 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list:
         if not hasattr(plugin["plugin"], "query"):
             return []
         
+        # Clear action and refresh caches before query
+        plugin["actions"].clear()
+        plugin["refreshes"].clear()
+        
         query_params = Query(
             Type=QueryType(request["Params"]["Type"]),
             RawQuery=request["Params"]["RawQuery"],
@@ -135,8 +145,8 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list:
         )
         
         results = await plugin["plugin"].query(ctx, query_params)
-        
-        # Ensure each result has an ID
+
+        # Ensure each result has an ID and cache actions and refreshes
         if results:
             for result in results:
                 if not result.Id:
@@ -145,10 +155,16 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list:
                     for action in result.Actions:
                         if not action.Id:
                             action.Id = str(uuid.uuid4())
+                        # Cache action
+                        plugin["actions"][action.Id] = action.Action
+                # Cache refresh callback if exists
+                if hasattr(result, "RefreshInterval") and result.RefreshInterval is not None and result.RefreshInterval > 0 and hasattr(result, "OnRefresh"):
+                    plugin["refreshes"][result.Id] = result.OnRefresh
         
-        return [result.__dict__ for result in results] if results else []
+        return [result.to_dict() for result in results]
     except Exception as e:
-        await logger.error(ctx["Values"]["traceId"], f"<{plugin['name']}> query failed: {str(e)}")
+        error_stack = traceback.format_exc()
+        await logger.error(ctx["Values"]["traceId"], f"<{plugin['name']}> query failed: {str(e)}\nStack trace:\n{error_stack}")
         raise e
 
 async def action(ctx: Context, request: Dict[str, Any]) -> Any:
@@ -162,13 +178,16 @@ async def action(ctx: Context, request: Dict[str, Any]) -> Any:
         action_id = request["Params"]["ActionId"]
         context_data = request["Params"].get("ContextData")
         
-        # Find the action in the plugin's results
-        if hasattr(plugin["plugin"], "handle_action"):
-            return await plugin["plugin"].handle_action(action_id, context_data)
+        # Get action from cache
+        action_func = plugin["actions"].get(action_id)
+        if action_func:
+            # Don't await the action, let it run independently
+            asyncio.create_task(action_func({"ContextData": context_data}))
         
         return None
     except Exception as e:
-        await logger.error(ctx["Values"]["traceId"], f"<{plugin['name']}> action failed: {str(e)}")
+        error_stack = traceback.format_exc()
+        await logger.error(ctx["Values"]["traceId"], f"<{plugin['name']}> action failed: {str(e)}\nStack trace:\n{error_stack}")
         raise e
 
 async def refresh(ctx: Context, request: Dict[str, Any]) -> Any:
@@ -180,14 +199,30 @@ async def refresh(ctx: Context, request: Dict[str, Any]) -> Any:
     
     try:
         result_id = request["Params"]["ResultId"]
+        refreshable_result = json.loads(request["Params"]["RefreshableResult"])
         
-        # Find the refresh callback in the plugin's results
-        if hasattr(plugin["plugin"], "handle_refresh"):
-            return await plugin["plugin"].handle_refresh(result_id)
+        # Get refresh callback from cache
+        refresh_func = plugin["refreshes"].get(result_id)
+        if refresh_func:
+            refreshed_result = await refresh_func(refreshable_result)
+            
+            # Cache any new actions from the refreshed result
+            if refreshed_result.Actions:
+                for action in refreshed_result.Actions:
+                    if not action.Id:
+                        action.Id = str(uuid.uuid4())
+                    plugin["actions"][action.Id] = action.Action
+            
+            # Cache refresh callback if exists
+            if hasattr(refreshed_result, "RefreshInterval") and refreshed_result.RefreshInterval is not None and refreshed_result.RefreshInterval > 0 and hasattr(refreshed_result, "OnRefresh"):
+                plugin["refreshes"][result_id] = refreshed_result.OnRefresh
+            
+            return refreshed_result.to_dict()
         
         return None
     except Exception as e:
-        await logger.error(ctx["Values"]["traceId"], f"<{plugin['name']}> refresh failed: {str(e)}")
+        error_stack = traceback.format_exc()
+        await logger.error(ctx["Values"]["traceId"], f"<{plugin['name']}> refresh failed: {str(e)}\nStack trace:\n{error_stack}")
         raise e
 
 async def unload_plugin(ctx: Context, request: Dict[str, Any]) -> None:
@@ -211,5 +246,6 @@ async def unload_plugin(ctx: Context, request: Dict[str, Any]) -> None:
         
         await logger.info(ctx["Values"]["traceId"], f"<{plugin['name']}> unload plugin successfully")
     except Exception as e:
-        await logger.error(ctx["Values"]["traceId"], f"<{plugin['name']}> unload plugin failed: {str(e)}")
+        error_stack = traceback.format_exc()
+        await logger.error(ctx["Values"]["traceId"], f"<{plugin['name']}> unload plugin failed: {str(e)}\nStack trace:\n{error_stack}")
         raise e 

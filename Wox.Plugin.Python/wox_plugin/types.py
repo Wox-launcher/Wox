@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Protocol, Union, Callable, Any, TypedDict, Literal
+from typing import Dict, List, Optional, Protocol, Union, Callable, Any, TypedDict, Literal, Awaitable
 import uuid
 
 # Basic types
@@ -34,6 +34,16 @@ class Selection:
     Text: Optional[str] = None
     FilePaths: Optional[List[str]] = None
 
+    def to_dict(self):
+        return {
+            "Type": self.Type,
+            "Text": self.Text,
+            "FilePaths": self.FilePaths
+        }
+
+    def __dict__(self):
+        return self.to_dict()
+
 # Query Environment
 @dataclass
 class QueryEnv:
@@ -53,6 +63,16 @@ class QueryEnv:
     """
     ActiveBrowserUrl: str
 
+    def to_dict(self):
+        return {
+            "ActiveWindowTitle": self.ActiveWindowTitle,
+            "ActiveWindowPid": self.ActiveWindowPid,
+            "ActiveBrowserUrl": self.ActiveBrowserUrl
+        }
+
+    def __dict__(self):
+        return self.to_dict()
+
 # Query
 class QueryType(str, Enum):
     INPUT = "input"
@@ -67,6 +87,20 @@ class Query:
     Search: str
     Selection: Selection
     Env: QueryEnv
+
+    def to_dict(self):
+        return {
+            "Type": self.Type,
+            "RawQuery": self.RawQuery,
+            "TriggerKeyword": self.TriggerKeyword,
+            "Command": self.Command,
+            "Search": self.Search,
+            "Selection": self.Selection.to_dict(),
+            "Env": self.Env.to_dict()
+        }
+
+    def __dict__(self):
+        return self.to_dict()
 
     def is_global_query(self) -> bool:
         return self.Type == QueryType.INPUT and not self.TriggerKeyword
@@ -86,6 +120,15 @@ class WoxImage:
     ImageType: WoxImageType
     ImageData: str
 
+    def to_dict(self):
+        return {
+            "ImageType": self.ImageType,
+            "ImageData": self.ImageData
+        }
+
+    def __dict__(self):
+        return self.to_dict()
+
 def new_base64_wox_image(image_data: str) -> WoxImage:
     return WoxImage(ImageType=WoxImageType.BASE64, ImageData=image_data)
 
@@ -102,6 +145,16 @@ class WoxPreview:
     PreviewData: str
     PreviewProperties: Dict[str, str]
 
+    def to_dict(self):
+        return {
+            "PreviewType": self.PreviewType,
+            "PreviewData": self.PreviewData,
+            "PreviewProperties": self.PreviewProperties
+        }
+
+    def __dict__(self):
+        return self.to_dict()
+
 class ResultTailType(str, Enum):
     TEXT = "text"
     IMAGE = "image"
@@ -112,35 +165,77 @@ class ResultTail:
     Text: Optional[str] = None
     Image: Optional[WoxImage] = None
 
+    def to_dict(self):
+        return {
+            "Type": self.Type,
+            "Text": self.Text,
+            "Image": self.Image.to_dict() if self.Image else None
+        }
+
+    def __dict__(self):
+        return self.to_dict()
+
 @dataclass
 class ActionContext:
     ContextData: str
 
 @dataclass
 class ResultAction:
-    Id: Optional[str]
     Name: str
-    Icon: Optional[WoxImage]
-    IsDefault: Optional[bool]
-    PreventHideAfterAction: Optional[bool]
-    Action: Callable[[ActionContext], None]
-    Hotkey: Optional[str]
+    Action: Callable[[ActionContext], Awaitable[None]]
+    Id: Optional[str] = None
+    Icon: Optional[WoxImage] = None
+    IsDefault: Optional[bool] = None
+    PreventHideAfterAction: Optional[bool] = None
+    Hotkey: Optional[str] = None
+
+    def to_dict(self):
+        return {
+            "Name": self.Name,
+            "Id": self.Id,
+            "Icon": self.Icon.to_dict() if self.Icon else None,
+            "IsDefault": self.IsDefault,
+            "PreventHideAfterAction": self.PreventHideAfterAction,
+            "Hotkey": self.Hotkey
+        }
+
+    def __dict__(self):
+        return self.to_dict()
 
 @dataclass
 class Result:
-    Id: Optional[str]
     Title: str
-    SubTitle: Optional[str]
     Icon: WoxImage
-    Preview: Optional[WoxPreview]
-    Score: Optional[float]
-    Group: Optional[str]
-    GroupScore: Optional[float]
-    Tails: Optional[List[ResultTail]]
-    ContextData: Optional[str]
-    Actions: Optional[List[ResultAction]]
-    RefreshInterval: Optional[int]
-    OnRefresh: Optional[Callable[["RefreshableResult"], "RefreshableResult"]]
+    Id: Optional[str] = None
+    SubTitle: Optional[str] = None
+    Preview: Optional[WoxPreview] = None
+    Score: Optional[float] = None
+    Group: Optional[str] = None
+    GroupScore: Optional[float] = None
+    Tails: Optional[List[ResultTail]] = None
+    ContextData: Optional[str] = None
+    Actions: Optional[List[ResultAction]] = None
+    RefreshInterval: Optional[int] = None
+    OnRefresh: Optional[Callable[["RefreshableResult"], "RefreshableResult"]] = None
+
+    def to_dict(self):
+        return {
+            "Title": self.Title,
+            "Icon": self.Icon.to_dict(),
+            "Id": self.Id,
+            "SubTitle": self.SubTitle,
+            "Preview": self.Preview.to_dict() if self.Preview else None,
+            "Score": self.Score,
+            "Group": self.Group,
+            "GroupScore": self.GroupScore,
+            "Tails": [tail.to_dict() for tail in self.Tails] if self.Tails else None,
+            "ContextData": self.ContextData,
+            "Actions": [action.to_dict() for action in self.Actions] if self.Actions else None,
+            "RefreshInterval": self.RefreshInterval
+        }
+ 
+    def __dict__(self):
+        return self.to_dict()
 
 @dataclass
 class RefreshableResult:
@@ -153,12 +248,37 @@ class RefreshableResult:
     RefreshInterval: int
     Actions: List[ResultAction]
 
+    def to_dict(self):
+        return {
+            "Title": self.Title,
+            "SubTitle": self.SubTitle,
+            "Icon": self.Icon.to_dict(),
+            "Preview": self.Preview.to_dict(),
+            "Tails": [tail.to_dict() for tail in self.Tails],
+            "ContextData": self.ContextData,
+            "RefreshInterval": self.RefreshInterval,
+            "Actions": [action.to_dict() for action in self.Actions]
+        }
+
+    def __dict__(self):
+        return self.to_dict()
+
 # Plugin API
 @dataclass
 class ChangeQueryParam:
     QueryType: QueryType
-    QueryText: Optional[str]
-    QuerySelection: Optional[Selection]
+    QueryText: Optional[str] = None
+    QuerySelection: Optional[Selection] = None
+
+    def to_dict(self):
+        return {
+            "QueryType": self.QueryType,
+            "QueryText": self.QueryText,
+            "QuerySelection": self.QuerySelection.to_dict() if self.QuerySelection else None
+        }
+
+    def __dict__(self):
+        return self.to_dict()
 
 # AI
 class ConversationRole(str, Enum):
@@ -175,6 +295,16 @@ class Conversation:
     Role: ConversationRole
     Text: str
     Timestamp: int
+
+    def to_dict(self):
+        return {
+            "Role": self.Role,
+            "Text": self.Text,
+            "Timestamp": self.Timestamp
+        }
+
+    def __dict__(self):
+        return self.to_dict()
 
 ChatStreamFunc = Callable[[ChatStreamDataType, str], None]
 
