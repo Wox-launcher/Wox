@@ -16,10 +16,16 @@ from wox_plugin import (
     Selection,
     QueryEnv,
     Result,
+    RefreshableResult,
+    WoxImage,
+    WoxPreview,
+    ResultTail,
+    ResultAction,
     new_context_with_value,
-    PluginInitParams
+    PluginInitParams,
+    PublicAPI
 )
-from plugin_manager import plugin_instances
+from plugin_manager import plugin_instances, PluginInstance
 from plugin_api import PluginAPI
 import traceback
 import asyncio
@@ -49,10 +55,10 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: web
 
 async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
     """Load a plugin"""
-    plugin_directory = request["Params"]["PluginDirectory"]
-    entry = request["Params"]["Entry"]
-    plugin_id = request["PluginId"]
-    plugin_name = request["PluginName"]
+    plugin_directory = request.get("Params", {}).get("PluginDirectory")
+    entry = request.get("Params", {}).get("Entry")
+    plugin_id = request.get("PluginId")
+    plugin_name = request.get("PluginName")
 
     await logger.info(ctx["Values"]["traceId"], f"<{plugin_name}> load plugin, directory: {plugin_directory}, entry: {entry}")
     
@@ -79,14 +85,13 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
         if not hasattr(module, "plugin"):
             raise AttributeError("Plugin module does not have a 'plugin' attribute")
         
-        plugin_instances[plugin_id] = {
-            "module": module,
-            "plugin": module.plugin,
-            "directory": plugin_directory,
-            "entry": entry,
-            "name": plugin_name,
-            "api": None
-        }
+        plugin_instances[plugin_id] = PluginInstance(
+            plugin=module.plugin,
+            api=None,  # Will be set in init_plugin
+            module_path=full_entry_path,
+            actions={},
+            refreshes={}
+        )
         
         await logger.info(ctx["Values"]["traceId"], f"<{plugin_name}> load plugin successfully")
     except Exception as e:
@@ -96,55 +101,50 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
 
 async def init_plugin(ctx: Context, request: Dict[str, Any], ws: websockets.WebSocketServerProtocol) -> None:
     """Initialize a plugin"""
-    plugin_id = request["PluginId"]
-    plugin = plugin_instances.get(plugin_id)
-    if not plugin:
-        raise Exception(f"plugin not found: {request['PluginName']}, forget to load plugin?")
+    plugin_id = request.get("PluginId")
+    plugin_name = request.get("PluginName")
+    plugin_instance = plugin_instances.get(plugin_id)
+    if not plugin_instance:
+        raise Exception(f"plugin not found: {plugin_name}, forget to load plugin?")
     
     try:
         # Create plugin API instance
-        api = PluginAPI(ws, plugin_id, plugin["name"])
-        plugin["api"] = api
-        plugin["actions"] = {}  # Add actions cache
-        plugin["refreshes"] = {}  # Add refreshes cache
+        api = PluginAPI(ws, plugin_id, plugin_name)
+        plugin_instance.api = api
         
-        # Call plugin's init method if it exists
-        if hasattr(plugin["plugin"], "init"):
-            init_params = PluginInitParams(API=api, PluginDirectory=plugin["directory"])
-            await plugin["plugin"].init(ctx, init_params)
+        # Call plugin's init method
+        init_params = PluginInitParams(API=api, PluginDirectory=request.get("Params", {}).get("PluginDirectory"))
+        await plugin_instance.plugin.init(ctx, init_params)
         
-        await logger.info(ctx["Values"]["traceId"], f"<{plugin['name']}> init plugin successfully")
+        await logger.info(ctx["Values"]["traceId"], f"<{plugin_name}> init plugin successfully")
     except Exception as e:
         error_stack = traceback.format_exc()
-        await logger.error(ctx["Values"]["traceId"], f"<{plugin['name']}> init plugin failed: {str(e)}\nStack trace:\n{error_stack}")
+        await logger.error(ctx["Values"]["traceId"], f"<{plugin_name}> init plugin failed: {str(e)}\nStack trace:\n{error_stack}")
         raise e
 
 async def query(ctx: Context, request: Dict[str, Any]) -> list:
     """Handle query request"""
-    plugin_id = request["PluginId"]
-    plugin = plugin_instances.get(plugin_id)
-    if not plugin:
-        raise Exception(f"plugin not found: {request['PluginName']}, forget to load plugin?")
+    plugin_id = request.get("PluginId")
+    plugin_name = request.get("PluginName")
+    plugin_instance = plugin_instances.get(plugin_id)
+    if not plugin_instance:
+        raise Exception(f"plugin not found: {plugin_name}, forget to load plugin?")
     
     try:
-        if not hasattr(plugin["plugin"], "query"):
-            return []
-        
         # Clear action and refresh caches before query
-        plugin["actions"].clear()
-        plugin["refreshes"].clear()
+        plugin_instance.actions.clear()
+        plugin_instance.refreshes.clear()
         
-        query_params = Query(
-            Type=QueryType(request["Params"]["Type"]),
-            RawQuery=request["Params"]["RawQuery"],
-            TriggerKeyword=request["Params"]["TriggerKeyword"],
-            Command=request["Params"]["Command"],
-            Search=request["Params"]["Search"],
-            Selection=Selection(**json.loads(request["Params"]["Selection"])),
-            Env=QueryEnv(**json.loads(request["Params"]["Env"]))
-        )
-        
-        results = await plugin["plugin"].query(ctx, query_params)
+        params = request.get("Params", {})
+        results = await plugin_instance.plugin.query(ctx, Query(
+            Type=QueryType(params.get("Type")),
+            RawQuery=params.get("RawQuery"),
+            TriggerKeyword=params.get("TriggerKeyword"),
+            Command=params.get("Command"),
+            Search=params.get("Search"),
+            Selection=Selection(**json.loads(params.get("Selection"))),
+            Env=QueryEnv(**json.loads(params.get("Env")))
+        ))
 
         # Ensure each result has an ID and cache actions and refreshes
         if results:
@@ -156,30 +156,32 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list:
                         if not action.Id:
                             action.Id = str(uuid.uuid4())
                         # Cache action
-                        plugin["actions"][action.Id] = action.Action
+                        plugin_instance.actions[action.Id] = action.Action
                 # Cache refresh callback if exists
-                if hasattr(result, "RefreshInterval") and result.RefreshInterval is not None and result.RefreshInterval > 0 and hasattr(result, "OnRefresh"):
-                    plugin["refreshes"][result.Id] = result.OnRefresh
+                if result.RefreshInterval and result.RefreshInterval > 0 and result.OnRefresh:
+                    plugin_instance.refreshes[result.Id] = result.OnRefresh
         
         return [result.to_dict() for result in results]
     except Exception as e:
         error_stack = traceback.format_exc()
-        await logger.error(ctx["Values"]["traceId"], f"<{plugin['name']}> query failed: {str(e)}\nStack trace:\n{error_stack}")
+        await logger.error(ctx["Values"]["traceId"], f"<{plugin_name}> query failed: {str(e)}\nStack trace:\n{error_stack}")
         raise e
 
 async def action(ctx: Context, request: Dict[str, Any]) -> Any:
     """Handle action request"""
-    plugin_id = request["PluginId"]
-    plugin = plugin_instances.get(plugin_id)
-    if not plugin:
-        raise Exception(f"plugin not found: {request['PluginName']}, forget to load plugin?")
+    plugin_id = request.get("PluginId")
+    plugin_name = request.get("PluginName")
+    plugin_instance = plugin_instances.get(plugin_id)
+    if not plugin_instance:
+        raise Exception(f"plugin not found: {plugin_name}, forget to load plugin?")
     
     try:
-        action_id = request["Params"]["ActionId"]
-        context_data = request["Params"].get("ContextData")
+        params = request.get("Params", {})
+        action_id = params.get("ActionId")
+        context_data = params.get("ContextData")
         
         # Get action from cache
-        action_func = plugin["actions"].get(action_id)
+        action_func = plugin_instance.actions.get(action_id)
         if action_func:
             # Don't await the action, let it run independently
             asyncio.create_task(action_func({"ContextData": context_data}))
@@ -187,22 +189,39 @@ async def action(ctx: Context, request: Dict[str, Any]) -> Any:
         return None
     except Exception as e:
         error_stack = traceback.format_exc()
-        await logger.error(ctx["Values"]["traceId"], f"<{plugin['name']}> action failed: {str(e)}\nStack trace:\n{error_stack}")
+        await logger.error(ctx["Values"]["traceId"], f"<{plugin_name}> action failed: {str(e)}\nStack trace:\n{error_stack}")
         raise e
 
 async def refresh(ctx: Context, request: Dict[str, Any]) -> Any:
     """Handle refresh request"""
-    plugin_id = request["PluginId"]
-    plugin = plugin_instances.get(plugin_id)
-    if not plugin:
-        raise Exception(f"plugin not found: {request['PluginName']}, forget to load plugin?")
+    plugin_id = request.get("PluginId")
+    plugin_name = request.get("PluginName")
+    plugin_instance = plugin_instances.get(plugin_id)
+    if not plugin_instance:
+        raise Exception(f"plugin not found: {plugin_name}, forget to load plugin?")
     
     try:
-        result_id = request["Params"]["ResultId"]
-        refreshable_result = json.loads(request["Params"]["RefreshableResult"])
+        params = request.get("Params", {})
+        result_id = params.get("ResultId")
+        refreshable_result_dict = json.loads(params.get("RefreshableResult"))
         
-        # Get refresh callback from cache
-        refresh_func = plugin["refreshes"].get(result_id)
+        # Convert dict to RefreshableResult object
+        refreshable_result = RefreshableResult(
+            Title=refreshable_result_dict.get("Title"),
+            SubTitle=refreshable_result_dict.get("SubTitle", ""),
+            Icon=WoxImage.from_dict(refreshable_result_dict.get("Icon", {})),
+            Preview=WoxPreview.from_dict(refreshable_result_dict.get("Preview", {})),
+            Tails=[ResultTail.from_dict(tail) for tail in refreshable_result_dict.get("Tails", [])],
+            ContextData=refreshable_result_dict.get("ContextData", ""),
+            RefreshInterval=refreshable_result_dict.get("RefreshInterval", 0),
+            Actions=[ResultAction.from_dict(action) for action in refreshable_result_dict.get("Actions", [])]
+        )
+
+        # replace action with cached action
+        for action in refreshable_result.Actions:
+            action.Action = plugin_instance.actions.get(action.Id)
+        
+        refresh_func = plugin_instance.refreshes.get(result_id)
         if refresh_func:
             refreshed_result = await refresh_func(refreshable_result)
             
@@ -211,41 +230,38 @@ async def refresh(ctx: Context, request: Dict[str, Any]) -> Any:
                 for action in refreshed_result.Actions:
                     if not action.Id:
                         action.Id = str(uuid.uuid4())
-                    plugin["actions"][action.Id] = action.Action
-            
-            # Cache refresh callback if exists
-            if hasattr(refreshed_result, "RefreshInterval") and refreshed_result.RefreshInterval is not None and refreshed_result.RefreshInterval > 0 and hasattr(refreshed_result, "OnRefresh"):
-                plugin["refreshes"][result_id] = refreshed_result.OnRefresh
+                    plugin_instance.actions[action.Id] = action.Action
             
             return refreshed_result.to_dict()
         
         return None
     except Exception as e:
         error_stack = traceback.format_exc()
-        await logger.error(ctx["Values"]["traceId"], f"<{plugin['name']}> refresh failed: {str(e)}\nStack trace:\n{error_stack}")
+        await logger.error(ctx["Values"]["traceId"], f"<{plugin_name}> refresh failed: {str(e)}\nStack trace:\n{error_stack}")
         raise e
 
 async def unload_plugin(ctx: Context, request: Dict[str, Any]) -> None:
     """Unload a plugin"""
-    plugin_id = request["PluginId"]
-    plugin = plugin_instances.get(plugin_id)
-    if not plugin:
-        raise Exception(f"plugin not found: {request['PluginName']}, forget to load plugin?")
+    plugin_id = request.get("PluginId")
+    plugin_name = request.get("PluginName")
+    plugin_instance = plugin_instances.get(plugin_id)
+    if not plugin_instance:
+        raise Exception(f"plugin not found: {plugin_name}, forget to load plugin?")
     
     try:
-        # Call plugin's unload method if it exists
-        if hasattr(plugin["plugin"], "unload"):
-            await plugin["plugin"].unload()
+        # Call plugin's unload method
+        await plugin_instance.plugin.unload()
         
         # Remove plugin from instances
         del plugin_instances[plugin_id]
         
         # Remove plugin directory from Python path
-        if plugin["directory"] in sys.path:
-            sys.path.remove(plugin["directory"])
+        plugin_dir = path.dirname(plugin_instance.module_path)
+        if plugin_dir in sys.path:
+            sys.path.remove(plugin_dir)
         
-        await logger.info(ctx["Values"]["traceId"], f"<{plugin['name']}> unload plugin successfully")
+        await logger.info(ctx["Values"]["traceId"], f"<{plugin_name}> unload plugin successfully")
     except Exception as e:
         error_stack = traceback.format_exc()
-        await logger.error(ctx["Values"]["traceId"], f"<{plugin['name']}> unload plugin failed: {str(e)}\nStack trace:\n{error_stack}")
+        await logger.error(ctx["Values"]["traceId"], f"<{plugin_name}> unload plugin failed: {str(e)}\nStack trace:\n{error_stack}")
         raise e 

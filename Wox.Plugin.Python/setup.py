@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="wox-plugin",
-    version="0.0.24",
+    version="0.0.28",
     description="All Python plugins for Wox should use types in this package",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",

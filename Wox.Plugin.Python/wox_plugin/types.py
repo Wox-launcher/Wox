@@ -44,6 +44,14 @@ class Selection:
     def __dict__(self):
         return self.to_dict()
 
+    @staticmethod
+    def from_dict(data: dict) -> "Selection":
+        return Selection(
+            Type=data["Type"],
+            Text=data.get("Text"),
+            FilePaths=data.get("FilePaths")
+        )
+
 # Query Environment
 @dataclass
 class QueryEnv:
@@ -72,6 +80,14 @@ class QueryEnv:
 
     def __dict__(self):
         return self.to_dict()
+
+    @staticmethod
+    def from_dict(data: dict) -> "QueryEnv":
+        return QueryEnv(
+            ActiveWindowTitle=data["ActiveWindowTitle"],
+            ActiveWindowPid=data["ActiveWindowPid"],
+            ActiveBrowserUrl=data["ActiveBrowserUrl"]
+        )
 
 # Query
 class QueryType(str, Enum):
@@ -102,6 +118,18 @@ class Query:
     def __dict__(self):
         return self.to_dict()
 
+    @staticmethod
+    def from_dict(data: dict) -> "Query":
+        return Query(
+            Type=data["Type"],
+            RawQuery=data["RawQuery"],
+            TriggerKeyword=data.get("TriggerKeyword"),
+            Command=data.get("Command"),
+            Search=data["Search"],
+            Selection=Selection.from_dict(data["Selection"]),
+            Env=QueryEnv.from_dict(data["Env"])
+        )
+
     def is_global_query(self) -> bool:
         return self.Type == QueryType.INPUT and not self.TriggerKeyword
 
@@ -129,6 +157,13 @@ class WoxImage:
     def __dict__(self):
         return self.to_dict()
 
+    @staticmethod
+    def from_dict(data: dict) -> "WoxImage":
+        return WoxImage(
+            ImageType=data["ImageType"],
+            ImageData=data["ImageData"]
+        )
+
 def new_base64_wox_image(image_data: str) -> WoxImage:
     return WoxImage(ImageType=WoxImageType.BASE64, ImageData=image_data)
 
@@ -155,6 +190,14 @@ class WoxPreview:
     def __dict__(self):
         return self.to_dict()
 
+    @staticmethod
+    def from_dict(data: dict) -> "WoxPreview":
+        return WoxPreview(
+            PreviewType=data["PreviewType"],
+            PreviewData=data["PreviewData"],
+            PreviewProperties=data["PreviewProperties"]
+        )
+
 class ResultTailType(str, Enum):
     TEXT = "text"
     IMAGE = "image"
@@ -174,6 +217,14 @@ class ResultTail:
 
     def __dict__(self):
         return self.to_dict()
+
+    @staticmethod
+    def from_dict(data: dict) -> "ResultTail":
+        return ResultTail(
+            Type=data["Type"],
+            Text=data.get("Text"),
+            Image=WoxImage.from_dict(data["Image"]) if data.get("Image") else None
+        )
 
 @dataclass
 class ActionContext:
@@ -202,6 +253,23 @@ class ResultAction:
     def __dict__(self):
         return self.to_dict()
 
+    @staticmethod
+    def from_dict(data: dict) -> "ResultAction":
+        # Action is a callable and cannot be serialized/deserialized
+        # We create a dummy async function as a placeholder
+        async def dummy_action(ctx: ActionContext) -> None:
+            pass
+
+        return ResultAction(
+            Name=data["Name"],
+            Action=dummy_action,  # Use dummy action as placeholder
+            Id=data.get("Id"),
+            Icon=WoxImage.from_dict(data["Icon"]) if data.get("Icon") else None,
+            IsDefault=data.get("IsDefault"),
+            PreventHideAfterAction=data.get("PreventHideAfterAction"),
+            Hotkey=data.get("Hotkey")
+        )
+
 @dataclass
 class Result:
     Title: str
@@ -216,7 +284,7 @@ class Result:
     ContextData: Optional[str] = None
     Actions: Optional[List[ResultAction]] = None
     RefreshInterval: Optional[int] = None
-    OnRefresh: Optional[Callable[["RefreshableResult"], "RefreshableResult"]] = None
+    OnRefresh: Optional[Callable[["RefreshableResult"], Awaitable["RefreshableResult"]]] = None
 
     def to_dict(self):
         return {
@@ -236,6 +304,29 @@ class Result:
  
     def __dict__(self):
         return self.to_dict()
+
+    @staticmethod
+    def from_dict(data: dict) -> "Result":
+        # OnRefresh is a callable and cannot be serialized/deserialized
+        # We create a dummy async function as a placeholder
+        async def dummy_refresh(result: "RefreshableResult") -> "RefreshableResult":
+            return result
+
+        return Result(
+            Title=data["Title"],
+            Icon=WoxImage.from_dict(data["Icon"]),
+            Id=data.get("Id"),
+            SubTitle=data.get("SubTitle"),
+            Preview=WoxPreview.from_dict(data["Preview"]) if data.get("Preview") else None,
+            Score=data.get("Score"),
+            Group=data.get("Group"),
+            GroupScore=data.get("GroupScore"),
+            Tails=[ResultTail.from_dict(t) for t in data["Tails"]] if data.get("Tails") else None,
+            ContextData=data.get("ContextData"),
+            Actions=[ResultAction.from_dict(a) for a in data["Actions"]] if data.get("Actions") else None,
+            RefreshInterval=data.get("RefreshInterval"),
+            OnRefresh=dummy_refresh if data.get("RefreshInterval") else None  # Only set dummy refresh if RefreshInterval is set
+        )
 
 @dataclass
 class RefreshableResult:
@@ -263,6 +354,25 @@ class RefreshableResult:
     def __dict__(self):
         return self.to_dict()
 
+    @staticmethod
+    def from_dict(data: dict) -> "RefreshableResult":
+        return RefreshableResult(
+            Title=data["Title"],
+            SubTitle=data["SubTitle"],
+            Icon=WoxImage.from_dict(data["Icon"]),
+            Preview=WoxPreview.from_dict(data["Preview"]),
+            Tails=[ResultTail.from_dict(t) for t in data["Tails"]],
+            ContextData=data["ContextData"],
+            RefreshInterval=data["RefreshInterval"],
+            Actions=[ResultAction.from_dict(a) for a in data["Actions"]]
+        )
+
+    def __await__(self):
+        # Make RefreshableResult awaitable by returning itself
+        async def _awaitable():
+            return self
+        return _awaitable().__await__()
+
 # Plugin API
 @dataclass
 class ChangeQueryParam:
@@ -279,6 +389,14 @@ class ChangeQueryParam:
 
     def __dict__(self):
         return self.to_dict()
+
+    @staticmethod
+    def from_dict(data: dict) -> "ChangeQueryParam":
+        return ChangeQueryParam(
+            QueryType=data["QueryType"],
+            QueryText=data.get("QueryText"),
+            QuerySelection=Selection.from_dict(data["QuerySelection"]) if data.get("QuerySelection") else None
+        )
 
 # AI
 class ConversationRole(str, Enum):
@@ -305,6 +423,14 @@ class Conversation:
 
     def __dict__(self):
         return self.to_dict()
+
+    @staticmethod
+    def from_dict(data: dict) -> "Conversation":
+        return Conversation(
+            Role=data["Role"],
+            Text=data["Text"],
+            Timestamp=data["Timestamp"]
+        )
 
 ChatStreamFunc = Callable[[ChatStreamDataType, str], None]
 

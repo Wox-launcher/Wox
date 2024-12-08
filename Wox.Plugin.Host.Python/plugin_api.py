@@ -49,7 +49,7 @@ class PluginAPI(PublicAPI):
         await self.ws.send(json.dumps(request))
         
         # Create a Future to wait for the response
-        future = asyncio.Future()
+        future: asyncio.Future[Any] = asyncio.Future()
         waiting_for_response[request_id] = future
         
         try:
