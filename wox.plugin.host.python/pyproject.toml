@@ -1,0 +1,20 @@
+[project]
+name = "wox-plugin-host"
+version = "0.0.1"
+description = "Python host for Wox plugins"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Wox Team", email = "qianlifeng@gmail.com" }]
+dependencies = ["loguru", "websockets", "wox-plugin==0.0.30"]
+
+[project.optional-dependencies]
+dev = ["black"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]

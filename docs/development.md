@@ -1,10 +1,19 @@
 # Development
 
-- Install [just](https://github.com/casey/just)
+Recommended IDE:
+- [Visual Studio Code](https://code.visualstudio.com/) - Recommended IDE as the workspace is pre-configured with all necessary settings and extensions.
+
+Required dependencies:
 - Install [Golang SDK](https://go.dev/dl/)
-- Install [Nodejs](https://nodejs.org) and [pnpm](https://pnpm.io/)
-- Install [Python](https://python.org/downloads) and [pip](https://pip.pypa.io/en/stable/installation/)
 - Install [Flutter](https://docs.flutter.dev/get-started/install)
-- For MacOS, you also need to install `cocoapods` via `brew install cocoapods`
-- Run `just dev` to build dependencies 
-- Run `go run main.go` in `Wox` directory and start Wox built in the previous step
+- Install [Nodejs](https://nodejs.org) and [pnpm](https://pnpm.io/)
+- Install [uv](https://github.com/astral-sh/uv)
+
+Platform specific dependencies:
+- For MacOS:
+  - Install [create-dmg](https://github.com/create-dmg/create-dmg)
+- For Windows/Linux:
+  - Install [upx](https://upx.github.io/)
+
+Getting Started:
+- Run `make dev` to setup development environment

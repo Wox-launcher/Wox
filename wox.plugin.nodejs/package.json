@@ -1,0 +1,32 @@
+{
+  "name": "@wox-launcher/wox-plugin",
+  "version": "0.0.83",
+  "description": "All nodejs plugin for Wox should use types in this package",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Wox-launcher/Wox.git"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./types/index.d.ts",
+  "files": [
+    "dist",
+    "types"
+  ],
+  "scripts": {
+    "build": "pnpm clean && tsc",
+    "clean": "node -e \"var { rmdirSync, existsSync } = require('fs'), path = require('path'); ['./dist'].forEach(fPath => {if (existsSync(path.join(__dirname, fPath))) rmdirSync(path.join(__dirname, fPath), { recursive: true })}); process.exit(0);\"",
+    "clean:all": "npm run clean && (rm -r ./node_modules || true)",
+    "lint": "eslint --ext .ts --fix src/**/*.ts",
+    "pub": "pnpm build && pnpm version patch && pnpm publish --no-git-checks --access public"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.13.1",
+    "@typescript-eslint/parser": "^7.13.1",
+    "eslint": "^9.5.0",
+    "eslint-config-prettier": "9.1.0",
+    "prettier": "3.3.2",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {}
+}

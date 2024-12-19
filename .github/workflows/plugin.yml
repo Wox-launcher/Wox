@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Check plugin updates
-        run: just ci_plugin
+        run: make plugins
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:

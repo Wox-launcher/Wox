@@ -1,0 +1,52 @@
+{
+	"folders": [
+		{
+			"name": "wox",
+			"path": "."
+		},
+		{
+			"name": "wox.core",
+			"path": "wox.core"
+		},
+		{
+			"name": "wox.plugin.python",
+			"path": "wox.plugin.python"
+		},
+		{
+			"name": "wox.plugin.host.python",
+			"path": "wox.plugin.host.python"
+		},
+		{
+			"name": "wox.plugin.nodejs",
+			"path": "wox.plugin.nodejs"
+		},
+		{
+			"name": "wox.plugin.host.nodejs",
+			"path": "wox.plugin.host.nodejs"
+		},
+		{
+			"name": "wox.ui.flutter",
+			"path": "wox.ui.flutter/wox"
+		}
+	],
+	"settings": {
+		"python.languageServer": "Pylance"
+	},
+	"extensions": {
+		"recommendations": [
+			// for go
+			"golang.go",
+			// for python
+			"ms-python.python",
+			"ms-python.vscode-pylance",
+			"ms-python.black-formatter",
+			// for flutter
+			"dart-code.flutter",
+			// for js
+			"dbaeumer.vscode-eslint",
+			"esbenp.prettier-vscode",
+			// others
+			"ms-vscode.makefile-tools"
+		]
+	}
+}

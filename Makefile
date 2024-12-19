@@ -1,0 +1,104 @@
+.PHONY: publish clean _bundle_mac_app plugins help dev test check_deps
+
+# Determine the current platform
+ifeq ($(OS),Windows_NT)
+    PLATFORM := windows
+    ARCH := amd64
+else
+    UNAME_S := $(shell uname -s)
+    ifeq ($(UNAME_S),Linux)
+        PLATFORM := linux
+        ARCH := amd64
+    endif
+    ifeq ($(UNAME_S),Darwin)
+        PLATFORM := macos
+        UNAME_M := $(shell uname -m)
+        ifeq ($(UNAME_M),arm64)
+            ARCH := arm64
+        else
+            ARCH := amd64
+        endif
+    endif
+endif
+
+RELEASE_DIR := release
+
+help:
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Targets:"
+	@echo "  help       Show this help message"
+	@echo "  dev        Setup development environment"
+	@echo "  test       Run tests"
+	@echo "  publish    Build and publish all components"
+	@echo "  plugins    Update plugin store"
+	@echo "  clean      Clean release directory"
+
+_check_deps:
+	@echo "Checking required dependencies..."
+	@command -v go >/dev/null 2>&1 || { echo "❌ go is required but not installed. Visit https://golang.org/doc/install" >&2; exit 1; }
+	@command -v flutter >/dev/null 2>&1 || { echo "❌ flutter is required but not installed. Visit https://flutter.dev/docs/get-started/install" >&2; exit 1; }
+	@command -v node >/dev/null 2>&1 || { echo "❌ nodejs is required but not installed. Visit https://nodejs.org/" >&2; exit 1; }
+	@command -v pnpm >/dev/null 2>&1 || { echo "❌ pnpm is required but not installed. Run: npm install -g pnpm" >&2; exit 1; }
+	@command -v uv >/dev/null 2>&1 || { echo "❌ uv is required but not installed. Visit https://github.com/astral-sh/uv" >&2; exit 1; }
+ifeq ($(PLATFORM),macos)
+	@command -v create-dmg >/dev/null 2>&1 || { echo "❌ create-dmg is required but not installed. Visit https://github.com/create-dmg/create-dmg" >&2; exit 1; }
+else
+	@command -v upx >/dev/null 2>&1 || { echo "❌ upx is required but not installed. Visit https://upx.github.io/" >&2; exit 1; }
+endif
+
+clean:
+	rm -rf $(RELEASE_DIR)
+
+plugins:
+	cd ci && go run plugin.go
+
+dev: _check_deps
+	# Install lefthook
+	go install github.com/evilmartians/lefthook@latest
+	lefthook install -f
+
+	# Build hosts and flutter
+	$(MAKE) -C wox.plugin.host.nodejs build
+	$(MAKE) -C wox.plugin.host.python build
+	$(MAKE) -C wox.ui.flutter/wox build
+
+test: dev
+	cd wox.core && go test ./...
+
+publish: clean dev
+	$(MAKE) -C wox.core build
+	
+ifeq ($(PLATFORM),windows)
+	upx $(RELEASE_DIR)/wox-windows-amd64.exe
+else ifeq ($(PLATFORM),linux)
+	upx $(RELEASE_DIR)/wox-linux-amd64
+else ifeq ($(PLATFORM),macos)
+	# to make sure the working directory is the release directory
+	cd $(RELEASE_DIR) && $(MAKE) -f ../Makefile _bundle_mac_app APP_NAME=wox-mac-$(ARCH)
+endif
+
+_bundle_mac_app:
+	chmod +x $(APP_NAME)
+	rm -rf $(APP_NAME).app Wox.app
+	mkdir -p $(APP_NAME).app/Contents/MacOS
+	mkdir -p $(APP_NAME).app/Contents/Resources
+	cp $(APP_NAME) $(APP_NAME).app/Contents/MacOS/wox
+	cp ../assets/mac/Info.plist $(APP_NAME).app/Contents/Info.plist
+	cp ../assets/mac/app.icns $(APP_NAME).app/Contents/Resources/app.icns
+	mv $(APP_NAME).app Wox.app
+	security unlock-keychain -p $(KEYCHAINPWD) login.keychain
+	codesign --options=runtime --force --deep --sign "Developer ID Application: jiajuan mao (AGYCFD2ZGN)" Wox.app/Contents/MacOS/wox
+	create-dmg \
+		--codesign "Developer ID Application: jiajuan mao (AGYCFD2ZGN)" \
+		--notarize "wox" \
+		--volname "Wox Installer" \
+		--volicon "../assets/mac/app.icns" \
+		--window-pos 200 120 \
+		--window-size 800 400 \
+		--icon-size 100 \
+		--icon "Wox.app" 200 190 \
+		--hide-extension "Wox.app" \
+		--app-drop-link 600 185 \
+		Wox.dmg Wox.app
+	mv "Wox.dmg" $(APP_NAME).dmg

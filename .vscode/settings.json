@@ -1,3 +1,32 @@
 {
     "dart.lineLength": 200,
+    "python.languageServer": "Pylance",
+    "python.analysis.typeCheckingMode": "strict",
+    "python.analysis.diagnosticMode": "workspace",
+    "python.analysis.inlayHints.functionReturnTypes": true,
+    "python.analysis.inlayHints.variableTypes": true,
+    "python.analysis.autoFormatStrings": true,
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportUnknownMemberType": "error",
+        "reportUnknownVariableType": "error",
+        "reportUnknownArgumentType": "error",
+        "reportUnknownParameterType": "error",
+        "reportMissingTypeStubs": "error",
+        "reportUnknownLambdaType": "error",
+        "reportOptionalCall": "error",
+        "reportOptionalMemberAccess": "error",
+        "reportOptionalSubscript": "error",
+        "reportOptionalIterable": "error",
+        "reportOptionalContextManager": "error",
+        "reportOptionalOperand": "error"
+    },
+    "files.exclude": {
+        "wox.plugin.host.nodejs": true,
+        "wox.plugin.host.python": true,
+        "wox.plugin.nodejs": true,
+        "wox.plugin.python": true,
+        "wox.ui.flutter": true,
+        "wox.core": true
+    }
 }
