@@ -4,15 +4,22 @@
 ifeq ($(OS),Windows_NT)
     PLATFORM := windows
     ARCH := amd64
+    GOARCH := amd64
 else
     UNAME_S := $(shell uname -s)
     ifeq ($(UNAME_S),Linux)
         PLATFORM := linux
         ARCH := amd64
+        GOARCH := amd64
     endif
     ifeq ($(UNAME_S),Darwin)
         PLATFORM := macos
         ARCH := $(shell uname -m)
+        ifeq ($(ARCH),x86_64)
+            GOARCH := amd64
+        else
+            GOARCH := $(ARCH)
+        endif
     endif
 endif
 
@@ -28,11 +35,11 @@ clean:
 
 build: clean
 ifeq ($(PLATFORM),windows)
-	CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-windows-amd64.exe
+	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -ldflags "-H windowsgui -s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-windows-$(ARCH).exe
 endif
 ifeq ($(PLATFORM),linux)
-	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-linux-amd64
+	CGO_ENABLED=1 GOOS=linux GOARCH=$(GOARCH) go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-linux-$(ARCH)
 endif
 ifeq ($(PLATFORM),macos)
-	CGO_ENABLED=1 GOOS=darwin GOARCH=$(ARCH) CGO_CFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="-mmacosx-version-min=10.15" go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-mac-$(ARCH)
+	CGO_ENABLED=1 GOOS=darwin GOARCH=$(GOARCH) CGO_CFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="-mmacosx-version-min=10.15" go build -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-mac-$(ARCH)
 endif 
