@@ -27,7 +27,7 @@ jobs:
             content_type: application/x-elf
             needs_keychain: true
           - os: macOS
-            arch: X64
+            arch: AMD64
             runner: [ self-hosted, macOS, X64 ]
             asset_path: ./release/wox-mac-amd64.dmg
             asset_name: wox-mac-amd64-$$.dmg
