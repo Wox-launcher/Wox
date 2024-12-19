@@ -36,15 +36,22 @@ help:
 
 _check_deps:
 	@echo "Checking required dependencies..."
-	@command -v go >/dev/null 2>&1 || { echo "❌ go is required but not installed. Visit https://golang.org/doc/install" >&2; exit 1; }
-	@command -v flutter >/dev/null 2>&1 || { echo "❌ flutter is required but not installed. Visit https://flutter.dev/docs/get-started/install" >&2; exit 1; }
-	@command -v node >/dev/null 2>&1 || { echo "❌ nodejs is required but not installed. Visit https://nodejs.org/" >&2; exit 1; }
-	@command -v pnpm >/dev/null 2>&1 || { echo "❌ pnpm is required but not installed. Run: npm install -g pnpm" >&2; exit 1; }
-	@command -v uv >/dev/null 2>&1 || { echo "❌ uv is required but not installed. Visit https://github.com/astral-sh/uv" >&2; exit 1; }
+	@command -v go >/dev/null 2>&1 || { echo "go is required but not installed. Visit https://golang.org/doc/install" >&2; exit 1; }
+	@command -v flutter >/dev/null 2>&1 || { echo "flutter is required but not installed. Visit https://flutter.dev/docs/get-started/install" >&2; exit 1; }
+	@command -v node >/dev/null 2>&1 || { echo "nodejs is required but not installed. Visit https://nodejs.org/" >&2; exit 1; }
+	@command -v pnpm >/dev/null 2>&1 || { echo "pnpm is required but not installed. Run: npm install -g pnpm" >&2; exit 1; }
+	@command -v uv >/dev/null 2>&1 || { echo "uv is required but not installed. Visit https://github.com/astral-sh/uv" >&2; exit 1; }
 ifeq ($(PLATFORM),macos)
-	@command -v create-dmg >/dev/null 2>&1 || { echo "❌ create-dmg is required but not installed. Visit https://github.com/create-dmg/create-dmg" >&2; exit 1; }
+	@command -v create-dmg >/dev/null 2>&1 || { echo "create-dmg is required but not installed. Visit https://github.com/create-dmg/create-dmg" >&2; exit 1; }
 else
-	@command -v upx >/dev/null 2>&1 || { echo "❌ upx is required but not installed. Visit https://upx.github.io/" >&2; exit 1; }
+	@command -v upx >/dev/null 2>&1 || { echo "upx is required but not installed. Visit https://upx.github.io/" >&2; exit 1; }
+endif
+
+ifeq ($(PLATFORM),windows)
+	@if not "$(shell echo $(shell uname -s) | grep -q '^MINGW64_NT' && echo yes || echo no)" == "yes" ; then \
+		echo "Please run this command in MINGW64 environment. If you have not installed MINGW64, please install it first. refer to https://www.mingw-w64.org/downloads/ or scoop install mingw" >&2; \
+		exit 1; \
+	fi
 endif
 
 clean:
