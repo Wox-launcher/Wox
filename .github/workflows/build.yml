@@ -11,75 +11,55 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Test
-        run: just test
-  build-macos-amd64:
+        run: make test
+
+  build:
     needs: test
-    runs-on: [ self-hosted, macOS, X64 ]
+    strategy:
+      matrix:
+        include:
+          - os: macOS
+            arch: ARM64
+            runner: [ self-hosted, macOS, ARM64 ]
+            asset_path: ./release/wox-mac-arm64.dmg
+            asset_name: wox-mac-arm64-$$.dmg
+            content_type: application/x-elf
+            needs_keychain: true
+          - os: macOS
+            arch: X64
+            runner: [ self-hosted, macOS, X64 ]
+            asset_path: ./release/wox-mac-amd64.dmg
+            asset_name: wox-mac-amd64-$$.dmg
+            content_type: application/x-elf
+            needs_keychain: true
+          - os: Windows
+            arch: AMD64
+            runner: [ self-hosted, Windows ]
+            asset_path: ./release/wox-windows-amd64.exe
+            asset_name: wox-windows-amd64-$$.exe
+            content_type: application/x-msdownload
+          - os: Linux
+            arch: AMD64
+            runner: [ self-hosted, Linux ]
+            asset_path: ./release/wox-linux-amd64
+            asset_name: wox-linux-amd64-$$
+            content_type: application/x-msdownload
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v3
-      - name: Build
-        run: just release darwin-amd64
-        env:
-          KEYCHAINPWD: ${{ secrets.KEYCHAINPWD }}
-      - name: Deploy nightly release amd64
-        uses: WebFreak001/deploy-nightly@v3.0.0
-        with:
-          upload_url: https://uploads.github.com/repos/Wox-launcher/Wox/releases/127182165/assets{?name,label}
-          release_id: 127182165
-          asset_path: ./Release/wox-mac-amd64.dmg # path to archive to upload
-          asset_name: wox-mac-amd64-$$.dmg # name to upload the release as, use $$ to insert date (YYYYMMDD) and 6 letter commit hash
-          asset_content_type: application/x-elf # required by GitHub API
-          max_releases: 1
-  build-macos-arm64:
-    needs: test
-    runs-on: [ self-hosted, macOS, ARM64 ]
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build
-        run: just release darwin-arm64
-        env:
-          KEYCHAINPWD: ${{ secrets.KEYCHAINPWD }}
-      - name: Deploy nightly release arm64
-        uses: WebFreak001/deploy-nightly@v3.0.0
-        with:
-          upload_url: https://uploads.github.com/repos/Wox-launcher/Wox/releases/127182165/assets{?name,label}
-          release_id: 127182165
-          asset_path: ./Release/wox-mac-arm64.dmg # path to archive to upload
-          asset_name: wox-mac-arm64-$$.dmg # name to upload the release as, use $$ to insert date (YYYYMMDD) and 6 letter commit hash
-          asset_content_type: application/x-elf # required by GitHub API
-          max_releases: 1
-  build-windows:
-    needs: test
-    runs-on: [ self-hosted, Windows ]
-    steps:
       - uses: pnpm/action-setup@v2
         with:
           version: 8
-      - uses: actions/checkout@v3
       - name: Build
-        run: just release windows
+        run: make publish
+        env:
+          KEYCHAINPWD: ${{ matrix.needs_keychain && secrets.KEYCHAINPWD || '' }}
       - name: Deploy nightly release
         uses: WebFreak001/deploy-nightly@v3.0.0
         with:
           upload_url: https://uploads.github.com/repos/Wox-launcher/Wox/releases/127182165/assets{?name,label}
           release_id: 127182165
-          asset_path: ./Release/wox-windows-amd64.exe # path to archive to upload
-          asset_name: wox-windows-amd64-$$.exe # name to upload the release as, use $$ to insert date (YYYYMMDD) and 6 letter commit hash
-          asset_content_type: application/x-msdownload # required by GitHub API
-          max_releases: 1
-  build-linux:
-    needs: test
-    runs-on: [ self-hosted, Linux ]
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build
-        run: just release linux
-      - name: Deploy nightly release
-        uses: WebFreak001/deploy-nightly@v3.0.0
-        with:
-          upload_url: https://uploads.github.com/repos/Wox-launcher/Wox/releases/127182165/assets{?name,label}
-          release_id: 127182165
-          asset_path: ./Release/wox-linux-amd64 # path to archive to upload
-          asset_name: wox-linux-amd64-$$ # name to upload the release as, use $$ to insert date (YYYYMMDD) and 6 letter commit hash
-          asset_content_type: application/x-msdownload # required by GitHub API
+          asset_path: ${{ matrix.asset_path }}
+          asset_name: ${{ matrix.asset_name }}
+          asset_content_type: ${{ matrix.content_type }}
           max_releases: 1
