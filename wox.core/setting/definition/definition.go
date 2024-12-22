@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/tidwall/gjson"
 	"wox/util"
+
+	"github.com/tidwall/gjson"
 )
 
 type PluginSettingDefinitionType string

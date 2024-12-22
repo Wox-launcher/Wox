@@ -28,7 +28,7 @@ func (w *WebsocketHost) getHostName(ctx context.Context) string {
 	return fmt.Sprintf("%s Host Impl", w.host.GetRuntime(ctx))
 }
 
-func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, entry string, executableArgs ...string) error {
+func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, entry string, envs []string, executableArgs ...string) error {
 	port, portErr := util.GetAvailableTcpPort(ctx)
 	if portErr != nil {
 		return fmt.Errorf("failed to get available port: %w", portErr)
@@ -44,7 +44,7 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 	args = append(args, executableArgs...)
 	args = append(args, entry, fmt.Sprintf("%d", port), util.GetLocation().GetLogHostsDirectory(), fmt.Sprintf("%d", os.Getpid()))
 
-	cmd, err := util.ShellRun(executablePath, args...)
+	cmd, err := util.ShellRunWithEnv(executablePath, envs, args...)
 	if err != nil {
 		return fmt.Errorf("failed to start host: %w", err)
 	}
@@ -98,7 +98,7 @@ func (w *WebsocketHost) UnloadPlugin(ctx context.Context, metadata plugin.Metada
 }
 
 func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metadata, method string, params map[string]string) (result any, err error) {
-	if !w.ws.IsConnected() {
+	if w.ws == nil || !w.ws.IsConnected() {
 		return "", fmt.Errorf("host is not connected")
 	}
 
@@ -342,34 +342,45 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 		}
 
 		metadata := pluginInstance.Metadata
-		pluginInstance.API.OnGetDynamicSetting(ctx, func(key string) definition.PluginSettingDefinitionItem {
+		pluginInstance.API.OnGetDynamicSetting(ctx, func(key string) string {
 			result, err := w.invokeMethod(ctx, metadata, "onGetDynamicSetting", map[string]string{
 				"CallbackId": callbackId,
 				"Key":        key,
 			})
 			if err != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to get dynamic setting: %s", request.PluginName, err))
-				return definition.PluginSettingDefinitionItem{
+				settingJson, marshalErr := json.Marshal(definition.PluginSettingDefinitionItem{
 					Type: definition.PluginSettingDefinitionTypeLabel,
 					Value: &definition.PluginSettingValueLabel{
 						Content: fmt.Sprintf("failed to get dynamic setting: %s", err),
 					},
+				})
+				if marshalErr != nil {
+					util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal dynamic setting: %s", request.PluginName, marshalErr))
+					return ""
 				}
+				return string(settingJson)
 			}
 
+			// validate the result is a valid definition.PluginSettingDefinitionItem json string
 			var setting definition.PluginSettingDefinitionItem
 			unmarshalErr := json.Unmarshal([]byte(result.(string)), &setting)
 			if unmarshalErr != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal dynamic setting: %s", request.PluginName, unmarshalErr))
-				return definition.PluginSettingDefinitionItem{
+				settingJson, marshalErr := json.Marshal(definition.PluginSettingDefinitionItem{
 					Type: definition.PluginSettingDefinitionTypeLabel,
 					Value: &definition.PluginSettingValueLabel{
 						Content: fmt.Sprintf("failed to unmarshal dynamic setting: %s", unmarshalErr),
 					},
+				})
+				if marshalErr != nil {
+					util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal dynamic setting: %s", request.PluginName, marshalErr))
+					return ""
 				}
+				return string(settingJson)
 			}
 
-			return setting
+			return result.(string)
 		})
 		w.sendResponseToHost(ctx, request, "")
 	case "OnDeepLink":

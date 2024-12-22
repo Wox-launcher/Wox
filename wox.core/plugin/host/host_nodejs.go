@@ -3,12 +3,13 @@ package host
 import (
 	"context"
 	"fmt"
-	"github.com/Masterminds/semver/v3"
-	"github.com/mitchellh/go-homedir"
 	"path"
 	"strings"
 	"wox/plugin"
 	"wox/util"
+
+	"github.com/Masterminds/semver/v3"
+	"github.com/mitchellh/go-homedir"
 )
 
 func init() {
@@ -29,7 +30,7 @@ func (n *NodejsHost) GetRuntime(ctx context.Context) plugin.Runtime {
 }
 
 func (n *NodejsHost) Start(ctx context.Context) error {
-	return n.websocketHost.StartHost(ctx, n.findNodejsPath(ctx), path.Join(util.GetLocation().GetHostDirectory(), "node-host.js"))
+	return n.websocketHost.StartHost(ctx, n.findNodejsPath(ctx), path.Join(util.GetLocation().GetHostDirectory(), "node-host.js"), nil)
 }
 
 func (n *NodejsHost) findNodejsPath(ctx context.Context) string {

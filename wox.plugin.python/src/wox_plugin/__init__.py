@@ -6,47 +6,43 @@ This package provides the SDK for developing Wox plugins in Python.
 
 from typing import List
 
-from .plugin import Plugin, BasePlugin, PluginInitParams
-from .api import PublicAPI
+from .plugin import Plugin, PluginInitParams
+from .api import PublicAPI, ChatStreamCallback
 from .models.context import Context
-from .models.query import Query, QueryEnv, Selection
+from .models.query import (
+    Query,
+    QueryEnv,
+    Selection,
+    ChangeQueryParam,
+    QueryType,
+    SelectionType,
+    MetadataCommand,
+)
 from .models.result import (
     Result,
-    WoxImage,
-    WoxPreview,
     ResultTail,
     ResultAction,
     ActionContext,
     RefreshableResult,
-)
-from .models.settings import (
-    PluginSettingDefinitionItem,
-    PluginSettingDefinitionValue,
-    PluginSettingValueStyle,
-    MetadataCommand,
-)
-from .types import (
-    Platform,
-    SelectionType,
-    QueryType,
-    WoxImageType,
-    WoxPreviewType,
     ResultTailType,
+)
+
+from .models.ai import (
+    AIModel,
+    Conversation,
     ConversationRole,
     ChatStreamDataType,
-    PluginSettingDefinitionType,
 )
-from .utils.helpers import new_base64_wox_image
-from .exceptions import WoxPluginError, InvalidQueryError, PluginInitError, APIError
+from .models.image import WoxImage, WoxImageType
+from .models.preview import WoxPreview, WoxPreviewType, WoxPreviewScrollPosition
 
-__version__: str = "0.1.0"
 __all__: List[str] = [
     # Plugin
     "Plugin",
-    "BasePlugin",
     "PluginInitParams",
     # API
     "PublicAPI",
+    "ChatStreamCallback",
     # Models
     "Context",
     "Query",
@@ -59,25 +55,33 @@ __all__: List[str] = [
     "ResultAction",
     "ActionContext",
     "RefreshableResult",
-    "PluginSettingDefinitionItem",
-    "PluginSettingDefinitionValue",
-    "PluginSettingValueStyle",
     "MetadataCommand",
-    # Types
-    "Platform",
-    "SelectionType",
-    "QueryType",
-    "WoxImageType",
-    "WoxPreviewType",
-    "ResultTailType",
+    "PluginSettingDefinitionItem",
+    "PluginSettingValueStyle",
+    # AI
+    "AIModel",
+    "Conversation",
     "ConversationRole",
     "ChatStreamDataType",
-    "PluginSettingDefinitionType",
-    # Utils
-    "new_base64_wox_image",
+    "user_message",
+    "ai_message",
+    # Query
+    "ChangeQueryParam",
+    "QueryType",
+    "Selection",
+    "SelectionType",
     # Exceptions
     "WoxPluginError",
     "InvalidQueryError",
     "PluginInitError",
     "APIError",
+    # Image
+    "WoxImage",
+    "WoxImageType",
+    # Preview
+    "WoxPreview",
+    "WoxPreviewType",
+    "WoxPreviewScrollPosition",
+    # Result
+    "ResultTailType",
 ]

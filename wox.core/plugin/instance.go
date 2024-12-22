@@ -3,7 +3,6 @@ package plugin
 import (
 	"context"
 	"wox/setting"
-	"wox/setting/definition"
 )
 
 type Instance struct {
@@ -17,7 +16,7 @@ type Instance struct {
 	Host               Host                   // plugin host to run this plugin
 	Setting            *setting.PluginSetting // setting for this plugin
 
-	DynamicSettingCallbacks []func(key string) definition.PluginSettingDefinitionItem // dynamic setting callbacks
+	DynamicSettingCallbacks []func(key string) string // dynamic setting callbacks
 	SettingChangeCallbacks  []func(key string, value string)
 	DeepLinkCallbacks       []func(arguments map[string]string)
 	UnloadCallbacks         []func()

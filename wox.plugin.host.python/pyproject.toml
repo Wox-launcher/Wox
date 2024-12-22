@@ -4,17 +4,19 @@ version = "0.0.1"
 description = "Python host for Wox plugins"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "MIT"
+license = "GPL-3.0"
 authors = [{ name = "Wox Team", email = "qianlifeng@gmail.com" }]
-dependencies = ["loguru", "websockets", "wox-plugin==0.0.30"]
+dependencies = ["loguru", "websockets", "wox-plugin==0.0.45"]
+
+[project.scripts]
+run = "wox_plugin_host.__main__:run"
 
 [project.optional-dependencies]
-dev = ["black"]
+dev = ["shiv", "ruff", "mypy"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.black]
-line-length = 100
-target-version = ["py310"]
+[tool.ruff]
+line-length = 140

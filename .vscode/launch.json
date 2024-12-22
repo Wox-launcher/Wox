@@ -9,14 +9,14 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/Wox",
+            "program": "${workspaceFolder}/wox.core",
             "env": {
                 "CGO_ENABLED": "1"
             }
         },
         {
             "name": "Run Flutter",
-            "cwd": "Wox.UI.Flutter/wox",
+            "cwd": "${workspaceFolder}/wox.ui.flutter/wox",
             "request": "launch",
             "type": "dart",
             // "flutterMode": "release"

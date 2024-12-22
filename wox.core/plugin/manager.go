@@ -589,7 +589,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 
 	// store preview for ui invoke later
 	// because preview may contain some heavy data (E.g. image or large text), we will store preview in cache and only send preview to ui when user select the result
-	if result.Preview.PreviewType != "" && result.Preview.PreviewType != WoxPreviewTypeRemote {
+	if result.Preview.PreviewType != "" && result.Preview.PreviewData != "" && result.Preview.PreviewType != WoxPreviewTypeRemote {
 		resultCache.Preview = result.Preview
 		result.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,

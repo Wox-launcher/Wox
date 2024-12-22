@@ -30,7 +30,8 @@
 		}
 	],
 	"settings": {
-		"python.languageServer": "Pylance"
+		"python.languageServer": "Default",
+		"makefile.configureOnOpen": false
 	},
 	"extensions": {
 		"recommendations": [
@@ -38,8 +39,8 @@
 			"golang.go",
 			// for python
 			"ms-python.python",
-			"ms-python.vscode-pylance",
-			"ms-python.black-formatter",
+			"charliermarsh.ruff",
+			"ms-python.mypy-type-checker",
 			// for flutter
 			"dart-code.flutter",
 			// for js

@@ -7,22 +7,22 @@ help:
 	@echo "  make clean      - Remove build artifacts and cache files"
 	@echo "  make build      - Build Python host"
 	@echo "  make install    - Install development dependencies"
+	@echo "  make lint       - Run linting"
+	@echo "  make format     - Run formatting"
 
 clean:
-	rm -rf python-host.pyz .venv/ __pycache__/ *.pyc python-host/
-	find . -type d -name "__pycache__" -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
+	rm -rf python-host.pyz python-host/
 
 install:
 	uv cache clean
 	uv sync --all-extras
 
-build: install clean
-	uv pip freeze > requirements.txt
-	uv pip install -r requirements.txt --target python-host
-	rm requirements.txt
-	cp -r src/wox_plugin_host/*.py python-host/
-	uv run python -m zipapp -p "interpreter" python-host
-	rm -rf python-host
-	mkdir -p $(HOSTS_DIR)
-	mv python-host.pyz $(HOSTS_DIR)/python-host.pyz
+lint:
+	uv run ruff check src
+	uv run mypy src
+
+format:
+	uv run ruff format src
+
+build: clean install lint format
+	uv run shiv --compressed -c run -o $(HOSTS_DIR)/python-host.pyz .

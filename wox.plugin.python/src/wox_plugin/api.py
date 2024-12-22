@@ -1,17 +1,16 @@
-from typing import Protocol, List, Callable
+from typing import Protocol, Callable, Dict, List
 
-from .types import MapString, ChatStreamFunc
+from .models.query import MetadataCommand
 from .models.context import Context
 from .models.query import ChangeQueryParam
-from .models.settings import MetadataCommand, PluginSettingDefinitionItem
-from .models.result import Conversation
+from .models.ai import AIModel, Conversation, ChatStreamCallback
 
 
 class PublicAPI(Protocol):
     """Public API interface for Wox plugins"""
 
     async def change_query(self, ctx: Context, query: ChangeQueryParam) -> None:
-        """Change the current query"""
+        """Change the current query in Wox"""
         ...
 
     async def hide_app(self, ctx: Context) -> None:
@@ -23,11 +22,11 @@ class PublicAPI(Protocol):
         ...
 
     async def notify(self, ctx: Context, message: str) -> None:
-        """Show a notification"""
+        """Show a notification message"""
         ...
 
     async def log(self, ctx: Context, level: str, msg: str) -> None:
-        """Log a message"""
+        """Write log message"""
         ...
 
     async def get_translation(self, ctx: Context, key: str) -> str:
@@ -38,27 +37,19 @@ class PublicAPI(Protocol):
         """Get setting value"""
         ...
 
-    async def save_setting(
-        self, ctx: Context, key: str, value: str, is_platform_specific: bool
-    ) -> None:
+    async def save_setting(self, ctx: Context, key: str, value: str, is_platform_specific: bool) -> None:
         """Save setting value"""
         ...
 
-    async def on_setting_changed(
-        self, ctx: Context, callback: Callable[[str, str], None]
-    ) -> None:
+    async def on_setting_changed(self, ctx: Context, callback: Callable[[str, str], None]) -> None:
         """Register setting change callback"""
         ...
 
-    async def on_get_dynamic_setting(
-        self, ctx: Context, callback: Callable[[str], PluginSettingDefinitionItem]
-    ) -> None:
+    async def on_get_dynamic_setting(self, ctx: Context, callback: Callable[[str], str]) -> None:
         """Register dynamic setting callback"""
         ...
 
-    async def on_deep_link(
-        self, ctx: Context, callback: Callable[[MapString], None]
-    ) -> None:
+    async def on_deep_link(self, ctx: Context, callback: Callable[[Dict[str, str]], None]) -> None:
         """Register deep link callback"""
         ...
 
@@ -66,14 +57,27 @@ class PublicAPI(Protocol):
         """Register unload callback"""
         ...
 
-    async def register_query_commands(
-        self, ctx: Context, commands: List[MetadataCommand]
-    ) -> None:
+    async def register_query_commands(self, ctx: Context, commands: List[MetadataCommand]) -> None:
         """Register query commands"""
         ...
 
-    async def llm_stream(
-        self, ctx: Context, conversations: List[Conversation], callback: ChatStreamFunc
+    async def ai_chat_stream(
+        self,
+        ctx: Context,
+        model: AIModel,
+        conversations: List[Conversation],
+        callback: ChatStreamCallback,
     ) -> None:
-        """Stream LLM responses"""
+        """
+        Start an AI chat stream.
+
+        Args:
+            ctx: Context
+            model: AI model to use
+            conversations: Conversation history
+            callback: Stream callback function to receive AI responses
+                     The callback takes two parameters:
+                     - stream_type: ChatStreamDataType, indicates the stream status
+                     - data: str, the stream content
+        """
         ...

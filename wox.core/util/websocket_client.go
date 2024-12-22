@@ -3,9 +3,10 @@ package util
 import (
 	"context"
 	"fmt"
-	"github.com/gorilla/websocket"
 	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 type WebsocketClient struct {

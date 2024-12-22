@@ -30,7 +30,7 @@ func (n *PythonHost) GetRuntime(ctx context.Context) plugin.Runtime {
 }
 
 func (n *PythonHost) Start(ctx context.Context) error {
-	return n.websocketHost.StartHost(ctx, n.findPythonPath(ctx), path.Join(util.GetLocation().GetHostDirectory(), "python-host.pyz"))
+	return n.websocketHost.StartHost(ctx, n.findPythonPath(ctx), path.Join(util.GetLocation().GetHostDirectory(), "python-host.pyz"), []string{"SHIV_ROOT=" + util.GetLocation().GetCacheDirectory()})
 }
 
 func (n *PythonHost) findPythonPath(ctx context.Context) string {

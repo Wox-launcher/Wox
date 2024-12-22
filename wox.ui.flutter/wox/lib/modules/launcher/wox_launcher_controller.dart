@@ -201,7 +201,7 @@ class WoxLauncherController extends GetxController {
       // on windows, it is somehow necessary to invoke show twice to make the window show
       // otherwise, the window will not show up if it is the first time to invoke showApp
       await windowManager.show();
-    } 
+    }
     await windowManager.focus();
     queryBoxFocusNode.requestFocus();
 
@@ -491,7 +491,9 @@ class WoxLauncherController extends GetxController {
       if (activeResultIndex.value < prevResultIndex) {
         resultScrollerController.jumpTo(0);
       } else {
-        bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code ? isResultItemAtBottom(activeResultIndex.value - 1) : !isResultItemAtBottom(results.length - 1);
+        bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code
+            ? isResultItemAtBottom(activeResultIndex.value - 1)
+            : !isResultItemAtBottom(results.length - 1);
         if (shouldJump) {
           resultScrollerController.jumpTo(resultScrollerController.offset.ceil() + WoxThemeUtil.instance.getResultItemHeight() * (activeResultIndex.value - prevResultIndex).abs());
         }
@@ -592,7 +594,8 @@ class WoxLauncherController extends GetxController {
     RenderBox? renderBox = resultGlobalKeys[index].currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return false;
 
-    if (renderBox.localToGlobal(Offset.zero).dy.ceil() >= WoxThemeUtil.instance.getQueryBoxHeight() + WoxThemeUtil.instance.getResultListViewHeightByCount(MAX_LIST_VIEW_ITEM_COUNT - 1)) {
+    if (renderBox.localToGlobal(Offset.zero).dy.ceil() >=
+        WoxThemeUtil.instance.getQueryBoxHeight() + WoxThemeUtil.instance.getResultListViewHeightByCount(MAX_LIST_VIEW_ITEM_COUNT - 1)) {
       return true;
     }
     return false;
@@ -774,7 +777,8 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
-    Logger.instance.info(traceId, "update active actions, reason: $reason, current active result: ${activeQueryResult.title.value}, active action: ${activeQueryResult.actions.first.name.value}");
+    Logger.instance.info(
+        traceId, "update active actions, reason: $reason, current active result: ${activeQueryResult.title.value}, active action: ${activeQueryResult.actions.first.name.value}");
 
     String? previousActionName;
     if (remainIndex && actions.isNotEmpty && activeActionIndex.value >= 0 && activeActionIndex.value < actions.length) {
@@ -870,6 +874,7 @@ class WoxLauncherController extends GetxController {
             final resultIndex = results.indexWhere((element) => element.id == result.id);
             if (isResultActiveByIndex(resultIndex)) {
               currentPreview.value = result.preview;
+              isShowPreviewPanel.value = currentPreview.value.previewData != "";
               resetActiveAction(traceId, "refresh active result", remainIndex: true);
             }
 

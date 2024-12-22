@@ -3,42 +3,35 @@ import json
 import uuid
 from typing import Any, Dict, Callable
 import websockets
-import logger
-from wox_plugin.types import (
+from . import logger
+from wox_plugin import (
     Context,
     PublicAPI,
     ChangeQueryParam,
     MetadataCommand,
-    PluginSettingDefinitionItem,
-    MapString,
     Conversation,
-    ChatStreamFunc,
+    AIModel,
+    ChatStreamCallback,
 )
-from constants import PLUGIN_JSONRPC_TYPE_REQUEST
-from plugin_manager import waiting_for_response
+from .constants import PLUGIN_JSONRPC_TYPE_REQUEST
+from .plugin_manager import waiting_for_response
 
 
 class PluginAPI(PublicAPI):
-    def __init__(
-        self, ws: websockets.WebSocketServerProtocol, plugin_id: str, plugin_name: str
-    ):
+    def __init__(self, ws: websockets.asyncio.server.ServerConnection, plugin_id: str, plugin_name: str):
         self.ws = ws
         self.plugin_id = plugin_id
         self.plugin_name = plugin_name
         self.setting_change_callbacks: Dict[str, Callable[[str, str], None]] = {}
-        self.get_dynamic_setting_callbacks: Dict[
-            str, Callable[[str], PluginSettingDefinitionItem]
-        ] = {}
-        self.deep_link_callbacks: Dict[str, Callable[[MapString], None]] = {}
+        self.get_dynamic_setting_callbacks: Dict[str, Callable[[str], str]] = {}
+        self.deep_link_callbacks: Dict[str, Callable[[Dict[str, str]], None]] = {}
         self.unload_callbacks: Dict[str, Callable[[], None]] = {}
-        self.llm_stream_callbacks: Dict[str, ChatStreamFunc] = {}
+        self.llm_stream_callbacks: Dict[str, ChatStreamCallback] = {}
 
-    async def invoke_method(
-        self, ctx: Context, method: str, params: Dict[str, Any]
-    ) -> Any:
+    async def invoke_method(self, ctx: Context, method: str, params: Dict[str, Any]) -> Any:
         """Invoke a method on Wox"""
         request_id = str(uuid.uuid4())
-        trace_id = ctx["Values"]["traceId"]
+        trace_id = ctx.get_trace_id()
 
         if method != "Log":
             await logger.info(
@@ -71,11 +64,9 @@ class PluginAPI(PublicAPI):
     async def change_query(self, ctx: Context, query: ChangeQueryParam) -> None:
         """Change the query in Wox"""
         params = {
-            "QueryType": query.QueryType,
-            "QueryText": query.QueryText,
-            "QuerySelection": (
-                query.QuerySelection.__dict__ if query.QuerySelection else None
-            ),
+            "QueryType": query.query_type,
+            "QueryText": query.query_text,
+            "QuerySelection": (query.query_selection.__dict__ if query.query_selection else None),
         }
         await self.invoke_method(ctx, "ChangeQuery", params)
 
@@ -105,9 +96,7 @@ class PluginAPI(PublicAPI):
         result = await self.invoke_method(ctx, "GetSetting", {"key": key})
         return str(result) if result is not None else ""
 
-    async def save_setting(
-        self, ctx: Context, key: str, value: str, is_platform_specific: bool
-    ) -> None:
+    async def save_setting(self, ctx: Context, key: str, value: str, is_platform_specific: bool) -> None:
         """Save a setting value"""
         await self.invoke_method(
             ctx,
@@ -115,27 +104,19 @@ class PluginAPI(PublicAPI):
             {"key": key, "value": value, "isPlatformSpecific": is_platform_specific},
         )
 
-    async def on_setting_changed(
-        self, ctx: Context, callback: Callable[[str, str], None]
-    ) -> None:
+    async def on_setting_changed(self, ctx: Context, callback: Callable[[str, str], None]) -> None:
         """Register setting changed callback"""
         callback_id = str(uuid.uuid4())
         self.setting_change_callbacks[callback_id] = callback
         await self.invoke_method(ctx, "OnSettingChanged", {"callbackId": callback_id})
 
-    async def on_get_dynamic_setting(
-        self, ctx: Context, callback: Callable[[str], PluginSettingDefinitionItem]
-    ) -> None:
+    async def on_get_dynamic_setting(self, ctx: Context, callback: Callable[[str], str]) -> None:
         """Register dynamic setting callback"""
         callback_id = str(uuid.uuid4())
         self.get_dynamic_setting_callbacks[callback_id] = callback
-        await self.invoke_method(
-            ctx, "OnGetDynamicSetting", {"callbackId": callback_id}
-        )
+        await self.invoke_method(ctx, "OnGetDynamicSetting", {"callbackId": callback_id})
 
-    async def on_deep_link(
-        self, ctx: Context, callback: Callable[[MapString], None]
-    ) -> None:
+    async def on_deep_link(self, ctx: Context, callback: Callable[[Dict[str, str]], None]) -> None:
         """Register deep link callback"""
         callback_id = str(uuid.uuid4())
         self.deep_link_callbacks[callback_id] = callback
@@ -147,9 +128,7 @@ class PluginAPI(PublicAPI):
         self.unload_callbacks[callback_id] = callback
         await self.invoke_method(ctx, "OnUnload", {"callbackId": callback_id})
 
-    async def register_query_commands(
-        self, ctx: Context, commands: list[MetadataCommand]
-    ) -> None:
+    async def register_query_commands(self, ctx: Context, commands: list[MetadataCommand]) -> None:
         """Register query commands"""
         await self.invoke_method(
             ctx,
@@ -157,8 +136,12 @@ class PluginAPI(PublicAPI):
             {"commands": json.dumps([command.__dict__ for command in commands])},
         )
 
-    async def llm_stream(
-        self, ctx: Context, conversations: list[Conversation], callback: ChatStreamFunc
+    async def ai_chat_stream(
+        self,
+        ctx: Context,
+        model: AIModel,
+        conversations: list[Conversation],
+        callback: ChatStreamCallback,
     ) -> None:
         """Chat using LLM"""
         callback_id = str(uuid.uuid4())

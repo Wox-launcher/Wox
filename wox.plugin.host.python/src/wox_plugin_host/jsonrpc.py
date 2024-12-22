@@ -5,37 +5,27 @@ import sys
 from typing import Any, Dict
 import uuid
 import websockets
-import logger
-from wox_plugin.types import (
+from . import logger
+from wox_plugin import (
     Context,
     Query,
-    QueryType,
-    Selection,
-    QueryEnv,
     RefreshableResult,
-    WoxImage,
-    WoxPreview,
-    ResultTail,
-    ResultAction,
     PluginInitParams,
     ActionContext,
+    Result,
 )
-from plugin_manager import plugin_instances, PluginInstance
-from plugin_api import PluginAPI
+from .plugin_manager import plugin_instances, PluginInstance
+from .plugin_api import PluginAPI
 import traceback
 import asyncio
 
 
-async def handle_request_from_wox(
-    ctx: Context, request: Dict[str, Any], ws: websockets.WebSocketServerProtocol
-) -> Any:
+async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: websockets.asyncio.server.ServerConnection) -> Any:
     """Handle incoming request from Wox"""
     method = request.get("Method")
     plugin_name = request.get("PluginName")
 
-    await logger.info(
-        ctx["Values"]["traceId"], f"invoke <{plugin_name}> method: {method}"
-    )
+    await logger.info(ctx.get_trace_id(), f"invoke <{plugin_name}> method: {method}")
 
     if method == "loadPlugin":
         return await load_plugin(ctx, request)
@@ -50,19 +40,20 @@ async def handle_request_from_wox(
     elif method == "unloadPlugin":
         return await unload_plugin(ctx, request)
     else:
-        await logger.info(ctx["Values"]["traceId"], f"unknown method handler: {method}")
+        await logger.info(ctx.get_trace_id(), f"unknown method handler: {method}")
         raise Exception(f"unknown method handler: {method}")
 
 
 async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
     """Load a plugin"""
-    plugin_directory: str = request.get("Params", {}).get("PluginDirectory", "")
-    entry: str = request.get("Params", {}).get("Entry", "")
+    params: Dict[str, str] = request.get("Params", {})
+    plugin_directory: str = params.get("PluginDirectory", "")
+    entry: str = params.get("Entry", "")
     plugin_id: str = request.get("PluginId", "")
     plugin_name: str = request.get("PluginName", "")
 
     await logger.info(
-        ctx["Values"]["traceId"],
+        ctx.get_trace_id(),
         f"<{plugin_name}> load plugin, directory: {plugin_directory}, entry: {entry}",
     )
 
@@ -94,27 +85,23 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
 
         plugin_instances[plugin_id] = PluginInstance(
             plugin=module.plugin,
-            api=None,  # type: ignore , Will be set in init_plugin
+            api=None,
             module_path=full_entry_path,
             actions={},
             refreshes={},
         )
 
-        await logger.info(
-            ctx["Values"]["traceId"], f"<{plugin_name}> load plugin successfully"
-        )
+        await logger.info(ctx.get_trace_id(), f"<{plugin_name}> load plugin successfully")
     except Exception as e:
         error_stack = traceback.format_exc()
         await logger.error(
-            ctx["Values"]["traceId"],
+            ctx.get_trace_id(),
             f"<{plugin_name}> load plugin failed: {str(e)}\nStack trace:\n{error_stack}",
         )
         raise e
 
 
-async def init_plugin(
-    ctx: Context, request: Dict[str, Any], ws: websockets.WebSocketServerProtocol
-) -> None:
+async def init_plugin(ctx: Context, request: Dict[str, Any], ws: websockets.asyncio.server.ServerConnection) -> None:
     """Initialize a plugin"""
     plugin_id = request.get("PluginId", "")
     plugin_name = request.get("PluginName", "")
@@ -126,26 +113,24 @@ async def init_plugin(
         # Create plugin API instance
         api = PluginAPI(ws, plugin_id, plugin_name)
         plugin_instance.api = api
+        params: Dict[str, str] = request.get("Params", {})
+        plugin_directory: str = params.get("PluginDirectory", "")
 
         # Call plugin's init method
-        init_params = PluginInitParams(
-            API=api, PluginDirectory=request.get("Params", {}).get("PluginDirectory")
-        )
+        init_params = PluginInitParams(api=api, plugin_directory=plugin_directory)
         await plugin_instance.plugin.init(ctx, init_params)
 
-        await logger.info(
-            ctx["Values"]["traceId"], f"<{plugin_name}> init plugin successfully"
-        )
+        await logger.info(ctx.get_trace_id(), f"<{plugin_name}> init plugin successfully")
     except Exception as e:
         error_stack = traceback.format_exc()
         await logger.error(
-            ctx["Values"]["traceId"],
+            ctx.get_trace_id(),
             f"<{plugin_name}> init plugin failed: {str(e)}\nStack trace:\n{error_stack}",
         )
         raise e
 
 
-async def query(ctx: Context, request: Dict[str, Any]) -> list[Any]:
+async def query(ctx: Context, request: Dict[str, Any]) -> list[Result]:
     """Handle query request"""
     plugin_id = request.get("PluginId", "")
     plugin_name = request.get("PluginName", "")
@@ -158,50 +143,36 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list[Any]:
         plugin_instance.actions.clear()
         plugin_instance.refreshes.clear()
 
-        params = request.get("Params", {})
-        results = await plugin_instance.plugin.query(
-            ctx,
-            Query(
-                Type=QueryType(params.get("Type")),
-                RawQuery=params.get("RawQuery"),
-                TriggerKeyword=params.get("TriggerKeyword"),
-                Command=params.get("Command"),
-                Search=params.get("Search"),
-                Selection=Selection(**json.loads(params.get("Selection"))),
-                Env=QueryEnv(**json.loads(params.get("Env"))),
-            ),
-        )
+        params: Dict[str, str] = request.get("Params", {})
+        results = await plugin_instance.plugin.query(ctx, Query.from_json(json.dumps(params)))
 
         # Ensure each result has an ID and cache actions and refreshes
         if results:
             for result in results:
-                if not result.Id:
-                    result.Id = str(uuid.uuid4())
-                if result.Actions:
-                    for action in result.Actions:
-                        if not action.Id:
-                            action.Id = str(uuid.uuid4())
-                        # Cache action
-                        plugin_instance.actions[action.Id] = action.Action
+                if not result.id:
+                    result.id = str(uuid.uuid4())
+                if result.actions:
+                    for action in result.actions:
+                        if action.action:
+                            if not action.id:
+                                action.id = str(uuid.uuid4())
+                            # Cache action
+                            plugin_instance.actions[action.id] = action.action
                 # Cache refresh callback if exists
-                if (
-                    result.RefreshInterval
-                    and result.RefreshInterval > 0
-                    and result.OnRefresh
-                ):
-                    plugin_instance.refreshes[result.Id] = result.OnRefresh
+                if result.refresh_interval and result.refresh_interval > 0 and result.on_refresh:
+                    plugin_instance.refreshes[result.id] = result.on_refresh
 
-        return [result.to_dict() for result in results]
+        return results
     except Exception as e:
         error_stack = traceback.format_exc()
         await logger.error(
-            ctx["Values"]["traceId"],
+            ctx.get_trace_id(),
             f"<{plugin_name}> query failed: {str(e)}\nStack trace:\n{error_stack}",
         )
         raise e
 
 
-async def action(ctx: Context, request: Dict[str, Any]) -> Any:
+async def action(ctx: Context, request: Dict[str, Any]) -> None:
     """Handle action request"""
     plugin_id = request.get("PluginId", "")
     plugin_name = request.get("PluginName", "")
@@ -210,29 +181,28 @@ async def action(ctx: Context, request: Dict[str, Any]) -> Any:
         raise Exception(f"plugin not found: {plugin_name}, forget to load plugin?")
 
     try:
-        params = request.get("Params", {})
-        action_id = params.get("ActionId")
-        context_data = params.get("ContextData")
+        params: Dict[str, str] = request.get("Params", {})
+        action_id = params.get("ActionId", "")
+        context_data = params.get("ContextData", "")
 
         # Get action from cache
         action_func = plugin_instance.actions.get(action_id)
         if action_func:
             # Handle both coroutine and regular functions
-            result = action_func(ActionContext(ContextData=context_data))
+            result = action_func(ActionContext(context_data=context_data))
             if asyncio.iscoroutine(result):
                 asyncio.create_task(result)
 
-        return None
     except Exception as e:
         error_stack = traceback.format_exc()
         await logger.error(
-            ctx["Values"]["traceId"],
+            ctx.get_trace_id(),
             f"<{plugin_name}> action failed: {str(e)}\nStack trace:\n{error_stack}",
         )
         raise e
 
 
-async def refresh(ctx: Context, request: Dict[str, Any]) -> Any:
+async def refresh(ctx: Context, request: Dict[str, Any]) -> RefreshableResult:
     """Handle refresh request"""
     plugin_id = request.get("PluginId", "")
     plugin_name = request.get("PluginName", "")
@@ -241,50 +211,37 @@ async def refresh(ctx: Context, request: Dict[str, Any]) -> Any:
         raise Exception(f"plugin not found: {plugin_name}, forget to load plugin?")
 
     try:
-        params = request.get("Params", {})
-        result_id = params.get("ResultId")
-        refreshable_result_dict = json.loads(params.get("RefreshableResult"))
+        params: Dict[str, str] = request.get("Params", {})
+        result_id = params.get("ResultId", "")
+        refreshable_result_dict = json.loads(params.get("RefreshableResult", ""))
 
         # Convert dict to RefreshableResult object
-        refreshable_result = RefreshableResult(
-            Title=refreshable_result_dict.get("Title"),
-            SubTitle=refreshable_result_dict.get("SubTitle", ""),
-            Icon=WoxImage.from_dict(refreshable_result_dict.get("Icon", {})),
-            Preview=WoxPreview.from_dict(refreshable_result_dict.get("Preview", {})),
-            Tails=[
-                ResultTail.from_dict(tail)
-                for tail in refreshable_result_dict.get("Tails", [])
-            ],
-            ContextData=refreshable_result_dict.get("ContextData", ""),
-            RefreshInterval=refreshable_result_dict.get("RefreshInterval", 0),
-            Actions=[
-                ResultAction.from_dict(action)
-                for action in refreshable_result_dict.get("Actions", [])
-            ],
-        )
+        refreshable_result = RefreshableResult.from_json(json.dumps(refreshable_result_dict))
 
         # replace action with cached action
-        for action in refreshable_result.Actions:
-            action.Action = plugin_instance.actions.get(action.Id)
+        for action in refreshable_result.actions:
+            action.action = plugin_instance.actions.get(action.id)
 
         refresh_func = plugin_instance.refreshes.get(result_id)
         if refresh_func:
             refreshed_result = await refresh_func(refreshable_result)
 
             # Cache any new actions from the refreshed result
-            if refreshed_result.Actions:
-                for action in refreshed_result.Actions:
-                    if not action.Id:
-                        action.Id = str(uuid.uuid4())
-                    plugin_instance.actions[action.Id] = action.Action
+            if refreshed_result.actions:
+                for action in refreshed_result.actions:
+                    if not action.id:
+                        action.id = str(uuid.uuid4())
 
-            return refreshed_result.to_dict()
+                    if action.action:
+                        plugin_instance.actions[action.id] = action.action
 
-        return None
+            return refreshed_result
+
+        raise Exception(f"refresh function not found for result id: {result_id}")
     except Exception as e:
         error_stack = traceback.format_exc()
         await logger.error(
-            ctx["Values"]["traceId"],
+            ctx.get_trace_id(),
             f"<{plugin_name}> refresh failed: {str(e)}\nStack trace:\n{error_stack}",
         )
         raise e
@@ -292,8 +249,8 @@ async def refresh(ctx: Context, request: Dict[str, Any]) -> Any:
 
 async def unload_plugin(ctx: Context, request: Dict[str, Any]) -> None:
     """Unload a plugin"""
-    plugin_id = request.get("PluginId")
-    plugin_name = request.get("PluginName")
+    plugin_id = request.get("PluginId", "")
+    plugin_name = request.get("PluginName", "")
     plugin_instance = plugin_instances.get(plugin_id)
     if not plugin_instance:
         raise Exception(f"plugin not found: {plugin_name}, forget to load plugin?")
@@ -307,13 +264,11 @@ async def unload_plugin(ctx: Context, request: Dict[str, Any]) -> None:
         if plugin_dir in sys.path:
             sys.path.remove(plugin_dir)
 
-        await logger.info(
-            ctx["Values"]["traceId"], f"<{plugin_name}> unload plugin successfully"
-        )
+        await logger.info(ctx.get_trace_id(), f"<{plugin_name}> unload plugin successfully")
     except Exception as e:
         error_stack = traceback.format_exc()
         await logger.error(
-            ctx["Values"]["traceId"],
+            ctx.get_trace_id(),
             f"<{plugin_name}> unload plugin failed: {str(e)}\nStack trace:\n{error_stack}",
         )
         raise e

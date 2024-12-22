@@ -2,11 +2,12 @@ package util
 
 import (
 	"fmt"
-	"github.com/mitchellh/go-homedir"
 	"os"
 	"path"
 	"strings"
 	"sync"
+
+	"github.com/mitchellh/go-homedir"
 )
 
 var locationInstance *Location

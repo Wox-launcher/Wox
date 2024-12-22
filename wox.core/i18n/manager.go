@@ -101,7 +101,6 @@ func (m *Manager) TranslatePlugin(ctx context.Context, key string, pluginDirecto
 
 	jsonPath := path.Join(pluginDirectory, "lang", fmt.Sprintf("%s.json", m.currentLangCode))
 	if _, err := os.Stat(jsonPath); os.IsNotExist(err) {
-		util.GetLogger().Error(ctx, fmt.Sprintf("lang file not found: %s", jsonPath))
 		return key
 	}
 

@@ -16,3 +16,5 @@ wox.core/log/
 wox.plugin.python/dist/
 wox.plugin.python/wox_plugin.egg-info/
 .venv/
+.ruff_cache/
+.mypy_cache/

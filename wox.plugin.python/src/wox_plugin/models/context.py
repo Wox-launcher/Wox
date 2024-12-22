@@ -1,27 +1,45 @@
 import uuid
+from dataclasses import dataclass, field
 from typing import Dict
-from pydantic import BaseModel
+import json
 
 
-class Context(BaseModel):
+@dataclass
+class Context:
     """
     Context object that carries request-scoped values across the plugin execution
     """
 
-    Values: Dict[str, str]
+    values: Dict[str, str] = field(default_factory=dict)
+
+    def to_json(self) -> str:
+        """Convert to JSON string with camelCase naming"""
+        return json.dumps(
+            {
+                "Values": self.values,
+            }
+        )
+
+    @classmethod
+    def from_json(cls, json_str: str) -> "Context":
+        """Create from JSON string with camelCase naming"""
+        data = json.loads(json_str)
+        return cls(
+            values=data.get("Values", {}),
+        )
 
     def get_trace_id(self) -> str:
         """Get the trace ID from context"""
-        return self.Values["traceId"]
+        return self.values.get("TraceId", "")
 
-    @staticmethod
-    def new() -> "Context":
+    @classmethod
+    def new(cls) -> "Context":
         """Create a new context with a random trace ID"""
-        return Context(Values={"traceId": str(uuid.uuid4())})
+        return cls(values={"TraceId": str(uuid.uuid4())})
 
-    @staticmethod
-    def new_with_value(key: str, value: str) -> "Context":
+    @classmethod
+    def new_with_value(cls, key: str, value: str) -> "Context":
         """Create a new context with a specific key-value pair"""
-        ctx = Context.new()
-        ctx.Values[key] = value
+        ctx = cls.new()
+        ctx.values[key] = value
         return ctx

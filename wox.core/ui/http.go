@@ -189,7 +189,13 @@ func convertPluginDto(ctx context.Context, pluginDto dto.PluginDto, pluginInstan
 			if settingDefinition.Type == definition.PluginSettingDefinitionTypeDynamic {
 				replaced := false
 				for _, callback := range pluginInstance.DynamicSettingCallbacks {
-					newSettingDefinition := callback(settingDefinition.Value.GetKey())
+					newSettingDefinitionJson := callback(settingDefinition.Value.GetKey())
+					var newSettingDefinition definition.PluginSettingDefinitionItem
+					unmarshalErr := json.Unmarshal([]byte(newSettingDefinitionJson), &newSettingDefinition)
+					if unmarshalErr != nil {
+						logger.Error(ctx, fmt.Sprintf("failed to unmarshal dynamic setting: %s", unmarshalErr.Error()))
+						continue
+					}
 					if newSettingDefinition.Value != nil && newSettingDefinition.Type != definition.PluginSettingDefinitionTypeDynamic {
 						logger.Debug(ctx, fmt.Sprintf("dynamic setting replaced: %s(%s) -> %s(%s)", settingDefinition.Value.GetKey(), settingDefinition.Type, newSettingDefinition.Value.GetKey(), newSettingDefinition.Type))
 						pluginDto.SettingDefinitions[i] = newSettingDefinition
