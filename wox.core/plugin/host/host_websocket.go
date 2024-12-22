@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -135,7 +136,7 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 	case response := <-resultChan:
 		util.GetLogger().Debug(ctx, fmt.Sprintf("inovke plugin <%s> method: %s finished, response time: %dms", metadata.Name, method, util.GetSystemTimestamp()-startTimestamp))
 		if response.Error != "" {
-			return "", fmt.Errorf(response.Error)
+			return "", errors.New(response.Error)
 		} else {
 			return response.Result, nil
 		}
