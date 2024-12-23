@@ -480,7 +480,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		if result.Actions[actionIndex].Id == "" {
 			result.Actions[actionIndex].Id = uuid.NewString()
 		}
-		if result.Actions[actionIndex].Icon.ImageType == "" {
+		if result.Actions[actionIndex].Icon.IsEmpty() {
 			// set default action icon if not present
 			result.Actions[actionIndex].Icon = DefaultActionIcon
 		}
@@ -589,7 +589,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 
 	// store preview for ui invoke later
 	// because preview may contain some heavy data (E.g. image or large text), we will store preview in cache and only send preview to ui when user select the result
-	if result.Preview.PreviewType != "" && result.Preview.PreviewData != "" && result.Preview.PreviewType != WoxPreviewTypeRemote {
+	if !result.Preview.IsEmpty() && result.Preview.PreviewType != WoxPreviewTypeRemote {
 		resultCache.Preview = result.Preview
 		result.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,
@@ -696,7 +696,7 @@ func (m *Manager) polishRefreshableResult(ctx context.Context, resultCache *Quer
 		if result.Actions[actionIndex].Id == "" {
 			result.Actions[actionIndex].Id = uuid.NewString()
 		}
-		if result.Actions[actionIndex].Icon.ImageType == "" {
+		if result.Actions[actionIndex].Icon.IsEmpty() {
 			// set default action icon if not present
 			result.Actions[actionIndex].Icon = DefaultActionIcon
 		}
@@ -760,7 +760,7 @@ func (m *Manager) polishRefreshableResult(ctx context.Context, resultCache *Quer
 	// convert non-remote preview to remote preview
 	// because preview may contain some heavy data (E.g. image or large text),
 	// we will store preview in cache and only send preview to ui when user select the result
-	if result.Preview.PreviewType != "" && result.Preview.PreviewType != WoxPreviewTypeRemote {
+	if !result.Preview.IsEmpty() && result.Preview.PreviewType != WoxPreviewTypeRemote {
 		resultCache.Preview = result.Preview
 		result.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,

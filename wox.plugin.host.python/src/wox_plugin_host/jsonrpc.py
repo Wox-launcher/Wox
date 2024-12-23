@@ -167,12 +167,12 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list[dict[str, Any]]:
                 "Id": result.id,
                 "Title": result.title,
                 "SubTitle": result.sub_title,
-                "Icon": result.icon,
+                "Icon": json.loads(result.icon.to_json()),
                 "Actions": [
                     {
                         "Id": action.id,
                         "Name": action.name,
-                        "Icon": action.icon,
+                        "Icon": json.loads(action.icon.to_json()),
                         "IsDefault": action.is_default,
                         "PreventHideAfterAction": action.prevent_hide_after_action,
                         "Hotkey": action.hotkey,
@@ -183,7 +183,7 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list[dict[str, Any]]:
                 "Score": result.score,
                 "Group": result.group,
                 "GroupScore": result.group_score,
-                "Tails": result.tails,
+                "Tails": [json.loads(tail.to_json()) for tail in result.tails],
                 "ContextData": result.context_data,
                 "RefreshInterval": result.refresh_interval,
             }
@@ -264,16 +264,16 @@ async def refresh(ctx: Context, request: Dict[str, Any]) -> dict[str, Any]:
             return {
                 "Title": refreshed_result.title,
                 "SubTitle": refreshed_result.sub_title,
-                "Icon": refreshed_result.icon,
-                "Preview": refreshed_result.preview,
-                "Tails": refreshed_result.tails,
+                "Icon": json.loads(refreshed_result.icon.to_json()),
+                "Preview": json.loads(refreshed_result.preview.to_json()),
+                "Tails": [json.loads(tail.to_json()) for tail in refreshed_result.tails],
                 "ContextData": refreshed_result.context_data,
                 "RefreshInterval": refreshed_result.refresh_interval,
                 "Actions": [
                     {
                         "Id": action.id,
                         "Name": action.name,
-                        "Icon": action.icon,
+                        "Icon": json.loads(action.icon.to_json()),
                         "IsDefault": action.is_default,
                         "PreventHideAfterAction": action.prevent_hide_after_action,
                         "Hotkey": action.hotkey,

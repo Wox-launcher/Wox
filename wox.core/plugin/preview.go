@@ -22,3 +22,7 @@ type WoxPreview struct {
 	PreviewProperties map[string]string // key support i18n
 	ScrollPosition    WoxPreviewScrollPosition
 }
+
+func (p *WoxPreview) IsEmpty() bool {
+	return p.PreviewData == ""
+}

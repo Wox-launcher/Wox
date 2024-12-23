@@ -47,6 +47,10 @@ func (w *WoxImage) String() string {
 	return fmt.Sprintf("%s:%s", w.ImageType, w.ImageData)
 }
 
+func (w *WoxImage) IsEmpty() bool {
+	return w.ImageData == ""
+}
+
 func (w *WoxImage) ToPng() (image.Image, error) {
 	if w.ImageType == WoxImageTypeBase64 {
 		if !strings.HasPrefix(w.ImageData, "data:image/png;") {

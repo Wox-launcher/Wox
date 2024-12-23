@@ -159,7 +159,7 @@ func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams
 func (r *WebSearchPlugin) indexIcons(ctx context.Context) {
 	hasAnyIconIndexed := false
 	for i, search := range r.webSearches {
-		if search.Icon.ImageType == "" {
+		if search.Icon.IsEmpty() {
 			r.webSearches[i].Icon = r.indexWebSearchIcon(ctx, search)
 			hasAnyIconIndexed = true
 		}
