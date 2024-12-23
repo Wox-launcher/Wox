@@ -27,8 +27,8 @@ class WoxImage:
         """Convert to JSON string with camelCase naming"""
         return json.dumps(
             {
-                "Data": self.image_data,
-                "Type": self.image_type,
+                "ImageData": self.image_data,
+                "ImageType": self.image_type,
             }
         )
 
@@ -36,9 +36,12 @@ class WoxImage:
     def from_json(cls, json_str: str) -> "WoxImage":
         """Create from JSON string with camelCase naming"""
         data = json.loads(json_str)
+        if not data.get("ImageType"):
+            data["ImageType"] = WoxImageType.ABSOLUTE
+
         return cls(
-            image_type=WoxImageType(data.get("Type", WoxImageType.ABSOLUTE)),
-            image_data=data.get("Data", ""),
+            image_type=WoxImageType(data.get("ImageType")),
+            image_data=data.get("ImageData", ""),
         )
 
     @classmethod

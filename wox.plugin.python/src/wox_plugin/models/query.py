@@ -67,11 +67,11 @@ class Selection:
         """Create from JSON string with camelCase naming"""
         data = json.loads(json_str)
 
-        if data.get("Type", "") == "":
+        if not data.get("Type"):
             data["Type"] = SelectionType.TEXT
 
         return cls(
-            type=SelectionType(data.get("Type", SelectionType.TEXT)),
+            type=SelectionType(data.get("Type")),
             text=data.get("Text", ""),
             file_paths=data.get("FilePaths", []),
         )
@@ -157,11 +157,11 @@ class Query:
         """Create from JSON string with camelCase naming"""
         data = json.loads(json_str)
 
-        if data.get("Type", "") == "":
+        if not data.get("Type"):
             data["Type"] = QueryType.INPUT
 
         return cls(
-            type=QueryType(data.get("Type", QueryType.INPUT)),
+            type=QueryType(data.get("Type")),
             raw_query=data.get("RawQuery", ""),
             selection=Selection.from_json(data.get("Selection", Selection().to_json())),
             env=QueryEnv.from_json(data.get("Env", QueryEnv().to_json())),
@@ -205,8 +205,12 @@ class ChangeQueryParam:
     def from_json(cls, json_str: str) -> "ChangeQueryParam":
         """Create from JSON string with camelCase naming"""
         data = json.loads(json_str)
+
+        if not data.get("QueryType"):
+            data["QueryType"] = QueryType.INPUT
+
         return cls(
-            query_type=QueryType(data.get("QueryType", QueryType.INPUT)),
+            query_type=QueryType(data.get("QueryType")),
             query_text=data.get("QueryText", ""),
             query_selection=Selection.from_json(data.get("QuerySelection", Selection().to_json())),
         )

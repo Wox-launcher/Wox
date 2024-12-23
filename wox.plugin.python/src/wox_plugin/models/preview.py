@@ -45,9 +45,16 @@ class WoxPreview:
     def from_json(cls, json_str: str) -> "WoxPreview":
         """Create from JSON string with camelCase naming"""
         data = json.loads(json_str)
+
+        if not data.get("PreviewType"):
+            data["PreviewType"] = WoxPreviewType.TEXT
+
+        if not data.get("ScrollPosition"):
+            data["ScrollPosition"] = WoxPreviewScrollPosition.BOTTOM
+
         return cls(
-            preview_type=WoxPreviewType(data.get("PreviewType", WoxPreviewType.TEXT)),
+            preview_type=WoxPreviewType(data.get("PreviewType")),
             preview_data=data.get("PreviewData", ""),
             preview_properties=data.get("PreviewProperties", {}),
-            scroll_position=WoxPreviewScrollPosition(data.get("ScrollPosition", WoxPreviewScrollPosition.BOTTOM)),
+            scroll_position=WoxPreviewScrollPosition(data.get("ScrollPosition")),
         )

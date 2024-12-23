@@ -35,13 +35,15 @@ class ResultTail:
     def from_json(cls, json_str: str) -> "ResultTail":
         """Create from JSON string with camelCase naming"""
         data = json.loads(json_str)
-        image = WoxImage()
-        if "Image" in data:
-            image = WoxImage.from_json(json.dumps(data["Image"]))
+        if not data.get("Type"):
+            data["Type"] = ResultTailType.TEXT
+        if not data.get("Image"):
+            data["Image"] = {}
+
         return cls(
-            type=ResultTailType(data.get("Type", ResultTailType.TEXT)),
+            type=ResultTailType(data.get("Type")),
             text=data.get("Text", ""),
-            image=image,
+            image=WoxImage.from_json(json.dumps(data["Image"])),
         )
 
 
@@ -201,7 +203,7 @@ class RefreshableResult:
                 "ContextData": self.context_data,
                 "RefreshInterval": self.refresh_interval,
                 "Actions": [json.loads(action.to_json()) for action in self.actions],
-            }
+            },
         )
 
     @classmethod

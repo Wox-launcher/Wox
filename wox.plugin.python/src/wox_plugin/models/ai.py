@@ -73,8 +73,12 @@ class Conversation:
     def from_json(cls, json_str: str) -> "Conversation":
         """Create from JSON string with camelCase naming"""
         data = json.loads(json_str)
+
+        if not data.get("Role"):
+            data["Role"] = ConversationRole.USER
+
         return cls(
-            role=ConversationRole(data.get("Role", ConversationRole.USER)),
+            role=ConversationRole(data.get("Role")),
             text=data.get("Text", ""),
             images=[bytes.fromhex(img) for img in data.get("Images", [])] if data.get("Images") else [],
             timestamp=data.get("Timestamp", int(time.time() * 1000)),

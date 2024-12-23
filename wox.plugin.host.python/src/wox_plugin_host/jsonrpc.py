@@ -12,7 +12,6 @@ from wox_plugin import (
     RefreshableResult,
     PluginInitParams,
     ActionContext,
-    Result,
 )
 from .plugin_manager import plugin_instances, PluginInstance
 from .plugin_api import PluginAPI
@@ -130,7 +129,7 @@ async def init_plugin(ctx: Context, request: Dict[str, Any], ws: websockets.asyn
         raise e
 
 
-async def query(ctx: Context, request: Dict[str, Any]) -> list[Result]:
+async def query(ctx: Context, request: Dict[str, Any]) -> list[dict[str, Any]]:
     """Handle query request"""
     plugin_id = request.get("PluginId", "")
     plugin_name = request.get("PluginName", "")
@@ -162,7 +161,34 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list[Result]:
                 if result.refresh_interval and result.refresh_interval > 0 and result.on_refresh:
                     plugin_instance.refreshes[result.id] = result.on_refresh
 
-        return results
+        # to avoid json serialization error, convert Result to dict and omit functions
+        return [
+            {
+                "Id": result.id,
+                "Title": result.title,
+                "SubTitle": result.sub_title,
+                "Icon": result.icon,
+                "Actions": [
+                    {
+                        "Id": action.id,
+                        "Name": action.name,
+                        "Icon": action.icon,
+                        "IsDefault": action.is_default,
+                        "PreventHideAfterAction": action.prevent_hide_after_action,
+                        "Hotkey": action.hotkey,
+                    }
+                    for action in result.actions
+                ],
+                "Preview": result.preview,
+                "Score": result.score,
+                "Group": result.group,
+                "GroupScore": result.group_score,
+                "Tails": result.tails,
+                "ContextData": result.context_data,
+                "RefreshInterval": result.refresh_interval,
+            }
+            for result in results
+        ]
     except Exception as e:
         error_stack = traceback.format_exc()
         await logger.error(
@@ -202,7 +228,7 @@ async def action(ctx: Context, request: Dict[str, Any]) -> None:
         raise e
 
 
-async def refresh(ctx: Context, request: Dict[str, Any]) -> RefreshableResult:
+async def refresh(ctx: Context, request: Dict[str, Any]) -> dict[str, Any]:
     """Handle refresh request"""
     plugin_id = request.get("PluginId", "")
     plugin_name = request.get("PluginName", "")
@@ -235,7 +261,26 @@ async def refresh(ctx: Context, request: Dict[str, Any]) -> RefreshableResult:
                     if action.action:
                         plugin_instance.actions[action.id] = action.action
 
-            return refreshed_result
+            return {
+                "Title": refreshed_result.title,
+                "SubTitle": refreshed_result.sub_title,
+                "Icon": refreshed_result.icon,
+                "Preview": refreshed_result.preview,
+                "Tails": refreshed_result.tails,
+                "ContextData": refreshed_result.context_data,
+                "RefreshInterval": refreshed_result.refresh_interval,
+                "Actions": [
+                    {
+                        "Id": action.id,
+                        "Name": action.name,
+                        "Icon": action.icon,
+                        "IsDefault": action.is_default,
+                        "PreventHideAfterAction": action.prevent_hide_after_action,
+                        "Hotkey": action.hotkey,
+                    }
+                    for action in refreshed_result.actions
+                ],
+            }
 
         raise Exception(f"refresh function not found for result id: {result_id}")
     except Exception as e:
