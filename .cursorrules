@@ -1,4 +1,4 @@
-项目基本结构如下:
+# 项目基本结构如下:
 
 wox.core                    Go实现的Wox后端,通过websocket与http与wox.ui.flutter通信
     wox.core/setting        wox.core的设置相关定义
@@ -9,10 +9,16 @@ wox.plugin.nodejs           nodejs插件需要引用的类库
 wox.plugin.host.nodejs      nodejs插件的host,通过websocket与wox.core通信,负责加载nodejs插件
 wox.ui.flutter               flutter实现的Wox前端,通过websocket与wox.core通信
 
-所有的插件类库(wox.plugin.python,wox.plugin.nodejs)的定义都必须对齐wox.core的定义, 例如:
-wox.core/plugin/api.go 定义了API接口, 所有的插件类库都必须定义这些接口, 且名称,类型,参数,返回值必须完全一致
+# 对每个项目的具体要求:
 
+## wox.core
 
-本项目中所有的python项目都使用如下类库:
-* orjson进行数据序列化, 请参考wox.plugin.python/src/wox_plugin/models/query.py
+- wox.core中的日志方式参考: util/log.go 以及 plugin/manager.go下面的用法
+- wox.core中的方法第一个参数基本都是context.Context, 我们通过将traceId放在context中来实现日志跟踪
+
+## wox.plugin.python
+* 具体的功能实现必须对齐 wox.core/plugin/api.go 中的定义
 * dataclass进行数据模型定义, 请参考wox.plugin.python/src/wox_plugin/models/query.py
+
+# 其他要求
+你在回答问题的时候请使用中文回答我, 但是生成的代码中的注释必须使用英文
