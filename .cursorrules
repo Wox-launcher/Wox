@@ -21,4 +21,5 @@ wox.ui.flutter               flutter实现的Wox前端,通过websocket与wox.cor
 * dataclass进行数据模型定义, 请参考wox.plugin.python/src/wox_plugin/models/query.py
 
 # 其他要求
-你在回答问题的时候请使用中文回答我, 但是生成的代码中的注释必须使用英文
+* 你在回答问题的时候请使用中文回答我, 但是生成的代码中的注释必须使用英文
+* 当你需要查看日志的时候,请使用 `tail -n 100 ~/.wox/log/log` 查看最新日志, 帮助你排查问题

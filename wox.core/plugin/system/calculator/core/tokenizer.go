@@ -2,112 +2,111 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/shopspring/decimal"
 )
+
+type TokenKind int
+
+const (
+	UnknownToken  TokenKind = iota // For error handling
+	NumberToken                    // For numbers (e.g., 100, 3.14)
+	IdentToken                     // For identifiers and keywords (e.g., USD, in, to)
+	ReservedToken                  // For operators and special characters (e.g., +, -, *, /)
+	EosToken                       // End of stream token
+)
+
+type Token struct {
+	Kind TokenKind
+	Val  decimal.Decimal // Only used for NumberToken
+	Str  string          // Original string representation
+}
+
+func (t *Token) String() string {
+	return t.Str
+}
+
+type TokenPattern struct {
+	Pattern   string    // Regex pattern for matching
+	Type      TokenKind // Type of token this pattern produces
+	Priority  int       // Higher priority patterns are matched first
+	FullMatch bool      // Whether this pattern should match the entire input
+}
 
 type Tokenizer struct {
 	patterns []TokenPattern
 }
 
 func NewTokenizer(patterns []TokenPattern) *Tokenizer {
-	// Sort patterns by priority
-	sorted := make([]TokenPattern, len(patterns))
-	copy(sorted, patterns)
-	for i := 0; i < len(sorted)-1; i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			if sorted[i].Priority < sorted[j].Priority {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
+	// Sort patterns by priority (highest first)
+	for i := 0; i < len(patterns)-1; i++ {
+		for j := i + 1; j < len(patterns); j++ {
+			if patterns[i].Priority < patterns[j].Priority {
+				patterns[i], patterns[j] = patterns[j], patterns[i]
 			}
 		}
 	}
-	return &Tokenizer{patterns: sorted}
-}
 
-type invalidTokenError struct {
-	input    string
-	position int
-}
-
-func (e *invalidTokenError) Error() string {
-	curr := ""
-	pos := e.position
-	for _, line := range strings.Split(e.input, "\n") {
-		len := len(line)
-		curr += line + "\n"
-		if pos < len {
-			return curr + strings.Repeat(" ", pos) + "^ invalid token"
-		}
-		pos -= len + 1
-	}
-	return ""
+	return &Tokenizer{patterns: patterns}
 }
 
 func (t *Tokenizer) Tokenize(ctx context.Context, input string) ([]Token, error) {
-	chars := []rune(input)
-	i := 0
-	n := len(chars)
-	tokens := []Token{}
+	var tokens []Token
+	input = strings.TrimSpace(input)
 
-	for i < n {
-		char := chars[i]
-		if unicode.IsSpace(char) {
-			i++
+	// Try full match patterns first
+	for _, pattern := range t.patterns {
+		if !pattern.FullMatch {
 			continue
 		}
+		re := regexp.MustCompile(`^` + pattern.Pattern + `$`)
+		if re.MatchString(input) {
+			// For full match patterns, we create a single token with the entire input
+			token := Token{Kind: pattern.Type, Str: input}
+			if pattern.Type == NumberToken {
+				// Only parse decimal value for number tokens
+				if val, err := decimal.NewFromString(input); err == nil {
+					token.Val = val
+				}
+			}
+			return []Token{token, {Kind: EosToken}}, nil
+		}
+	}
 
-		// Try to match each pattern
+	// If no full match, tokenize normally
+	for len(input) > 0 {
+		input = strings.TrimSpace(input)
+		if len(input) == 0 {
+			break
+		}
+
 		matched := false
 		for _, pattern := range t.patterns {
-			var re *regexp.Regexp
-			var match string
-
 			if pattern.FullMatch {
-				// For full match patterns, try to match the entire remaining input
-				re = regexp.MustCompile("^" + pattern.Pattern + "$")
-				match = re.FindString(strings.TrimSpace(string(chars[i:])))
-				if match != "" {
-					tokens = append(tokens, Token{Kind: pattern.Type, Str: match})
-					i = n // Move to the end
-					matched = true
-					break
-				}
-			} else {
-				// For partial match patterns, match from current position
-				re = regexp.MustCompile("^" + pattern.Pattern)
-				match = re.FindString(string(chars[i:]))
-				if match != "" {
-					if pattern.Type == NumberToken {
-						val, err := strconv.ParseFloat(match, 64)
-						if err != nil {
-							return nil, err
-						}
-						tokens = append(tokens, Token{Kind: NumberToken, Val: decimal.NewFromFloat(val)})
-					} else {
-						tokens = append(tokens, Token{Kind: pattern.Type, Str: match})
+				continue
+			}
+
+			re := regexp.MustCompile(`^` + pattern.Pattern)
+			if matches := re.FindString(input); matches != "" {
+				token := Token{Kind: pattern.Type, Str: matches}
+				if pattern.Type == NumberToken {
+					// Only parse decimal value for number tokens
+					if val, err := decimal.NewFromString(matches); err == nil {
+						token.Val = val
 					}
-					i += len([]rune(match))
-					matched = true
-					break
 				}
-			}
-		}
-
-		if !matched {
-			// Special handling for operators
-			if strings.ContainsRune("+-*/(),", char) {
-				tokens = append(tokens, Token{Kind: ReservedToken, Str: string(char)})
-				i++
+				tokens = append(tokens, token)
+				input = input[len(matches):]
 				matched = true
+				break
 			}
 		}
 
 		if !matched {
-			return nil, &invalidTokenError{input: input, position: i}
+			return nil, fmt.Errorf("invalid token at: %s", input)
 		}
 	}
 

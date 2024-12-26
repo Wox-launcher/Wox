@@ -9,6 +9,40 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// NodeKind represents the type of AST node
+type NodeKind string
+
+const (
+	AddNode   NodeKind = "+"
+	SubNode   NodeKind = "-"
+	MulNode   NodeKind = "*"
+	DivNode   NodeKind = "/"
+	FuncNode  NodeKind = "func"
+	NumNode   NodeKind = "num"
+	IdentNode NodeKind = "ident"
+)
+
+// Node represents a node in the AST
+type Node struct {
+	Kind     NodeKind
+	Left     *Node
+	Right    *Node
+	FuncName string
+	Args     []*Node
+	Val      decimal.Decimal
+	Str      string // Used for identifiers
+}
+
+// Result represents a calculation result
+type Result struct {
+	// The display value that will be shown to user
+	DisplayValue string
+	// The raw value that will be used for calculation (optional)
+	RawValue *decimal.Decimal
+	// The unit of the result (optional)
+	Unit string
+}
+
 type Parser struct {
 	tokens []Token
 	i      int
@@ -156,7 +190,60 @@ func (p *Parser) primary(ctx context.Context) (*Node, error) {
 	}
 
 	if p.tokens[p.i].Kind == IdentToken {
-		return p.identNode(ctx)
+		ident, err := p.identNode(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		// Check if this is a function call
+		if p.i < len(p.tokens) && p.tokens[p.i].Kind == ReservedToken && p.tokens[p.i].Str == "(" {
+			// Consume the opening parenthesis
+			p.i++
+
+			// Parse function arguments
+			var args []*Node
+			for {
+				if p.i >= len(p.tokens) {
+					return nil, fmt.Errorf("unexpected end of input in function call")
+				}
+
+				// Check for empty argument list or end of arguments
+				if p.tokens[p.i].Kind == ReservedToken && p.tokens[p.i].Str == ")" {
+					p.i++ // Consume the closing parenthesis
+					break
+				}
+
+				// Parse the argument
+				arg, err := p.add(ctx)
+				if err != nil {
+					return nil, err
+				}
+				args = append(args, arg)
+
+				// Check for comma or closing parenthesis
+				if p.i >= len(p.tokens) {
+					return nil, fmt.Errorf("unexpected end of input in function call")
+				}
+				if p.tokens[p.i].Kind == ReservedToken {
+					if p.tokens[p.i].Str == ")" {
+						p.i++ // Consume the closing parenthesis
+						break
+					} else if p.tokens[p.i].Str == "," {
+						p.i++ // Consume the comma
+						continue
+					}
+				}
+				return nil, fmt.Errorf("expected ',' or ')' in function call")
+			}
+
+			return &Node{
+				Kind:     FuncNode,
+				FuncName: strings.ToLower(ident.Str),
+				Args:     args,
+			}, nil
+		}
+
+		return ident, nil
 	}
 	return p.numberNode(ctx)
 }

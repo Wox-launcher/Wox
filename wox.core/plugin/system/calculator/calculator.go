@@ -3,10 +3,13 @@ package calculator
 import (
 	"context"
 	"fmt"
+	"strings"
 	"wox/plugin"
 	"wox/plugin/system/calculator/core"
 	"wox/plugin/system/calculator/modules"
 	"wox/util/clipboard"
+
+	"github.com/samber/lo"
 )
 
 func init() {
@@ -21,7 +24,7 @@ type Calculator struct {
 
 func (c *Calculator) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "system.calculator",
+		Id:            "a48dc5f0-dab9-4112-b883-b68129d6782b",
 		Name:          "Calculator",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
@@ -29,12 +32,11 @@ func (c *Calculator) GetMetadata() plugin.Metadata {
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
 		Description:   "Calculator for Wox",
-		Icon:          "calculator.png",
+		Icon:          plugin.PluginCalculatorIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
 			"*",
 			"calculator",
-			"time",
 		},
 		Commands: []plugin.MetadataCommand{},
 		SupportedOS: []string{
@@ -49,33 +51,35 @@ func (c *Calculator) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
 
 	registry := core.NewModuleRegistry()
-	// Register all modules
-	mathModule := modules.NewMathModule(ctx, c.api)
-	registry.Register(mathModule)
+	registry.Register(modules.NewMathModule(ctx, c.api))
+	registry.Register(modules.NewTimeModule(ctx, c.api))
+	registry.Register(modules.NewCurrencyModule(ctx, c.api))
 
-	timeModule := modules.NewTimeModule(ctx, c.api)
-	registry.Register(timeModule)
-
-	// TODO: implement these modules
-	//registry.Register(modules.NewCurrencyModule())
-	//registry.Register(modules.NewUnitModule())
-	//registry.Register(modules.NewCryptoModule())
-
-	// Create tokenizer with all patterns from registered modules
 	tokenizer := core.NewTokenizer(registry.GetTokenPatterns())
-
 	c.registry = registry
 	c.tokenizer = tokenizer
 }
 
 // parseExpression parses a complex expression like "1btc + 100usd"
 // It returns a slice of tokens grouped by their module
-func (c *Calculator) parseExpression(ctx context.Context, tokens []core.Token) ([]*core.Value, []string, error) {
-	values := make([]*core.Value, 0)
+func (c *Calculator) parseExpression(ctx context.Context, tokens []core.Token) ([]*core.Result, []string, error) {
+	values := make([]*core.Result, 0)
 	operators := make([]string, 0)
 
 	currentTokens := make([]core.Token, 0)
 
+	// First try math module for the entire expression
+	// because +-/* are supported by math module, which will be used for mixed unit expression
+	mathModule := c.registry.GetModule("math")
+	if mathModule != nil && mathModule.CanHandle(ctx, tokens) {
+		value, err := mathModule.Parse(ctx, tokens)
+		if err == nil {
+			values = append(values, value)
+			return values, operators, nil
+		}
+	}
+
+	// If math module can't handle it, try parsing as mixed unit expression
 	for i := 0; i < len(tokens); i++ {
 		t := tokens[i]
 
@@ -120,17 +124,31 @@ func (c *Calculator) parseExpression(ctx context.Context, tokens []core.Token) (
 
 // calculateMixedUnits calculates expressions with mixed units
 // For example: "1btc + 100usd" will convert everything to USD and then calculate
-func (c *Calculator) calculateMixedUnits(ctx context.Context, values []*core.Value, operators []string) (*core.Value, error) {
+func (c *Calculator) calculateMixedUnits(ctx context.Context, values []*core.Result, operators []string) (*core.Result, error) {
 	if len(values) == 0 {
 		return nil, fmt.Errorf("no values to calculate")
 	}
 
-	// Convert all values to USD (or the unit of the first value)
+	// If there are no operators, just return the first value as is
+	if len(operators) == 0 {
+		return values[0], nil
+	}
+
+	// Convert all values to the first value's unit
 	targetUnit := values[0].Unit
-	result := values[0].Amount
+	if targetUnit == "" || values[0].RawValue == nil {
+		return nil, fmt.Errorf("first value must have a unit and raw value")
+	}
+
+	result := values[0].RawValue
+	unit := values[0].Unit
 
 	for i := 0; i < len(operators); i++ {
 		// Convert the next value to the target unit
+		if values[i+1].Unit == "" || values[i+1].RawValue == nil {
+			return nil, fmt.Errorf("value must have a unit and raw value")
+		}
+
 		convertedValue, err := c.registry.Convert(ctx, values[i+1], targetUnit)
 		if err != nil {
 			return nil, err
@@ -139,13 +157,21 @@ func (c *Calculator) calculateMixedUnits(ctx context.Context, values []*core.Val
 		// Perform the calculation
 		switch operators[i] {
 		case "+":
-			result = result.Add(convertedValue.Amount)
+			val := result.Add(*convertedValue.RawValue)
+			result = &val
+			unit = convertedValue.Unit
 		case "-":
-			result = result.Sub(convertedValue.Amount)
+			val := result.Sub(*convertedValue.RawValue)
+			result = &val
+			unit = convertedValue.Unit
 		}
 	}
 
-	return &core.Value{Amount: result, Unit: targetUnit}, nil
+	return &core.Result{
+		DisplayValue: fmt.Sprintf("%s %s", result.String(), unit),
+		RawValue:     result,
+		Unit:         unit,
+	}, nil
 }
 
 func (c *Calculator) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -160,64 +186,41 @@ func (c *Calculator) Query(ctx context.Context, query plugin.Query) []plugin.Que
 	}
 	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Tokens: %+v", tokens))
 
-	// Try to parse as a mixed unit expression
+	// Try to parse as an expression (could be a simple math expression or a mixed unit expression)
 	values, operators, err := c.parseExpression(ctx, tokens)
-	if err == nil && len(values) > 0 {
-		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Mixed unit expression: values=%+v, operators=%+v", values, operators))
-		result, err := c.calculateMixedUnits(ctx, values, operators)
-		if err == nil {
-			return []plugin.QueryResult{
-				{
-					Title:    fmt.Sprintf("%s = %s", query.Search, result.Amount.String()),
-					SubTitle: fmt.Sprintf("Copy %s to clipboard", result.Amount.String()),
-					Icon:     plugin.PluginCalculatorIcon,
-					Actions: []plugin.QueryResultAction{
-						{
-							Name: "i18n:plugin_calculator_copy_result",
-							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-								clipboard.WriteText(result.Amount.String())
-							},
-						},
-					},
-				},
-			}
-		} else {
-			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Mixed unit calculation error: %v", err))
-		}
-	} else if err != nil {
+	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Parse expression error: %v", err))
+		return []plugin.QueryResult{}
 	}
 
-	// If mixed unit calculation fails, try to find a single module to handle it
-	for _, module := range c.registry.Modules() {
-		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Trying module: %s", module.Name()))
-		if module.CanHandle(ctx, tokens) {
-			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Module %s can handle tokens", module.Name()))
-			result, err := module.Calculate(ctx, tokens)
-			if err != nil {
-				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Calculate error from module %s: %v", module.Name(), err))
-				continue
-			}
-			return []plugin.QueryResult{
+	if len(values) == 0 {
+		c.api.Log(ctx, plugin.LogLevelDebug, "No values parsed from expression")
+		return []plugin.QueryResult{}
+	}
+
+	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Expression parsed: values=[%s], operators=[%s]",
+		lo.Map(values, func(v *core.Result, _ int) string { return v.DisplayValue }),
+		strings.Join(operators, "")))
+
+	// Calculate the result (handles both simple and mixed unit expressions)
+	result, err := c.calculateMixedUnits(ctx, values, operators)
+	if err != nil {
+		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Calculation error: %v", err))
+		return []plugin.QueryResult{}
+	}
+
+	return []plugin.QueryResult{
+		{
+			Title: result.DisplayValue,
+			Icon:  plugin.PluginCalculatorIcon,
+			Actions: []plugin.QueryResultAction{
 				{
-					Title:    fmt.Sprintf("%s = %s", query.Search, result.Amount.String()),
-					SubTitle: fmt.Sprintf("Copy %s to clipboard", result.Amount.String()),
-					Icon:     plugin.PluginCalculatorIcon,
-					Actions: []plugin.QueryResultAction{
-						{
-							Name: "i18n:plugin_calculator_copy_result",
-							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-								clipboard.WriteText(result.Amount.String())
-							},
-						},
+					Name: "i18n:plugin_calculator_copy_result",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						clipboard.WriteText(result.DisplayValue)
 					},
 				},
-			}
-		} else {
-			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Module %s cannot handle tokens", module.Name()))
-		}
+			},
+		},
 	}
-
-	c.api.Log(ctx, plugin.LogLevelDebug, "No module can handle the expression")
-	return []plugin.QueryResult{}
 }

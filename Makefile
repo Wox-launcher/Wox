@@ -73,6 +73,9 @@ dev: _check_deps
 test: dev
 	cd wox.core && go test ./...
 
+only_test:
+	cd wox.core && go test ./...
+
 publish: clean dev
 	$(MAKE) -C wox.core build
 	

@@ -122,11 +122,36 @@ func (m *MathModule) CanHandle(ctx context.Context, tokens []core.Token) bool {
 
 	m.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("MathModule.CanHandle: tokens=%+v", tokens))
 
-	firstToken := tokens[0]
-	m.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("MathModule.CanHandle: first token kind=%v", firstToken.Kind))
-	return firstToken.Kind == core.NumberToken ||
-		firstToken.Kind == core.IdentToken ||
-		(firstToken.Kind == core.ReservedToken && firstToken.Str == "(")
+	// Check all tokens to ensure they are valid math expressions
+	for _, token := range tokens {
+		switch token.Kind {
+		case core.NumberToken:
+			// Numbers are always valid
+			continue
+		case core.ReservedToken:
+			// Only allow math operators and parentheses
+			if !strings.Contains("+-*/(),", token.Str) {
+				m.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("MathModule.CanHandle: invalid reserved token %s", token.Str))
+				return false
+			}
+		case core.IdentToken:
+			// Check if it's a known function or constant
+			if _, ok := functions[strings.ToLower(token.Str)]; !ok {
+				if _, ok := constants[strings.ToLower(token.Str)]; !ok {
+					m.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("MathModule.CanHandle: unknown identifier %s", token.Str))
+					return false
+				}
+			}
+		case core.EosToken:
+			// Ignore end of stream token
+			continue
+		default:
+			m.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("MathModule.CanHandle: invalid token kind %v", token.Kind))
+			return false
+		}
+	}
+
+	return true
 }
 
 func (m *MathModule) call(funcName string, args []decimal.Decimal) (decimal.Decimal, error) {
@@ -134,6 +159,7 @@ func (m *MathModule) call(funcName string, args []decimal.Decimal) (decimal.Deci
 	if !ok {
 		return decimal.Zero, fmt.Errorf("unknown function %s", funcName)
 	}
+
 	switch f := f.(type) {
 	case func() float64:
 		return decimal.NewFromFloat(f()), nil
@@ -216,7 +242,7 @@ func (m *MathModule) calculate(ctx context.Context, n *core.Node) (decimal.Decim
 	return decimal.Zero, fmt.Errorf("unknown node type: %s", n.Kind)
 }
 
-func (m *MathModule) Parse(ctx context.Context, tokens []core.Token) (*core.Value, error) {
+func (m *MathModule) Parse(ctx context.Context, tokens []core.Token) (*core.Result, error) {
 	m.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("MathModule.Parse: tokens=%+v", tokens))
 	m.parser = core.NewParser(tokens)
 	node, err := m.parser.Parse(ctx)
@@ -225,21 +251,26 @@ func (m *MathModule) Parse(ctx context.Context, tokens []core.Token) (*core.Valu
 		return nil, err
 	}
 	m.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("MathModule.Parse: node=%+v", node))
+
 	result, err := m.calculate(ctx, node)
 	if err != nil {
 		m.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("MathModule.Parse: calculate error=%v", err))
 		return nil, err
 	}
 	m.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("MathModule.Parse: result=%v", result))
-	return &core.Value{Amount: result, Unit: ""}, nil
+
+	return &core.Result{
+		DisplayValue: result.String(),
+		RawValue:     &result,
+	}, nil
 }
 
-func (m *MathModule) Calculate(ctx context.Context, tokens []core.Token) (*core.Value, error) {
+func (m *MathModule) Calculate(ctx context.Context, tokens []core.Token) (*core.Result, error) {
 	return m.Parse(ctx, tokens)
 }
 
-func (m *MathModule) Convert(ctx context.Context, value *core.Value, toUnit string) (*core.Value, error) {
-	return nil, fmt.Errorf("math module doesn't support unit conversion")
+func (m *MathModule) Convert(ctx context.Context, value *core.Result, toUnit string) (*core.Result, error) {
+	return nil, fmt.Errorf("math module does not support unit conversion")
 }
 
 func (m *MathModule) CanConvertTo(unit string) bool {
