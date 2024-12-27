@@ -53,7 +53,10 @@ func (c *Calculator) Init(ctx context.Context, initParams plugin.InitParams) {
 	registry := core.NewModuleRegistry()
 	registry.Register(modules.NewMathModule(ctx, c.api))
 	registry.Register(modules.NewTimeModule(ctx, c.api))
-	registry.Register(modules.NewCurrencyModule(ctx, c.api))
+
+	currencyModule := modules.NewCurrencyModule(ctx, c.api)
+	currencyModule.StartExchangeRateSyncSchedule(ctx)
+	registry.Register(currencyModule)
 
 	tokenizer := core.NewTokenizer(registry.GetTokenPatterns())
 	c.registry = registry

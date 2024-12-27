@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 	"wox/i18n"
@@ -19,8 +20,29 @@ func TestCalculatorCurrency(t *testing.T) {
 		{
 			name:           "USD to EUR",
 			query:          "100 USD in EUR",
-			expectedTitle:  "€85.3",
+			expectedTitle:  "€",
 			expectedAction: "Copy result",
+			titleCheck: func(title string) bool {
+				return len(title) > 1 && strings.HasPrefix(title, "€") && title[len("€")] >= '0' && title[len("€")] <= '9'
+			},
+		},
+		{
+			name:           "EUR to USD",
+			query:          "50 EUR = ? USD",
+			expectedTitle:  "$",
+			expectedAction: "Copy result",
+			titleCheck: func(title string) bool {
+				return len(title) > 1 && strings.HasPrefix(title, "$") && title[1] >= '0' && title[1] <= '9'
+			},
+		},
+		{
+			name:           "USD to CNY",
+			query:          "100 USD to CNY",
+			expectedTitle:  "¥",
+			expectedAction: "Copy result",
+			titleCheck: func(title string) bool {
+				return len(title) > 1 && strings.HasPrefix(title, "¥") && title[len("¥")] >= '0' && title[len("¥")] <= '9'
+			},
 		},
 	}
 	runQueryTests(t, tests)
@@ -294,6 +316,7 @@ type queryTest struct {
 	query          string
 	expectedTitle  string
 	expectedAction string
+	titleCheck     func(string) bool
 }
 
 func runQueryTests(t *testing.T, tests []queryTest) {
@@ -351,7 +374,24 @@ func runQueryTests(t *testing.T, tests []queryTest) {
 			// Find matching result
 			found := false
 			for _, result := range allResults {
-				if result.Title == tt.expectedTitle {
+				if tt.titleCheck != nil {
+					if tt.titleCheck(result.Title) {
+						found = true
+						// Verify action
+						actionFound := false
+						for _, action := range result.Actions {
+							if action.Name == tt.expectedAction {
+								actionFound = true
+								break
+							}
+						}
+						if !actionFound {
+							t.Errorf("Expected action %q not found in result actions for title %q", tt.expectedAction, result.Title)
+							success = false
+						}
+						break
+					}
+				} else if result.Title == tt.expectedTitle {
 					found = true
 					// Verify action
 					actionFound := false
@@ -362,17 +402,7 @@ func runQueryTests(t *testing.T, tests []queryTest) {
 						}
 					}
 					if !actionFound {
-						t.Errorf("Expected action %q not found in result actions:", tt.expectedAction)
-						t.Errorf("Got results for query %q:", tt.query)
-						for i, result := range allResults {
-							t.Errorf("Result %d:", i+1)
-							t.Errorf("  Title: %s", result.Title)
-							t.Errorf("  SubTitle: %s", result.SubTitle)
-							t.Errorf("  Actions:")
-							for j, action := range result.Actions {
-								t.Errorf("    %d. %s", j+1, action.Name)
-							}
-						}
+						t.Errorf("Expected action %q not found in result actions for title %q", tt.expectedAction, result.Title)
 						success = false
 					}
 					break
@@ -380,8 +410,7 @@ func runQueryTests(t *testing.T, tests []queryTest) {
 			}
 
 			if !found {
-				t.Errorf("Expected title %q not found in results:", tt.expectedTitle)
-				t.Errorf("Got results for query %q:", tt.query)
+				t.Errorf("Expected title format not found in results. Got results for query %q:", tt.query)
 				for i, result := range allResults {
 					t.Errorf("Result %d:", i+1)
 					t.Errorf("  Title: %s", result.Title)

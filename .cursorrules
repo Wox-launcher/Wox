@@ -23,3 +23,4 @@ wox.ui.flutter               flutter实现的Wox前端,通过websocket与wox.cor
 # 其他要求
 * 你在回答问题的时候请使用中文回答我, 但是生成的代码中的注释必须使用英文
 * 当你需要查看日志的时候,请使用 `tail -n 100 ~/.wox/log/log` 查看最新日志, 帮助你排查问题
+* 编写单元测试的时候， 注意初始化日志，否则日志可能不会打印到正确的位置，参考：wox.core/main_test.go
