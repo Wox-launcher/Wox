@@ -12,17 +12,35 @@ import (
 type TokenKind int
 
 const (
-	UnknownToken  TokenKind = iota // For error handling
-	NumberToken                    // For numbers (e.g., 100, 3.14)
-	IdentToken                     // For identifiers and keywords (e.g., USD, in, to)
-	ReservedToken                  // For operators and special characters (e.g., +, -, *, /)
-	EosToken                       // End of stream token
+	UnknownToken    TokenKind = iota // For error handling
+	NumberToken                      // For numbers (e.g., 100, 3.14)
+	IdentToken                       // For identifiers and keywords (e.g., USD, in, to)
+	OperationToken                   // For operators and special characters (e.g., +, -, *, /)
+	ConversionToken                  // For conversion directives (e.g., in EUR, to USD)
+	EosToken                         // End of stream token
 )
 
+func (t TokenKind) String() string {
+	switch t {
+	case NumberToken:
+		return "NumberToken"
+	case IdentToken:
+		return "IdentToken"
+	case OperationToken:
+		return "OperationToken"
+	case ConversionToken:
+		return "ConversionToken"
+	case EosToken:
+		return "EosToken"
+	}
+	return "UnknownToken"
+}
+
 type Token struct {
-	Kind TokenKind
-	Val  decimal.Decimal // Only used for NumberToken
-	Str  string          // Original string representation
+	Kind   TokenKind
+	Val    decimal.Decimal // Only used for NumberToken
+	Str    string          // Original string representation
+	Module Module          // The module that parsed this token
 }
 
 func (t *Token) String() string {
@@ -34,6 +52,7 @@ type TokenPattern struct {
 	Type      TokenKind // Type of token this pattern produces
 	Priority  int       // Higher priority patterns are matched first
 	FullMatch bool      // Whether this pattern should match the entire input
+	Module    Module    // The module that owns this pattern
 }
 
 type Tokenizer struct {
@@ -65,7 +84,11 @@ func (t *Tokenizer) Tokenize(ctx context.Context, input string) ([]Token, error)
 		re := regexp.MustCompile(`^` + pattern.Pattern + `$`)
 		if re.MatchString(input) {
 			// For full match patterns, we create a single token with the entire input
-			token := Token{Kind: pattern.Type, Str: input}
+			token := Token{
+				Kind:   pattern.Type,
+				Str:    input,
+				Module: pattern.Module,
+			}
 			if pattern.Type == NumberToken {
 				// Only parse decimal value for number tokens
 				if val, err := decimal.NewFromString(input); err == nil {
@@ -90,22 +113,41 @@ func (t *Tokenizer) Tokenize(ctx context.Context, input string) ([]Token, error)
 			}
 
 			re := regexp.MustCompile(`^` + pattern.Pattern)
-			if matches := re.FindString(input); matches != "" {
-				token := Token{Kind: pattern.Type, Str: matches}
+			if matches := re.FindStringSubmatch(input); len(matches) > 0 {
+				// Create a single token for the entire match
+				token := Token{
+					Kind:   pattern.Type,
+					Str:    matches[0],
+					Module: pattern.Module,
+				}
+
+				// If it's a number token, parse the value
 				if pattern.Type == NumberToken {
-					// Only parse decimal value for number tokens
-					if val, err := decimal.NewFromString(matches); err == nil {
+					if val, err := decimal.NewFromString(matches[0]); err == nil {
 						token.Val = val
 					}
 				}
+
 				tokens = append(tokens, token)
-				input = input[len(matches):]
+				input = input[len(matches[0]):]
 				matched = true
 				break
 			}
 		}
 
 		if !matched {
+			// Try to match operators
+			if strings.HasPrefix(input, "+") || strings.HasPrefix(input, "-") ||
+				strings.HasPrefix(input, "*") || strings.HasPrefix(input, "/") {
+				tokens = append(tokens, Token{
+					Kind:   OperationToken,
+					Str:    input[0:1],
+					Module: nil,
+				})
+				input = input[1:]
+				continue
+			}
+
 			return nil, fmt.Errorf("invalid token at: %s", input)
 		}
 	}

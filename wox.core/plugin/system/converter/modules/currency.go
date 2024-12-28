@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 	"wox/plugin"
-	"wox/plugin/system/calculator/core"
+	"wox/plugin/system/converter/core"
 	"wox/util"
 
 	"github.com/PuerkitoBio/goquery"
@@ -30,36 +30,32 @@ func NewCurrencyModule(ctx context.Context, api plugin.API) *CurrencyModule {
 		numberPattern   = `([0-9]+(?:\.[0-9]+)?)`
 	)
 
-	// Initialize pattern handlers
+	// Initialize pattern handlers with atomic patterns
 	handlers := []*patternHandler{
 		{
-			Pattern:     numberPattern + `\s*` + currencyPattern + `\s+in\s+` + currencyPattern,
+			Pattern:     numberPattern + `\s*` + currencyPattern,
 			Priority:    1000,
-			Description: "Convert currency using 'in' format (e.g., 10 USD in EUR)",
-			Handler:     m.handleConversion,
+			Description: "Handle currency amount (e.g., 10 USD)",
+			Handler:     m.handleSingleCurrency,
 		},
 		{
-			Pattern:     numberPattern + `\s*` + currencyPattern + `\s*=\s*\?\s*` + currencyPattern,
+			Pattern:     `in\s+` + currencyPattern,
 			Priority:    900,
-			Description: "Convert currency using '=?' format (e.g., 10USD=?EUR)",
-			Handler:     m.handleConversion,
+			Description: "Handle 'in' conversion format (e.g., in EUR)",
+			Handler:     m.handleInConversion,
 		},
 		{
-			Pattern:     numberPattern + `\s*` + currencyPattern + `\s+to\s+` + currencyPattern,
+			Pattern:     `to\s+` + currencyPattern,
 			Priority:    800,
-			Description: "Convert currency using 'to' format (e.g., 10 USD to EUR)",
-			Handler:     m.handleConversion,
+			Description: "Handle 'to' conversion format (e.g., to EUR)",
+			Handler:     m.handleToConversion,
 		},
-	}
-
-	// Add debug logging for pattern matching
-	for _, h := range handlers {
-		pattern := h.Pattern
-		originalHandler := h.Handler
-		h.Handler = func(ctx context.Context, matches []string) (*core.Result, error) {
-			util.GetLogger().Debug(ctx, fmt.Sprintf("Currency pattern matched: %s, matches: %v", pattern, matches))
-			return originalHandler(ctx, matches)
-		}
+		{
+			Pattern:     `=\s*\?\s*` + currencyPattern,
+			Priority:    700,
+			Description: "Handle '=?' conversion format (e.g., =?EUR)",
+			Handler:     m.handleToConversion,
+		},
 	}
 
 	m.regexBaseModule = NewRegexBaseModule(api, "currency", handlers)
@@ -87,16 +83,16 @@ func (m *CurrencyModule) StartExchangeRateSyncSchedule(ctx context.Context) {
 	})
 }
 
-func (m *CurrencyModule) Convert(ctx context.Context, value *core.Result, toUnit string) (*core.Result, error) {
-	fromCurrency := value.Unit
-	toCurrency := strings.ToUpper(toUnit)
+func (m *CurrencyModule) Convert(ctx context.Context, value core.Result, toUnit core.Unit) (core.Result, error) {
+	fromCurrency := value.Unit.Name
+	toCurrency := toUnit.Name
 
 	// Check if currencies are supported
 	if _, ok := m.rates[fromCurrency]; !ok {
-		return nil, fmt.Errorf("unsupported currency: %s", fromCurrency)
+		return core.Result{}, fmt.Errorf("unsupported currency: %s", fromCurrency)
 	}
 	if _, ok := m.rates[toCurrency]; !ok {
-		return nil, fmt.Errorf("unsupported currency: %s", toCurrency)
+		return core.Result{}, fmt.Errorf("unsupported currency: %s", toCurrency)
 	}
 
 	// Convert to USD first (as base currency), then to target currency
@@ -105,10 +101,11 @@ func (m *CurrencyModule) Convert(ctx context.Context, value *core.Result, toUnit
 	result := amountInUSD * m.rates[toCurrency]
 	resultDecimal := decimal.NewFromFloat(result)
 
-	return &core.Result{
+	return core.Result{
 		DisplayValue: m.formatWithCurrencySymbol(resultDecimal, toCurrency),
-		RawValue:     &resultDecimal,
-		Unit:         toCurrency,
+		RawValue:     resultDecimal,
+		Unit:         toUnit,
+		Module:       m,
 	}, nil
 }
 
@@ -119,37 +116,50 @@ func (m *CurrencyModule) CanConvertTo(unit string) bool {
 
 // Helper functions
 
-func (m *CurrencyModule) handleConversion(ctx context.Context, matches []string) (*core.Result, error) {
-	// matches[0] is the full match
-	// matches[1] is the amount
-	// matches[2] is the source currency
-	// matches[3] is the target currency
+func (m *CurrencyModule) handleSingleCurrency(ctx context.Context, matches []string) (core.Result, error) {
 	amount, err := decimal.NewFromString(matches[1])
 	if err != nil {
-		return nil, fmt.Errorf("invalid amount: %s", matches[1])
+		return core.Result{}, fmt.Errorf("invalid amount: %s", matches[1])
 	}
 
-	fromCurrency := strings.ToUpper(matches[2])
-	toCurrency := strings.ToUpper(matches[3])
+	currency := strings.ToUpper(matches[2])
 
-	// Check if currencies are supported
-	if _, ok := m.rates[fromCurrency]; !ok {
-		return nil, fmt.Errorf("unsupported currency: %s", fromCurrency)
-	}
-	if _, ok := m.rates[toCurrency]; !ok {
-		return nil, fmt.Errorf("unsupported currency: %s", toCurrency)
+	// Check if the currency is supported
+	if _, ok := m.rates[currency]; !ok {
+		return core.Result{}, fmt.Errorf("unsupported currency: %s", currency)
 	}
 
-	// Convert to USD first (as base currency), then to target currency
-	amountFloat, _ := amount.Float64()
-	amountInUSD := amountFloat / m.rates[fromCurrency]
-	result := amountInUSD * m.rates[toCurrency]
-	resultDecimal := decimal.NewFromFloat(result)
+	return core.Result{
+		DisplayValue: m.formatWithCurrencySymbol(amount, currency),
+		RawValue:     amount,
+		Unit:         core.Unit{Name: currency, Type: core.UnitTypeCurrency},
+		Module:       m,
+	}, nil
+}
 
-	return &core.Result{
-		DisplayValue: m.formatWithCurrencySymbol(resultDecimal, toCurrency),
-		RawValue:     &resultDecimal,
-		Unit:         toCurrency,
+func (m *CurrencyModule) handleInConversion(ctx context.Context, matches []string) (core.Result, error) {
+	currency := strings.ToUpper(matches[1])
+	if _, ok := m.rates[currency]; !ok {
+		return core.Result{}, fmt.Errorf("unsupported currency: %s", currency)
+	}
+	return core.Result{
+		DisplayValue: fmt.Sprintf("in %s", currency),
+		RawValue:     decimal.NewFromInt(0),
+		Unit:         core.Unit{Name: currency, Type: core.UnitTypeCurrency},
+		Module:       m,
+	}, nil
+}
+
+func (m *CurrencyModule) handleToConversion(ctx context.Context, matches []string) (core.Result, error) {
+	currency := strings.ToUpper(matches[1])
+	if _, ok := m.rates[currency]; !ok {
+		return core.Result{}, fmt.Errorf("unsupported currency: %s", currency)
+	}
+	return core.Result{
+		DisplayValue: fmt.Sprintf("to %s", currency),
+		RawValue:     decimal.NewFromInt(0),
+		Unit:         core.Unit{Name: currency, Type: core.UnitTypeCurrency},
+		Module:       m,
 	}, nil
 }
 
@@ -275,4 +285,27 @@ func (m *CurrencyModule) parseExchangeRateFromHKAB(ctx context.Context) (rates m
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("Successfully parsed %d exchange rates", len(rates)))
 	return rates, nil
+}
+
+func (m *CurrencyModule) TokenPatterns() []core.TokenPattern {
+	return []core.TokenPattern{
+		{
+			Pattern:   `([0-9]+(?:\.[0-9]+)?)\s*(?i)(usd|eur|gbp|jpy|cny|aud|cad)`,
+			Type:      core.IdentToken,
+			Priority:  1000,
+			FullMatch: false,
+		},
+		{
+			Pattern:   `(?i)(?:in|to)\s+(usd|eur|gbp|jpy|cny|aud|cad)`,
+			Type:      core.ConversionToken,
+			Priority:  900,
+			FullMatch: false,
+		},
+		{
+			Pattern:   `(?i)=\s*\?\s*(usd|eur|gbp|jpy|cny|aud|cad)`,
+			Type:      core.ConversionToken,
+			Priority:  800,
+			FullMatch: false,
+		},
+	}
 }

@@ -1,229 +1,177 @@
 package calculator
 
 import (
-	"context"
 	"fmt"
+	"math"
 	"strings"
-	"wox/plugin"
-	"wox/plugin/system/calculator/core"
-	"wox/plugin/system/calculator/modules"
-	"wox/util/clipboard"
 
-	"github.com/samber/lo"
+	"github.com/shopspring/decimal"
 )
 
-func init() {
-	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &Calculator{})
+var functions = map[string]interface{}{
+	"abs":         math.Abs,
+	"acos":        math.Acos,
+	"acosh":       math.Acosh,
+	"asin":        math.Asin,
+	"asinh":       math.Asinh,
+	"atan":        math.Atan,
+	"atan2":       math.Atan2,
+	"atanh":       math.Atanh,
+	"cbrt":        math.Cbrt,
+	"ceil":        math.Ceil,
+	"copysign":    math.Copysign,
+	"cos":         math.Cos,
+	"cosh":        math.Cosh,
+	"dim":         math.Dim,
+	"erf":         math.Erf,
+	"erfc":        math.Erfc,
+	"erfcinv":     math.Erfcinv, // Go 1.10+
+	"erfinv":      math.Erfinv,  // Go 1.10+
+	"exp":         math.Exp,
+	"exp2":        math.Exp2,
+	"expm1":       math.Expm1,
+	"fma":         math.FMA, // Go 1.14+
+	"floor":       math.Floor,
+	"gamma":       math.Gamma,
+	"hypot":       math.Hypot,
+	"j0":          math.J0,
+	"j1":          math.J1,
+	"log":         math.Log,
+	"log10":       math.Log10,
+	"log1p":       math.Log1p,
+	"log2":        math.Log2,
+	"logb":        math.Logb,
+	"max":         math.Max,
+	"min":         math.Min,
+	"mod":         math.Mod,
+	"nan":         math.NaN,
+	"nextafter":   math.Nextafter,
+	"pow":         math.Pow,
+	"remainder":   math.Remainder,
+	"round":       math.Round,       // Go 1.10+
+	"roundtoeven": math.RoundToEven, // Go 1.10+
+	"sin":         math.Sin,
+	"sinh":        math.Sinh,
+	"sqrt":        math.Sqrt,
+	"tan":         math.Tan,
+	"tanh":        math.Tanh,
+	"trunc":       math.Trunc,
+	"y0":          math.Y0,
+	"y1":          math.Y1,
 }
 
-type Calculator struct {
-	api       plugin.API
-	registry  *core.ModuleRegistry
-	tokenizer *core.Tokenizer
-}
-
-func (c *Calculator) GetMetadata() plugin.Metadata {
-	return plugin.Metadata{
-		Id:            "a48dc5f0-dab9-4112-b883-b68129d6782b",
-		Name:          "Calculator",
-		Author:        "Wox Launcher",
-		Website:       "https://github.com/Wox-launcher/Wox",
-		Version:       "1.0.0",
-		MinWoxVersion: "2.0.0",
-		Runtime:       "Go",
-		Description:   "Calculator for Wox",
-		Icon:          plugin.PluginCalculatorIcon.String(),
-		Entry:         "",
-		TriggerKeywords: []string{
-			"*",
-			"calculator",
-		},
-		Commands: []plugin.MetadataCommand{},
-		SupportedOS: []string{
-			"Windows",
-			"Macos",
-			"Linux",
-		},
+func call(funcName string, args []decimal.Decimal) (decimal.Decimal, error) {
+	f, ok := functions[funcName]
+	if !ok {
+		return decimal.Zero, fmt.Errorf("unknown function %s", funcName)
+	}
+	switch f := f.(type) {
+	case func() float64:
+		return decimal.NewFromFloat(f()), nil
+	case func(float64) float64:
+		return decimal.NewFromFloat(f(args[0].InexactFloat64())), nil
+	case func(float64, float64) float64:
+		return decimal.NewFromFloat(f(args[0].InexactFloat64(), args[1].InexactFloat64())), nil
+	case func(float64, float64, float64) float64:
+		return decimal.NewFromFloat(f(args[0].InexactFloat64(), args[1].InexactFloat64(), args[2].InexactFloat64())), nil
+	default:
+		return decimal.Zero, fmt.Errorf("invalid function %s", funcName)
 	}
 }
 
-func (c *Calculator) Init(ctx context.Context, initParams plugin.InitParams) {
-	c.api = initParams.API
-
-	registry := core.NewModuleRegistry()
-	registry.Register(modules.NewMathModule(ctx, c.api))
-	registry.Register(modules.NewTimeModule(ctx, c.api))
-
-	currencyModule := modules.NewCurrencyModule(ctx, c.api)
-	currencyModule.StartExchangeRateSyncSchedule(ctx)
-	registry.Register(currencyModule)
-
-	tokenizer := core.NewTokenizer(registry.GetTokenPatterns())
-	c.registry = registry
-	c.tokenizer = tokenizer
-}
-
-// parseExpression parses a complex expression like "1btc + 100usd"
-// It returns a slice of tokens grouped by their module
-func (c *Calculator) parseExpression(ctx context.Context, tokens []core.Token) ([]*core.Result, []string, error) {
-	values := make([]*core.Result, 0)
-	operators := make([]string, 0)
-
-	currentTokens := make([]core.Token, 0)
-
-	// First try math module for the entire expression
-	// because +-/* are supported by math module, which will be used for mixed unit expression
-	mathModule := c.registry.GetModule("math")
-	if mathModule != nil && mathModule.CanHandle(ctx, tokens) {
-		value, err := mathModule.Parse(ctx, tokens)
-		if err == nil {
-			values = append(values, value)
-			return values, operators, nil
-		}
-	}
-
-	// If math module can't handle it, try parsing as mixed unit expression
-	for i := 0; i < len(tokens); i++ {
-		t := tokens[i]
-
-		if t.Kind == core.ReservedToken && (t.Str == "+" || t.Str == "-") {
-			// Found an operator, parse the current tokens
-			if len(currentTokens) > 0 {
-				// Try to find a module that can handle these tokens
-				for _, module := range c.registry.Modules() {
-					if module.CanHandle(ctx, currentTokens) {
-						value, err := module.Parse(ctx, currentTokens)
-						if err != nil {
-							continue
-						}
-						values = append(values, value)
-						operators = append(operators, t.Str)
-						currentTokens = make([]core.Token, 0)
-						break
-					}
-				}
-			}
-		} else {
-			currentTokens = append(currentTokens, t)
-		}
-	}
-
-	// Handle the last group of tokens
-	if len(currentTokens) > 0 {
-		for _, module := range c.registry.Modules() {
-			if module.CanHandle(ctx, currentTokens) {
-				value, err := module.Parse(ctx, currentTokens)
-				if err != nil {
-					continue
-				}
-				values = append(values, value)
-				break
-			}
-		}
-	}
-
-	return values, operators, nil
-}
-
-// calculateMixedUnits calculates expressions with mixed units
-// For example: "1btc + 100usd" will convert everything to USD and then calculate
-func (c *Calculator) calculateMixedUnits(ctx context.Context, values []*core.Result, operators []string) (*core.Result, error) {
-	if len(values) == 0 {
-		return nil, fmt.Errorf("no values to calculate")
-	}
-
-	// If there are no operators, just return the first value as is
-	if len(operators) == 0 {
-		return values[0], nil
-	}
-
-	// Convert all values to the first value's unit
-	targetUnit := values[0].Unit
-	if targetUnit == "" || values[0].RawValue == nil {
-		return nil, fmt.Errorf("first value must have a unit and raw value")
-	}
-
-	result := values[0].RawValue
-	unit := values[0].Unit
-
-	for i := 0; i < len(operators); i++ {
-		// Convert the next value to the target unit
-		if values[i+1].Unit == "" || values[i+1].RawValue == nil {
-			return nil, fmt.Errorf("value must have a unit and raw value")
-		}
-
-		convertedValue, err := c.registry.Convert(ctx, values[i+1], targetUnit)
+func calculate(n *node) (decimal.Decimal, error) {
+	switch n.kind {
+	case addNode:
+		left, err := calculate(n.left)
 		if err != nil {
-			return nil, err
+			return decimal.Zero, err
 		}
-
-		// Perform the calculation
-		switch operators[i] {
-		case "+":
-			val := result.Add(*convertedValue.RawValue)
-			result = &val
-			unit = convertedValue.Unit
-		case "-":
-			val := result.Sub(*convertedValue.RawValue)
-			result = &val
-			unit = convertedValue.Unit
+		right, err := calculate(n.right)
+		if err != nil {
+			return decimal.Zero, err
 		}
+		return left.Add(right), nil
+	case subNode:
+		left, err := calculate(n.left)
+		if err != nil {
+			return decimal.Zero, err
+		}
+		right, err := calculate(n.right)
+		if err != nil {
+			return decimal.Zero, err
+		}
+		return left.Sub(right), nil
+	case mulNode:
+		left, err := calculate(n.left)
+		if err != nil {
+			return decimal.Zero, err
+		}
+		right, err := calculate(n.right)
+		if err != nil {
+			return decimal.Zero, err
+		}
+		return left.Mul(right), nil
+	case divNode:
+		left, err := calculate(n.left)
+		if err != nil {
+			return decimal.Zero, err
+		}
+		right, err := calculate(n.right)
+		if err != nil {
+			return decimal.Zero, err
+		}
+		return left.Div(right), nil
+	case numNode:
+		return n.val, nil
+	case funcNode:
+		var args []decimal.Decimal
+		for _, arg := range n.args {
+			val, err := calculate(arg)
+			if err != nil {
+				return decimal.Zero, err
+			}
+			args = append(args, val)
+		}
+		return call(n.funcName, args)
 	}
-
-	return &core.Result{
-		DisplayValue: fmt.Sprintf("%s %s", result.String(), unit),
-		RawValue:     result,
-		Unit:         unit,
-	}, nil
+	return decimal.Zero, fmt.Errorf("unknown node type: %s", n.kind)
 }
 
-func (c *Calculator) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	if query.Search == "" {
-		return []plugin.QueryResult{}
-	}
-
-	tokens, err := c.tokenizer.Tokenize(ctx, query.Search)
+func Calculate(expr string) (decimal.Decimal, error) {
+	tokens, err := tokenize(expr)
 	if err != nil {
-		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Tokenize error: %v", err))
-		return []plugin.QueryResult{}
+		return decimal.Zero, err
 	}
-	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Tokens: %+v", tokens))
 
-	// Try to parse as an expression (could be a simple math expression or a mixed unit expression)
-	values, operators, err := c.parseExpression(ctx, tokens)
+	// Check if any identifier token is not a valid function name or constant
+	for _, t := range tokens {
+		if t.kind == identToken {
+			// Check if it's a function name
+			if _, ok := functions[t.str]; !ok {
+				// If not a function, check if it's a constant
+				if _, ok := map[string]float64{
+					"e":       math.E,
+					"pi":      math.Pi,
+					"phi":     math.Phi,
+					"sqrt2":   math.Sqrt2,
+					"sqrte":   math.SqrtE,
+					"sqrtpi":  math.SqrtPi,
+					"sqrtphi": math.SqrtPhi,
+					"ln2":     math.Ln2,
+					"log2e":   math.Log2E,
+					"ln10":    math.Ln10,
+					"log10e":  math.Log10E,
+				}[strings.ToLower(t.str)]; !ok {
+					return decimal.Zero, fmt.Errorf("unknown identifier: %s", t.str)
+				}
+			}
+		}
+	}
+
+	p := newParser(tokens)
+	n, err := p.parse()
 	if err != nil {
-		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Parse expression error: %v", err))
-		return []plugin.QueryResult{}
+		return decimal.Zero, err
 	}
-
-	if len(values) == 0 {
-		c.api.Log(ctx, plugin.LogLevelDebug, "No values parsed from expression")
-		return []plugin.QueryResult{}
-	}
-
-	c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Expression parsed: values=[%s], operators=[%s]",
-		lo.Map(values, func(v *core.Result, _ int) string { return v.DisplayValue }),
-		strings.Join(operators, "")))
-
-	// Calculate the result (handles both simple and mixed unit expressions)
-	result, err := c.calculateMixedUnits(ctx, values, operators)
-	if err != nil {
-		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Calculation error: %v", err))
-		return []plugin.QueryResult{}
-	}
-
-	return []plugin.QueryResult{
-		{
-			Title: result.DisplayValue,
-			Icon:  plugin.PluginCalculatorIcon,
-			Actions: []plugin.QueryResultAction{
-				{
-					Name: "i18n:plugin_calculator_copy_result",
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						clipboard.WriteText(result.DisplayValue)
-					},
-				},
-			},
-		},
-	}
+	return calculate(n)
 }

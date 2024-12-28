@@ -15,6 +15,60 @@ import (
 	"wox/util"
 )
 
+func TestCalculatorCrypto(t *testing.T) {
+	tests := []queryTest{
+		{
+			name:           "BTC to USD",
+			query:          "1BTC in USD",
+			expectedTitle:  "$",
+			expectedAction: "Copy result",
+			titleCheck: func(title string) bool {
+				return len(title) > 1 && strings.HasPrefix(title, "$") && title[1] >= '0' && title[1] <= '9'
+			},
+		},
+		{
+			name:           "BTC plus USD",
+			query:          "1BTC + 1 USD",
+			expectedTitle:  "$",
+			expectedAction: "Copy result",
+			titleCheck: func(title string) bool {
+				return len(title) > 1 && strings.HasPrefix(title, "$") && title[1] >= '0' && title[1] <= '9'
+			},
+		},
+		{
+			name:           "ETH to USD",
+			query:          "1 ETH to USD",
+			expectedTitle:  "$",
+			expectedAction: "Copy result",
+			titleCheck: func(title string) bool {
+				return len(title) > 1 && strings.HasPrefix(title, "$") && title[1] >= '0' && title[1] <= '9'
+			},
+		},
+		{
+			name:           "BTC + ETH",
+			query:          "1BTC + 1ETH",
+			expectedTitle:  "$",
+			expectedAction: "Copy result",
+			titleCheck: func(title string) bool {
+				return len(title) > 1 && strings.HasPrefix(title, "$")
+			},
+		},
+		{
+			name:           "invalid crypto query",
+			query:          "1btc dsfsdf",
+			expectedTitle:  "Search for 1btc dsfsdf",
+			expectedAction: "Search",
+		},
+		{
+			name:           "BTC plus number",
+			query:          "1btc + 1",
+			expectedTitle:  "Search for 1btc + 1",
+			expectedAction: "Search",
+		},
+	}
+	runQueryTests(t, tests)
+}
+
 func TestCalculatorCurrency(t *testing.T) {
 	tests := []queryTest{
 		{
@@ -211,8 +265,9 @@ func TestFilePlugin(t *testing.T) {
 }
 
 func TestCalculatorTime(t *testing.T) {
-	// Get current time
 	now := time.Now()
+
+	// Get current time
 	hour := now.Hour()
 	ampm := "AM"
 	if hour >= 12 {
@@ -225,6 +280,7 @@ func TestCalculatorTime(t *testing.T) {
 		hour = 12
 	}
 	expectedTime := fmt.Sprintf("%d:%02d %s", hour, now.Minute(), ampm)
+	// expectedTimePlusOneHour := fmt.Sprintf("%d:%02d %s", hour+1, now.Minute(), ampm)
 
 	// Calculate expected date for "monday in 10 days"
 	targetDate := now.AddDate(0, 0, 10)
@@ -261,6 +317,12 @@ func TestCalculatorTime(t *testing.T) {
 			name:           "Specific time in location",
 			query:          "3:30 pm in tokyo",
 			expectedTitle:  "2:30 PM",
+			expectedAction: "Copy result",
+		},
+		{
+			name:           "Simple time unit",
+			query:          "100ms",
+			expectedTitle:  "100 milliseconds",
 			expectedAction: "Copy result",
 		},
 	}
@@ -305,7 +367,7 @@ func init() {
 	plugin.GetPluginManager().Start(ctx, ui.GetUIManager().GetUI(ctx))
 
 	// Wait for plugins to initialize
-	time.Sleep(time.Second)
+	time.Sleep(time.Second * 5)
 
 	// Initialize selection
 	util.InitSelection()
