@@ -58,27 +58,11 @@ func (g *GroqProvider) ChatStream(ctx context.Context, model Model, conversation
 func (g *GroqProvider) Models(ctx context.Context) (models []Model, err error) {
 	return []Model{
 		{
-			Name:     "llama-3.1-70b-versatile",
+			Name:     "llama-3.3-70b-versatile",
 			Provider: ProviderNameGroq,
 		},
 		{
-			Name:     "llama-3.1-8b-instant",
-			Provider: ProviderNameGroq,
-		},
-		{
-			Name:     "llama3-8b-8192",
-			Provider: ProviderNameGroq,
-		},
-		{
-			Name:     "llama3-70b-8192",
-			Provider: ProviderNameGroq,
-		},
-		{
-			Name:     "mixtral-8x7b-32768",
-			Provider: ProviderNameGroq,
-		},
-		{
-			Name:     "gemma-7b-it",
+			Name:     "gemma2-9b-it",
 			Provider: ProviderNameGroq,
 		},
 	}, nil

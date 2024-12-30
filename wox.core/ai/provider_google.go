@@ -62,11 +62,11 @@ func (g *GoogleProvider) ChatStream(ctx context.Context, model Model, conversati
 func (g *GoogleProvider) Models(ctx context.Context) ([]Model, error) {
 	return []Model{
 		{
-			Name:     "gemini-1.0-pro",
+			Name:     "gemini-exp-1206",
 			Provider: ProviderNameGoogle,
 		},
 		{
-			Name:     "gemini-1.5-pro",
+			Name:     "gemini-2.0-flash-exp",
 			Provider: ProviderNameGoogle,
 		},
 	}, nil
