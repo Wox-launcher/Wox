@@ -68,29 +68,46 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
         if path.exists(deps_dir) and deps_dir not in sys.path:
             sys.path.append(deps_dir)
 
-        # Combine plugin directory and entry file to get full path
-        full_entry_path: str = path.join(plugin_directory, entry)
+        try:
+            # Add the parent directory to Python path
+            parent_dir = path.dirname(plugin_directory)
+            if parent_dir not in sys.path:
+                sys.path.append(parent_dir)
 
-        # Import the plugin module
-        spec = importlib.util.spec_from_file_location("plugin", full_entry_path)
-        if spec is None or spec.loader is None:
-            raise ImportError(f"Could not load plugin from {full_entry_path}")
+            # Convert entry path to module path
+            # e.g., "killprocess/main.py" -> "dist.killprocess.main"
+            plugin_dir_name = path.basename(plugin_directory)
+            entry_without_ext = entry.replace(".py", "").replace("/", ".")
+            module_path = f"{plugin_dir_name}.{entry_without_ext}"
 
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+            await logger.info(
+                ctx.get_trace_id(),
+                f"module_path: {module_path}, plugin_dir_name: {plugin_dir_name}, entry_without_ext: {entry_without_ext}",
+            )
 
-        if not hasattr(module, "plugin"):
-            raise AttributeError("Plugin module does not have a 'plugin' attribute")
+            # Import the module
+            module = importlib.import_module(module_path)
 
-        plugin_instances[plugin_id] = PluginInstance(
-            plugin=module.plugin,
-            api=None,
-            module_path=full_entry_path,
-            actions={},
-            refreshes={},
-        )
+            if not hasattr(module, "plugin"):
+                raise AttributeError("Plugin module does not have a 'plugin' attribute")
 
-        await logger.info(ctx.get_trace_id(), f"<{plugin_name}> load plugin successfully")
+            plugin_instances[plugin_id] = PluginInstance(
+                plugin=module.plugin,
+                api=None,
+                module_path=plugin_directory,
+                actions={},
+                refreshes={},
+            )
+
+            await logger.info(ctx.get_trace_id(), f"<{plugin_name}> load plugin successfully")
+        except Exception as e:
+            error_stack = traceback.format_exc()
+            await logger.error(
+                ctx.get_trace_id(),
+                f"<{plugin_name}> load plugin failed: {str(e)}\nStack trace:\n{error_stack}",
+            )
+            raise e
+
     except Exception as e:
         error_stack = traceback.format_exc()
         await logger.error(

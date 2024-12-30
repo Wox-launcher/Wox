@@ -219,6 +219,11 @@ class WoxLauncherController extends GetxController {
       await clearQueryResults();
     }
 
+    // switch to the launcher view if in setting view
+    if (isInSettingView.value) {
+      isInSettingView.value = false;
+    }
+
     await WoxApi.instance.onHide(currentQuery.value);
   }
 
