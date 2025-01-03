@@ -10,6 +10,7 @@ type Lang struct {
 const (
 	LangCodeEnUs LangCode = "en_US"
 	LangCodeZhCn LangCode = "zh_CN"
+	LangCodeRuRu LangCode = "ru_RU"
 )
 
 func GetSupportedLanguages() []Lang {
@@ -21,6 +22,10 @@ func GetSupportedLanguages() []Lang {
 		{
 			Code: LangCodeZhCn,
 			Name: "简体中文",
+		},
+		{
+			Code: LangCodeRuRu,
+			Name: "Русский",
 		},
 	}
 }
