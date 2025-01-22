@@ -78,9 +78,9 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
   }
 
   Widget buildText(String txtData) {
-    return Scrollbar(
-      child: SingleChildScrollView(
-        controller: scrollController,
+    return SingleChildScrollView(
+      controller: scrollController,
+      child: Scrollbar(
         child: SelectableText(
           txtData,
           style: TextStyle(color: fromCssColor(widget.woxTheme.previewFontColor)),

@@ -28,19 +28,22 @@ func GetLogger() *Log {
 	logOnce.Do(func() {
 		logFolder := GetLocation().GetLogDirectory()
 		logInstance = CreateLogger(logFolder)
-		setCrashOutput()
+		setCrashOutput(logInstance)
 	})
 	return logInstance
 }
 
-func setCrashOutput() {
+func setCrashOutput(logInstance *Log) {
 	logFile := path.Join(GetLocation().GetLogDirectory(), "crash.log")
 	crashFile, err := os.Create(logFile)
 	if err != nil {
 		panic(err)
 	}
 
-	debug.SetCrashOutput(crashFile, debug.CrashOptions{})
+	setCrashOutputErr := debug.SetCrashOutput(crashFile, debug.CrashOptions{})
+	if setCrashOutputErr != nil {
+		logInstance.Error(context.Background(), fmt.Sprintf("failed to set crash output: %s", setCrashOutputErr.Error()))
+	}
 }
 
 func CreateLogger(logFolder string) *Log {
