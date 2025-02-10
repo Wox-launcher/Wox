@@ -11,6 +11,7 @@ const (
 	LangCodeEnUs LangCode = "en_US"
 	LangCodeZhCn LangCode = "zh_CN"
 	LangCodeRuRu LangCode = "ru_RU"
+	LangCodePtBr LangCode = "pt_BR"
 )
 
 func GetSupportedLanguages() []Lang {
@@ -26,6 +27,10 @@ func GetSupportedLanguages() []Lang {
 		{
 			Code: LangCodeRuRu,
 			Name: "Русский",
+		},
+		{
+			Code: LangCodePtBr,
+			Name: "Português",
 		},
 	}
 }
