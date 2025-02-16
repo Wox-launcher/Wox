@@ -47,7 +47,7 @@ func HttpDownload(ctx context.Context, url string, dest string) error {
 func getClient() *resty.Client {
 	if client == nil {
 		client = resty.New()
-		client.SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36")
+		client.SetHeader("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36")
 	}
 
 	return client

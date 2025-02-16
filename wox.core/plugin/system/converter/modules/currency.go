@@ -3,6 +3,7 @@ package modules
 import (
 	"bytes"
 	"context"
+	"encoding/xml"
 	"fmt"
 	"strconv"
 	"strings"
@@ -64,20 +65,31 @@ func NewCurrencyModule(ctx context.Context, api plugin.API) *CurrencyModule {
 
 func (m *CurrencyModule) StartExchangeRateSyncSchedule(ctx context.Context) {
 	util.Go(ctx, "currency_exchange_rate_sync", func() {
+		// Try multiple data sources
+		sources := []func(context.Context) (map[string]float64, error){
+			m.parseExchangeRateFromHKAB,
+			m.parseExchangeRateFromECB,
+		}
 
-		rates, err := m.parseExchangeRateFromHKAB(ctx)
-		if err == nil {
-			m.rates = rates
-		} else {
-			util.GetLogger().Error(ctx, fmt.Sprintf("Failed to fetch initial exchange rates from HKAB: %s", err.Error()))
+		for _, source := range sources {
+			rates, err := source(ctx)
+			if err == nil && len(rates) > 0 {
+				m.rates = rates
+				util.GetLogger().Info(ctx, "Successfully updated rates from source")
+				break
+			}
+			util.GetLogger().Warn(ctx, fmt.Sprintf("Failed to update rates from source: %s", err.Error()))
 		}
 
 		for range time.NewTicker(1 * time.Hour).C {
-			rates, err := m.parseExchangeRateFromHKAB(ctx)
-			if err == nil {
-				m.rates = rates
-			} else {
-				util.GetLogger().Error(ctx, fmt.Sprintf("Failed to fetch exchange rates from HKAB: %s", err.Error()))
+			for _, source := range sources {
+				rates, err := source(ctx)
+				if err == nil && len(rates) > 0 {
+					m.rates = rates
+					util.GetLogger().Info(ctx, "Successfully updated rates from source")
+					break
+				}
+				util.GetLogger().Warn(ctx, fmt.Sprintf("Failed to update rates from source: %s", err.Error()))
 			}
 		}
 	})
@@ -284,6 +296,80 @@ func (m *CurrencyModule) parseExchangeRateFromHKAB(ctx context.Context) (rates m
 	}
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("Successfully parsed %d exchange rates", len(rates)))
+	return rates, nil
+}
+
+// parseExchangeRateFromECB parses exchange rates from European Central Bank
+func (m *CurrencyModule) parseExchangeRateFromECB(ctx context.Context) (rates map[string]float64, err error) {
+	util.GetLogger().Info(ctx, "Starting to parse exchange rates from ECB")
+
+	// Initialize maps
+	rates = make(map[string]float64)
+
+	// ECB provides daily reference rates in XML format
+	body, err := util.HttpGet(ctx, "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml")
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("Failed to get exchange rates from ECB: %s", err.Error()))
+		return nil, err
+	}
+
+	// Parse XML
+	type Cube struct {
+		Currency string  `xml:"currency,attr"`
+		Rate     float64 `xml:"rate,attr"`
+	}
+
+	type CubeTime struct {
+		Time  string `xml:"time,attr"`
+		Cubes []Cube `xml:"Cube"`
+	}
+
+	type CubeWrapper struct {
+		CubeTime CubeTime `xml:"Cube>Cube"`
+	}
+
+	var result CubeWrapper
+	err = xml.Unmarshal(body, &result)
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("Failed to parse XML: %s", err.Error()))
+		return nil, err
+	}
+
+	// ECB rates are based on EUR, we need to convert them to USD base
+	// First, find the USD/EUR rate
+	var usdEurRate float64
+	for _, cube := range result.CubeTime.Cubes {
+		if cube.Currency == "USD" {
+			usdEurRate = cube.Rate
+			break
+		}
+	}
+
+	if usdEurRate == 0 {
+		util.GetLogger().Error(ctx, "USD rate not found in ECB data")
+		return nil, fmt.Errorf("USD rate not found")
+	}
+
+	// Set base USD rate
+	rates["USD"] = 1.0
+	// Set EUR rate
+	rates["EUR"] = 1.0 / usdEurRate
+
+	// Convert other rates to USD base
+	for _, cube := range result.CubeTime.Cubes {
+		if cube.Currency == "USD" {
+			continue
+		}
+		// Convert EUR based rate to USD based rate
+		rates[cube.Currency] = cube.Rate / usdEurRate
+	}
+
+	if len(rates) < 2 {
+		util.GetLogger().Error(ctx, "Failed to parse enough exchange rates from ECB")
+		return nil, fmt.Errorf("failed to parse exchange rates")
+	}
+
+	util.GetLogger().Info(ctx, fmt.Sprintf("Successfully parsed %d exchange rates from ECB", len(rates)))
 	return rates, nil
 }
 

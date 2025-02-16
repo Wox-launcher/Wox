@@ -16,7 +16,7 @@ func TestParseExchangeRateFromHKAB(t *testing.T) {
 		rates: make(map[string]float64),
 	}
 
-	rates, err := m.parseExchangeRateFromHKAB(ctx)
+	rates, err := m.parseExchangeRateFromECB(ctx)
 	if err != nil {
 		t.Errorf("TestParseExchangeRateFromHKAB failed: %v", err)
 		return
