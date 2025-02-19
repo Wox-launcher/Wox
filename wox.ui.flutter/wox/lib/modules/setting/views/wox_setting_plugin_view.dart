@@ -256,12 +256,26 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 if (!plugin.isInstalled)
                   Padding(
                     padding: const EdgeInsets.only(right: 8.0),
-                    child: Button(
-                      onPressed: () {
-                        controller.installPlugin(plugin);
-                      },
-                      child: const Text('Install'),
-                    ),
+                    child: Obx(() => Button(
+                          onPressed: controller.isInstallingPlugin.value
+                              ? null
+                              : () {
+                                  controller.installPlugin(plugin);
+                                },
+                          child: controller.isInstallingPlugin.value
+                              ? const Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: ProgressRing(),
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text('Installing...'),
+                                  ],
+                                )
+                              : const Text('Install'),
+                        )),
                   ),
                 if (plugin.isInstalled && !plugin.isDisable)
                   Padding(

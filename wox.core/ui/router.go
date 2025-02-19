@@ -195,7 +195,7 @@ func handlePluginInstall(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
 	if !idResult.Exists() {
-		writeErrorResponse(w, "id is empty")
+		writeErrorResponse(w, "Plugin ID is required for installation")
 		return
 	}
 
@@ -209,16 +209,20 @@ func handlePluginInstall(w http.ResponseWriter, r *http.Request) {
 		return false
 	})
 	if !exist {
-		writeErrorResponse(w, "can't find plugin in the store")
+		writeErrorResponse(w, fmt.Sprintf("Plugin '%s' not found in the store", pluginId))
 		return
 	}
 
+	logger.Info(ctx, fmt.Sprintf("Installing plugin '%s' (%s)", findPlugin.Name, pluginId))
 	installErr := plugin.GetStoreManager().Install(ctx, findPlugin)
 	if installErr != nil {
-		writeErrorResponse(w, "can't install plugin: "+installErr.Error())
+		errMsg := fmt.Sprintf("Failed to install plugin '%s': %s", findPlugin.Name, installErr.Error())
+		logger.Error(ctx, errMsg)
+		writeErrorResponse(w, errMsg)
 		return
 	}
 
+	logger.Info(ctx, fmt.Sprintf("Successfully installed plugin '%s' (%s)", findPlugin.Name, pluginId))
 	writeSuccessResponse(w, "")
 }
 
