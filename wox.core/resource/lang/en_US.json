@@ -27,6 +27,7 @@
   "ui_tray_toggle_app": "Toggle Wox",
   "ui_tray_open_setting_window": "Settings",
   "ui_tray_quit": "Quit",
+  "ui_proxy_url_tips": "Proxy address, e.g. http://localhost:7890",
   "plugin_app_open": "Open",
   "plugin_app_open_containing_folder": "Open Containing Folder",
   "plugin_app_copy_path": "Copy Path",

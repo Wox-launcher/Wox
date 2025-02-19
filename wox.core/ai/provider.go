@@ -15,8 +15,12 @@ var (
 	ProviderNameGroq   ProviderName = "groq"
 )
 
+type Model struct {
+	Name     string
+	Provider ProviderName
+}
+
 type Provider interface {
-	Close(ctx context.Context) error
 	ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error)
 	Models(ctx context.Context) ([]Model, error)
 }

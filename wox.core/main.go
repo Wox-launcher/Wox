@@ -93,6 +93,7 @@ func main() {
 		return
 	}
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	util.UpdateHTTPProxy(ctx, woxSetting.HttpProxyUrl.Get())
 
 	langErr := i18n.GetI18nManager().UpdateLang(ctx, woxSetting.LangCode)
 	if langErr != nil {

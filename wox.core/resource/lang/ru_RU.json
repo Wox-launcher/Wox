@@ -27,6 +27,7 @@
   "ui_tray_toggle_app": "Переключить Wox",
   "ui_tray_open_setting_window": "Настройки",
   "ui_tray_quit": "Выйти",
+  "ui_proxy_url_tips": "Адрес прокси, например: http://localhost:7890",
   "plugin_app_open": "Открыть",
   "plugin_app_open_containing_folder": "Открыть содержащую папку",
   "plugin_app_copy_path": "Копировать путь",

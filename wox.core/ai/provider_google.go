@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"wox/setting"
+	"wox/util"
 
 	"github.com/google/generative-ai-go/genai"
 	"github.com/googleapis/gax-go/v2/apierror"
@@ -14,49 +15,30 @@ import (
 
 type GoogleProvider struct {
 	connectContext setting.AIProvider
-	client         *genai.Client
 }
 
 type GoogleProviderStream struct {
 	stream        *genai.GenerateContentResponseIterator
 	conversations []Conversation
+	client        *genai.Client
 }
 
 func NewGoogleProvider(ctx context.Context, connectContext setting.AIProvider) Provider {
 	return &GoogleProvider{connectContext: connectContext}
 }
 
-func (g *GoogleProvider) ensureClient(ctx context.Context) error {
-	if g.client == nil {
-		client, newClientErr := genai.NewClient(ctx, option.WithAPIKey(g.connectContext.ApiKey))
-		if newClientErr != nil {
-			return newClientErr
-		}
-
-		g.client = client
-	}
-
-	return nil
-}
-
-func (g *GoogleProvider) Close(ctx context.Context) error {
-	if g.client != nil {
-		return g.client.Close()
-	}
-	return nil
-}
-
 func (g *GoogleProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
-	if ensureClientErr := g.ensureClient(ctx); ensureClientErr != nil {
-		return nil, ensureClientErr
+	client, err := genai.NewClient(ctx, option.WithAPIKey(g.connectContext.ApiKey), option.WithHTTPClient(util.GetHTTPClient(ctx)))
+	if err != nil {
+		return nil, err
 	}
 
 	chatMessages, lastConversation := g.convertConversations(conversations)
-	aiModel := g.client.GenerativeModel(model.Name)
+	aiModel := client.GenerativeModel(model.Name)
 	session := aiModel.StartChat()
 	session.History = chatMessages
 	stream := session.SendMessageStream(ctx, lastConversation.Parts...)
-	return &GoogleProviderStream{conversations: conversations, stream: stream}, nil
+	return &GoogleProviderStream{conversations: conversations, stream: stream, client: client}, nil
 }
 
 func (g *GoogleProvider) Models(ctx context.Context) ([]Model, error) {
@@ -75,6 +57,12 @@ func (g *GoogleProvider) Models(ctx context.Context) ([]Model, error) {
 func (g *GoogleProviderStream) Receive(ctx context.Context) (string, error) {
 	response, err := g.stream.Next()
 	if err != nil {
+		// Close client when stream is done or error occurs
+		if g.client != nil {
+			g.client.Close()
+			g.client = nil
+		}
+
 		// no more messages
 		if errors.Is(err, iterator.Done) {
 			return "", io.EOF
@@ -88,6 +76,10 @@ func (g *GoogleProviderStream) Receive(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if len(response.Candidates) == 0 {
+		if g.client != nil {
+			g.client.Close()
+			g.client = nil
+		}
 		return "", io.EOF
 	}
 
@@ -98,10 +90,6 @@ func (g *GoogleProviderStream) Receive(ctx context.Context) (string, error) {
 	}
 
 	return "", errors.New("no text in response")
-}
-
-func (g *GoogleProviderStream) Close(ctx context.Context) {
-	// no-op
 }
 
 func (g *GoogleProvider) convertConversations(conversations []Conversation) (msgWithoutLast []*genai.Content, lastMsg *genai.Content) {

@@ -27,6 +27,7 @@
   "ui_tray_toggle_app": "显示/隐藏Wox",
   "ui_tray_open_setting_window": "设置",
   "ui_tray_quit": "退出",
+  "ui_proxy_url_tips": "代理地址，例如：http://localhost:7890",
   "plugin_app_open": "打开",
   "plugin_app_open_containing_folder": "打开所在文件夹",
   "plugin_app_copy_path": "复制路径",

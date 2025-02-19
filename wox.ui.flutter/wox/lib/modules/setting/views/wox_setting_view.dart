@@ -26,7 +26,6 @@ class WoxSettingView extends GetView<WoxSettingController> {
                   return KeyEventResult.handled;
               }
             }
-
             return KeyEventResult.ignored;
           },
           child: Scaffold(
@@ -49,14 +48,14 @@ class WoxSettingView extends GetView<WoxSettingController> {
                       body: const WoxSettingGeneralView(),
                     ),
                     PaneItem(
-                      icon: const Icon(FluentIcons.globe),
-                      title: const Text('Network'),
-                      body: const WoxSettingProxyView(),
-                    ),
-                    PaneItem(
                       icon: const Icon(Icons.grain),
                       title: const Text('AI'),
                       body: const WoxSettingAIView(),
+                    ),
+                     PaneItem(
+                      icon: const Icon(FluentIcons.globe),
+                      title: const Text('Network'),
+                      body:  WoxSettingProxyView(),
                     ),
                     PaneItemExpander(
                         icon: const Icon(FluentIcons.app_icon_default_add),

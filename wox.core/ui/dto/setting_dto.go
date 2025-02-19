@@ -19,6 +19,8 @@ type WoxSettingDto struct {
 	QueryShortcuts       []setting.QueryShortcut
 	LastQueryMode        setting.LastQueryMode
 	AIProviders          []setting.AIProvider
+	HttpProxyEnabled     bool
+	HttpProxyUrl         string
 
 	// UI related
 	AppWidth int

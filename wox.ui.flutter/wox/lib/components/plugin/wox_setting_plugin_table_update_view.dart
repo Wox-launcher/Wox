@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
@@ -365,100 +366,110 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   Widget build(BuildContext context) {
     return FluentApp(
       debugShowCheckedModeBanner: false,
-      home: ContentDialog(
-        constraints: const BoxConstraints(maxWidth: 800, maxHeight: 600),
-        content: SingleChildScrollView(
-          child: Column(children: [
-            for (var column in columns)
-              if (!column.hideInUpdate)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: getMaxColumnWidth(),
+      home: Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
+            Navigator.pop(context);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: ContentDialog(
+          constraints: const BoxConstraints(maxWidth: 800, maxHeight: 600),
+          content: SingleChildScrollView(
+            child: Column(children: [
+              for (var column in columns)
+                if (!column.hideInUpdate)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: getMaxColumnWidth(),
+                              child: Text(
+                                column.label,
+                                style: const TextStyle(overflow: TextOverflow.ellipsis),
+                                textAlign: TextAlign.right,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            buildColumn(column),
+                          ],
+                        ),
+                        if (column.tooltip != "")
+                          Padding(
+                            padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
                             child: Text(
-                              column.label,
-                              style: const TextStyle(overflow: TextOverflow.ellipsis),
-                              textAlign: TextAlign.right,
+                              column.tooltip,
+                              style: TextStyle(color: Colors.grey[90], fontSize: 12),
                             ),
                           ),
-                          const SizedBox(width: 16),
-                          buildColumn(column),
-                        ],
-                      ),
-                      if (column.tooltip != "")
-                        Padding(
-                          padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
-                          child: Text(
-                            column.tooltip,
-                            style: TextStyle(color: Colors.grey[90], fontSize: 12),
+                        if (fieldValidationErrors.containsKey(column.key))
+                          Padding(
+                            padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
+                            child: Text(
+                              fieldValidationErrors[column.key]!,
+                              style: TextStyle(color: Colors.red, fontSize: 12),
+                            ),
                           ),
-                        ),
-                      if (fieldValidationErrors.containsKey(column.key))
-                        Padding(
-                          padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
-                          child: Text(
-                            fieldValidationErrors[column.key]!,
-                            style: TextStyle(color: Colors.red, fontSize: 12),
-                          ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
+            ]),
+          ),
+          actions: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Button(
+                  child: const Text('Cancel'),
+                  onPressed: () => Navigator.pop(context),
                 ),
-          ]),
-        ),
-        actions: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Button(
-                child: const Text('Cancel'),
-                onPressed: () => Navigator.pop(context),
-              ),
-              const SizedBox(width: 16),
-              FilledButton(
-                child: const Text('Confirm'),
-                onPressed: () {
-                  // validate
-                  for (var column in columns) {
-                    if (column.validators.isNotEmpty) {
-                      for (var element in column.validators) {
-                        var errMsg = element.validator.validate(getValue(column.key));
-                        if (errMsg != "") {
-                          fieldValidationErrors[column.key] = errMsg;
-                        } else {
-                          fieldValidationErrors.remove(column.key);
+                const SizedBox(width: 16),
+                FilledButton(
+                  child: const Text('Confirm'),
+                  onPressed: () {
+                    // validate
+                    for (var column in columns) {
+                      if (column.validators.isNotEmpty) {
+                        for (var element in column.validators) {
+                          var errMsg = element.validator.validate(getValue(column.key));
+                          if (errMsg != "") {
+                            fieldValidationErrors[column.key] = errMsg;
+                          } else {
+                            fieldValidationErrors.remove(column.key);
+                          }
                         }
                       }
                     }
-                  }
-                  if (fieldValidationErrors.isNotEmpty) {
-                    setState(() {});
-                    return;
-                  }
+                    if (fieldValidationErrors.isNotEmpty) {
+                      setState(() {});
+                      return;
+                    }
 
-                  // remove empty text list
-                  for (var column in columns) {
-                    if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeTextList) {
-                      var columnValues = getValue(column.key);
-                      if (columnValues is List) {
-                        columnValues.removeWhere((element) => element == "");
+                    // remove empty text list
+                    for (var column in columns) {
+                      if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeTextList) {
+                        var columnValues = getValue(column.key);
+                        if (columnValues is List) {
+                          columnValues.removeWhere((element) => element == "");
+                        }
                       }
                     }
-                  }
 
-                  widget.onUpdate(widget.item.key, values);
+                    widget.onUpdate(widget.item.key, values);
 
-                  Navigator.pop(context);
-                },
-              ),
-            ],
-          )
-        ],
+                    Navigator.pop(context);
+                  },
+                ),
+              ],
+            )
+          ],
+        ),
       ),
     );
   }

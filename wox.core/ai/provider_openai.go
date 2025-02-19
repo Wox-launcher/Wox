@@ -4,13 +4,13 @@ import (
 	"context"
 	"io"
 	"wox/setting"
+	"wox/util"
 
 	"github.com/sashabaranov/go-openai"
 )
 
 type OpenAIProvider struct {
 	connectContext setting.AIProvider
-	client         *openai.Client
 }
 
 type OpenAIProviderStream struct {
@@ -22,24 +22,12 @@ func NewOpenAIClient(ctx context.Context, connectContext setting.AIProvider) Pro
 	return &OpenAIProvider{connectContext: connectContext}
 }
 
-func (o *OpenAIProvider) Close(ctx context.Context) error {
-	return nil
-}
-
-func (o *OpenAIProvider) ensureClient(ctx context.Context) error {
-	if o.client == nil {
-		o.client = openai.NewClient(o.connectContext.ApiKey)
-	}
-
-	return nil
-}
-
 func (o *OpenAIProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
-	if ensureClientErr := o.ensureClient(ctx); ensureClientErr != nil {
-		return nil, ensureClientErr
-	}
+	config := openai.DefaultConfig(o.connectContext.ApiKey)
+	config.HTTPClient = util.GetHTTPClient(ctx)
+	client := openai.NewClientWithConfig(config)
 
-	createdStream, createErr := o.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
+	createdStream, createErr := client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
 		Stream:   true,
 		Model:    model.Name,
 		Messages: o.convertConversations(conversations),

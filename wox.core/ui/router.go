@@ -447,6 +447,8 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.MainHotkey = woxSetting.MainHotkey.Get()
 	settingDto.SelectionHotkey = woxSetting.SelectionHotkey.Get()
 	settingDto.QueryHotkeys = woxSetting.QueryHotkeys.Get()
+	settingDto.HttpProxyEnabled = woxSetting.HttpProxyEnabled.Get()
+	settingDto.HttpProxyUrl = woxSetting.HttpProxyUrl.Get()
 
 	writeSuccessResponse(w, settingDto)
 }

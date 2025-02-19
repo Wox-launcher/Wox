@@ -19,7 +19,6 @@ import (
 
 type OllamaProvider struct {
 	connectContext setting.AIProvider
-	client         *ollama.LLM
 }
 
 type OllamaProviderStream struct {
@@ -29,10 +28,6 @@ type OllamaProviderStream struct {
 
 func NewOllamaProvider(ctx context.Context, connectContext setting.AIProvider) Provider {
 	return &OllamaProvider{connectContext: connectContext}
-}
-
-func (o *OllamaProvider) Close(ctx context.Context) error {
-	return nil
 }
 
 func (o *OllamaProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
@@ -114,4 +109,8 @@ func (s *OllamaProviderStream) Receive(ctx context.Context) (string, error) {
 	resp := string(buf[:n])
 	util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("OLLAMA: Send response: %s", resp))
 	return resp, nil
+}
+
+func (o *OllamaProvider) UpdateProxy(ctx context.Context, proxyUrl string) error {
+	return nil
 }

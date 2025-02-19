@@ -26,8 +26,8 @@ type WoxSetting struct {
 	AIProviders          []AIProvider
 
 	// HTTP proxy settings
-	HttpProxyEnabled bool
-	HttpProxyUrl     string
+	HttpProxyEnabled PlatformSettingValue[bool]
+	HttpProxyUrl     PlatformSettingValue[string]
 
 	// UI related
 	AppWidth int
@@ -104,8 +104,16 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 			MacValue:   false,
 			LinuxValue: false,
 		},
-		HttpProxyEnabled: false,
-		HttpProxyUrl:     "",
+		HttpProxyEnabled: PlatformSettingValue[bool]{
+			WinValue:   false,
+			MacValue:   false,
+			LinuxValue: false,
+		},
+		HttpProxyUrl: PlatformSettingValue[string]{
+			WinValue:   "",
+			MacValue:   "",
+			LinuxValue: "",
+		},
 	}
 }
 

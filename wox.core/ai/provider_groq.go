@@ -19,7 +19,6 @@ const groqBaseUrl = "https://api.groq.com/openai/v1"
 
 type GroqProvider struct {
 	connectContext setting.AIProvider
-	client         *openai.LLM
 }
 
 type GroqProviderStream struct {
@@ -31,12 +30,13 @@ func NewGroqProvider(ctx context.Context, connectContext setting.AIProvider) Pro
 	return &GroqProvider{connectContext: connectContext}
 }
 
-func (g *GroqProvider) Close(ctx context.Context) error {
-	return nil
-}
-
 func (g *GroqProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
-	client, clientErr := openai.New(openai.WithModel(model.Name), openai.WithBaseURL(groqBaseUrl), openai.WithToken(g.connectContext.ApiKey))
+	client, clientErr := openai.New(
+		openai.WithModel(model.Name),
+		openai.WithBaseURL(groqBaseUrl),
+		openai.WithToken(g.connectContext.ApiKey),
+		openai.WithHTTPClient(util.GetHTTPClient(ctx)),
+	)
 	if clientErr != nil {
 		return nil, clientErr
 	}
@@ -91,11 +91,14 @@ func (g *GroqProvider) Models(ctx context.Context) (models []Model, err error) {
 	//   ]
 	// }
 
-	gjson.Get(string(body), "data.#.id").ForEach(func(key, value gjson.Result) bool {
-		models = append(models, Model{
-			Name:     value.String(),
-			Provider: ProviderNameGroq,
-		})
+	// only return active models
+	gjson.Get(string(body), "data").ForEach(func(key, value gjson.Result) bool {
+		if value.Get("active").Bool() {
+			models = append(models, Model{
+				Name:     value.Get("id").String(),
+				Provider: ProviderNameGroq,
+			})
+		}
 		return true
 	})
 

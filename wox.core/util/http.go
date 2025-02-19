@@ -1,67 +1,142 @@
 package util
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-
-	"github.com/go-resty/resty/v2"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"sync"
 )
 
-var client *resty.Client
+var (
+	httpClient  *http.Client
+	clientMutex sync.Mutex
+	defaultUA   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
+)
 
-func HttpGet(ctx context.Context, url string) ([]byte, error) {
-	resp, err := getClient().R().Get(url)
+// newRequest creates a new http request with common headers
+func newRequest(ctx context.Context, method, url string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, err
 	}
-	if resp.IsError() {
-		return nil, fmt.Errorf("http get %s failed, status code: %d, error: %s", url, resp.StatusCode(), resp.String())
+	req.Header.Set("User-Agent", defaultUA)
+	return req, nil
+}
+
+// doRequest executes the request and handles common response processing
+func doRequest(req *http.Request) ([]byte, error) {
+	resp, err := getClient().Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("http %s %s failed, status code: %d", req.Method, req.URL, resp.StatusCode)
 	}
 
-	return resp.Body(), nil
+	return io.ReadAll(resp.Body)
+}
+
+func HttpGet(ctx context.Context, url string) ([]byte, error) {
+	req, err := newRequest(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return doRequest(req)
 }
 
 func HttpGetWithHeaders(ctx context.Context, url string, headers map[string]string) ([]byte, error) {
-	resp, err := getClient().R().SetHeaders(headers).Get(url)
+	req, err := newRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
-	if resp.IsError() {
-		return nil, fmt.Errorf("http get %s failed, status code: %d, error: %s", url, resp.StatusCode(), resp.String())
+
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 
-	return resp.Body(), nil
+	return doRequest(req)
 }
 
 func HttpPost(ctx context.Context, url string, body any) ([]byte, error) {
-	resp, err := getClient().R().SetBody(body).Post(url)
+	jsonData, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
-	if resp.IsError() {
-		return nil, fmt.Errorf("http post %s failed, status code: %d, error: %s", url, resp.StatusCode(), resp.String())
-	}
 
-	return resp.Body(), nil
+	req, err := newRequest(ctx, http.MethodPost, url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	return doRequest(req)
 }
 
 func HttpDownload(ctx context.Context, url string, dest string) error {
-	resp, err := getClient().R().SetOutput(dest).Get(url)
+	req, err := newRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
-	if resp.IsError() {
-		return fmt.Errorf("http download %s failed, status code: %d, error: %s", url, resp.StatusCode(), resp.String())
+
+	resp, err := getClient().Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("http download %s failed, status code: %d", url, resp.StatusCode)
 	}
 
-	return nil
+	out, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	return err
 }
 
-func getClient() *resty.Client {
-	if client == nil {
-		client = resty.New()
-		client.SetHeader("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36")
+func UpdateHTTPProxy(ctx context.Context, proxyUrl string) {
+	clientMutex.Lock()
+	defer clientMutex.Unlock()
+
+	GetLogger().Info(ctx, fmt.Sprintf("updating HTTP proxy, url: %s", proxyUrl))
+
+	transport := &http.Transport{}
+	if proxyUrl != "" {
+		proxyURL, err := url.Parse(proxyUrl)
+		if err != nil {
+			GetLogger().Error(ctx, fmt.Sprintf("failed to parse proxy url: %s", err.Error()))
+			return
+		}
+		transport.Proxy = http.ProxyURL(proxyURL)
 	}
 
-	return client
+	httpClient = &http.Client{
+		Transport: transport,
+	}
+}
+
+func getClient() *http.Client {
+	if httpClient == nil {
+		httpClient = &http.Client{}
+	}
+	return httpClient
+}
+
+// GetHTTPClient returns a http client with proxy settings from context
+func GetHTTPClient(ctx context.Context) *http.Client {
+	clientMutex.Lock()
+	defer clientMutex.Unlock()
+
+	return getClient()
 }

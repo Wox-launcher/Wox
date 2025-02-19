@@ -177,7 +177,21 @@ func (m *Manager) UpdateWoxSetting(ctx context.Context, key, value string) error
 		return fmt.Errorf("key is empty")
 	}
 
-	if key == "EnableAutostart" {
+	if key == "HttpProxyEnabled" {
+		m.woxSetting.HttpProxyEnabled.Set(value == "true")
+		if m.woxSetting.HttpProxyUrl.Get() != "" && m.woxSetting.HttpProxyEnabled.Get() {
+			m.onUpdateProxy(ctx, m.woxSetting.HttpProxyUrl.Get())
+		} else {
+			m.onUpdateProxy(ctx, "")
+		}
+	} else if key == "HttpProxyUrl" {
+		m.woxSetting.HttpProxyUrl.Set(value)
+		if m.woxSetting.HttpProxyEnabled.Get() && value != "" {
+			m.onUpdateProxy(ctx, m.woxSetting.HttpProxyUrl.Get())
+		} else {
+			m.onUpdateProxy(ctx, "")
+		}
+	} else if key == "EnableAutostart" {
 		m.woxSetting.EnableAutostart.Set(value == "true")
 	} else if key == "MainHotkey" {
 		if value != "" {
@@ -242,6 +256,16 @@ func (m *Manager) UpdateWoxSetting(ctx context.Context, key, value string) error
 	}
 
 	return m.SaveWoxSetting(ctx)
+}
+
+func (m *Manager) onUpdateProxy(ctx context.Context, url string) {
+	util.GetLogger().Info(ctx, fmt.Sprintf("updating HTTP proxy, url: %s", url))
+
+	if url != "" {
+		util.UpdateHTTPProxy(ctx, url)
+	} else {
+		util.UpdateHTTPProxy(ctx, "")
+	}
 }
 
 func (m *Manager) GetWoxAppData(ctx context.Context) *WoxAppData {
