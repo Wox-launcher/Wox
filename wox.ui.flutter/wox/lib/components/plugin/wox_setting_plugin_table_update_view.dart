@@ -18,9 +18,9 @@ class WoxSettingPluginTableUpdate extends StatefulWidget {
   final Future<String?> Function(Map<String, dynamic> rowValues)? onUpdateValidate;
 
   const WoxSettingPluginTableUpdate({
-    super.key, 
-    required this.item, 
-    required this.row, 
+    super.key,
+    required this.item,
+    required this.row,
     required this.onUpdate,
     this.onUpdateValidate,
   });
@@ -469,7 +469,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
 
                     // validate with onUpdateValidate if provided
                     if (widget.onUpdateValidate != null) {
-                      String? validationError = await widget.onUpdateValidate!(widget.item.key, values);
+                      String? validationError = await widget.onUpdateValidate!(values);
                       if (validationError != null) {
                         setState(() {
                           customValidationError = validationError;

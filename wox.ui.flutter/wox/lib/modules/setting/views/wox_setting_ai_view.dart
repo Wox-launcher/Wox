@@ -111,11 +111,15 @@ class WoxSettingAIView extends GetView<WoxSettingController> {
                   },
                   onUpdateValidate: (rowValues) async {
                     if (rowValues["Name"] != "ollama") {
-                      if (rowValues["ApiKey"] == null) {
+                      if (rowValues["ApiKey"] == null || rowValues["ApiKey"] == "") {
                         return "API key is required.";
                       }
                     }
-
+                    if (rowValues["Name"] == "ollama") {
+                      if (rowValues["Host"] == null || rowValues["Host"] == "") {
+                        return "Host is required.";
+                      }
+                    }
                     return null;
                   },
                 );
