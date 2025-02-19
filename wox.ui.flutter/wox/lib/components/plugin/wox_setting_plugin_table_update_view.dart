@@ -9,7 +9,9 @@ import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/modules/setting/wox_setting_controller.dart';
 import 'package:wox/utils/picker.dart';
+import 'package:get/get.dart';
 
 class WoxSettingPluginTableUpdate extends StatefulWidget {
   final PluginSettingValueTable item;
@@ -128,6 +130,10 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     }
 
     return max > 0 ? max : 100;
+  }
+
+  String tr(String key) {
+    return Get.find<WoxSettingController>().tr(key);
   }
 
   Future<List<PluginSettingValueSelectOption>> getSelectionAIModelOptions() async {
@@ -386,7 +392,6 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         },
         child: ContentDialog(
           constraints: const BoxConstraints(maxWidth: 800),
-          title: Text(isUpdate ? "Update" : "Add"),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -401,8 +406,8 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                             width: getMaxColumnWidth(),
                             child: Row(
                               children: [
-                                Text(column.label),
-                                if (column.tooltip != "") WoxTooltipView(tooltip: column.tooltip),
+                                Text(tr(column.label)),
+                                if (column.tooltip != "") WoxTooltipView(tooltip: tr(column.tooltip)),
                               ],
                             ),
                           ),

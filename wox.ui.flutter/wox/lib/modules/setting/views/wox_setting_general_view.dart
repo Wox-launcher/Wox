@@ -195,8 +195,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                       "Columns": [
                         {
                           "Key": "Hotkey",
-                          "Label": "Hotkey",
-                          "Tooltip": "The hotkey to trigger the query.",
+                          "Label": "i18n:query_hotkeys_hotkey",
+                          "Tooltip": "i18n:query_hotkeys_hotkey_tooltip",
                           "Width": 120,
                           "Type": "hotkey",
                           "TextMaxLines": 1,
@@ -206,10 +206,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                         },
                         {
                           "Key": "Query",
-                          "Label": "Query",
-                          "Tooltip": "The query when the hotkey is triggered. Following variables are supported:\n\n"
-                              "{wox:selected_text} represent the selected text.\n"
-                              "{wox:active_browser_url} represent the url of active browser tab.",
+                          "Label": "i18n:query_hotkeys_query",
+                          "Tooltip": "i18n:query_hotkeys_query_tooltip",
                           "Type": "text",
                           "TextMaxLines": 1,
                           "Validators": [
@@ -218,12 +216,10 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                         },
                         {
                           "Key": "IsSilentExecution",
-                          "Label": "Silent",
-                          "Tooltip": "When selected, if the count of query result is 1, Wox will execute the query directly without showing the result list.\n\n"
-                              "This is useful when you have a query that always return one result and you want to execute it directly.\n"
-                              "Note: This option is only available when the query result count is 1. Otherwise it will be ignored and notify a warning.",
+                          "Label": "i18n:query_hotkeys_silent",
+                          "Tooltip": "i18n:query_hotkeys_silent_tooltip",
                           "Width": 60,
-                          "Type": "checkbox"
+                          "Type": "checkbox",
                         }
                       ],
                       "SortColumnKey": "Query"

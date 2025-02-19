@@ -24,11 +24,11 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final Future<String?> Function(Map<String, dynamic> rowValues)? onUpdateValidate;
 
   const WoxSettingPluginTable({
-    super.key, 
-    required this.item, 
-    required super.value, 
-    required super.onUpdate, 
-    this.tableWidth = 650.0, 
+    super.key,
+    required this.item,
+    required super.value,
+    required super.onUpdate,
+    this.tableWidth = 650.0,
     this.readonly = false,
     this.onUpdateValidate,
   });
@@ -83,14 +83,14 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
-          column.label,
+          tr(column.label),
           style: const TextStyle(
             overflow: TextOverflow.ellipsis,
           ),
         ),
         if (column.tooltip != "")
           WoxTooltipView(
-            tooltip: column.tooltip,
+            tooltip: tr(column.tooltip),
             paddingRight: 0,
           ),
       ],
@@ -412,7 +412,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
             label: columnWidth(
               column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
                 "Key": "Operation",
-                "Label": "Operation",
+                "Label": tr("operation"),
                 "Tooltip": "",
                 "Width": operationWidth.toInt(),
                 "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText,
@@ -420,9 +420,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
               }),
               isHeader: true,
               isOperation: true,
-              child: const Text(
-                "Operation",
-                style: TextStyle(
+              child: Text(
+                tr("operation"),
+                style: const TextStyle(
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -494,10 +494,10 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                             );
                           });
                     },
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(material.Icons.add),
-                        Text("Add"),
+                        const Icon(material.Icons.add),
+                        Text(tr("add")),
                       ],
                     )),
             ],

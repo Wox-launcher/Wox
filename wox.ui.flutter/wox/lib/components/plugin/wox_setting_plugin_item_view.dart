@@ -18,6 +18,10 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
     return value;
   }
 
+  String tr(String key) {
+    return Get.find<WoxSettingController>().tr(key);
+  }
+
   Widget withFlexible(List<Widget> children) {
     return Wrap(
       crossAxisAlignment: WrapCrossAlignment.center,

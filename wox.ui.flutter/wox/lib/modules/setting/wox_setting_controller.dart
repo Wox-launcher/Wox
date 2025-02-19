@@ -50,6 +50,10 @@ class WoxSettingController extends GetxController {
 
   // get translation
   String tr(String key) {
+    if (key.startsWith("i18n:")) {
+      key = key.substring(5);
+    }
+
     var uiKey = "ui_$key";
     return langMap[uiKey] ?? key;
   }
