@@ -14,6 +14,8 @@ class WoxSetting {
   late List<AIProvider> aiProviders;
   late int appWidth;
   late String themeId;
+  late bool httpProxyEnabled;
+  late String httpProxyUrl;
 
   WoxSetting({
     required this.enableAutostart,
@@ -31,6 +33,8 @@ class WoxSetting {
     required this.aiProviders,
     required this.appWidth,
     required this.themeId,
+    required this.httpProxyEnabled,
+    required this.httpProxyUrl,
   });
 
   WoxSetting.fromJson(Map<String, dynamic> json) {
@@ -75,6 +79,8 @@ class WoxSetting {
 
     appWidth = json['AppWidth'];
     themeId = json['ThemeId'];
+    httpProxyEnabled = json['HttpProxyEnabled'] ?? false;
+    httpProxyUrl = json['HttpProxyUrl'] ?? '';
   }
 
   Map<String, dynamic> toJson() {
@@ -94,6 +100,8 @@ class WoxSetting {
     data['AIProviders'] = aiProviders;
     data['AppWidth'] = appWidth;
     data['ThemeId'] = themeId;
+    data['HttpProxyEnabled'] = httpProxyEnabled;
+    data['HttpProxyUrl'] = httpProxyUrl;
     return data;
   }
 }

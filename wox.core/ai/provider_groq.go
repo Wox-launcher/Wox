@@ -10,9 +10,12 @@ import (
 
 	"github.com/djherbis/buffer"
 	"github.com/djherbis/nio/v3"
+	"github.com/tidwall/gjson"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/openai"
 )
+
+const groqBaseUrl = "https://api.groq.com/openai/v1"
 
 type GroqProvider struct {
 	connectContext setting.AIProvider
@@ -33,7 +36,7 @@ func (g *GroqProvider) Close(ctx context.Context) error {
 }
 
 func (g *GroqProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
-	client, clientErr := openai.New(openai.WithModel(model.Name), openai.WithBaseURL("https://api.groq.com/openai/v1"), openai.WithToken(g.connectContext.ApiKey))
+	client, clientErr := openai.New(openai.WithModel(model.Name), openai.WithBaseURL(groqBaseUrl), openai.WithToken(g.connectContext.ApiKey))
 	if clientErr != nil {
 		return nil, clientErr
 	}
@@ -56,16 +59,47 @@ func (g *GroqProvider) ChatStream(ctx context.Context, model Model, conversation
 }
 
 func (g *GroqProvider) Models(ctx context.Context) (models []Model, err error) {
-	return []Model{
-		{
-			Name:     "llama-3.3-70b-versatile",
+	body, err := util.HttpGetWithHeaders(ctx, groqBaseUrl+"/models", map[string]string{
+		"Authorization": "Bearer " + g.connectContext.ApiKey,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// response example
+	//{
+	//   "object": "list",
+	//   "data": [
+	//     {
+	//       "id": "llama3-groq-70b-8192-tool-use-preview",
+	//       "object": "model",
+	//       "created": 1693721698,
+	//       "owned_by": "Groq",
+	//       "active": true,
+	//       "context_window": 8192,
+	//       "public_apps": null
+	//     },
+	//     {
+	//       "id": "gemma2-9b-it",
+	//       "object": "model",
+	//       "created": 1693721698,
+	//       "owned_by": "Google",
+	//       "active": true,
+	//       "context_window": 8192,
+	//       "public_apps": null
+	//     }
+	//   ]
+	// }
+
+	gjson.Get(string(body), "data.#.id").ForEach(func(key, value gjson.Result) bool {
+		models = append(models, Model{
+			Name:     value.String(),
 			Provider: ProviderNameGroq,
-		},
-		{
-			Name:     "gemma2-9b-it",
-			Provider: ProviderNameGroq,
-		},
-	}, nil
+		})
+		return true
+	})
+
+	return models, nil
 }
 
 func (g *GroqProvider) convertConversations(conversations []Conversation) (chatMessages []llms.MessageContent) {

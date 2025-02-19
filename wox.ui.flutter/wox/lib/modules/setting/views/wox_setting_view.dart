@@ -8,6 +8,7 @@ import 'package:wox/modules/setting/wox_setting_controller.dart';
 
 import 'wox_setting_plugin_view.dart';
 import 'wox_setting_general_view.dart';
+import 'wox_setting_proxy_view.dart';
 
 class WoxSettingView extends GetView<WoxSettingController> {
   const WoxSettingView({super.key});
@@ -46,6 +47,11 @@ class WoxSettingView extends GetView<WoxSettingController> {
                       icon: const Icon(FluentIcons.settings),
                       title: const Text('General'),
                       body: const WoxSettingGeneralView(),
+                    ),
+                    PaneItem(
+                      icon: const Icon(FluentIcons.globe),
+                      title: const Text('Network'),
+                      body: const WoxSettingProxyView(),
                     ),
                     PaneItem(
                       icon: const Icon(Icons.grain),

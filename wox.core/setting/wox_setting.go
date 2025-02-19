@@ -25,6 +25,10 @@ type WoxSetting struct {
 	LastQueryMode        LastQueryMode
 	AIProviders          []AIProvider
 
+	// HTTP proxy settings
+	HttpProxyEnabled bool
+	HttpProxyUrl     string
+
 	// UI related
 	AppWidth int
 	ThemeId  string
@@ -100,6 +104,8 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 			MacValue:   false,
 			LinuxValue: false,
 		},
+		HttpProxyEnabled: false,
+		HttpProxyUrl:     "",
 	}
 }
 

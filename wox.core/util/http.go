@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-resty/resty/v2"
 )
@@ -14,7 +15,19 @@ func HttpGet(ctx context.Context, url string) ([]byte, error) {
 		return nil, err
 	}
 	if resp.IsError() {
-		return nil, resp.Error().(error)
+		return nil, fmt.Errorf("http get %s failed, status code: %d, error: %s", url, resp.StatusCode(), resp.String())
+	}
+
+	return resp.Body(), nil
+}
+
+func HttpGetWithHeaders(ctx context.Context, url string, headers map[string]string) ([]byte, error) {
+	resp, err := getClient().R().SetHeaders(headers).Get(url)
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, fmt.Errorf("http get %s failed, status code: %d, error: %s", url, resp.StatusCode(), resp.String())
 	}
 
 	return resp.Body(), nil
@@ -26,7 +39,7 @@ func HttpPost(ctx context.Context, url string, body any) ([]byte, error) {
 		return nil, err
 	}
 	if resp.IsError() {
-		return nil, resp.Error().(error)
+		return nil, fmt.Errorf("http post %s failed, status code: %d, error: %s", url, resp.StatusCode(), resp.String())
 	}
 
 	return resp.Body(), nil
@@ -38,7 +51,7 @@ func HttpDownload(ctx context.Context, url string, dest string) error {
 		return err
 	}
 	if resp.IsError() {
-		return resp.Error().(error)
+		return fmt.Errorf("http download %s failed, status code: %d, error: %s", url, resp.StatusCode(), resp.String())
 	}
 
 	return nil
