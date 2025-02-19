@@ -44,22 +44,22 @@ class WoxSettingView extends GetView<WoxSettingController> {
                   items: [
                     PaneItem(
                       icon: const Icon(FluentIcons.settings),
-                      title: const Text('General'),
+                      title: Text(controller.tr('general')),
                       body: const WoxSettingGeneralView(),
                     ),
                     PaneItem(
                       icon: const Icon(Icons.grain),
-                      title: const Text('AI'),
+                      title: Text(controller.tr('ai')),
                       body: const WoxSettingAIView(),
                     ),
                      PaneItem(
                       icon: const Icon(FluentIcons.globe),
-                      title: const Text('Network'),
-                      body:  WoxSettingProxyView(),
+                      title: Text(controller.tr('network')),
+                      body: const WoxSettingProxyView(),
                     ),
                     PaneItemExpander(
                         icon: const Icon(FluentIcons.app_icon_default_add),
-                        title: const Text('Plugins'),
+                        title: Text(controller.tr('plugins')),
                         body: const WoxSettingPluginView(),
                         onTap: () async {
                           await controller.switchToPluginList(true);
@@ -68,7 +68,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                         items: [
                           PaneItem(
                             icon: const Icon(FluentIcons.office_store_logo),
-                            title: const Text('Store Plugins'),
+                            title: Text(controller.tr('store_plugins')),
                             body: const WoxSettingPluginView(),
                             onTap: () async {
                               await controller.switchToPluginList(true);
@@ -76,7 +76,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                           ),
                           PaneItem(
                             icon: const Icon(FluentIcons.installation),
-                            title: const Text('Installed Plugins'),
+                            title: Text(controller.tr('installed_plugins')),
                             body: const WoxSettingPluginView(),
                             onTap: () async {
                               await controller.switchToPluginList(false);
@@ -85,7 +85,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                         ]),
                     PaneItemExpander(
                       icon: const Icon(FluentIcons.color),
-                      title: const Text('Themes'),
+                      title: Text(controller.tr('themes')),
                       body: const Text('Themes'),
                       onTap: () async {
                         await controller.switchToThemeList(true);
@@ -94,7 +94,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                       items: [
                         PaneItem(
                           icon: const Icon(FluentIcons.mail),
-                          title: const Text('Store Themes'),
+                          title: Text(controller.tr('store_themes')),
                           body: const WoxSettingThemeView(),
                           onTap: () async {
                             await controller.switchToThemeList(true);
@@ -102,7 +102,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                         ),
                         PaneItem(
                           icon: const Icon(FluentIcons.installation),
-                          title: const Text('Installed Themes'),
+                          title: Text(controller.tr('installed_themes')),
                           body: const WoxSettingThemeView(),
                           onTap: () async {
                             await controller.switchToThemeList(false);
@@ -114,7 +114,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                   footerItems: [
                     PaneItem(
                       icon: const Icon(FluentIcons.back),
-                      title: const Text('Back'),
+                      title: Text(controller.tr('back')),
                       body: const Text('Back'),
                       onTap: () => controller.hideWindow(),
                     ),

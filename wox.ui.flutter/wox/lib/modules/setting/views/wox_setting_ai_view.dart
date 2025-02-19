@@ -95,9 +95,6 @@ class WoxSettingAIView extends GetView<WoxSettingController> {
                         "Tooltip": "The API key of the AI provider.",
                         "Type": "text",
                         "TextMaxLines": 1,
-                        "Validators": [
-                          {"Type": "not_empty"}
-                        ],
                       },
                       {
                         "Key": "Host",
@@ -111,6 +108,15 @@ class WoxSettingAIView extends GetView<WoxSettingController> {
                   }),
                   onUpdate: (key, value) {
                     controller.updateConfig("AIProviders", value);
+                  },
+                  onUpdateValidate: (rowValues) async {
+                    if (rowValues["Name"] != "ollama") {
+                      if (rowValues["ApiKey"] == null) {
+                        return "API key is required.";
+                      }
+                    }
+
+                    return null;
                   },
                 );
               }),

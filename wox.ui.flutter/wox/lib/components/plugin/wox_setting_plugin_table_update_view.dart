@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
+import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -14,8 +15,15 @@ class WoxSettingPluginTableUpdate extends StatefulWidget {
   final PluginSettingValueTable item;
   final Map<String, dynamic> row;
   final Function onUpdate;
+  final Future<String?> Function(Map<String, dynamic> rowValues)? onUpdateValidate;
 
-  const WoxSettingPluginTableUpdate({super.key, required this.item, required this.row, required this.onUpdate});
+  const WoxSettingPluginTableUpdate({
+    super.key, 
+    required this.item, 
+    required this.row, 
+    required this.onUpdate,
+    this.onUpdateValidate,
+  });
 
   @override
   State<WoxSettingPluginTableUpdate> createState() => _WoxSettingPluginTableUpdateState();
@@ -28,6 +36,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   Map<String, String> fieldValidationErrors = {};
   Map<String, TextEditingController> textboxEditingController = {};
   List<PluginSettingValueTableColumn> columns = [];
+  String? customValidationError;
 
   @override
   void initState() {
@@ -376,50 +385,48 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           return KeyEventResult.ignored;
         },
         child: ContentDialog(
-          constraints: const BoxConstraints(maxWidth: 800, maxHeight: 600),
+          constraints: const BoxConstraints(maxWidth: 800),
+          title: Text(isUpdate ? "Update" : "Add"),
           content: SingleChildScrollView(
-            child: Column(children: [
-              for (var column in columns)
-                if (!column.hideInUpdate)
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var column in columns)
+                  if (!column.hideInUpdate)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: getMaxColumnWidth(),
+                            child: Row(
+                              children: [
+                                Text(column.label),
+                                if (column.tooltip != "") WoxTooltipView(tooltip: column.tooltip),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          buildColumn(column),
+                        ],
+                      ),
+                    ),
+                if (customValidationError != null)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Row(
                       children: [
-                        Row(
-                          children: [
-                            SizedBox(
-                              width: getMaxColumnWidth(),
-                              child: Text(
-                                column.label,
-                                style: const TextStyle(overflow: TextOverflow.ellipsis),
-                                textAlign: TextAlign.right,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            buildColumn(column),
-                          ],
+                        Expanded(
+                          child: Text(
+                            customValidationError!,
+                            style: TextStyle(color: Colors.red.toAccentColor()),
+                          ),
                         ),
-                        if (column.tooltip != "")
-                          Padding(
-                            padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
-                            child: Text(
-                              column.tooltip,
-                              style: TextStyle(color: Colors.grey[90], fontSize: 12),
-                            ),
-                          ),
-                        if (fieldValidationErrors.containsKey(column.key))
-                          Padding(
-                            padding: EdgeInsets.only(left: getMaxColumnWidth() + 16, top: 4),
-                            child: Text(
-                              fieldValidationErrors[column.key]!,
-                              style: TextStyle(color: Colors.red, fontSize: 12),
-                            ),
-                          ),
                       ],
                     ),
                   ),
-            ]),
+              ],
+            ),
           ),
           actions: [
             Row(
@@ -431,9 +438,8 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 ),
                 const SizedBox(width: 16),
                 FilledButton(
-                  child: const Text('Confirm'),
-                  onPressed: () {
-                    // validate
+                  onPressed: () async {
+                    // validate field validators first
                     for (var column in columns) {
                       if (column.validators.isNotEmpty) {
                         for (var element in column.validators) {
@@ -461,13 +467,28 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                       }
                     }
 
-                    widget.onUpdate(widget.item.key, values);
+                    // validate with onUpdateValidate if provided
+                    if (widget.onUpdateValidate != null) {
+                      String? validationError = await widget.onUpdateValidate!(widget.item.key, values);
+                      if (validationError != null) {
+                        setState(() {
+                          customValidationError = validationError;
+                        });
+                        return;
+                      } else {
+                        setState(() {
+                          customValidationError = null;
+                        });
+                      }
+                    }
 
+                    widget.onUpdate(widget.item.key, values);
                     Navigator.pop(context);
                   },
+                  child: const Text('Save'),
                 ),
               ],
-            )
+            ),
           ],
         ),
       ),

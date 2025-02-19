@@ -21,8 +21,17 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final columnSpacing = 10.0;
   final columnTooltipWidth = 20.0;
   final bool readonly;
+  final Future<String?> Function(Map<String, dynamic> rowValues)? onUpdateValidate;
 
-  const WoxSettingPluginTable({super.key, required this.item, required super.value, required super.onUpdate, this.tableWidth = 650.0, this.readonly = false});
+  const WoxSettingPluginTable({
+    super.key, 
+    required this.item, 
+    required super.value, 
+    required super.onUpdate, 
+    this.tableWidth = 650.0, 
+    this.readonly = false,
+    this.onUpdateValidate,
+  });
 
   double calculateColumnWidthForZeroWidth(PluginSettingValueTableColumn column) {
     // if there are multiple columns which have width set to 0, we will set the max width to 100 for each column
@@ -219,7 +228,8 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                       return WoxSettingPluginTableUpdate(
                         item: item,
                         row: row,
-                        onUpdate: (key, value) {
+                        onUpdateValidate: onUpdateValidate,
+                        onUpdate: (key, value) async {
                           var rowsJson = getSetting(key);
                           if (rowsJson == "") {
                             rowsJson = "[]";

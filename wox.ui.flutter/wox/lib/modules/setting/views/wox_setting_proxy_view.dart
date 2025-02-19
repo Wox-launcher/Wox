@@ -64,7 +64,7 @@ class WoxSettingProxyView extends GetView<WoxSettingController> {
             width: 850,
             children: [
               formField(
-                label: controller.tr("enable_http_proxy"),
+                label: controller.tr("proxy_enabled"),
                 child: ToggleSwitch(
                   checked: controller.woxSetting.value.httpProxyEnabled,
                   onChanged: (value) => controller.updateConfig('HttpProxyEnabled', value.toString()),
