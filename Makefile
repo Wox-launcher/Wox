@@ -70,11 +70,7 @@ dev: _check_deps
 	$(MAKE) -C wox.plugin.host.python build
 	$(MAKE) -C wox.ui.flutter/wox build
 
-test:
-	# build the plugin host to makesure the plugin host is working
-	$(MAKE) -C wox.plugin.host.nodejs build
-	$(MAKE) -C wox.plugin.host.python build
-	
+test: dev
 	cd wox.core && go test ./...
 
 only_test:
