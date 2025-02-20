@@ -329,7 +329,7 @@ func TestCalculatorTime(t *testing.T) {
 	runQueryTests(t, tests)
 }
 
-func init() {
+func initServices() {
 	ctx := context.Background()
 
 	// Initialize location
@@ -351,8 +351,7 @@ func init() {
 	}
 
 	// Initialize i18n
-	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	err = i18n.GetI18nManager().UpdateLang(ctx, woxSetting.LangCode)
+	err = i18n.GetI18nManager().UpdateLang(ctx, i18n.LangCodeEnUs)
 	if err != nil {
 		panic(err)
 	}
@@ -384,6 +383,8 @@ type queryTest struct {
 func runQueryTests(t *testing.T, tests []queryTest) {
 	ctx := util.NewTraceContext()
 	var failedTests []string
+
+	initServices()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -449,6 +450,10 @@ func runQueryTests(t *testing.T, tests []queryTest) {
 						}
 						if !actionFound {
 							t.Errorf("Expected action %q not found in result actions for title %q", tt.expectedAction, result.Title)
+							t.Errorf("Actual result actions:")
+							for _, action := range result.Actions {
+								t.Errorf("  %s", action.Name)
+							}
 							success = false
 						}
 						break
