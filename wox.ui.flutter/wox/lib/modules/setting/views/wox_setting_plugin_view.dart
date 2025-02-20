@@ -26,6 +26,7 @@ import 'package:wox/components/plugin/wox_setting_plugin_checkbox_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_textbox_view.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/strings.dart';
 
 class WoxSettingPluginView extends GetView<WoxSettingController> {
   const WoxSettingPluginView({super.key});
@@ -52,7 +53,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
               return TextBox(
                 autofocus: true,
                 controller: controller.filterPluginKeywordController,
-                placeholder: 'Search ${controller.filteredPluginDetails.length} plugins',
+                placeholder: Strings.format(controller.tr('search_plugins'), [controller.filteredPluginDetails.length]),
                 padding: const EdgeInsets.all(10),
                 suffix: const Padding(
                   padding: EdgeInsets.only(right: 8.0),
@@ -187,9 +188,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                         border: Border.all(color: SettingWarningColor),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: const Text(
-                        'dev',
-                        style: TextStyle(
+                      child: Text(
+                        controller.tr('plugin_dev_tag'),
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
                         ),
@@ -219,7 +220,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     child: Row(
                       children: [
                         Text(
-                          "website",
+                          controller.tr('plugin_website'),
                           style: TextStyle(
                             color: Colors.blue,
                           ),
@@ -250,7 +251,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       onPressed: () {
                         controller.uninstallPlugin(plugin);
                       },
-                      child: const Text('Uninstall'),
+                      child: Text(controller.tr('plugin_uninstall')),
                     ),
                   ),
                 if (!plugin.isInstalled)
@@ -263,18 +264,18 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                                   controller.installPlugin(plugin);
                                 },
                           child: controller.isInstallingPlugin.value
-                              ? const Row(
+                              ? Row(
                                   children: [
-                                    SizedBox(
+                                    const SizedBox(
                                       width: 16,
                                       height: 16,
                                       child: ProgressRing(),
                                     ),
-                                    SizedBox(width: 8),
-                                    Text('Installing...'),
+                                    const SizedBox(width: 8),
+                                    Text(controller.tr("plugin_installing")),
                                   ],
                                 )
-                              : const Text('Install'),
+                              : Text(controller.tr('plugin_install')),
                         )),
                   ),
                 if (plugin.isInstalled && !plugin.isDisable)
@@ -284,7 +285,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       onPressed: () {
                         controller.disablePlugin(plugin);
                       },
-                      child: const Text('Disable'),
+                      child: Text(controller.tr('plugin_disable')),
                     ),
                   ),
                 if (plugin.isInstalled && plugin.isDisable)
@@ -294,7 +295,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       onPressed: () {
                         controller.enablePlugin(plugin);
                       },
-                      child: const Text('Enable'),
+                      child: Text(controller.tr('plugin_enable')),
                     ),
                   ),
               ],
@@ -313,36 +314,36 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 if (controller.shouldShowSettingTab())
                   dt.TabData(
                     index: 0,
-                    title: const material.Tab(
-                      child: Text('Settings'),
+                    title: material.Tab(
+                      child: Text(controller.tr('plugin_tab_settings')),
                     ),
                     content: pluginTabSetting(),
                   ),
                 dt.TabData(
                   index: 1,
-                  title: const material.Tab(
-                    child: Text('Trigger Keywords'),
+                  title: material.Tab(
+                    child: Text(controller.tr('plugin_tab_trigger_keywords')),
                   ),
                   content: pluginTabTriggerKeywords(),
                 ),
                 dt.TabData(
                   index: 2,
-                  title: const material.Tab(
-                    child: Text('Commands'),
+                  title: material.Tab(
+                    child: Text(controller.tr('plugin_tab_commands')),
                   ),
                   content: pluginTabCommand(),
                 ),
                 dt.TabData(
                   index: 3,
-                  title: const material.Tab(
-                    child: Text('Description'),
+                  title: material.Tab(
+                    child: Text(controller.tr('plugin_tab_description')),
                   ),
                   content: pluginTabDescription(),
                 ),
                 dt.TabData(
                   index: 4,
-                  title: const material.Tab(
-                    child: Text('Privacy'),
+                  title: material.Tab(
+                    child: Text(controller.tr('plugin_tab_privacy')),
                   ),
                   content: pluginTabPrivacy(),
                 ),
@@ -488,12 +489,12 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   Widget pluginTabTriggerKeywords() {
     var plugin = controller.activePluginDetail.value;
     if (plugin.triggerKeywords.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
+      return Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('This plugin has no trigger keywords'),
+            Text(controller.tr('plugin_no_trigger_keywords')),
           ],
         ),
       );
@@ -507,8 +508,8 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         "Columns": [
           {
             "Key": "keyword",
-            "Label": "Keyword",
-            "Tooltip": "The keyword that triggers this plugin. * presents no keyword, any input will trigger this plugin.",
+            "Label": controller.tr('plugin_trigger_keyword_column'),
+            "Tooltip": controller.tr('plugin_trigger_keyword_tooltip'),
             "Type": "text",
             "TextMaxLines": 1,
             "Validators": [
@@ -533,12 +534,12 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   Widget pluginTabCommand() {
     var plugin = controller.activePluginDetail.value;
     if (plugin.commands.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
+      return Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('This plugin has no command'),
+            Text(controller.tr('plugin_no_commands')),
           ],
         ),
       );
@@ -553,7 +554,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         "Columns": [
           {
             "Key": "Command",
-            "Label": "Name",
+            "Label": controller.tr('plugin_command_name_column'),
             "Width": 120,
             "Type": "text",
             "TextMaxLines": 1,
@@ -563,7 +564,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
           },
           {
             "Key": "Description",
-            "Label": "Description",
+            "Label": controller.tr('plugin_command_desc_column'),
             "Type": "text",
             "TextMaxLines": 1,
             "Validators": [
@@ -579,9 +580,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
 
   Widget pluginTabPrivacy() {
     var plugin = controller.activePluginDetail.value;
-    var noDataAccess = const Padding(
+    var noDataAccess = Padding(
       padding: EdgeInsets.all(16),
-      child: Text('This plugin requires no data access'),
+      child: Text(controller.tr('plugin_no_data_access')),
     );
 
     if (plugin.features.isEmpty) {
@@ -616,34 +617,34 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('This plugin requires access to the following data:'),
+            Text(controller.tr('plugin_data_access_title')),
             ...params.map((e) {
               if (e == "requireActiveWindowName") {
                 return privacyItem(
                   material.Icons.window,
-                  'Active window name',
-                  'E.g. you are using google chrome to view webpages, you activate Wox and this plugin will get the active window name as "Google Chrome"',
+                  controller.tr('plugin_privacy_window_name'),
+                  controller.tr('plugin_privacy_window_name_desc'),
                 );
               }
               if (e == "requireActiveWindowPid") {
                 return privacyItem(
                   material.Icons.window,
-                  'Active window process id',
-                  'E.g. you are using google chrome to view webpages, you activate Wox and this plugin will get the active window process id as "1234"',
+                  controller.tr('plugin_privacy_window_pid'),
+                  controller.tr('plugin_privacy_window_pid_desc'),
                 );
               }
               if (e == "requireActiveBrowserUrl") {
                 return privacyItem(
                   material.Icons.web_sharp,
-                  'Active browser URL',
-                  'E.g. you are using google chrome to view webpages, you activate Wox and this plugin will get the url of active tab you are viewing',
+                  controller.tr('plugin_privacy_browser_url'),
+                  controller.tr('plugin_privacy_browser_url_desc'),
                 );
               }
               if (e == "llm") {
                 return privacyItem(
                   material.Icons.chat,
-                  'Large Language Model (LLM)',
-                  'This plugin uses large language model to provide better results, you need to configure the model in LLM Tools plugin first',
+                  controller.tr('plugin_privacy_llm'),
+                  controller.tr('plugin_privacy_llm_desc'),
                 );
               }
               return Text(e);

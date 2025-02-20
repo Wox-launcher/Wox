@@ -74,8 +74,8 @@ class WoxSettingAIView extends GetView<WoxSettingController> {
                     "Columns": [
                       {
                         "Key": "Name",
-                        "Label": "Provider Name",
-                        "Tooltip": "The name of the AI provider.",
+                        "Label": "i18n:ai_providers_name",
+                        "Tooltip": "i18n:ai_providers_name_tooltip",
                         "Width": 120,
                         "Type": "select",
                         "SelectOptions": [
@@ -91,15 +91,15 @@ class WoxSettingAIView extends GetView<WoxSettingController> {
                       },
                       {
                         "Key": "ApiKey",
-                        "Label": "API Key",
-                        "Tooltip": "The API key of the AI provider.",
+                        "Label": "i18n:ai_providers_api_key",
+                        "Tooltip": "i18n:ai_providers_api_key_tooltip",
                         "Type": "text",
                         "TextMaxLines": 1,
                       },
                       {
                         "Key": "Host",
-                        "Label": "Host",
-                        "Tooltip": "The host of the AI provider.",
+                        "Label": "i18n:ai_providers_host",
+                        "Tooltip": "i18n:ai_providers_host_tooltip",
                         "Width": 200,
                         "Type": "text",
                       }
@@ -112,12 +112,12 @@ class WoxSettingAIView extends GetView<WoxSettingController> {
                   onUpdateValidate: (rowValues) async {
                     if (rowValues["Name"] != "ollama") {
                       if (rowValues["ApiKey"] == null || rowValues["ApiKey"] == "") {
-                        return "API key is required.";
+                        return controller.tr("i18n:ai_providers_api_key_required");
                       }
                     }
                     if (rowValues["Name"] == "ollama") {
                       if (rowValues["Host"] == null || rowValues["Host"] == "") {
-                        return "Host is required.";
+                        return controller.tr("i18n:ai_providers_host_required");
                       }
                     }
                     return null;

@@ -1,0 +1,58 @@
+---
+description: Git Conventional Commits
+globs: 
+---
+# Git Conventional Commits
+
+Rule for generating commit messages using conventional commits format.
+
+<rule>
+name: conventional_commits
+description: Generate commit messages using conventional commits format
+filters:
+  - type: event
+    pattern: "build_success"
+  - type: file_change
+    pattern: "*"
+
+actions:
+  - type: suggest
+    message: |
+      Important Rules:
+      1. Always check git diff first to understand the changes
+      2. Only generate commit message, DO NOT execute git commit command
+
+      Changes should be committed using conventional commits format:
+
+      Format: <type>(<scope>): <description>
+
+      Types:
+      - feat: A new feature
+      - fix: A bug fix
+      - docs: Documentation only changes
+      - style: Changes that do not affect the meaning of the code
+      - refactor: A code change that neither fixes a bug nor adds a feature
+      - perf: A code change that improves performance
+      - test: Adding missing tests or correcting existing tests
+      - chore: Changes to the build process or auxiliary tools
+
+      The scope should be derived from the file path or affected component.
+      The description should be clear and concise, written in imperative mood.
+
+examples:
+  - input: |
+      # After adding a new function
+      CHANGE_DESCRIPTION="add user authentication function"
+      FILE="src/auth/login.ts"
+    output: "feat(src-auth): add user authentication function"
+
+  - input: |
+      # After fixing a bug
+      CHANGE_DESCRIPTION="fix incorrect date parsing"
+      FILE="lib/utils/date.js"
+    output: "fix(lib-utils): fix incorrect date parsing"
+
+metadata:
+  priority: high
+  version: 1.0
+</rule>

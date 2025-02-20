@@ -240,8 +240,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                       "Columns": [
                         {
                           "Key": "Shortcut",
-                          "Label": "Shortcut",
-                          "Tooltip": "Query shortcut. E.g. 'translate' => 'chatgpt translate'",
+                          "Label": "i18n:query_shortcuts_shortcut",
+                          "Tooltip": "i18n:query_shortcuts_shortcut_tooltip",
                           "Width": 120,
                           "Type": "text",
                           "TextMaxLines": 1,
@@ -251,8 +251,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                         },
                         {
                           "Key": "Query",
-                          "Label": "Query",
-                          "Tooltip": "The query represented by the shortcut.",
+                          "Label": "i18n:query_shortcuts_query",
+                          "Tooltip": "i18n:query_shortcuts_query_tooltip",
                           "Type": "text",
                           "TextMaxLines": 1,
                           "Validators": [

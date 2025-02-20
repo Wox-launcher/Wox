@@ -7,6 +7,7 @@ import 'package:wox/components/wox_theme_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/strings.dart';
 
 class WoxSettingThemeView extends GetView<WoxSettingController> {
   const WoxSettingThemeView({super.key});
@@ -32,7 +33,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
             child: Obx(() {
               return TextBox(
                 autofocus: true,
-                placeholder: 'Search ${controller.filteredThemeList.length} themes',
+                placeholder: Strings.format(controller.tr('setting_theme_search_placeholder'), [controller.filteredThemeList.length]),
                 padding: const EdgeInsets.all(10),
                 suffix: const Padding(
                   padding: EdgeInsets.only(right: 8.0),
@@ -158,11 +159,11 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                     onPressed: () {
                       controller.openPluginWebsite(theme.themeUrl);
                     },
-                    child: const base.Row(
+                    child: base.Row(
                       children: [
                         Text(
-                          "website",
-                          style: TextStyle(
+                          controller.tr('setting_theme_website'),
+                          style: const TextStyle(
                             color: base.Colors.blue,
                           ),
                         ),
@@ -192,7 +193,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                       onPressed: () {
                         controller.uninstallTheme(theme);
                       },
-                      child: const Text('Uninstall'),
+                      child: Text(controller.tr('setting_theme_uninstall')),
                     ),
                   ),
                 if (!theme.isInstalled)
@@ -202,7 +203,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                       onPressed: () {
                         controller.installTheme(theme);
                       },
-                      child: const Text('Install'),
+                      child: Text(controller.tr('setting_theme_install')),
                     ),
                   ),
               ],
@@ -213,17 +214,17 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
               length: 2,
               child: Column(
                 children: [
-                  const base.TabBar(
+                  base.TabBar(
                     isScrollable: true,
                     tabAlignment: base.TabAlignment.start,
                     labelColor: SettingPrimaryColor,
                     indicatorColor: SettingPrimaryColor,
                     tabs: [
                       base.Tab(
-                        child: Text('Preview'),
+                        child: Text(controller.tr('setting_theme_preview')),
                       ),
                       base.Tab(
-                        child: Text('Description'),
+                        child: Text(controller.tr('setting_theme_description')),
                       ),
                     ],
                   ),
@@ -246,7 +247,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
 
   Widget themeTabPreview(WoxTheme theme) {
     if (theme.themeId.isEmpty) {
-      return const Text('Theme data is empty');
+      return Text(controller.tr('setting_theme_empty_data'));
     }
 
     return WoxThemePreview(theme: theme);

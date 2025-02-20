@@ -1,0 +1,6 @@
+---
+description: python plugin定义
+globs: wox.plugin.python/**/*.py
+---
+* 具体的功能实现必须对齐 [api.go](mdc:wox.core/plugin/api.go) 中的定义
+* dataclass进行数据模型定义, 请参考 [query.py](mdc:wox.plugin.python/src/wox_plugin/models/query.py)

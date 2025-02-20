@@ -1,0 +1,7 @@
+---
+description: wox.core编码规则
+globs: wox.core/**/*.go
+---
+* 日志方式参考: [log.go](mdc:wox.core/util/log.go) 以及 [manager.go](mdc:wox.core/plugin/manager.go) 下面的用法
+* wox.core项目中的方法第一个参数基本都是context.Context, 我们通过将traceId放在context中来实现日志跟踪
+* 编写单元测试的时候， 注意初始化日志，否则日志可能不会打印到正确的位置，参考: @main_test.go
