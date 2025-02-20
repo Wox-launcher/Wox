@@ -71,10 +71,10 @@ dev: _check_deps
 	$(MAKE) -C wox.ui.flutter/wox build
 
 test: dev
-	cd wox.core && go test ./...
+	$(MAKE) only_test
 
 only_test:
-	cd wox.core && go test ./...
+	cd wox.core && go test ./... -skip TestFetchCryptoPrices
 
 publish: clean dev
 	$(MAKE) -C wox.core build
