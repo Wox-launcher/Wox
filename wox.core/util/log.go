@@ -35,15 +35,27 @@ func GetLogger() *Log {
 
 func setCrashOutput(logInstance *Log) {
 	logFile := path.Join(GetLocation().GetLogDirectory(), "crash.log")
-	crashFile, err := os.Create(logFile)
+	// Open file in append mode instead of create
+	crashFile, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		panic(err)
+		logInstance.Error(context.Background(), fmt.Sprintf("failed to open crash log file: %s", err.Error()))
+		return
+	}
+	defer crashFile.Close()
+
+	// Verify write permission
+	if err := crashFile.Chmod(0644); err != nil {
+		logInstance.Error(context.Background(), fmt.Sprintf("failed to set crash log file permission: %s", err.Error()))
+		return
 	}
 
 	setCrashOutputErr := debug.SetCrashOutput(crashFile, debug.CrashOptions{})
 	if setCrashOutputErr != nil {
 		logInstance.Error(context.Background(), fmt.Sprintf("failed to set crash output: %s", setCrashOutputErr.Error()))
+		return
 	}
+
+	logInstance.Info(context.Background(), fmt.Sprintf("crash output set to: %s", logFile))
 }
 
 func CreateLogger(logFolder string) *Log {
