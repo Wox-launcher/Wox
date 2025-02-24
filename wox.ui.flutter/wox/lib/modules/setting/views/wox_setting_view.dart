@@ -52,7 +52,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                       title: Text(controller.tr('ai')),
                       body: const WoxSettingAIView(),
                     ),
-                     PaneItem(
+                    PaneItem(
                       icon: const Icon(FluentIcons.globe),
                       title: Text(controller.tr('network')),
                       body: const WoxSettingProxyView(),
@@ -61,9 +61,6 @@ class WoxSettingView extends GetView<WoxSettingController> {
                         icon: const Icon(FluentIcons.app_icon_default_add),
                         title: Text(controller.tr('plugins')),
                         body: const WoxSettingPluginView(),
-                        onTap: () async {
-                          await controller.switchToPluginList(true);
-                        },
                         initiallyExpanded: true,
                         items: [
                           PaneItem(
@@ -86,10 +83,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                     PaneItemExpander(
                       icon: const Icon(FluentIcons.color),
                       title: Text(controller.tr('themes')),
-                      body: const Text('Themes'),
-                      onTap: () async {
-                        await controller.switchToThemeList(true);
-                      },
+                      body: const WoxSettingThemeView(),
                       initiallyExpanded: true,
                       items: [
                         PaneItem(

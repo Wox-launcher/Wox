@@ -205,10 +205,10 @@ packages:
     dependency: "direct main"
     description:
       name: fluent_ui
-      sha256: ae97c15cbf41594e31d9582a359b5a725cb66753bef73ed845ba534d3c7ec053
+      sha256: "8e41dd62b321ec9a4a14cebe1dcb9144d7a32b9cef326332687c1da45d537540"
       url: "https://pub.dev"
     source: hosted
-    version: "4.9.1"
+    version: "4.11.2"
   flutter:
     dependency: "direct main"
     description: flutter
@@ -1029,4 +1029,4 @@ packages:
     version: "6.5.0"
 sdks:
   dart: ">=3.7.0-0 <4.0.0"
-  flutter: ">=3.24.0"
+  flutter: ">=3.27.0"

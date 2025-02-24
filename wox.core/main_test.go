@@ -366,7 +366,7 @@ func initServices() {
 	plugin.GetPluginManager().Start(ctx, ui.GetUIManager().GetUI(ctx))
 
 	// Wait for plugins to initialize
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 10)
 
 	// Initialize selection
 	util.InitSelection()
