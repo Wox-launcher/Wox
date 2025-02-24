@@ -468,6 +468,7 @@ class WoxLauncherController extends GetxController {
     }
 
     actions.assignAll(filteredActions);
+    activeActionIndex.value = 0;
     updateToolbarByActiveAction(traceId);
   }
 
@@ -791,13 +792,20 @@ class WoxLauncherController extends GetxController {
     }
 
     final filterText = actionTextFieldController.text;
+    List<WoxResultAction> newActions;
     if (filterText.isNotEmpty) {
-      var filteredActions = activeQueryResult.actions.where((element) {
+      newActions = activeQueryResult.actions.where((element) {
         return isFuzzyMatch(traceId, element.name.value, filterText);
       }).toList();
-      actions.assignAll(filteredActions);
+      activeActionIndex.value = newActions.isEmpty ? -1 : 0;
+      remainIndex = false;
     } else {
-      actions.assignAll(activeQueryResult.actions);
+      newActions = List.from(activeQueryResult.actions);
+    }
+
+    // Only update actions if they have actually changed
+    if (!WoxResultAction.listEquals(actions, newActions)) {
+      actions.assignAll(newActions);
     }
 
     // remain the same action index

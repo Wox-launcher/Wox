@@ -294,6 +294,23 @@ class WoxResultAction {
   static WoxResultAction empty() {
     return WoxResultAction(id: "", name: "".obs, icon: WoxImage.empty().obs, isDefault: false, preventHideAfterAction: false, hotkey: "");
   }
+
+  bool equals(WoxResultAction other) {
+    return id == other.id &&
+        name.value == other.name.value &&
+        icon.value.imageData == other.icon.value.imageData &&
+        isDefault == other.isDefault &&
+        preventHideAfterAction == other.preventHideAfterAction &&
+        hotkey == other.hotkey;
+  }
+
+  static bool listEquals(List<WoxResultAction> actions1, List<WoxResultAction> actions2) {
+    if (actions1.length != actions2.length) return false;
+    for (var i = 0; i < actions1.length; i++) {
+      if (!actions1[i].equals(actions2[i])) return false;
+    }
+    return true;
+  }
 }
 
 class Position {
