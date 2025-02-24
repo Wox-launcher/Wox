@@ -41,9 +41,11 @@
   "ui_setting_theme_website": "Website",
   "ui_setting_theme_uninstall": "Uninstall",
   "ui_setting_theme_install": "Install",
+  "ui_setting_theme_apply": "Apply",
   "ui_setting_theme_preview": "Preview",
   "ui_setting_theme_description": "Description",
   "ui_setting_theme_empty_data": "Theme data is empty",
+  "ui_setting_theme_system_tag": "System",
   "ui_back": "Back",
   "ui_operation": "Operation",
   "ui_query_hotkeys_hotkey": "Hotkey",
@@ -223,5 +225,6 @@
   "plugin_manager_query_failed": "%s query failed",
   "plugin_manager_remove_from_favorite": "Remove from favorite",
   "plugin_manager_add_to_favorite": "Add to favorite",
-  "plugin_manager_invalid_query_type": "Invalid query type"
+  "plugin_manager_invalid_query_type": "Invalid query type",
+  "ui_setting_plugin_system_tag": "System"
 }

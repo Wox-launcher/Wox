@@ -71,6 +71,16 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
           child: Scrollbar(
             thumbVisibility: false,
             child: Obx(() {
+              if (controller.isLoadingPlugins.value) {
+                return const Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: ProgressRing(),
+                  ),
+                );
+              }
+
               return ListView.builder(
                 primary: true,
                 itemCount: controller.filteredPluginDetails.length,
@@ -123,6 +133,27 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                                     fontSize: 12,
                                   ),
                                 ),
+                                if (plugin.isSystem) ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(3),
+                                      border: Border.all(
+                                        color: isActive ? Colors.white.withOpacity(0.3) : Colors.blue.lighter,
+                                        width: 0.5,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      controller.tr('setting_plugin_system_tag'),
+                                      style: TextStyle(
+                                        color: isActive ? Colors.white : Colors.blue,
+                                        fontSize: 11,
+                                        height: 1.1,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                             trailing: pluginTrailIcon(plugin, isActive),
@@ -152,6 +183,16 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   Widget pluginDetail() {
     return Expanded(
       child: Obx(() {
+        if (controller.isLoadingPlugins.value) {
+          return const Center(
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: ProgressRing(),
+            ),
+          );
+        }
+
         final plugin = controller.activePluginDetail.value;
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Padding(

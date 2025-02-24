@@ -47,6 +47,17 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
         Expanded(
           child: base.Scrollbar(
             child: Obx(() {
+              if (controller.filteredThemeList.isEmpty) {
+                return Center(
+                  child: Text(
+                    controller.tr('setting_theme_empty_data'),
+                    style: const TextStyle(
+                      color: base.Colors.grey,
+                    ),
+                  ),
+                );
+              }
+
               return ListView.builder(
                 itemCount: controller.filteredThemeList.length,
                 itemBuilder: (context, index) {
@@ -76,11 +87,12 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                                 )),
                             subtitle: base.Row(
                               mainAxisAlignment: MainAxisAlignment.start,
+                              crossAxisAlignment: base.CrossAxisAlignment.center,
                               children: [
                                 Text(
                                   theme.version,
-                                  maxLines: 1, // Limiting the description to two lines
-                                  overflow: TextOverflow.ellipsis, // Add ellipsis for overflow
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     color: isActive ? base.Colors.white : base.Colors.grey,
                                     fontSize: 12,
@@ -89,13 +101,34 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                                 const base.SizedBox(width: 10),
                                 Text(
                                   theme.themeAuthor,
-                                  maxLines: 1, // Limiting the description to two lines
-                                  overflow: TextOverflow.ellipsis, // Add ellipsis for overflow
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     color: isActive ? base.Colors.white : base.Colors.grey,
                                     fontSize: 12,
                                   ),
                                 ),
+                                if (theme.isSystem) ...[
+                                  const base.SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(3),
+                                      border: Border.all(
+                                        color: isActive ? base.Colors.white.withOpacity(0.3) : Colors.blue.lighter,
+                                        width: 0.5,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      controller.tr('setting_theme_system_tag'),
+                                      style: TextStyle(
+                                        color: isActive ? base.Colors.white : Colors.blue,
+                                        fontSize: 11,
+                                        height: 1.1,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -116,6 +149,16 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
     return Expanded(
       child: Obx(() {
         final theme = controller.activeTheme.value;
+        if (theme.themeId.isEmpty) {
+          return Center(
+            child: Text(
+              controller.tr('setting_theme_empty_data'),
+              style: const TextStyle(
+                color: base.Colors.grey,
+              ),
+            ),
+          );
+        }
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Padding(
             padding: const EdgeInsets.only(bottom: 8.0, left: 10),
@@ -147,11 +190,15 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  theme.themeAuthor,
-                  style: const TextStyle(
-                    color: base.Colors.grey,
-                  ),
+                base.Row(
+                  children: [
+                    Text(
+                      theme.themeAuthor,
+                      style: const TextStyle(
+                        color: base.Colors.grey,
+                      ),
+                    ),
+                  ],
                 ),
                 Padding(
                   padding: const EdgeInsets.only(left: 18.0),
@@ -167,7 +214,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                             color: base.Colors.blue,
                           ),
                         ),
-                        Padding(
+                        const Padding(
                           padding: EdgeInsets.only(left: 4.0),
                           child: Icon(
                             FluentIcons.open_in_new_tab,
@@ -186,16 +233,6 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
             padding: const EdgeInsets.only(bottom: 8.0, left: 16),
             child: Row(
               children: [
-                if (theme.isInstalled && !theme.isSystem)
-                  base.Padding(
-                    padding: const EdgeInsets.only(right: 8.0),
-                    child: Button(
-                      onPressed: () {
-                        controller.uninstallTheme(theme);
-                      },
-                      child: Text(controller.tr('setting_theme_uninstall')),
-                    ),
-                  ),
                 if (!theme.isInstalled)
                   base.Padding(
                     padding: const EdgeInsets.only(right: 8.0),
@@ -204,6 +241,28 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                         controller.installTheme(theme);
                       },
                       child: Text(controller.tr('setting_theme_install')),
+                    ),
+                  ),
+                if (theme.isInstalled || theme.isSystem)
+                  base.Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: Button(
+                      onPressed: controller.woxSetting.value.themeId == theme.themeId
+                          ? null
+                          : () {
+                              controller.applyTheme(theme);
+                            },
+                      child: Text(controller.tr('setting_theme_apply')),
+                    ),
+                  ),
+                if (theme.isInstalled && !theme.isSystem)
+                  base.Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: Button(
+                      onPressed: () {
+                        controller.uninstallTheme(theme);
+                      },
+                      child: Text(controller.tr('setting_theme_uninstall')),
                     ),
                   ),
               ],

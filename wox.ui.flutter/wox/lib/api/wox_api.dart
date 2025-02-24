@@ -73,6 +73,10 @@ class WoxApi {
     await WoxHttpUtil.instance.postData("/theme/uninstall", {"id": id});
   }
 
+  Future<void> applyTheme(String id) async {
+    await WoxHttpUtil.instance.postData("/theme/apply", {"id": id});
+  }
+
   Future<bool> isHotkeyAvailable(String hotkey) async {
     return await WoxHttpUtil.instance.postData("/hotkey/available", {"hotkey": hotkey});
   }

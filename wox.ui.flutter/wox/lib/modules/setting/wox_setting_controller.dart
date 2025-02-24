@@ -32,6 +32,20 @@ class WoxSettingController extends GetxController {
 
   final isInstallingPlugin = false.obs;
 
+  // Add loading state and cache
+  final isLoadingPlugins = false.obs;
+  final _storePluginsCache = <PluginDetail>[];
+  final _installedPluginsCache = <PluginDetail>[];
+  final _lastStorePluginsFetchTime = DateTime(2000).obs;
+  final _lastInstalledPluginsFetchTime = DateTime(2000).obs;
+  static const _cacheDuration = Duration(minutes: 5);
+
+  @override
+  void onInit() {
+    super.onInit();
+    refreshThemeList();
+  }
+
   void hideWindow() {
     Get.find<WoxLauncherController>().isInSettingView.value = false;
   }
@@ -61,43 +75,87 @@ class WoxSettingController extends GetxController {
   // ---------- Plugins ----------
 
   Future<void> loadStorePlugins() async {
+    // Check if cache is still valid
+    if (_storePluginsCache.isNotEmpty && DateTime.now().difference(_lastStorePluginsFetchTime.value) < _cacheDuration) {
+      pluginDetails.clear();
+      pluginDetails.addAll(_storePluginsCache);
+      return;
+    }
+
     final storePlugins = await WoxApi.instance.findStorePlugins();
     storePlugins.sort((a, b) => a.name.compareTo(b.name));
     pluginDetails.clear();
     pluginDetails.addAll(storePlugins);
+
+    // Update cache
+    _storePluginsCache.clear();
+    _storePluginsCache.addAll(storePlugins);
+    _lastStorePluginsFetchTime.value = DateTime.now();
   }
 
   Future<void> loadInstalledPlugins() async {
+    // Check if cache is still valid
+    if (_installedPluginsCache.isNotEmpty && DateTime.now().difference(_lastInstalledPluginsFetchTime.value) < _cacheDuration) {
+      pluginDetails.clear();
+      pluginDetails.addAll(_installedPluginsCache);
+      return;
+    }
+
     final installedPlugin = await WoxApi.instance.findInstalledPlugins();
     installedPlugin.sort((a, b) => a.name.compareTo(b.name));
     pluginDetails.clear();
     pluginDetails.addAll(installedPlugin);
+
+    // Update cache
+    _installedPluginsCache.clear();
+    _installedPluginsCache.addAll(installedPlugin);
+    _lastInstalledPluginsFetchTime.value = DateTime.now();
   }
 
   Future<void> refreshPluginList() async {
-    if (isStorePluginList.value) {
-      await loadStorePlugins();
-    } else {
-      await loadInstalledPlugins();
-    }
+    try {
+      isLoadingPlugins.value = true;
 
-    filterPlugins();
+      if (isStorePluginList.value) {
+        await loadStorePlugins();
+      } else {
+        await loadInstalledPlugins();
+      }
 
-    //active plugin
-    if (activePluginDetail.value.id.isNotEmpty) {
-      activePluginDetail.value = filteredPluginDetails.firstWhere((element) => element.id == activePluginDetail.value.id, orElse: () => filteredPluginDetails[0]);
-    } else {
-      setFirstFilteredPluginDetailActive();
+      filterPlugins();
+
+      //active plugin
+      if (activePluginDetail.value.id.isNotEmpty) {
+        activePluginDetail.value = filteredPluginDetails.firstWhere((element) => element.id == activePluginDetail.value.id,
+            orElse: () => filteredPluginDetails.isNotEmpty ? filteredPluginDetails[0] : PluginDetail.empty());
+      } else {
+        setFirstFilteredPluginDetailActive();
+      }
+    } finally {
+      isLoadingPlugins.value = false;
     }
   }
 
   Future<void> switchToPluginList(bool isStorePlugin) async {
+    // If we're already loading, ignore the request
+    if (isLoadingPlugins.value) return;
+
     activePaneIndex.value = isStorePlugin ? 4 : 5;
     isStorePluginList.value = isStorePlugin;
     activePluginDetail.value = PluginDetail.empty();
     filterPluginKeywordController.text = "";
     await refreshPluginList();
     setFirstFilteredPluginDetailActive();
+  }
+
+  // Force refresh cache
+  Future<void> forceRefreshPluginList() async {
+    if (isStorePluginList.value) {
+      _lastStorePluginsFetchTime.value = DateTime(2000);
+    } else {
+      _lastInstalledPluginsFetchTime.value = DateTime(2000);
+    }
+    await refreshPluginList();
   }
 
   void setFirstFilteredPluginDetailActive() {
@@ -111,6 +169,9 @@ class WoxSettingController extends GetxController {
       isInstallingPlugin.value = true;
       Logger.instance.info(const UuidV4().generate(), 'installing plugin: ${plugin.name}');
       await WoxApi.instance.installPlugin(plugin.id);
+      // Clear both caches when installing a plugin
+      _lastStorePluginsFetchTime.value = DateTime(2000);
+      _lastInstalledPluginsFetchTime.value = DateTime(2000);
       await refreshPluginList();
     } catch (e) {
       Get.snackbar(
@@ -141,6 +202,9 @@ class WoxSettingController extends GetxController {
   Future<void> uninstallPlugin(PluginDetail plugin) async {
     Logger.instance.info(const UuidV4().generate(), 'uninstalling plugin: ${plugin.name}');
     await WoxApi.instance.uninstallPlugin(plugin.id);
+    // Clear both caches when uninstalling a plugin
+    _lastStorePluginsFetchTime.value = DateTime(2000);
+    _lastInstalledPluginsFetchTime.value = DateTime(2000);
     await refreshPluginList();
   }
 
@@ -212,6 +276,15 @@ class WoxSettingController extends GetxController {
     Logger.instance.info(const UuidV4().generate(), 'Uninstalling theme: ${theme.themeId}');
     await WoxApi.instance.uninstallTheme(theme.themeId);
     await refreshThemeList();
+  }
+
+  Future<void> applyTheme(WoxTheme theme) async {
+    Logger.instance.info(const UuidV4().generate(), 'Applying theme: ${theme.themeId}');
+    await WoxApi.instance.applyTheme(theme.themeId);
+    await refreshThemeList();
+    // refresh wox setting to make the UI updated
+    await WoxSettingUtil.instance.loadSetting();
+    woxSetting.value = WoxSettingUtil.instance.currentSetting;
   }
 
   onFilterThemes(String filter) {

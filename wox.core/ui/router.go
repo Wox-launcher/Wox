@@ -36,6 +36,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/theme/installed": handleThemeInstalled,
 	"/theme/install":   handleThemeInstall,
 	"/theme/uninstall": handleThemeUninstall,
+	"/theme/apply":     handleThemeApply,
 
 	// settings
 	"/setting/wox":           handleSettingWox,
@@ -430,6 +431,32 @@ func handleThemeUninstall(w http.ResponseWriter, r *http.Request) {
 		GetUIManager().ChangeToDefaultTheme(ctx)
 	}
 
+	writeSuccessResponse(w, "")
+}
+
+func handleThemeApply(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+
+	body, _ := io.ReadAll(r.Body)
+	idResult := gjson.GetBytes(body, "id")
+	if !idResult.Exists() {
+		writeErrorResponse(w, "id is empty")
+		return
+	}
+
+	themeId := idResult.String()
+
+	// Find theme in installed themes
+	storeThemes := GetUIManager().GetAllThemes(ctx)
+	findTheme, exist := lo.Find(storeThemes, func(item share.Theme) bool {
+		return item.ThemeId == themeId
+	})
+	if !exist {
+		writeErrorResponse(w, "can't find theme")
+		return
+	}
+
+	GetUIManager().ChangeTheme(ctx, findTheme)
 	writeSuccessResponse(w, "")
 }
 
