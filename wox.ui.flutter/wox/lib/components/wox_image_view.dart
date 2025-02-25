@@ -29,6 +29,11 @@ class WoxImageView extends StatelessWidget {
         },
       );
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code) {
+      // check if file exists
+      if (!File(woxImage.imageData).existsSync()) {
+        return const SizedBox(width: 24, height: 24);
+      }
+      
       return Image.file(File(woxImage.imageData), width: width, height: height);
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code) {
       return SvgPicture.string(woxImage.imageData, width: width, height: height);

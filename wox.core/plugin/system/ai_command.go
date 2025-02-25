@@ -180,7 +180,7 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 
 		var startAnsweringTime int64
 		onPreparing := func(current plugin.RefreshableResult) plugin.RefreshableResult {
-			current.Preview.PreviewData = "i18n:plugin_ai_command_answering"
+			current.Preview.PreviewData = i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_answering")
 			current.SubTitle = "i18n:plugin_ai_command_answering"
 			startAnsweringTime = util.GetSystemTimestamp()
 			return current
@@ -195,7 +195,10 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 			}
 
 			current.SubTitle = "i18n:plugin_ai_command_answering"
-			current.Preview.PreviewData += deltaAnswer
+
+			// Process thinking tags to convert them to markdown quote format
+			processedDelta := processThinkingTags(deltaAnswer)
+			current.Preview.PreviewData += processedDelta
 			current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
 
 			if isFinished {
@@ -397,7 +400,9 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	}
 
 	onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
-		current.Preview.PreviewData += deltaAnswer
+		// Process thinking tags to convert them to markdown quote format
+		processedDelta := processThinkingTags(deltaAnswer)
+		current.Preview.PreviewData += processedDelta
 		current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
 		current.ContextData = current.Preview.PreviewData
 		if isFinished {
@@ -441,4 +446,69 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	}
 
 	return []plugin.QueryResult{result}
+}
+
+// processThinkingTags converts <think>...</think> content to markdown quote format
+func processThinkingTags(text string) string {
+	// Only process thinking tags if <think> appears at the beginning of the text
+	trimmedText := strings.TrimSpace(text)
+	if !strings.HasPrefix(trimmedText, "<think>") {
+		return text
+	}
+
+	// We found <think> at the beginning, process it
+	var resultBuilder strings.Builder
+	insideThink := true
+
+	// Remove the opening <think> tag from the beginning
+	processedText := strings.TrimPrefix(trimmedText, "<think>")
+
+	// Split by lines to add > to each line in think block
+	lines := strings.Split(processedText, "\n")
+
+	for i, line := range lines {
+		// Check for closing think tag
+		if strings.Contains(line, "</think>") {
+			insideThink = false
+			// Split the line at </think>
+			parts := strings.Split(line, "</think>")
+
+			// Handle content before </think> tag
+			if len(parts) > 0 {
+				beforeTag := parts[0]
+				if len(strings.TrimSpace(beforeTag)) > 0 {
+					// Add quote to non-empty content before </think>
+					resultBuilder.WriteString("> " + beforeTag)
+				}
+			}
+
+			// Handle content after </think> tag
+			if len(parts) > 1 {
+				afterTag := parts[1]
+				if len(strings.TrimSpace(afterTag)) > 0 {
+					// Only add newline if we wrote something before
+					if len(strings.TrimSpace(parts[0])) > 0 {
+						resultBuilder.WriteString("\n")
+					}
+					resultBuilder.WriteString(afterTag)
+				}
+			}
+
+			// If the line was just </think> or we've already handled all content,
+			// we don't need to do anything else for this line
+		} else if insideThink {
+			// Inside a think block, add quote prefix
+			resultBuilder.WriteString("> " + line)
+		} else {
+			// Outside think block (after </think>), no special formatting
+			resultBuilder.WriteString(line)
+		}
+
+		// Add newline unless it's the last line
+		if i < len(lines)-1 {
+			resultBuilder.WriteString("\n")
+		}
+	}
+
+	return resultBuilder.String()
 }
