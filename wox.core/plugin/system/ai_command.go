@@ -187,37 +187,36 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 		}
 
 		isFirstAnswer := true
-		answerText := ""
 		onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
 			if isFirstAnswer {
 				current.Preview.PreviewData = ""
+				current.ContextData = ""
 				isFirstAnswer = false
 			}
 
 			current.SubTitle = "i18n:plugin_ai_command_answering"
+			current.ContextData += deltaAnswer
 
 			// Process thinking tags to convert them to markdown quote format
-			processedDelta := processThinkingTags(deltaAnswer)
-			current.Preview.PreviewData += processedDelta
+			thinking, content := c.processThinking(current.ContextData)
+			current.Preview.PreviewData = c.convertThinkingToMarkdown(thinking, content)
 			current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
 
 			if isFinished {
 				current.RefreshInterval = 0
 				current.SubTitle = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_answered_cost"), util.GetSystemTimestamp()-startAnsweringTime)
-				answerText = current.Preview.PreviewData
-
 				current.Actions = []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_ai_command_copy",
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							clipboard.WriteText(answerText)
+							clipboard.WriteText(content)
 						},
 					},
 				}
 
 				// paste to active window
 				pasteToActiveWindowAction, pasteToActiveWindowErr := getPasteToActiveWindowAction(ctx, c.api, func() {
-					clipboard.WriteText(answerText)
+					clipboard.WriteText(content)
 				})
 				if pasteToActiveWindowErr == nil {
 					current.Actions = append(current.Actions, pasteToActiveWindowAction)
@@ -259,7 +258,7 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 			Title:           command.Name,
 			SubTitle:        fmt.Sprintf("%s - %s", command.AIModel().Provider, command.AIModel().Name),
 			Icon:            aiCommandIcon,
-			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeText, PreviewData: "i18n:plugin_ai_command_enter_to_start"},
+			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: "i18n:plugin_ai_command_enter_to_start"},
 			RefreshInterval: 100,
 			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, command.AIModel(), conversations, func() bool {
 				return startGenerate
@@ -400,11 +399,11 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	}
 
 	onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
+		current.ContextData += deltaAnswer
 		// Process thinking tags to convert them to markdown quote format
-		processedDelta := processThinkingTags(deltaAnswer)
-		current.Preview.PreviewData += processedDelta
+		thinking, content := c.processThinking(current.ContextData)
+		current.Preview.PreviewData = c.convertThinkingToMarkdown(thinking, content)
 		current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
-		current.ContextData = current.Preview.PreviewData
 		if isFinished {
 			current.RefreshInterval = 0 // stop refreshing
 		}
@@ -431,7 +430,8 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 				Name: "i18n:plugin_ai_command_copy",
 				Icon: plugin.CopyIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					clipboard.WriteText(actionContext.ContextData)
+					_, content := c.processThinking(actionContext.ContextData)
+					clipboard.WriteText(content)
 				},
 			},
 		},
@@ -439,7 +439,8 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 
 	// paste to active window
 	pasteToActiveWindowAction, pasteToActiveWindowErr := getPasteToActiveWindowAction(ctx, c.api, func() {
-		clipboard.WriteText(result.ContextData)
+		_, content := c.processThinking(result.ContextData)
+		clipboard.WriteText(content)
 	})
 	if pasteToActiveWindowErr == nil {
 		result.Actions = append(result.Actions, pasteToActiveWindowAction)
@@ -448,67 +449,45 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	return []plugin.QueryResult{result}
 }
 
-// processThinkingTags converts <think>...</think> content to markdown quote format
-func processThinkingTags(text string) string {
-	// Only process thinking tags if <think> appears at the beginning of the text
-	trimmedText := strings.TrimSpace(text)
-	if !strings.HasPrefix(trimmedText, "<think>") {
-		return text
-	}
+// processThinking parse the text to get the thinking and content
+func (c *Plugin) processThinking(text string) (thinking string, content string) {
+	const thinkStart = "<think>"
+	const thinkEnd = "</think>"
 
-	// We found <think> at the beginning, process it
-	var resultBuilder strings.Builder
-	insideThink := true
-
-	// Remove the opening <think> tag from the beginning
-	processedText := strings.TrimPrefix(trimmedText, "<think>")
-
-	// Split by lines to add > to each line in think block
-	lines := strings.Split(processedText, "\n")
-
-	for i, line := range lines {
-		// Check for closing think tag
-		if strings.Contains(line, "</think>") {
-			insideThink = false
-			// Split the line at </think>
-			parts := strings.Split(line, "</think>")
-
-			// Handle content before </think> tag
-			if len(parts) > 0 {
-				beforeTag := parts[0]
-				if len(strings.TrimSpace(beforeTag)) > 0 {
-					// Add quote to non-empty content before </think>
-					resultBuilder.WriteString("> " + beforeTag)
-				}
+	// Check if the text starts with the thinking tag
+	if len(text) >= len(thinkStart) && text[:len(thinkStart)] == thinkStart {
+		// Find the end tag
+		endIndex := strings.Index(text, thinkEnd)
+		if endIndex != -1 {
+			// Extract thinking content (without the tags)
+			thinking = text[len(thinkStart):endIndex]
+			// Extract the remaining content after the thinking tag
+			if endIndex+len(thinkEnd) < len(text) {
+				content = text[endIndex+len(thinkEnd):]
 			}
-
-			// Handle content after </think> tag
-			if len(parts) > 1 {
-				afterTag := parts[1]
-				if len(strings.TrimSpace(afterTag)) > 0 {
-					// Only add newline if we wrote something before
-					if len(strings.TrimSpace(parts[0])) > 0 {
-						resultBuilder.WriteString("\n")
-					}
-					resultBuilder.WriteString(afterTag)
-				}
-			}
-
-			// If the line was just </think> or we've already handled all content,
-			// we don't need to do anything else for this line
-		} else if insideThink {
-			// Inside a think block, add quote prefix
-			resultBuilder.WriteString("> " + line)
 		} else {
-			// Outside think block (after </think>), no special formatting
-			resultBuilder.WriteString(line)
+			// If there's no end tag, the entire text is considered thinking
+			thinking = text[len(thinkStart):]
 		}
-
-		// Add newline unless it's the last line
-		if i < len(lines)-1 {
-			resultBuilder.WriteString("\n")
-		}
+	} else {
+		// If there's no thinking tag at the beginning, the entire text is content
+		content = text
 	}
 
-	return resultBuilder.String()
+	return thinking, content
+}
+
+func (c *Plugin) convertThinkingToMarkdown(thinking string, content string) string {
+	if thinking == "" {
+		return content
+	}
+
+	// everyline in thinking should be prefixed with "> "
+	thinkingLines := strings.Split(thinking, "\n")
+	for i, line := range thinkingLines {
+		thinkingLines[i] = "> " + line
+	}
+	thinking = strings.Join(thinkingLines, "\n")
+
+	return thinking + "\n\n" + content
 }

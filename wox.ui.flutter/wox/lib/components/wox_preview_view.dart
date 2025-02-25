@@ -65,13 +65,19 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
           horizontalRuleDecoration: BoxDecoration(
             border: Border(
               top: BorderSide(
-                color: fromCssColor(widget.woxTheme.previewFontColor).withOpacity(0.6),
+                color: fromCssColor(widget.woxTheme.previewFontColor).withAlpha((0.6 * 255).round()),
                 width: 1,
               ),
               bottom: const BorderSide(
                 color: Colors.transparent,
                 width: 10,
               ),
+            ),
+          ),
+          blockquoteDecoration: BoxDecoration(
+            color: fromCssColor(widget.woxTheme.previewFontColor).withAlpha((0.1 * 255).round()),
+            border: Border(
+              left: BorderSide(color: fromCssColor(widget.woxTheme.previewFontColor).withAlpha((0.2 * 255).round()), width: 2),
             ),
           ),
         ));
