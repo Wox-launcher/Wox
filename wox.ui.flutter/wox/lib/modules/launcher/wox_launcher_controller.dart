@@ -887,7 +887,12 @@ class WoxLauncherController extends GetxController {
             final resultIndex = results.indexWhere((element) => element.id == result.id);
             if (isResultActiveByIndex(resultIndex)) {
               currentPreview.value = result.preview;
+              final oldShowPreview = isShowPreviewPanel.value;
               isShowPreviewPanel.value = currentPreview.value.previewData != "";
+              if (oldShowPreview != isShowPreviewPanel.value) {
+                Logger.instance.debug(traceId, "preview panel visibility changed, resize height");
+                resizeHeight();
+              }
               resetActiveAction(traceId, "refresh active result", remainIndex: true);
             }
 

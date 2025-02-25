@@ -25,4 +25,8 @@ func TestAICommandParseThinking(t *testing.T) {
 	thinking, content = plugin.processThinking("<think> think is not end with think should be included")
 	assert.Equal(t, " think is not end with think should be included", thinking)
 	assert.Equal(t, "", content)
+
+	thinking, content = plugin.processThinking("<think>think is in the middle of the text</think> should not <think> be included")
+	assert.Equal(t, "think is in the middle of the text", thinking)
+	assert.Equal(t, " should not <think> be included", content)
 }
