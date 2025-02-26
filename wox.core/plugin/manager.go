@@ -415,7 +415,10 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	logger.Debug(ctx, fmt.Sprintf("<%s> finish query, result count: %d, cost: %dms", pluginInstance.Metadata.Name, len(results), util.GetSystemTimestamp()-start))
 
 	for i := range results {
-		results[i] = m.addDefaultActions(ctx, pluginInstance, query, results[i])
+		if results[i].Group == "" {
+			defaultActions := m.getDefaultActions(ctx, pluginInstance, query, results[i].Title, results[i].SubTitle)
+			results[i].Actions = append(results[i].Actions, defaultActions...)
+		}
 		results[i] = m.PolishResult(ctx, pluginInstance, query, results[i])
 	}
 
@@ -446,29 +449,26 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 	}
 }
 
-func (m *Manager) addDefaultActions(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult) QueryResult {
-	if query.Type == QueryTypeInput {
-		if result.Group == "" {
-			if setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle) {
-				result.Actions = append(result.Actions, QueryResultAction{
-					Name: "i18n:plugin_manager_remove_from_favorite",
-					Icon: RemoveFromFavIcon,
-					Action: func(ctx context.Context, actionContext ActionContext) {
-						setting.GetSettingManager().RemoveFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
-					},
-				})
-			} else {
-				result.Actions = append(result.Actions, QueryResultAction{
-					Name: "i18n:plugin_manager_add_to_favorite",
-					Icon: AddToFavIcon,
-					Action: func(ctx context.Context, actionContext ActionContext) {
-						setting.GetSettingManager().AddFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
-					},
-				})
-			}
-		}
+func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instance, query Query, title, subTitle string) (defaultActions []QueryResultAction) {
+	if setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle) {
+		defaultActions = append(defaultActions, QueryResultAction{
+			Name: "i18n:plugin_manager_remove_from_favorite",
+			Icon: RemoveFromFavIcon,
+			Action: func(ctx context.Context, actionContext ActionContext) {
+				setting.GetSettingManager().RemoveFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
+			},
+		})
+	} else {
+		defaultActions = append(defaultActions, QueryResultAction{
+			Name: "i18n:plugin_manager_add_to_favorite",
+			Icon: AddToFavIcon,
+			Action: func(ctx context.Context, actionContext ActionContext) {
+				setting.GetSettingManager().AddFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
+			},
+		})
 	}
-	return result
+
+	return defaultActions
 }
 
 func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult) QueryResult {
@@ -614,6 +614,13 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			result.Score += score
 		}
 	}
+	// check if result is favorite result
+	// favorite result will not be affected by ignoreAutoScore setting, so we add score here
+	if setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle) {
+		favScore := int64(100000)
+		logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) is favorite result, add score: %d", pluginInstance.Metadata.Name, result.Title, favScore))
+		result.Score += favScore
+	}
 
 	m.resultCache.Store(result.Id, resultCache)
 
@@ -647,11 +654,6 @@ func (m *Manager) formatFileListPreview(ctx context.Context, filePaths []string)
 
 func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string) int64 {
 	var score int64 = 0
-
-	// check if result is favorite result
-	if setting.GetSettingManager().IsFavoriteResult(ctx, pluginId, title, subTitle) {
-		score += 100000
-	}
 
 	resultHash := setting.NewResultHash(pluginId, title, subTitle)
 	woxAppData := setting.GetSettingManager().GetWoxAppData(ctx)
@@ -1081,6 +1083,10 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 	}
 
 	newResult := resultCache.Refresh(ctx, refreshableResult)
+	// // add default actions
+	// defaultActions := m.getDefaultActions(ctx, resultCache.PluginInstance, resultCache.Query, newResult.Title, newResult.SubTitle)
+	// newResult.Actions = append(newResult.Actions, defaultActions...)
+
 	newResult = m.polishRefreshableResult(ctx, resultCache, newResult)
 	return RefreshableResultWithResultId{
 		ResultId:        refreshableResultWithId.ResultId,
