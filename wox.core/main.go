@@ -66,6 +66,25 @@ func main() {
 	// check if there is existing instance running
 	if existingPort := getExistingInstancePort(ctx); existingPort > 0 {
 		util.GetLogger().Error(ctx, fmt.Sprintf("there is existing instance running, port: %d", existingPort))
+
+		// if args has deeplink, post it to the existing instance
+		if len(os.Args) > 1 {
+			for _, arg := range os.Args {
+				if strings.HasPrefix(arg, "wox://") {
+					_, postDeepLinkErr := util.HttpPost(ctx, fmt.Sprintf("http://localhost:%d/deeplink", existingPort), map[string]string{
+						"deeplink": arg,
+					})
+					if postDeepLinkErr != nil {
+						util.GetLogger().Error(ctx, fmt.Sprintf("failed to post deeplink to existing instance: %s", postDeepLinkErr.Error()))
+					} else {
+						util.GetLogger().Info(ctx, "post deeplink to existing instance successfully, bye~")
+						return
+					}
+				}
+			}
+		}
+
+		// show existing instance if no deeplink is provided
 		_, postShowErr := util.HttpPost(ctx, fmt.Sprintf("http://localhost:%d/show", existingPort), "")
 		if postShowErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to show existing instance: %s", postShowErr.Error()))
@@ -86,6 +105,8 @@ func main() {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to extract embed file: %s", extractErr.Error()))
 		return
 	}
+
+	util.EnsureDeepLinkProtocolHandler(ctx)
 
 	settingErr := setting.GetSettingManager().Init(ctx)
 	if settingErr != nil {

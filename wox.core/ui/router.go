@@ -744,29 +744,13 @@ func handleDeeplink(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
 
 	body, _ := io.ReadAll(r.Body)
-	commandResult := gjson.GetBytes(body, "command")
-	if !commandResult.Exists() {
-		writeErrorResponse(w, "command is empty")
+	deeplinkResult := gjson.GetBytes(body, "deeplink")
+	if !deeplinkResult.Exists() {
+		writeErrorResponse(w, "deeplink is empty")
 		return
 	}
 
-	// arguments is map[string]string
-	argumentsResult := gjson.GetBytes(body, "arguments")
-	var arguments = make(map[string]string)
-	if argumentsResult.Exists() {
-		err := json.Unmarshal([]byte(argumentsResult.String()), &arguments)
-		if err != nil {
-			writeErrorResponse(w, err.Error())
-			return
-		}
-	}
-
-	// replace all %20 with space in arguments
-	for key, value := range arguments {
-		arguments[key] = strings.ReplaceAll(value, "%20", " ")
-	}
-
-	GetUIManager().PostDeeplink(ctx, commandResult.String(), arguments)
+	GetUIManager().ProcessDeeplink(ctx, deeplinkResult.String())
 
 	writeSuccessResponse(w, "")
 }

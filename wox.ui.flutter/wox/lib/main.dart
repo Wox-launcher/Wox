@@ -177,21 +177,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
   @override
   void onProtocolUrlReceived(String url) {
     Logger.instance.info(const UuidV4().generate(), "deep link received: $url");
-    //replace %20 with space in the url
-    url = url.replaceAll("%20", " ");
-    // split the command and argument
-    // wox://command?argument=value&argument2=value2
-    var command = url.split("?")[0].split("//")[1];
-    var arguments = url.split("?")[1].split("&");
-    var argumentMap = <String, String>{};
-    for (var argument in arguments) {
-      var key = argument.split("=")[0];
-      var value = argument.split("=")[1];
-      // url decode value
-      argumentMap[key] = Uri.decodeComponent(value);
-    }
-
-    WoxApi.instance.onProtocolUrlReceived(command, argumentMap);
+    WoxApi.instance.onProtocolUrlReceived(url);
   }
 
   @override

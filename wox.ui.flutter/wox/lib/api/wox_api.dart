@@ -119,10 +119,9 @@ class WoxApi {
     return jsonMap.cast<String, String>();
   }
 
-  Future<void> onProtocolUrlReceived(String command, Map<String, String> arguments) async {
+  Future<void> onProtocolUrlReceived(String deeplink) async {
     await WoxHttpUtil.instance.postData("/deeplink", {
-      "command": command,
-      "arguments": arguments,
+      "deeplink": deeplink,
     });
   }
 
