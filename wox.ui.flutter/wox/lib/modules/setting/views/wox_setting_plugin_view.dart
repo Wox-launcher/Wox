@@ -347,6 +347,8 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
               isScrollable: true,
               showBackIcon: false,
               showNextIcon: false,
+              physics: const NeverScrollableScrollPhysics(),
+              physicsTabBarView: const NeverScrollableScrollPhysics(),
               tabAlignment: material.TabAlignment.start,
               onAddTabMoveTo: dt.MoveToTab.idol,
               labelColor: SettingPrimaryColor,
