@@ -627,6 +627,8 @@ class WoxLauncherController extends GetxController {
     isShowPreviewPanel.value = false;
     isShowActionPanel.value = false;
     resultGlobalKeys.clear();
+    queryIcon.value = QueryIconInfo.empty();
+
     await resizeHeight();
   }
 
