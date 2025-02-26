@@ -137,6 +137,9 @@ type QueryResultAction struct {
 	// Case insensitive, space insensitive
 	// If IsDefault is true, Hotkey will be set to enter key by default
 	Hotkey string
+
+	// internal use
+	IsSystemAction bool
 }
 
 type ActionContext struct {
@@ -164,6 +167,7 @@ func (q *QueryResult) ToUI() QueryResultUI {
 				IsDefault:              action.IsDefault,
 				PreventHideAfterAction: action.PreventHideAfterAction,
 				Hotkey:                 action.Hotkey,
+				IsSystemAction:         action.IsSystemAction,
 			}
 		}),
 		RefreshInterval: q.RefreshInterval,
@@ -193,6 +197,9 @@ type QueryResultActionUI struct {
 	IsDefault              bool
 	PreventHideAfterAction bool
 	Hotkey                 string
+
+	// internal use
+	IsSystemAction bool
 }
 
 // store latest result value after query/refresh, so we can retrieve data later in action/refresh

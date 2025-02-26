@@ -101,6 +101,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 						IsDefault:              action.IsDefault,
 						PreventHideAfterAction: action.PreventHideAfterAction,
 						Hotkey:                 action.Hotkey,
+						IsSystemAction:         action.IsSystemAction,
 					}
 				}),
 			}
@@ -157,6 +158,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 								util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", w.metadata.Name, actionErr.Error()))
 							}
 						},
+						IsSystemAction: action.IsSystemAction,
 					}
 				}),
 			}

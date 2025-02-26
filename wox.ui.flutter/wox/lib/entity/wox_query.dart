@@ -266,8 +266,9 @@ class WoxResultAction {
   late bool isDefault;
   late bool preventHideAfterAction;
   late String hotkey;
+  late bool isSystemAction;
 
-  WoxResultAction({required this.id, required this.name, required this.icon, required this.isDefault, required this.preventHideAfterAction, required this.hotkey});
+  WoxResultAction({required this.id, required this.name, required this.icon, required this.isDefault, required this.preventHideAfterAction, required this.hotkey, required this.isSystemAction});
 
   WoxResultAction.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
@@ -278,6 +279,7 @@ class WoxResultAction {
     if (json['Hotkey'] != null) {
       hotkey = json['Hotkey'];
     }
+    isSystemAction = json['IsSystemAction'];
   }
 
   Map<String, dynamic> toJson() {
@@ -288,11 +290,12 @@ class WoxResultAction {
     data['IsDefault'] = isDefault;
     data['PreventHideAfterAction'] = preventHideAfterAction;
     data['Hotkey'] = hotkey;
+    data['IsSystemAction'] = isSystemAction;
     return data;
   }
 
   static WoxResultAction empty() {
-    return WoxResultAction(id: "", name: "".obs, icon: WoxImage.empty().obs, isDefault: false, preventHideAfterAction: false, hotkey: "");
+    return WoxResultAction(id: "", name: "".obs, icon: WoxImage.empty().obs, isDefault: false, preventHideAfterAction: false, hotkey: "", isSystemAction: false);
   }
 
   bool equals(WoxResultAction other) {
@@ -301,7 +304,8 @@ class WoxResultAction {
         icon.value.imageData == other.icon.value.imageData &&
         isDefault == other.isDefault &&
         preventHideAfterAction == other.preventHideAfterAction &&
-        hotkey == other.hotkey;
+        hotkey == other.hotkey &&
+        isSystemAction == other.isSystemAction;
   }
 
   static bool listEquals(List<WoxResultAction> actions1, List<WoxResultAction> actions2) {

@@ -452,16 +452,18 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instance, query Query, title, subTitle string) (defaultActions []QueryResultAction) {
 	if setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle) {
 		defaultActions = append(defaultActions, QueryResultAction{
-			Name: "i18n:plugin_manager_remove_from_favorite",
-			Icon: RemoveFromFavIcon,
+			Name:           "i18n:plugin_manager_remove_from_favorite",
+			Icon:           RemoveFromFavIcon,
+			IsSystemAction: true,
 			Action: func(ctx context.Context, actionContext ActionContext) {
 				setting.GetSettingManager().RemoveFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
 			},
 		})
 	} else {
 		defaultActions = append(defaultActions, QueryResultAction{
-			Name: "i18n:plugin_manager_add_to_favorite",
-			Icon: AddToFavIcon,
+			Name:           "i18n:plugin_manager_add_to_favorite",
+			Icon:           AddToFavIcon,
+			IsSystemAction: true,
 			Action: func(ctx context.Context, actionContext ActionContext) {
 				setting.GetSettingManager().AddFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
 			},
@@ -1079,13 +1081,19 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 			PreventHideAfterAction: action.PreventHideAfterAction,
 			Hotkey:                 action.Hotkey,
 			Action:                 actionFunc,
+			IsSystemAction:         action.IsSystemAction,
 		})
 	}
 
 	newResult := resultCache.Refresh(ctx, refreshableResult)
-	// // add default actions
-	// defaultActions := m.getDefaultActions(ctx, resultCache.PluginInstance, resultCache.Query, newResult.Title, newResult.SubTitle)
-	// newResult.Actions = append(newResult.Actions, defaultActions...)
+
+	// add default actions if there is no system action
+	if lo.CountBy(newResult.Actions, func(action QueryResultAction) bool {
+		return action.IsSystemAction
+	}) == 0 {
+		defaultActions := m.getDefaultActions(ctx, resultCache.PluginInstance, resultCache.Query, newResult.Title, newResult.SubTitle)
+		newResult.Actions = append(newResult.Actions, defaultActions...)
+	}
 
 	newResult = m.polishRefreshableResult(ctx, resultCache, newResult)
 	return RefreshableResultWithResultId{
@@ -1105,6 +1113,7 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 				IsDefault:              action.IsDefault,
 				PreventHideAfterAction: action.PreventHideAfterAction,
 				Hotkey:                 action.Hotkey,
+				IsSystemAction:         action.IsSystemAction,
 			}
 		}),
 	}, nil
