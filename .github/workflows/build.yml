@@ -3,7 +3,7 @@ name: Build
 on:
   push:
     branches:
-      - v2
+      - main
 
 jobs:
   test:
