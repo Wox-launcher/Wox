@@ -924,36 +924,34 @@ class WoxLauncherController extends GetxController {
 
   Future<void> openSettingWindow(String traceId, SettingWindowContext context) async {
     isInSettingView.value = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (context.path == "/plugin/setting") {
-        var settingController = Get.find<WoxSettingController>();
-        await settingController.switchToPluginList(false);
-        settingController.filterPluginKeywordController.text = context.param;
-        settingController.filterPlugins();
-        settingController.setFirstFilteredPluginDetailActive();
+    if (context.path == "/plugin/setting") {
+      var settingController = Get.find<WoxSettingController>();
+      await settingController.switchToPluginList(false);
+      settingController.filterPluginKeywordController.text = context.param;
+      settingController.filterPlugins();
+      settingController.setFirstFilteredPluginDetailActive();
 
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          settingController.switchToPluginSettingTab();
-        });
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        settingController.switchToPluginSettingTab();
+      });
+    }
 
-      // if user open setting window from silent query, the windows may not visible yet
-      var isVisible = await windowManager.isVisible();
-      if (!isVisible) {
-        await showApp(
-            traceId,
-            ShowAppParams(
-              queryHistories: latestQueryHistories,
-              lastQueryMode: lastQueryMode,
-              selectAll: true,
-              position: Position(
-                type: WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code,
-                x: 0,
-                y: 0,
-              ),
-            ));
-      }
-    });
+    // if user open setting window from silent query, the windows may not visible yet
+    var isVisible = await windowManager.isVisible();
+    if (!isVisible) {
+      await showApp(
+          traceId,
+          ShowAppParams(
+            queryHistories: latestQueryHistories,
+            lastQueryMode: lastQueryMode,
+            selectAll: true,
+            position: Position(
+              type: WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code,
+              x: 0,
+              y: 0,
+            ),
+          ));
+    }
   }
 
   void showToolbarMsg(String traceId, ToolbarMsg msg) {
