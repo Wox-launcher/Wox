@@ -547,6 +547,8 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 		}
 	}
 
+	util.GetLogger().Info(ctx, fmt.Sprintf("parsed deeplink => command: %s, arguments: %v", command, arguments))
+
 	if command == "query" {
 		query := arguments["q"]
 		if query != "" {
