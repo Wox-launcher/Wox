@@ -61,6 +61,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
         data: markdownData,
         padding: EdgeInsets.zero,
         selectable: true,
+        physics: const ClampingScrollPhysics(),
         styleSheet: MarkdownStyleSheet.fromTheme(styleTheme).copyWith(
           horizontalRuleDecoration: BoxDecoration(
             border: Border(
@@ -161,14 +162,6 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       );
     }
 
-    if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (scrollController.hasClients) {
-          scrollController.jumpTo(scrollController.position.maxScrollExtent);
-        }
-      });
-    }
-
     Widget contentWidget = const SizedBox();
     if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MARKDOWN.code) {
       contentWidget = buildMarkdown(widget.woxPreview.previewData);
@@ -235,6 +228,14 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
           child: WoxImageView(woxImage: parsedWoxImage),
         );
       }
+    }
+
+    if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (scrollController.hasClients) {
+         scrollController.jumpTo(scrollController.position.maxScrollExtent);
+        }
+      });
     }
 
     return Container(
