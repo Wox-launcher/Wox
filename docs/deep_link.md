@@ -17,6 +17,64 @@ Currently, Wox supports the following command for deep linking:
 
 Please note that deep linking in Wox is case-sensitive, so ensure that your commands and parameters are correctly formatted.
 
+## Plugin Deep Linking
+
+Plugin developers can implement deep linking in their plugins to allow direct access to specific plugin functionality. This is done through the `wox://plugin/<plugin_id>?param=value` URL format.
+
+### Implementing Deep Link Support in Your Plugin
+
+To implement deep link support in your plugin:
+
+1. First, make sure your plugin has the `deeplink` feature enabled in its metadata:
+
+```json
+{
+  "features": [
+    {
+      "name": "deeplink"
+    }
+  ]
+}
+```
+
+2. Register a deep link callback in your plugin's `Init` function:
+
+```go
+func (p *YourPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
+    // Register deep link callback
+    initParams.API.OnDeepLink(ctx, func(arguments map[string]string) {
+        // Handle deep link arguments
+        if action, ok := arguments["action"]; ok {
+            switch action {
+            case "search":
+                query := arguments["query"]
+                // Perform search with the query
+                // ...
+            case "open":
+                id := arguments["id"]
+                // Open item with the specified ID
+                // ...
+            default:
+                // Handle unknown action
+            }
+        }
+    })
+}
+```
+
+3. Your plugin can now respond to deep links in the format: `wox://plugin/your_plugin_id?action=search&query=example`
+
+### Deep Link Callback
+
+The deep link callback receives a map of arguments parsed from the URL query parameters. You can use these arguments to determine what action to take in your plugin.
+
+### Best Practices
+
+1. **Document Your Deep Links**: Make sure to document the deep link format and parameters that your plugin supports.
+2. **Validate Input**: Always validate the input parameters to prevent unexpected behavior.
+3. **Provide Feedback**: If a deep link is invalid or cannot be processed, provide appropriate feedback to the user.
+4. **URL Encoding**: Remember that values in deep links should be URL encoded to handle special characters properly.
+
 ## Platform-specific Notes
 
 ### Linux
