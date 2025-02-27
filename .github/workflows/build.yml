@@ -23,27 +23,27 @@ jobs:
             arch: ARM64
             runner: [ self-hosted, macOS, ARM64 ]
             asset_path: ./release/wox-mac-arm64.dmg
-            asset_name: wox-mac-arm64-$$.dmg
+            asset_name: wox-mac-arm64.dmg
             content_type: application/x-elf
             needs_keychain: true
           - os: macOS
             arch: AMD64
             runner: [ self-hosted, macOS, X64 ]
             asset_path: ./release/wox-mac-amd64.dmg
-            asset_name: wox-mac-amd64-$$.dmg
+            asset_name: wox-mac-amd64.dmg
             content_type: application/x-elf
             needs_keychain: true
           - os: Windows
             arch: AMD64
             runner: [ self-hosted, Windows ]
             asset_path: ./release/wox-windows-amd64.exe
-            asset_name: wox-windows-amd64-$$.exe
+            asset_name: wox-windows-amd64.exe
             content_type: application/x-msdownload
           - os: Linux
             arch: AMD64
             runner: [ self-hosted, Linux ]
             asset_path: ./release/wox-linux-amd64
-            asset_name: wox-linux-amd64-$$
+            asset_name: wox-linux-amd64
             content_type: application/x-msdownload
     runs-on: ${{ matrix.runner }}
     steps:
