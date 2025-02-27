@@ -8,7 +8,7 @@ Wox
 **Wox** is a cross-platform launcher that simply works. It's an alternative to [Alfred](https://www.alfredapp.com/) and [Launchy](http://www.launchy.net/)
 
 
-![Snapshot](https://raw.githubusercontent.com/Wox-launcher/Wox/v2/docs/images/app.png)
+![Snapshot](https://raw.githubusercontent.com/Wox-launcher/Wox/master/docs/images/app.png)
 
 Features
 --------
