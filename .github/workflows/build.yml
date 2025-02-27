@@ -52,12 +52,18 @@ jobs:
         run: make publish
         env:
           KEYCHAINPWD: ${{ matrix.needs_keychain && secrets.KEYCHAINPWD || '' }}
-      - name: Deploy nightly release
-        uses: WebFreak001/deploy-nightly@v3.0.0
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: https://uploads.github.com/repos/Wox-launcher/Wox/releases/127182165/assets{?name,label}
-          release_id: 127182165
-          asset_path: ${{ matrix.asset_path }}
-          asset_name: ${{ matrix.asset_name }}
-          asset_content_type: ${{ matrix.content_type }}
-          max_releases: 1
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_path }}
+          retention-days: 3
+      # - name: Deploy nightly release
+      #   uses: WebFreak001/deploy-nightly@v3.0.0
+      #   with:
+      #     upload_url: https://uploads.github.com/repos/Wox-launcher/Wox/releases/127182165/assets{?name,label}
+      #     release_id: 127182165
+      #     asset_path: ${{ matrix.asset_path }}
+      #     asset_name: ${{ matrix.asset_name }}
+      #     asset_content_type: ${{ matrix.content_type }}
+      #     max_releases: 1
