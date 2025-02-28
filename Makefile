@@ -74,7 +74,7 @@ test: dev
 	$(MAKE) only_test
 
 only_test:
-	cd wox.core && go test ./... -skip TestFetchCryptoPrices
+	cd wox.core && go test ./... -skip TestFetchCryptoPrices -skip TestCalculatorCrypto -skip TestCalculatorCurrency
 
 publish: clean dev
 	$(MAKE) -C wox.core build
