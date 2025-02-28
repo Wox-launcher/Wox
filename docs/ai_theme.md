@@ -12,4 +12,4 @@ macaroon color scheme.
 This feature provides a quick and easy way to create unique and personalized themes for your Wox launcher. Enjoy the flexibility and creativity that comes with AI-powered theme
 creation.
 
-![AI Theme](https://raw.githubusercontent.com/Wox-launcher/Wox/v2/docs/images/ai_theme.jpg)
+![AI Theme](https://raw.githubusercontent.com/Wox-launcher/Wox/master/docs/images/ai_theme.jpg)

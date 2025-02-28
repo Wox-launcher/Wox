@@ -21,7 +21,7 @@ This feature allows you to automatically generate a commit message using Wox [AI
     > %s
     - Vision: No
 
-![AI git msg setting](https://raw.githubusercontent.com/Wox-launcher/Wox/v2/docs/images/ai_auto_git_msg_setting.png)
+![AI git msg setting](https://raw.githubusercontent.com/Wox-launcher/Wox/master/docs/images/ai_auto_git_msg_setting.png)
 
 
 2. Config bash scripts
@@ -43,4 +43,4 @@ git diff | commit
 
 This command will automatically call Wox and generate a commit message for you.
 
-![AI git msg](https://raw.githubusercontent.com/Wox-launcher/Wox/v2/docs/images/ai_auto_git_msg.png)
+![AI git msg](https://raw.githubusercontent.com/Wox-launcher/Wox/master/docs/images/ai_auto_git_msg.png)

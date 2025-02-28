@@ -6,7 +6,7 @@ operations.
 
 ## Setting up Clip Query on macOS
 
-![Clip Query On Macos](https://raw.githubusercontent.com/Wox-launcher/Wox/v2/docs/images/popclip.png)
+![Clip Query On Macos](https://raw.githubusercontent.com/Wox-launcher/Wox/master/docs/images/popclip.png)
 
 On macOS, you can use the [PopClip](https://www.popclip.app/) software to enable the Clip Query feature. After installing PopClip, you can install
 the [Popclip snippets extension](https://www.popclip.app/dev/snippets) by
