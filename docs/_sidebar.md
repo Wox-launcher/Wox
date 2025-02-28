@@ -2,6 +2,7 @@
 
     - [Install](install.md)
     - [Uninstall](uninstall.md)
+    - [FAQ](faq.md)
 
 - Introduction
 
@@ -19,6 +20,7 @@
     - [Plugin store](plugin_store.md)
     - [Write plugin](vue.md)
     - [Submit plugin](helpers.md)
+    - [AI Commands](plugin_ai_command.md)
 
 - Theme
     - [Install Theme](theme.md)
@@ -29,5 +31,7 @@
 
 - Misc
     - [Development](development.md)
+    - [Architecture](architecture.md)
+    - [Contributing](contributing.md)
 
 - [Github](https://github.com/Wox-launcher/Wox)

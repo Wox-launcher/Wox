@@ -1,6 +1,7 @@
 ---
 description: 项目结构
 globs: 
+alwaysApply: true
 ---
 wox.core                    Go实现的Wox后端,通过websocket与http与wox.ui.flutter通信
     wox.core/setting        wox.core的设置相关定义
