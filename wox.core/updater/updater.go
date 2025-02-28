@@ -10,7 +10,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 )
 
-const versionManifestUrl = "https://raw.githubusercontent.com/Wox-launcher/Wox/v2/updater.json"
+const versionManifestUrl = "https://raw.githubusercontent.com/Wox-launcher/Wox/master/updater.json"
 
 type VersionManifest struct {
 	Version            string
