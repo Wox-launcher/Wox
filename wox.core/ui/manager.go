@@ -560,6 +560,10 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 		}
 	}
 
+	if command == "toggle" {
+		m.ui.ToggleApp(ctx)
+	}
+
 	if strings.HasPrefix(command, "plugin/") {
 		pluginID := strings.TrimPrefix(command, "plugin/")
 		if pluginID != "" {

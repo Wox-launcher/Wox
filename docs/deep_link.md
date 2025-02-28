@@ -14,6 +14,7 @@ Currently, Wox supports the following command for deep linking:
 |----------|-----------------------------------------|----------------------------------------------------------------------------------------------------------------------------|
 | `query`  | Execute a specific query in Wox         | `wox://query?q=<your query with url encoded>`  <a href="wox://query?q=search%20files" target="_blank">click me to try</a>. |
 | `plugin` | Execute a specific plugin action in Wox | `wox://plugin/<plugin_id>?anyKey=anyValue`                                                                                 |
+| `toggle` | Toggle Wox                             | `wox://toggle`                                                                                                             |
 
 Please note that deep linking in Wox is case-sensitive, so ensure that your commands and parameters are correctly formatted.
 
