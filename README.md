@@ -18,23 +18,23 @@ Features
 - Single executable file, no installation required
 - Develop plugins with Javascript, Python
 
-Install and Run
+Install
 ------------
 
-- Manual
+| Platform | Method | Command/Instructions |
+|----------|--------|----------------------|
+| All Platforms | Manual | Download from [releases](https://github.com/Wox-launcher/Wox/releases) and run the single executable file |
+| macOS | Homebrew | `brew tap wox-launcher/wox && brew install wox` |
+| Arch Linux | AUR | `yay -S wox-bin` or use your preferred AUR helper |
 
-Download from [releases](https://github.com/Wox-launcher/Wox/releases) and run the single executable file
-
-- Homebrew
-
-`brew tap wox-launcher/wox`  
-`brew install wox`
-
-Usage
+Usages
 -----
 
-- Launch: <kbd>Alt</kbd>/<kbd>Command</kbd>+<kbd>Space</kbd>
-- Cancel/Return: <kbd>Esc</kbd>
+| Action | Shortcut |
+|--------|----------|
+| Toggle App | <kbd>Alt</kbd>/<kbd>Command</kbd>+<kbd>Space</kbd> |
+| Show Actions | <kbd>Alt</kbd>/<kbd>Command</kbd>+<kbd>J</kbd> |
+| Cancel/Return | <kbd>Esc</kbd> |
 
 Contribution
 ------------

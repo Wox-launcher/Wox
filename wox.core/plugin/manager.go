@@ -528,7 +528,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		result.Actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, result.Actions[actionIndex].Name)
 	}
 	// translate preview data if preview type is text
-	if result.Preview.PreviewType == WoxPreviewTypeText {
+	if result.Preview.PreviewType == WoxPreviewTypeText || result.Preview.PreviewType == WoxPreviewTypeMarkdown {
 		result.Preview.PreviewData = m.translatePlugin(ctx, pluginInstance, result.Preview.PreviewData)
 	}
 
@@ -1130,6 +1130,8 @@ func (m *Manager) GetResultPreview(ctx context.Context, resultId string) (WoxPre
 	// if preview text is too long, ellipsis it, otherwise UI maybe freeze when render
 	if preview.PreviewType == WoxPreviewTypeText {
 		preview.PreviewData = util.EllipsisMiddle(preview.PreviewData, 2000)
+		// translate preview data if preview type is text
+		preview.PreviewData = m.translatePlugin(ctx, resultCache.PluginInstance, preview.PreviewData)
 	}
 
 	return preview, nil
