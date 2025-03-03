@@ -13,6 +13,7 @@ import (
 	"wox/share"
 	"wox/ui"
 	"wox/util"
+	"wox/util/selection"
 )
 
 func TestCalculatorCrypto(t *testing.T) {
@@ -369,7 +370,7 @@ func initServices() {
 	time.Sleep(time.Second * 10)
 
 	// Initialize selection
-	util.InitSelection()
+	selection.InitSelection()
 }
 
 type queryTest struct {

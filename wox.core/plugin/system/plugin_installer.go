@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"wox/plugin"
-	"wox/util"
+	"wox/util/selection"
 )
 
 func init() {
@@ -50,7 +50,7 @@ func (i *PluginInstallerPlugin) Init(ctx context.Context, initParams plugin.Init
 
 func (i *PluginInstallerPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	if query.Type == plugin.QueryTypeSelection &&
-		query.Selection.Type == util.SelectionTypeFile &&
+		query.Selection.Type == selection.SelectionTypeFile &&
 		len(query.Selection.FilePaths) == 1 &&
 		strings.HasSuffix(query.Selection.FilePaths[0], ".wox") {
 		return i.queryForSelectionFile(ctx, query.Selection.FilePaths[0])

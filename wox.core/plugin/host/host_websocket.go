@@ -13,6 +13,7 @@ import (
 	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
+	"wox/util/selection"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -247,7 +248,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 				return
 			}
 
-			var selection util.Selection
+			var selection selection.Selection
 			unmarshalSelectionErr := json.Unmarshal([]byte(querySelection), &selection)
 			if unmarshalSelectionErr != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal selection: %s", request.PluginName, unmarshalSelectionErr))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"wox/util"
+	"wox/util/selection"
 
 	"github.com/samber/lo"
 )
@@ -56,7 +57,7 @@ type Query struct {
 	// User selected or drag-drop data, can be text or file or image etc
 	//
 	// NOTE: Only available when query type is QueryTypeSelection
-	Selection util.Selection
+	Selection selection.Selection
 
 	// additional query environment data
 	// expose more context env data to plugin, E.g. plugin A only show result when active window title is "Chrome"

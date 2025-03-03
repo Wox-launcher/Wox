@@ -11,6 +11,7 @@ import (
 	"wox/share"
 	"wox/util"
 	"wox/util/notifier"
+	"wox/util/selection"
 	"wox/util/window"
 
 	"github.com/google/uuid"
@@ -305,7 +306,7 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 		responseUIError(ctx, request, querySelectionErr.Error())
 		return
 	}
-	var querySelection util.Selection
+	var querySelection selection.Selection
 	json.Unmarshal([]byte(querySelectionJson), &querySelection)
 
 	var changedQuery share.PlainQuery

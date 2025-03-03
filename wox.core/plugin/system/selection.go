@@ -7,6 +7,7 @@ import (
 	"wox/util"
 	"wox/util/airdrop"
 	"wox/util/clipboard"
+	"wox/util/selection"
 )
 
 var selectionIcon = plugin.PluginSelectionIcon
@@ -56,10 +57,10 @@ func (i *SelectionPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 		return []plugin.QueryResult{}
 	}
 
-	if query.Selection.Type == util.SelectionTypeText {
+	if query.Selection.Type == selection.SelectionTypeText {
 		return i.queryForSelectionText(ctx, query.Selection.Text)
 	}
-	if query.Selection.Type == util.SelectionTypeFile {
+	if query.Selection.Type == selection.SelectionTypeFile {
 		return i.queryForSelectionFile(ctx, query.Selection.FilePaths)
 	}
 

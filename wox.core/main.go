@@ -14,6 +14,7 @@ import (
 	"wox/setting"
 	"wox/ui"
 	"wox/util"
+	"wox/util/selection"
 
 	"golang.design/x/hotkey/mainthread"
 
@@ -135,7 +136,7 @@ func main() {
 	shareUI := ui.GetUIManager().GetUI(ctx)
 	plugin.GetPluginManager().Start(ctx, shareUI)
 
-	util.InitSelection()
+	selection.InitSelection()
 
 	// hotkey must be registered in main thread
 	mainthread.Init(func() {

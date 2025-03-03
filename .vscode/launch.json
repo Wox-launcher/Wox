@@ -25,7 +25,10 @@
     "compounds": [
         {
             "name": "Run Wox",
-            "configurations": ["Run Go", "Run Flutter"],
+            "configurations": [
+                "Run Go",
+                "Run Flutter"
+            ],
             "stopAll": true
         }
     ]

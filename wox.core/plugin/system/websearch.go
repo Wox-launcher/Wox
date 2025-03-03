@@ -11,6 +11,7 @@ import (
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/util"
+	"wox/util/selection"
 )
 
 var webSearchesSettingKey = "webSearches"
@@ -298,7 +299,7 @@ func (r *WebSearchPlugin) QueryFallback(ctx context.Context, query plugin.Query)
 
 func (r *WebSearchPlugin) querySelection(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
 	//only support text selection
-	if query.Selection.Type == util.SelectionTypeFile {
+	if query.Selection.Type == selection.SelectionTypeFile {
 		return []plugin.QueryResult{}
 	}
 

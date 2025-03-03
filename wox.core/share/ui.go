@@ -2,13 +2,13 @@ package share
 
 import (
 	"context"
-	"wox/util"
+	"wox/util/selection"
 )
 
 type PlainQuery struct {
 	QueryType      string
 	QueryText      string
-	QuerySelection util.Selection
+	QuerySelection selection.Selection
 }
 
 var DefaultSettingWindowContext = SettingWindowContext{Path: "/"}

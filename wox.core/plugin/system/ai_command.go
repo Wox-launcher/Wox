@@ -13,6 +13,7 @@ import (
 	"wox/share"
 	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/selection"
 
 	"github.com/disintegration/imaging"
 	"github.com/samber/lo"
@@ -167,12 +168,12 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 
 	var results []plugin.QueryResult
 	for _, command := range commands {
-		if query.Selection.Type == util.SelectionTypeFile {
+		if query.Selection.Type == selection.SelectionTypeFile {
 			if !command.Vision {
 				continue
 			}
 		}
-		if query.Selection.Type == util.SelectionTypeText {
+		if query.Selection.Type == selection.SelectionTypeText {
 			if command.Vision {
 				continue
 			}
@@ -231,7 +232,7 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 		}
 
 		var conversations []ai.Conversation
-		if query.Selection.Type == util.SelectionTypeFile {
+		if query.Selection.Type == selection.SelectionTypeFile {
 			var images []image.Image
 			for _, imagePath := range query.Selection.FilePaths {
 				img, imgErr := imaging.Open(imagePath)
@@ -246,7 +247,7 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 				Images: images,
 			})
 		}
-		if query.Selection.Type == util.SelectionTypeText {
+		if query.Selection.Type == selection.SelectionTypeText {
 			conversations = append(conversations, ai.Conversation{
 				Role: ai.ConversationRoleUser,
 				Text: fmt.Sprintf(command.Prompt, query.Selection.Text),

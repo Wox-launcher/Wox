@@ -20,6 +20,7 @@ import (
 	"wox/share"
 	"wox/util"
 	"wox/util/notifier"
+	"wox/util/selection"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
@@ -498,13 +499,13 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 
 	// add default preview for selection query if no preview is set
 	if query.Type == QueryTypeSelection && result.Preview.PreviewType == "" {
-		if query.Selection.Type == util.SelectionTypeText {
+		if query.Selection.Type == selection.SelectionTypeText {
 			result.Preview = WoxPreview{
 				PreviewType: WoxPreviewTypeText,
 				PreviewData: query.Selection.Text,
 			}
 		}
-		if query.Selection.Type == util.SelectionTypeFile {
+		if query.Selection.Type == selection.SelectionTypeFile {
 			result.Preview = WoxPreview{
 				PreviewType: WoxPreviewTypeMarkdown,
 				PreviewData: m.formatFileListPreview(ctx, query.Selection.FilePaths),
@@ -1160,14 +1161,14 @@ func (m *Manager) polishPreview(ctx context.Context, preview WoxPreview) WoxPrev
 
 func (m *Manager) ReplaceQueryVariable(ctx context.Context, query string) string {
 	if strings.Contains(query, QueryVariableSelectedText) {
-		selection, selectedErr := util.GetSelected()
+		selected, selectedErr := selection.GetSelected(ctx)
 		if selectedErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to get selected text: %s", selectedErr.Error()))
 		} else {
-			if selection.Type == util.SelectionTypeText {
-				query = strings.ReplaceAll(query, QueryVariableSelectedText, selection.Text)
+			if selected.Type == selection.SelectionTypeText {
+				query = strings.ReplaceAll(query, QueryVariableSelectedText, selected.Text)
 			} else {
-				logger.Error(ctx, fmt.Sprintf("selected data is not text, type: %s", selection.Type))
+				logger.Error(ctx, fmt.Sprintf("selected data is not text, type: %s", selected.Type))
 			}
 		}
 	}

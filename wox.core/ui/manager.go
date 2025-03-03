@@ -19,6 +19,7 @@ import (
 	"wox/util/autostart"
 	"wox/util/hotkey"
 	"wox/util/ime"
+	"wox/util/selection"
 	"wox/util/tray"
 
 	"github.com/Masterminds/semver/v3"
@@ -213,7 +214,7 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 	return m.selectionHotkey.Register(ctx, combineKey, func() {
 		newCtx := util.NewTraceContext()
 		start := util.GetSystemTimestamp()
-		selection, err := util.GetSelected()
+		selection, err := selection.GetSelected(newCtx)
 		logger.Debug(newCtx, fmt.Sprintf("took %d ms to get selection", util.GetSystemTimestamp()-start))
 		if err != nil {
 			logger.Error(newCtx, fmt.Sprintf("failed to get selected: %s", err.Error()))
