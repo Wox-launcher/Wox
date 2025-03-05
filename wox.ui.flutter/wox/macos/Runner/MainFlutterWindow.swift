@@ -1,24 +1,25 @@
 import Cocoa
 import FlutterMacOS
-import window_manager
 
 class MainFlutterWindow: NSPanel {
+  var isReadyToShow: Bool = false
+  
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
-    self.setFrame(windowFrame, display: true)
+    self.setFrame(windowFrame, display: false)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
-
-    // force appearance to light mode, otherwise borderless window will have a dark border line
-    NSApp.appearance = NSAppearance(named: .aqua)
 
     super.awakeFromNib()
   }
 
   override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
-      super.order(place, relativeTo: otherWin)
-      hiddenWindowAtLaunch()
+    super.order(place, relativeTo: otherWin)
+    
+    if !isReadyToShow {
+      setIsVisible(false)
+    }
   }
 }

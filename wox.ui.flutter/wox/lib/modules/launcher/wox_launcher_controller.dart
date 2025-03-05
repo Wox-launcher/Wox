@@ -8,7 +8,7 @@ import 'package:get/get.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:lpinyin/lpinyin.dart';
 import 'package:uuid/v4.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_image.dart';
@@ -35,7 +35,7 @@ import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 import 'package:fuzzywuzzy/fuzzywuzzy.dart';
-import 'package:wox/utils/linux_window_manager.dart';
+import 'package:wox/utils/windows/linux_window_manager.dart';
 
 class WoxLauncherController extends GetxController {
   //query related variables
@@ -680,7 +680,7 @@ class WoxLauncherController extends GetxController {
     } else if (Platform.isLinux) {
       // window manager setSize is not working on linux, so we need to implement it by ourselves
       if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window height to $totalHeight");
-      await LinuxWindowManager.instance.setSize(800, totalHeight.toDouble());
+      await LinuxWindowManager.instance.setSize(Size(800, totalHeight.toDouble()));
     } else {
       if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window height to $totalHeight");
       await windowManager.setSize(Size(800, totalHeight.toDouble()));

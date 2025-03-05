@@ -31,10 +31,10 @@ dependencies:
   flutter:
     sdk: flutter
 
-  window_manager:
-    git:
-      url: https://github.com/qianlifeng/window_manager.git
-      ref: db8b4c7f348311dbd5ce4cec8635f0c2cf048775
+  # window_manager:
+  #   git:
+  #     url: https://github.com/qianlifeng/window_manager.git
+  #     ref: db8b4c7f348311dbd5ce4cec8635f0c2cf048775
   web_socket_channel: ^3.0.1
   flutter_acrylic: ^1.1.4
   get: ^4.6.6

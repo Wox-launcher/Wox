@@ -7,7 +7,8 @@ import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:get/get.dart';
 import 'package:protocol_handler/protocol_handler.dart';
 import 'package:uuid/v4.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:wox/utils/windows/window_manager.dart';
+import 'package:wox/utils/windows/window_manager_interface.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/modules/launcher/views/wox_launcher_view.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
@@ -75,21 +76,7 @@ Future<void> initDeepLink() async {
 }
 
 Future<void> initWindow() async {
-  await windowManager.ensureInitialized();
-  await Window.initialize();
-
-  WindowOptions windowOptions = WindowOptions(
-    size: Size(WoxSettingUtil.instance.currentSetting.appWidth.toDouble(), WoxThemeUtil.instance.getQueryBoxHeight()),
-    center: true,
-    skipTaskbar: true,
-    alwaysOnTop: true,
-    titleBarStyle: TitleBarStyle.hidden,
-    windowButtonVisibility: false,
-  );
-  await windowManager.setResizable(false);
-  await windowManager.setMaximizable(false);
-  await windowManager.setMinimizable(false);
-  await windowManager.waitUntilReadyToShow(windowOptions);
+  await windowManager.waitUntilReadyToShow();
 }
 
 class MyApp extends StatelessWidget {
@@ -165,7 +152,6 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
 
   Future<void> setAcrylicEffect() async {
     if (Platform.isMacOS) {
-      await windowManager.setVisibleOnAllWorkspaces(true, visibleOnFullScreen: true);
       await Window.setBlurViewState(MacOSBlurViewState.active);
       await Window.setEffect(effect: WindowEffect.popover, dark: false);
     }
