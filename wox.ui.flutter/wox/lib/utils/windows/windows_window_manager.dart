@@ -8,7 +8,39 @@ class WindowsWindowManager extends BaseWindowManager {
 
   static final WindowsWindowManager instance = WindowsWindowManager._();
 
-  WindowsWindowManager._();
+  WindowsWindowManager._() {
+    // Set up method call handler for events from native
+    _channel.setMethodCallHandler(_handleMethodCall);
+  }
+
+  /// Handle method calls from native code
+  Future<dynamic> _handleMethodCall(MethodCall call) async {
+    switch (call.method) {
+      case 'onWindowFocus':
+        notifyWindowFocus();
+        break;
+      case 'onWindowBlur':
+        notifyWindowBlur();
+        break;
+      case 'onWindowMaximize':
+        notifyWindowMaximize();
+        break;
+      case 'onWindowMinimize':
+        notifyWindowMinimize();
+        break;
+      case 'onWindowResize':
+        notifyWindowResize();
+        break;
+      case 'onWindowMove':
+        notifyWindowMove();
+        break;
+      case 'onWindowClose':
+        notifyWindowClose();
+        break;
+      default:
+        Logger.instance.warn("WindowsWindowManager", "Unhandled method call: ${call.method}");
+    }
+  }
 
   @override
   Future<void> setSize(Size size) async {
@@ -19,6 +51,7 @@ class WindowsWindowManager extends BaseWindowManager {
       });
     } catch (e) {
       Logger.instance.error("WindowsWindowManager", "Error setting window size: $e");
+      rethrow;
     }
   }
 
@@ -42,6 +75,7 @@ class WindowsWindowManager extends BaseWindowManager {
       });
     } catch (e) {
       Logger.instance.error("WindowsWindowManager", "Error setting position: $e");
+      rethrow;
     }
   }
 
@@ -51,6 +85,7 @@ class WindowsWindowManager extends BaseWindowManager {
       await _channel.invokeMethod('center');
     } catch (e) {
       Logger.instance.error("WindowsWindowManager", "Error centering window: $e");
+      rethrow;
     }
   }
 
@@ -60,6 +95,7 @@ class WindowsWindowManager extends BaseWindowManager {
       await _channel.invokeMethod('show');
     } catch (e) {
       Logger.instance.error("WindowsWindowManager", "Error showing window: $e");
+      rethrow;
     }
   }
 
@@ -69,6 +105,7 @@ class WindowsWindowManager extends BaseWindowManager {
       await _channel.invokeMethod('hide');
     } catch (e) {
       Logger.instance.error("WindowsWindowManager", "Error hiding window: $e");
+      rethrow;
     }
   }
 
@@ -78,6 +115,7 @@ class WindowsWindowManager extends BaseWindowManager {
       await _channel.invokeMethod('focus');
     } catch (e) {
       Logger.instance.error("WindowsWindowManager", "Error focusing window: $e");
+      rethrow;
     }
   }
 
@@ -97,15 +135,22 @@ class WindowsWindowManager extends BaseWindowManager {
       await _channel.invokeMethod('setAlwaysOnTop', alwaysOnTop);
     } catch (e) {
       Logger.instance.error("WindowsWindowManager", "Error setting always on top: $e");
+      rethrow;
     }
   }
 
   @override
   Future<void> waitUntilReadyToShow() async {
     try {
-      await _channel.invokeMethod('waitUntilReadyToShow');
+      await _channel.invokeMethod('waitUntilReadyToShow', {
+        'width': 800.0,
+        'height': 600.0,
+        'center': true,
+        'alwaysOnTop': false,
+      });
     } catch (e) {
       Logger.instance.error("WindowsWindowManager", "Error waiting until ready to show: $e");
+      rethrow;
     }
   }
 }

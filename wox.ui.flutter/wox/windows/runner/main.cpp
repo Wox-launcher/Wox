@@ -43,6 +43,23 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (!window.Create(L"wox", origin, size)) {
     return EXIT_FAILURE;
   }
+  
+  // Set window styles to ensure no title bar, no resize, no maximize/minimize buttons
+  HWND window_handle = window.GetHandle();
+  if (window_handle != NULL) {
+    // Remove any system menu
+    SetMenu(window_handle, NULL);
+    
+    // Make sure the window cannot be resized
+    LONG style = GetWindowLong(window_handle, GWL_STYLE);
+    style &= ~(WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
+    SetWindowLong(window_handle, GWL_STYLE, style);
+    
+    // Update the window
+    SetWindowPos(window_handle, NULL, 0, 0, 0, 0, 
+                SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER);
+  }
+  
   window.SetQuitOnClose(true);
 
   ::MSG msg = { };

@@ -123,7 +123,7 @@ void setup_linux_window_manager_channel(FlView *view, GtkWindow *window) {
   g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
   g_autoptr(FlMethodChannel) channel =
       fl_method_channel_new(fl_engine_get_binary_messenger(engine),
-                            "com.wox.window_manager", FL_METHOD_CODEC(codec));
+                            "com.wox.linux_window_manager", FL_METHOD_CODEC(codec));
   fl_method_channel_set_method_call_handler(channel, method_call_cb, window,
                                             NULL);
 }

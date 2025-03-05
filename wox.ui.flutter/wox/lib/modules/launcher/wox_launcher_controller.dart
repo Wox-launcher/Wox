@@ -673,18 +673,8 @@ class WoxLauncherController extends GetxController {
     }
     final totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight;
 
-    if (Platform.isWindows) {
-      final totalHeightFinal = totalHeight.toDouble() + (10 / PlatformDispatcher.instance.views.first.devicePixelRatio).ceil();
-      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window height to $totalHeightFinal");
-      await windowManager.setSize(Size(800, totalHeightFinal));
-    } else if (Platform.isLinux) {
-      // window manager setSize is not working on linux, so we need to implement it by ourselves
-      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window height to $totalHeight");
-      await LinuxWindowManager.instance.setSize(Size(800, totalHeight.toDouble()));
-    } else {
-      if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window height to $totalHeight");
-      await windowManager.setSize(Size(800, totalHeight.toDouble()));
-    }
+    if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window height to $totalHeight");
+    await windowManager.setSize(Size(800, totalHeight.toDouble()));
   }
 
   void updateActiveResultIndex(String traceId, WoxDirection woxDirection) {

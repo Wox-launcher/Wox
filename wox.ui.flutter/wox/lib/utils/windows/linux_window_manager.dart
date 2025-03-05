@@ -6,20 +6,11 @@ import 'package:wox/utils/windows/window_manager_interface.dart';
 
 /// Linux implementation of the window manager
 class LinuxWindowManager extends BaseWindowManager {
-  static const _channel = MethodChannel('com.wox.window_manager');
+  static const _channel = MethodChannel('com.wox.linux_window_manager');
 
   static final LinuxWindowManager instance = LinuxWindowManager._();
 
   LinuxWindowManager._();
-
-  @override
-  Future<void> ensureInitialized() async {
-    try {
-      await _channel.invokeMethod('ensureInitialized');
-    } catch (e) {
-      Logger.instance.error("LinuxWindowManager", "Error initializing: $e");
-    }
-  }
 
   @override
   Future<void> setSize(Size size) async {
