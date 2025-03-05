@@ -12,17 +12,7 @@ func ShellOpen(path string) error {
 }
 
 func ShellRun(name string, arg ...string) (*exec.Cmd, error) {
-	cmd := exec.Command(name, arg...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true} // Hide the window
-	cmd.Stdout = GetLogger().GetWriter()
-	cmd.Stderr = GetLogger().GetWriter()
-	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8")
-	cmdErr := cmd.Start()
-	if cmdErr != nil {
-		return nil, cmdErr
-	}
-
-	return cmd, nil
+	return ShellRunWithEnv(name, []string{"PYTHONIOENCODING=utf-8"}, arg...)
 }
 
 func ShellRunWithEnv(name string, envs []string, arg ...string) (*exec.Cmd, error) {
@@ -31,6 +21,7 @@ func ShellRunWithEnv(name string, envs []string, arg ...string) (*exec.Cmd, erro
 	}
 
 	cmd := exec.Command(name, arg...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true} // Hide the window
 	cmd.Stdout = GetLogger().GetWriter()
 	cmd.Stderr = GetLogger().GetWriter()
 	cmd.Env = append(os.Environ(), envs...)
