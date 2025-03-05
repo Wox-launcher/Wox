@@ -142,12 +142,7 @@ class WindowsWindowManager extends BaseWindowManager {
   @override
   Future<void> waitUntilReadyToShow() async {
     try {
-      await _channel.invokeMethod('waitUntilReadyToShow', {
-        'width': 800.0,
-        'height': 600.0,
-        'center': true,
-        'alwaysOnTop': false,
-      });
+      await _channel.invokeMethod('waitUntilReadyToShow');
     } catch (e) {
       Logger.instance.error("WindowsWindowManager", "Error waiting until ready to show: $e");
       rethrow;

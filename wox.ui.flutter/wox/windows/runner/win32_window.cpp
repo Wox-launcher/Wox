@@ -1,7 +1,8 @@
-#include "win32_window.h"
+﻿#include "win32_window.h"
 
 #include <dwmapi.h>
 #include <flutter_windows.h>
+#include <windowsx.h>
 
 #include "resource.h"
 
@@ -16,15 +17,37 @@ namespace {
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
 
-constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
+// Round corners on Windows 11 (or newer) 
+#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+#define DWMWA_WINDOW_CORNER_PREFERENCE 33
+#endif
 
-/// Registry key for app theme preference.
-///
-/// A value of 0 indicates apps should use dark mode. A non-zero or missing
-/// value indicates apps should use light mode.
-constexpr const wchar_t kGetPreferredBrightnessRegKey[] =
-  L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
-constexpr const wchar_t kGetPreferredBrightnessRegValue[] = L"AppsUseLightTheme";
+// Windows 11 backdrop types
+#ifndef DWMWA_SYSTEMBACKDROP_TYPE
+#define DWMWA_SYSTEMBACKDROP_TYPE 38
+#endif
+
+#ifndef DWMSBT_NONE
+// DWM System Backdrop types
+typedef enum {
+  DWMSBT_NONE = 0,          // None
+  DWMSBT_MAINWINDOW = 1,    // Use the Backdrop material
+  DWMSBT_TRANSIENTWINDOW = 2, // Use the Acrylic material
+  DWMSBT_TABBEDWINDOW = 3   // Use the Mica material
+} DWMSBT;
+#endif
+
+// DWM_WINDOW_CORNER_PREFERENCE enum values (for Windows 11)
+#ifndef DWMWCP_DEFAULT
+typedef enum {
+  DWMWCP_DEFAULT = 0,
+  DWMWCP_DONOTROUND = 1,
+  DWMWCP_ROUND = 2,
+  DWMWCP_ROUNDSMALL = 3
+} MY_DWM_WINDOW_CORNER_PREFERENCE;
+#endif
+
+constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 
 // The number of Win32Window objects that currently exist.
 static int g_active_window_count = 0;
@@ -51,6 +74,32 @@ void EnableFullDpiSupportIfAvailable(HWND hwnd) {
     enable_non_client_dpi_scaling(hwnd);
   }
   FreeLibrary(user32_module);
+}
+
+// Enable acrylic effect (Windows 11)
+void EnableAcrylicEffect(HWND hwnd) {
+  // Get Windows build number
+  DWORD buildNumber = 0;
+  HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
+  if (hNtdll) {
+    typedef void (WINAPI *RtlGetNtVersionNumbersFunc)(DWORD*, DWORD*, DWORD*);
+    RtlGetNtVersionNumbersFunc RtlGetNtVersionNumbers = (RtlGetNtVersionNumbersFunc)GetProcAddress(hNtdll, "RtlGetNtVersionNumbers");
+    if (RtlGetNtVersionNumbers) {
+      DWORD major, minor, buildNum;
+      RtlGetNtVersionNumbers(&major, &minor, &buildNum);
+      buildNumber = buildNum & 0x0FFFFFFF; // Remove the build revision
+    }
+  }
+
+  // Windows 11 (build 22000 and higher) - Use official API
+  if (buildNumber >= 22000) {
+    // Use SystemBackdrop API with Acrylic effect (true blur with frosted glass look)
+    int backdropType = DWMSBT_TRANSIENTWINDOW; // Acrylic (frosted glass effect)
+    
+    // 应用毛玻璃效果
+    DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdropType, sizeof(backdropType));
+  }
+  // 其他Windows版本不需要支持毛玻璃效果
 }
 
 }  // namespace
@@ -134,8 +183,15 @@ bool Win32Window::Create(const std::wstring& title,
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
   double scale_factor = dpi / 96.0;
 
-  HWND window = CreateWindow(
-      window_class, title.c_str(), WS_POPUP,
+  // Update window style for better support of DWM effects
+  // We need a proper window with caption area for DWM to apply effects correctly
+  // but we use WS_POPUP for borderless look
+  DWORD dwStyle = WS_POPUP | WS_THICKFRAME;
+  DWORD dwExStyle = WS_EX_APPWINDOW;
+
+  HWND window = CreateWindowEx(
+      dwExStyle,
+      window_class, title.c_str(), dwStyle,
       Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
       Scale(size.width, scale_factor), Scale(size.height, scale_factor),
       nullptr, nullptr, GetModuleHandle(nullptr), this);
@@ -144,17 +200,51 @@ bool Win32Window::Create(const std::wstring& title,
     return false;
   }
 
+  // Important: Do NOT set a NULL_BRUSH as it breaks the acrylic effect
+  // Do NOT set window to layered with SetLayeredWindowAttributes as it
+  // will break the DWM acrylic/blur effect
+
+  // Set rounded corners (Windows 11 feature)
+  DWORD buildNumber = 0;
+  HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
+  if (hNtdll) {
+    typedef void (WINAPI *RtlGetNtVersionNumbersFunc)(DWORD*, DWORD*, DWORD*);
+    RtlGetNtVersionNumbersFunc RtlGetNtVersionNumbers = (RtlGetNtVersionNumbersFunc)GetProcAddress(hNtdll, "RtlGetNtVersionNumbers");
+    if (RtlGetNtVersionNumbers) {
+      DWORD major, minor, buildNum;
+      RtlGetNtVersionNumbers(&major, &minor, &buildNum);
+      buildNumber = buildNum & 0x0FFFFFFF; // Remove the build revision
+    }
+  }
+
+  // Apply rounded corners for Windows 11 (build 22000 and higher)
+  if (buildNumber >= 22000) {
+    // DWMWCP_ROUND = 2
+    UINT cornerPreference = 2;
+    DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPreference, sizeof(cornerPreference));
+  }
+
+  // Apply acrylic effect for Windows 10 and 11
+  EnableAcrylicEffect(window);
+
   // disable animations
   BOOL disableAnimations = TRUE;
   DwmSetWindowAttribute(window, DWMWA_TRANSITIONS_FORCEDISABLED, &disableAnimations, sizeof(disableAnimations));
 
-  UpdateTheme(window);
+  // force light theme regardless of system theme setting
+  BOOL forceDarkTheme = FALSE;
+  DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE, &forceDarkTheme, sizeof(forceDarkTheme));
 
   return OnCreate();
 }
 
 bool Win32Window::Show() {
-  return ShowWindow(window_handle_, SW_SHOWNORMAL);
+  if (window_handle_) {
+    ShowWindow(window_handle_, SW_SHOWNOACTIVATE);
+    UpdateWindow(window_handle_);
+    return true;
+  }
+  return false;
 }
 
 // static
@@ -201,8 +291,19 @@ Win32Window::MessageHandler(HWND hwnd,
 
       return 0;
     }
+    
+    // For acrylic effect, we need to leave WM_ERASEBKGND to default handler
+    // Do NOT return 1 here as it breaks the DWM backdrop effect
+    
+    // Remove the WM_PAINT custom handler - let the system handle it for acrylic
+      
+    case WM_NCCALCSIZE:
+      // Keep default non-client area calculation for DWM to work
+      break;
+      
     case WM_SIZE: {
-      RECT rect = GetClientArea();
+      RECT rect;
+      GetClientRect(hwnd, &rect);
       if (child_content_ != nullptr) {
         // Size and position the child window.
         MoveWindow(child_content_, rect.left, rect.top, rect.right - rect.left,
@@ -215,10 +316,6 @@ Win32Window::MessageHandler(HWND hwnd,
       if (child_content_ != nullptr) {
         SetFocus(child_content_);
       }
-      return 0;
-
-    case WM_DWMCOLORIZATIONCOLORCHANGED:
-      UpdateTheme(hwnd);
       return 0;
   }
 
@@ -274,19 +371,4 @@ bool Win32Window::OnCreate() {
 
 void Win32Window::OnDestroy() {
   // No-op; provided for subclasses.
-}
-
-void Win32Window::UpdateTheme(HWND const window) {
-  DWORD light_mode;
-  DWORD light_mode_size = sizeof(light_mode);
-  LSTATUS result = RegGetValue(HKEY_CURRENT_USER, kGetPreferredBrightnessRegKey,
-                               kGetPreferredBrightnessRegValue,
-                               RRF_RT_REG_DWORD, nullptr, &light_mode,
-                               &light_mode_size);
-
-  if (result == ERROR_SUCCESS) {
-    BOOL enable_dark_mode = light_mode == 0;
-    DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE,
-                          &enable_dark_mode, sizeof(enable_dark_mode));
-  }
 }

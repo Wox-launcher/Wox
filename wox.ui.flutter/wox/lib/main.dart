@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:get/get.dart';
 import 'package:protocol_handler/protocol_handler.dart';
 import 'package:uuid/v4.dart';
@@ -109,8 +108,6 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
 
     protocolHandler.addListener(this);
 
-    setAcrylicEffect();
-
     var launcherController = Get.find<WoxLauncherController>();
     launcherController.isInSettingView.listen((isShowSetting) async {
       if (isShowSetting) {
@@ -148,16 +145,6 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
       // Notify the backend that the UI is ready. The server-side will determine whether to display the UI window.
       WoxApi.instance.onUIReady();
     });
-  }
-
-  Future<void> setAcrylicEffect() async {
-    if (Platform.isMacOS) {
-      await Window.setBlurViewState(MacOSBlurViewState.active);
-      await Window.setEffect(effect: WindowEffect.popover, dark: false);
-    }
-    if (Platform.isWindows) {
-      await Window.setEffect(effect: WindowEffect.mica, color: const Color(0xFF222222), dark: false);
-    }
   }
 
   @override

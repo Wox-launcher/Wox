@@ -1,4 +1,4 @@
-#include "flutter_window.h"
+﻿#include "flutter_window.h"
 
 #include <optional>
 #include <flutter/plugin_registrar_windows.h>
@@ -372,65 +372,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     }
     else if (method_name == "waitUntilReadyToShow")
     {
-      const auto *arguments =
-          std::get_if<flutter::EncodableMap>(method_call.arguments());
-      if (arguments)
-      {
-        auto width_it = arguments->find(flutter::EncodableValue("width"));
-        auto height_it = arguments->find(flutter::EncodableValue("height"));
-        auto center_it = arguments->find(flutter::EncodableValue("center"));
-        auto always_on_top_it =
-            arguments->find(flutter::EncodableValue("alwaysOnTop"));
-
-        if (width_it != arguments->end() && height_it != arguments->end())
-        {
-          double width = std::get<double>(width_it->second);
-          double height = std::get<double>(height_it->second);
-          
-          // Get DPI scale factor
-          float dpiScale = GetDpiScale(hwnd);
-          
-          // Apply DPI scaling to get physical pixels
-          int scaledWidth = static_cast<int>(width * dpiScale);
-          int scaledHeight = static_cast<int>(height * dpiScale);
-          
-          RECT rect;
-          GetWindowRect(hwnd, &rect);
-          SetWindowPos(hwnd, nullptr, rect.left, rect.top, scaledWidth, scaledHeight, SWP_NOZORDER);
-        }
-
-        if (center_it != arguments->end() && std::get<bool>(center_it->second))
-        {
-          RECT rect;
-          GetWindowRect(hwnd, &rect);
-          int width = rect.right - rect.left;
-          int height = rect.bottom - rect.top;
-
-          // Get system metrics for the primary monitor
-          int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-          int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-          
-          // Calculate center position (already in physical pixels)
-          int x = (screenWidth - width) / 2;
-          int y = (screenHeight - height) / 2;
-
-          SetWindowPos(hwnd, nullptr, x, y, width, height, SWP_NOZORDER);
-        }
-
-        if (always_on_top_it != arguments->end() &&
-            std::get<bool>(always_on_top_it->second))
-        {
-          RECT rect;
-          GetWindowRect(hwnd, &rect);
-          SetWindowPos(hwnd, HWND_TOPMOST, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOSIZE);
-        }
-
         result->Success();
-      }
-      else
-      {
-        result->Error("INVALID_ARGUMENTS", "Invalid arguments for waitUntilReadyToShow");
-      }
     }
     else
     {
