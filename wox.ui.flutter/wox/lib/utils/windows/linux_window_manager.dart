@@ -1,8 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/windows/base_window_manager.dart';
-import 'package:wox/utils/windows/window_manager_interface.dart';
 
 /// Linux implementation of the window manager
 class LinuxWindowManager extends BaseWindowManager {

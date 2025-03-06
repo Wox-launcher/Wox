@@ -1,8 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/windows/base_window_manager.dart';
-import 'package:wox/utils/windows/window_manager_interface.dart';
 
 /// macOS implementation of the window manager
 class MacOSWindowManager extends BaseWindowManager {
@@ -11,15 +9,6 @@ class MacOSWindowManager extends BaseWindowManager {
   static final MacOSWindowManager instance = MacOSWindowManager._();
 
   MacOSWindowManager._();
-
-  @override
-  Future<void> ensureInitialized() async {
-    try {
-      await _channel.invokeMethod('ensureInitialized');
-    } catch (e) {
-      Logger.instance.error("MacOSWindowManager", "Error initializing: $e");
-    }
-  }
 
   @override
   Future<void> setSize(Size size) async {

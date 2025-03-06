@@ -6,3 +6,15 @@ alwaysApply: true
 * 你在回答问题的时候请使用中文回答我, 但是生成的代码中的注释必须使用英文
 * 当你需要查看日志的时候,请使用 `tail -n 100 ~/.wox/log/log` 查看最新日志, 帮助你排查问题
 * 在解决任何问题之前, 请在项目根目录下面执行一下 ls , 这样你对整个项目的结构有一个了解
+
+
+# 项目结构
+
+wox.core                    Go实现的Wox后端,通过websocket与http与wox.ui.flutter通信
+    wox.core/setting        wox.core的设置相关定义
+    wox.core/plugin         wox.core的API定义与实现
+wox.plugin.python           python插件需要引用的类库
+wox.plugin.host.python      python插件的host,通过websocket与wox.core通信,负责加载python插件
+wox.plugin.nodejs           nodejs插件需要引用的类库
+wox.plugin.host.nodejs      nodejs插件的host,通过websocket与wox.core通信,负责加载nodejs插件
+wox.ui.flutter               flutter实现的Wox前端,通过websocket与wox.core通信
