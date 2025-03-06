@@ -20,94 +20,23 @@ class AppDelegate: FlutterAppDelegate {
   
   /// Apply acrylic effect to window
   private func applyAcrylicEffect(to window: NSWindow) {
-    // Set window base properties
-    window.backgroundColor = .clear
-    window.isOpaque = false
-    window.hasShadow = true
-    
-    // Ensure light theme is used
+    // Ensure light theme is used, otherwise the dark theme effect the theme color
     window.appearance = NSAppearance(named: .aqua)
     
-    // Remove window title bar to ensure the entire window is transparent
-    window.titlebarAppearsTransparent = true
-    window.titleVisibility = .hidden
-    window.styleMask.insert(.fullSizeContentView)
-    
     if let contentView = window.contentView {
-      // Clear any existing effect views
-      for subview in contentView.subviews {
-        if subview is NSVisualEffectView {
-          subview.removeFromSuperview()
-        }
-      }
-      
-      // Create visual effect view
       let effectView = NSVisualEffectView(frame: contentView.bounds)
-      
-      // Try .hudWindow material, which is one of the closest materials to Windows acrylic effect in macOS
       effectView.material = .popover
-      
-      // Always keep active state
       effectView.state = .active
-      
-      // Use behindWindow to ensure the effect applies to content behind the window
       effectView.blendingMode = .behindWindow
-      
       // Ensure the effect view resizes with the window
       effectView.autoresizingMask = [.width, .height]
-      
-      // Add the effect view to the bottom layer of the content view
       contentView.addSubview(effectView, positioned: .below, relativeTo: nil)
       
       // Try to make all Flutter-related views transparent
       for subview in contentView.subviews where !(subview is NSVisualEffectView) {
         subview.wantsLayer = true
         subview.layer?.backgroundColor = NSColor.clear.cgColor
-        subview.layer?.opacity = 1.0 // Ensure views are visible but with transparent background
-        
-        // Recursively set all subviews to transparent
-        setViewsTransparent(subview)
       }
-      
-      // Force refresh view hierarchy
-      contentView.needsDisplay = true
-      contentView.displayIfNeeded()
-      window.contentViewController?.view.needsDisplay = true
-      window.contentViewController?.view.displayIfNeeded()
-    }
-  }
-  
-  /// Recursively set view and its subviews to transparent
-  private func setViewsTransparent(_ view: NSView) {
-    for subview in view.subviews {
-      subview.wantsLayer = true
-      subview.layer?.backgroundColor = NSColor.clear.cgColor
-      subview.layer?.opacity = 1.0 // Ensure views are visible but with transparent background
-      
-      // If it's a FlutterView or related view, try to set transparency more deeply
-      if subview.className.contains("Flutter") {
-        if let layer = subview.layer {
-          // Try more settings to ensure Flutter view is transparent
-          layer.isOpaque = false
-          
-          // Iterate through sublayers and set them to transparent
-          if let sublayers = layer.sublayers {
-            for sublayer in sublayers {
-              sublayer.backgroundColor = CGColor.clear
-              sublayer.isOpaque = false
-            }
-          }
-        }
-        
-        // Check if there are any custom properties that can be set to transparent
-        // This is to handle potential Flutter-specific implementations
-        if let mainFlutterView = subview as? NSView, mainFlutterView.responds(to: Selector(("isOpaque"))) {
-          mainFlutterView.setValue(false, forKey: "isOpaque")
-        }
-      }
-      
-      // Recursively process subviews
-      setViewsTransparent(subview)
     }
   }
   
