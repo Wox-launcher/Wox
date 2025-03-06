@@ -70,50 +70,43 @@ void EnableFullDpiSupportIfAvailable(HWND hwnd) {
   auto enable_non_client_dpi_scaling =
       reinterpret_cast<EnableNonClientDpiScaling*>(
           GetProcAddress(user32_module, "EnableNonClientDpiScaling"));
-  if (enable_non_client_dpi_scaling != nullptr) {
+  if (enable_non_client_dpi_scaling) {
     enable_non_client_dpi_scaling(hwnd);
   }
   FreeLibrary(user32_module);
 }
 
-// Get current Windows version information
-DWORD GetWindowsBuildNumber() {
-  DWORD buildNumber = 0;
-  HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
-  if (hNtdll) {
-    typedef void (WINAPI *RtlGetNtVersionNumbersFunc)(DWORD*, DWORD*, DWORD*);
-    RtlGetNtVersionNumbersFunc RtlGetNtVersionNumbers = (RtlGetNtVersionNumbersFunc)GetProcAddress(hNtdll, "RtlGetNtVersionNumbers");
-    if (RtlGetNtVersionNumbers) {
-      DWORD major, minor, buildNum;
-      RtlGetNtVersionNumbers(&major, &minor, &buildNum);
-      buildNumber = buildNum & 0x0FFFFFFF; // Remove build revision version
-    }
-  }
-  return buildNumber;
-}
-
-// Implement acrylic effect using simplified DWM API
+// Implement modern UI effect for Windows 11, fallback gracefully on Windows 10
 void EnableAcrylicEffect(HWND hwnd) {
-  // Get Windows version
-  DWORD buildNumber = GetWindowsBuildNumber();
-  
-  // Extend window frame into client area - this is the foundation for acrylic effect
+  // Extend window frame into client area - works on both Windows 10 and 11
   MARGINS margins = {-1};
   DwmExtendFrameIntoClientArea(hwnd, &margins);
   
-  // Windows 11 (22000+) - use SystemBackdrop API
-  if (buildNumber >= 22000) {
-    // Set rounded corners (Windows 11 feature)
-    int cornerPreference = 2; // DWMWCP_ROUND
-    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,   &cornerPreference, sizeof(cornerPreference));
-    
-    // SystemBackdrop API (22000+) - MICA effect
-    int backdropType = 3; // DWMSBT_TABBEDWINDOW = Mica
-    DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE,    &backdropType, sizeof(backdropType));
+  // Get Windows version
+  OSVERSIONINFOEX osvi = {0};
+  osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
+  // Using RtlGetVersion to bypass GetVersionEx deprecation
+  typedef NTSTATUS(WINAPI* RtlGetVersionPtr)(PRTL_OSVERSIONINFOW);
+  HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
+  if (hNtdll) {
+    RtlGetVersionPtr RtlGetVersion = (RtlGetVersionPtr)GetProcAddress(hNtdll, "RtlGetVersion");
+    if (RtlGetVersion) {
+      RtlGetVersion((PRTL_OSVERSIONINFOW)&osvi);
+    }
   }
-  // Windows 10 - use DWM blur effect
+  
+  // Windows 11 specific features - build number 22000 or higher
+  if (osvi.dwBuildNumber >= 22000) {
+    // Set rounded corners (Windows 11 feature)
+    int cornerPreference = DWMWCP_ROUND; // Use enum value (2) from defined constants
+    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,  &cornerPreference, sizeof(cornerPreference));
+  
+    // Apply Mica material effect using SystemBackdrop API
+    int backdropType = DWMSBT_TABBEDWINDOW; // Use enum value (3) from defined constants
+    DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE,   &backdropType, sizeof(backdropType));
+  } 
   else {
-    // Simple background blur effect
+    // Windows 10 fallback - use simple blur effect
     DWM_BLURBEHIND bb = {0};
     bb.dwFlags = DWM_BB_ENABLE;
     bb.fEnable = TRUE;
@@ -313,45 +306,7 @@ Win32Window::MessageHandler(HWND hwnd,
         SetFocus(child_content_);
       }
       return 0;
-      
-    // Handle window dragging
-    case WM_NCHITTEST: {
-      // Get mouse position
-      POINT pt = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
-      ScreenToClient(hwnd, &pt);
-      
-      // Get window size
-      RECT rect;
-      GetClientRect(hwnd, &rect);
-      
-      // Define border region size (area for resizing the window)
-      const int border_width = 8;
-      
-      // Check if in border region
-      bool top = pt.y < border_width;
-      bool bottom = pt.y > rect.bottom - border_width;
-      bool left = pt.x < border_width;
-      bool right = pt.x > rect.right - border_width;
-      
-      // Return appropriate hit test value
-      if (top && left) return HTTOPLEFT;
-      if (top && right) return HTTOPRIGHT;
-      if (bottom && left) return HTBOTTOMLEFT;
-      if (bottom && right) return HTBOTTOMRIGHT;
-      if (top) return HTTOP;
-      if (bottom) return HTBOTTOM;
-      if (left) return HTLEFT;
-      if (right) return HTRIGHT;
-      
-      // For title bar area, allow window dragging
-      const int title_height = 32; // Title bar height, can be adjusted as needed
-      if (pt.y < title_height) {
-        return HTCAPTION;
-      }
-      
-      // Client area
-      return HTCLIENT;
-    }
+   
   }
 
   return DefWindowProc(window_handle_, message, wparam, lparam);
