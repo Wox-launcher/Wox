@@ -76,9 +76,8 @@ void EnableFullDpiSupportIfAvailable(HWND hwnd) {
   FreeLibrary(user32_module);
 }
 
-// Enable acrylic effect (Windows 11)
-void EnableAcrylicEffect(HWND hwnd) {
-  // Get Windows build number
+// Get current Windows version information
+DWORD GetWindowsBuildNumber() {
   DWORD buildNumber = 0;
   HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
   if (hNtdll) {
@@ -87,19 +86,39 @@ void EnableAcrylicEffect(HWND hwnd) {
     if (RtlGetNtVersionNumbers) {
       DWORD major, minor, buildNum;
       RtlGetNtVersionNumbers(&major, &minor, &buildNum);
-      buildNumber = buildNum & 0x0FFFFFFF; // Remove the build revision
+      buildNumber = buildNum & 0x0FFFFFFF; // Remove build revision version
     }
   }
+  return buildNumber;
+}
 
-  // Windows 11 (build 22000 and higher) - Use official API
+// Implement acrylic effect using simplified DWM API
+void EnableAcrylicEffect(HWND hwnd) {
+  // Get Windows version
+  DWORD buildNumber = GetWindowsBuildNumber();
+  
+  // Extend window frame into client area - this is the foundation for acrylic effect
+  MARGINS margins = {-1};
+  DwmExtendFrameIntoClientArea(hwnd, &margins);
+  
+  // Windows 11 (22000+) - use SystemBackdrop API
   if (buildNumber >= 22000) {
-    // Use SystemBackdrop API with Acrylic effect (true blur with frosted glass look)
-    int backdropType = DWMSBT_TRANSIENTWINDOW; // Acrylic (frosted glass effect)
+    // Set rounded corners (Windows 11 feature)
+    int cornerPreference = 2; // DWMWCP_ROUND
+    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,   &cornerPreference, sizeof(cornerPreference));
     
-    // 应用毛玻璃效果
-    DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdropType, sizeof(backdropType));
+    // SystemBackdrop API (22000+) - MICA effect
+    int backdropType = 3; // DWMSBT_TABBEDWINDOW = Mica
+    DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE,    &backdropType, sizeof(backdropType));
   }
-  // 其他Windows版本不需要支持毛玻璃效果
+  // Windows 10 - use DWM blur effect
+  else {
+    // Simple background blur effect
+    DWM_BLURBEHIND bb = {0};
+    bb.dwFlags = DWM_BB_ENABLE;
+    bb.fEnable = TRUE;
+    DwmEnableBlurBehindWindow(hwnd, &bb);
+  }
 }
 
 }  // namespace
@@ -183,12 +202,14 @@ bool Win32Window::Create(const std::wstring& title,
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
   double scale_factor = dpi / 96.0;
 
-  // Update window style for better support of DWM effects
-  // We need a proper window with caption area for DWM to apply effects correctly
-  // but we use WS_POPUP for borderless look
-  DWORD dwStyle = WS_POPUP | WS_THICKFRAME;
-  DWORD dwExStyle = WS_EX_APPWINDOW;
+  // Window style settings - crucial for acrylic effect
+  // Use WS_POPUP for borderless window, but add other styles to make window resizable
+  DWORD dwStyle = WS_POPUP | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+  
+  // Add WS_EX_LAYERED to support transparency
+  DWORD dwExStyle = WS_EX_APPWINDOW | WS_EX_LAYERED;
 
+  // Create window
   HWND window = CreateWindowEx(
       dwExStyle,
       window_class, title.c_str(), dwStyle,
@@ -200,40 +221,14 @@ bool Win32Window::Create(const std::wstring& title,
     return false;
   }
 
-  // Important: Do NOT set a NULL_BRUSH as it breaks the acrylic effect
-  // Do NOT set window to layered with SetLayeredWindowAttributes as it
-  // will break the DWM acrylic/blur effect
+  // Set window opacity (255 = fully opaque)
+  SetLayeredWindowAttributes(window, 0, 255, LWA_ALPHA);
 
-  // Set rounded corners (Windows 11 feature)
-  DWORD buildNumber = 0;
-  HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
-  if (hNtdll) {
-    typedef void (WINAPI *RtlGetNtVersionNumbersFunc)(DWORD*, DWORD*, DWORD*);
-    RtlGetNtVersionNumbersFunc RtlGetNtVersionNumbers = (RtlGetNtVersionNumbersFunc)GetProcAddress(hNtdll, "RtlGetNtVersionNumbers");
-    if (RtlGetNtVersionNumbers) {
-      DWORD major, minor, buildNum;
-      RtlGetNtVersionNumbers(&major, &minor, &buildNum);
-      buildNumber = buildNum & 0x0FFFFFFF; // Remove the build revision
-    }
-  }
-
-  // Apply rounded corners for Windows 11 (build 22000 and higher)
-  if (buildNumber >= 22000) {
-    // DWMWCP_ROUND = 2
-    UINT cornerPreference = 2;
-    DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPreference, sizeof(cornerPreference));
-  }
-
-  // Apply acrylic effect for Windows 10 and 11
+  // Apply acrylic effect - must be called after window creation
   EnableAcrylicEffect(window);
 
-  // disable animations
-  BOOL disableAnimations = TRUE;
-  DwmSetWindowAttribute(window, DWMWA_TRANSITIONS_FORCEDISABLED, &disableAnimations, sizeof(disableAnimations));
-
-  // force light theme regardless of system theme setting
-  BOOL forceDarkTheme = FALSE;
-  DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE, &forceDarkTheme, sizeof(forceDarkTheme));
+  // Save window handle
+  window_handle_ = window;
 
   return OnCreate();
 }
@@ -292,14 +287,15 @@ Win32Window::MessageHandler(HWND hwnd,
       return 0;
     }
     
-    // For acrylic effect, we need to leave WM_ERASEBKGND to default handler
-    // Do NOT return 1 here as it breaks the DWM backdrop effect
-    
-    // Remove the WM_PAINT custom handler - let the system handle it for acrylic
-      
-    case WM_NCCALCSIZE:
-      // Keep default non-client area calculation for DWM to work
+    // Custom non-client area calculation needed to support transparent window and acrylic effect
+    case WM_NCCALCSIZE: {
+      if (wparam == TRUE) {
+        // Return 0 to make the entire window area the client area, removing default non-client area
+        // This is very important for acrylic effect
+        return 0;
+      }
       break;
+    }
       
     case WM_SIZE: {
       RECT rect;
@@ -317,6 +313,45 @@ Win32Window::MessageHandler(HWND hwnd,
         SetFocus(child_content_);
       }
       return 0;
+      
+    // Handle window dragging
+    case WM_NCHITTEST: {
+      // Get mouse position
+      POINT pt = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+      ScreenToClient(hwnd, &pt);
+      
+      // Get window size
+      RECT rect;
+      GetClientRect(hwnd, &rect);
+      
+      // Define border region size (area for resizing the window)
+      const int border_width = 8;
+      
+      // Check if in border region
+      bool top = pt.y < border_width;
+      bool bottom = pt.y > rect.bottom - border_width;
+      bool left = pt.x < border_width;
+      bool right = pt.x > rect.right - border_width;
+      
+      // Return appropriate hit test value
+      if (top && left) return HTTOPLEFT;
+      if (top && right) return HTTOPRIGHT;
+      if (bottom && left) return HTBOTTOMLEFT;
+      if (bottom && right) return HTBOTTOMRIGHT;
+      if (top) return HTTOP;
+      if (bottom) return HTBOTTOM;
+      if (left) return HTLEFT;
+      if (right) return HTRIGHT;
+      
+      // For title bar area, allow window dragging
+      const int title_height = 32; // Title bar height, can be adjusted as needed
+      if (pt.y < title_height) {
+        return HTCAPTION;
+      }
+      
+      // Client area
+      return HTCLIENT;
+    }
   }
 
   return DefWindowProc(window_handle_, message, wparam, lparam);
