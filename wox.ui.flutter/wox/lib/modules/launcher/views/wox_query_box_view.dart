@@ -116,16 +116,27 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                       controller: controller.queryBoxTextFieldController,
                       scrollController: controller.queryBoxScrollController,
                       onChanged: (value) {
+                        // because we use addPostFrameCallback below to solve the issue that isComposingRangeValid is not reliable on Windows,
+                        // but this will cause the selection changed randomly, so we need to store the current selection and restore it later.
+                        // once https://github.com/flutter/flutter/issues/128565 is fixed, we can remove the those hacks
+                        // Store the current selection to restore it later
+                        final currentSelection = controller.queryBoxTextFieldController.selection;
+
                         // isComposingRangeValid is not reliable on Windows, we need to use inside post frame callback to check the value
-                        // see https://github.com/flutter/flutter/issues/128565#issuecomment-1772016743
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           // if the composing range is valid, which means the text is changed by IME and the query is not finished yet,
                           // we should not trigger the query until the composing is finished.
+                          // see https://github.com/flutter/flutter/issues/128565#issuecomment-1772016743
                           if (controller.queryBoxTextFieldController.value.isComposingRangeValid) {
                             return;
                           }
 
                           controller.onQueryBoxTextChanged(value);
+
+                          // Restore the selection after the frame is rendered
+                          if (controller.queryBoxTextFieldController.text == value) {
+                            controller.queryBoxTextFieldController.selection = currentSelection;
+                          }
                         });
                       },
                     ),

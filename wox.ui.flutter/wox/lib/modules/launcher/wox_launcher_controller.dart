@@ -109,6 +109,7 @@ class WoxLauncherController extends GetxController {
 
     //ignore the results if the query id is not matched
     if (currentQuery.value.queryId != receivedResults.first.queryId) {
+      Logger.instance.error(traceId, "query id is not matched, ignore the results");
       return;
     }
 
@@ -191,7 +192,7 @@ class WoxLauncherController extends GetxController {
     lastQueryMode = params.lastQueryMode;
 
     if (params.selectAll) {
-      selectQueryBoxAllText();
+      selectQueryBoxAllText(traceId);
     }
     if (params.position.type == WoxPositionTypeEnum.POSITION_TYPE_MOUSE_SCREEN.code) {
       await windowManager.setPosition(Offset(params.position.x.toDouble(), params.position.y.toDouble()));
@@ -628,7 +629,8 @@ class WoxLauncherController extends GetxController {
   }
 
   // select all text in query box
-  void selectQueryBoxAllText() {
+  void selectQueryBoxAllText(String traceId) {
+    Logger.instance.info(traceId, "select query box all text");
     queryBoxTextFieldController.selection = TextSelection(baseOffset: 0, extentOffset: queryBoxTextFieldController.text.length);
   }
 
@@ -986,8 +988,9 @@ class WoxLauncherController extends GetxController {
         currentQueryHistoryIndex = currentQueryHistoryIndex + 1;
         var changedQuery = latestQueryHistories[currentQueryHistoryIndex].query;
         if (changedQuery != null) {
-          onQueryChanged(const UuidV4().generate(), changedQuery, "user arrow up history");
-          selectQueryBoxAllText();
+          final traceId = const UuidV4().generate();
+          onQueryChanged(traceId, changedQuery, "user arrow up history");
+          selectQueryBoxAllText(traceId);
         }
       }
       return;

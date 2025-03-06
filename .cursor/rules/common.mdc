@@ -1,11 +1,6 @@
 ---
 description: 
 globs: 
-alwaysApply: false
----
----
-description: MUST USE THIS RULE
-globs: 
 alwaysApply: true
 ---
 * 你在回答问题的时候请使用中文回答我, 但是生成的代码中的注释必须使用英文
