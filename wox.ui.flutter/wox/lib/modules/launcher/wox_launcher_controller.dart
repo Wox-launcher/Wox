@@ -197,11 +197,6 @@ class WoxLauncherController extends GetxController {
       await windowManager.setPosition(Offset(params.position.x.toDouble(), params.position.y.toDouble()));
     }
     await windowManager.show();
-    if (Platform.isWindows) {
-      // on windows, it is somehow necessary to invoke show twice to make the window show
-      // otherwise, the window will not show up if it is the first time to invoke showApp
-      await windowManager.show();
-    }
     await windowManager.focus();
     queryBoxFocusNode.requestFocus();
 

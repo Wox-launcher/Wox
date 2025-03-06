@@ -25,7 +25,7 @@ clean:
 	rm -rf $(UI_FLUTTER_DIR)
 
 build: clean
-	flutter build --release $(FLUTTER_TARGET)
+	flutter build $(FLUTTER_TARGET)
 	mkdir -p $(UI_FLUTTER_DIR)
 ifeq ($(FLUTTER_TARGET),windows)
 	cp -r build/$(FLUTTER_TARGET)/x64/runner/Release $(UI_FLUTTER_DIR)/wox

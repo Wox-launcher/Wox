@@ -1,11 +1,15 @@
 ---
+description: 
+globs: 
+alwaysApply: false
+---
+---
 description: MUST USE THIS RULE
 globs: 
 alwaysApply: true
 ---
 * 你在回答问题的时候请使用中文回答我, 但是生成的代码中的注释必须使用英文
 * 当你需要查看日志的时候,请使用 `tail -n 100 ~/.wox/log/log` 查看最新日志, 帮助你排查问题
-* 在解决任何问题之前, 请在项目根目录下面执行一下 ls , 这样你对整个项目的结构有一个了解
 
 
 # 项目结构

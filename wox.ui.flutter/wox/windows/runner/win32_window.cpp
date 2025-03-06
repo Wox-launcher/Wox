@@ -195,12 +195,10 @@ bool Win32Window::Create(const std::wstring& title,
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
   double scale_factor = dpi / 96.0;
 
-  // Window style settings - crucial for acrylic effect
-  // Use WS_POPUP for borderless window, but add other styles to make window resizable
-  DWORD dwStyle = WS_POPUP | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
-  
-  // Add WS_EX_LAYERED to support transparency
-  DWORD dwExStyle = WS_EX_APPWINDOW | WS_EX_LAYERED;
+  // Window style settings
+  DWORD dwStyle = WS_POPUP | WS_THICKFRAME;
+  // WS_EX_TOOLWINDOW to hide from taskbar
+  DWORD dwExStyle =  WS_EX_TOOLWINDOW;
 
   // Create window
   HWND window = CreateWindowEx(

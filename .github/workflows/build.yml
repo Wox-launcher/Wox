@@ -49,7 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Build
-        run: make publish
+        run: make build
         env:
           KEYCHAINPWD: ${{ matrix.needs_keychain && secrets.KEYCHAINPWD || '' }}
       - name: Upload artifact

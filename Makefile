@@ -1,4 +1,4 @@
-.PHONY: publish clean _bundle_mac_app plugins help dev test check_deps
+.PHONY: build clean _bundle_mac_app plugins help dev test check_deps
 
 # Determine the current platform
 ifeq ($(OS),Windows_NT)
@@ -30,7 +30,7 @@ help:
 	@echo "  help       Show this help message"
 	@echo "  dev        Setup development environment"
 	@echo "  test       Run tests"
-	@echo "  publish    Build and publish all components"
+	@echo "  build      Build all components"
 	@echo "  plugins    Update plugin store"
 	@echo "  clean      Clean release directory"
 
@@ -76,7 +76,7 @@ test: dev
 only_test:
 	cd wox.core && go test ./... -v -skip "TestFetchCryptoPrices|TestCalculatorCrypto|TestCalculatorCurrency"
 
-publish: clean dev
+build: clean dev
 	$(MAKE) -C wox.core build
 	
 ifeq ($(PLATFORM),windows)
