@@ -25,6 +25,8 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
+	"github.com/mitchellh/go-homedir"
+	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 )
 
@@ -568,4 +570,65 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 			plugin.GetPluginManager().ExecutePluginDeeplink(ctx, pluginID, arguments)
 		}
 	}
+}
+
+// ChangeUserDataDirectory handles changing the user data directory location
+// This includes creating the new directory structure and copying all data
+func (m *Manager) ChangeUserDataDirectory(ctx context.Context, newDirectory string) error {
+	location := util.GetLocation()
+	oldDirectory := location.GetUserDataDirectory()
+
+	// check if new directory is valid
+	if _, err := os.Stat(newDirectory); os.IsNotExist(err) {
+		return fmt.Errorf("new directory is not a valid directory: %s", newDirectory)
+	}
+
+	// Skip if old and new directories are the same
+	if oldDirectory == newDirectory {
+		logger.Info(ctx, "New directory is the same as current directory, skipping")
+		return nil
+	}
+
+	// Expand tilde if present in the path
+	expandedDir, expandErr := homedir.Expand(newDirectory)
+	if expandErr != nil {
+		return fmt.Errorf("failed to expand directory path: %w", expandErr)
+	}
+	newDirectory = expandedDir
+
+	logger.Info(ctx, fmt.Sprintf("Changing user data directory from %s to %s", oldDirectory, newDirectory))
+
+	// Create the new directory if it doesn't exist
+	if err := os.MkdirAll(newDirectory, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to create new directory: %w", err)
+	}
+
+	// Copy existing data to the new location if the old location exists and differs from new
+	if oldDirectory != "" && oldDirectory != newDirectory {
+		logger.Info(ctx, fmt.Sprintf("Copying data from %s to %s", oldDirectory, newDirectory))
+		// Use the copy library to copy all directories and files recursively
+		// The library will automatically create subdirectories as needed
+		if err := cp.Copy(oldDirectory, newDirectory); err != nil {
+			return fmt.Errorf("failed to copy user data: %w", err)
+		}
+	}
+
+	// Update the shortcut file
+	shortcutPath := location.GetUserDataDirectoryShortcutPath()
+	file, err := os.OpenFile(shortcutPath, os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open shortcut file for writing: %w", err)
+	}
+	defer file.Close()
+
+	_, writeErr := file.WriteString(newDirectory)
+	if writeErr != nil {
+		return fmt.Errorf("failed to write new directory path to shortcut file: %w", writeErr)
+	}
+
+	// Update the location in memory
+	location.UpdateUserDataDirectory(newDirectory)
+
+	logger.Info(ctx, "User data directory successfully changed")
+	return nil
 }

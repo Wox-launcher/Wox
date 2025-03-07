@@ -8,10 +8,12 @@ import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_setting_util.dart';
+import 'package:wox/utils/wox_http_util.dart';
 
 class WoxSettingController extends GetxController {
   final activePaneIndex = 0.obs;
   final woxSetting = WoxSettingUtil.instance.currentSetting.obs;
+  final userDataLocation = "".obs;
 
   //plugins
   final pluginList = <PluginDetail>[];
@@ -44,6 +46,7 @@ class WoxSettingController extends GetxController {
   void onInit() {
     super.onInit();
     refreshThemeList();
+    loadUserDataLocation();
   }
 
   void hideWindow() {
@@ -308,5 +311,14 @@ class WoxSettingController extends GetxController {
     activeTheme.value = WoxTheme.empty();
     await refreshThemeList();
     setFirstFilteredThemeActive();
+  }
+
+  Future<void> loadUserDataLocation() async {
+    userDataLocation.value = await WoxApi.instance.getUserDataLocation();
+  }
+
+  Future<void> updateUserDataLocation(String newLocation) async {
+    await WoxApi.instance.updateUserDataLocation(newLocation);
+    userDataLocation.value = newLocation;
   }
 }

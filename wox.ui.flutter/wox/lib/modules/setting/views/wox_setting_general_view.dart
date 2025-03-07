@@ -19,7 +19,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
       child: Obx(() {
         return Padding(
             padding: const EdgeInsets.all(20),
-            child: form(width: 850, children: [
+            child: form(children: [
               formField(
                 label: controller.tr("ui_autostart"),
                 tips: controller.tr("ui_autostart_tips"),

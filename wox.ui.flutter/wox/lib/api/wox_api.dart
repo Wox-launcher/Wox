@@ -132,4 +132,12 @@ class WoxApi {
   Future<bool> doctorCheck() async {
     return await WoxHttpUtil.instance.postData("/doctor/check", null);
   }
+
+  Future<String> getUserDataLocation() async {
+    return await WoxHttpUtil.instance.postData("/setting/userdata/location", null);
+  }
+
+  Future<void> updateUserDataLocation(String location) async {
+    await WoxHttpUtil.instance.postData("/setting/userdata/location/update", {"location": location});
+  }
 }

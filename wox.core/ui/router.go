@@ -39,9 +39,11 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/theme/apply":     handleThemeApply,
 
 	// settings
-	"/setting/wox":           handleSettingWox,
-	"/setting/wox/update":    handleSettingWoxUpdate,
-	"/setting/plugin/update": handleSettingPluginUpdate,
+	"/setting/wox":                      handleSettingWox,
+	"/setting/wox/update":               handleSettingWoxUpdate,
+	"/setting/plugin/update":            handleSettingPluginUpdate,
+	"/setting/userdata/location":        handleUserDataLocation,
+	"/setting/userdata/location/update": handleUserDataLocationUpdate,
 
 	// events
 	"/on/focus/lost": handleOnFocusLost,
@@ -792,4 +794,38 @@ func handleDoctorCheck(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeSuccessResponse(w, allPassed)
+}
+
+func handleUserDataLocation(w http.ResponseWriter, r *http.Request) {
+	location := util.GetLocation()
+	writeSuccessResponse(w, location.GetUserDataDirectory())
+}
+
+func handleUserDataLocationUpdate(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+	logger.Info(ctx, "Updating user data directory location")
+
+	body, _ := io.ReadAll(r.Body)
+	locationResult := gjson.GetBytes(body, "location")
+	if !locationResult.Exists() {
+		writeErrorResponse(w, "location is empty")
+		return
+	}
+
+	newLocation := locationResult.String()
+	if newLocation == "" {
+		writeErrorResponse(w, "location cannot be empty")
+		return
+	}
+
+	// Use the manager method to handle directory change
+	err := GetUIManager().ChangeUserDataDirectory(ctx, newLocation)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("Failed to change user data directory: %s", err.Error()))
+		writeErrorResponse(w, fmt.Sprintf("Failed to change user data directory: %s", err.Error()))
+		return
+	}
+
+	logger.Info(ctx, fmt.Sprintf("User data directory successfully changed to: %s", newLocation))
+	writeSuccessResponse(w, "User data directory updated successfully")
 }

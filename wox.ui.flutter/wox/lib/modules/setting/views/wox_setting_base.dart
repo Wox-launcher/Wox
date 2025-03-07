@@ -3,10 +3,9 @@ import 'package:wox/modules/setting/wox_setting_controller.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
 abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
-  
   const WoxSettingBaseView({super.key});
 
-  Widget form({required double width, required List<Widget> children}) {
+  Widget form({double width = 960, required List<Widget> children}) {
     return Column(
       children: [
         ...children.map((e) => SizedBox(
@@ -17,7 +16,7 @@ abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
     );
   }
 
-  Widget formField({required String label, required Widget child, String? tips, double labelWidth = 120}) {
+  Widget formField({required String label, required Widget child, String? tips, double labelWidth = 160}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
       child: Column(
@@ -28,13 +27,19 @@ abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
                 padding: const EdgeInsets.only(right: 20),
                 child: SizedBox(width: labelWidth, child: Text(label, textAlign: TextAlign.right)),
               ),
-              child,
+              Flexible(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: child,
+                ),
+              ),
             ],
           ),
           if (tips != null)
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
                     padding: const EdgeInsets.only(right: 20),
@@ -54,4 +59,3 @@ abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
     );
   }
 }
-  

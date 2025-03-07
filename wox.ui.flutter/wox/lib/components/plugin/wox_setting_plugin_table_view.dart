@@ -28,7 +28,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     required this.item,
     required super.value,
     required super.onUpdate,
-    this.tableWidth = 650.0,
+    this.tableWidth = 720.0,
     this.readonly = false,
     this.onUpdateValidate,
   });
@@ -451,64 +451,62 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: 6),
-      child: Column(
-        crossAxisAlignment: item.title == "" ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Row(
-                  children: [
-                    Text(
-                      item.title,
-                    ),
-                    if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip),
-                  ],
+      child: SizedBox(
+        width: tableWidth,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Row(
+                    children: [
+                      Text(
+                        item.title,
+                      ),
+                      if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip),
+                    ],
+                  ),
                 ),
-              ),
-              if (!readonly)
-                HyperlinkButton(
-                    onPressed: () {
-                      showDialog(
-                          context: context,
-                          builder: (context) {
-                            return WoxSettingPluginTableUpdate(
-                              item: item,
-                              row: const {},
-                              onUpdate: (key, row) {
-                                var rowsJson = getSetting(key);
-                                if (rowsJson == "") {
-                                  rowsJson = "[]";
-                                }
-                                var rows = json.decode(rowsJson);
-                                rows.add(row);
-                                //remove the unique key
-                                rows.forEach((element) {
-                                  element.remove(rowUniqueIdKey);
-                                });
+                if (!readonly)
+                  HyperlinkButton(
+                      onPressed: () {
+                        showDialog(
+                            context: context,
+                            builder: (context) {
+                              return WoxSettingPluginTableUpdate(
+                                item: item,
+                                row: const {},
+                                onUpdate: (key, row) {
+                                  var rowsJson = getSetting(key);
+                                  if (rowsJson == "") {
+                                    rowsJson = "[]";
+                                  }
+                                  var rows = json.decode(rowsJson);
+                                  rows.add(row);
+                                  //remove the unique key
+                                  rows.forEach((element) {
+                                    element.remove(rowUniqueIdKey);
+                                  });
 
-                                updateConfig(key, json.encode(rows));
-                              },
-                            );
-                          });
-                    },
-                    child: Row(
-                      children: [
-                        const Icon(material.Icons.add),
-                        Text(tr("ui_add")),
-                      ],
-                    )),
-            ],
-          ),
-          // full width the datatable
-          SizedBox(
-            width: tableWidth,
-            //add horizontal scroll if table is too wide
-            child: buildTable(context),
-          ),
-        ],
+                                  updateConfig(key, json.encode(rows));
+                                },
+                              );
+                            });
+                      },
+                      child: Row(
+                        children: [
+                          const Icon(material.Icons.add),
+                          Text(tr("ui_add")),
+                        ],
+                      )),
+              ],
+            ),
+            buildTable(context),
+          ],
+        ),
       ),
     );
   }

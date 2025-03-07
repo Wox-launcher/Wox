@@ -14,13 +14,12 @@ class WoxSettingAIView extends WoxSettingBaseView {
     return SingleChildScrollView(
       child: Padding(
           padding: const EdgeInsets.all(20),
-          child: form(width: 1000, children: [
+          child: form(children: [
             formField(
               label: controller.tr("ui_ai_model"),
               child: Obx(() {
                 return WoxSettingPluginTable(
                   value: json.encode(controller.woxSetting.value.aiProviders),
-                  tableWidth: 750,
                   item: PluginSettingValueTable.fromJson({
                     "Key": "AIProviders",
                     "Columns": [

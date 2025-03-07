@@ -197,3 +197,12 @@ func (l *Location) GetUIAppPath() string {
 func (l *Location) GetAppLockPath() string {
 	return path.Join(l.GetWoxDataDirectory(), "wox.lock")
 }
+
+func (l *Location) UpdateUserDataDirectory(newDirectory string) {
+	l.userDataDirectory = newDirectory
+}
+
+// Get the path to the shortcut file that stores the user data directory path
+func (l *Location) GetUserDataDirectoryShortcutPath() string {
+	return l.userDataDirectoryShortcutPath
+}
