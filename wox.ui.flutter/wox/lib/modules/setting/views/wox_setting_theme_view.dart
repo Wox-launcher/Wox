@@ -33,7 +33,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
             child: Obx(() {
               return TextBox(
                 autofocus: true,
-                placeholder: Strings.format(controller.tr('setting_theme_search_placeholder'), [controller.filteredThemeList.length]),
+                placeholder: Strings.format(controller.tr('ui_setting_theme_search_placeholder'), [controller.filteredThemeList.length]),
                 padding: const EdgeInsets.all(10),
                 suffix: const Padding(
                   padding: EdgeInsets.only(right: 8.0),
@@ -50,7 +50,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
               if (controller.filteredThemeList.isEmpty) {
                 return Center(
                   child: Text(
-                    controller.tr('setting_theme_empty_data'),
+                    controller.tr('ui_setting_theme_empty_data'),
                     style: const TextStyle(
                       color: base.Colors.grey,
                     ),
@@ -120,7 +120,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                                       ),
                                     ),
                                     child: Text(
-                                      controller.tr('setting_theme_system_tag'),
+                                      controller.tr('ui_setting_theme_system_tag'),
                                       style: TextStyle(
                                         color: isActive ? base.Colors.white : Colors.blue,
                                         fontSize: 11,
@@ -152,7 +152,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
         if (theme.themeId.isEmpty) {
           return Center(
             child: Text(
-              controller.tr('setting_theme_empty_data'),
+              controller.tr('ui_setting_theme_empty_data'),
               style: const TextStyle(
                 color: base.Colors.grey,
               ),
@@ -209,7 +209,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                     child: base.Row(
                       children: [
                         Text(
-                          controller.tr('setting_theme_website'),
+                          controller.tr('ui_setting_theme_website'),
                           style: const TextStyle(
                             color: base.Colors.blue,
                           ),
@@ -240,7 +240,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                       onPressed: () {
                         controller.installTheme(theme);
                       },
-                      child: Text(controller.tr('setting_theme_install')),
+                      child: Text(controller.tr('ui_setting_theme_install')),
                     ),
                   ),
                 if (theme.isInstalled || theme.isSystem)
@@ -252,7 +252,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                           : () {
                               controller.applyTheme(theme);
                             },
-                      child: Text(controller.tr('setting_theme_apply')),
+                      child: Text(controller.tr('ui_setting_theme_apply')),
                     ),
                   ),
                 if (theme.isInstalled && !theme.isSystem)
@@ -262,7 +262,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                       onPressed: () {
                         controller.uninstallTheme(theme);
                       },
-                      child: Text(controller.tr('setting_theme_uninstall')),
+                      child: Text(controller.tr('ui_setting_theme_uninstall')),
                     ),
                   ),
               ],
@@ -280,10 +280,10 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                     indicatorColor: SettingPrimaryColor,
                     tabs: [
                       base.Tab(
-                        child: Text(controller.tr('setting_theme_preview')),
+                        child: Text(controller.tr('ui_setting_theme_preview')),
                       ),
                       base.Tab(
-                        child: Text(controller.tr('setting_theme_description')),
+                        child: Text(controller.tr('ui_setting_theme_description')),
                       ),
                     ],
                   ),
@@ -306,7 +306,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
 
   Widget themeTabPreview(WoxTheme theme) {
     if (theme.themeId.isEmpty) {
-      return Text(controller.tr('setting_theme_empty_data'));
+      return Text(controller.tr('ui_setting_theme_empty_data'));
     }
 
     return WoxThemePreview(theme: theme);

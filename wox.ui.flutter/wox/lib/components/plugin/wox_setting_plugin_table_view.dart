@@ -260,18 +260,18 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                     context: context,
                     builder: (context) {
                       return ContentDialog(
-                        content: const Text("Are you sure you want to delete this row?"),
+                        content: Text(tr("ui_delete_row_confirm")),
                         actions: [
                           Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
                               Button(
-                                child: const Text('Cancel'),
+                                child: Text(tr("ui_cancel")),
                                 onPressed: () => Navigator.pop(context),
                               ),
                               const SizedBox(width: 16),
                               FilledButton(
-                                child: const Text('Delete'),
+                                child: Text(tr("ui_delete")),
                                 onPressed: () {
                                   Navigator.pop(context);
 
@@ -333,7 +333,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
               label: columnWidth(
                 column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
                   "Key": "Operation",
-                  "Label": "Operation",
+                  "Label": tr("operation"),
                   "Tooltip": "",
                   "Width": operationWidth.toInt(),
                   "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText,
@@ -341,9 +341,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 }),
                 isHeader: false,
                 isOperation: true,
-                child: const Text(
-                  "Operation",
-                  style: TextStyle(
+                child: Text(
+                  tr("operation"),
+                  style: const TextStyle(
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -412,7 +412,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
             label: columnWidth(
               column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
                 "Key": "Operation",
-                "Label": tr("operation"),
+                "Label": tr("ui_operation"),
                 "Tooltip": "",
                 "Width": operationWidth.toInt(),
                 "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText,
@@ -421,7 +421,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
               isHeader: true,
               isOperation: true,
               child: Text(
-                tr("operation"),
+                tr("ui_operation"),
                 style: const TextStyle(
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -497,7 +497,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                     child: Row(
                       children: [
                         const Icon(material.Icons.add),
-                        Text(tr("add")),
+                        Text(tr("ui_add")),
                       ],
                     )),
             ],

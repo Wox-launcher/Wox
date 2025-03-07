@@ -44,28 +44,28 @@ class WoxSettingView extends GetView<WoxSettingController> {
                   items: [
                     PaneItem(
                       icon: const Icon(FluentIcons.settings),
-                      title: Text(controller.tr('general')),
+                      title: Text(controller.tr('ui_general')),
                       body: const WoxSettingGeneralView(),
                     ),
                     PaneItem(
                       icon: const Icon(Icons.grain),
-                      title: Text(controller.tr('ai')),
+                      title: Text(controller.tr('ui_ai')),
                       body: const WoxSettingAIView(),
                     ),
                     PaneItem(
                       icon: const Icon(FluentIcons.globe),
-                      title: Text(controller.tr('network')),
+                      title: Text(controller.tr('ui_network')),
                       body: const WoxSettingProxyView(),
                     ),
                     PaneItemExpander(
                         icon: const Icon(FluentIcons.app_icon_default_add),
-                        title: Text(controller.tr('plugins')),
+                        title: Text(controller.tr('ui_plugins')),
                         body: const WoxSettingPluginView(),
                         initiallyExpanded: true,
                         items: [
                           PaneItem(
                             icon: const Icon(FluentIcons.office_store_logo),
-                            title: Text(controller.tr('store_plugins')),
+                            title: Text(controller.tr('ui_store_plugins')),
                             body: const WoxSettingPluginView(),
                             onTap: () async {
                               await controller.switchToPluginList(true);
@@ -73,7 +73,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                           ),
                           PaneItem(
                             icon: const Icon(FluentIcons.installation),
-                            title: Text(controller.tr('installed_plugins')),
+                            title: Text(controller.tr('ui_installed_plugins')),
                             body: const WoxSettingPluginView(),
                             onTap: () async {
                               await controller.switchToPluginList(false);
@@ -82,13 +82,13 @@ class WoxSettingView extends GetView<WoxSettingController> {
                         ]),
                     PaneItemExpander(
                       icon: const Icon(FluentIcons.color),
-                      title: Text(controller.tr('themes')),
+                      title: Text(controller.tr('ui_themes')),
                       body: const WoxSettingThemeView(),
                       initiallyExpanded: true,
                       items: [
                         PaneItem(
                           icon: const Icon(FluentIcons.mail),
-                          title: Text(controller.tr('store_themes')),
+                          title: Text(controller.tr('ui_store_themes')),
                           body: const WoxSettingThemeView(),
                           onTap: () async {
                             await controller.switchToThemeList(true);
@@ -96,7 +96,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                         ),
                         PaneItem(
                           icon: const Icon(FluentIcons.installation),
-                          title: Text(controller.tr('installed_themes')),
+                          title: Text(controller.tr('ui_installed_themes')),
                           body: const WoxSettingThemeView(),
                           onTap: () async {
                             await controller.switchToThemeList(false);
@@ -108,8 +108,8 @@ class WoxSettingView extends GetView<WoxSettingController> {
                   footerItems: [
                     PaneItem(
                       icon: const Icon(FluentIcons.back),
-                      title: Text(controller.tr('back')),
-                      body: const Text('Back'),
+                      title: Text(controller.tr('ui_back')),
+                      body:  Text(controller.tr('ui_back')),
                       onTap: () => controller.hideWindow(),
                     ),
                   ],

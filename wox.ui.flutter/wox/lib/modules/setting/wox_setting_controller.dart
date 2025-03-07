@@ -14,10 +14,10 @@ class WoxSettingController extends GetxController {
   final woxSetting = WoxSettingUtil.instance.currentSetting.obs;
 
   //plugins
-  final pluginDetails = <PluginDetail>[];
+  final pluginList = <PluginDetail>[];
   final filterPluginKeywordController = TextEditingController();
-  final filteredPluginDetails = <PluginDetail>[].obs;
-  final activePluginDetail = PluginDetail.empty().obs;
+  final filteredPluginList = <PluginDetail>[].obs;
+  final activePlugin = PluginDetail.empty().obs;
   final isStorePluginList = true.obs;
   late TabController activePluginTabController;
 
@@ -67,9 +67,6 @@ class WoxSettingController extends GetxController {
     if (key.startsWith("i18n:")) {
       key = key.substring(5);
     }
-    
-    // add ui_ prefix for these ui related keys
-    key = "ui_$key";
 
     return langMap[key] ?? key;
   }
@@ -79,15 +76,15 @@ class WoxSettingController extends GetxController {
   Future<void> loadStorePlugins() async {
     // Check if cache is still valid
     if (_storePluginsCache.isNotEmpty && DateTime.now().difference(_lastStorePluginsFetchTime.value) < _cacheDuration) {
-      pluginDetails.clear();
-      pluginDetails.addAll(_storePluginsCache);
+      pluginList.clear();
+      pluginList.addAll(_storePluginsCache);
       return;
     }
 
     final storePlugins = await WoxApi.instance.findStorePlugins();
     storePlugins.sort((a, b) => a.name.compareTo(b.name));
-    pluginDetails.clear();
-    pluginDetails.addAll(storePlugins);
+    pluginList.clear();
+    pluginList.addAll(storePlugins);
 
     // Update cache
     _storePluginsCache.clear();
@@ -98,15 +95,15 @@ class WoxSettingController extends GetxController {
   Future<void> loadInstalledPlugins() async {
     // Check if cache is still valid
     if (_installedPluginsCache.isNotEmpty && DateTime.now().difference(_lastInstalledPluginsFetchTime.value) < _cacheDuration) {
-      pluginDetails.clear();
-      pluginDetails.addAll(_installedPluginsCache);
+      pluginList.clear();
+      pluginList.addAll(_installedPluginsCache);
       return;
     }
 
     final installedPlugin = await WoxApi.instance.findInstalledPlugins();
     installedPlugin.sort((a, b) => a.name.compareTo(b.name));
-    pluginDetails.clear();
-    pluginDetails.addAll(installedPlugin);
+    pluginList.clear();
+    pluginList.addAll(installedPlugin);
 
     // Update cache
     _installedPluginsCache.clear();
@@ -127,9 +124,9 @@ class WoxSettingController extends GetxController {
       filterPlugins();
 
       //active plugin
-      if (activePluginDetail.value.id.isNotEmpty) {
-        activePluginDetail.value = filteredPluginDetails.firstWhere((element) => element.id == activePluginDetail.value.id,
-            orElse: () => filteredPluginDetails.isNotEmpty ? filteredPluginDetails[0] : PluginDetail.empty());
+      if (activePlugin.value.id.isNotEmpty) {
+        activePlugin.value = filteredPluginList.firstWhere((element) => element.id == activePlugin.value.id,
+            orElse: () => filteredPluginList.isNotEmpty ? filteredPluginList[0] : PluginDetail.empty());
       } else {
         setFirstFilteredPluginDetailActive();
       }
@@ -144,25 +141,15 @@ class WoxSettingController extends GetxController {
 
     activePaneIndex.value = isStorePlugin ? 4 : 5;
     isStorePluginList.value = isStorePlugin;
-    activePluginDetail.value = PluginDetail.empty();
+    activePlugin.value = PluginDetail.empty();
     filterPluginKeywordController.text = "";
     await refreshPluginList();
     setFirstFilteredPluginDetailActive();
   }
 
-  // Force refresh cache
-  Future<void> forceRefreshPluginList() async {
-    if (isStorePluginList.value) {
-      _lastStorePluginsFetchTime.value = DateTime(2000);
-    } else {
-      _lastInstalledPluginsFetchTime.value = DateTime(2000);
-    }
-    await refreshPluginList();
-  }
-
   void setFirstFilteredPluginDetailActive() {
-    if (filteredPluginDetails.isNotEmpty) {
-      activePluginDetail.value = filteredPluginDetails[0];
+    if (filteredPluginList.isNotEmpty) {
+      activePlugin.value = filteredPluginList[0];
     }
   }
 
@@ -211,12 +198,12 @@ class WoxSettingController extends GetxController {
   }
 
   filterPlugins() {
-    filteredPluginDetails.clear();
+    filteredPluginList.clear();
 
     if (filterPluginKeywordController.text.isEmpty) {
-      filteredPluginDetails.addAll(pluginDetails);
+      filteredPluginList.addAll(pluginList);
     } else {
-      filteredPluginDetails.addAll(pluginDetails.where((element) => element.name.toLowerCase().contains(filterPluginKeywordController.text.toLowerCase())));
+      filteredPluginList.addAll(pluginList.where((element) => element.name.toLowerCase().contains(filterPluginKeywordController.text.toLowerCase())));
     }
   }
 
@@ -234,7 +221,7 @@ class WoxSettingController extends GetxController {
   }
 
   bool shouldShowSettingTab() {
-    return activePluginDetail.value.isInstalled && activePluginDetail.value.settingDefinitions.isNotEmpty;
+    return activePlugin.value.isInstalled && activePlugin.value.settingDefinitions.isNotEmpty;
   }
 
   void switchToPluginSettingTab() {

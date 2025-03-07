@@ -69,8 +69,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
             padding: const EdgeInsets.all(20),
             child: form(width: 850, children: [
               formField(
-                label: controller.tr("autostart"),
-                tips: controller.tr("autostart_tips"),
+                label: controller.tr("ui_autostart"),
+                tips: controller.tr("ui_autostart_tips"),
                 child: ToggleSwitch(
                   checked: controller.woxSetting.value.enableAutostart,
                   onChanged: (bool value) {
@@ -79,8 +79,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                 ),
               ),
               formField(
-                label: controller.tr("hotkey"),
-                tips: controller.tr("hotkey_tips"),
+                label: controller.tr("ui_hotkey"),
+                tips: controller.tr("ui_hotkey_tips"),
                 child: WoxHotkeyRecorder(
                   hotkey: WoxHotkey.parseHotkeyFromString(controller.woxSetting.value.mainHotkey),
                   onHotKeyRecorded: (hotkey) {
@@ -89,8 +89,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                 ),
               ),
               formField(
-                label: controller.tr("selection_hotkey"),
-                tips: controller.tr("selection_hotkey_tips"),
+                label: controller.tr("ui_selection_hotkey"),
+                tips: controller.tr("ui_selection_hotkey_tips"),
                 child: WoxHotkeyRecorder(
                   hotkey: WoxHotkey.parseHotkeyFromString(controller.woxSetting.value.selectionHotkey),
                   onHotKeyRecorded: (hotkey) {
@@ -99,8 +99,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                 ),
               ),
               formField(
-                label: controller.tr("use_pinyin"),
-                tips: controller.tr("use_pinyin_tips"),
+                label: controller.tr("ui_use_pinyin"),
+                tips: controller.tr("ui_use_pinyin_tips"),
                 child: Obx(() {
                   return ToggleSwitch(
                     checked: controller.woxSetting.value.usePinYin,
@@ -111,8 +111,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                 }),
               ),
               formField(
-                label: controller.tr("hide_on_lost_focus"),
-                tips: controller.tr("hide_on_lost_focus_tips"),
+                label: controller.tr("ui_hide_on_lost_focus"),
+                tips: controller.tr("ui_hide_on_lost_focus_tips"),
                 child: Obx(() {
                   return ToggleSwitch(
                     checked: controller.woxSetting.value.hideOnLostFocus,
@@ -123,8 +123,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                 }),
               ),
               formField(
-                label: controller.tr("hide_on_start"),
-                tips: controller.tr("hide_on_start_tips"),
+                label: controller.tr("ui_hide_on_start"),
+                tips: controller.tr("ui_hide_on_start_tips"),
                 child: Obx(() {
                   return ToggleSwitch(
                     checked: controller.woxSetting.value.hideOnStart,
@@ -135,8 +135,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                 }),
               ),
               formField(
-                label: controller.tr("show_tray"),
-                tips: controller.tr("show_tray_tips"),
+                label: controller.tr("ui_show_tray"),
+                tips: controller.tr("ui_show_tray_tips"),
                 child: Obx(() {
                   return ToggleSwitch(
                     checked: controller.woxSetting.value.showTray,
@@ -147,8 +147,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                 }),
               ),
               formField(
-                label: controller.tr("switch_input_method_abc"),
-                tips: controller.tr("switch_input_method_abc_tips"),
+                label: controller.tr("ui_switch_input_method_abc"),
+                tips: controller.tr("ui_switch_input_method_abc_tips"),
                 child: Obx(() {
                   return ToggleSwitch(
                     checked: controller.woxSetting.value.switchInputMethodABC,
@@ -159,22 +159,22 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                 }),
               ),
               formField(
-                label: controller.tr("show_position"),
-                tips: controller.tr("show_position_tips"),
+                label: controller.tr("ui_show_position"),
+                tips: controller.tr("ui_show_position_tips"),
                 child: Obx(() {
                   return ComboBox<String>(
                     items: [
                       ComboBoxItem(
                         value: "mouse_screen",
-                        child: Text(controller.tr("show_position_mouse_screen")),
+                        child: Text(controller.tr("ui_show_position_mouse_screen")),
                       ),
                       ComboBoxItem(
                         value: "active_screen",
-                        child: Text(controller.tr("show_position_active_screen")),
+                        child: Text(controller.tr("ui_show_position_active_screen")),
                       ),
                       ComboBoxItem(
                         value: "last_location",
-                        child: Text(controller.tr("show_position_last_location")),
+                        child: Text(controller.tr("ui_show_position_last_location")),
                       ),
                     ],
                     value: controller.woxSetting.value.showPosition,
@@ -187,7 +187,7 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                 }),
               ),
               formField(
-                label: controller.tr("lang"),
+                label: controller.tr("ui_lang"),
                 child: FutureBuilder(
                     future: WoxApi.instance.getAllLanguages(),
                     builder: (context, snapshot) {
@@ -214,7 +214,7 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                     }),
               ),
               formField(
-                label: controller.tr("query_hotkeys"),
+                label: controller.tr("ui_query_hotkeys"),
                 child: Obx(() {
                   return WoxSettingPluginTable(
                     value: json.encode(controller.woxSetting.value.queryHotkeys),
@@ -223,8 +223,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                       "Columns": [
                         {
                           "Key": "Hotkey",
-                          "Label": "i18n:query_hotkeys_hotkey",
-                          "Tooltip": "i18n:query_hotkeys_hotkey_tooltip",
+                          "Label": "i18n:ui_query_hotkeys_hotkey",
+                          "Tooltip": "i18n:ui_query_hotkeys_hotkey_tooltip",
                           "Width": 120,
                           "Type": "hotkey",
                           "TextMaxLines": 1,
@@ -234,8 +234,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                         },
                         {
                           "Key": "Query",
-                          "Label": "i18n:query_hotkeys_query",
-                          "Tooltip": "i18n:query_hotkeys_query_tooltip",
+                          "Label": "i18n:ui_query_hotkeys_query",
+                          "Tooltip": "i18n:ui_query_hotkeys_query_tooltip",
                           "Type": "text",
                           "TextMaxLines": 1,
                           "Validators": [
@@ -244,8 +244,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                         },
                         {
                           "Key": "IsSilentExecution",
-                          "Label": "i18n:query_hotkeys_silent",
-                          "Tooltip": "i18n:query_hotkeys_silent_tooltip",
+                          "Label": "i18n:ui_query_hotkeys_silent",
+                          "Tooltip": "i18n:ui_query_hotkeys_silent_tooltip",
                           "Width": 60,
                           "Type": "checkbox",
                         }
@@ -259,7 +259,7 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                 }),
               ),
               formField(
-                label: controller.tr("query_shortcuts"),
+                label: controller.tr("ui_query_shortcuts"),
                 child: Obx(() {
                   return WoxSettingPluginTable(
                     value: json.encode(controller.woxSetting.value.queryShortcuts),
@@ -268,8 +268,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                       "Columns": [
                         {
                           "Key": "Shortcut",
-                          "Label": "i18n:query_shortcuts_shortcut",
-                          "Tooltip": "i18n:query_shortcuts_shortcut_tooltip",
+                          "Label": "i18n:ui_query_shortcuts_shortcut",
+                          "Tooltip": "i18n:ui_query_shortcuts_shortcut_tooltip",
                           "Width": 120,
                           "Type": "text",
                           "TextMaxLines": 1,
@@ -279,8 +279,8 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                         },
                         {
                           "Key": "Query",
-                          "Label": "i18n:query_shortcuts_query",
-                          "Tooltip": "i18n:query_shortcuts_query_tooltip",
+                          "Label": "i18n:ui_query_shortcuts_query",
+                          "Tooltip": "i18n:ui_query_shortcuts_query_tooltip",
                           "Type": "text",
                           "TextMaxLines": 1,
                           "Validators": [

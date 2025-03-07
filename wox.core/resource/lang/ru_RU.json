@@ -101,6 +101,11 @@
   "ui_plugin_trigger_keyword_tooltip": "Ключевое слово, которое активирует этот плагин. * означает отсутствие ключевого слова, любой ввод активирует этот плагин.",
   "ui_plugin_command_name_column": "Название",
   "ui_plugin_command_desc_column": "Описание",
+  "ui_setting_plugin_system_tag": "Система",
+  "ui_setting_plugin_empty_data": "Данные плагина пусты",
+  "ui_delete_row_confirm": "Вы уверены, что хотите удалить эту строку?",
+  "ui_cancel": "Отмена",
+  "ui_delete": "Удалить",
   "plugin_app_open": "Открыть",
   "plugin_app_open_containing_folder": "Открыть содержащую папку",
   "plugin_app_copy_path": "Копировать путь",
@@ -230,6 +235,5 @@
   "plugin_manager_query_failed": "Запрос %s не выполнен",
   "plugin_manager_remove_from_favorite": "Удалить из избранного",
   "plugin_manager_add_to_favorite": "Добавить в избранное",
-  "plugin_manager_invalid_query_type": "Недопустимый тип запроса",
-  "ui_setting_plugin_system_tag": "Система"
+  "plugin_manager_invalid_query_type": "Недопустимый тип запроса"
 }

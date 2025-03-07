@@ -55,7 +55,7 @@ func (s *Store) getStoreManifests(ctx context.Context) []storeManifest {
 	return []storeManifest{
 		{
 			Name: "Wox Official Plugin Store",
-			Url:  "https://raw.githubusercontent.com/Wox-launcher/Wox/v2/store-plugin.json",
+			Url:  "https://raw.githubusercontent.com/Wox-launcher/Wox/master/store-plugin.json",
 		},
 	}
 }

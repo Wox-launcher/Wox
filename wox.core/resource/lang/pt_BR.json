@@ -101,6 +101,11 @@
   "ui_plugin_trigger_keyword_tooltip": "The keyword that triggers this plugin. * presents no keyword, any input will trigger this plugin.",
   "ui_plugin_command_name_column": "Name",
   "ui_plugin_command_desc_column": "Description",
+  "ui_setting_plugin_system_tag": "Sistema",
+  "ui_setting_plugin_empty_data": "Dados do plugin vazios",
+  "ui_delete_row_confirm": "Tem certeza que deseja excluir esta linha?",
+  "ui_cancel": "Cancelar",
+  "ui_delete": "Excluir",
   "plugin_app_open": "Abrir",
   "plugin_app_open_containing_folder": "Abrir pasta contendo",
   "plugin_app_copy_path": "Copiar caminho",
@@ -230,6 +235,5 @@
   "plugin_manager_query_failed": "Consulta %s falhou",
   "plugin_manager_remove_from_favorite": "Remover dos favoritos",
   "plugin_manager_add_to_favorite": "Adicionar aos favoritos",
-  "plugin_manager_invalid_query_type": "Tipo de consulta inválido",
-  "ui_setting_plugin_system_tag": "Sistema"
+  "plugin_manager_invalid_query_type": "Tipo de consulta inválido"
 }

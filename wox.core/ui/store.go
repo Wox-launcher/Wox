@@ -38,7 +38,7 @@ func (s *Store) getStoreManifests(ctx context.Context) []storeManifest {
 	return []storeManifest{
 		{
 			Name: "Wox Official Theme Store",
-			Url:  "https://raw.githubusercontent.com/Wox-launcher/Wox/v2/store-theme.json",
+			Url:  "https://raw.githubusercontent.com/Wox-launcher/Wox/master/store-theme.json",
 		},
 	}
 }

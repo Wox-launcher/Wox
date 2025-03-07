@@ -101,6 +101,11 @@
   "ui_plugin_trigger_keyword_tooltip": "The keyword that triggers this plugin. * presents no keyword, any input will trigger this plugin.",
   "ui_plugin_command_name_column": "Name",
   "ui_plugin_command_desc_column": "Description",
+  "ui_setting_plugin_system_tag": "System",
+  "ui_setting_plugin_empty_data": "Plugin data is empty",
+  "ui_delete_row_confirm": "Are you sure you want to delete this row?",
+  "ui_cancel": "Cancel",
+  "ui_delete": "Delete",
   "plugin_app_open": "Open",
   "plugin_app_open_containing_folder": "Open Containing Folder",
   "plugin_app_copy_path": "Copy Path",
@@ -230,6 +235,5 @@
   "plugin_manager_query_failed": "%s query failed",
   "plugin_manager_remove_from_favorite": "Remove from favorite",
   "plugin_manager_add_to_favorite": "Add to favorite",
-  "plugin_manager_invalid_query_type": "Invalid query type",
-  "ui_setting_plugin_system_tag": "System"
+  "plugin_manager_invalid_query_type": "Invalid query type"
 }
