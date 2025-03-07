@@ -526,25 +526,22 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 	logger.Info(ctx, fmt.Sprintf("start processing deeplink: %s", deeplink))
 
 	parts := strings.SplitN(deeplink, "?", 2)
-	if len(parts) < 2 {
-		util.GetLogger().Error(ctx, "invalid deep link format")
-		return
-	}
-
 	command := strings.TrimPrefix(parts[0], "wox://")
 
 	arguments := make(map[string]string)
-	queryParams := strings.Split(parts[1], "&")
-	for _, param := range queryParams {
-		keyValue := strings.SplitN(param, "=", 2)
-		if len(keyValue) == 2 {
-			key := keyValue[0]
-			value, err := url.QueryUnescape(keyValue[1])
-			if err != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("failed to unescape value: %s", err.Error()))
-				continue
+	if len(parts) == 2 {
+		queryParams := strings.Split(parts[1], "&")
+		for _, param := range queryParams {
+			keyValue := strings.SplitN(param, "=", 2)
+			if len(keyValue) == 2 {
+				key := keyValue[0]
+				value, err := url.QueryUnescape(keyValue[1])
+				if err != nil {
+					util.GetLogger().Error(ctx, fmt.Sprintf("failed to unescape value: %s", err.Error()))
+					continue
+				}
+				arguments[key] = value
 			}
-			arguments[key] = value
 		}
 	}
 
