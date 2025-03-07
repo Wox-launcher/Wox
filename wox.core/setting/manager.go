@@ -253,6 +253,8 @@ func (m *Manager) UpdateWoxSetting(ctx context.Context, key, value string) error
 		m.woxSetting.AIProviders = aiModels
 	} else if key == "ShowPosition" {
 		m.woxSetting.ShowPosition = PositionType(value)
+	} else if key == "EnableAutoBackup" {
+		m.woxSetting.EnableAutoBackup = value == "true"
 	} else {
 		return fmt.Errorf("unknown key: %s", key)
 	}

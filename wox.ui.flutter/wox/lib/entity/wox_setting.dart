@@ -17,6 +17,7 @@ class WoxSetting {
   late String themeId;
   late bool httpProxyEnabled;
   late String httpProxyUrl;
+  late bool enableAutoBackup;
 
   WoxSetting({
     required this.enableAutostart,
@@ -37,6 +38,7 @@ class WoxSetting {
     required this.themeId,
     required this.httpProxyEnabled,
     required this.httpProxyUrl,
+    required this.enableAutoBackup,
   });
 
   WoxSetting.fromJson(Map<String, dynamic> json) {
@@ -84,6 +86,7 @@ class WoxSetting {
     themeId = json['ThemeId'];
     httpProxyEnabled = json['HttpProxyEnabled'] ?? false;
     httpProxyUrl = json['HttpProxyUrl'] ?? '';
+    enableAutoBackup = json['EnableAutoBackup'] ?? false;
   }
 
   Map<String, dynamic> toJson() {
@@ -106,6 +109,7 @@ class WoxSetting {
     data['ThemeId'] = themeId;
     data['HttpProxyEnabled'] = httpProxyEnabled;
     data['HttpProxyUrl'] = httpProxyUrl;
+    data['EnableAutoBackup'] = enableAutoBackup;
     return data;
   }
 }

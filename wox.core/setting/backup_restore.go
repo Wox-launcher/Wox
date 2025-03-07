@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
-	cp "github.com/otiai10/copy"
 	"os"
 	"path"
 	"slices"
 	"strings"
 	"time"
 	"wox/util"
+
+	"github.com/google/uuid"
+	cp "github.com/otiai10/copy"
 )
 
 type BackupType string
@@ -32,6 +33,18 @@ type Backup struct {
 func (m *Manager) StartAutoBackup(ctx context.Context) {
 	util.Go(ctx, "backup", func() {
 		for range time.NewTimer(24 * time.Hour).C {
+			// Check if auto backup is enabled in settings
+			settings := m.GetWoxSetting(ctx)
+			if settings == nil {
+				logger.Error(ctx, "failed to get settings: settings is nil")
+				continue
+			}
+
+			if !settings.EnableAutoBackup {
+				logger.Info(ctx, "auto backup is disabled, skipping")
+				continue
+			}
+
 			backupErr := m.Backup(ctx, BackupTypeAuto)
 			if backupErr != nil {
 				logger.Error(ctx, fmt.Sprintf("failed to backup data: %s", backupErr.Error()))

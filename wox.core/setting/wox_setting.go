@@ -25,6 +25,7 @@ type WoxSetting struct {
 	LastQueryMode        LastQueryMode
 	ShowPosition         PositionType
 	AIProviders          []AIProvider
+	EnableAutoBackup     bool // Enable automatic data backup
 
 	// HTTP proxy settings
 	HttpProxyEnabled PlatformSettingValue[bool]
@@ -124,6 +125,7 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 			MacValue:   "",
 			LinuxValue: "",
 		},
+		EnableAutoBackup: true,
 	}
 }
 

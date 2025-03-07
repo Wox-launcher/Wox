@@ -7,33 +7,28 @@ class WoxSettingProxyView extends WoxSettingBaseView {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Obx(() {
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: form(children: [
-            formField(
-              label: controller.tr("ui_proxy_enabled"),
-              child: ToggleSwitch(
-                checked: controller.woxSetting.value.httpProxyEnabled,
-                onChanged: (value) => controller.updateConfig('HttpProxyEnabled', value.toString()),
-              ),
+    return Obx(() {
+      return form(children: [
+        formField(
+          label: controller.tr("ui_proxy_enabled"),
+          child: ToggleSwitch(
+            checked: controller.woxSetting.value.httpProxyEnabled,
+            onChanged: (value) => controller.updateConfig('HttpProxyEnabled', value.toString()),
+          ),
+        ),
+        formField(
+          label: controller.tr("ui_proxy_url"),
+          tips: controller.tr("ui_proxy_url_tips"),
+          child: SizedBox(
+            width: 400,
+            child: TextBox(
+              enabled: controller.woxSetting.value.httpProxyEnabled,
+              controller: TextEditingController(text: controller.woxSetting.value.httpProxyUrl),
+              onChanged: (value) => controller.updateConfig('HttpProxyUrl', value),
             ),
-            formField(
-              label: controller.tr("ui_proxy_url"),
-              tips: controller.tr("ui_proxy_url_tips"),
-              child: SizedBox(
-                width: 400,
-                child: TextBox(
-                  enabled: controller.woxSetting.value.httpProxyEnabled,
-                  controller: TextEditingController(text: controller.woxSetting.value.httpProxyUrl),
-                  onChanged: (value) => controller.updateConfig('HttpProxyUrl', value),
-                ),
-              ),
-            ),
-          ]),
-        );
-      }),
-    );
+          ),
+        ),
+      ]);
+    });
   }
 }

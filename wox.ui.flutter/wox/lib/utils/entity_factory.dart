@@ -1,4 +1,5 @@
 import 'package:wox/entity/wox_ai.dart';
+import 'package:wox/entity/wox_backup.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_lang.dart';
 import 'package:wox/entity/wox_plugin.dart';
@@ -27,6 +28,8 @@ class EntityFactory {
       return (json as List).map((e) => AIModel.fromJson(e)).toList() as T;
     } else if (T.toString() == "List<WoxLang>") {
       return (json as List).map((e) => WoxLang.fromJson(e)).toList() as T;
+    } else if (T.toString() == "List<WoxBackup>") {
+      return (json as List).map((e) => WoxBackup.fromJson(e)).toList() as T;
     } else {
       return json as T;
     }

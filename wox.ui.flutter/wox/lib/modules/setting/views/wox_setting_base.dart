@@ -6,19 +6,24 @@ abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
   const WoxSettingBaseView({super.key});
 
   Widget form({double width = 960, required List<Widget> children}) {
-    return Column(
-      children: [
-        ...children.map((e) => SizedBox(
-              width: width,
-              child: e,
-            )),
-      ],
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.only(left: 20, right: 40, bottom: 20, top: 20),
+        child: Column(
+          children: [
+            ...children.map((e) => SizedBox(
+                  width: width,
+                  child: e,
+                )),
+          ],
+        ),
+      ),
     );
   }
 
   Widget formField({required String label, required Widget child, String? tips, double labelWidth = 160}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.only(bottom: 20),
       child: Column(
         children: [
           Row(

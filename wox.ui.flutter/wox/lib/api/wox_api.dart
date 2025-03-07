@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:core';
 
 import 'package:wox/entity/wox_ai.dart';
+import 'package:wox/entity/wox_backup.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_lang.dart';
 import 'package:wox/entity/wox_plugin.dart';
@@ -139,5 +140,17 @@ class WoxApi {
 
   Future<void> updateUserDataLocation(String location) async {
     await WoxHttpUtil.instance.postData("/setting/userdata/location/update", {"location": location});
+  }
+
+  Future<void> backupNow() async {
+    await WoxHttpUtil.instance.postData("/backup/now", null);
+  }
+
+  Future<List<WoxBackup>> getAllBackups() async {
+    return await WoxHttpUtil.instance.postData("/backup/all", null);
+  }
+
+  Future<void> restoreBackup(String id) async {
+    await WoxHttpUtil.instance.postData("/backup/restore", {"id": id});
   }
 }

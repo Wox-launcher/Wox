@@ -3,17 +3,18 @@ import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
+import 'package:wox/entity/wox_backup.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_setting_util.dart';
-import 'package:wox/utils/wox_http_util.dart';
 
 class WoxSettingController extends GetxController {
   final activePaneIndex = 0.obs;
   final woxSetting = WoxSettingUtil.instance.currentSetting.obs;
   final userDataLocation = "".obs;
+  final backups = <WoxBackup>[].obs;
 
   //plugins
   final pluginList = <PluginDetail>[];
@@ -47,6 +48,7 @@ class WoxSettingController extends GetxController {
     super.onInit();
     refreshThemeList();
     loadUserDataLocation();
+    refreshBackups();
   }
 
   void hideWindow() {
@@ -55,8 +57,7 @@ class WoxSettingController extends GetxController {
 
   Future<void> updateConfig(String key, String value) async {
     await WoxApi.instance.updateSetting(key, value);
-    await WoxSettingUtil.instance.loadSetting();
-    woxSetting.value = WoxSettingUtil.instance.currentSetting;
+    await reloadSetting();
     Logger.instance.info(const UuidV4().generate(), 'Setting updated: $key=$value');
   }
 
@@ -274,9 +275,7 @@ class WoxSettingController extends GetxController {
     Logger.instance.info(const UuidV4().generate(), 'Applying theme: ${theme.themeId}');
     await WoxApi.instance.applyTheme(theme.themeId);
     await refreshThemeList();
-    // refresh wox setting to make the UI updated
-    await WoxSettingUtil.instance.loadSetting();
-    woxSetting.value = WoxSettingUtil.instance.currentSetting;
+    await reloadSetting();
   }
 
   onFilterThemes(String filter) {
@@ -320,5 +319,26 @@ class WoxSettingController extends GetxController {
   Future<void> updateUserDataLocation(String newLocation) async {
     await WoxApi.instance.updateUserDataLocation(newLocation);
     userDataLocation.value = newLocation;
+  }
+
+  Future<void> backupNow() async {
+    await WoxApi.instance.backupNow();
+    refreshBackups();
+  }
+
+  Future<void> refreshBackups() async {
+    final result = await WoxApi.instance.getAllBackups();
+    backups.assignAll(result);
+  }
+
+  Future<void> restoreBackup(String id) async {
+    await WoxApi.instance.restoreBackup(id);
+    await reloadSetting();
+  }
+
+  Future<void> reloadSetting() async {
+    await WoxSettingUtil.instance.loadSetting();
+    woxSetting.value = WoxSettingUtil.instance.currentSetting;
+    Logger.instance.info(const UuidV4().generate(), 'Setting reloaded');
   }
 }

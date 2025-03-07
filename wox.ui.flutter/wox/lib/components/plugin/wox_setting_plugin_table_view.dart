@@ -28,7 +28,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     required this.item,
     required super.value,
     required super.onUpdate,
-    this.tableWidth = 720.0,
+    this.tableWidth = 760.0,
     this.readonly = false,
     this.onUpdateValidate,
   });
