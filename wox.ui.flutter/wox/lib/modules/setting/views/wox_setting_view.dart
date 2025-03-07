@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:wox/modules/setting/views/wox_setting_ai_view.dart';
+import 'package:wox/modules/setting/views/wox_setting_data_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_theme_view.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
 
@@ -56,6 +57,11 @@ class WoxSettingView extends GetView<WoxSettingController> {
                       icon: const Icon(FluentIcons.globe),
                       title: Text(controller.tr('ui_network')),
                       body: const WoxSettingProxyView(),
+                    ),
+                    PaneItem(
+                      icon: const Icon(FluentIcons.database),
+                      title: Text(controller.tr('ui_data')),
+                      body: const WoxSettingDataView(),
                     ),
                     PaneItemExpander(
                         icon: const Icon(FluentIcons.app_icon_default_add),
