@@ -36,3 +36,9 @@ func GetMouseScreen() Size {
 		Height: int(height),
 	}
 }
+
+func GetActiveScreen() Size {
+	// For Linux, we'll use the mouse screen info
+	// Note: Getting the truly active screen in Linux is complex and requires window manager integration
+	return GetMouseScreen()
+}

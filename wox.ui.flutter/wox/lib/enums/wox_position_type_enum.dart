@@ -1,8 +1,9 @@
 typedef WoxPositionType = String;
 
 enum WoxPositionTypeEnum {
-  POSITION_TYPE_MOUSE_SCREEN("MouseScreen", "MouseScreen"),
-  POSITION_TYPE_LAST_LOCATION("LastLocation", "LastLocation");
+  POSITION_TYPE_MOUSE_SCREEN("mouse_screen", "MouseScreen"),
+  POSITION_TYPE_ACTIVE_SCREEN("active_screen", "ActiveScreen"),
+  POSITION_TYPE_LAST_LOCATION("last_location", "LastLocation");
 
   final String code;
   final String value;

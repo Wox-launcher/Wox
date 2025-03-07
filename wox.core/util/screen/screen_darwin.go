@@ -12,11 +12,22 @@ typedef struct {
 } ScreenInfo;
 
 ScreenInfo getMouseScreenSize();
+ScreenInfo getActiveScreenSize();
 */
 import "C"
 
 func GetMouseScreen() Size {
 	screenInfo := C.getMouseScreenSize()
+	return Size{
+		Width:  int(screenInfo.width),
+		Height: int(screenInfo.height),
+		X:      int(screenInfo.x),
+		Y:      int(screenInfo.y),
+	}
+}
+
+func GetActiveScreen() Size {
+	screenInfo := C.getActiveScreenSize()
 	return Size{
 		Width:  int(screenInfo.width),
 		Height: int(screenInfo.height),

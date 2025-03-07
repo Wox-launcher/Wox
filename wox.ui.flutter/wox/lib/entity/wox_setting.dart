@@ -11,6 +11,7 @@ class WoxSetting {
   late List<QueryHotkey> queryHotkeys;
   late List<QueryShortcut> queryShortcuts;
   late String lastQueryMode;
+  late String showPosition;
   late List<AIProvider> aiProviders;
   late int appWidth;
   late String themeId;
@@ -30,6 +31,7 @@ class WoxSetting {
     required this.queryHotkeys,
     required this.queryShortcuts,
     required this.lastQueryMode,
+    required this.showPosition,
     required this.aiProviders,
     required this.appWidth,
     required this.themeId,
@@ -47,6 +49,7 @@ class WoxSetting {
     hideOnLostFocus = json['HideOnLostFocus'];
     showTray = json['ShowTray'] ?? false;
     langCode = json['LangCode'];
+    showPosition = json['ShowPosition'] ?? 'mouse_screen';
 
     if (json['QueryHotkeys'] != null) {
       queryHotkeys = <QueryHotkey>[];
@@ -97,6 +100,7 @@ class WoxSetting {
     data['QueryHotkeys'] = queryHotkeys;
     data['QueryShortcuts'] = queryShortcuts;
     data['LastQueryMode'] = lastQueryMode;
+    data['ShowPosition'] = showPosition;
     data['AIProviders'] = aiProviders;
     data['AppWidth'] = appWidth;
     data['ThemeId'] = themeId;

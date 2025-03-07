@@ -21,6 +21,7 @@ type WoxSettingDto struct {
 	AIProviders          []setting.AIProvider
 	HttpProxyEnabled     bool
 	HttpProxyUrl         string
+	ShowPosition         setting.PositionType
 
 	// UI related
 	AppWidth int

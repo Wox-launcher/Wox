@@ -159,6 +159,34 @@ class WoxSettingGeneralView extends GetView<WoxSettingController> {
                 }),
               ),
               formField(
+                label: controller.tr("show_position"),
+                tips: controller.tr("show_position_tips"),
+                child: Obx(() {
+                  return ComboBox<String>(
+                    items: [
+                      ComboBoxItem(
+                        value: "mouse_screen",
+                        child: Text(controller.tr("show_position_mouse_screen")),
+                      ),
+                      ComboBoxItem(
+                        value: "active_screen",
+                        child: Text(controller.tr("show_position_active_screen")),
+                      ),
+                      ComboBoxItem(
+                        value: "last_location",
+                        child: Text(controller.tr("show_position_last_location")),
+                      ),
+                    ],
+                    value: controller.woxSetting.value.showPosition,
+                    onChanged: (v) {
+                      if (v != null) {
+                        controller.updateConfig("ShowPosition", v);
+                      }
+                    },
+                  );
+                }),
+              ),
+              formField(
                 label: controller.tr("lang"),
                 child: FutureBuilder(
                     future: WoxApi.instance.getAllLanguages(),

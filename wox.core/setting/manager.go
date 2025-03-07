@@ -251,6 +251,8 @@ func (m *Manager) UpdateWoxSetting(ctx context.Context, key, value string) error
 		}
 
 		m.woxSetting.AIProviders = aiModels
+	} else if key == "ShowPosition" {
+		m.woxSetting.ShowPosition = PositionType(value)
 	} else {
 		return fmt.Errorf("unknown key: %s", key)
 	}

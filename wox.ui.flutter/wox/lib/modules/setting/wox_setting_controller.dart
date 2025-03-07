@@ -67,9 +67,11 @@ class WoxSettingController extends GetxController {
     if (key.startsWith("i18n:")) {
       key = key.substring(5);
     }
+    
+    // add ui_ prefix for these ui related keys
+    key = "ui_$key";
 
-    var uiKey = "ui_$key";
-    return langMap[uiKey] ?? key;
+    return langMap[key] ?? key;
   }
 
   // ---------- Plugins ----------

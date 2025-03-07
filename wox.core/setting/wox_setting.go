@@ -23,6 +23,7 @@ type WoxSetting struct {
 	QueryHotkeys         PlatformSettingValue[[]QueryHotkey]
 	QueryShortcuts       []QueryShortcut
 	LastQueryMode        LastQueryMode
+	ShowPosition         PositionType
 	AIProviders          []AIProvider
 
 	// HTTP proxy settings
@@ -35,6 +36,14 @@ type WoxSetting struct {
 }
 
 type LastQueryMode = string
+
+type PositionType string
+
+const (
+	PositionTypeMouseScreen  PositionType = "mouse_screen"
+	PositionTypeActiveScreen PositionType = "active_screen"
+	PositionTypeLastLocation PositionType = "last_location"
+)
 
 const (
 	LastQueryModePreserve LastQueryMode = "preserve" // preserve last query and select all for quick modify
@@ -97,6 +106,7 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 		HideOnLostFocus:      true,
 		LangCode:             langCode,
 		LastQueryMode:        LastQueryModeEmpty,
+		ShowPosition:         PositionTypeMouseScreen,
 		AppWidth:             800,
 		ThemeId:              DefaultThemeId,
 		EnableAutostart: PlatformSettingValue[bool]{

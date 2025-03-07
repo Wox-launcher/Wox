@@ -199,11 +199,24 @@ func (u *uiImpl) invokeWebsocketMethod(ctx context.Context, method string, data 
 }
 
 func getShowAppParams(ctx context.Context, selectAll bool) map[string]any {
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	var position Position
+
+	// Now we can directly use the ShowPosition as a PositionType
+	switch woxSetting.ShowPosition {
+	case setting.PositionTypeActiveScreen:
+		position = NewActiveScreenPosition()
+	case setting.PositionTypeLastLocation:
+		position = NewLastLocationPosition(0, 0) // Initial values, will be updated by UI
+	default: // Default to mouse screen
+		position = NewMouseScreenPosition()
+	}
+
 	return map[string]any{
 		"SelectAll":      selectAll,
-		"Position":       NewMouseScreenPosition(),
+		"Position":       position,
 		"QueryHistories": setting.GetSettingManager().GetLatestQueryHistory(ctx, 10),
-		"LastQueryMode":  setting.GetSettingManager().GetWoxSetting(ctx).LastQueryMode,
+		"LastQueryMode":  woxSetting.LastQueryMode,
 	}
 }
 
