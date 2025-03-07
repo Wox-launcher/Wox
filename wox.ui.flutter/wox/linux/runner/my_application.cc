@@ -114,14 +114,20 @@ static void my_application_activate(GApplication *application) {
   if (use_header_bar) {
     GtkHeaderBar *header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "test");
+    gtk_header_bar_set_title(header_bar, "Wox");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "test");
+    gtk_window_set_title(window, "Wox");
   }
 
   gtk_window_set_default_size(window, 1280, 720);
+  
+  // Prevent notifications and taskbar entries
+  gtk_window_set_skip_taskbar_hint(window, TRUE);
+  gtk_window_set_type_hint(window, GDK_WINDOW_TYPE_HINT_UTILITY);
+  gtk_window_set_keep_above(window, TRUE);
+  
   gtk_widget_show(GTK_WIDGET(window));
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
