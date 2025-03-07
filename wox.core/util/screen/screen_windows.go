@@ -46,7 +46,7 @@ ScreenInfo getActiveScreenSize() {
     }
 
     // Fallback to mouse screen
-    return getMouseScreenSize()
+    return getMouseScreenSize();
 }
 */
 import "C"
