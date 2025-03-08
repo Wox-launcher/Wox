@@ -134,10 +134,23 @@ static void my_application_activate(GApplication *application) {
   fl_dart_project_set_dart_entrypoint_arguments(
       project, self->dart_entrypoint_arguments);
 
+  // By default the window background is transparent(not acrylic), which is not what we want
+  // so following code is to make the window background opaque
+  GtkBox *box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  gtk_widget_show(GTK_WIDGET(box));
+  const gchar *css = "box { background-color: #FFFFFF; }";
+  GtkCssProvider *provider = gtk_css_provider_new();
+  gtk_css_provider_load_from_data(provider, css, -1, nullptr);
+  GtkStyleContext *context = gtk_widget_get_style_context(GTK_WIDGET(box));
+  gtk_style_context_add_class(context, "box");
+  gtk_style_context_add_provider(context, GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
+  
+  g_object_unref(provider);
+  gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(box));
+  
   FlView *view = fl_view_new(project);
   gtk_widget_show(GTK_WIDGET(view));
-  gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
-
+  gtk_container_add(GTK_CONTAINER(box), GTK_WIDGET(view));
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
   // Set up method channel for window management
