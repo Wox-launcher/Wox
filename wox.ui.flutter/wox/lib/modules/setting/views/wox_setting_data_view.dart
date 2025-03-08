@@ -17,43 +17,58 @@ class WoxSettingDataView extends WoxSettingBaseView {
           return TextBox(
             controller: TextEditingController(text: controller.userDataLocation.value),
             readOnly: true,
-            suffix: Button(
-              child: Text(controller.tr("ui_data_config_location_change")),
-              onPressed: () async {
-                // Store the context before async operation
-                final currentContext = context;
-                final result = await FileSelector.pick(
-                  const UuidV4().generate(),
-                  FileSelectorParams(isDirectory: true),
-                );
-                if (result.isNotEmpty) {
-                  if (currentContext.mounted) {
-                    showDialog(
-                      context: currentContext,
-                      builder: (context) {
-                        return ContentDialog(
-                          content: Text(controller.tr("ui_data_config_location_change_confirm").replaceAll("{0}", result[0])),
-                          actions: [
-                            Button(
-                              child: Text(controller.tr("ui_data_config_location_change_cancel")),
-                              onPressed: () {
-                                Navigator.pop(context);
-                              },
-                            ),
-                            FilledButton(
-                              child: Text(controller.tr("ui_data_config_location_change_confirm_button")),
-                              onPressed: () {
-                                Navigator.pop(context);
-                                controller.updateUserDataLocation(result[0]);
-                              },
-                            ),
-                          ],
-                        );
-                      },
+            suffix: Row(
+              children: [
+                Button(
+                  style: ButtonStyle(
+                    backgroundColor: ButtonState.all(Colors.blue),
+                    foregroundColor: ButtonState.all(Colors.white),
+                  ),
+                  child: Text(controller.tr("ui_data_config_location_change")),
+                  onPressed: () async {
+                    // Store the context before async operation
+                    final currentContext = context;
+                    final result = await FileSelector.pick(
+                      const UuidV4().generate(),
+                      FileSelectorParams(isDirectory: true),
                     );
-                  }
-                }
-              },
+                    if (result.isNotEmpty) {
+                      if (currentContext.mounted) {
+                        showDialog(
+                          context: currentContext,
+                          builder: (context) {
+                            return ContentDialog(
+                              content: Text(controller.tr("ui_data_config_location_change_confirm").replaceAll("{0}", result[0])),
+                              actions: [
+                                Button(
+                                  child: Text(controller.tr("ui_data_config_location_change_cancel")),
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                  },
+                                ),
+                                FilledButton(
+                                  child: Text(controller.tr("ui_data_config_location_change_confirm_button")),
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    controller.updateUserDataLocation(result[0]);
+                                  },
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      }
+                    }
+                  },
+                ),
+                const SizedBox(width: 10),
+                Button(
+                  child: Text(controller.tr("plugin_file_open")),
+                  onPressed: () {
+                    controller.openFolder(controller.userDataLocation.value);
+                  },
+                ),
+              ],
             ),
           );
         }),
@@ -158,34 +173,44 @@ class WoxSettingDataView extends WoxSettingBaseView {
                           ),
                         ),
                         material.DataCell(
-                          HyperlinkButton(
-                            child: Text(controller.tr("ui_data_backup_restore")),
-                            onPressed: () {
-                              showDialog(
-                                context: context,
-                                builder: (context) {
-                                  return ContentDialog(
-                                    title: Text(controller.tr("ui_data_backup_restore_confirm_title")),
-                                    content: Text(controller.tr("ui_data_backup_restore_confirm_message")),
-                                    actions: [
-                                      Button(
-                                        child: Text(controller.tr("ui_data_backup_restore_cancel")),
-                                        onPressed: () {
-                                          Navigator.pop(context);
-                                        },
-                                      ),
-                                      FilledButton(
-                                        child: Text(controller.tr("ui_data_backup_restore_confirm")),
-                                        onPressed: () {
-                                          Navigator.pop(context);
-                                          controller.restoreBackup(backup.id);
-                                        },
-                                      ),
-                                    ],
+                          Row(
+                            children: [
+                              HyperlinkButton(
+                                child: Text(controller.tr("ui_data_backup_restore")),
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) {
+                                      return ContentDialog(
+                                        title: Text(controller.tr("ui_data_backup_restore_confirm_title")),
+                                        content: Text(controller.tr("ui_data_backup_restore_confirm_message")),
+                                        actions: [
+                                          Button(
+                                            child: Text(controller.tr("ui_data_backup_restore_cancel")),
+                                            onPressed: () {
+                                              Navigator.pop(context);
+                                            },
+                                          ),
+                                          FilledButton(
+                                            child: Text(controller.tr("ui_data_backup_restore_confirm")),
+                                            onPressed: () {
+                                              Navigator.pop(context);
+                                              controller.restoreBackup(backup.id);
+                                            },
+                                          ),
+                                        ],
+                                      );
+                                    },
                                   );
                                 },
-                              );
-                            },
+                              ),
+                              HyperlinkButton(
+                                child: Text(controller.tr("plugin_file_open")),
+                                onPressed: () {
+                                  controller.openFolder(backup.path);
+                                },
+                              ),
+                            ],
                           ),
                         ),
                       ],

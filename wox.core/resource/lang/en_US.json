@@ -127,7 +127,7 @@
   "ui_data_backup_empty": "No backup found",
   "ui_data_backup_restore": "Restore",
   "ui_data_backup_restore_confirm_title": "Restore Backup",
-  "ui_data_backup_restore_confirm_message": "Are you sure you want to restore this backup? Your current data will be overwritten.",
+  "ui_data_backup_restore_confirm_message": "Are you sure you want to restore this backup? This will replace all your current settings and data.",
   "ui_data_backup_restore_cancel": "Cancel",
   "ui_data_backup_restore_confirm": "Restore",
   "ui_data_backup_date": "Date",

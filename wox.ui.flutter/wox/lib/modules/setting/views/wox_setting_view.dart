@@ -9,7 +9,7 @@ import 'package:wox/modules/setting/wox_setting_controller.dart';
 
 import 'wox_setting_plugin_view.dart';
 import 'wox_setting_general_view.dart';
-import 'wox_setting_proxy_view.dart';
+import 'wox_setting_network_view.dart';
 
 class WoxSettingView extends GetView<WoxSettingController> {
   const WoxSettingView({super.key});
@@ -56,7 +56,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                     PaneItem(
                       icon: const Icon(FluentIcons.globe),
                       title: Text(controller.tr('ui_network')),
-                      body: const WoxSettingProxyView(),
+                      body: const WoxSettingNetworkView(),
                     ),
                     PaneItem(
                       icon: const Icon(FluentIcons.database),
@@ -115,7 +115,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                     PaneItem(
                       icon: const Icon(FluentIcons.back),
                       title: Text(controller.tr('ui_back')),
-                      body:  Text(controller.tr('ui_back')),
+                      body: Text(controller.tr('ui_back')),
                       onTap: () => controller.hideWindow(),
                     ),
                   ],

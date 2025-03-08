@@ -28,6 +28,7 @@ type Backup struct {
 	Name      string // backup folder name
 	Timestamp int64
 	Type      BackupType
+	Path      string // backup file path
 }
 
 func (m *Manager) StartAutoBackup(ctx context.Context) {
@@ -202,6 +203,7 @@ func (m *Manager) FindAllBackups(ctx context.Context) ([]Backup, error) {
 			continue
 		}
 
+		backupInfo.Path = path.Join(backupDir, entry.Name())
 		backupList = append(backupList, backupInfo)
 	}
 

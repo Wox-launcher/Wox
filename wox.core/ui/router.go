@@ -67,7 +67,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/ping":             handlePing,
 	"/image":            handleImage,
 	"/preview":          handlePreview,
-	"/open/url":         handleOpenUrl,
+	"/open":             handleOpen,
 	"/backup/now":       handleBackupNow,
 	"/backup/restore":   handleBackupRestore,
 	"/backup/all":       handleBackupAll,
@@ -555,15 +555,15 @@ func handleSettingPluginUpdate(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "")
 }
 
-func handleOpenUrl(w http.ResponseWriter, r *http.Request) {
+func handleOpen(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
-	urlResult := gjson.GetBytes(body, "url")
-	if !urlResult.Exists() {
-		writeErrorResponse(w, "id is empty")
+	pathResult := gjson.GetBytes(body, "path")
+	if !pathResult.Exists() {
+		writeErrorResponse(w, "path is empty")
 		return
 	}
 
-	util.ShellOpen(urlResult.String())
+	util.ShellOpen(pathResult.String())
 
 	writeSuccessResponse(w, "")
 }

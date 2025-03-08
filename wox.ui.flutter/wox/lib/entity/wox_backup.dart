@@ -3,12 +3,14 @@ class WoxBackup {
   late String name;
   late int timestamp;
   late String type;
+  late String path;
 
   WoxBackup({
     required this.id,
     required this.name,
     required this.timestamp,
     required this.type,
+    required this.path,
   });
 
   WoxBackup.fromJson(Map<String, dynamic> json) {
@@ -16,6 +18,7 @@ class WoxBackup {
     name = json['Name'];
     timestamp = json['Timestamp'];
     type = json['Type'];
+    path = json['Path'];
   }
 
   Map<String, dynamic> toJson() {
@@ -24,6 +27,7 @@ class WoxBackup {
     data['Name'] = name;
     data['Timestamp'] = timestamp;
     data['Type'] = type;
+    data['Path'] = path;
     return data;
   }
 }

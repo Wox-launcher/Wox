@@ -331,6 +331,10 @@ class WoxSettingController extends GetxController {
     backups.assignAll(result);
   }
 
+  Future<void> openFolder(String path) async {
+    await WoxApi.instance.open(path);
+  }
+
   Future<void> restoreBackup(String id) async {
     await WoxApi.instance.restoreBackup(id);
     await reloadSetting();
