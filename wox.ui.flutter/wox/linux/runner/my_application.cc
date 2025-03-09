@@ -7,6 +7,8 @@
 #include <stdarg.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
+#include <X11/Xlib.h>
+#include <X11/Xatom.h>
 #endif
 
 #include "flutter/generated_plugin_registrant.h"
@@ -112,8 +114,50 @@ static void method_call_cb(FlMethodChannel* channel,
     gtk_widget_hide(GTK_WIDGET(window));
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
   } else if (strcmp(method, "focus") == 0) {
+    log("FLUTTER: focus - attempting to focus window");
+    
+    GdkWindow *gdk_window = gtk_widget_get_window(GTK_WIDGET(window));
+    if (gdk_window) {
+      gdk_window_raise(gdk_window);
+      gdk_window_focus(gdk_window, GDK_CURRENT_TIME);
+      
+#ifdef GDK_WINDOWING_X11
+      if (GDK_IS_X11_WINDOW(gdk_window)) {
+        Display *display = GDK_DISPLAY_XDISPLAY(gdk_window_get_display(gdk_window));
+        Window xid = GDK_WINDOW_XID(gdk_window);
+        
+        log("FLUTTER: focus - using X11 specific methods");
+        
+        // 更安全的X11代码实现
+        XRaiseWindow(display, xid);
+        
+        // 使用简化的_NET_ACTIVE_WINDOW消息
+        Atom net_active_window = XInternAtom(display, "_NET_ACTIVE_WINDOW", False);
+        if (net_active_window != None) {
+          XEvent xev;
+          memset(&xev, 0, sizeof(xev));
+          xev.type = ClientMessage;
+          xev.xclient.type = ClientMessage;
+          xev.xclient.window = xid;
+          xev.xclient.message_type = net_active_window;
+          xev.xclient.format = 32;
+          xev.xclient.data.l[0] = 2; // 来源指示: 2 = 来自应用程序的请求
+          xev.xclient.data.l[1] = CurrentTime;
+          
+          XSendEvent(display, DefaultRootWindow(display), False,
+                    SubstructureRedirectMask | SubstructureNotifyMask, &xev);
+          
+          XFlush(display);
+        }
+      }
+#endif
+
+    }
+    
+    // 使用GTK的标准方法
     gtk_window_present(window);
-    log("FLUTTER: focus");
+    gtk_widget_grab_focus(GTK_WIDGET(window));
+    log("FLUTTER: focus - all focus operations completed");
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
   } else if (strcmp(method, "isVisible") == 0) {
     gboolean visible = gtk_widget_get_visible(GTK_WIDGET(window));
