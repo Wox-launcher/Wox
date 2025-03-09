@@ -1,6 +1,9 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <math.h>  
+#include <cairo.h> 
+#include <gdk/gdk.h>  
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -14,6 +17,50 @@ struct _MyApplication {
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+// Function to draw rounded rectangle
+static void cairo_rounded_rectangle(cairo_t *cr, double x, double y, double width, double height, double radius) {
+  cairo_new_sub_path(cr);  // Fix function name: cairo_new_subpath -> cairo_new_sub_path
+  cairo_arc(cr, x + radius, y + radius, radius, M_PI, 3 * M_PI / 2);
+  cairo_line_to(cr, x + width - radius, y);
+  cairo_arc(cr, x + width - radius, y + radius, radius, 3 * M_PI / 2, 0);
+  cairo_line_to(cr, x + width, y + height - radius);
+  cairo_arc(cr, x + width - radius, y + height - radius, radius, 0, M_PI / 2);
+  cairo_line_to(cr, x + radius, y + height);
+  cairo_arc(cr, x + radius, y + height - radius, radius, M_PI / 2, M_PI);
+  cairo_close_path(cr);
+}
+
+static void set_window_shape(GtkWindow *window) {
+  GdkWindow *gdk_window = gtk_widget_get_window(GTK_WIDGET(window));
+  if (!gdk_window) {
+    return;
+  }
+
+  int width, height;
+  gtk_window_get_size(window, &width, &height);
+
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_A1, width, height);
+  cairo_t *cr = cairo_create(surface);
+
+  cairo_set_source_rgba(cr, 1, 1, 1, 1);  // white fill
+  cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+  cairo_rounded_rectangle(cr, 0, 0, width, height, 10);  // rounded radius is 10
+  cairo_fill(cr);
+
+  cairo_destroy(cr);
+
+  cairo_region_t *region = gdk_cairo_region_create_from_surface(surface);
+  gdk_window_shape_combine_region(gdk_window, region, 0, 0);
+  cairo_region_destroy(region);
+
+  cairo_surface_destroy(surface);
+}
+
+// Callback function to handle window size changes
+static void on_size_allocate(GtkWidget *widget, GdkRectangle *allocation, gpointer user_data) {
+  set_window_shape(GTK_WINDOW(user_data));
+}
 
 // Method channel handler
 static void method_call_cb(FlMethodChannel* channel,
@@ -69,8 +116,6 @@ static void method_call_cb(FlMethodChannel* channel,
     gtk_window_set_keep_above(window, always_on_top);
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
   } else if (strcmp(method, "waitUntilReadyToShow") == 0) {
-    // For Linux, we can simply return success as the window is generally ready to show
-    // when it's created
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
   } else {
     response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
@@ -163,6 +208,10 @@ static void my_application_activate(GApplication *application) {
                                           g_object_ref(self),
                                           g_object_unref);
 
+  // Add signal connection to implement rounded window
+  g_signal_connect(window, "realize", G_CALLBACK(set_window_shape), NULL);
+  g_signal_connect(window, "size-allocate", G_CALLBACK(on_size_allocate), window);
+
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
@@ -189,19 +238,11 @@ static gboolean my_application_local_command_line(GApplication *application,
 
 // Implements GApplication::startup.
 static void my_application_startup(GApplication* application) {
-  //MyApplication* self = MY_APPLICATION(object);
-
-  // Perform any actions required at application startup.
-
   G_APPLICATION_CLASS(my_application_parent_class)->startup(application);
 }
 
 // Implements GApplication::shutdown.
 static void my_application_shutdown(GApplication* application) {
-  //MyApplication* self = MY_APPLICATION(object);
-
-  // Perform any actions required at application shutdown.
-
   G_APPLICATION_CLASS(my_application_parent_class)->shutdown(application);
 }
 
@@ -225,12 +266,7 @@ static void my_application_init(MyApplication *self) {
 }
 
 MyApplication* my_application_new() {
-  // Set the program name to the application ID, which helps various systems
-  // like GTK and desktop environments map this running application to its
-  // corresponding .desktop file. This ensures better integration by allowing
-  // the application to be recognized beyond its binary name.
   g_set_prgname(APPLICATION_ID);
-
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID, "flags",
                                      G_APPLICATION_NON_UNIQUE, nullptr));
