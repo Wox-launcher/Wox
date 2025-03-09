@@ -4,6 +4,7 @@
 #include <math.h>  
 #include <cairo.h> 
 #include <gdk/gdk.h>  
+#include <stdarg.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -17,6 +18,13 @@ struct _MyApplication {
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+static void log(const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  g_logv(G_LOG_DOMAIN, G_LOG_LEVEL_MESSAGE, format, args);
+  va_end(args);
+}
 
 // Function to draw rounded rectangle
 static void cairo_rounded_rectangle(cairo_t *cr, double x, double y, double width, double height, double radius) {
@@ -91,6 +99,7 @@ static void method_call_cb(FlMethodChannel* channel,
       double x = fl_value_get_float(fl_value_lookup_string(args, "x"));
       double y = fl_value_get_float(fl_value_lookup_string(args, "y"));
       gtk_window_move(window, (int)x, (int)y);
+      log("FLUTTER: setPosition, x: %f, y: %f", x, y);
       response = FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
     }
   } else if (strcmp(method, "center") == 0) {
@@ -104,6 +113,7 @@ static void method_call_cb(FlMethodChannel* channel,
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
   } else if (strcmp(method, "focus") == 0) {
     gtk_window_present(window);
+    log("FLUTTER: focus");
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
   } else if (strcmp(method, "isVisible") == 0) {
     gboolean visible = gtk_widget_get_visible(GTK_WIDGET(window));
@@ -173,7 +183,6 @@ static void my_application_activate(GApplication *application) {
   gtk_window_set_type_hint(window, GDK_WINDOW_TYPE_HINT_UTILITY);
   gtk_window_set_keep_above(window, TRUE);
   
-  gtk_widget_show(GTK_WIDGET(window));
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
@@ -231,6 +240,12 @@ static gboolean my_application_local_command_line(GApplication *application,
   }
 
   g_application_activate(application);
+  
+  // hide at startup
+  if (self->window != NULL) {
+    gtk_widget_hide(GTK_WIDGET(self->window));
+  }
+  
   *exit_status = 0;
 
   return TRUE;

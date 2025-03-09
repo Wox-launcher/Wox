@@ -196,6 +196,10 @@ class WoxLauncherController extends GetxController {
     }
     
     // Handle different position types
+    // on linux, we need to show first and then set position or center it
+    if (Platform.isLinux) {
+      await windowManager.show();
+    }
     if (params.position.type == WoxPositionTypeEnum.POSITION_TYPE_MOUSE_SCREEN.code || 
         params.position.type == WoxPositionTypeEnum.POSITION_TYPE_ACTIVE_SCREEN.code) {
       await windowManager.setPosition(Offset(params.position.x.toDouble(), params.position.y.toDouble()));
