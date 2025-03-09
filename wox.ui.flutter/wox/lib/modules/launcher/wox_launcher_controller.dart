@@ -208,7 +208,7 @@ class WoxLauncherController extends GetxController {
       // but if it's the first time to show, we need to set the position to the center of the screen
       var position = await windowManager.getPosition();
       if (position.dx == 0 && position.dy == 0) {
-        await windowManager.center();
+        await windowManager.center(800, 600);
       }
     }
     

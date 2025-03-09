@@ -46,9 +46,12 @@ class MacOSWindowManager extends BaseWindowManager {
   }
 
   @override
-  Future<void> center() async {
+  Future<void> center(double width, double height) async {
     try {
-      await _channel.invokeMethod('center');
+      await _channel.invokeMethod('center', {
+        'width': width,
+        'height': height,
+      });
     } catch (e) {
       Logger.instance.error("MacOSWindowManager", "Error centering window: $e");
     }

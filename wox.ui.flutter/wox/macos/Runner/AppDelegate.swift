@@ -92,6 +92,26 @@ class AppDelegate: FlutterAppDelegate {
             result(FlutterError(code: "INVALID_ARGS", message: "Invalid arguments for setPosition", details: nil))
           }
           
+        case "center":
+          let screenFrame = window.screen?.frame ?? NSScreen.main?.frame ?? NSRect.zero
+          var windowWidth: CGFloat = window.frame.width
+          var windowHeight: CGFloat = window.frame.height
+          if let args = call.arguments as? [String: Any] {
+            if let width = args["width"] as? Double {
+              windowWidth = CGFloat(width)
+            }
+            if let height = args["height"] as? Double {
+              windowHeight = CGFloat(height)
+            }
+          }
+          
+          let x = (screenFrame.width - windowWidth) / 2 + screenFrame.minX
+          let y = (screenFrame.height - windowHeight) / 2 + screenFrame.minY
+          
+          let newFrame = NSRect(x: x, y: y, width: windowWidth, height: windowHeight)
+          window.setFrame(newFrame, display: true)
+          result(nil)
+          
         case "show":
           self?.log("Showing Wox window")
           // Save the current frontmost application before activating Wox

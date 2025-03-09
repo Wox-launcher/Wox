@@ -17,7 +17,7 @@ abstract class WindowManagerInterface {
   Future<void> setPosition(Offset position);
 
   /// Center the window on the screen
-  Future<void> center();
+  Future<void> center(double width, double height);
 
   /// Show the window
   Future<void> show();

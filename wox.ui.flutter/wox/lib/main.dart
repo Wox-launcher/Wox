@@ -121,7 +121,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
         WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
           await windowManager.setSize(const Size(1200, 800));
           if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window to 1200x800 for setting view");
-          await windowManager.center();
+          await windowManager.center(1200,800);
         });
 
         Get.find<WoxSettingController>().activePaneIndex.value = 0;

@@ -177,33 +177,12 @@ LRESULT CALLBACK FlutterWindow::WindowProc(HWND hwnd, UINT message, WPARAM wpara
   case WM_ACTIVATE:
     if (LOWORD(wparam) == WA_ACTIVE || LOWORD(wparam) == WA_CLICKACTIVE)
     {
-      g_window_instance->SendWindowEvent("onWindowFocus");
+      //g_window_instance->SendWindowEvent("onWindowFocus");
     }
     else
     {
       g_window_instance->SendWindowEvent("onWindowBlur");
     }
-    break;
-  case WM_SIZE:
-    if (wparam == SIZE_MAXIMIZED)
-    {
-      g_window_instance->SendWindowEvent("onWindowMaximize");
-    }
-    else if (wparam == SIZE_MINIMIZED)
-    {
-      g_window_instance->SendWindowEvent("onWindowMinimize");
-    }
-    else if (wparam == SIZE_RESTORED)
-    {
-      // This could be either unmaximize or restore from minimize
-      g_window_instance->SendWindowEvent("onWindowResize");
-    }
-    break;
-  case WM_MOVE:
-    g_window_instance->SendWindowEvent("onWindowMove");
-    break;
-  case WM_CLOSE:
-    g_window_instance->SendWindowEvent("onWindowClose");
     break;
   }
 
@@ -315,10 +294,32 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     }
     else if (method_name == "center")
     {
-      RECT rect;
-      GetWindowRect(hwnd, &rect);
-      int width = rect.right - rect.left;
-      int height = rect.bottom - rect.top;
+      // Get window dimensions from arguments if provided, otherwise use current dimensions
+      int width, height;
+      if (const auto* arguments = std::get_if<flutter::EncodableMap>(method_call.arguments())) {
+        // Check if width and height are provided in arguments
+        auto width_it = arguments->find(flutter::EncodableValue("width"));
+        auto height_it = arguments->find(flutter::EncodableValue("height"));
+        
+        if (width_it != arguments->end() && !std::holds_alternative<std::monostate>(width_it->second) &&
+            height_it != arguments->end() && !std::holds_alternative<std::monostate>(height_it->second)) {
+          // Use provided dimensions
+          width = static_cast<int>(std::get<double>(width_it->second));
+          height = static_cast<int>(std::get<double>(height_it->second));
+        } else {
+          // Use current dimensions
+          RECT rect;
+          GetWindowRect(hwnd, &rect);
+          width = rect.right - rect.left;
+          height = rect.bottom - rect.top;
+        }
+      } else {
+        // Use current dimensions
+        RECT rect;
+        GetWindowRect(hwnd, &rect);
+        width = rect.right - rect.left;
+        height = rect.bottom - rect.top;
+      }
 
       // Get system metrics for the primary monitor
       int screenWidth = GetSystemMetrics(SM_CXSCREEN);

@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/windows/base_window_manager.dart';
 
@@ -20,7 +21,7 @@ class LinuxWindowManager extends BaseWindowManager {
         notifyWindowBlur();
         break;
       default:
-        Logger.instance.warn("LinuxWindowManager", "Unhandled method call: ${call.method}");
+        Logger.instance.warn(const UuidV4().generate(), "Unhandled method call: ${call.method}");
     }
   }
 
@@ -32,7 +33,7 @@ class LinuxWindowManager extends BaseWindowManager {
         'height': size.height,
       });
     } catch (e) {
-      Logger.instance.error("LinuxWindowManager", "Error setting window size: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error setting window size: $e");
     }
   }
 
@@ -40,9 +41,9 @@ class LinuxWindowManager extends BaseWindowManager {
   Future<Offset> getPosition() async {
     try {
       final Map<dynamic, dynamic> result = await _channel.invokeMethod('getPosition');
-      return Offset(result['x'], result['y']);
+      return Offset(double.parse(result['x'].toString()), double.parse(result['y'].toString()));
     } catch (e) {
-      Logger.instance.error("LinuxWindowManager", "Error getting position: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error getting position: $e");
       return Offset.zero;
     }
   }
@@ -55,16 +56,19 @@ class LinuxWindowManager extends BaseWindowManager {
         'y': position.dy,
       });
     } catch (e) {
-      Logger.instance.error("LinuxWindowManager", "Error setting position: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error setting position: $e");
     }
   }
 
   @override
-  Future<void> center() async {
+  Future<void> center(double width, double height) async {
     try {
-      await _channel.invokeMethod('center');
+      await _channel.invokeMethod('center', {
+        'width': width,
+        'height': height,
+      });
     } catch (e) {
-      Logger.instance.error("LinuxWindowManager", "Error centering window: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error centering window: $e");
     }
   }
 
@@ -73,7 +77,7 @@ class LinuxWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('show');
     } catch (e) {
-      Logger.instance.error("LinuxWindowManager", "Error showing window: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error showing window: $e");
     }
   }
 
@@ -82,7 +86,7 @@ class LinuxWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('hide');
     } catch (e) {
-      Logger.instance.error("LinuxWindowManager", "Error hiding window: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error hiding window: $e");
     }
   }
 
@@ -91,7 +95,7 @@ class LinuxWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('focus');
     } catch (e) {
-      Logger.instance.error("LinuxWindowManager", "Error focusing window: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error focusing window: $e");
     }
   }
 
@@ -100,7 +104,7 @@ class LinuxWindowManager extends BaseWindowManager {
     try {
       return await _channel.invokeMethod('isVisible');
     } catch (e) {
-      Logger.instance.error("LinuxWindowManager", "Error checking visibility: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error checking visibility: $e");
       return false;
     }
   }
@@ -110,7 +114,7 @@ class LinuxWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('setAlwaysOnTop', alwaysOnTop);
     } catch (e) {
-      Logger.instance.error("LinuxWindowManager", "Error setting always on top: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error setting always on top: $e");
     }
   }
 
@@ -119,7 +123,7 @@ class LinuxWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('waitUntilReadyToShow');
     } catch (e) {
-      Logger.instance.error("LinuxWindowManager", "Error waiting until ready to show: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error waiting until ready to show: $e");
     }
   }
 }

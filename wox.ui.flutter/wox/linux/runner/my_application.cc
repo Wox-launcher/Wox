@@ -25,10 +25,10 @@ static FlMethodChannel* g_method_channel = nullptr;
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
 static void log(const char *format, ...) {
-  va_list args;
-  va_start(args, format);
-  g_logv(G_LOG_DOMAIN, G_LOG_LEVEL_MESSAGE, format, args);
-  va_end(args);
+  // va_list args;
+  // va_start(args, format);
+  // g_logv(G_LOG_DOMAIN, G_LOG_LEVEL_MESSAGE, format, args);
+  // va_end(args);
 }
 
 // Function to draw rounded rectangle
@@ -122,7 +122,43 @@ static void method_call_cb(FlMethodChannel* channel,
       response = FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
     }
   } else if (strcmp(method, "center") == 0) {
-    gtk_window_set_position(window, GTK_WIN_POS_CENTER);
+    // 获取窗口尺寸，优先使用传入的参数
+    int window_width, window_height;
+    
+    if (fl_value_get_type(args) == FL_VALUE_TYPE_MAP) {
+      FlValue* width_value = fl_value_lookup_string(args, "width");
+      FlValue* height_value = fl_value_lookup_string(args, "height");
+      
+      if (width_value != nullptr && fl_value_get_type(width_value) == FL_VALUE_TYPE_FLOAT &&
+          height_value != nullptr && fl_value_get_type(height_value) == FL_VALUE_TYPE_FLOAT) {
+        // 使用传入的尺寸
+        window_width = (int)fl_value_get_float(width_value);
+        window_height = (int)fl_value_get_float(height_value);
+        
+        // 调整窗口大小
+        gtk_window_resize(window, window_width, window_height);
+      } else {
+        // 使用当前窗口尺寸
+        gtk_window_get_size(window, &window_width, &window_height);
+      }
+    } else {
+      // 使用当前窗口尺寸
+      gtk_window_get_size(window, &window_width, &window_height);
+    }
+    
+    // 获取屏幕尺寸 (使用非弃用的 API)
+    GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(window));
+    GdkMonitor *monitor = gdk_display_get_primary_monitor(display);
+    GdkRectangle workarea;
+    gdk_monitor_get_workarea(monitor, &workarea);
+    
+    // 计算居中位置
+    int x = workarea.x + (workarea.width - window_width) / 2;
+    int y = workarea.y + (workarea.height - window_height) / 2;
+    
+    // 设置窗口位置
+    gtk_window_move(window, x, y);
+    
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
   } else if (strcmp(method, "show") == 0) {
     gtk_widget_show(GTK_WIDGET(window));

@@ -39,8 +39,8 @@ class WindowManager implements WindowManagerInterface {
   }
 
   @override
-  Future<void> center() {
-    return _platformImpl.center();
+  Future<void> center(double width, double height) {
+    return _platformImpl.center(width, height);
   }
 
   @override
