@@ -161,14 +161,6 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
   }
 
   @override
-  void onWindowFocus() {
-    // https://pub.dev/packages/window_manager#hidden-at-launch
-    if (Platform.isWindows) {
-      setState(() {});
-    }
-  }
-
-  @override
   void onWindowBlur() async {
     // if windows is already hidden, return
     // in Windows, when the window is hidden, the onWindowBlur event will be triggered which will cause

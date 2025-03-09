@@ -21,66 +21,10 @@ abstract class BaseWindowManager implements WindowManagerInterface {
     return localListeners;
   }
 
-  /// Notify all listeners of window focus
-  void notifyWindowFocus() {
-    for (final WindowListener listener in listeners) {
-      listener.onWindowFocus();
-    }
-  }
-
   /// Notify all listeners of window blur
   void notifyWindowBlur() {
     for (final WindowListener listener in listeners) {
       listener.onWindowBlur();
-    }
-  }
-
-  /// Notify all listeners of window maximize
-  void notifyWindowMaximize() {
-    for (final WindowListener listener in listeners) {
-      listener.onWindowMaximize();
-    }
-  }
-
-  /// Notify all listeners of window unmaximize
-  void notifyWindowUnmaximize() {
-    for (final WindowListener listener in listeners) {
-      listener.onWindowUnmaximize();
-    }
-  }
-
-  /// Notify all listeners of window minimize
-  void notifyWindowMinimize() {
-    for (final WindowListener listener in listeners) {
-      listener.onWindowMinimize();
-    }
-  }
-
-  /// Notify all listeners of window restore
-  void notifyWindowRestore() {
-    for (final WindowListener listener in listeners) {
-      listener.onWindowRestore();
-    }
-  }
-
-  /// Notify all listeners of window resize
-  void notifyWindowResize() {
-    for (final WindowListener listener in listeners) {
-      listener.onWindowResize();
-    }
-  }
-
-  /// Notify all listeners of window move
-  void notifyWindowMove() {
-    for (final WindowListener listener in listeners) {
-      listener.onWindowMove();
-    }
-  }
-
-  /// Notify all listeners of window close
-  void notifyWindowClose() {
-    for (final WindowListener listener in listeners) {
-      listener.onWindowClose();
     }
   }
 }

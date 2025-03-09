@@ -16,26 +16,8 @@ class WindowsWindowManager extends BaseWindowManager {
   /// Handle method calls from native code
   Future<dynamic> _handleMethodCall(MethodCall call) async {
     switch (call.method) {
-      case 'onWindowFocus':
-        notifyWindowFocus();
-        break;
       case 'onWindowBlur':
         notifyWindowBlur();
-        break;
-      case 'onWindowMaximize':
-        notifyWindowMaximize();
-        break;
-      case 'onWindowMinimize':
-        notifyWindowMinimize();
-        break;
-      case 'onWindowResize':
-        notifyWindowResize();
-        break;
-      case 'onWindowMove':
-        notifyWindowMove();
-        break;
-      case 'onWindowClose':
-        notifyWindowClose();
         break;
       default:
         Logger.instance.warn("WindowsWindowManager", "Unhandled method call: ${call.method}");

@@ -2,15 +2,7 @@ import 'package:flutter/material.dart';
 
 /// Listener for window events
 mixin WindowListener {
-  void onWindowFocus() {}
   void onWindowBlur() {}
-  void onWindowMaximize() {}
-  void onWindowUnmaximize() {}
-  void onWindowMinimize() {}
-  void onWindowRestore() {}
-  void onWindowResize() {}
-  void onWindowMove() {}
-  void onWindowClose() {}
 }
 
 /// Interface for window manager implementations

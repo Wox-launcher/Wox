@@ -8,7 +8,21 @@ class LinuxWindowManager extends BaseWindowManager {
 
   static final LinuxWindowManager instance = LinuxWindowManager._();
 
-  LinuxWindowManager._();
+  LinuxWindowManager._() {
+    // Set up method call handler for events from native
+    _channel.setMethodCallHandler(_handleMethodCall);
+  }
+
+  /// Handle method calls from native code
+  Future<dynamic> _handleMethodCall(MethodCall call) async {
+    switch (call.method) {
+      case 'onWindowBlur':
+        notifyWindowBlur();
+        break;
+      default:
+        Logger.instance.warn("LinuxWindowManager", "Unhandled method call: ${call.method}");
+    }
+  }
 
   @override
   Future<void> setSize(Size size) async {

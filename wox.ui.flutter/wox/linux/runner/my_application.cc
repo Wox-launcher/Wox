@@ -19,6 +19,9 @@ struct _MyApplication {
   GtkWindow *window;  // Store reference to the main window
 };
 
+// Global variable to store method channel for window events
+static FlMethodChannel* g_method_channel = nullptr;
+
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
 static void log(const char *format, ...) {
@@ -70,6 +73,20 @@ static void set_window_shape(GtkWindow *window) {
 // Callback function to handle window size changes
 static void on_size_allocate(GtkWidget *widget, GdkRectangle *allocation, gpointer user_data) {
   set_window_shape(GTK_WINDOW(user_data));
+}
+
+// Callback function to handle window focus-out event
+static gboolean on_window_focus_out(GtkWidget *widget, GdkEventFocus *event, gpointer user_data) {
+  log("FLUTTER: Window lost focus");
+  
+  // Notify Flutter through method channel
+  if (g_method_channel != nullptr) {
+    g_autoptr(FlValue) args = fl_value_new_null();
+    fl_method_channel_invoke_method(g_method_channel, "onWindowBlur", args, nullptr, nullptr, nullptr);
+  }
+  
+  // Return FALSE to allow the event to propagate further
+  return FALSE;
 }
 
 // Method channel handler
@@ -260,10 +277,17 @@ static void my_application_activate(GApplication *application) {
   fl_method_channel_set_method_call_handler(channel, method_call_cb,
                                           g_object_ref(self),
                                           g_object_unref);
+  
+  // Store method channel reference for window events
+  g_method_channel = channel;
+  g_object_add_weak_pointer(G_OBJECT(channel), (gpointer *)&g_method_channel);
 
   // Add signal connection to implement rounded window
   g_signal_connect(window, "realize", G_CALLBACK(set_window_shape), NULL);
   g_signal_connect(window, "size-allocate", G_CALLBACK(on_size_allocate), window);
+
+  // Add signal connection for window focus-out event
+  g_signal_connect(window, "focus-out-event", G_CALLBACK(on_window_focus_out), NULL);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
@@ -309,6 +333,13 @@ static void my_application_shutdown(GApplication* application) {
 static void my_application_dispose(GObject *object) {
   MyApplication *self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  
+  // Clear method channel reference
+  if (g_method_channel != nullptr) {
+    g_object_remove_weak_pointer(G_OBJECT(g_method_channel), (gpointer *)&g_method_channel);
+    g_method_channel = nullptr;
+  }
+  
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
