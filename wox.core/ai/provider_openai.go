@@ -25,6 +25,9 @@ func NewOpenAIClient(ctx context.Context, connectContext setting.AIProvider) Pro
 func (o *OpenAIProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
 	config := openai.DefaultConfig(o.connectContext.ApiKey)
 	config.HTTPClient = util.GetHTTPClient(ctx)
+	if o.connectContext.Host != "" {
+		config.BaseURL = o.connectContext.Host
+	}
 	client := openai.NewClientWithConfig(config)
 
 	createdStream, createErr := client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
