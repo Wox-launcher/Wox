@@ -9,7 +9,10 @@
 // Store window instance for window procedure
 FlutterWindow *g_window_instance = nullptr;
 
-FlutterWindow::FlutterWindow(const flutter::DartProject &project) : project_(project), original_window_proc_(nullptr)
+FlutterWindow::FlutterWindow(const flutter::DartProject &project)
+    : project_(project), 
+      original_window_proc_(nullptr),
+      previous_active_window_(nullptr)
 {
   g_window_instance = this;
 }
@@ -21,6 +24,12 @@ FlutterWindow::~FlutterWindow()
   {
     g_window_instance = nullptr;
   }
+}
+
+void FlutterWindow::Log(const std::string &message)
+{
+  //print to console
+  std::cout << message << std::endl;
 }
 
 // Get the DPI scaling factor for the window
@@ -279,7 +288,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
           GetWindowRect(hwnd, &rect);
           int width = rect.right - rect.left;
           int height = rect.bottom - rect.top;
-          SetWindowPos(hwnd, nullptr, scaledX, scaledY, width, height, SWP_NOZORDER);
+          SetWindowPos(hwnd, nullptr, scaledX, scaledY, width, height, SWP_NOZORDER | SWP_NOSIZE);
           result->Success();
         }
         else
@@ -294,46 +303,56 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     }
     else if (method_name == "center")
     {
-      // Get window dimensions from arguments if provided, otherwise use current dimensions
-      int width, height;
-      if (const auto* arguments = std::get_if<flutter::EncodableMap>(method_call.arguments())) {
-        // Check if width and height are provided in arguments
-        auto width_it = arguments->find(flutter::EncodableValue("width"));
-        auto height_it = arguments->find(flutter::EncodableValue("height"));
-        
-        if (width_it != arguments->end() && !std::holds_alternative<std::monostate>(width_it->second) &&
-            height_it != arguments->end() && !std::holds_alternative<std::monostate>(height_it->second)) {
-          // Use provided dimensions
-          width = static_cast<int>(std::get<double>(width_it->second));
-          height = static_cast<int>(std::get<double>(height_it->second));
-        } else {
-          // Use current dimensions
-          RECT rect;
-          GetWindowRect(hwnd, &rect);
-          width = rect.right - rect.left;
-          height = rect.bottom - rect.top;
-        }
-      } else {
-        // Use current dimensions
-        RECT rect;
-        GetWindowRect(hwnd, &rect);
-        width = rect.right - rect.left;
-        height = rect.bottom - rect.top;
+      const auto* arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());
+      if (!arguments) {
+        result->Error("INVALID_ARGUMENTS", "Arguments must be provided for center");
+        return;
       }
+
+      auto width_it = arguments->find(flutter::EncodableValue("width"));
+      auto height_it = arguments->find(flutter::EncodableValue("height"));
+      
+      if (width_it == arguments->end() || height_it == arguments->end()) {
+        result->Error("INVALID_ARGUMENTS", "Both width and height must be provided for center");
+        return;
+      }
+
+      double width = std::get<double>(width_it->second);
+      double height = std::get<double>(height_it->second);
+
+      // Get DPI scale factor
+      float dpiScale = GetDpiScale(hwnd);
+      
+      // Apply DPI scaling to get physical pixels
+      int scaledWidth = static_cast<int>(width * dpiScale);
+      int scaledHeight = static_cast<int>(height * dpiScale);
 
       // Get system metrics for the primary monitor
       int screenWidth = GetSystemMetrics(SM_CXSCREEN);
       int screenHeight = GetSystemMetrics(SM_CYSCREEN);
       
-      // Calculate center position (already in physical pixels)
-      int x = (screenWidth - width) / 2;
-      int y = (screenHeight - height) / 2;
+      // Calculate center position
+      int x = (screenWidth - scaledWidth) / 2;
+      int y = (screenHeight - scaledHeight) / 2;
 
-      SetWindowPos(hwnd, nullptr, x, y, width, height, SWP_NOZORDER);
+      Log("Center: window to " + std::to_string(x) + "," + std::to_string(y) + " with " + std::to_string(scaledWidth) + "," + std::to_string(scaledHeight));
+      SetWindowPos(hwnd, nullptr, x, y, scaledWidth, scaledHeight, SWP_NOZORDER);
       result->Success();
     }
     else if (method_name == "show")
     {
+      // Store the current foreground window before showing Wox
+      previous_active_window_ = GetForegroundWindow();
+      if (previous_active_window_ == hwnd) {
+        previous_active_window_ = nullptr;
+      }
+      
+      if (previous_active_window_ != nullptr) {
+        Log("Saving previous active window: " + std::to_string((intptr_t)previous_active_window_));
+      } else {
+        Log("No previous active window found");
+      }
+
       ShowWindow(hwnd, SW_SHOW);
       SetForegroundWindow(hwnd);
       result->Success();
@@ -341,6 +360,14 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     else if (method_name == "hide")
     {
       ShowWindow(hwnd, SW_HIDE);
+      
+      // Restore focus to the previous active window
+      if (previous_active_window_ != nullptr && IsWindow(previous_active_window_)) {
+        Log("Restoring focus to previous window: " + std::to_string((intptr_t)previous_active_window_));
+        SetForegroundWindow(previous_active_window_);
+        previous_active_window_ = nullptr;
+      }
+      
       result->Success();
     }
     else if (method_name == "focus")

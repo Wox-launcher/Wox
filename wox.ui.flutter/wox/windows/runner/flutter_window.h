@@ -38,6 +38,12 @@ private:
   // Original window procedure
   WNDPROC original_window_proc_;
 
+  // Previous active window handle
+  HWND previous_active_window_;
+
+  // Log message to console
+  void Log(const std::string &message);
+
   // Get the DPI scaling factor for the window
   float GetDpiScale(HWND hwnd);
 
