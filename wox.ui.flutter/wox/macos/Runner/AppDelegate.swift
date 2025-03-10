@@ -5,6 +5,8 @@ import FlutterMacOS
 class AppDelegate: FlutterAppDelegate {
   // Store the previous active application
   private var previousActiveApp: NSRunningApplication?
+  // Flutter method channel for window events
+  private var windowEventChannel: FlutterMethodChannel?
   
   private func log(_ message: String) {
     //NSLog("WoxApp: \(message)")
@@ -40,6 +42,27 @@ class AppDelegate: FlutterAppDelegate {
     }
   }
   
+  // Setup notification for window blur event
+  private func setupWindowBlurNotification() {
+    guard let window = self.mainFlutterWindow else { return }
+    
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(windowDidResignKey),
+      name: NSWindow.didResignKeyNotification,
+      object: window
+    )
+  }
+  
+  // Handle window loss of focus
+  @objc private func windowDidResignKey(_ notification: Notification) {
+    log("Window did resign key (blur)")
+    // Notify Flutter about the window blur event
+    DispatchQueue.main.async {
+      self.windowEventChannel?.invokeMethod("onWindowBlur", arguments: nil)
+    }
+  }
+  
   override func applicationDidFinishLaunching(_ notification: Notification) {
     let controller = self.mainFlutterWindow?.contentViewController as! FlutterViewController
     
@@ -51,6 +74,12 @@ class AppDelegate: FlutterAppDelegate {
     let channel = FlutterMethodChannel(
       name: "com.wox.macos_window_manager",
       binaryMessenger: controller.engine.binaryMessenger)
+    
+    // Store window event channel for use in window events
+    self.windowEventChannel = channel
+    
+    // Setup window blur notification
+    setupWindowBlurNotification()
     
     channel.setMethodCallHandler { [weak self] (call, result) in
       guard let window = self?.mainFlutterWindow else {

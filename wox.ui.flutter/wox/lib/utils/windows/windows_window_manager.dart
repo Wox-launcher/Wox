@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/windows/base_window_manager.dart';
 
@@ -20,7 +21,7 @@ class WindowsWindowManager extends BaseWindowManager {
         notifyWindowBlur();
         break;
       default:
-        Logger.instance.warn("WindowsWindowManager", "Unhandled method call: ${call.method}");
+        Logger.instance.warn(const UuidV4().generate(), "Unhandled method call: ${call.method}");
     }
   }
 
@@ -32,7 +33,7 @@ class WindowsWindowManager extends BaseWindowManager {
         'height': size.height,
       });
     } catch (e) {
-      Logger.instance.error("WindowsWindowManager", "Error setting window size: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error setting window size: $e");
       rethrow;
     }
   }
@@ -43,7 +44,7 @@ class WindowsWindowManager extends BaseWindowManager {
       final Map<dynamic, dynamic> result = await _channel.invokeMethod('getPosition');
       return Offset(result['x'], result['y']);
     } catch (e) {
-      Logger.instance.error("WindowsWindowManager", "Error getting position: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error getting position: $e");
       return Offset.zero;
     }
   }
@@ -56,7 +57,7 @@ class WindowsWindowManager extends BaseWindowManager {
         'y': position.dy,
       });
     } catch (e) {
-      Logger.instance.error("WindowsWindowManager", "Error setting position: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error setting position: $e");
       rethrow;
     }
   }
@@ -69,7 +70,7 @@ class WindowsWindowManager extends BaseWindowManager {
         'height': height,
       });
     } catch (e) {
-      Logger.instance.error("WindowsWindowManager", "Error centering window: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error centering window: $e");
       rethrow;
     }
   }
@@ -79,7 +80,7 @@ class WindowsWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('show');
     } catch (e) {
-      Logger.instance.error("WindowsWindowManager", "Error showing window: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error showing window: $e");
       rethrow;
     }
   }
@@ -89,7 +90,7 @@ class WindowsWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('hide');
     } catch (e) {
-      Logger.instance.error("WindowsWindowManager", "Error hiding window: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error hiding window: $e");
       rethrow;
     }
   }
@@ -99,7 +100,7 @@ class WindowsWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('focus');
     } catch (e) {
-      Logger.instance.error("WindowsWindowManager", "Error focusing window: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error focusing window: $e");
       rethrow;
     }
   }
@@ -109,7 +110,7 @@ class WindowsWindowManager extends BaseWindowManager {
     try {
       return await _channel.invokeMethod('isVisible');
     } catch (e) {
-      Logger.instance.error("WindowsWindowManager", "Error checking visibility: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error checking visibility: $e");
       return false;
     }
   }
@@ -119,7 +120,7 @@ class WindowsWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('setAlwaysOnTop', alwaysOnTop);
     } catch (e) {
-      Logger.instance.error("WindowsWindowManager", "Error setting always on top: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error setting always on top: $e");
       rethrow;
     }
   }
@@ -129,7 +130,7 @@ class WindowsWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('waitUntilReadyToShow');
     } catch (e) {
-      Logger.instance.error("WindowsWindowManager", "Error waiting until ready to show: $e");
+      Logger.instance.error(const UuidV4().generate(), "Error waiting until ready to show: $e");
       rethrow;
     }
   }

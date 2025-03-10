@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:uuid/uuid.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/windows/base_window_manager.dart';
 
@@ -8,7 +9,23 @@ class MacOSWindowManager extends BaseWindowManager {
 
   static final MacOSWindowManager instance = MacOSWindowManager._();
 
-  MacOSWindowManager._();
+  MacOSWindowManager._() {
+    // Set up method call handler for receiving events from native side
+    _channel.setMethodCallHandler(_handleMethodCall);
+  }
+
+  // Handle method calls from the native side
+  Future<dynamic> _handleMethodCall(MethodCall call) async {
+    switch (call.method) {
+      case 'onWindowBlur':
+        Logger.instance.debug(const Uuid().v4(), "Window blur event received");
+        notifyWindowBlur();
+        break;
+      default:
+        Logger.instance.debug(const Uuid().v4(), "Unhandled method call: ${call.method}");
+    }
+    return null;
+  }
 
   @override
   Future<void> setSize(Size size) async {
@@ -18,7 +35,7 @@ class MacOSWindowManager extends BaseWindowManager {
         'height': size.height,
       });
     } catch (e) {
-      Logger.instance.error("MacOSWindowManager", "Error setting window size: $e");
+      Logger.instance.error(const Uuid().v4(), "Error setting window size: $e");
     }
   }
 
@@ -28,7 +45,7 @@ class MacOSWindowManager extends BaseWindowManager {
       final Map<dynamic, dynamic> result = await _channel.invokeMethod('getPosition');
       return Offset(result['x'], result['y']);
     } catch (e) {
-      Logger.instance.error("MacOSWindowManager", "Error getting position: $e");
+      Logger.instance.error(const Uuid().v4(), "Error getting position: $e");
       return Offset.zero;
     }
   }
@@ -41,7 +58,7 @@ class MacOSWindowManager extends BaseWindowManager {
         'y': position.dy,
       });
     } catch (e) {
-      Logger.instance.error("MacOSWindowManager", "Error setting position: $e");
+      Logger.instance.error(const Uuid().v4(), "Error setting position: $e");
     }
   }
 
@@ -53,7 +70,7 @@ class MacOSWindowManager extends BaseWindowManager {
         'height': height,
       });
     } catch (e) {
-      Logger.instance.error("MacOSWindowManager", "Error centering window: $e");
+      Logger.instance.error(const Uuid().v4(), "Error centering window: $e");
     }
   }
 
@@ -62,7 +79,7 @@ class MacOSWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('show');
     } catch (e) {
-      Logger.instance.error("MacOSWindowManager", "Error showing window: $e");
+      Logger.instance.error(const Uuid().v4(), "Error showing window: $e");
     }
   }
 
@@ -71,7 +88,7 @@ class MacOSWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('hide');
     } catch (e) {
-      Logger.instance.error("MacOSWindowManager", "Error hiding window: $e");
+      Logger.instance.error(const Uuid().v4(), "Error hiding window: $e");
     }
   }
 
@@ -80,7 +97,7 @@ class MacOSWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('focus');
     } catch (e) {
-      Logger.instance.error("MacOSWindowManager", "Error focusing window: $e");
+      Logger.instance.error(const Uuid().v4(), "Error focusing window: $e");
     }
   }
 
@@ -89,7 +106,7 @@ class MacOSWindowManager extends BaseWindowManager {
     try {
       return await _channel.invokeMethod('isVisible');
     } catch (e) {
-      Logger.instance.error("MacOSWindowManager", "Error checking visibility: $e");
+      Logger.instance.error(const Uuid().v4(), "Error checking visibility: $e");
       return false;
     }
   }
@@ -99,7 +116,7 @@ class MacOSWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('setAlwaysOnTop', alwaysOnTop);
     } catch (e) {
-      Logger.instance.error("MacOSWindowManager", "Error setting always on top: $e");
+      Logger.instance.error(const Uuid().v4(), "Error setting always on top: $e");
     }
   }
 
@@ -108,7 +125,7 @@ class MacOSWindowManager extends BaseWindowManager {
     try {
       await _channel.invokeMethod('waitUntilReadyToShow');
     } catch (e) {
-      Logger.instance.error("MacOSWindowManager", "Error waiting until ready to show: $e");
+      Logger.instance.error(const Uuid().v4(), "Error waiting until ready to show: $e");
     }
   }
 }
