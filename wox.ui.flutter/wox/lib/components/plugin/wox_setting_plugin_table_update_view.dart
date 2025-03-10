@@ -39,6 +39,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   Map<String, TextEditingController> textboxEditingController = {};
   List<PluginSettingValueTableColumn> columns = [];
   String? customValidationError;
+  List<PluginSettingValueSelectOption>? aiModelOptions;
 
   @override
   void initState() {
@@ -88,6 +89,10 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           textboxEditingController[column.key + i.toString()] = TextEditingController(text: columnValues[i]);
         }
       }
+    }
+    
+    if (columns.any((column) => column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeSelectAIModel)) {
+      _loadAIModelOptions();
     }
   }
 
@@ -141,6 +146,17 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     return models.map((e) {
       return PluginSettingValueSelectOption(value: jsonEncode(e), label: "${e.provider} - ${e.name}");
     }).toList();
+  }
+
+  Future<void> _loadAIModelOptions() async {
+    try {
+      aiModelOptions = await getSelectionAIModelOptions();
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (e) {
+      // Handle error if needed
+    }
   }
 
   Widget buildColumn(PluginSettingValueTableColumn column) {
@@ -245,28 +261,21 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeSelectAIModel:
         return Expanded(
-          child: FutureBuilder(
-            future: getSelectionAIModelOptions(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.done) {
-                return ComboBox<String>(
+          child: aiModelOptions == null
+              ? const Center(child: ProgressRing(strokeWidth: 2))
+              : ComboBox<String>(
                   value: getValue(column.key),
                   onChanged: (value) {
                     updateValue(column.key, value);
                     setState(() {});
                   },
-                  items: snapshot.data?.map((e) {
+                  items: aiModelOptions!.map((e) {
                     return ComboBoxItem(
                       value: e.value,
                       child: Text(e.label),
                     );
                   }).toList(),
-                );
-              } else {
-                return const SizedBox();
-              }
-            },
-          ),
+                ),
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeWoxImage:
         return Text("wox image...");

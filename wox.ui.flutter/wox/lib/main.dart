@@ -170,6 +170,12 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
       return;
     }
 
+    // if in setting view, return
+    final launcherController = Get.find<WoxLauncherController>();
+    if (launcherController.isInSettingView.value) {
+      return;
+    }
+
     WoxApi.instance.onFocusLost();
   }
 
