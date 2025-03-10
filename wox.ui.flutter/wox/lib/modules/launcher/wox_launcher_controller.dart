@@ -194,14 +194,13 @@ class WoxLauncherController extends GetxController {
     if (params.selectAll) {
       selectQueryBoxAllText(traceId);
     }
-    
+
     // Handle different position types
     // on linux, we need to show first and then set position or center it
     if (Platform.isLinux) {
       await windowManager.show();
     }
-    if (params.position.type == WoxPositionTypeEnum.POSITION_TYPE_MOUSE_SCREEN.code || 
-        params.position.type == WoxPositionTypeEnum.POSITION_TYPE_ACTIVE_SCREEN.code) {
+    if (params.position.type == WoxPositionTypeEnum.POSITION_TYPE_MOUSE_SCREEN.code || params.position.type == WoxPositionTypeEnum.POSITION_TYPE_ACTIVE_SCREEN.code) {
       await windowManager.setPosition(Offset(params.position.x.toDouble(), params.position.y.toDouble()));
     } else if (params.position.type == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
       // For last location, we don't need to set position as it will remain where it was last positioned
@@ -211,7 +210,7 @@ class WoxLauncherController extends GetxController {
         await windowManager.center(800, 600);
       }
     }
-    
+
     await windowManager.show();
     await windowManager.focus();
     queryBoxFocusNode.requestFocus();
@@ -928,7 +927,6 @@ class WoxLauncherController extends GetxController {
     isInSettingView.value = true;
     if (context.path == "/plugin/setting") {
       var settingController = Get.find<WoxSettingController>();
-      await settingController.switchToPluginList(false);
       settingController.filterPluginKeywordController.text = context.param;
       settingController.filterPlugins();
       settingController.setFirstFilteredPluginDetailActive();

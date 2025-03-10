@@ -111,9 +111,15 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
     var launcherController = Get.find<WoxLauncherController>();
     launcherController.isInSettingView.listen((isShowSetting) async {
       if (isShowSetting) {
+        final settingController = Get.find<WoxSettingController>();
         await windowManager.setAlwaysOnTop(false);
         await WoxThemeUtil.instance.loadTheme();
         await WoxSettingUtil.instance.loadSetting();
+        // load plugins from store and installed in the background, don't use await to avoid blocking the main thread
+        settingController.loadInstalledPlugins();
+        settingController.loadStorePlugins();
+        settingController.activePaneIndex.value = 0;
+
         launcherController.positionBeforeOpenSetting = await windowManager.getPosition();
 
         // when switching to setting view by executing the query action, which will trigger the hiding action panel, which will causing the window size will be changed first
@@ -121,10 +127,8 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
         WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
           await windowManager.setSize(const Size(1200, 800));
           if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window to 1200x800 for setting view");
-          await windowManager.center(1200,800);
+          await windowManager.center(1200, 800);
         });
-
-        Get.find<WoxSettingController>().activePaneIndex.value = 0;
       } else {
         await windowManager.setAlwaysOnTop(true);
         launcherController.resizeHeight();

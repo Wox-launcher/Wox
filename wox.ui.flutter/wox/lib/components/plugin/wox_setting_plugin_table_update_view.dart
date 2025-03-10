@@ -1,12 +1,9 @@
-import 'dart:convert';
-
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/v4.dart';
-import 'package:wox/api/wox_api.dart';
+import 'package:wox/components/wox_ai_model_selector_view.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
-import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/modules/setting/wox_setting_controller.dart';
@@ -39,7 +36,6 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   Map<String, TextEditingController> textboxEditingController = {};
   List<PluginSettingValueTableColumn> columns = [];
   String? customValidationError;
-  List<PluginSettingValueSelectOption>? aiModelOptions;
 
   @override
   void initState() {
@@ -90,10 +86,6 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         }
       }
     }
-    
-    if (columns.any((column) => column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeSelectAIModel)) {
-      _loadAIModelOptions();
-    }
   }
 
   @override
@@ -139,24 +131,6 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
 
   String tr(String key) {
     return Get.find<WoxSettingController>().tr(key);
-  }
-
-  Future<List<PluginSettingValueSelectOption>> getSelectionAIModelOptions() async {
-    final models = await WoxApi.instance.findAIModels();
-    return models.map((e) {
-      return PluginSettingValueSelectOption(value: jsonEncode(e), label: "${e.provider} - ${e.name}");
-    }).toList();
-  }
-
-  Future<void> _loadAIModelOptions() async {
-    try {
-      aiModelOptions = await getSelectionAIModelOptions();
-      if (mounted) {
-        setState(() {});
-      }
-    } catch (e) {
-      // Handle error if needed
-    }
   }
 
   Widget buildColumn(PluginSettingValueTableColumn column) {
@@ -261,24 +235,16 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeSelectAIModel:
         return Expanded(
-          child: aiModelOptions == null
-              ? const Center(child: ProgressRing(strokeWidth: 2))
-              : ComboBox<String>(
-                  value: getValue(column.key),
-                  onChanged: (value) {
-                    updateValue(column.key, value);
-                    setState(() {});
-                  },
-                  items: aiModelOptions!.map((e) {
-                    return ComboBoxItem(
-                      value: e.value,
-                      child: Text(e.label),
-                    );
-                  }).toList(),
-                ),
+          child: WoxAIModelSelectorView(
+            initialValue: getValue(column.key),
+            onModelSelected: (modelJson) {
+              updateValue(column.key, modelJson);
+              setState(() {});
+            },
+          ),
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeWoxImage:
-        return Text("wox image...");
+        return const Text("wox image...");
       case PluginSettingValueType.pluginSettingValueTableColumnTypeTextList:
         var columnValues = getValue(column.key);
         return Expanded(

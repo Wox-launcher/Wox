@@ -20,6 +20,8 @@ class EntityFactory {
       return WoxImage.fromJson(json) as T;
     } else if (T.toString() == "WoxLang") {
       return WoxLang.fromJson(json) as T;
+    } else if (T.toString() == "PluginDetail") {
+      return PluginDetail.fromJson(json) as T;
     } else if (T.toString() == "List<PluginDetail>") {
       return (json as List).map((e) => PluginDetail.fromJson(e)).toList() as T;
     } else if (T.toString() == "List<WoxTheme>") {

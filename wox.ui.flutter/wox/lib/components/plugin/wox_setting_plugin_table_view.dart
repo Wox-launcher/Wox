@@ -282,7 +282,6 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                                   rows.removeWhere((element) => element[rowUniqueIdKey] == row[rowUniqueIdKey]);
 
                                   //remove the unique key
-
                                   rows.forEach((element) {
                                     element.remove(rowUniqueIdKey);
                                   });

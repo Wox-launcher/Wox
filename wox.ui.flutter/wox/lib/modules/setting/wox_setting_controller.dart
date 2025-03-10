@@ -18,6 +18,8 @@ class WoxSettingController extends GetxController {
 
   //plugins
   final pluginList = <PluginDetail>[];
+  final storePlugins = <PluginDetail>[];
+  final installedPlugins = <PluginDetail>[];
   final filterPluginKeywordController = TextEditingController();
   final filteredPluginList = <PluginDetail>[].obs;
   final activePlugin = PluginDetail.empty().obs;
@@ -34,14 +36,6 @@ class WoxSettingController extends GetxController {
   var langMap = <String, String>{}.obs;
 
   final isInstallingPlugin = false.obs;
-
-  // Add loading state and cache
-  final isLoadingPlugins = false.obs;
-  final _storePluginsCache = <PluginDetail>[];
-  final _installedPluginsCache = <PluginDetail>[];
-  final _lastStorePluginsFetchTime = DateTime(2000).obs;
-  final _lastInstalledPluginsFetchTime = DateTime(2000).obs;
-  static const _cacheDuration = Duration(minutes: 5);
 
   @override
   void onInit() {
@@ -78,77 +72,118 @@ class WoxSettingController extends GetxController {
   // ---------- Plugins ----------
 
   Future<void> loadStorePlugins() async {
-    // Check if cache is still valid
-    if (_storePluginsCache.isNotEmpty && DateTime.now().difference(_lastStorePluginsFetchTime.value) < _cacheDuration) {
-      pluginList.clear();
-      pluginList.addAll(_storePluginsCache);
-      return;
-    }
-
-    final storePlugins = await WoxApi.instance.findStorePlugins();
-    storePlugins.sort((a, b) => a.name.compareTo(b.name));
-    pluginList.clear();
-    pluginList.addAll(storePlugins);
-
-    // Update cache
-    _storePluginsCache.clear();
-    _storePluginsCache.addAll(storePlugins);
-    _lastStorePluginsFetchTime.value = DateTime.now();
+    final storePluginsFromAPI = await WoxApi.instance.findStorePlugins();
+    storePluginsFromAPI.sort((a, b) => a.name.compareTo(b.name));
+    storePlugins.clear();
+    storePlugins.addAll(storePluginsFromAPI);
   }
 
   Future<void> loadInstalledPlugins() async {
-    // Check if cache is still valid
-    if (_installedPluginsCache.isNotEmpty && DateTime.now().difference(_lastInstalledPluginsFetchTime.value) < _cacheDuration) {
-      pluginList.clear();
-      pluginList.addAll(_installedPluginsCache);
-      return;
-    }
-
-    final installedPlugin = await WoxApi.instance.findInstalledPlugins();
-    installedPlugin.sort((a, b) => a.name.compareTo(b.name));
-    pluginList.clear();
-    pluginList.addAll(installedPlugin);
-
-    // Update cache
-    _installedPluginsCache.clear();
-    _installedPluginsCache.addAll(installedPlugin);
-    _lastInstalledPluginsFetchTime.value = DateTime.now();
+    final installedPluginsFromAPI = await WoxApi.instance.findInstalledPlugins();
+    installedPluginsFromAPI.sort((a, b) => a.name.compareTo(b.name));
+    installedPlugins.clear();
+    installedPlugins.addAll(installedPluginsFromAPI);
   }
 
-  Future<void> refreshPluginList() async {
-    try {
-      isLoadingPlugins.value = true;
-
-      if (isStorePluginList.value) {
-        await loadStorePlugins();
-      } else {
-        await loadInstalledPlugins();
+  Future<void> refreshPlugin(String pluginId, String refreshType /* update / add / remove */) async {
+    Logger.instance.info(const UuidV4().generate(), 'Refreshing plugin: $pluginId, refreshType: $refreshType');
+    if (refreshType == "add") {
+      PluginDetail updatedPlugin = await WoxApi.instance.getPluginDetail(pluginId);
+      if (updatedPlugin.id.isEmpty) {
+        Logger.instance.info(const UuidV4().generate(), 'Plugin not found: $pluginId');
+        return;
       }
 
-      filterPlugins();
-
-      //active plugin
-      if (activePlugin.value.id.isNotEmpty) {
-        activePlugin.value = filteredPluginList.firstWhere((element) => element.id == activePlugin.value.id,
-            orElse: () => filteredPluginList.isNotEmpty ? filteredPluginList[0] : PluginDetail.empty());
-      } else {
-        setFirstFilteredPluginDetailActive();
+      int storeIndex = storePlugins.indexWhere((p) => p.id == pluginId);
+      if (storeIndex >= 0) {
+        storePlugins[storeIndex] = updatedPlugin;
       }
-    } finally {
-      isLoadingPlugins.value = false;
+      int installedIndex = installedPlugins.indexWhere((p) => p.id == pluginId);
+      if (installedIndex >= 0) {
+        installedPlugins[installedIndex] = updatedPlugin;
+      } else {
+        installedPlugins.add(updatedPlugin);
+      }
+      int filteredPluginListIndex = filteredPluginList.indexWhere((p) => p.id == pluginId);
+      if (filteredPluginListIndex >= 0) {
+        filteredPluginList[filteredPluginListIndex] = updatedPlugin;
+      } else {
+        filteredPluginList.add(updatedPlugin);
+      }
+      if (activePlugin.value.id == pluginId) {
+        activePlugin.value = updatedPlugin;
+      }
+    } else if (refreshType == "remove") {
+      installedPlugins.removeWhere((p) => p.id == pluginId);
+      int storeIndex = storePlugins.indexWhere((p) => p.id == pluginId);
+      if (storeIndex >= 0) {
+        storePlugins[storeIndex].isInstalled = false;
+      }
+      // if is in installed plugin view, remove from plugin list
+      if (activePaneIndex.value == 6) {
+        pluginList.removeWhere((p) => p.id == pluginId);
+        filteredPluginList.removeWhere((p) => p.id == pluginId);
+      }
+      // if is in store plugin view, update the installed property
+      if (activePaneIndex.value == 5) {
+        pluginList.firstWhere((p) => p.id == pluginId).isInstalled = false;
+        filteredPluginList.firstWhere((p) => p.id == pluginId).isInstalled = false;
+      }
+      if (activePlugin.value.id == pluginId) {
+        activePlugin.value = installedPlugins.isNotEmpty ? installedPlugins[0] : PluginDetail.empty();
+      }
+    } else if (refreshType == "update") {
+      PluginDetail updatedPlugin = await WoxApi.instance.getPluginDetail(pluginId);
+      if (updatedPlugin.id.isEmpty) {
+        Logger.instance.info(const UuidV4().generate(), 'Plugin not found: $pluginId');
+        return;
+      }
+
+      int installedIndex = installedPlugins.indexWhere((p) => p.id == pluginId);
+      if (installedIndex >= 0) {
+        installedPlugins[installedIndex] = updatedPlugin;
+      }
+      int storeIndex = storePlugins.indexWhere((p) => p.id == pluginId);
+      if (storeIndex >= 0) {
+        storePlugins[storeIndex] = updatedPlugin;
+      }
+      int pluginListIndex = pluginList.indexWhere((p) => p.id == pluginId);
+      if (pluginListIndex >= 0) {
+        pluginList[pluginListIndex] = updatedPlugin;
+      }
+      int filteredPluginListIndex = filteredPluginList.indexWhere((p) => p.id == pluginId);
+      if (filteredPluginListIndex >= 0) {
+        filteredPluginList[filteredPluginListIndex] = updatedPlugin;
+      }
+      if (activePlugin.value.id == pluginId) {
+        activePlugin.value = updatedPlugin;
+      }
     }
   }
 
   Future<void> switchToPluginList(bool isStorePlugin) async {
-    // If we're already loading, ignore the request
-    if (isLoadingPlugins.value) return;
+    if (isStorePlugin) {
+      pluginList.clear();
+      pluginList.addAll(storePlugins);
+    } else {
+      pluginList.clear();
+      pluginList.addAll(installedPlugins);
+    }
 
     activePaneIndex.value = isStorePlugin ? 5 : 6;
     isStorePluginList.value = isStorePlugin;
     activePlugin.value = PluginDetail.empty();
     filterPluginKeywordController.text = "";
-    await refreshPluginList();
-    setFirstFilteredPluginDetailActive();
+
+    filterPlugins();
+
+    //active plugin
+    if (activePlugin.value.id.isNotEmpty) {
+      activePlugin.value = filteredPluginList.firstWhere((element) => element.id == activePlugin.value.id,
+          orElse: () => filteredPluginList.isNotEmpty ? filteredPluginList[0] : PluginDetail.empty());
+    } else {
+      setFirstFilteredPluginDetailActive();
+    }
   }
 
   void setFirstFilteredPluginDetailActive() {
@@ -162,10 +197,7 @@ class WoxSettingController extends GetxController {
       isInstallingPlugin.value = true;
       Logger.instance.info(const UuidV4().generate(), 'installing plugin: ${plugin.name}');
       await WoxApi.instance.installPlugin(plugin.id);
-      // Clear both caches when installing a plugin
-      _lastStorePluginsFetchTime.value = DateTime(2000);
-      _lastInstalledPluginsFetchTime.value = DateTime(2000);
-      await refreshPluginList();
+      await refreshPlugin(plugin.id, "add");
     } catch (e) {
       Get.snackbar(
         'Installation Failed',
@@ -183,22 +215,19 @@ class WoxSettingController extends GetxController {
   Future<void> disablePlugin(PluginDetail plugin) async {
     Logger.instance.info(const UuidV4().generate(), 'disabling plugin: ${plugin.name}');
     await WoxApi.instance.disablePlugin(plugin.id);
-    await refreshPluginList();
+    await refreshPlugin(plugin.id, "update");
   }
 
   Future<void> enablePlugin(PluginDetail plugin) async {
     Logger.instance.info(const UuidV4().generate(), 'enabling plugin: ${plugin.name}');
     await WoxApi.instance.enablePlugin(plugin.id);
-    await refreshPluginList();
+    await refreshPlugin(plugin.id, "update");
   }
 
   Future<void> uninstallPlugin(PluginDetail plugin) async {
     Logger.instance.info(const UuidV4().generate(), 'uninstalling plugin: ${plugin.name}');
     await WoxApi.instance.uninstallPlugin(plugin.id);
-    // Clear both caches when uninstalling a plugin
-    _lastStorePluginsFetchTime.value = DateTime(2000);
-    _lastInstalledPluginsFetchTime.value = DateTime(2000);
-    await refreshPluginList();
+    await refreshPlugin(plugin.id, "remove");
   }
 
   filterPlugins() {
@@ -216,13 +245,21 @@ class WoxSettingController extends GetxController {
   }
 
   Future<void> updatePluginSetting(String pluginId, String key, String value) async {
+    final activeTabIndex = activePluginTabController.index;
+
     await WoxApi.instance.updatePluginSetting(pluginId, key, value);
+    await refreshPlugin(pluginId, "update");
     Logger.instance.info(const UuidV4().generate(), 'plugin setting updated: $key=$value');
+
+    // switch to the tab that was active before the update
+    WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
+      if (activePluginTabController.index != activeTabIndex) {
+        activePluginTabController.index = activeTabIndex;
+      }
+    });
   }
 
-  Future<void> updatePluginTriggerKeywords(String pluginId, List<String> triggerKeywords) async {
-    await updatePluginSetting(pluginId, "TriggerKeywords", triggerKeywords.join(","));
-  }
+  Future<void> updatePluginTriggerKeywords(String pluginId, List<String> triggerKeywords) async {}
 
   bool shouldShowSettingTab() {
     return activePlugin.value.isInstalled && activePlugin.value.settingDefinitions.isNotEmpty;

@@ -42,6 +42,10 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData("/plugin/installed", null);
   }
 
+  Future<PluginDetail> getPluginDetail(String pluginId) async {
+    return await WoxHttpUtil.instance.postData("/plugin/detail", {"id": pluginId});
+  }
+
   Future<void> installPlugin(String id) async {
     await WoxHttpUtil.instance.postData("/plugin/install", {"id": id});
   }

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,6 +30,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/plugin/uninstall": handlePluginUninstall,
 	"/plugin/disable":   handlePluginDisable,
 	"/plugin/enable":    handlePluginEnable,
+	"/plugin/detail":    handlePluginDetail,
 
 	//	themes
 	"/theme":           handleTheme,
@@ -156,40 +158,48 @@ func handlePluginInstalled(w http.ResponseWriter, r *http.Request) {
 	instances := plugin.GetPluginManager().GetPluginInstances()
 	var plugins []dto.PluginDto
 	for _, pluginInstance := range instances {
-		var installedPlugin dto.PluginDto
-		copyErr := copier.Copy(&installedPlugin, &pluginInstance.Metadata)
-		if copyErr != nil {
-			writeErrorResponse(w, copyErr.Error())
+		installedPlugin, err := convertPluginInstanceToDto(getCtx, pluginInstance)
+		if err != nil {
+			writeErrorResponse(w, err.Error())
 			return
 		}
-		installedPlugin.IsSystem = pluginInstance.IsSystemPlugin
-		installedPlugin.IsDev = pluginInstance.IsDevPlugin
-		installedPlugin.IsInstalled = true
-		installedPlugin.IsDisable = pluginInstance.Setting.Disabled
-
-		//load screenshot urls from store if exist
-		storePlugin, foundErr := plugin.GetStoreManager().GetStorePluginManifestById(getCtx, pluginInstance.Metadata.Id)
-		if foundErr == nil {
-			installedPlugin.ScreenshotUrls = storePlugin.ScreenshotUrls
-		} else {
-			installedPlugin.ScreenshotUrls = []string{}
-		}
-
-		// load icon
-		iconImg, parseErr := plugin.ParseWoxImage(pluginInstance.Metadata.Icon)
-		if parseErr == nil {
-			installedPlugin.Icon = iconImg
-		} else {
-			installedPlugin.Icon = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAELUlEQVR4nO3ZW2xTdRwH8JPgkxE1XuKFQUe73rb1IriNyYOJvoiALRszvhqffHBLJjEx8Q0TlRiN0RiNrPd27boLY1wUFAQHyquJiTIYpefay7au2yiJG1/zb6Kx/ZfS055T1mS/5JtzXpr+Pufy//9P/gyzURulXIHp28Rp7H5eY/OSc6bRiiPNN9tBQs4bDsFrbN5/AQ2JANO3qRgx9dZ76I2vwingvsQhgHUK2NPQCKeAuOw7Mf72B1hPCEZu9bBrWE8IRm6RH60nBFMNQA3Eh6kVzCzzyOVu5I+HUyvqApREkOZxe5bKR+kVdQFKIcgVLwW4usyrD1ACcSsXKwm4lYvVB1Ar4r7fAWeNCPLClgIcruBFVhRQK4Jc8Vwulj/WZRQqh4i8+X5d5glGaYCDBzp/WYQ5KsJ98JDqCEZJgIO/g53nM9BHpXxMEQHuXnURjFIA0vyOHxfQMiIVxBgW4FIRwSgBcLB3YPt+DrqwWDKGEA9Xz7tlES/9nkPHuQyeP5/By3/crh9gf3wNlpMpaENC2egDHFwHSiBurqL78hLaJlNoPZaCeSIJ01gSu68sqw/YF1uDeTKF5qBQUXR+DkNFiOgbg7BOSBTAOJrIw1QD7J1dzf+Jxs/LitbL4qhjsAAROjAA67hEAQzRBLovLSkPePX6an6U2eblqorWE4en7xCFsIxJFEAfkcoiZANeufo3tMMitnq4qkIArZMp2E+k4H29COEcQPuoSAH0YQm7prPKAMhjsMXFVpUmN4f2qTRsp+dgPTUH21SyJKJtRKQALcNiSYRswLNH46gmTW4W7SfSsP8w/x/AcjIN6/EkvEWPU9AxgNaIQAF0IRFdF7O1AZ75Lg65aXKxsJxKw35mngIQlOVYoiTCHBYogDZQiJANePrbm5AT8uhYT8/hubPzdwW0HU/BMpGA5yCNMIV4CrDdL6DzQrY6wFPfxFBpSPOkabLEuBeAzAOWcYIonCcCr/XDFOQpQLOPIBblA578OoZKQprfcXYeO88tVAwg80D7mARPL40wBjgKoPHy8gFPfHUD90q++Z8W8usauQAyD7RFJbiLEfv7YfBztQMe/3IW5bLFzeYb7/g5UzXANJZE64gIdw+N0Hu52gCPfTGLu2Wrm0XHhQw6Ly7WDDCOJmCOiNQq1r+vHy0etnrAo59fR6mQcZ40Tr7GlAIYogmYhgVqFUsQOjdbHeCRz66hONt8HLqmF9E1nVUcoI9IMIUIYpBGuOLyAQ9/eg3/jybAo/tyFrsuZVUD6MMSjEGeQvj2vgMwLz4gC7D5yAy7+cgMSLYHBbzw2xK6f1Uf0DIswhDgMeQsRPAae0QW4sGP/9zz0Cd/seRTcfeVpboCdCEReh+PIUeNiHWx7dtsDxQibF6mkQpFCHLONOYGvM1Hmm+obd+NYhqg/gG2aOxED6eh5gAAAABJRU5ErkJggg==`)
-		}
-		installedPlugin.Icon = plugin.ConvertIcon(getCtx, installedPlugin.Icon, pluginInstance.PluginDirectory)
-
-		installedPlugin = convertPluginDto(getCtx, installedPlugin, pluginInstance)
-
 		plugins = append(plugins, installedPlugin)
 	}
 
 	writeSuccessResponse(w, plugins)
+}
+
+func convertPluginInstanceToDto(ctx context.Context, pluginInstance *plugin.Instance) (installedPlugin dto.PluginDto, err error) {
+	copyErr := copier.Copy(&installedPlugin, &pluginInstance.Metadata)
+	if copyErr != nil {
+		return dto.PluginDto{}, copyErr
+	}
+
+	installedPlugin.IsSystem = pluginInstance.IsSystemPlugin
+	installedPlugin.IsDev = pluginInstance.IsDevPlugin
+	installedPlugin.IsInstalled = true
+	installedPlugin.IsDisable = pluginInstance.Setting.Disabled
+
+	//load screenshot urls from store if exist
+	storePlugin, foundErr := plugin.GetStoreManager().GetStorePluginManifestById(ctx, pluginInstance.Metadata.Id)
+	if foundErr == nil {
+		installedPlugin.ScreenshotUrls = storePlugin.ScreenshotUrls
+	} else {
+		installedPlugin.ScreenshotUrls = []string{}
+	}
+
+	// load icon
+	iconImg, parseErr := plugin.ParseWoxImage(pluginInstance.Metadata.Icon)
+	if parseErr == nil {
+		installedPlugin.Icon = iconImg
+	} else {
+		installedPlugin.Icon = plugin.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAELUlEQVR4nO3ZW2xTdRwH8JPgkxE1XuKFQUe73rb1IriNyYOJvoiALRszvhqffHBLJjEx8Q0TlRiN0RiNrPd27boLY1wUFAQHyquJiTIYpefay7au2yiJG1/zb6Kx/ZfS055T1mS/5JtzXpr+Pufy//9P/gyzURulXIHp28Rp7H5eY/OSc6bRiiPNN9tBQs4bDsFrbN5/AQ2JANO3qRgx9dZ76I2vwingvsQhgHUK2NPQCKeAuOw7Mf72B1hPCEZu9bBrWE8IRm6RH60nBFMNQA3Eh6kVzCzzyOVu5I+HUyvqApREkOZxe5bKR+kVdQFKIcgVLwW4usyrD1ACcSsXKwm4lYvVB1Ar4r7fAWeNCPLClgIcruBFVhRQK4Jc8Vwulj/WZRQqh4i8+X5d5glGaYCDBzp/WYQ5KsJ98JDqCEZJgIO/g53nM9BHpXxMEQHuXnURjFIA0vyOHxfQMiIVxBgW4FIRwSgBcLB3YPt+DrqwWDKGEA9Xz7tlES/9nkPHuQyeP5/By3/crh9gf3wNlpMpaENC2egDHFwHSiBurqL78hLaJlNoPZaCeSIJ01gSu68sqw/YF1uDeTKF5qBQUXR+DkNFiOgbg7BOSBTAOJrIw1QD7J1dzf+Jxs/LitbL4qhjsAAROjAA67hEAQzRBLovLSkPePX6an6U2eblqorWE4en7xCFsIxJFEAfkcoiZANeufo3tMMitnq4qkIArZMp2E+k4H29COEcQPuoSAH0YQm7prPKAMhjsMXFVpUmN4f2qTRsp+dgPTUH21SyJKJtRKQALcNiSYRswLNH46gmTW4W7SfSsP8w/x/AcjIN6/EkvEWPU9AxgNaIQAF0IRFdF7O1AZ75Lg65aXKxsJxKw35mngIQlOVYoiTCHBYogDZQiJANePrbm5AT8uhYT8/hubPzdwW0HU/BMpGA5yCNMIV4CrDdL6DzQrY6wFPfxFBpSPOkabLEuBeAzAOWcYIonCcCr/XDFOQpQLOPIBblA578OoZKQprfcXYeO88tVAwg80D7mARPL40wBjgKoPHy8gFPfHUD90q++Z8W8usauQAyD7RFJbiLEfv7YfBztQMe/3IW5bLFzeYb7/g5UzXANJZE64gIdw+N0Hu52gCPfTGLu2Wrm0XHhQw6Ly7WDDCOJmCOiNQq1r+vHy0etnrAo59fR6mQcZ40Tr7GlAIYogmYhgVqFUsQOjdbHeCRz66hONt8HLqmF9E1nVUcoI9IMIUIYpBGuOLyAQ9/eg3/jybAo/tyFrsuZVUD6MMSjEGeQvj2vgMwLz4gC7D5yAy7+cgMSLYHBbzw2xK6f1Uf0DIswhDgMeQsRPAae0QW4sGP/9zz0Cd/seRTcfeVpboCdCEReh+PIUeNiHWx7dtsDxQibF6mkQpFCHLONOYGvM1Hmm+obd+NYhqg/gG2aOxED6eh5gAAAABJRU5ErkJggg==`)
+	}
+	installedPlugin.Icon = plugin.ConvertIcon(ctx, installedPlugin.Icon, pluginInstance.PluginDirectory)
+
+	installedPlugin = convertPluginDto(ctx, installedPlugin, pluginInstance)
+
+	return installedPlugin, nil
 }
 
 func handlePluginInstall(w http.ResponseWriter, r *http.Request) {
@@ -828,4 +838,31 @@ func handleUserDataLocationUpdate(w http.ResponseWriter, r *http.Request) {
 
 	logger.Info(ctx, fmt.Sprintf("User data directory successfully changed to: %s", newLocation))
 	writeSuccessResponse(w, "User data directory updated successfully")
+}
+
+func handlePluginDetail(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+
+	body, _ := io.ReadAll(r.Body)
+	idResult := gjson.GetBytes(body, "id")
+	if !idResult.Exists() {
+		writeErrorResponse(w, "id is empty")
+		return
+	}
+
+	plugins := plugin.GetPluginManager().GetPluginInstances()
+	foundPlugin, exist := lo.Find(plugins, func(item *plugin.Instance) bool {
+		return item.Metadata.Id == idResult.String()
+	})
+	if !exist {
+		writeErrorResponse(w, fmt.Sprintf("Plugin with ID %s not found", idResult.String()))
+		return
+	}
+
+	pluginDto, err := convertPluginInstanceToDto(ctx, foundPlugin)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+	writeSuccessResponse(w, pluginDto)
 }

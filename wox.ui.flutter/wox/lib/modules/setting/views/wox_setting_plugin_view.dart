@@ -71,16 +71,6 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
           child: Scrollbar(
             thumbVisibility: false,
             child: Obx(() {
-              if (controller.isLoadingPlugins.value) {
-                return const Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: ProgressRing(),
-                  ),
-                );
-              }
-
               if (controller.filteredPluginList.isEmpty) {
                 return Center(
                   child: Text(
@@ -194,16 +184,6 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   Widget pluginDetail() {
     return Expanded(
       child: Obx(() {
-        if (controller.isLoadingPlugins.value) {
-          return const Center(
-            child: SizedBox(
-              width: 20,
-              height: 20,
-              child: ProgressRing(),
-            ),
-          );
-        }
-
         if (controller.activePlugin.value.id.isEmpty) {
           return Center(
             child: Text(
@@ -466,7 +446,6 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       item: e.value as PluginSettingValueCheckBox,
                       onUpdate: (key, value) async {
                         await controller.updatePluginSetting(plugin.id, key, value);
-                        controller.refreshPluginList();
                       },
                     );
                   }
@@ -476,7 +455,6 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       item: e.value as PluginSettingValueTextBox,
                       onUpdate: (key, value) async {
                         await controller.updatePluginSetting(plugin.id, key, value);
-                        controller.refreshPluginList();
                       },
                     );
                   }
@@ -486,7 +464,6 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       item: e.value as PluginSettingValueNewLine,
                       onUpdate: (key, value) async {
                         await controller.updatePluginSetting(plugin.id, key, value);
-                        controller.refreshPluginList();
                       },
                     );
                   }
@@ -496,7 +473,6 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       item: e.value as PluginSettingValueSelect,
                       onUpdate: (key, value) async {
                         await controller.updatePluginSetting(plugin.id, key, value);
-                        controller.refreshPluginList();
                       },
                     );
                   }
@@ -506,7 +482,6 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       item: e.value as PluginSettingValueSelectAIModel,
                       onUpdate: (key, value) async {
                         await controller.updatePluginSetting(plugin.id, key, value);
-                        controller.refreshPluginList();
                       },
                     );
                   }
@@ -516,7 +491,6 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       item: e.value as PluginSettingValueHead,
                       onUpdate: (key, value) async {
                         await controller.updatePluginSetting(plugin.id, key, value);
-                        controller.refreshPluginList();
                       },
                     );
                   }
@@ -526,7 +500,6 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       item: e.value as PluginSettingValueLabel,
                       onUpdate: (key, value) async {
                         await controller.updatePluginSetting(plugin.id, key, value);
-                        controller.refreshPluginList();
                       },
                     );
                   }
@@ -536,7 +509,6 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       item: e.value as PluginSettingValueTable,
                       onUpdate: (key, value) async {
                         await controller.updatePluginSetting(plugin.id, key, value);
-                        controller.refreshPluginList();
                       },
                     );
                   }
@@ -584,14 +556,13 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         ],
         "SortColumnKey": "keyword"
       }),
-      onUpdate: (key, value) {
+      onUpdate: (key, value) async {
         final List<String> triggerKeywords = [];
         for (var item in json.decode(value)) {
           triggerKeywords.add(item["keyword"]);
         }
         plugin.triggerKeywords = triggerKeywords;
-        controller.updatePluginTriggerKeywords(plugin.id, triggerKeywords);
-        controller.refreshPluginList();
+        await controller.updatePluginSetting(plugin.id, "TriggerKeywords", triggerKeywords.join(","));
       },
     );
   }
@@ -728,7 +699,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
           Row(
             children: [
               Icon(icon),
-              SizedBox(width: 10),
+              const SizedBox(width: 10),
               Text(title),
             ],
           ),
