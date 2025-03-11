@@ -18,6 +18,8 @@ class WoxHotkey {
         modifiers.add(HotKeyModifier.shift);
       } else if (e == "meta" || e == "command" || e == "cmd") {
         modifiers.add(HotKeyModifier.meta);
+      } else if (e == "windows" || e == "win") {
+        modifiers.add(HotKeyModifier.meta);
       } else if (e == "a") {
         key = LogicalKeyboardKey.keyA;
       } else if (e == "b") {
