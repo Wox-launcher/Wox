@@ -341,38 +341,16 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     }
     else if (method_name == "show")
     {
-      // Store the current foreground window before showing Wox
-      previous_active_window_ = GetForegroundWindow();
-      if (previous_active_window_ == hwnd) {
-        previous_active_window_ = nullptr;
-      }
-      
-      if (previous_active_window_ != nullptr) {
-        Log("Saving previous active window: " + std::to_string((intptr_t)previous_active_window_));
-      } else {
-        Log("No previous active window found");
-      }
-
       ShowWindow(hwnd, SW_SHOW);
-      SetForegroundWindow(hwnd);
       result->Success();
     }
     else if (method_name == "hide")
     {
       ShowWindow(hwnd, SW_HIDE);
-      
-      // Restore focus to the previous active window
-      if (previous_active_window_ != nullptr && IsWindow(previous_active_window_)) {
-        Log("Restoring focus to previous window: " + std::to_string((intptr_t)previous_active_window_));
-        SetForegroundWindow(previous_active_window_);
-        previous_active_window_ = nullptr;
-      }
-      
       result->Success();
     }
     else if (method_name == "focus")
     {
-      ShowWindow(hwnd, SW_SHOW);
       SetForegroundWindow(hwnd);
       result->Success();
     }

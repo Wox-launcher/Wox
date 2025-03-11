@@ -219,8 +219,6 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> hideApp(String traceId) async {
-    await windowManager.hide();
-
     //clear query box text if query type is selection or last query mode is empty
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code || lastQueryMode == WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_EMPTY.code) {
       currentQuery.value = PlainQuery.emptyInput();
@@ -233,6 +231,9 @@ class WoxLauncherController extends GetxController {
     if (isInSettingView.value) {
       isInSettingView.value = false;
     }
+
+    // must invoke after clearQueryResults, because clearQueryResults will trigger resizeHeight, which will cause the focus can't return to the other window in windows
+    await windowManager.hide();
 
     await WoxApi.instance.onHide(currentQuery.value);
   }
