@@ -10,6 +10,8 @@ import 'package:wox/utils/log.dart';
 
 class WoxQueryBoxView extends GetView<WoxLauncherController> {
   const WoxQueryBoxView({super.key});
+  
+  static int _lastHideAppTimestamp = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -23,11 +25,26 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                 onKeyEvent: (FocusNode node, KeyEvent event) {
                   var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
                   if (!isAnyModifierPressed) {
+                    // handle escape key 
+                    // On Windows, the keydown and keyup events are triggered sequentially (strange behavior but true). If you only listen for the keydown event individually, 
+                    // it will require pressing the Esc key twice for the keydown event to be captured.
+                    //
+                    // Solution:
+                    // 1. Listen for both keydown and keyup events
+                    // 2. Debounce the hide app action to prevent it from being called multiple times
+                    if (event is KeyDownEvent || event is KeyUpEvent) {
+                      if (event.logicalKey == LogicalKeyboardKey.escape) {
+                        int currentTimestamp = DateTime.now().millisecondsSinceEpoch;
+                        if (currentTimestamp - _lastHideAppTimestamp > 300) {
+                          _lastHideAppTimestamp = currentTimestamp;
+                          controller.hideApp(const UuidV4().generate());
+                        }
+                        return KeyEventResult.handled;
+                      }
+                    }
+                    
                     if (event is KeyDownEvent) {
                       switch (event.logicalKey) {
-                        case LogicalKeyboardKey.escape:
-                          controller.hideApp(const UuidV4().generate());
-                          return KeyEventResult.handled;
                         case LogicalKeyboardKey.arrowDown:
                           controller.handleQueryBoxArrowDown();
                           return KeyEventResult.handled;
