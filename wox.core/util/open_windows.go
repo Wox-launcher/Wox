@@ -8,7 +8,7 @@ import (
 )
 
 func ShellOpen(path string) error {
-	return exec.Command("cmd", "/C", "start", "explorer.exe", path).Start()
+	return exec.Command("cmd", "/C", "start", "", path).Start()
 }
 
 func ShellRun(name string, arg ...string) (*exec.Cmd, error) {

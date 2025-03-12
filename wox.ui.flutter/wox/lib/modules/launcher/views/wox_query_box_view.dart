@@ -12,6 +12,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
   const WoxQueryBoxView({super.key});
   
   static int _lastHideAppTimestamp = 0;
+  static int _lastEnterTimestamp = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -25,9 +26,9 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                 onKeyEvent: (FocusNode node, KeyEvent event) {
                   var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
                   if (!isAnyModifierPressed) {
-                    // handle escape key 
-                    // On Windows, the keydown and keyup events are triggered sequentially (strange behavior but true). If you only listen for the keydown event individually, 
-                    // it will require pressing the Esc key twice for the keydown event to be captured.
+                    // handle escape/enter key 
+                    // On Windows, the keydown and keyup events are triggered sequentially after windows first hide (strange behavior but true). 
+                    // If you only listen for the keydown event individually, it will require pressing the Esc/Enter key twice for the keydown event to be captured.
                     //
                     // Solution:
                     // 1. Listen for both keydown and keyup events
@@ -41,6 +42,14 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         }
                         return KeyEventResult.handled;
                       }
+                      if (event.logicalKey == LogicalKeyboardKey.enter) {
+                        int currentTimestamp = DateTime.now().millisecondsSinceEpoch;
+                        if (currentTimestamp - _lastEnterTimestamp > 300) {
+                          _lastEnterTimestamp = currentTimestamp;
+                          controller.onEnter(const UuidV4().generate());
+                        }
+                        return KeyEventResult.handled;
+                      }
                     }
                     
                     if (event is KeyDownEvent) {
@@ -50,9 +59,6 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                           return KeyEventResult.handled;
                         case LogicalKeyboardKey.arrowUp:
                           controller.handleQueryBoxArrowUp();
-                          return KeyEventResult.handled;
-                        case LogicalKeyboardKey.enter:
-                          controller.onEnter(const UuidV4().generate());
                           return KeyEventResult.handled;
                         case LogicalKeyboardKey.tab:
                           controller.autoCompleteQuery(const UuidV4().generate());
