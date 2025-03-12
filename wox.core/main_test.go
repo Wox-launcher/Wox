@@ -478,7 +478,7 @@ func runQueryTests(t *testing.T, tests []queryTest) {
 			}
 
 			if !found {
-				t.Errorf("Expected title format not found in results. Got results for query %q:", tt.query)
+				t.Errorf("Expected title (%s) format not found in results. Got results for query %q:", tt.expectedTitle, tt.query)
 				for i, result := range allResults {
 					t.Errorf("Result %d:", i+1)
 					t.Errorf("  Title: %s", result.Title)
