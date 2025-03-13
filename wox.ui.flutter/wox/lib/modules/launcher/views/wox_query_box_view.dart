@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/wox_drag_move_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
@@ -10,7 +11,7 @@ import 'package:wox/utils/log.dart';
 
 class WoxQueryBoxView extends GetView<WoxLauncherController> {
   const WoxQueryBoxView({super.key});
-  
+
   static int _lastHideAppTimestamp = 0;
   static int _lastEnterTimestamp = 0;
 
@@ -26,8 +27,8 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                 onKeyEvent: (FocusNode node, KeyEvent event) {
                   var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
                   if (!isAnyModifierPressed) {
-                    // handle escape/enter key 
-                    // On Windows, the keydown and keyup events are triggered sequentially after windows first hide (strange behavior but true). 
+                    // handle escape/enter key
+                    // On Windows, the keydown and keyup events are triggered sequentially after windows first hide (strange behavior but true).
                     // If you only listen for the keydown event individually, it will require pressing the Esc/Enter key twice for the keydown event to be captured.
                     //
                     // Solution:
@@ -51,7 +52,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         return KeyEventResult.handled;
                       }
                     }
-                    
+
                     if (event is KeyDownEvent) {
                       switch (event.logicalKey) {
                         case LogicalKeyboardKey.arrowDown:
@@ -143,7 +144,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         TextInputFormatter.withFunction((oldValue, newValue) {
                           var traceId = const UuidV4().generate();
                           Logger.instance.info(traceId, "IME Formatter - old: ${oldValue.text}, new: ${newValue.text}, composing: ${newValue.composing}");
-                          
+
                           // Flutter's IME handling has inconsistencies across platforms, especially on Windows
                           // So we use input formatter to detect IME input completion instead of onChanged event
                           // Reference: https://github.com/flutter/flutter/issues/128565
@@ -157,12 +158,12 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                           // Solution:
                           // 1. Track composing range changes to more accurately detect when IME input completes
                           // 2. Use start and end positions to determine composing state instead of relying solely on isComposingRangeValid
-                          
+
                           // Check if both states are in IME editing mode
                           // composing.start >= 0 indicates an active IME composition region
                           bool wasComposing = oldValue.composing.start >= 0 && oldValue.composing.end >= 0;
                           bool isComposing = newValue.composing.start >= 0 && newValue.composing.end >= 0;
-                          
+
                           if (wasComposing && !isComposing) {
                             // Scenario 1: IME composition completed
                             // Transition from composing to non-composing state indicates user has finished word selection
@@ -180,10 +181,10 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                               controller.onQueryBoxTextChanged(newValue.text);
                             });
                           }
-                          
+
                           // Use Future.microtask to ensure query is triggered after text update is complete
                           // This prevents querying with incomplete state updates
-                          
+
                           return newValue;
                         }),
                       ],
@@ -193,20 +194,25 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
         Positioned(
           right: 10,
           height: 55,
-          child: Container(
-            width: 55,
-            height: 55,
-            color: Colors.transparent,
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: MouseRegion(
-                cursor: controller.queryIcon.value.action != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
-                child: GestureDetector(
-                  onTap: () {
-                    controller.queryIcon.value.action?.call();
-                    controller.queryBoxFocusNode.requestFocus();
-                  },
-                  child: WoxImageView(woxImage: controller.queryIcon.value.icon, width: 24, height: 24),
+          child: WoxDragMoveArea(
+            onDragEnd: () {
+              controller.queryBoxFocusNode.requestFocus();
+            },
+            child: Container(
+              width: 55,
+              height: 55,
+              color: Colors.transparent,
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: MouseRegion(
+                  cursor: controller.queryIcon.value.action != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+                  child: GestureDetector(
+                    onTap: () {
+                      controller.queryIcon.value.action?.call();
+                      controller.queryBoxFocusNode.requestFocus();
+                    },
+                    child: WoxImageView(woxImage: controller.queryIcon.value.icon, width: 24, height: 24),
+                  ),
                 ),
               ),
             ),

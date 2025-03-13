@@ -121,6 +121,15 @@ class MacOSWindowManager extends BaseWindowManager {
   }
 
   @override
+  Future<void> startDragging() async {
+    try {
+      await _channel.invokeMethod('startDragging');
+    } catch (e) {
+      Logger.instance.error(const Uuid().v4(), "Error starting window drag: $e");
+    }
+  }
+
+  @override
   Future<void> waitUntilReadyToShow() async {
     try {
       await _channel.invokeMethod('waitUntilReadyToShow');

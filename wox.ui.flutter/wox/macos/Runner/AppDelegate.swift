@@ -9,7 +9,7 @@ class AppDelegate: FlutterAppDelegate {
   private var windowEventChannel: FlutterMethodChannel?
   
   private func log(_ message: String) {
-    //NSLog("WoxApp: \(message)")
+    // NSLog("WoxApp: \(message)")
   }
   
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -187,6 +187,13 @@ class AppDelegate: FlutterAppDelegate {
           } else {
             result(FlutterError(code: "INVALID_ARGS", message: "Invalid arguments for setAlwaysOnTop", details: nil))
           }
+          
+        case "startDragging":
+          if let currentEvent = window.currentEvent {
+            self?.log("Performing drag with event: \(currentEvent)")
+            window.performDrag(with: currentEvent)
+          } 
+          result(nil)
           
         case "waitUntilReadyToShow":
             // Force appearance to light mode, otherwise borderless window will have a dark border line

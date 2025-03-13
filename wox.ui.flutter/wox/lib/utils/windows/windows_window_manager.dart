@@ -126,6 +126,15 @@ class WindowsWindowManager extends BaseWindowManager {
   }
 
   @override
+  Future<void> startDragging() async {
+    try {
+      await _channel.invokeMethod('startDragging');
+    } catch (e) {
+      Logger.instance.error(const UuidV4().generate(), "Error starting window drag: $e");
+    }
+  }
+
+  @override
   Future<void> waitUntilReadyToShow() async {
     try {
       await _channel.invokeMethod('waitUntilReadyToShow');

@@ -175,14 +175,6 @@ LRESULT CALLBACK FlutterWindow::WindowProc(HWND hwnd, UINT message, WPARAM wpara
   // Handle window messages and send events to Flutter
   switch (message)
   {
-  // Add handling for left mouse button down to enable window dragging
-  case WM_LBUTTONDOWN:
-    {
-      // Start dragging the window when left mouse button is pressed
-      ReleaseCapture();
-      SendMessage(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
-      return 0;
-    }
   case WM_ACTIVATE:
     if (LOWORD(wparam) == WA_ACTIVE || LOWORD(wparam) == WA_CLICKACTIVE)
     {
@@ -375,6 +367,12 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       {
         result->Error("INVALID_ARGUMENTS", "Invalid arguments for setAlwaysOnTop");
       }
+    }
+    else if (method_name == "startDragging")
+    {
+      ReleaseCapture();
+      SendMessage(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+      result->Success();
     }
     else if (method_name == "waitUntilReadyToShow")
     {

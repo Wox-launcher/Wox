@@ -69,6 +69,11 @@ class WindowManager implements WindowManagerInterface {
   }
 
   @override
+  Future<void> startDragging() {
+    return _platformImpl.startDragging();
+  }
+
+  @override
   Future<void> waitUntilReadyToShow() {
     return _platformImpl.waitUntilReadyToShow();
   }
