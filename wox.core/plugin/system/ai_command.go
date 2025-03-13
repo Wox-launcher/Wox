@@ -456,20 +456,26 @@ func (c *Plugin) processThinking(text string) (thinking string, content string) 
 	const thinkStart = "<think>"
 	const thinkEnd = "</think>"
 
-	// Check if the text starts with the thinking tag
-	if len(text) >= len(thinkStart) && text[:len(thinkStart)] == thinkStart {
-		// Find the end tag
+	// Trim leading newlines for tag detection
+	trimmedText := strings.TrimLeft(text, "\n")
+
+	// Check if the text starts with the thinking tag after trimming newlines
+	if len(trimmedText) >= len(thinkStart) && trimmedText[:len(thinkStart)] == thinkStart {
+		// Calculate the offset to maintain original indices
+		offset := len(text) - len(trimmedText)
+
+		// Find the end tag in the original text
 		endIndex := strings.Index(text, thinkEnd)
 		if endIndex != -1 {
 			// Extract thinking content (without the tags)
-			thinking = text[len(thinkStart):endIndex]
+			thinking = text[offset+len(thinkStart) : endIndex]
 			// Extract the remaining content after the thinking tag
 			if endIndex+len(thinkEnd) < len(text) {
 				content = text[endIndex+len(thinkEnd):]
 			}
 		} else {
 			// If there's no end tag, the entire text is considered thinking
-			thinking = text[len(thinkStart):]
+			thinking = text[offset+len(thinkStart):]
 		}
 	} else {
 		// If there's no thinking tag at the beginning, the entire text is content

@@ -4,6 +4,7 @@ go 1.23.0
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.0
+	github.com/PuerkitoBio/goquery v1.10.0
 	github.com/cdfmlr/ellipsis v0.0.1
 	github.com/disintegration/imaging v1.6.2
 	github.com/djherbis/buffer v1.2.0
@@ -12,7 +13,7 @@ require (
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/go-resty/resty/v2 v2.15.3
 	github.com/godbus/dbus/v5 v5.1.0
-	github.com/google/generative-ai-go v0.18.0
+	github.com/google/generative-ai-go v0.19.0
 	github.com/google/uuid v1.6.0
 	github.com/googleapis/gax-go/v2 v2.13.0
 	github.com/gorilla/websocket v1.5.3
@@ -56,7 +57,6 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.5 // indirect
 	cloud.google.com/go/compute/metadata v0.5.2 // indirect
 	cloud.google.com/go/longrunning v0.6.2 // indirect
-	github.com/PuerkitoBio/goquery v1.10.0 // indirect
 	github.com/andybalholm/cascadia v1.3.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect

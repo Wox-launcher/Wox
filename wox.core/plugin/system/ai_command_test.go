@@ -14,6 +14,10 @@ func TestAICommandParseThinking(t *testing.T) {
 	assert.Equal(t, " hello world", thinking)
 	assert.Equal(t, "this is content", content)
 
+	thinking, content = plugin.processThinking("\n<think> hello world</think>this is content")
+	assert.Equal(t, " hello world", thinking)
+	assert.Equal(t, "this is content", content)
+
 	thinking, content = plugin.processThinking("hello world")
 	assert.Equal(t, "", thinking)
 	assert.Equal(t, "hello world", content)
