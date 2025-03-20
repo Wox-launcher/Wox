@@ -7,6 +7,7 @@ import (
 	"strings"
 	"wox/plugin"
 	"wox/util"
+	"wox/util/shell"
 
 	"github.com/mitchellh/go-homedir"
 )
@@ -95,7 +96,7 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 					{
 						Name: "i18n:plugin_browser_bookmark_open_in_browser",
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							util.ShellOpen(bookmark.Url)
+							shell.Open(bookmark.Url)
 						},
 					},
 				},

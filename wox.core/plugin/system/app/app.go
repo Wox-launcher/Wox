@@ -15,6 +15,7 @@ import (
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/shell"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
@@ -146,9 +147,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 		isNameMatch, nameScore := system.IsStringMatchScore(ctx, info.Name, query.Search)
 		isPathNameMatch, pathNameScore := system.IsStringMatchScore(ctx, filepath.Base(info.Path), query.Search)
 		if isNameMatch || isPathNameMatch {
-			// 确定要显示的路径
 			displayPath := info.GetDisplayPath()
-
 			result := plugin.QueryResult{
 				Id:       uuid.NewString(),
 				Title:    info.Name,
@@ -160,9 +159,10 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 						Name: "i18n:plugin_app_open",
 						Icon: plugin.OpenIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							runErr := util.ShellOpen(info.Path)
+							runErr := shell.Open(info.Path)
 							if runErr != nil {
 								a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", info.Path, runErr.Error()))
+								a.api.Notify(ctx, fmt.Sprintf("i18n:plugin_app_open_failed_description: %s", runErr.Error()))
 							}
 						},
 					},

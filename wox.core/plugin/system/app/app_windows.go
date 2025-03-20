@@ -16,6 +16,7 @@ import (
 	"unsafe"
 	"wox/plugin"
 	"wox/util"
+	"wox/util/shell"
 
 	win "github.com/lxn/win"
 	lnk "github.com/parsiya/golnk"
@@ -233,7 +234,7 @@ func (a *WindowsRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) 
 
 func (a *WindowsRetriever) OpenAppFolder(ctx context.Context, app appInfo) error {
 	if app.Type != AppTypeUWP {
-		return util.ShellOpenFileInFolder(app.Path)
+		return shell.ShellOpenFileInFolder(app.Path)
 	}
 
 	// Extract AppID from Path (format: "shell:AppsFolder\PackageFamilyName!AppId")
@@ -243,7 +244,7 @@ func (a *WindowsRetriever) OpenAppFolder(ctx context.Context, app appInfo) error
 	}
 
 	// Get app installation location using PowerShell
-	output, err := util.ShellRunOutput("powershell", "-Command", fmt.Sprintf(`
+	output, err := shell.ShellRunOutput("powershell", "-Command", fmt.Sprintf(`
 		$packageFamilyName = ($('%s' -split '!')[0])
 		$package = Get-AppxPackage | Where-Object { $_.PackageFamilyName -eq $packageFamilyName }
 		if ($package) {
@@ -259,7 +260,7 @@ func (a *WindowsRetriever) OpenAppFolder(ctx context.Context, app appInfo) error
 		return fmt.Errorf("UWP app install location not found for: %s", appID)
 	}
 
-	return util.ShellOpenFileInFolder(installLocation)
+	return shell.ShellOpenFileInFolder(installLocation)
 }
 
 func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
@@ -292,7 +293,7 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 	`
 
 	// Set command encoding to UTF-8
-	output, err := util.ShellRunOutput("powershell", "-Command", powershellCmd)
+	output, err := shell.ShellRunOutput("powershell", "-Command", powershellCmd)
 	if err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Error running powershell command: %v", err))
 		return apps
@@ -428,7 +429,7 @@ func (a *WindowsRetriever) GetUWPAppIcon(ctx context.Context, appID string) (plu
 		}
 	`, appID)
 
-	output, err := util.ShellRunOutput("powershell", "-Command", powershellCmd)
+	output, err := shell.ShellRunOutput("powershell", "-Command", powershellCmd)
 	if err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Error running powershell command: %v", err))
 		return plugin.WoxImage{}, err

@@ -3,9 +3,10 @@ package hotkey
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/samber/lo"
 	"golang.design/x/hotkey"
-	"strings"
 )
 
 // combineKey is a string like "Ctrl+Shift+Space", multiple modifiers and one key, combine examples:

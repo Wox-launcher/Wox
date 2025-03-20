@@ -8,6 +8,7 @@ import (
 	"wox/updater"
 	"wox/util"
 	"wox/util/permission"
+	"wox/util/shell"
 )
 
 type DoctorCheckResult struct {
@@ -66,7 +67,7 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 		Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_update_available"), latestVersion.CurrentVersion, latestVersion.LatestVersion),
 		ActionName:  "i18n:plugin_doctor_version_download",
 		Action: func(ctx context.Context) {
-			util.ShellOpen(latestVersion.DownloadUrl)
+			shell.Open(latestVersion.DownloadUrl)
 		},
 	}
 }

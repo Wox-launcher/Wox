@@ -14,6 +14,7 @@ import (
 	"wox/share"
 	"wox/util"
 	"wox/util/selection"
+	"wox/util/shell"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -46,7 +47,7 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 	args = append(args, executableArgs...)
 	args = append(args, entry, fmt.Sprintf("%d", port), util.GetLocation().GetLogHostsDirectory(), fmt.Sprintf("%d", os.Getpid()))
 
-	cmd, err := util.ShellRunWithEnv(executablePath, envs, args...)
+	cmd, err := shell.RunWithEnv(executablePath, envs, args...)
 	if err != nil {
 		return fmt.Errorf("failed to start host: %w", err)
 	}

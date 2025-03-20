@@ -12,6 +12,7 @@ import (
 	"wox/setting/validator"
 	"wox/util"
 	"wox/util/selection"
+	"wox/util/shell"
 )
 
 var webSearchesSettingKey = "webSearches"
@@ -252,7 +253,7 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							util.Go(ctx, "open urls", func() {
 								for _, url := range search.Urls {
-									util.ShellOpen(r.replaceVariables(ctx, url, otherQuery))
+									shell.Open(r.replaceVariables(ctx, url, otherQuery))
 									time.Sleep(time.Millisecond * 100)
 								}
 							})
@@ -285,7 +286,7 @@ func (r *WebSearchPlugin) QueryFallback(ctx context.Context, query plugin.Query)
 					Icon: plugin.SearchIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						for _, url := range search.Urls {
-							util.ShellOpen(r.replaceVariables(ctx, url, query.RawQuery))
+							shell.Open(r.replaceVariables(ctx, url, query.RawQuery))
 							time.Sleep(time.Millisecond * 100)
 						}
 					},
@@ -317,7 +318,7 @@ func (r *WebSearchPlugin) querySelection(ctx context.Context, query plugin.Query
 					Icon: plugin.SearchIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						for _, url := range search.Urls {
-							util.ShellOpen(r.replaceVariables(ctx, url, query.Selection.Text))
+							shell.Open(r.replaceVariables(ctx, url, query.Selection.Text))
 							time.Sleep(time.Millisecond * 100)
 						}
 					},

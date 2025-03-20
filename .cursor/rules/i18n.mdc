@@ -1,6 +1,7 @@
 ---
-description: Internationalization (i18n) Rules
+description: 
 globs: 
+alwaysApply: false
 ---
 # Internationalization (i18n) Rules
 

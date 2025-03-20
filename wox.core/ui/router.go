@@ -16,6 +16,7 @@ import (
 	"wox/ui/dto"
 	"wox/util"
 	"wox/util/hotkey"
+	"wox/util/shell"
 
 	"github.com/jinzhu/copier"
 	"github.com/samber/lo"
@@ -574,7 +575,7 @@ func handleOpen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	util.ShellOpen(pathResult.String())
+	shell.Open(pathResult.String())
 
 	writeSuccessResponse(w, "")
 }

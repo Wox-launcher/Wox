@@ -28,6 +28,7 @@ import (
 	"unsafe"
 	"wox/plugin"
 	"wox/util"
+	"wox/util/shell"
 
 	"github.com/disintegration/imaging"
 	"github.com/mitchellh/go-homedir"
@@ -146,7 +147,7 @@ func (a *MacRetriever) getPrefPaneName(path string) (string, error) {
 }
 
 func (a *MacRetriever) getAppNameFromMdls(path string) (string, error) {
-	out, err := util.ShellRunOutput("mdls", "-name", "kMDItemDisplayName", "-raw", path)
+	out, err := shell.RunOutput("mdls", "-name", "kMDItemDisplayName", "-raw", path)
 	if err != nil {
 		msg := fmt.Sprintf("failed to get app name from mdls(%s): %s", path, err.Error())
 		var exitError *exec.ExitError
@@ -187,7 +188,7 @@ func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (plugi
 	if strings.HasSuffix(rawImagePath, ".icns") {
 		//use sips to convert icns to png
 		//sips -s format png /Applications/Calculator.app/Contents/Resources/AppIcon.icns --out /tmp/wox-app-icon.png
-		out, openErr := util.ShellRunOutput("sips", "-s", "format", "png", rawImagePath, "--out", iconCachePath)
+		out, openErr := shell.RunOutput("sips", "-s", "format", "png", rawImagePath, "--out", iconCachePath)
 		if openErr != nil {
 			msg := fmt.Sprintf("failed to convert icns to png: %s", openErr.Error())
 			if out != nil {
@@ -222,7 +223,7 @@ func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (plugi
 
 func (a *MacRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
 	//use `system_profiler SPApplicationsDataType -json` to get all apps
-	out, err := util.ShellRunOutput("system_profiler", "SPApplicationsDataType", "-json")
+	out, err := shell.RunOutput("system_profiler", "SPApplicationsDataType", "-json")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get extra apps: %s", err.Error())
 	}
@@ -450,5 +451,5 @@ func (a *MacRetriever) getRunningProcesses() (infos []processInfo) {
 }
 
 func (a *MacRetriever) OpenAppFolder(ctx context.Context, app appInfo) error {
-	return util.ShellOpenFileInFolder(app.Path)
+	return shell.OpenFileInFolder(app.Path)
 }

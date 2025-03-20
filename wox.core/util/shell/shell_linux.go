@@ -1,18 +1,19 @@
-package util
+package shell
 
 import (
 	"os"
 	"os/exec"
+	"wox/util"
 )
 
-func ShellOpen(path string) error {
+func Open(path string) error {
 	return exec.Command("xdg-open", path).Start()
 }
 
-func ShellRun(name string, arg ...string) (*exec.Cmd, error) {
+func Run(name string, arg ...string) (*exec.Cmd, error) {
 	cmd := exec.Command(name, arg...)
-	cmd.Stdout = GetLogger().GetWriter()
-	cmd.Stderr = GetLogger().GetWriter()
+	cmd.Stdout = util.GetLogger().GetWriter()
+	cmd.Stderr = util.GetLogger().GetWriter()
 	cmdErr := cmd.Start()
 	if cmdErr != nil {
 		return nil, cmdErr
@@ -21,14 +22,14 @@ func ShellRun(name string, arg ...string) (*exec.Cmd, error) {
 	return cmd, nil
 }
 
-func ShellRunWithEnv(name string, envs []string, arg ...string) (*exec.Cmd, error) {
+func RunWithEnv(name string, envs []string, arg ...string) (*exec.Cmd, error) {
 	if len(envs) == 0 {
-		return ShellRun(name, arg...)
+		return Run(name, arg...)
 	}
 
 	cmd := exec.Command(name, arg...)
-	cmd.Stdout = GetLogger().GetWriter()
-	cmd.Stderr = GetLogger().GetWriter()
+	cmd.Stdout = util.GetLogger().GetWriter()
+	cmd.Stderr = util.GetLogger().GetWriter()
 	cmd.Env = append(os.Environ(), envs...)
 	cmdErr := cmd.Start()
 	if cmdErr != nil {
@@ -38,11 +39,11 @@ func ShellRunWithEnv(name string, envs []string, arg ...string) (*exec.Cmd, erro
 	return cmd, nil
 }
 
-func ShellRunOutput(name string, arg ...string) ([]byte, error) {
+func RunOutput(name string, arg ...string) ([]byte, error) {
 	cmd := exec.Command(name, arg...)
 	return cmd.Output()
 }
 
-func ShellOpenFileInFolder(path string) error {
+func OpenFileInFolder(path string) error {
 	return exec.Command("xdg-open", path).Start()
 }

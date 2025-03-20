@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
-	"wox/util"
+	"wox/util/shell"
 )
 
 var searcher Searcher = &MacSearcher{}
@@ -20,7 +20,7 @@ func (m *MacSearcher) Search(pattern SearchPattern) []SearchResult {
 
 	// use mdfind to search files
 	cmd := fmt.Sprintf("mdfind \"kMDItemDisplayName=='%s'\" | head -n 20", pattern.Name)
-	output, err := util.ShellRunOutput("bash", "-c", cmd)
+	output, err := shell.RunOutput("bash", "-c", cmd)
 	if err != nil {
 		return nil
 	}

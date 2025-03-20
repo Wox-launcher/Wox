@@ -12,6 +12,7 @@ import (
 	"wox/share"
 	"wox/ui"
 	"wox/util"
+	"wox/util/shell"
 )
 
 var sysIcon = plugin.PluginSysIcon
@@ -65,10 +66,10 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			Icon:  plugin.LockIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if util.IsMacOS() {
-					util.ShellRun("osascript", "-e", "tell application \"System Events\" to keystroke \"q\" using {control down, command down}")
+					shell.Run("osascript", "-e", "tell application \"System Events\" to keystroke \"q\" using {control down, command down}")
 				}
 				if util.IsWindows() {
-					util.ShellRun("rundll32.exe", "user32.dll,LockWorkStation")
+					shell.Run("rundll32.exe", "user32.dll,LockWorkStation")
 				}
 			},
 		},
@@ -77,10 +78,10 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			Icon:  plugin.TrashIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if util.IsMacOS() {
-					util.ShellRun("osascript", "-e", "tell application \"Finder\" to empty trash")
+					shell.Run("osascript", "-e", "tell application \"Finder\" to empty trash")
 				}
 				if util.IsWindows() {
-					util.ShellRun("powershell.exe", "-Command", "Clear-RecycleBin -Force")
+					shell.Run("powershell.exe", "-Command", "Clear-RecycleBin -Force")
 				}
 			},
 		},
@@ -104,10 +105,10 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			Icon:  plugin.SettingIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if util.IsMacOS() {
-					util.ShellRun("open", "-a", "System Preferences")
+					shell.Run("open", "-a", "System Preferences")
 				}
 				if util.IsWindows() {
-					util.ShellRun("control.exe", "desk.cpl")
+					shell.Run("control.exe", "desk.cpl")
 				}
 			},
 		},

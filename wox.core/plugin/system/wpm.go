@@ -13,6 +13,7 @@ import (
 	"wox/setting/definition"
 	"wox/share"
 	"wox/util"
+	"wox/util/shell"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
@@ -452,7 +453,7 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 				{
 					Name: "i18n:plugin_wpm_open_directory",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						openErr := util.ShellOpen(lp.metadata.Directory)
+						openErr := shell.Open(lp.metadata.Directory)
 						if openErr != nil {
 							w.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_open_directory_failed"), openErr.Error()))
 						}

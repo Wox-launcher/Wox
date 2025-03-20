@@ -20,6 +20,7 @@ import (
 	"wox/util/hotkey"
 	"wox/util/ime"
 	"wox/util/selection"
+	"wox/util/shell"
 	"wox/util/tray"
 
 	"github.com/Masterminds/semver/v3"
@@ -298,7 +299,7 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 	}
 
 	logger.Info(ctx, fmt.Sprintf("start ui, path=%s, port=%d, pid=%d", appPath, m.serverPort, os.Getpid()))
-	cmd, cmdErr := util.ShellRun(appPath,
+	cmd, cmdErr := shell.Run(appPath,
 		fmt.Sprintf("%d", m.serverPort),
 		fmt.Sprintf("%d", os.Getpid()),
 		fmt.Sprintf("%t", util.IsDev()),

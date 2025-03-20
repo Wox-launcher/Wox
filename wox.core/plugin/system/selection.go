@@ -8,6 +8,7 @@ import (
 	"wox/util/airdrop"
 	"wox/util/clipboard"
 	"wox/util/selection"
+	"wox/util/shell"
 )
 
 var selectionIcon = plugin.PluginSelectionIcon
@@ -141,7 +142,7 @@ func (i *SelectionPlugin) queryForFile(ctx context.Context, filePath string) (re
 				Name: "Open containing folder",
 				Icon: plugin.OpenContainingFolderIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					util.ShellOpenFileInFolder(filePath)
+					shell.OpenFileInFolder(filePath)
 				},
 			},
 		},

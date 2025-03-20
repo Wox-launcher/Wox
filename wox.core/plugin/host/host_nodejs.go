@@ -7,6 +7,7 @@ import (
 	"strings"
 	"wox/plugin"
 	"wox/util"
+	"wox/util/shell"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/mitchellh/go-homedir"
@@ -55,7 +56,7 @@ func (n *NodejsHost) findNodejsPath(ctx context.Context) string {
 	foundPath := ""
 	for _, p := range possibleNodejsPaths {
 		if util.IsFileExists(p) {
-			versionOriginal, versionErr := util.ShellRunOutput(p, "-v")
+			versionOriginal, versionErr := shell.RunOutput(p, "-v")
 			if versionErr != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("failed to get nodejs version: %s, path=%s", versionErr, p))
 				continue

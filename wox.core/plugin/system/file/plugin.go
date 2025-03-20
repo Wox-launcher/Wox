@@ -4,7 +4,7 @@ import (
 	"context"
 	"wox/plugin"
 	"wox/setting/definition"
-	"wox/util"
+	"wox/util/shell"
 
 	"github.com/samber/lo"
 )
@@ -66,13 +66,13 @@ func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryRe
 				{
 					Name: "i18n:plugin_file_open",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						util.ShellOpen(item.Path)
+						shell.Open(item.Path)
 					},
 				},
 				{
 					Name: "i18n:plugin_file_open_containing_folder",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						util.ShellOpenFileInFolder(item.Path)
+						shell.OpenFileInFolder(item.Path)
 					},
 				},
 			},

@@ -54,8 +54,6 @@ func setCrashOutput(logInstance *Log) {
 		logInstance.Error(context.Background(), fmt.Sprintf("failed to set crash output: %s", setCrashOutputErr.Error()))
 		return
 	}
-
-	logInstance.Info(context.Background(), fmt.Sprintf("crash output set to: %s", logFile))
 }
 
 func CreateLogger(logFolder string) *Log {

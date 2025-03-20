@@ -8,6 +8,7 @@ import (
 	"strings"
 	"wox/plugin"
 	"wox/util"
+	"wox/util/shell"
 
 	"github.com/samber/lo"
 )
@@ -98,7 +99,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 						Name: "i18n:plugin_url_open",
 						Icon: plugin.OpenIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							openErr := util.ShellOpen(history.Url)
+							openErr := shell.Open(history.Url)
 							if openErr != nil {
 								r.api.Log(ctx, "Error opening URL", openErr.Error())
 							}
@@ -131,7 +132,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 						if !strings.HasPrefix(url, "http") {
 							url = "https://" + url
 						}
-						openErr := util.ShellOpen(url)
+						openErr := shell.Open(url)
 						if openErr != nil {
 							r.api.Log(ctx, "Error opening URL", openErr.Error())
 						} else {

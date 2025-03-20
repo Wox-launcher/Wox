@@ -3,10 +3,11 @@ package hotkey
 import (
 	"context"
 	"fmt"
-	"github.com/robotn/gohook"
-	"golang.design/x/hotkey"
 	"time"
 	"wox/util"
+
+	hook "github.com/robotn/gohook"
+	"golang.design/x/hotkey"
 )
 
 var initialized = false

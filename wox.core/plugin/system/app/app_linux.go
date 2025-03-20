@@ -5,6 +5,7 @@ import (
 	"errors"
 	"wox/plugin"
 	"wox/util"
+	"wox/util/shell"
 )
 
 var appRetriever = &LinuxRetriever{}
@@ -44,5 +45,5 @@ func (a *LinuxRetriever) GetPid(ctx context.Context, app appInfo) int {
 }
 
 func (a *LinuxRetriever) OpenAppFolder(ctx context.Context, app appInfo) error {
-	return util.ShellOpenFileInFolder(app.Path)
+	return shell.ShellOpenFileInFolder(app.Path)
 }
