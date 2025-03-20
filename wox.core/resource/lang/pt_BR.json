@@ -82,6 +82,7 @@
   "ui_ai_providers_api_key_tooltip": "A chave de API do provedor de IA.",
   "ui_ai_providers_host": "Host",
   "ui_ai_providers_host_tooltip": "O host do provedor de IA.",
+  "ui_ai_providers_status": "Status",
   "ui_ai_providers_api_key_required": "A chave de API obrigatória.",
   "ui_ai_providers_host_required": "O host obrigatório.",
   "ui_ai_model": "Modelo de IA",

@@ -41,6 +41,7 @@ class PluginSettingValueType {
   static const pluginSettingValueTableColumnTypeDirPath = "dirPath";
   static const pluginSettingValueTableColumnTypeSelect = "select";
   static const pluginSettingValueTableColumnTypeSelectAIModel = "selectAIModel";
+  static const pluginSettingValueTableColumnTypeAIModelStatus = "aiModelStatus";
   static const pluginSettingValueTableColumnTypeWoxImage = "woxImage";
   static const pluginSettingValueTableColumnTypeHotkey = "hotkey";
 }

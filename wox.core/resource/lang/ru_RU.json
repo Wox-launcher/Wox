@@ -82,6 +82,7 @@
   "ui_ai_providers_api_key_tooltip": "API-ключ поставщика",
   "ui_ai_providers_host": "Хост",
   "ui_ai_providers_host_tooltip": "Хост поставщика",
+  "ui_ai_providers_status": "Статус",
   "ui_ai_providers_api_key_required": "API-ключ обязателен",
   "ui_ai_providers_host_required": "Хост обязателен",
   "ui_ai_model": "Модель",

@@ -78,6 +78,20 @@ func (g *GoogleProvider) Models(ctx context.Context) ([]Model, error) {
 	return googleModels, nil
 }
 
+func (g *GoogleProvider) Ping(ctx context.Context) error {
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:     g.connectContext.ApiKey,
+		Backend:    genai.BackendGeminiAPI,
+		HTTPClient: util.GetHTTPClient(ctx),
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = client.Models.List(ctx, &genai.ListModelsConfig{})
+	return err
+}
+
 func (g *GoogleProviderStream) Receive(ctx context.Context) (string, error) {
 	responseMsg := ""
 	next, _ := iter.Pull2(g.stream)

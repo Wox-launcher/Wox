@@ -23,13 +23,7 @@ func NewOpenAIClient(ctx context.Context, connectContext setting.AIProvider) Pro
 }
 
 func (o *OpenAIProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
-	config := openai.DefaultConfig(o.connectContext.ApiKey)
-	config.HTTPClient = util.GetHTTPClient(ctx)
-	if o.connectContext.Host != "" {
-		config.BaseURL = o.connectContext.Host
-	}
-	client := openai.NewClientWithConfig(config)
-
+	client := o.getClient(ctx)
 	createdStream, createErr := client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
 		Stream:   true,
 		Model:    model.Name,
@@ -43,12 +37,27 @@ func (o *OpenAIProvider) ChatStream(ctx context.Context, model Model, conversati
 }
 
 func (o *OpenAIProvider) Models(ctx context.Context) ([]Model, error) {
-	return []Model{
-		{
-			Name:     "gpt-3.5-turbo",
+	client := o.getClient(ctx)
+	models, err := client.ListModels(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var openaiModels []Model
+	for _, model := range models.Models {
+		openaiModels = append(openaiModels, Model{
+			Name:     model.ID,
 			Provider: ProviderNameOpenAI,
-		},
-	}, nil
+		})
+	}
+
+	return openaiModels, nil
+}
+
+func (o *OpenAIProvider) Ping(ctx context.Context) error {
+	client := o.getClient(ctx)
+	_, err := client.ListModels(ctx)
+	return err
 }
 
 func (s *OpenAIProviderStream) Receive(ctx context.Context) (string, error) {
@@ -91,4 +100,13 @@ func (o *OpenAIProvider) convertConversations(conversations []Conversation) []op
 	}
 
 	return chatMessages
+}
+
+func (o *OpenAIProvider) getClient(ctx context.Context) *openai.Client {
+	config := openai.DefaultConfig(o.connectContext.ApiKey)
+	config.HTTPClient = util.GetHTTPClient(ctx)
+	if o.connectContext.Host != "" {
+		config.BaseURL = o.connectContext.Host
+	}
+	return openai.NewClientWithConfig(config)
 }

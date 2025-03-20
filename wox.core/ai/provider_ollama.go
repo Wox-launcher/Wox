@@ -70,6 +70,11 @@ func (o *OllamaProvider) Models(ctx context.Context) (models []Model, err error)
 	return models, nil
 }
 
+func (o *OllamaProvider) Ping(ctx context.Context) error {
+	_, err := util.HttpGet(ctx, o.connectContext.Host+"/api/tags")
+	return err
+}
+
 func (o *OllamaProvider) convertConversations(conversations []Conversation) (chatMessages []llms.MessageContent) {
 	for _, conversation := range conversations {
 		var msg llms.MessageContent

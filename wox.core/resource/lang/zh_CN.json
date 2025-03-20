@@ -82,6 +82,7 @@
   "ui_ai_providers_api_key_tooltip": "API密钥",
   "ui_ai_providers_host": "API地址",
   "ui_ai_providers_host_tooltip": "API地址",
+  "ui_ai_providers_status": "状态",
   "ui_ai_providers_api_key_required": "API密钥是必需的",
   "ui_ai_providers_host_required": "API地址是必需的",
   "ui_ai_model": "AI模型",

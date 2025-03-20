@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
@@ -208,6 +209,30 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
             overflow: TextOverflow.ellipsis,
           ),
         ),
+      );
+    }
+    if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAIModelStatus) {
+      var providerName = row["Name"] ?? "";
+      var modelName = row["ApiKey"] ?? "";
+      var host = row["Host"] ?? "";
+      
+      return FutureBuilder<String>(
+        future: WoxApi.instance.pingAIModel(providerName, modelName, host),
+        builder: (context, snapshot) {
+          return columnWidth(
+            column: column,
+            isHeader: false,
+            isOperation: false,
+            child: snapshot.connectionState == ConnectionState.waiting
+                ? const Icon(material.Icons.circle, color: material.Colors.grey)
+                : snapshot.error != null
+                    ? material.Tooltip(
+                        message: snapshot.error?.toString() ?? "",
+                        child: const Icon(material.Icons.circle, color: material.Colors.red),
+                      )
+                    : const Icon(material.Icons.circle, color: material.Colors.green),
+          );
+        },
       );
     }
 

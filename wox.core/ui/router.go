@@ -59,6 +59,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 
 	// ai
 	"/ai/models": handleAIModels,
+	"/ai/ping":   handleAIPing,
 
 	// doctor
 	"/doctor/check": handleDoctorCheck,
@@ -791,6 +792,46 @@ func handleAIModels(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeSuccessResponse(w, results)
+}
+
+func handleAIPing(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+
+	body, _ := io.ReadAll(r.Body)
+	providerResult := gjson.GetBytes(body, "name")
+	if !providerResult.Exists() {
+		writeErrorResponse(w, "provider name is empty")
+		return
+	}
+	apiKeyResult := gjson.GetBytes(body, "apiKey")
+	if !apiKeyResult.Exists() {
+		writeErrorResponse(w, "apiKey is empty")
+		return
+	}
+	hostResult := gjson.GetBytes(body, "host")
+	if !hostResult.Exists() {
+		writeErrorResponse(w, "host is empty")
+		return
+	}
+
+	provider, err := ai.NewProvider(ctx, setting.AIProvider{
+		Name:   providerResult.String(),
+		ApiKey: apiKeyResult.String(),
+		Host:   hostResult.String(),
+	})
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to new ai provider: %s", err.Error()))
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	err = provider.Ping(ctx)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	writeSuccessResponse(w, "")
 }
 
 func handleDoctorCheck(w http.ResponseWriter, r *http.Request) {

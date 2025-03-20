@@ -23,6 +23,7 @@ type Model struct {
 type Provider interface {
 	ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error)
 	Models(ctx context.Context) ([]Model, error)
+	Ping(ctx context.Context) error
 }
 
 type ChatStreamDataType string

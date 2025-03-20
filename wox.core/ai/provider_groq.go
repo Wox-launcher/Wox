@@ -105,6 +105,13 @@ func (g *GroqProvider) Models(ctx context.Context) (models []Model, err error) {
 	return models, nil
 }
 
+func (g *GroqProvider) Ping(ctx context.Context) error {
+	_, err := util.HttpGetWithHeaders(ctx, groqBaseUrl+"/models", map[string]string{
+		"Authorization": "Bearer " + g.connectContext.ApiKey,
+	})
+	return err
+}
+
 func (g *GroqProvider) convertConversations(conversations []Conversation) (chatMessages []llms.MessageContent) {
 	for _, conversation := range conversations {
 		if conversation.Role == ConversationRoleUser {

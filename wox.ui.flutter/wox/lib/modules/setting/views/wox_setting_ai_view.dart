@@ -24,7 +24,7 @@ class WoxSettingAIView extends WoxSettingBaseView {
                   "Key": "Name",
                   "Label": "i18n:ui_ai_providers_name",
                   "Tooltip": "i18n:ui_ai_providers_name_tooltip",
-                  "Width": 120,
+                  "Width": 100,
                   "Type": "select",
                   "SelectOptions": [
                     {"Label": "OpenAI", "Value": "openai"},
@@ -48,8 +48,15 @@ class WoxSettingAIView extends WoxSettingBaseView {
                   "Key": "Host",
                   "Label": "i18n:ui_ai_providers_host",
                   "Tooltip": "i18n:ui_ai_providers_host_tooltip",
-                  "Width": 200,
+                  "Width": 160,
                   "Type": "text",
+                },
+                {
+                  "Key": "Status",
+                  "Label": "i18n:ui_ai_providers_status",
+                  "HideInUpdate": true,
+                  "Width": 60,
+                  "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeAIModelStatus,
                 }
               ],
               "SortColumnKey": "Name"
