@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"io"
 	"iter"
 	"wox/setting"
 	"wox/util"
@@ -14,7 +15,7 @@ type GoogleProvider struct {
 }
 
 type GoogleProviderStream struct {
-	stream        iter.Seq2[*genai.GenerateContentResponse, error]
+	stream        func() (*genai.GenerateContentResponse, error, bool)
 	conversations []Conversation
 	client        *genai.Client
 }
@@ -35,7 +36,8 @@ func (g *GoogleProvider) ChatStream(ctx context.Context, model Model, conversati
 
 	chatMessages := g.convertConversations(conversations)
 	stream := client.Models.GenerateContentStream(ctx, model.Name, chatMessages, &genai.GenerateContentConfig{})
-	return &GoogleProviderStream{conversations: conversations, stream: stream, client: client}, nil
+	next, _ := iter.Pull2(stream)
+	return &GoogleProviderStream{conversations: conversations, stream: next, client: client}, nil
 }
 
 func (g *GoogleProvider) Models(ctx context.Context) ([]Model, error) {
@@ -93,20 +95,16 @@ func (g *GoogleProvider) Ping(ctx context.Context) error {
 }
 
 func (g *GoogleProviderStream) Receive(ctx context.Context) (string, error) {
-	responseMsg := ""
-	next, _ := iter.Pull2(g.stream)
-	for {
-		response, err, valid := next()
-		if err != nil {
-			return "", err
-		}
-		if !valid {
-			break
-		}
-		responseMsg += response.Text()
+	response, err, valid := g.stream()
+	if err != nil {
+		return "", err
+	}
+	if !valid {
+		// finished
+		return "", io.EOF
 	}
 
-	return responseMsg, nil
+	return response.Text(), nil
 }
 
 func (g *GoogleProvider) convertConversations(conversations []Conversation) (newConversations []*genai.Content) {
