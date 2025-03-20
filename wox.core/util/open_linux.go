@@ -3,9 +3,17 @@ package util
 import (
 	"os"
 	"os/exec"
+	"strings"
 )
 
 func ShellOpen(path string) error {
+	if strings.HasSuffix(path, ".desktop") {
+		_, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		return exec.Command("gio", "launch", path).Start()
+	}
 	return exec.Command("xdg-open", path).Start()
 }
 
