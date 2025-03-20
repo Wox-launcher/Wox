@@ -2,15 +2,11 @@ package ai
 
 import (
 	"context"
-	"errors"
-	"io"
+	"iter"
 	"wox/setting"
 	"wox/util"
 
-	"github.com/google/generative-ai-go/genai"
-	"github.com/googleapis/gax-go/v2/apierror"
-	"google.golang.org/api/iterator"
-	"google.golang.org/api/option"
+	"google.golang.org/genai"
 )
 
 type GoogleProvider struct {
@@ -18,7 +14,7 @@ type GoogleProvider struct {
 }
 
 type GoogleProviderStream struct {
-	stream        *genai.GenerateContentResponseIterator
+	stream        iter.Seq2[*genai.GenerateContentResponse, error]
 	conversations []Conversation
 	client        *genai.Client
 }
@@ -28,67 +24,78 @@ func NewGoogleProvider(ctx context.Context, connectContext setting.AIProvider) P
 }
 
 func (g *GoogleProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
-	client, err := genai.NewClient(ctx, option.WithAPIKey(g.connectContext.ApiKey), option.WithHTTPClient(util.GetHTTPClient(ctx)))
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:     g.connectContext.ApiKey,
+		Backend:    genai.BackendGeminiAPI,
+		HTTPClient: util.GetHTTPClient(ctx),
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	chatMessages, lastConversation := g.convertConversations(conversations)
-	aiModel := client.GenerativeModel(model.Name)
-	session := aiModel.StartChat()
-	session.History = chatMessages
-	stream := session.SendMessageStream(ctx, lastConversation.Parts...)
+	chatMessages := g.convertConversations(conversations)
+	stream := client.Models.GenerateContentStream(ctx, model.Name, chatMessages, &genai.GenerateContentConfig{})
 	return &GoogleProviderStream{conversations: conversations, stream: stream, client: client}, nil
 }
 
 func (g *GoogleProvider) Models(ctx context.Context) ([]Model, error) {
-	return []Model{
-		{
-			Name:     "gemini-2.0-flash",
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:     g.connectContext.ApiKey,
+		Backend:    genai.BackendGeminiAPI,
+		HTTPClient: util.GetHTTPClient(ctx),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	models, err := client.Models.List(ctx, &genai.ListModelsConfig{})
+	if err != nil {
+		return nil, err
+	}
+
+	var googleModels []Model
+	for _, model := range models.Items {
+		googleModels = append(googleModels, Model{
+			Name:     model.Name,
 			Provider: ProviderNameGoogle,
-		},
-	}, nil
+		})
+	}
+
+	for {
+		models, err := models.Next(ctx)
+		if err != nil {
+			break
+		}
+
+		for _, model := range models.Items {
+			googleModels = append(googleModels, Model{
+				Name:     model.Name,
+				Provider: ProviderNameGoogle,
+			})
+		}
+	}
+
+	return googleModels, nil
 }
 
 func (g *GoogleProviderStream) Receive(ctx context.Context) (string, error) {
-	response, err := g.stream.Next()
-	if err != nil {
-		// Close client when stream is done or error occurs
-		if g.client != nil {
-			g.client.Close()
-			g.client = nil
+	responseMsg := ""
+	next, _ := iter.Pull2(g.stream)
+	for {
+		response, err, valid := next()
+		if err != nil {
+			return "", err
 		}
-
-		// no more messages
-		if errors.Is(err, iterator.Done) {
-			return "", io.EOF
+		if !valid {
+			break
 		}
-
-		var v *apierror.APIError
-		if errors.As(err, &v) {
-			return "", v.Unwrap()
-		}
-
-		return "", err
-	}
-	if len(response.Candidates) == 0 {
-		if g.client != nil {
-			g.client.Close()
-			g.client = nil
-		}
-		return "", io.EOF
+		responseMsg += response.Text()
 	}
 
-	for _, part := range response.Candidates[0].Content.Parts {
-		if v, ok := part.(genai.Text); ok {
-			return string(v), nil
-		}
-	}
-
-	return "", errors.New("no text in response")
+	return responseMsg, nil
 }
 
-func (g *GoogleProvider) convertConversations(conversations []Conversation) (msgWithoutLast []*genai.Content, lastMsg *genai.Content) {
+func (g *GoogleProvider) convertConversations(conversations []Conversation) (newConversations []*genai.Content) {
 	var chatMessages []*genai.Content
 	for _, conversation := range conversations {
 		role := ""
@@ -99,16 +106,18 @@ func (g *GoogleProvider) convertConversations(conversations []Conversation) (msg
 			role = "model"
 		}
 		if role == "" {
-			return nil, nil
+			return nil
 		}
 
 		chatMessages = append(chatMessages, &genai.Content{
-			Parts: []genai.Part{
-				genai.Text(conversation.Text),
+			Parts: []*genai.Part{
+				{
+					Text: conversation.Text,
+				},
 			},
 			Role: role,
 		})
 	}
 
-	return chatMessages[:len(chatMessages)-1], chatMessages[len(chatMessages)-1]
+	return chatMessages
 }
