@@ -8,7 +8,8 @@ import (
 )
 
 func ShellOpen(path string) error {
-	return exec.Command("cmd", "/C", "start", "", path).Start()
+	_, err := ShellRun("cmd", "/C", "start", "", path)
+	return err
 }
 
 func ShellRun(name string, arg ...string) (*exec.Cmd, error) {
@@ -49,5 +50,6 @@ func ShellOpenFileInFolder(path string) error {
 		return err
 	}
 
-	return exec.Command("explorer.exe", "/select,", absPath).Start()
+	_, err = ShellRun("explorer.exe", "/select,", absPath)
+	return err
 }
