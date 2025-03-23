@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import 'package:highlight/languages/yaml.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/components/wox_preview_chat_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
@@ -228,12 +230,15 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
           child: WoxImageView(woxImage: parsedWoxImage),
         );
       }
+    } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
+      var previewChatData = WoxPreviewChatData.fromJson(jsonDecode(widget.woxPreview.previewData));
+      contentWidget = WoxPreviewChatView(previewChatData: previewChatData, woxTheme: widget.woxTheme);
     }
 
     if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (scrollController.hasClients) {
-         scrollController.jumpTo(scrollController.position.maxScrollExtent);
+          scrollController.jumpTo(scrollController.position.maxScrollExtent);
         }
       });
     }

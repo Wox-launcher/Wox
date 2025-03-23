@@ -1,5 +1,10 @@
 package plugin
 
+import (
+	"encoding/json"
+	"wox/ai"
+)
+
 type WoxPreviewType = string
 type WoxPreviewScrollPosition = string
 
@@ -10,6 +15,7 @@ const (
 	WoxPreviewTypeUrl      = "url"
 	WoxPreviewTypeFile     = "file"   // when type is file(can be *.md, *.jpg, *.pdf and so on), data should be url/filepath
 	WoxPreviewTypeRemote   = "remote" // when type is remote, data should be url to load WoxPreview
+	WoxPreviewTypeChat     = "chat"   // when type is chat, data should be Json string of WoxPreviewChatData
 )
 
 const (
@@ -25,4 +31,16 @@ type WoxPreview struct {
 
 func (p *WoxPreview) IsEmpty() bool {
 	return p.PreviewData == ""
+}
+
+type WoxPreviewChatData struct {
+	Messages []ai.Conversation
+}
+
+func (d *WoxPreviewChatData) Json() string {
+	jsonData, err := json.Marshal(d)
+	if err != nil {
+		return ""
+	}
+	return string(jsonData)
 }

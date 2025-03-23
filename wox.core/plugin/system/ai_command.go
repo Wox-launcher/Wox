@@ -182,7 +182,13 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 
 		var startAnsweringTime int64
 		onPreparing := func(current plugin.RefreshableResult) plugin.RefreshableResult {
-			current.Preview.PreviewData = i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_answering")
+			previewData := plugin.WoxPreviewChatData{Messages: []ai.Conversation{
+				{
+					Role: ai.ConversationRoleAI,
+					Text: i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_answering"),
+				},
+			}}
+			current.Preview.PreviewData = previewData.Json()
 			current.SubTitle = "i18n:plugin_ai_command_answering"
 			startAnsweringTime = util.GetSystemTimestamp()
 			return current
@@ -191,7 +197,7 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 		isFirstAnswer := true
 		onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
 			if isFirstAnswer {
-				current.Preview.PreviewData = ""
+				current.Preview.PreviewData = "{}"
 				current.ContextData = ""
 				isFirstAnswer = false
 			}
@@ -199,9 +205,19 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 			current.SubTitle = "i18n:plugin_ai_command_answering"
 			current.ContextData += deltaAnswer
 
+			// parse prev data to WoxPreviewChatData
+			var prevData plugin.WoxPreviewChatData
+			err := json.Unmarshal([]byte(current.Preview.PreviewData), &prevData)
+			if err != nil {
+				return current
+			}
 			// Process thinking tags to convert them to markdown quote format
 			thinking, content := c.processThinking(current.ContextData)
-			current.Preview.PreviewData = c.convertThinkingToMarkdown(thinking, content)
+			prevData.Messages = append(prevData.Messages, ai.Conversation{
+				Role: ai.ConversationRoleAI,
+				Text: c.convertThinkingToMarkdown(thinking, content),
+			})
+			current.Preview.PreviewData = prevData.Json()
 			current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
 
 			if isFinished {
@@ -227,7 +243,17 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 			return current
 		}
 		onAnswerErr := func(current plugin.RefreshableResult, err error) plugin.RefreshableResult {
-			current.Preview.PreviewData += fmt.Sprintf("\n\nError: %s", err.Error())
+			// parse prev data to WoxPreviewChatData
+			var prevData plugin.WoxPreviewChatData
+			unmarshalErr := json.Unmarshal([]byte(current.Preview.PreviewData), &prevData)
+			if unmarshalErr != nil {
+				return current
+			}
+			prevData.Messages = append(prevData.Messages, ai.Conversation{
+				Role: ai.ConversationRoleAI,
+				Text: fmt.Sprintf("\n\nError: %s", err.Error()),
+			})
+			current.Preview.PreviewData = prevData.Json()
 			current.RefreshInterval = 0 // stop refreshing
 			return current
 		}
@@ -260,7 +286,7 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 			Title:           command.Name,
 			SubTitle:        fmt.Sprintf("%s - %s", command.AIModel().Provider, command.AIModel().Name),
 			Icon:            aiCommandIcon,
-			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: "i18n:plugin_ai_command_enter_to_start"},
+			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeChat, PreviewData: "{}"},
 			RefreshInterval: 100,
 			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, command.AIModel(), conversations, func() bool {
 				return startGenerate
@@ -402,9 +428,20 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 
 	onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
 		current.ContextData += deltaAnswer
+
+		// parse prev data to WoxPreviewChatData
+		var prevData plugin.WoxPreviewChatData
+		err := json.Unmarshal([]byte(current.Preview.PreviewData), &prevData)
+		if err != nil {
+			return current
+		}
 		// Process thinking tags to convert them to markdown quote format
 		thinking, content := c.processThinking(current.ContextData)
-		current.Preview.PreviewData = c.convertThinkingToMarkdown(thinking, content)
+		prevData.Messages = append(prevData.Messages, ai.Conversation{
+			Role: ai.ConversationRoleAI,
+			Text: c.convertThinkingToMarkdown(thinking, content),
+		})
+		current.Preview.PreviewData = prevData.Json()
 		current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
 		if isFinished {
 			current.RefreshInterval = 0 // stop refreshing
@@ -413,7 +450,18 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 		return current
 	}
 	onAnswerErr := func(current plugin.RefreshableResult, err error) plugin.RefreshableResult {
-		current.Preview.PreviewData += fmt.Sprintf("\n\nError: %s", err.Error())
+		// parse prev data to WoxPreviewChatData
+		var prevData plugin.WoxPreviewChatData
+		unmarshalErr := json.Unmarshal([]byte(current.Preview.PreviewData), &prevData)
+		if unmarshalErr != nil {
+			return current
+		}
+		prevData.Messages = append(prevData.Messages, ai.Conversation{
+			Role: ai.ConversationRoleAI,
+			Text: fmt.Sprintf("\n\nError: %s", err.Error()),
+		})
+
+		current.Preview.PreviewData = prevData.Json()
 		current.RefreshInterval = 0 // stop refreshing
 		return current
 	}
@@ -421,7 +469,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	result := plugin.QueryResult{
 		Title:           fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_chat_with"), aiCommandSetting.Name),
 		SubTitle:        fmt.Sprintf("%s - %s", aiCommandSetting.AIModel().Provider, aiCommandSetting.AIModel().Name),
-		Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
+		Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeChat, PreviewData: "{}"},
 		Icon:            aiCommandIcon,
 		RefreshInterval: 100,
 		OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, aiCommandSetting.AIModel(), conversations, func() bool {
