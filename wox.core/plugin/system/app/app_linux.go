@@ -45,5 +45,5 @@ func (a *LinuxRetriever) GetPid(ctx context.Context, app appInfo) int {
 }
 
 func (a *LinuxRetriever) OpenAppFolder(ctx context.Context, app appInfo) error {
-	return shell.ShellOpenFileInFolder(app.Path)
+	return shell.OpenFileInFolder(app.Path)
 }
