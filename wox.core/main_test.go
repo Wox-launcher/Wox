@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"wox/entity"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/resource"
 	"wox/setting"
-	"wox/share"
 	"wox/ui"
 	"wox/util"
 	"wox/util/selection"
@@ -391,7 +391,7 @@ func runQueryTests(t *testing.T, tests []queryTest) {
 		t.Run(tt.name, func(t *testing.T) {
 			success := true
 			// Create query
-			plainQuery := share.PlainQuery{
+			plainQuery := entity.PlainQuery{
 				QueryType: plugin.QueryTypeInput,
 				QueryText: tt.query,
 			}

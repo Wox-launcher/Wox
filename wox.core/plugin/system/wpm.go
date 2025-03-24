@@ -8,10 +8,10 @@ import (
 	"path"
 	"strings"
 	"time"
+	"wox/entity"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting/definition"
-	"wox/share"
 	"wox/util"
 	"wox/util/shell"
 
@@ -312,7 +312,7 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 						util.Go(ctx, "create plugin", func() {
 							w.createPlugin(ctx, template, pluginName, query)
 						})
-						w.api.ChangeQuery(ctx, share.PlainQuery{
+						w.api.ChangeQuery(ctx, entity.PlainQuery{
 							QueryType: plugin.QueryTypeInput,
 							QueryText: fmt.Sprintf("%s create ", query.TriggerKeyword),
 						})
@@ -340,8 +340,8 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 		// action will be executed in another go routine, so we need to copy the variable
 		pluginInstance := pluginInstanceShadow
 
-		icon := plugin.ParseWoxImageOrDefault(pluginInstance.Metadata.Icon, wpmIcon)
-		icon = plugin.ConvertRelativePathToAbsolutePath(ctx, icon, pluginInstance.PluginDirectory)
+		icon := entity.ParseWoxImageOrDefault(pluginInstance.Metadata.Icon, wpmIcon)
+		icon = entity.ConvertRelativePathToAbsolutePath(ctx, icon, pluginInstance.PluginDirectory)
 
 		return plugin.QueryResult{
 			Id:       uuid.NewString(),
@@ -373,7 +373,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 			Id:       uuid.NewString(),
 			Title:    pluginManifest.Name,
 			SubTitle: pluginManifest.Description,
-			Icon:     plugin.NewWoxImageUrl(pluginManifest.IconUrl),
+			Icon:     entity.NewWoxImageUrl(pluginManifest.IconUrl),
 			Preview: plugin.WoxPreview{
 				PreviewType: plugin.WoxPreviewTypeMarkdown,
 				PreviewData: fmt.Sprintf(`
@@ -413,8 +413,8 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 	//list all local plugins
 	return lo.Map(w.localPlugins, func(lp localPlugin, _ int) plugin.QueryResult {
-		iconImage := plugin.ParseWoxImageOrDefault(lp.metadata.Metadata.Icon, wpmIcon)
-		iconImage = plugin.ConvertIcon(ctx, iconImage, lp.metadata.Directory)
+		iconImage := entity.ParseWoxImageOrDefault(lp.metadata.Metadata.Icon, wpmIcon)
+		iconImage = entity.ConvertIcon(ctx, iconImage, lp.metadata.Directory)
 
 		return plugin.QueryResult{
 			Id:       uuid.NewString(),
@@ -513,7 +513,7 @@ func (w *WPMPlugin) reloadDevCommand(ctx context.Context) []plugin.QueryResult {
 
 func (w *WPMPlugin) addDevCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	w.api.Log(ctx, plugin.LogLevelInfo, "Please choose a directory to add local plugin")
-	pluginDirectories := plugin.GetPluginManager().GetUI().PickFiles(ctx, share.PickFilesParams{IsDirectory: true})
+	pluginDirectories := plugin.GetPluginManager().GetUI().PickFiles(ctx, entity.PickFilesParams{IsDirectory: true})
 	if len(pluginDirectories) == 0 {
 		w.api.Notify(ctx, "i18n:plugin_wpm_choose_directory")
 		return []plugin.QueryResult{}
@@ -580,7 +580,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 	}
 
 	w.creatingProcess = "i18n:plugin_wpm_choose_directory_prompt"
-	pluginDirectories := plugin.GetPluginManager().GetUI().PickFiles(ctx, share.PickFilesParams{IsDirectory: true})
+	pluginDirectories := plugin.GetPluginManager().GetUI().PickFiles(ctx, entity.PickFilesParams{IsDirectory: true})
 	if len(pluginDirectories) == 0 {
 		w.api.Notify(ctx, "You need to choose a directory to create the plugin")
 		return
@@ -643,7 +643,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 	w.localPluginDirectories = append(w.localPluginDirectories, pluginDirectory)
 	w.saveLocalPluginDirectories(ctx)
 	w.loadDevPlugin(ctx, pluginDirectory)
-	w.api.ChangeQuery(ctx, share.PlainQuery{
+	w.api.ChangeQuery(ctx, entity.PlainQuery{
 		QueryType: plugin.QueryTypeInput,
 		QueryText: fmt.Sprintf("%s dev ", query.TriggerKeyword),
 	})

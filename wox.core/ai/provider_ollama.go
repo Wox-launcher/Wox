@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image/png"
 	"io"
+	"wox/entity"
 	"wox/setting"
 	"wox/util"
 
@@ -22,7 +23,7 @@ type OllamaProvider struct {
 }
 
 type OllamaProviderStream struct {
-	conversations []Conversation
+	conversations []entity.Conversation
 	reader        io.Reader
 }
 
@@ -30,7 +31,7 @@ func NewOllamaProvider(ctx context.Context, connectContext setting.AIProvider) P
 	return &OllamaProvider{connectContext: connectContext}
 }
 
-func (o *OllamaProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
+func (o *OllamaProvider) ChatStream(ctx context.Context, model entity.Model, conversations []entity.Conversation) (ChatStream, error) {
 	client, clientErr := ollama.New(ollama.WithServerURL(o.connectContext.Host), ollama.WithModel(model.Name))
 	if clientErr != nil {
 		return nil, clientErr
@@ -53,16 +54,16 @@ func (o *OllamaProvider) ChatStream(ctx context.Context, model Model, conversati
 	return &OllamaProviderStream{conversations: conversations, reader: r}, nil
 }
 
-func (o *OllamaProvider) Models(ctx context.Context) (models []Model, err error) {
+func (o *OllamaProvider) Models(ctx context.Context) (models []entity.Model, err error) {
 	body, err := util.HttpGet(ctx, o.connectContext.Host+"/api/tags")
 	if err != nil {
 		return nil, err
 	}
 
 	gjson.Get(string(body), "models.#.name").ForEach(func(key, value gjson.Result) bool {
-		models = append(models, Model{
+		models = append(models, entity.Model{
 			Name:     value.String(),
-			Provider: ProviderNameOllama,
+			Provider: entity.ProviderNameOllama,
 		})
 		return true
 	})
@@ -75,19 +76,24 @@ func (o *OllamaProvider) Ping(ctx context.Context) error {
 	return err
 }
 
-func (o *OllamaProvider) convertConversations(conversations []Conversation) (chatMessages []llms.MessageContent) {
+func (o *OllamaProvider) convertConversations(conversations []entity.Conversation) (chatMessages []llms.MessageContent) {
 	for _, conversation := range conversations {
 		var msg llms.MessageContent
-		if conversation.Role == ConversationRoleUser {
+		if conversation.Role == entity.ConversationRoleUser {
 			msg = llms.TextParts(llms.ChatMessageTypeHuman, conversation.Text)
 		}
-		if conversation.Role == ConversationRoleAI {
+		if conversation.Role == entity.ConversationRoleAI {
 			msg = llms.TextParts(llms.ChatMessageTypeAI, conversation.Text)
 		}
 
 		for _, image := range conversation.Images {
 			buf := new(bytes.Buffer)
-			err := png.Encode(buf, image)
+			img, err := image.ToImage()
+			if err != nil {
+				util.GetLogger().Error(util.NewTraceContext(), err.Error())
+				continue
+			}
+			err = png.Encode(buf, img)
 			if err != nil {
 				util.GetLogger().Error(util.NewTraceContext(), err.Error())
 				continue

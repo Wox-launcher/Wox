@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"io"
+	"wox/entity"
 	"wox/setting"
 	"wox/util"
 
@@ -15,14 +16,14 @@ type OpenAIProvider struct {
 
 type OpenAIProviderStream struct {
 	stream        *openai.ChatCompletionStream
-	conversations []Conversation
+	conversations []entity.Conversation
 }
 
 func NewOpenAIClient(ctx context.Context, connectContext setting.AIProvider) Provider {
 	return &OpenAIProvider{connectContext: connectContext}
 }
 
-func (o *OpenAIProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
+func (o *OpenAIProvider) ChatStream(ctx context.Context, model entity.Model, conversations []entity.Conversation) (ChatStream, error) {
 	client := o.getClient(ctx)
 	createdStream, createErr := client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
 		Stream:   true,
@@ -36,18 +37,18 @@ func (o *OpenAIProvider) ChatStream(ctx context.Context, model Model, conversati
 	return &OpenAIProviderStream{conversations: conversations, stream: createdStream}, nil
 }
 
-func (o *OpenAIProvider) Models(ctx context.Context) ([]Model, error) {
+func (o *OpenAIProvider) Models(ctx context.Context) ([]entity.Model, error) {
 	client := o.getClient(ctx)
 	models, err := client.ListModels(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	var openaiModels []Model
+	var openaiModels []entity.Model
 	for _, model := range models.Models {
-		openaiModels = append(openaiModels, Model{
+		openaiModels = append(openaiModels, entity.Model{
 			Name:     model.ID,
-			Provider: ProviderNameOpenAI,
+			Provider: entity.ProviderNameOpenAI,
 		})
 	}
 
@@ -79,14 +80,14 @@ func (s *OpenAIProviderStream) Receive(ctx context.Context) (string, error) {
 	return response.Choices[0].Delta.Content, nil
 }
 
-func (o *OpenAIProvider) convertConversations(conversations []Conversation) []openai.ChatCompletionMessage {
+func (o *OpenAIProvider) convertConversations(conversations []entity.Conversation) []openai.ChatCompletionMessage {
 	var chatMessages []openai.ChatCompletionMessage
 	for _, conversation := range conversations {
 		role := ""
-		if conversation.Role == ConversationRoleUser {
+		if conversation.Role == entity.ConversationRoleUser {
 			role = openai.ChatMessageRoleUser
 		}
-		if conversation.Role == ConversationRoleAI {
+		if conversation.Role == entity.ConversationRoleAI {
 			role = openai.ChatMessageRoleSystem
 		}
 		if role == "" {

@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"wox/ai"
+	"wox/entity"
 	"wox/plugin"
 	"wox/resource"
 	"wox/setting"
 	"wox/setting/definition"
-	"wox/share"
 	"wox/util"
 
 	"github.com/google/uuid"
@@ -87,12 +86,12 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 	}
 
 	ui := plugin.GetPluginManager().GetUI()
-	return lo.FilterMap(ui.GetAllThemes(ctx), func(theme share.Theme, _ int) (plugin.QueryResult, bool) {
+	return lo.FilterMap(ui.GetAllThemes(ctx), func(theme entity.Theme, _ int) (plugin.QueryResult, bool) {
 		match, _ := IsStringMatchScore(ctx, theme.ThemeName, query.Search)
 		if match {
 			result := plugin.QueryResult{
 				Title: theme.ThemeName,
-				Icon:  plugin.NewWoxImageTheme(theme),
+				Icon:  entity.NewWoxImageTheme(theme),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   "Change theme",
@@ -114,7 +113,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						ui.UninstallTheme(ctx, theme)
-						c.api.ChangeQuery(ctx, share.PlainQuery{
+						c.api.ChangeQuery(ctx, entity.PlainQuery{
 							QueryType: plugin.QueryTypeInput,
 							QueryText: fmt.Sprintf("%s ", query.TriggerKeyword),
 						})
@@ -149,7 +148,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 						Name:                   "Open theme settings",
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, share.SettingWindowContext{
+							plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, entity.SettingWindowContext{
 								Path:  "/plugin/setting",
 								Param: c.GetMetadata().Name,
 							})
@@ -159,7 +158,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 			},
 		}
 	}
-	var aiModel ai.Model
+	var aiModel entity.Model
 	unmarshalErr := json.Unmarshal([]byte(modelStr), &aiModel)
 	if unmarshalErr != nil {
 		c.api.Notify(ctx, unmarshalErr.Error())
@@ -193,9 +192,9 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 
 	exampleThemeJson := embedThemes[0]
 
-	var conversations []ai.Conversation
-	conversations = append(conversations, ai.Conversation{
-		Role: ai.ConversationRoleUser,
+	var conversations []entity.Conversation
+	conversations = append(conversations, entity.Conversation{
+		Role: entity.ConversationRoleUser,
 		Text: `
 					我正在编写Wox的主题, 该主题是由一段json组成, 例如：` + exampleThemeJson + `
 
@@ -227,7 +226,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 				}
 
 				var jsonTheme = fmt.Sprintf("{%s}", group["json"])
-				var theme share.Theme
+				var theme entity.Theme
 				unmarshalErr := json.Unmarshal([]byte(jsonTheme), &theme)
 				if unmarshalErr != nil {
 					c.api.Notify(ctx, unmarshalErr.Error())

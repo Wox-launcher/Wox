@@ -1,4 +1,4 @@
-package plugin
+package entity
 
 import (
 	"bytes"
@@ -12,7 +12,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"wox/share"
 	"wox/util"
 
 	"github.com/disintegration/imaging"
@@ -21,11 +20,12 @@ import (
 	"github.com/srwiley/rasterx"
 )
 
-var localImageMap = util.NewHashMap[string, string]()
-
 type WoxImageType = string
 
-var notPngErr = errors.New("image is not png")
+var NOT_PNG_ERR = errors.New("image is not png")
+
+var serverPort int
+var localImageMap = util.NewHashMap[string, string]()
 
 const (
 	WoxImageTypeAbsolutePath = "absolute"
@@ -54,7 +54,7 @@ func (w *WoxImage) IsEmpty() bool {
 func (w *WoxImage) ToPng() (image.Image, error) {
 	if w.ImageType == WoxImageTypeBase64 {
 		if !strings.HasPrefix(w.ImageData, "data:image/png;") {
-			return nil, notPngErr
+			return nil, NOT_PNG_ERR
 		}
 
 		data := strings.Split(w.ImageData, ",")[1]
@@ -69,7 +69,7 @@ func (w *WoxImage) ToPng() (image.Image, error) {
 
 	if w.ImageType == WoxImageTypeAbsolutePath {
 		if !strings.HasSuffix(w.ImageData, ".png") {
-			return nil, notPngErr
+			return nil, NOT_PNG_ERR
 		}
 
 		imgReader, openErr := os.Open(w.ImageData)
@@ -93,7 +93,7 @@ func (w *WoxImage) ToPng() (image.Image, error) {
 		}
 	}
 
-	return nil, notPngErr
+	return nil, NOT_PNG_ERR
 }
 
 func (w *WoxImage) ToImage() (image.Image, error) {
@@ -262,7 +262,7 @@ func NewWoxImageLottie(lottieJson string) WoxImage {
 	}
 }
 
-func NewWoxImageTheme(theme share.Theme) WoxImage {
+func NewWoxImageTheme(theme Theme) WoxImage {
 	themeJson, err := json.Marshal(theme)
 	if err != nil {
 		return WoxImage{}
@@ -325,7 +325,7 @@ func ConvertIcon(ctx context.Context, image WoxImage, pluginDirectory string) (n
 	newImage = ConvertRelativePathToAbsolutePath(ctx, image, pluginDirectory)
 	newImage = cropPngTransparentPaddings(ctx, newImage)
 	newImage = resizeImage(ctx, newImage, 40)
-	newImage = convertLocalImageToUrl(ctx, newImage)
+	newImage = ConvertLocalImageToUrl(ctx, newImage)
 	return
 }
 
@@ -364,10 +364,10 @@ func resizeImage(ctx context.Context, image WoxImage, size int) (newImage WoxIma
 	resizeImg := imaging.Resize(img, width, height, imaging.Lanczos)
 	saveErr := imaging.Save(resizeImg, resizeImgPath)
 	if saveErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to save resize image: %s", saveErr.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to save resize image: %s", saveErr.Error()))
 		return image
 	} else {
-		logger.Info(ctx, fmt.Sprintf("saved resize image: %s, cost %d ms", resizeImgPath, util.GetSystemTimestamp()-start))
+		util.GetLogger().Info(ctx, fmt.Sprintf("saved resize image: %s, cost %d ms", resizeImgPath, util.GetSystemTimestamp()-start))
 	}
 
 	return NewWoxImageAbsolutePath(resizeImgPath)
@@ -391,8 +391,8 @@ func cropPngTransparentPaddings(ctx context.Context, woxImage WoxImage) (newImag
 
 	pngImg, pngErr := woxImage.ToPng()
 	if pngErr != nil {
-		if !errors.Is(pngErr, notPngErr) {
-			logger.Error(ctx, fmt.Sprintf("failed to convert image to png: %s", pngErr.Error()))
+		if !errors.Is(pngErr, NOT_PNG_ERR) {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to convert image to png: %s", pngErr.Error()))
 		}
 		return woxImage
 	}
@@ -401,10 +401,10 @@ func cropPngTransparentPaddings(ctx context.Context, woxImage WoxImage) (newImag
 	cropImg := cropTransparentPaddings(pngImg)
 	saveErr := imaging.Save(cropImg, cropImgPath)
 	if saveErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to save crop image: %s", saveErr.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to save crop image: %s", saveErr.Error()))
 		return woxImage
 	} else {
-		logger.Info(ctx, fmt.Sprintf("saved crop image: %s, cost %d ms", cropImgPath, util.GetSystemTimestamp()-start))
+		util.GetLogger().Info(ctx, fmt.Sprintf("saved crop image: %s, cost %d ms", cropImgPath, util.GetSystemTimestamp()-start))
 	}
 
 	return NewWoxImageAbsolutePath(cropImgPath)
@@ -454,13 +454,13 @@ func ConvertRelativePathToAbsolutePath(ctx context.Context, image WoxImage, plug
 	return newImage
 }
 
-func convertLocalImageToUrl(ctx context.Context, image WoxImage) (newImage WoxImage) {
+func ConvertLocalImageToUrl(ctx context.Context, image WoxImage) (newImage WoxImage) {
 	newImage = image
 
 	if image.ImageType == WoxImageTypeAbsolutePath {
 		imgHash := image.Hash()
 		newImage.ImageType = WoxImageTypeUrl
-		newImage.ImageData = fmt.Sprintf("http://localhost:%d/image?id=%s", GetPluginManager().GetUI().GetServerPort(ctx), imgHash)
+		newImage.ImageData = fmt.Sprintf("http://localhost:%d/image?id=%s", serverPort, imgHash)
 		localImageMap.Store(imgHash, image.ImageData)
 	}
 
@@ -469,4 +469,8 @@ func convertLocalImageToUrl(ctx context.Context, image WoxImage) (newImage WoxIm
 
 func GetLocalImageMap(id string) (string, bool) {
 	return localImageMap.Load(id)
+}
+
+func SetServerPort(port int) {
+	serverPort = port
 }

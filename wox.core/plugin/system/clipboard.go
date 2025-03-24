@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"wox/entity"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
@@ -39,7 +40,7 @@ func init() {
 type ClipboardHistory struct {
 	Id         string
 	Data       clipboard.Data
-	Icon       plugin.WoxImage
+	Icon       entity.WoxImage
 	Timestamp  int64
 	IsFavorite bool
 }
@@ -48,7 +49,7 @@ type ClipboardHistoryJson struct {
 	Id         string
 	DataType   clipboard.Type
 	Data       []byte
-	Icon       plugin.WoxImage
+	Icon       entity.WoxImage
 	Timestamp  int64
 	IsFavorite bool
 }
@@ -117,8 +118,8 @@ func (c *ClipboardHistory) UnmarshalJSON(data []byte) error {
 }
 
 type clipboardImageCache struct {
-	preview plugin.WoxImage
-	icon    plugin.WoxImage
+	preview entity.WoxImage
+	icon    entity.WoxImage
 }
 
 type ClipboardPlugin struct {
@@ -356,7 +357,7 @@ func (c *ClipboardPlugin) convertClipboardData(ctx context.Context, history Clip
 	if history.Data.GetType() == clipboard.ClipboardTypeText {
 		historyData := history.Data.(*clipboard.TextData)
 
-		if history.Icon.ImageType == plugin.WoxImageTypeAbsolutePath {
+		if history.Icon.ImageType == entity.WoxImageTypeAbsolutePath {
 			// if image doesn't exist, use default icon
 			if _, err := os.Stat(history.Icon.ImageData); err != nil {
 				history.Icon = c.getDefaultTextIcon()
@@ -522,23 +523,23 @@ func (c *ClipboardPlugin) getResultGroup(ctx context.Context, history ClipboardH
 	return "History", 10
 }
 
-func (c *ClipboardPlugin) generateHistoryPreviewAndIconImage(ctx context.Context, history ClipboardHistory) (previewImg, iconImg plugin.WoxImage) {
+func (c *ClipboardPlugin) generateHistoryPreviewAndIconImage(ctx context.Context, history ClipboardHistory) (previewImg, iconImg entity.WoxImage) {
 	imagePreviewFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_preview.png", history.Id))
 	imageIconFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_icon.png", history.Id))
 	if util.IsFileExists(imagePreviewFile) {
-		previewImg = plugin.NewWoxImageAbsolutePath(imagePreviewFile)
-		iconImg = plugin.NewWoxImageAbsolutePath(imageIconFile)
+		previewImg = entity.NewWoxImageAbsolutePath(imagePreviewFile)
+		iconImg = entity.NewWoxImageAbsolutePath(imageIconFile)
 		return
 	}
 
 	historyData := history.Data.(*clipboard.ImageData)
 	compressedPreviewImg := imaging.Resize(historyData.Image, 400, 0, imaging.Lanczos)
 	compressedIconImg := imaging.Resize(historyData.Image, 40, 0, imaging.Lanczos)
-	previewImage, err := plugin.NewWoxImage(compressedPreviewImg)
+	previewImage, err := entity.NewWoxImage(compressedPreviewImg)
 	if err != nil {
 		previewImage = c.getDefaultTextIcon()
 	}
-	iconImage, iconErr := plugin.NewWoxImage(compressedIconImg)
+	iconImage, iconErr := entity.NewWoxImage(compressedIconImg)
 	if iconErr != nil {
 		iconImage = plugin.PreviewIcon
 	}
@@ -659,7 +660,7 @@ func (c *ClipboardPlugin) loadHistory(ctx context.Context) {
 	})
 }
 
-func (c *ClipboardPlugin) getDefaultTextIcon() plugin.WoxImage {
+func (c *ClipboardPlugin) getDefaultTextIcon() entity.WoxImage {
 	return plugin.TextIcon
 }
 

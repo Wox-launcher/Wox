@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"strings"
+	"wox/entity"
 	"wox/util"
 	"wox/util/selection"
 
@@ -95,7 +96,7 @@ type QueryResult struct {
 	Title string
 	// SubTitle support i18n
 	SubTitle string
-	Icon     WoxImage
+	Icon     entity.WoxImage
 	Preview  WoxPreview
 	// Score of the result, the higher the score, the more relevant the result is, more likely to be displayed on top
 	Score int64
@@ -118,8 +119,8 @@ type QueryResult struct {
 
 type QueryResultTail struct {
 	Type  QueryResultTailType
-	Text  string   // only available when type is QueryResultTailTypeText
-	Image WoxImage // only available when type is QueryResultTailTypeImage
+	Text  string          // only available when type is QueryResultTailTypeText
+	Image entity.WoxImage // only available when type is QueryResultTailTypeImage
 }
 
 type QueryResultAction struct {
@@ -127,7 +128,7 @@ type QueryResultAction struct {
 	Id string
 	// Name support i18n
 	Name string
-	Icon WoxImage
+	Icon entity.WoxImage
 	// If true, Wox will use this action as default action. There can be only one default action in results
 	// This can be omitted, if you don't set it, Wox will use the first action as default action
 	IsDefault bool
@@ -180,7 +181,7 @@ type QueryResultUI struct {
 	Id              string
 	Title           string
 	SubTitle        string
-	Icon            WoxImage
+	Icon            entity.WoxImage
 	Preview         WoxPreview
 	Score           int64
 	Group           string
@@ -194,7 +195,7 @@ type QueryResultUI struct {
 type QueryResultActionUI struct {
 	Id                     string
 	Name                   string
-	Icon                   WoxImage
+	Icon                   entity.WoxImage
 	IsDefault              bool
 	PreventHideAfterAction bool
 	Hotkey                 string

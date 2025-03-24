@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"iter"
+	"wox/entity"
 	"wox/setting"
 	"wox/util"
 
@@ -16,7 +17,7 @@ type GoogleProvider struct {
 
 type GoogleProviderStream struct {
 	stream        func() (*genai.GenerateContentResponse, error, bool)
-	conversations []Conversation
+	conversations []entity.Conversation
 	client        *genai.Client
 }
 
@@ -24,7 +25,7 @@ func NewGoogleProvider(ctx context.Context, connectContext setting.AIProvider) P
 	return &GoogleProvider{connectContext: connectContext}
 }
 
-func (g *GoogleProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
+func (g *GoogleProvider) ChatStream(ctx context.Context, model entity.Model, conversations []entity.Conversation) (ChatStream, error) {
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:     g.connectContext.ApiKey,
 		Backend:    genai.BackendGeminiAPI,
@@ -40,7 +41,7 @@ func (g *GoogleProvider) ChatStream(ctx context.Context, model Model, conversati
 	return &GoogleProviderStream{conversations: conversations, stream: next, client: client}, nil
 }
 
-func (g *GoogleProvider) Models(ctx context.Context) ([]Model, error) {
+func (g *GoogleProvider) Models(ctx context.Context) ([]entity.Model, error) {
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:     g.connectContext.ApiKey,
 		Backend:    genai.BackendGeminiAPI,
@@ -55,11 +56,11 @@ func (g *GoogleProvider) Models(ctx context.Context) ([]Model, error) {
 		return nil, err
 	}
 
-	var googleModels []Model
+	var googleModels []entity.Model
 	for _, model := range models.Items {
-		googleModels = append(googleModels, Model{
+		googleModels = append(googleModels, entity.Model{
 			Name:     model.Name,
-			Provider: ProviderNameGoogle,
+			Provider: entity.ProviderNameGoogle,
 		})
 	}
 
@@ -70,9 +71,9 @@ func (g *GoogleProvider) Models(ctx context.Context) ([]Model, error) {
 		}
 
 		for _, model := range models.Items {
-			googleModels = append(googleModels, Model{
+			googleModels = append(googleModels, entity.Model{
 				Name:     model.Name,
-				Provider: ProviderNameGoogle,
+				Provider: entity.ProviderNameGoogle,
 			})
 		}
 	}
@@ -107,14 +108,14 @@ func (g *GoogleProviderStream) Receive(ctx context.Context) (string, error) {
 	return response.Text(), nil
 }
 
-func (g *GoogleProvider) convertConversations(conversations []Conversation) (newConversations []*genai.Content) {
+func (g *GoogleProvider) convertConversations(conversations []entity.Conversation) (newConversations []*genai.Content) {
 	var chatMessages []*genai.Content
 	for _, conversation := range conversations {
 		role := ""
-		if conversation.Role == ConversationRoleUser {
+		if conversation.Role == entity.ConversationRoleUser {
 			role = "user"
 		}
-		if conversation.Role == ConversationRoleAI {
+		if conversation.Role == entity.ConversationRoleAI {
 			role = "model"
 		}
 		if role == "" {

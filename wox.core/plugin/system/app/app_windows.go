@@ -14,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 	"unsafe"
+	"wox/entity"
 	"wox/plugin"
 	"wox/util"
 	"wox/util/shell"
@@ -115,7 +116,7 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 	if iconErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Error getting icon for %s, use default icon: %s", targetPath, iconErr.Error()))
 	} else {
-		woxIcon, imgErr := plugin.NewWoxImage(img)
+		woxIcon, imgErr := entity.NewWoxImage(img)
 		if imgErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("Error converting icon for %s: %s", targetPath, imgErr.Error()))
 		} else {
@@ -138,7 +139,7 @@ func (a *WindowsRetriever) parseExe(ctx context.Context, appPath string) (appInf
 	if iconErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Error getting icon for %s: %s", appPath, iconErr.Error()))
 	} else {
-		woxIcon, imgErr := plugin.NewWoxImage(img)
+		woxIcon, imgErr := entity.NewWoxImage(img)
 		if imgErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("Error converting icon for %s: %s", appPath, imgErr.Error()))
 		} else {
@@ -355,9 +356,9 @@ func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {
 	return 0
 }
 
-func (a *WindowsRetriever) GetUWPAppIcon(ctx context.Context, appID string) (plugin.WoxImage, error) {
+func (a *WindowsRetriever) GetUWPAppIcon(ctx context.Context, appID string) (entity.WoxImage, error) {
 	if iconPath, ok := a.uwpIconCache[appID]; ok {
-		return plugin.NewWoxImageAbsolutePath(iconPath), nil
+		return entity.NewWoxImageAbsolutePath(iconPath), nil
 	}
 
 	powershellCmd := fmt.Sprintf(`
@@ -432,21 +433,21 @@ func (a *WindowsRetriever) GetUWPAppIcon(ctx context.Context, appID string) (plu
 	output, err := shell.RunOutput("powershell", "-Command", powershellCmd)
 	if err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Error running powershell command: %v", err))
-		return plugin.WoxImage{}, err
+		return entity.WoxImage{}, err
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	if len(lines) == 0 {
 		util.GetLogger().Error(ctx, "No icon path found")
-		return plugin.WoxImage{}, fmt.Errorf("No icon path found")
+		return entity.WoxImage{}, fmt.Errorf("No icon path found")
 	}
 
 	// Last line is the icon path
 	iconPath := strings.TrimSpace(lines[len(lines)-1])
 	if iconPath == "" {
 		util.GetLogger().Error(ctx, "Icon path is empty")
-		return plugin.WoxImage{}, fmt.Errorf("Icon path is empty")
+		return entity.WoxImage{}, fmt.Errorf("Icon path is empty")
 	}
 
-	return plugin.NewWoxImageAbsolutePath(iconPath), nil
+	return entity.NewWoxImageAbsolutePath(iconPath), nil
 }

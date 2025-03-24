@@ -8,10 +8,9 @@ import (
 	"os"
 	"strings"
 	"time"
-	"wox/ai"
+	"wox/entity"
 	"wox/plugin"
 	"wox/setting/definition"
-	"wox/share"
 	"wox/util"
 	"wox/util/selection"
 	"wox/util/shell"
@@ -237,7 +236,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] ChangeQuery method must have a queryText parameter", request.PluginName))
 				return
 			}
-			pluginInstance.API.ChangeQuery(ctx, share.PlainQuery{
+			pluginInstance.API.ChangeQuery(ctx, entity.PlainQuery{
 				QueryType: plugin.QueryTypeInput,
 				QueryText: queryText,
 			})
@@ -256,7 +255,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 				return
 			}
 
-			pluginInstance.API.ChangeQuery(ctx, share.PlainQuery{
+			pluginInstance.API.ChangeQuery(ctx, entity.PlainQuery{
 				QueryType:      plugin.QueryTypeSelection,
 				QuerySelection: selection,
 			})
@@ -443,7 +442,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			return
 		}
 
-		var model ai.Model
+		var model entity.Model
 		modelStr, modelExist := request.Params["model"]
 		if !modelExist {
 			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] AIChatStream method must have a model parameter", request.PluginName))
@@ -455,14 +454,14 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			return
 		}
 
-		var conversations []ai.Conversation
+		var conversations []entity.Conversation
 		unmarshalErr = json.Unmarshal([]byte(conversationsStr), &conversations)
 		if unmarshalErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal conversations: %s", request.PluginName, unmarshalErr))
 			return
 		}
 
-		llmErr := pluginInstance.API.AIChatStream(ctx, model, conversations, func(streamType ai.ChatStreamDataType, data string) {
+		llmErr := pluginInstance.API.AIChatStream(ctx, model, conversations, func(streamType entity.ChatStreamDataType, data string) {
 			w.invokeMethod(ctx, pluginInstance.Metadata, "onLLMStream", map[string]string{
 				"CallbackId": callbackId,
 				"StreamType": string(streamType),

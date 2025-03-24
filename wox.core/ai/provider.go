@@ -3,54 +3,31 @@ package ai
 import (
 	"context"
 	"errors"
+	"wox/entity"
 	"wox/setting"
 )
 
-type ProviderName string
-
-var (
-	ProviderNameOpenAI ProviderName = "openai"
-	ProviderNameGoogle ProviderName = "google"
-	ProviderNameOllama ProviderName = "ollama"
-	ProviderNameGroq   ProviderName = "groq"
-)
-
-type Model struct {
-	Name     string
-	Provider ProviderName
-}
-
 type Provider interface {
-	ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error)
-	Models(ctx context.Context) ([]Model, error)
+	ChatStream(ctx context.Context, model entity.Model, conversations []entity.Conversation) (ChatStream, error)
+	Models(ctx context.Context) ([]entity.Model, error)
 	Ping(ctx context.Context) error
 }
-
-type ChatStreamDataType string
-
-const (
-	ChatStreamTypeStreaming ChatStreamDataType = "streaming"
-	ChatStreamTypeFinished  ChatStreamDataType = "finished"
-	ChatStreamTypeError     ChatStreamDataType = "error"
-)
-
-type ChatStreamFunc func(t ChatStreamDataType, data string)
 
 type ChatStream interface {
 	Receive(ctx context.Context) (string, error) // will return io.EOF if no more messages
 }
 
 func NewProvider(ctx context.Context, providerSetting setting.AIProvider) (Provider, error) {
-	if providerSetting.Name == string(ProviderNameGoogle) {
+	if providerSetting.Name == string(entity.ProviderNameGoogle) {
 		return NewGoogleProvider(ctx, providerSetting), nil
 	}
-	if providerSetting.Name == string(ProviderNameOpenAI) {
+	if providerSetting.Name == string(entity.ProviderNameOpenAI) {
 		return NewOpenAIClient(ctx, providerSetting), nil
 	}
-	if providerSetting.Name == string(ProviderNameOllama) {
+	if providerSetting.Name == string(entity.ProviderNameOllama) {
 		return NewOllamaProvider(ctx, providerSetting), nil
 	}
-	if providerSetting.Name == string(ProviderNameGroq) {
+	if providerSetting.Name == string(entity.ProviderNameGroq) {
 		return NewGroqProvider(ctx, providerSetting), nil
 	}
 

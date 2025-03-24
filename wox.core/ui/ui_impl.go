@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"wox/entity"
 	"wox/plugin"
 	"wox/setting"
-	"wox/share"
 	"wox/util"
 	"wox/util/notifier"
 	"wox/util/selection"
@@ -23,7 +23,7 @@ type uiImpl struct {
 	requestMap *util.HashMap[string, chan WebsocketMsg]
 }
 
-func (u *uiImpl) ChangeQuery(ctx context.Context, query share.PlainQuery) {
+func (u *uiImpl) ChangeQuery(ctx context.Context, query entity.PlainQuery) {
 	u.invokeWebsocketMethod(ctx, "ChangeQuery", query)
 }
 
@@ -31,7 +31,7 @@ func (u *uiImpl) HideApp(ctx context.Context) {
 	u.invokeWebsocketMethod(ctx, "HideApp", nil)
 }
 
-func (u *uiImpl) ShowApp(ctx context.Context, showContext share.ShowContext) {
+func (u *uiImpl) ShowApp(ctx context.Context, showContext entity.ShowContext) {
 	GetUIManager().SetActiveWindowName(window.GetActiveWindowName())
 	GetUIManager().SetActiveWindowPid(window.GetActiveWindowPid())
 	u.invokeWebsocketMethod(ctx, "ShowApp", getShowAppParams(ctx, showContext.SelectAll))
@@ -47,7 +47,7 @@ func (u *uiImpl) GetServerPort(ctx context.Context) int {
 	return GetUIManager().serverPort
 }
 
-func (u *uiImpl) ChangeTheme(ctx context.Context, theme share.Theme) {
+func (u *uiImpl) ChangeTheme(ctx context.Context, theme entity.Theme) {
 	logger.Info(ctx, fmt.Sprintf("change theme: %s", theme.ThemeName))
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	woxSetting.ThemeId = theme.ThemeId
@@ -55,22 +55,22 @@ func (u *uiImpl) ChangeTheme(ctx context.Context, theme share.Theme) {
 	u.invokeWebsocketMethod(ctx, "ChangeTheme", theme)
 }
 
-func (u *uiImpl) InstallTheme(ctx context.Context, theme share.Theme) {
+func (u *uiImpl) InstallTheme(ctx context.Context, theme entity.Theme) {
 	logger.Info(ctx, fmt.Sprintf("install theme: %s", theme.ThemeName))
 	GetStoreManager().Install(ctx, theme)
 }
 
-func (u *uiImpl) UninstallTheme(ctx context.Context, theme share.Theme) {
+func (u *uiImpl) UninstallTheme(ctx context.Context, theme entity.Theme) {
 	logger.Info(ctx, fmt.Sprintf("uninstall theme: %s", theme.ThemeName))
 	GetStoreManager().Uninstall(ctx, theme)
 	GetUIManager().ChangeToDefaultTheme(ctx)
 }
 
-func (u *uiImpl) OpenSettingWindow(ctx context.Context, windowContext share.SettingWindowContext) {
+func (u *uiImpl) OpenSettingWindow(ctx context.Context, windowContext entity.SettingWindowContext) {
 	u.invokeWebsocketMethod(ctx, "OpenSettingWindow", windowContext)
 }
 
-func (u *uiImpl) GetAllThemes(ctx context.Context) []share.Theme {
+func (u *uiImpl) GetAllThemes(ctx context.Context) []entity.Theme {
 	return GetUIManager().GetAllThemes(ctx)
 }
 
@@ -78,7 +78,7 @@ func (u *uiImpl) RestoreTheme(ctx context.Context) {
 	GetUIManager().RestoreTheme(ctx)
 }
 
-func (u *uiImpl) Notify(ctx context.Context, msg share.NotifyMsg) {
+func (u *uiImpl) Notify(ctx context.Context, msg entity.NotifyMsg) {
 	if u.isNotifyInToolbar(ctx, msg.PluginId) {
 		u.invokeWebsocketMethod(ctx, "ShowToolbarMsg", msg)
 	} else {
@@ -101,13 +101,13 @@ func (u *uiImpl) isNotifyInToolbar(ctx context.Context, pluginId string) bool {
 		logger.Error(ctx, fmt.Sprintf("isNotifyInToolbar error: %s", err.Error()))
 		return false
 	}
-	//first marshal to json , then unmarshal to share.PlainQuery
+	//first marshal to json , then unmarshal to entity.PlainQuery
 	jsonData, marshalErr := json.Marshal(respData)
 	if marshalErr != nil {
 		logger.Error(ctx, fmt.Sprintf("isNotifyInToolbar marshal error: %s", marshalErr.Error()))
 		return false
 	}
-	var currentQuery share.PlainQuery
+	var currentQuery entity.PlainQuery
 	unmarshalErr := json.Unmarshal(jsonData, &currentQuery)
 	if unmarshalErr != nil {
 		logger.Error(ctx, fmt.Sprintf("isNotifyInToolbar unmarshal error: %s", unmarshalErr.Error()))
@@ -136,7 +136,7 @@ func (u *uiImpl) isNotifyInToolbar(ctx context.Context, pluginId string) bool {
 	return false
 }
 
-func (u *uiImpl) PickFiles(ctx context.Context, params share.PickFilesParams) []string {
+func (u *uiImpl) PickFiles(ctx context.Context, params entity.PickFilesParams) []string {
 	respData, err := u.invokeWebsocketMethod(ctx, "PickFiles", params)
 	if err != nil {
 		return nil
@@ -322,14 +322,14 @@ func handleWebsocketQuery(ctx context.Context, request WebsocketMsg) {
 	var querySelection selection.Selection
 	json.Unmarshal([]byte(querySelectionJson), &querySelection)
 
-	var changedQuery share.PlainQuery
+	var changedQuery entity.PlainQuery
 	if queryType == plugin.QueryTypeInput {
-		changedQuery = share.PlainQuery{
+		changedQuery = entity.PlainQuery{
 			QueryType: plugin.QueryTypeInput,
 			QueryText: queryText,
 		}
 	} else if queryType == plugin.QueryTypeSelection {
-		changedQuery = share.PlainQuery{
+		changedQuery = entity.PlainQuery{
 			QueryType:      plugin.QueryTypeSelection,
 			QueryText:      queryText,
 			QuerySelection: querySelection,

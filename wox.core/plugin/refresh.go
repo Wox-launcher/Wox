@@ -1,9 +1,11 @@
 package plugin
 
+import "wox/entity"
+
 type RefreshableResult struct {
 	Title           string
 	SubTitle        string
-	Icon            WoxImage
+	Icon            entity.WoxImage
 	Preview         WoxPreview
 	Tails           []QueryResultTail
 	ContextData     string
@@ -15,7 +17,7 @@ type RefreshableResultWithResultId struct {
 	ResultId        string
 	Title           string
 	SubTitle        string
-	Icon            WoxImage
+	Icon            entity.WoxImage
 	Preview         WoxPreview
 	Tails           []QueryResultTail
 	ContextData     string

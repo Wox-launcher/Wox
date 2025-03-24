@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"wox/entity"
 	"wox/setting"
 	"wox/util"
 
@@ -22,7 +23,7 @@ type GroqProvider struct {
 }
 
 type GroqProviderStream struct {
-	conversations []Conversation
+	conversations []entity.Conversation
 	reader        io.Reader
 }
 
@@ -30,7 +31,7 @@ func NewGroqProvider(ctx context.Context, connectContext setting.AIProvider) Pro
 	return &GroqProvider{connectContext: connectContext}
 }
 
-func (g *GroqProvider) ChatStream(ctx context.Context, model Model, conversations []Conversation) (ChatStream, error) {
+func (g *GroqProvider) ChatStream(ctx context.Context, model entity.Model, conversations []entity.Conversation) (ChatStream, error) {
 	client, clientErr := openai.New(
 		openai.WithModel(model.Name),
 		openai.WithBaseURL(groqBaseUrl),
@@ -58,7 +59,7 @@ func (g *GroqProvider) ChatStream(ctx context.Context, model Model, conversation
 	return &GroqProviderStream{conversations: conversations, reader: r}, nil
 }
 
-func (g *GroqProvider) Models(ctx context.Context) (models []Model, err error) {
+func (g *GroqProvider) Models(ctx context.Context) (models []entity.Model, err error) {
 	body, err := util.HttpGetWithHeaders(ctx, groqBaseUrl+"/models", map[string]string{
 		"Authorization": "Bearer " + g.connectContext.ApiKey,
 	})
@@ -94,9 +95,9 @@ func (g *GroqProvider) Models(ctx context.Context) (models []Model, err error) {
 	// only return active models
 	gjson.Get(string(body), "data").ForEach(func(key, value gjson.Result) bool {
 		if value.Get("active").Bool() {
-			models = append(models, Model{
+			models = append(models, entity.Model{
 				Name:     value.Get("id").String(),
-				Provider: ProviderNameGroq,
+				Provider: entity.ProviderNameGroq,
 			})
 		}
 		return true
@@ -112,12 +113,12 @@ func (g *GroqProvider) Ping(ctx context.Context) error {
 	return err
 }
 
-func (g *GroqProvider) convertConversations(conversations []Conversation) (chatMessages []llms.MessageContent) {
+func (g *GroqProvider) convertConversations(conversations []entity.Conversation) (chatMessages []llms.MessageContent) {
 	for _, conversation := range conversations {
-		if conversation.Role == ConversationRoleUser {
+		if conversation.Role == entity.ConversationRoleUser {
 			chatMessages = append(chatMessages, llms.TextParts(llms.ChatMessageTypeHuman, conversation.Text))
 		}
-		if conversation.Role == ConversationRoleAI {
+		if conversation.Role == entity.ConversationRoleAI {
 			chatMessages = append(chatMessages, llms.TextParts(llms.ChatMessageTypeAI, conversation.Text))
 		}
 	}

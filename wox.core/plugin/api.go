@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"io"
 	"path"
-	"wox/ai"
+	"wox/entity"
 	"wox/i18n"
 	"wox/setting"
-	"wox/share"
 	"wox/util"
 
-	"github.com/disintegration/imaging"
 	"github.com/samber/lo"
 )
 
@@ -26,7 +24,7 @@ const (
 )
 
 type API interface {
-	ChangeQuery(ctx context.Context, query share.PlainQuery)
+	ChangeQuery(ctx context.Context, query entity.PlainQuery)
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context)
 	Notify(ctx context.Context, description string)
@@ -39,7 +37,7 @@ type API interface {
 	OnDeepLink(ctx context.Context, callback func(arguments map[string]string))
 	OnUnload(ctx context.Context, callback func())
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
-	AIChatStream(ctx context.Context, model ai.Model, conversations []ai.Conversation, callback ai.ChatStreamFunc) error
+	AIChatStream(ctx context.Context, model entity.Model, conversations []entity.Conversation, callback entity.ChatStreamFunc) error
 }
 
 type APIImpl struct {
@@ -47,7 +45,7 @@ type APIImpl struct {
 	logger         *util.Log
 }
 
-func (a *APIImpl) ChangeQuery(ctx context.Context, query share.PlainQuery) {
+func (a *APIImpl) ChangeQuery(ctx context.Context, query entity.PlainQuery) {
 	GetPluginManager().GetUI().ChangeQuery(ctx, query)
 }
 
@@ -56,13 +54,13 @@ func (a *APIImpl) HideApp(ctx context.Context) {
 }
 
 func (a *APIImpl) ShowApp(ctx context.Context) {
-	GetPluginManager().GetUI().ShowApp(ctx, share.ShowContext{
+	GetPluginManager().GetUI().ShowApp(ctx, entity.ShowContext{
 		SelectAll: true,
 	})
 }
 
 func (a *APIImpl) Notify(ctx context.Context, message string) {
-	GetPluginManager().GetUI().Notify(ctx, share.NotifyMsg{
+	GetPluginManager().GetUI().Notify(ctx, entity.NotifyMsg{
 		PluginId:       a.pluginInstance.Metadata.Id,
 		Text:           a.GetTranslation(ctx, message),
 		DisplaySeconds: 3,
@@ -174,7 +172,7 @@ func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []Metadata
 	a.pluginInstance.SaveSetting(ctx)
 }
 
-func (a *APIImpl) AIChatStream(ctx context.Context, model ai.Model, conversations []ai.Conversation, callback ai.ChatStreamFunc) error {
+func (a *APIImpl) AIChatStream(ctx context.Context, model entity.Model, conversations []entity.Conversation, callback entity.ChatStreamFunc) error {
 	//check if plugin has the feature permission
 	if !a.pluginInstance.Metadata.IsSupportFeature(MetadataFeatureAI) {
 		return fmt.Errorf("plugin has no access to ai feature")
@@ -185,18 +183,21 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model ai.Model, conversation
 		return providerErr
 	}
 
-	// resize images in the conversation
-	for i, conversation := range conversations {
-		for j, image := range conversation.Images {
-			// resize image if it's too large
-			maxWidth := 600
-			if image.Bounds().Dx() > maxWidth {
-				start := util.GetSystemTimestamp()
-				conversations[i].Images[j] = imaging.Resize(image, maxWidth, 0, imaging.Lanczos)
-				a.Log(ctx, LogLevelDebug, fmt.Sprintf("resizing image (%d -> %d) in ai chat, cost %d ms", image.Bounds().Dx(), maxWidth, util.GetSystemTimestamp()-start))
-			}
-		}
-	}
+	// // resize images in the conversation
+	// for i, conversation := range conversations {
+	// 	for j, image := range conversation.Images {
+	// 		image.Resize(600)
+	// 		resizeImage(ctx, image, 600)
+
+	// 		// resize image if it's too large
+	// 		maxWidth := 600
+	// 		if image.Bounds().Dx() > maxWidth {
+	// 			start := util.GetSystemTimestamp()
+	// 			conversations[i].Images[j] = imaging.Resize(image, maxWidth, 0, imaging.Lanczos)
+	// 			a.Log(ctx, LogLevelDebug, fmt.Sprintf("resizing image (%d -> %d) in ai chat, cost %d ms", image.Bounds().Dx(), maxWidth, util.GetSystemTimestamp()-start))
+	// 		}
+	// 	}
+	// }
 
 	stream, err := provider.ChatStream(ctx, model, conversations)
 	if err != nil {
@@ -210,17 +211,17 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model ai.Model, conversation
 				response, streamErr := stream.Receive(ctx)
 				if errors.Is(streamErr, io.EOF) {
 					util.GetLogger().Info(ctx, "read stream completed")
-					callback(ai.ChatStreamTypeFinished, "")
+					callback(entity.ChatStreamTypeFinished, "")
 					return
 				}
 
 				if streamErr != nil {
 					util.GetLogger().Info(ctx, fmt.Sprintf("failed to read stream: %s", streamErr.Error()))
-					callback(ai.ChatStreamTypeError, streamErr.Error())
+					callback(entity.ChatStreamTypeError, streamErr.Error())
 					return
 				}
 
-				callback(ai.ChatStreamTypeStreaming, response)
+				callback(entity.ChatStreamTypeStreaming, response)
 			}
 		})
 	}

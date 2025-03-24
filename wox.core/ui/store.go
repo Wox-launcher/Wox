@@ -8,7 +8,7 @@ import (
 	"path"
 	"sync"
 	"time"
-	"wox/share"
+	"wox/entity"
 	"wox/util"
 
 	"github.com/samber/lo"
@@ -24,7 +24,7 @@ var storeInstance *Store
 var storeOnce sync.Once
 
 type Store struct {
-	themes []share.Theme
+	themes []entity.Theme
 }
 
 func GetStoreManager() *Store {
@@ -56,8 +56,8 @@ func (s *Store) Start(ctx context.Context) {
 	})
 }
 
-func (s *Store) GetStoreThemes(ctx context.Context) []share.Theme {
-	var storeThemeManifests []share.Theme
+func (s *Store) GetStoreThemes(ctx context.Context) []entity.Theme {
+	var storeThemeManifests []entity.Theme
 
 	for _, store := range s.getStoreManifests(ctx) {
 		themeManifest, manifestErr := s.GetStoreTheme(ctx, store)
@@ -67,7 +67,7 @@ func (s *Store) GetStoreThemes(ctx context.Context) []share.Theme {
 		}
 
 		for _, manifest := range themeManifest {
-			_, found := lo.Find(storeThemeManifests, func(manifest share.Theme) bool {
+			_, found := lo.Find(storeThemeManifests, func(manifest entity.Theme) bool {
 				return manifest.ThemeId == manifest.ThemeId
 			})
 			if found {
@@ -83,7 +83,7 @@ func (s *Store) GetStoreThemes(ctx context.Context) []share.Theme {
 	return storeThemeManifests
 }
 
-func (s *Store) GetStoreTheme(ctx context.Context, store storeManifest) ([]share.Theme, error) {
+func (s *Store) GetStoreTheme(ctx context.Context, store storeManifest) ([]entity.Theme, error) {
 	logger.Info(ctx, fmt.Sprintf("start to get theme manifest from %s(%s)", store.Name, store.Url))
 
 	response, getErr := util.HttpGet(ctx, store.Url)
@@ -91,7 +91,7 @@ func (s *Store) GetStoreTheme(ctx context.Context, store storeManifest) ([]share
 		return nil, getErr
 	}
 
-	var storeThemeManifests []share.Theme
+	var storeThemeManifests []entity.Theme
 	unmarshalErr := json.Unmarshal(response, &storeThemeManifests)
 	if unmarshalErr != nil {
 		return nil, unmarshalErr
@@ -100,7 +100,7 @@ func (s *Store) GetStoreTheme(ctx context.Context, store storeManifest) ([]share
 	return storeThemeManifests, nil
 }
 
-func (s *Store) Install(ctx context.Context, theme share.Theme) error {
+func (s *Store) Install(ctx context.Context, theme entity.Theme) error {
 	logger.Info(ctx, fmt.Sprintf("start to install theme %s(%s)", theme.ThemeId, theme.ThemeAuthor))
 
 	themePath := path.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))
@@ -120,7 +120,7 @@ func (s *Store) Install(ctx context.Context, theme share.Theme) error {
 	return nil
 }
 
-func (s *Store) Uninstall(ctx context.Context, theme share.Theme) error {
+func (s *Store) Uninstall(ctx context.Context, theme entity.Theme) error {
 	logger.Info(ctx, fmt.Sprintf("uninstalling theme: %s", theme.ThemeName))
 
 	if GetUIManager().IsSystemTheme(theme.ThemeId) {
@@ -139,6 +139,6 @@ func (s *Store) Uninstall(ctx context.Context, theme share.Theme) error {
 	return nil
 }
 
-func (s *Store) GetThemes() []share.Theme {
+func (s *Store) GetThemes() []entity.Theme {
 	return s.themes
 }

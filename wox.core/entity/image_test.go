@@ -1,11 +1,12 @@
-package plugin
+package entity
 
 import (
 	"fmt"
-	"github.com/disintegration/imaging"
-	"github.com/google/uuid"
 	"testing"
 	"wox/util"
+
+	"github.com/disintegration/imaging"
+	"github.com/google/uuid"
 )
 
 func TestWoxImage_ToImage(t *testing.T) {

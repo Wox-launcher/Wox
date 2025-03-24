@@ -3,9 +3,8 @@ package app
 import (
 	"context"
 	"testing"
-	"wox/ai"
+	"wox/entity"
 	"wox/plugin"
-	"wox/share"
 	"wox/util"
 
 	"github.com/stretchr/testify/require"
@@ -17,7 +16,7 @@ type emptyAPIImpl struct {
 func (e emptyAPIImpl) OnGetDynamicSetting(ctx context.Context, callback func(key string) string) {
 }
 
-func (e emptyAPIImpl) ChangeQuery(ctx context.Context, query share.PlainQuery) {
+func (e emptyAPIImpl) ChangeQuery(ctx context.Context, query entity.PlainQuery) {
 }
 
 func (e emptyAPIImpl) HideApp(ctx context.Context) {
@@ -55,7 +54,7 @@ func (e emptyAPIImpl) OnUnload(ctx context.Context, callback func()) {
 func (e emptyAPIImpl) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
 }
 
-func (e emptyAPIImpl) AIChatStream(ctx context.Context, model ai.Model, conversations []ai.Conversation, callback ai.ChatStreamFunc) error {
+func (e emptyAPIImpl) AIChatStream(ctx context.Context, model entity.Model, conversations []entity.Conversation, callback entity.ChatStreamFunc) error {
 	return nil
 }
 

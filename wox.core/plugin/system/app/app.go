@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"wox/entity"
 	"wox/plugin"
 	"wox/plugin/system"
 	"wox/setting/definition"
@@ -36,7 +37,7 @@ const (
 type appInfo struct {
 	Name string
 	Path string
-	Icon plugin.WoxImage
+	Icon entity.WoxImage
 	Type AppType
 
 	Pid int `json:"-"`
@@ -388,7 +389,7 @@ func (a *ApplicationPlugin) indexAppsByDirectory(ctx context.Context) []appInfo 
 				}
 
 				//preprocess icon
-				info.Icon = plugin.ConvertIcon(ctx, info.Icon, a.pluginDirectory)
+				info.Icon = entity.ConvertIcon(ctx, info.Icon, a.pluginDirectory)
 
 				lock.Lock()
 				appInfos = append(appInfos, info)
@@ -413,7 +414,7 @@ func (a *ApplicationPlugin) indexExtraApps(ctx context.Context) []appInfo {
 
 	//preprocess icon
 	for i := range apps {
-		apps[i].Icon = plugin.ConvertIcon(ctx, apps[i].Icon, a.pluginDirectory)
+		apps[i].Icon = entity.ConvertIcon(ctx, apps[i].Icon, a.pluginDirectory)
 	}
 
 	return apps

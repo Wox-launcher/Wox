@@ -7,9 +7,9 @@ import (
 	"path"
 	"runtime/pprof"
 	"time"
+	"wox/entity"
 	"wox/i18n"
 	"wox/plugin"
-	"wox/share"
 	"wox/ui"
 	"wox/util"
 	"wox/util/shell"
@@ -29,7 +29,7 @@ type SysPlugin struct {
 type SysCommand struct {
 	Title                  string
 	SubTitle               string
-	Icon                   plugin.WoxImage
+	Icon                   entity.WoxImage
 	PreventHideAfterAction bool
 	Action                 func(ctx context.Context, actionContext plugin.ActionContext)
 }
@@ -97,7 +97,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			PreventHideAfterAction: true,
 			Icon:                   plugin.WoxIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, share.DefaultSettingWindowContext)
+				plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, entity.DefaultSettingWindowContext)
 			},
 		},
 		{
@@ -142,7 +142,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 
 		r.commands = append(r.commands, SysCommand{
 			Title: "i18n:plugin_sys_delete_image_cache",
-			Icon:  plugin.NewWoxImageEmoji("🗑️"),
+			Icon:  entity.NewWoxImageEmoji("🗑️"),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				location := util.GetLocation()
 				imageCacheDirectory := location.GetImageCacheDirectory()
@@ -186,9 +186,9 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 			if match, score := IsStringMatchScore(ctx, instance.Metadata.Name, query.Search); match {
 				// load icon
 				pluginIcon := plugin.SettingIcon
-				iconImg, parseErr := plugin.ParseWoxImage(instance.Metadata.Icon)
+				iconImg, parseErr := entity.ParseWoxImage(instance.Metadata.Icon)
 				if parseErr == nil {
-					pluginIcon = plugin.ConvertRelativePathToAbsolutePath(ctx, iconImg, instance.PluginDirectory)
+					pluginIcon = entity.ConvertRelativePathToAbsolutePath(ctx, iconImg, instance.PluginDirectory)
 				}
 
 				results = append(results, plugin.QueryResult{
@@ -199,7 +199,7 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 						{
 							Name: "i18n:plugin_sys_execute",
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-								plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, share.SettingWindowContext{
+								plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, entity.SettingWindowContext{
 									Path:  "/plugin/setting",
 									Param: instance.Metadata.Name,
 								})

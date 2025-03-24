@@ -1,4 +1,4 @@
-package share
+package entity
 
 type Theme struct {
 	ThemeId     string

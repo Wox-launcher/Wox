@@ -8,9 +8,9 @@ import (
 	"path"
 	"slices"
 	"sync"
+	"wox/entity"
 	"wox/i18n"
 	"wox/setting/definition"
-	"wox/share"
 	"wox/util"
 	"wox/util/autostart"
 	"wox/util/hotkey"
@@ -366,7 +366,7 @@ func (m *Manager) SavePluginSetting(ctx context.Context, pluginId string, plugin
 	return nil
 }
 
-func (m *Manager) AddQueryHistory(ctx context.Context, query share.PlainQuery) {
+func (m *Manager) AddQueryHistory(ctx context.Context, query entity.PlainQuery) {
 	if query.IsEmpty() {
 		return
 	}

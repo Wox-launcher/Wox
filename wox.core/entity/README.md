@@ -1,0 +1,1 @@
+Due to the GO's cyclic reference limitation, some common type definitions are defined in this package
