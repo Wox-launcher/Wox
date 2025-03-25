@@ -10,7 +10,7 @@ import (
 	"path"
 	"strings"
 	"sync"
-	"wox/entity"
+	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/resource"
@@ -39,10 +39,10 @@ type Manager struct {
 	mainHotkey       *hotkey.Hotkey
 	selectionHotkey  *hotkey.Hotkey
 	queryHotkeys     []*hotkey.Hotkey
-	ui               entity.UI
+	ui               common.UI
 	serverPort       int
 	uiProcess        *os.Process
-	themes           *util.HashMap[string, entity.Theme]
+	themes           *util.HashMap[string, common.Theme]
 	systemThemeIds   []string
 	isUIReadyHandled bool
 
@@ -58,7 +58,7 @@ func GetUIManager() *Manager {
 		managerInstance.ui = &uiImpl{
 			requestMap: util.NewHashMap[string, chan WebsocketMsg](),
 		}
-		managerInstance.themes = util.NewHashMap[string, entity.Theme]()
+		managerInstance.themes = util.NewHashMap[string, common.Theme]()
 		logger = util.GetLogger()
 	})
 	return managerInstance
@@ -228,11 +228,11 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 			return
 		}
 
-		m.ui.ChangeQuery(newCtx, entity.PlainQuery{
+		m.ui.ChangeQuery(newCtx, common.PlainQuery{
 			QueryType:      plugin.QueryTypeSelection,
 			QuerySelection: selection,
 		})
-		m.ui.ShowApp(newCtx, entity.ShowContext{SelectAll: false})
+		m.ui.ShowApp(newCtx, common.ShowContext{SelectAll: false})
 	})
 }
 
@@ -242,7 +242,7 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 	err := hk.Register(ctx, queryHotkey.Hotkey, func() {
 		newCtx := util.NewTraceContext()
 		query := plugin.GetPluginManager().ReplaceQueryVariable(newCtx, queryHotkey.Query)
-		plainQuery := entity.PlainQuery{
+		plainQuery := common.PlainQuery{
 			QueryType: plugin.QueryTypeInput,
 			QueryText: query,
 		}
@@ -261,7 +261,7 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 			}
 		} else {
 			m.ui.ChangeQuery(newCtx, plainQuery)
-			m.ui.ShowApp(newCtx, entity.ShowContext{SelectAll: false})
+			m.ui.ShowApp(newCtx, common.ShowContext{SelectAll: false})
 		}
 	})
 	if err != nil {
@@ -313,30 +313,30 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) GetCurrentTheme(ctx context.Context) entity.Theme {
+func (m *Manager) GetCurrentTheme(ctx context.Context) common.Theme {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if v, ok := m.themes.Load(woxSetting.ThemeId); ok {
 		return v
 	}
 
-	return entity.Theme{}
+	return common.Theme{}
 }
 
-func (m *Manager) GetAllThemes(ctx context.Context) []entity.Theme {
-	var themes []entity.Theme
-	m.themes.Range(func(key string, value entity.Theme) bool {
+func (m *Manager) GetAllThemes(ctx context.Context) []common.Theme {
+	var themes []common.Theme
+	m.themes.Range(func(key string, value common.Theme) bool {
 		themes = append(themes, value)
 		return true
 	})
 	return themes
 }
 
-func (m *Manager) AddTheme(ctx context.Context, theme entity.Theme) {
+func (m *Manager) AddTheme(ctx context.Context, theme common.Theme) {
 	m.themes.Store(theme.ThemeId, theme)
 	m.ChangeTheme(ctx, theme)
 }
 
-func (m *Manager) RemoveTheme(ctx context.Context, theme entity.Theme) {
+func (m *Manager) RemoveTheme(ctx context.Context, theme common.Theme) {
 	m.themes.Delete(theme.ThemeId)
 }
 
@@ -347,7 +347,7 @@ func (m *Manager) ChangeToDefaultTheme(ctx context.Context) {
 }
 
 func (m *Manager) RestoreTheme(ctx context.Context) {
-	var uninstallThemes = m.themes.FilterList(func(key string, theme entity.Theme) bool {
+	var uninstallThemes = m.themes.FilterList(func(key string, theme common.Theme) bool {
 		return !theme.IsSystem
 	})
 
@@ -358,23 +358,23 @@ func (m *Manager) RestoreTheme(ctx context.Context) {
 	m.ChangeToDefaultTheme(ctx)
 }
 
-func (m *Manager) GetThemeById(themeId string) entity.Theme {
+func (m *Manager) GetThemeById(themeId string) common.Theme {
 	if v, ok := m.themes.Load(themeId); ok {
 		return v
 	}
-	return entity.Theme{}
+	return common.Theme{}
 }
 
-func (m *Manager) parseTheme(themeJson string) (entity.Theme, error) {
-	var theme entity.Theme
+func (m *Manager) parseTheme(themeJson string) (common.Theme, error) {
+	var theme common.Theme
 	parseErr := json.Unmarshal([]byte(themeJson), &theme)
 	if parseErr != nil {
-		return entity.Theme{}, parseErr
+		return common.Theme{}, parseErr
 	}
 	return theme, nil
 }
 
-func (m *Manager) ChangeTheme(ctx context.Context, theme entity.Theme) {
+func (m *Manager) ChangeTheme(ctx context.Context, theme common.Theme) {
 	m.GetUI(ctx).ChangeTheme(ctx, theme)
 }
 
@@ -387,7 +387,7 @@ func (m *Manager) ToggleWindow() {
 	})
 }
 
-func (m *Manager) GetUI(ctx context.Context) entity.UI {
+func (m *Manager) GetUI(ctx context.Context) common.UI {
 	return m.ui
 }
 
@@ -402,7 +402,7 @@ func (m *Manager) PostUIReady(ctx context.Context) {
 
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if !woxSetting.HideOnStart {
-		m.ui.ShowApp(ctx, entity.ShowContext{SelectAll: false})
+		m.ui.ShowApp(ctx, common.ShowContext{SelectAll: false})
 	}
 }
 
@@ -417,7 +417,7 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 	}
 }
 
-func (m *Manager) PostOnHide(ctx context.Context, query entity.PlainQuery) {
+func (m *Manager) PostOnHide(ctx context.Context, query common.PlainQuery) {
 	setting.GetSettingManager().AddQueryHistory(ctx, query)
 }
 
@@ -451,7 +451,7 @@ func (m *Manager) ShowTray() {
 		}, tray.MenuItem{
 			Title: i18n.GetI18nManager().TranslateWox(ctx, "ui_tray_open_setting_window"),
 			Callback: func() {
-				m.GetUI(ctx).OpenSettingWindow(ctx, entity.SettingWindowContext{})
+				m.GetUI(ctx).OpenSettingWindow(ctx, common.SettingWindowContext{})
 			},
 		}, tray.MenuItem{
 			Title: i18n.GetI18nManager().TranslateWox(ctx, "ui_tray_quit"),
@@ -553,11 +553,11 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 	if command == "query" {
 		query := arguments["q"]
 		if query != "" {
-			m.ui.ChangeQuery(ctx, entity.PlainQuery{
+			m.ui.ChangeQuery(ctx, common.PlainQuery{
 				QueryType: plugin.QueryTypeInput,
 				QueryText: query,
 			})
-			m.ui.ShowApp(ctx, entity.ShowContext{SelectAll: false})
+			m.ui.ShowApp(ctx, common.ShowContext{SelectAll: false})
 		}
 	}
 

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"wox/entity"
+	"wox/common"
 	"wox/plugin"
 	"wox/util"
 	"wox/util/shell"
@@ -22,7 +22,7 @@ func init() {
 
 type UrlHistory struct {
 	Url   string
-	Icon  entity.WoxImage
+	Icon  common.WoxImage
 	Title string
 }
 

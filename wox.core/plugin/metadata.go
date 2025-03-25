@@ -6,7 +6,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"wox/entity"
+	"wox/common"
 	"wox/setting/definition"
 )
 
@@ -54,11 +54,11 @@ type Metadata struct {
 	SettingDefinitions definition.PluginSettingDefinitions
 }
 
-func (m *Metadata) GetIconOrDefault(pluginDirectory string, defaultImage entity.WoxImage) entity.WoxImage {
-	image := entity.ParseWoxImageOrDefault(m.Icon, defaultImage)
-	if image.ImageType == entity.WoxImageTypeRelativePath {
+func (m *Metadata) GetIconOrDefault(pluginDirectory string, defaultImage common.WoxImage) common.WoxImage {
+	image := common.ParseWoxImageOrDefault(m.Icon, defaultImage)
+	if image.ImageType == common.WoxImageTypeRelativePath {
 		image.ImageData = path.Join(pluginDirectory, image.ImageData)
-		image.ImageType = entity.WoxImageTypeAbsolutePath
+		image.ImageType = common.WoxImageTypeAbsolutePath
 	}
 	return image
 }

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"wox/entity"
+	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/resource"
@@ -391,7 +391,7 @@ func runQueryTests(t *testing.T, tests []queryTest) {
 		t.Run(tt.name, func(t *testing.T) {
 			success := true
 			// Create query
-			plainQuery := entity.PlainQuery{
+			plainQuery := common.PlainQuery{
 				QueryType: plugin.QueryTypeInput,
 				QueryText: tt.query,
 			}

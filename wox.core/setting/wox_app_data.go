@@ -3,7 +3,7 @@ package setting
 import (
 	"context"
 	"fmt"
-	"wox/entity"
+	"wox/common"
 	"wox/util"
 )
 
@@ -16,7 +16,7 @@ type WoxAppData struct {
 }
 
 type QueryHistory struct {
-	Query     entity.PlainQuery
+	Query     common.PlainQuery
 	Timestamp int64
 }
 

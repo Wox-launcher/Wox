@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 	"wox/ai"
-	"wox/entity"
+	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
@@ -95,7 +95,7 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	imagePath, ok := entity.GetLocalImageMap(id)
+	imagePath, ok := common.GetLocalImageMap(id)
 	if !ok {
 		writeErrorResponse(w, "imagePath is empty")
 		return
@@ -145,7 +145,7 @@ func handlePluginStore(w http.ResponseWriter, r *http.Request) {
 		pluginInstance, isInstalled := lo.Find(plugin.GetPluginManager().GetPluginInstances(), func(item *plugin.Instance) bool {
 			return item.Metadata.Id == storePlugin.Id
 		})
-		plugins[i].Icon = entity.NewWoxImageUrl(manifests[i].IconUrl)
+		plugins[i].Icon = common.NewWoxImageUrl(manifests[i].IconUrl)
 		plugins[i].IsInstalled = isInstalled
 		plugins[i] = convertPluginDto(getCtx, plugins[i], pluginInstance)
 	}
@@ -191,13 +191,13 @@ func convertPluginInstanceToDto(ctx context.Context, pluginInstance *plugin.Inst
 	}
 
 	// load icon
-	iconImg, parseErr := entity.ParseWoxImage(pluginInstance.Metadata.Icon)
+	iconImg, parseErr := common.ParseWoxImage(pluginInstance.Metadata.Icon)
 	if parseErr == nil {
 		installedPlugin.Icon = iconImg
 	} else {
-		installedPlugin.Icon = entity.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAELUlEQVR4nO3ZW2xTdRwH8JPgkxE1XuKFQUe73rb1IriNyYOJvoiALRszvhqffHBLJjEx8Q0TlRiN0RiNrPd27boLY1wUFAQHyquJiTIYpefay7au2yiJG1/zb6Kx/ZfS055T1mS/5JtzXpr+Pufy//9P/gyzURulXIHp28Rp7H5eY/OSc6bRiiPNN9tBQs4bDsFrbN5/AQ2JANO3qRgx9dZ76I2vwingvsQhgHUK2NPQCKeAuOw7Mf72B1hPCEZu9bBrWE8IRm6RH60nBFMNQA3Eh6kVzCzzyOVu5I+HUyvqApREkOZxe5bKR+kVdQFKIcgVLwW4usyrD1ACcSsXKwm4lYvVB1Ar4r7fAWeNCPLClgIcruBFVhRQK4Jc8Vwulj/WZRQqh4i8+X5d5glGaYCDBzp/WYQ5KsJ98JDqCEZJgIO/g53nM9BHpXxMEQHuXnURjFIA0vyOHxfQMiIVxBgW4FIRwSgBcLB3YPt+DrqwWDKGEA9Xz7tlES/9nkPHuQyeP5/By3/crh9gf3wNlpMpaENC2egDHFwHSiBurqL78hLaJlNoPZaCeSIJ01gSu68sqw/YF1uDeTKF5qBQUXR+DkNFiOgbg7BOSBTAOJrIw1QD7J1dzf+Jxs/LitbL4qhjsAAROjAA67hEAQzRBLovLSkPePX6an6U2eblqorWE4en7xCFsIxJFEAfkcoiZANeufo3tMMitnq4qkIArZMp2E+k4H29COEcQPuoSAH0YQm7prPKAMhjsMXFVpUmN4f2qTRsp+dgPTUH21SyJKJtRKQALcNiSYRswLNH46gmTW4W7SfSsP8w/x/AcjIN6/EkvEWPU9AxgNaIQAF0IRFdF7O1AZ75Lg65aXKxsJxKw35mngIQlOVYoiTCHBYogDZQiJANePrbm5AT8uhYT8/hubPzdwW0HU/BMpGA5yCNMIV4CrDdL6DzQrY6wFPfxFBpSPOkabLEuBeAzAOWcYIonCcCr/XDFOQpQLOPIBblA578OoZKQprfcXYeO88tVAwg80D7mARPL40wBjgKoPHy8gFPfHUD90q++Z8W8usauQAyD7RFJbiLEfv7YfBztQMe/3IW5bLFzeYb7/g5UzXANJZE64gIdw+N0Hu52gCPfTGLu2Wrm0XHhQw6Ly7WDDCOJmCOiNQq1r+vHy0etnrAo59fR6mQcZ40Tr7GlAIYogmYhgVqFUsQOjdbHeCRz66hONt8HLqmF9E1nVUcoI9IMIUIYpBGuOLyAQ9/eg3/jybAo/tyFrsuZVUD6MMSjEGeQvj2vgMwLz4gC7D5yAy7+cgMSLYHBbzw2xK6f1Uf0DIswhDgMeQsRPAae0QW4sGP/9zz0Cd/seRTcfeVpboCdCEReh+PIUeNiHWx7dtsDxQibF6mkQpFCHLONOYGvM1Hmm+obd+NYhqg/gG2aOxED6eh5gAAAABJRU5ErkJggg==`)
+		installedPlugin.Icon = common.NewWoxImageBase64(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAELUlEQVR4nO3ZW2xTdRwH8JPgkxE1XuKFQUe73rb1IriNyYOJvoiALRszvhqffHBLJjEx8Q0TlRiN0RiNrPd27boLY1wUFAQHyquJiTIYpefay7au2yiJG1/zb6Kx/ZfS055T1mS/5JtzXpr+Pufy//9P/gyzURulXIHp28Rp7H5eY/OSc6bRiiPNN9tBQs4bDsFrbN5/AQ2JANO3qRgx9dZ76I2vwingvsQhgHUK2NPQCKeAuOw7Mf72B1hPCEZu9bBrWE8IRm6RH60nBFMNQA3Eh6kVzCzzyOVu5I+HUyvqApREkOZxe5bKR+kVdQFKIcgVLwW4usyrD1ACcSsXKwm4lYvVB1Ar4r7fAWeNCPLClgIcruBFVhRQK4Jc8Vwulj/WZRQqh4i8+X5d5glGaYCDBzp/WYQ5KsJ98JDqCEZJgIO/g53nM9BHpXxMEQHuXnURjFIA0vyOHxfQMiIVxBgW4FIRwSgBcLB3YPt+DrqwWDKGEA9Xz7tlES/9nkPHuQyeP5/By3/crh9gf3wNlpMpaENC2egDHFwHSiBurqL78hLaJlNoPZaCeSIJ01gSu68sqw/YF1uDeTKF5qBQUXR+DkNFiOgbg7BOSBTAOJrIw1QD7J1dzf+Jxs/LitbL4qhjsAAROjAA67hEAQzRBLovLSkPePX6an6U2eblqorWE4en7xCFsIxJFEAfkcoiZANeufo3tMMitnq4qkIArZMp2E+k4H29COEcQPuoSAH0YQm7prPKAMhjsMXFVpUmN4f2qTRsp+dgPTUH21SyJKJtRKQALcNiSYRswLNH46gmTW4W7SfSsP8w/x/AcjIN6/EkvEWPU9AxgNaIQAF0IRFdF7O1AZ75Lg65aXKxsJxKw35mngIQlOVYoiTCHBYogDZQiJANePrbm5AT8uhYT8/hubPzdwW0HU/BMpGA5yCNMIV4CrDdL6DzQrY6wFPfxFBpSPOkabLEuBeAzAOWcYIonCcCr/XDFOQpQLOPIBblA578OoZKQprfcXYeO88tVAwg80D7mARPL40wBjgKoPHy8gFPfHUD90q++Z8W8usauQAyD7RFJbiLEfv7YfBztQMe/3IW5bLFzeYb7/g5UzXANJZE64gIdw+N0Hu52gCPfTGLu2Wrm0XHhQw6Ly7WDDCOJmCOiNQq1r+vHy0etnrAo59fR6mQcZ40Tr7GlAIYogmYhgVqFUsQOjdbHeCRz66hONt8HLqmF9E1nVUcoI9IMIUIYpBGuOLyAQ9/eg3/jybAo/tyFrsuZVUD6MMSjEGeQvj2vgMwLz4gC7D5yAy7+cgMSLYHBbzw2xK6f1Uf0DIswhDgMeQsRPAae0QW4sGP/9zz0Cd/seRTcfeVpboCdCEReh+PIUeNiHWx7dtsDxQibF6mkQpFCHLONOYGvM1Hmm+obd+NYhqg/gG2aOxED6eh5gAAAABJRU5ErkJggg==`)
 	}
-	installedPlugin.Icon = entity.ConvertIcon(ctx, installedPlugin.Icon, pluginInstance.PluginDirectory)
+	installedPlugin.Icon = common.ConvertIcon(ctx, installedPlugin.Icon, pluginInstance.PluginDirectory)
 
 	installedPlugin = convertPluginDto(ctx, installedPlugin, pluginInstance)
 
@@ -351,7 +351,7 @@ func handleThemeStore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i, storeTheme := range themes {
-		isInstalled := lo.ContainsBy(GetUIManager().GetAllThemes(ctx), func(item entity.Theme) bool {
+		isInstalled := lo.ContainsBy(GetUIManager().GetAllThemes(ctx), func(item common.Theme) bool {
 			return item.ThemeId == storeTheme.ThemeId
 		})
 		themes[i].IsUpgradable = GetUIManager().IsThemeUpgradable(storeTheme.ThemeId, storeTheme.Version)
@@ -393,7 +393,7 @@ func handleThemeInstall(w http.ResponseWriter, r *http.Request) {
 	themeId := idResult.String()
 
 	storeThemes := GetStoreManager().GetThemes()
-	findTheme, exist := lo.Find(storeThemes, func(item entity.Theme) bool {
+	findTheme, exist := lo.Find(storeThemes, func(item common.Theme) bool {
 		if item.ThemeId == themeId {
 			return true
 		}
@@ -426,7 +426,7 @@ func handleThemeUninstall(w http.ResponseWriter, r *http.Request) {
 	themeId := idResult.String()
 
 	storeThemes := GetUIManager().GetAllThemes(ctx)
-	findTheme, exist := lo.Find(storeThemes, func(item entity.Theme) bool {
+	findTheme, exist := lo.Find(storeThemes, func(item common.Theme) bool {
 		if item.ThemeId == themeId {
 			return true
 		}
@@ -462,7 +462,7 @@ func handleThemeApply(w http.ResponseWriter, r *http.Request) {
 
 	// Find theme in installed themes
 	storeThemes := GetUIManager().GetAllThemes(ctx)
-	findTheme, exist := lo.Find(storeThemes, func(item entity.Theme) bool {
+	findTheme, exist := lo.Find(storeThemes, func(item common.Theme) bool {
 		return item.ThemeId == themeId
 	})
 	if !exist {
@@ -634,7 +634,7 @@ func handleHotkeyAvailable(w http.ResponseWriter, r *http.Request) {
 
 func handleShow(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
-	GetUIManager().GetUI(ctx).ShowApp(ctx, entity.ShowContext{SelectAll: true})
+	GetUIManager().GetUI(ctx).ShowApp(ctx, common.ShowContext{SelectAll: true})
 	writeSuccessResponse(w, "")
 }
 
@@ -700,7 +700,7 @@ func handleOnHide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var plainQuery entity.PlainQuery
+	var plainQuery common.PlainQuery
 	unmarshalErr := json.Unmarshal([]byte(queryResult.String()), &plainQuery)
 	if unmarshalErr != nil {
 		logger.Error(ctx, unmarshalErr.Error())
@@ -722,7 +722,7 @@ func handleQueryIcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var plainQuery entity.PlainQuery
+	var plainQuery common.PlainQuery
 	unmarshalErr := json.Unmarshal([]byte(queryResult.String()), &plainQuery)
 	if unmarshalErr != nil {
 		logger.Error(ctx, unmarshalErr.Error())
@@ -733,24 +733,24 @@ func handleQueryIcon(w http.ResponseWriter, r *http.Request) {
 	_, pluginInstance, err := plugin.GetPluginManager().NewQuery(ctx, plainQuery)
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to new query: %s", err.Error()))
-		writeSuccessResponse(w, entity.WoxImage{})
+		writeSuccessResponse(w, common.WoxImage{})
 		return
 	}
 
 	if pluginInstance == nil {
 		// this query is not for any plugin (now a global query)
-		writeSuccessResponse(w, entity.WoxImage{})
+		writeSuccessResponse(w, common.WoxImage{})
 		return
 	}
 
-	iconImg, parseErr := entity.ParseWoxImage(pluginInstance.Metadata.Icon)
+	iconImg, parseErr := common.ParseWoxImage(pluginInstance.Metadata.Icon)
 	if parseErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to parse icon: %s", parseErr.Error()))
-		writeSuccessResponse(w, entity.WoxImage{})
+		writeSuccessResponse(w, common.WoxImage{})
 		return
 	}
 
-	iconImage := entity.ConvertIcon(ctx, iconImg, pluginInstance.PluginDirectory)
+	iconImage := common.ConvertIcon(ctx, iconImg, pluginInstance.PluginDirectory)
 	writeSuccessResponse(w, iconImage)
 }
 
@@ -772,7 +772,7 @@ func handleDeeplink(w http.ResponseWriter, r *http.Request) {
 func handleAIModels(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
 
-	var results []entity.Model
+	var results []common.Model
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	for _, providerSetting := range woxSetting.AIProviders {
 		provider, err := ai.NewProvider(ctx, providerSetting)

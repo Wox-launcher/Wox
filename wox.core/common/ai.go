@@ -1,4 +1,4 @@
-package entity
+package common
 
 type ConversationRole string
 type ProviderName string

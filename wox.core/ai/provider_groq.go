@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"wox/entity"
+	"wox/common"
 	"wox/setting"
 	"wox/util"
 
@@ -23,7 +23,7 @@ type GroqProvider struct {
 }
 
 type GroqProviderStream struct {
-	conversations []entity.Conversation
+	conversations []common.Conversation
 	reader        io.Reader
 }
 
@@ -31,7 +31,7 @@ func NewGroqProvider(ctx context.Context, connectContext setting.AIProvider) Pro
 	return &GroqProvider{connectContext: connectContext}
 }
 
-func (g *GroqProvider) ChatStream(ctx context.Context, model entity.Model, conversations []entity.Conversation) (ChatStream, error) {
+func (g *GroqProvider) ChatStream(ctx context.Context, model common.Model, conversations []common.Conversation) (ChatStream, error) {
 	client, clientErr := openai.New(
 		openai.WithModel(model.Name),
 		openai.WithBaseURL(groqBaseUrl),
@@ -59,7 +59,7 @@ func (g *GroqProvider) ChatStream(ctx context.Context, model entity.Model, conve
 	return &GroqProviderStream{conversations: conversations, reader: r}, nil
 }
 
-func (g *GroqProvider) Models(ctx context.Context) (models []entity.Model, err error) {
+func (g *GroqProvider) Models(ctx context.Context) (models []common.Model, err error) {
 	body, err := util.HttpGetWithHeaders(ctx, groqBaseUrl+"/models", map[string]string{
 		"Authorization": "Bearer " + g.connectContext.ApiKey,
 	})
@@ -95,9 +95,9 @@ func (g *GroqProvider) Models(ctx context.Context) (models []entity.Model, err e
 	// only return active models
 	gjson.Get(string(body), "data").ForEach(func(key, value gjson.Result) bool {
 		if value.Get("active").Bool() {
-			models = append(models, entity.Model{
+			models = append(models, common.Model{
 				Name:     value.Get("id").String(),
-				Provider: entity.ProviderNameGroq,
+				Provider: common.ProviderNameGroq,
 			})
 		}
 		return true
@@ -113,12 +113,12 @@ func (g *GroqProvider) Ping(ctx context.Context) error {
 	return err
 }
 
-func (g *GroqProvider) convertConversations(conversations []entity.Conversation) (chatMessages []llms.MessageContent) {
+func (g *GroqProvider) convertConversations(conversations []common.Conversation) (chatMessages []llms.MessageContent) {
 	for _, conversation := range conversations {
-		if conversation.Role == entity.ConversationRoleUser {
+		if conversation.Role == common.ConversationRoleUser {
 			chatMessages = append(chatMessages, llms.TextParts(llms.ChatMessageTypeHuman, conversation.Text))
 		}
-		if conversation.Role == entity.ConversationRoleAI {
+		if conversation.Role == common.ConversationRoleAI {
 			chatMessages = append(chatMessages, llms.TextParts(llms.ChatMessageTypeAI, conversation.Text))
 		}
 	}

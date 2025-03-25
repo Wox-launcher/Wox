@@ -2,7 +2,7 @@ package plugin
 
 import (
 	"encoding/json"
-	"wox/entity"
+	"wox/common"
 )
 
 type WoxPreviewType = string
@@ -34,7 +34,7 @@ func (p *WoxPreview) IsEmpty() bool {
 }
 
 type WoxPreviewChatData struct {
-	Messages []entity.Conversation
+	Messages []common.Conversation
 }
 
 func (d *WoxPreviewChatData) Json() string {

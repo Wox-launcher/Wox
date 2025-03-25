@@ -26,7 +26,7 @@ import (
 	"strings"
 	"sync"
 	"unsafe"
-	"wox/entity"
+	"wox/common"
 	"wox/plugin"
 	"wox/util"
 	"wox/util/shell"
@@ -161,7 +161,7 @@ func (a *MacRetriever) getAppNameFromMdls(path string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (entity.WoxImage, error) {
+func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (common.WoxImage, error) {
 	if v, ok := iconsMap[appPath]; ok {
 		return v, nil
 	}
@@ -170,8 +170,8 @@ func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (entit
 	iconPathMd5 := fmt.Sprintf("%x", md5.Sum([]byte(appPath)))
 	iconCachePath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("app_%s.png", iconPathMd5))
 	if _, err := os.Stat(iconCachePath); err == nil {
-		return entity.WoxImage{
-			ImageType: entity.WoxImageTypeAbsolutePath,
+		return common.WoxImage{
+			ImageType: common.WoxImageTypeAbsolutePath,
 			ImageData: iconCachePath,
 		}, nil
 	}
@@ -180,8 +180,8 @@ func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (entit
 	if iconErr != nil {
 		// use default icon if no icon is found, and don't cache
 		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get app icon for path: %s, %s", appPath, iconErr.Error()))
-		return entity.WoxImage{
-			ImageType: entity.WoxImageTypeAbsolutePath,
+		return common.WoxImage{
+			ImageType: common.WoxImageTypeAbsolutePath,
 			ImageData: defaultAppIcon,
 		}, nil
 	}
@@ -195,29 +195,29 @@ func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (entit
 			if out != nil {
 				msg = fmt.Sprintf("%s, output: %s", msg, string(out))
 			}
-			return entity.WoxImage{}, errors.New(msg)
+			return common.WoxImage{}, errors.New(msg)
 		}
 	} else {
 		originF, originErr := os.Open(rawImagePath)
 		if originErr != nil {
-			return entity.WoxImage{}, fmt.Errorf("can't open origin image file: %s", originErr.Error())
+			return common.WoxImage{}, fmt.Errorf("can't open origin image file: %s", originErr.Error())
 		}
 
 		//copy image to cache
 		destF, destErr := os.Create(iconCachePath)
 		if destErr != nil {
-			return entity.WoxImage{}, fmt.Errorf("can't create cache file: %s", destErr.Error())
+			return common.WoxImage{}, fmt.Errorf("can't create cache file: %s", destErr.Error())
 		}
 		defer destF.Close()
 
 		if _, err := io.Copy(destF, originF); err != nil {
-			return entity.WoxImage{}, fmt.Errorf("can't copy image to cache: %s", err.Error())
+			return common.WoxImage{}, fmt.Errorf("can't copy image to cache: %s", err.Error())
 		}
 	}
 
 	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("app icon cache created: %s", iconCachePath))
-	return entity.WoxImage{
-		ImageType: entity.WoxImageTypeAbsolutePath,
+	return common.WoxImage{
+		ImageType: common.WoxImageTypeAbsolutePath,
 		ImageData: iconCachePath,
 	}, nil
 }

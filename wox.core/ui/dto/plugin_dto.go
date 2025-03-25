@@ -1,7 +1,7 @@
 package dto
 
 import (
-	"wox/entity"
+	"wox/common"
 	"wox/plugin"
 	"wox/setting"
 	"wox/setting/definition"
@@ -15,7 +15,7 @@ type PluginDto struct {
 	MinWoxVersion      string
 	Runtime            string
 	Description        string
-	Icon               entity.WoxImage
+	Icon               common.WoxImage
 	Website            string
 	Entry              string
 	ScreenshotUrls     []string

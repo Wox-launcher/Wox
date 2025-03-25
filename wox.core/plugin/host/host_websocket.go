@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 	"time"
-	"wox/entity"
+	"wox/common"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
@@ -236,7 +236,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] ChangeQuery method must have a queryText parameter", request.PluginName))
 				return
 			}
-			pluginInstance.API.ChangeQuery(ctx, entity.PlainQuery{
+			pluginInstance.API.ChangeQuery(ctx, common.PlainQuery{
 				QueryType: plugin.QueryTypeInput,
 				QueryText: queryText,
 			})
@@ -255,7 +255,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 				return
 			}
 
-			pluginInstance.API.ChangeQuery(ctx, entity.PlainQuery{
+			pluginInstance.API.ChangeQuery(ctx, common.PlainQuery{
 				QueryType:      plugin.QueryTypeSelection,
 				QuerySelection: selection,
 			})
@@ -442,7 +442,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			return
 		}
 
-		var model entity.Model
+		var model common.Model
 		modelStr, modelExist := request.Params["model"]
 		if !modelExist {
 			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] AIChatStream method must have a model parameter", request.PluginName))
@@ -454,14 +454,14 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			return
 		}
 
-		var conversations []entity.Conversation
+		var conversations []common.Conversation
 		unmarshalErr = json.Unmarshal([]byte(conversationsStr), &conversations)
 		if unmarshalErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal conversations: %s", request.PluginName, unmarshalErr))
 			return
 		}
 
-		llmErr := pluginInstance.API.AIChatStream(ctx, model, conversations, func(streamType entity.ChatStreamDataType, data string) {
+		llmErr := pluginInstance.API.AIChatStream(ctx, model, conversations, func(streamType common.ChatStreamDataType, data string) {
 			w.invokeMethod(ctx, pluginInstance.Metadata, "onLLMStream", map[string]string{
 				"CallbackId": callbackId,
 				"StreamType": string(streamType),

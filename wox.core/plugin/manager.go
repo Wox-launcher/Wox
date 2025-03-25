@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 	"wox/ai"
-	"wox/entity"
+	"wox/common"
 	"wox/i18n"
 	"wox/setting"
 
@@ -41,10 +41,10 @@ type debounceTimer struct {
 
 type Manager struct {
 	instances          []*Instance
-	ui                 entity.UI
+	ui                 common.UI
 	resultCache        *util.HashMap[string, *QueryResultCache]
 	debounceQueryTimer *util.HashMap[string, *debounceTimer]
-	aiProviders        *util.HashMap[entity.ProviderName, ai.Provider]
+	aiProviders        *util.HashMap[common.ProviderName, ai.Provider]
 
 	activeBrowserUrl string //active browser url before wox is activated
 }
@@ -54,14 +54,14 @@ func GetPluginManager() *Manager {
 		managerInstance = &Manager{
 			resultCache:        util.NewHashMap[string, *QueryResultCache](),
 			debounceQueryTimer: util.NewHashMap[string, *debounceTimer](),
-			aiProviders:        util.NewHashMap[entity.ProviderName, ai.Provider](),
+			aiProviders:        util.NewHashMap[common.ProviderName, ai.Provider](),
 		}
 		logger = util.GetLogger()
 	})
 	return managerInstance
 }
 
-func (m *Manager) Start(ctx context.Context, ui entity.UI) error {
+func (m *Manager) Start(ctx context.Context, ui common.UI) error {
 	m.ui = ui
 
 	loadErr := m.loadPlugins(ctx)
@@ -436,8 +436,8 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 }
 
 func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Metadata, query Query, err error) QueryResult {
-	overlayIcon := entity.NewWoxImageEmoji("🚫")
-	pluginIcon := entity.ParseWoxImageOrDefault(pluginMetadata.Icon, overlayIcon)
+	overlayIcon := common.NewWoxImageEmoji("🚫")
+	pluginIcon := common.ParseWoxImageOrDefault(pluginMetadata.Icon, overlayIcon)
 	icon := pluginIcon.OverlayFullPercentage(overlayIcon, 0.6)
 
 	return QueryResult{
@@ -491,10 +491,10 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	}
 
 	// convert icon
-	result.Icon = entity.ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
+	result.Icon = common.ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
 	for i := range result.Tails {
 		if result.Tails[i].Type == QueryResultTailTypeImage {
-			result.Tails[i].Image = entity.ConvertIcon(ctx, result.Tails[i].Image, pluginInstance.PluginDirectory)
+			result.Tails[i].Image = common.ConvertIcon(ctx, result.Tails[i].Image, pluginInstance.PluginDirectory)
 		}
 	}
 
@@ -723,10 +723,10 @@ func (m *Manager) polishRefreshableResult(ctx context.Context, resultCache *Quer
 	})
 
 	// convert icon
-	result.Icon = entity.ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
+	result.Icon = common.ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
 	for i := range result.Tails {
 		if result.Tails[i].Type == QueryResultTailTypeImage {
-			result.Tails[i].Image = entity.ConvertIcon(ctx, result.Tails[i].Image, pluginInstance.PluginDirectory)
+			result.Tails[i].Image = common.ConvertIcon(ctx, result.Tails[i].Image, pluginInstance.PluginDirectory)
 		}
 	}
 
@@ -889,13 +889,13 @@ func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *I
 			return QueryResult{
 				Title:    item.Command,
 				SubTitle: item.Description,
-				Icon:     entity.ParseWoxImageOrDefault(queryPlugin.Metadata.Icon, entity.NewWoxImageEmoji("🔍")),
+				Icon:     common.ParseWoxImageOrDefault(queryPlugin.Metadata.Icon, common.NewWoxImageEmoji("🔍")),
 				Actions: []QueryResultAction{
 					{
 						Name:                   "Execute",
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext ActionContext) {
-							m.ui.ChangeQuery(ctx, entity.PlainQuery{
+							m.ui.ChangeQuery(ctx, common.PlainQuery{
 								QueryType: QueryTypeInput,
 								QueryText: fmt.Sprintf("%s %s ", query.TriggerKeyword, item.Command),
 							})
@@ -946,11 +946,11 @@ func (m *Manager) translatePlugin(ctx context.Context, pluginInstance *Instance,
 	}
 }
 
-func (m *Manager) GetUI() entity.UI {
+func (m *Manager) GetUI() common.UI {
 	return m.ui
 }
 
-func (m *Manager) NewQuery(ctx context.Context, plainQuery entity.PlainQuery) (Query, *Instance, error) {
+func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Query, *Instance, error) {
 	if plainQuery.QueryType == QueryTypeInput {
 		newQuery := plainQuery.QueryText
 		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
@@ -1141,14 +1141,14 @@ func (m *Manager) GetResultPreview(ctx context.Context, resultId string) (WoxPre
 
 func (m *Manager) polishPreview(ctx context.Context, preview WoxPreview) WoxPreview {
 	if preview.PreviewType == WoxPreviewTypeImage {
-		woxImage, err := entity.ParseWoxImage(preview.PreviewData)
+		woxImage, err := common.ParseWoxImage(preview.PreviewData)
 		if err != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to parse wox image for preview: %s", err.Error()))
 			return preview
 		}
 
-		if woxImage.ImageType == entity.WoxImageTypeAbsolutePath {
-			newWoxImage := entity.ConvertLocalImageToUrl(ctx, woxImage)
+		if woxImage.ImageType == common.WoxImageTypeAbsolutePath {
+			newWoxImage := common.ConvertLocalImageToUrl(ctx, woxImage)
 			return WoxPreview{
 				PreviewType:       WoxPreviewTypeImage,
 				PreviewData:       newWoxImage.String(),
@@ -1196,7 +1196,7 @@ func (m *Manager) IsHostStarted(ctx context.Context, runtime Runtime) bool {
 	return false
 }
 
-func (m *Manager) GetAIProvider(ctx context.Context, provider entity.ProviderName) (ai.Provider, error) {
+func (m *Manager) GetAIProvider(ctx context.Context, provider common.ProviderName) (ai.Provider, error) {
 	if v, exist := m.aiProviders.Load(provider); exist {
 		return v, nil
 	}

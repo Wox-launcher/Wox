@@ -8,7 +8,7 @@ import (
 	"path"
 	"slices"
 	"sync"
-	"wox/entity"
+	"wox/common"
 	"wox/i18n"
 	"wox/setting/definition"
 	"wox/util"
@@ -366,7 +366,7 @@ func (m *Manager) SavePluginSetting(ctx context.Context, pluginId string, plugin
 	return nil
 }
 
-func (m *Manager) AddQueryHistory(ctx context.Context, query entity.PlainQuery) {
+func (m *Manager) AddQueryHistory(ctx context.Context, query common.PlainQuery) {
 	if query.IsEmpty() {
 		return
 	}

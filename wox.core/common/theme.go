@@ -1,4 +1,4 @@
-package entity
+package common
 
 type Theme struct {
 	ThemeId     string

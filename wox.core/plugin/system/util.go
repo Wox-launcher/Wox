@@ -13,7 +13,7 @@ import (
 	"path"
 	"sync"
 	"time"
-	"wox/entity"
+	"wox/common"
 	"wox/plugin"
 	"wox/setting"
 	"wox/util"
@@ -30,7 +30,7 @@ type cacheResult struct {
 }
 
 var pinyinMatchCache = util.NewHashMap[string, cacheResult]()
-var windowIconCache = util.NewHashMap[string, entity.WoxImage]()
+var windowIconCache = util.NewHashMap[string, common.WoxImage]()
 
 func IsStringMatchScore(ctx context.Context, term string, subTerm string) (bool, int64) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
@@ -58,7 +58,7 @@ func IsStringMatchNoPinYin(ctx context.Context, term string, subTerm string) boo
 	return match
 }
 
-func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (entity.WoxImage, error) {
+func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (common.WoxImage, error) {
 	parseUrl, err := url.Parse(websiteUrl)
 	if err != nil {
 		return webSearchIcon, fmt.Errorf("failed to parse url for %s: %s", websiteUrl, err.Error())
@@ -69,8 +69,8 @@ func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (entity.Wox
 	iconPathMd5 := fmt.Sprintf("%x", md5.Sum([]byte(hostUrl)))
 	iconCachePath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("website_icon_%s.png", iconPathMd5))
 	if _, statErr := os.Stat(iconCachePath); statErr == nil {
-		return entity.WoxImage{
-			ImageType: entity.WoxImageTypeAbsolutePath,
+		return common.WoxImage{
+			ImageType: common.WoxImageTypeAbsolutePath,
 			ImageData: iconCachePath,
 		}, nil
 	}
@@ -91,7 +91,7 @@ func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (entity.Wox
 		return webSearchIcon, fmt.Errorf("failed to get image for %s: %s", hostUrl, imageEr.Error())
 	}
 
-	woxImage, woxImageErr := entity.NewWoxImage(*image)
+	woxImage, woxImageErr := common.NewWoxImage(*image)
 	if woxImageErr != nil {
 		return webSearchIcon, fmt.Errorf("failed to convert image for %s: %s", hostUrl, woxImageErr.Error())
 	}
@@ -106,9 +106,9 @@ func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (entity.Wox
 }
 
 func createLLMOnRefreshHandler(ctx context.Context,
-	chatStreamAPI func(ctx context.Context, model entity.Model, conversations []entity.Conversation, callback entity.ChatStreamFunc) error,
-	model entity.Model,
-	conversations []entity.Conversation,
+	chatStreamAPI func(ctx context.Context, model common.Model, conversations []common.Conversation, callback common.ChatStreamFunc) error,
+	model common.Model,
+	conversations []common.Conversation,
 	shouldStartAnswering func() bool,
 	onPreparing func(plugin.RefreshableResult) plugin.RefreshableResult,
 	onAnswering func(plugin.RefreshableResult, string, bool) plugin.RefreshableResult,
@@ -116,7 +116,7 @@ func createLLMOnRefreshHandler(ctx context.Context,
 
 	var isStreamCreated bool
 	var locker sync.Locker = &sync.Mutex{}
-	var chatStreamDataTypeBuffer entity.ChatStreamDataType
+	var chatStreamDataTypeBuffer common.ChatStreamDataType
 	var responseBuffer string
 	return func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
 		if !shouldStartAnswering() {
@@ -129,13 +129,13 @@ func createLLMOnRefreshHandler(ctx context.Context,
 			if onPreparing != nil {
 				current = onPreparing(current)
 			}
-			err := chatStreamAPI(ctx, model, conversations, func(chatStreamDataType entity.ChatStreamDataType, response string) {
+			err := chatStreamAPI(ctx, model, conversations, func(chatStreamDataType common.ChatStreamDataType, response string) {
 				locker.Lock()
 				chatStreamDataTypeBuffer = chatStreamDataType
-				if chatStreamDataType == entity.ChatStreamTypeStreaming || chatStreamDataTypeBuffer == entity.ChatStreamTypeFinished {
+				if chatStreamDataType == common.ChatStreamTypeStreaming || chatStreamDataTypeBuffer == common.ChatStreamTypeFinished {
 					responseBuffer += response
 				}
-				if chatStreamDataType == entity.ChatStreamTypeError {
+				if chatStreamDataType == common.ChatStreamTypeError {
 					responseBuffer = response
 				}
 				util.GetLogger().Info(ctx, fmt.Sprintf("stream buffered: %s", responseBuffer))
@@ -147,7 +147,7 @@ func createLLMOnRefreshHandler(ctx context.Context,
 			}
 		}
 
-		if chatStreamDataTypeBuffer == entity.ChatStreamTypeFinished {
+		if chatStreamDataTypeBuffer == common.ChatStreamTypeFinished {
 			util.GetLogger().Info(ctx, "stream finished")
 			locker.Lock()
 			buf := responseBuffer
@@ -155,7 +155,7 @@ func createLLMOnRefreshHandler(ctx context.Context,
 			locker.Unlock()
 			return onAnswering(current, buf, true)
 		}
-		if chatStreamDataTypeBuffer == entity.ChatStreamTypeError {
+		if chatStreamDataTypeBuffer == common.ChatStreamTypeError {
 			util.GetLogger().Info(ctx, fmt.Sprintf("stream error: %s", responseBuffer))
 			locker.Lock()
 			err := fmt.Errorf(responseBuffer)
@@ -163,7 +163,7 @@ func createLLMOnRefreshHandler(ctx context.Context,
 			locker.Unlock()
 			return onAnswerErr(current, err)
 		}
-		if chatStreamDataTypeBuffer == entity.ChatStreamTypeStreaming {
+		if chatStreamDataTypeBuffer == common.ChatStreamTypeStreaming {
 			util.GetLogger().Info(ctx, fmt.Sprintf("streaming: %s", responseBuffer))
 			locker.Lock()
 			buf := responseBuffer
@@ -176,7 +176,7 @@ func createLLMOnRefreshHandler(ctx context.Context,
 	}
 }
 
-func getActiveWindowIcon(ctx context.Context) (entity.WoxImage, error) {
+func getActiveWindowIcon(ctx context.Context) (common.WoxImage, error) {
 	cacheKey := fmt.Sprintf("%s-%d", window.GetActiveWindowName(), window.GetActiveWindowPid())
 	if icon, ok := windowIconCache.Load(cacheKey); ok {
 		return icon, nil
@@ -184,17 +184,17 @@ func getActiveWindowIcon(ctx context.Context) (entity.WoxImage, error) {
 
 	icon, err := window.GetActiveWindowIcon()
 	if err != nil {
-		return entity.WoxImage{}, err
+		return common.WoxImage{}, err
 	}
 
 	var buf bytes.Buffer
 	encodeErr := png.Encode(&buf, icon)
 	if encodeErr != nil {
-		return entity.WoxImage{}, encodeErr
+		return common.WoxImage{}, encodeErr
 	}
 
 	base64Str := base64.StdEncoding.EncodeToString(buf.Bytes())
-	woxIcon := entity.NewWoxImageBase64(fmt.Sprintf("data:image/png;base64,%s", base64Str))
+	woxIcon := common.NewWoxImageBase64(fmt.Sprintf("data:image/png;base64,%s", base64Str))
 	windowIconCache.Store(cacheKey, woxIcon)
 	return woxIcon, nil
 }
@@ -204,7 +204,7 @@ func refreshQuery(ctx context.Context, api plugin.API, query plugin.Query) {
 		return
 	}
 
-	api.ChangeQuery(ctx, entity.PlainQuery{
+	api.ChangeQuery(ctx, common.PlainQuery{
 		QueryType: query.Type,
 		QueryText: query.RawQuery,
 	})
@@ -214,7 +214,7 @@ func getPasteToActiveWindowAction(ctx context.Context, api plugin.API, actionCal
 	windowName := window.GetActiveWindowName()
 	windowIcon, windowIconErr := window.GetActiveWindowIcon()
 	if windowIconErr == nil && windowName != "" {
-		windowIconImage, err := entity.NewWoxImage(windowIcon)
+		windowIconImage, err := common.NewWoxImage(windowIcon)
 		if err == nil {
 			return plugin.QueryResultAction{
 				Name:      "Paste to " + windowName,

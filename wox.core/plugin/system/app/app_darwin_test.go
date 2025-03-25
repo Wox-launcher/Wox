@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 	"testing"
-	"wox/entity"
+	"wox/common"
 	"wox/plugin"
 	"wox/util"
 
@@ -16,7 +16,7 @@ type emptyAPIImpl struct {
 func (e emptyAPIImpl) OnGetDynamicSetting(ctx context.Context, callback func(key string) string) {
 }
 
-func (e emptyAPIImpl) ChangeQuery(ctx context.Context, query entity.PlainQuery) {
+func (e emptyAPIImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
 }
 
 func (e emptyAPIImpl) HideApp(ctx context.Context) {
@@ -54,7 +54,7 @@ func (e emptyAPIImpl) OnUnload(ctx context.Context, callback func()) {
 func (e emptyAPIImpl) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
 }
 
-func (e emptyAPIImpl) AIChatStream(ctx context.Context, model entity.Model, conversations []entity.Conversation, callback entity.ChatStreamFunc) error {
+func (e emptyAPIImpl) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, callback common.ChatStreamFunc) error {
 	return nil
 }
 

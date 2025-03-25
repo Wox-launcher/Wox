@@ -3,7 +3,7 @@ package system
 import (
 	"context"
 	"fmt"
-	"wox/entity"
+	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
 
@@ -66,7 +66,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 						Name:                   "i18n:plugin_indicator_activate",
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							i.api.ChangeQuery(ctx, entity.PlainQuery{
+							i.api.ChangeQuery(ctx, common.PlainQuery{
 								QueryType: plugin.QueryTypeInput,
 								QueryText: fmt.Sprintf("%s ", triggerKeyword),
 							})
@@ -88,7 +88,7 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 							Name:                   "i18n:plugin_indicator_activate",
 							PreventHideAfterAction: true,
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-								i.api.ChangeQuery(ctx, entity.PlainQuery{
+								i.api.ChangeQuery(ctx, common.PlainQuery{
 									QueryType: plugin.QueryTypeInput,
 									QueryText: fmt.Sprintf("%s %s ", triggerKeyword, metadataCommand.Command),
 								})

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"image/png"
 	"io"
-	"wox/entity"
+	"wox/common"
 	"wox/setting"
 	"wox/util"
 
@@ -23,7 +23,7 @@ type OllamaProvider struct {
 }
 
 type OllamaProviderStream struct {
-	conversations []entity.Conversation
+	conversations []common.Conversation
 	reader        io.Reader
 }
 
@@ -31,7 +31,7 @@ func NewOllamaProvider(ctx context.Context, connectContext setting.AIProvider) P
 	return &OllamaProvider{connectContext: connectContext}
 }
 
-func (o *OllamaProvider) ChatStream(ctx context.Context, model entity.Model, conversations []entity.Conversation) (ChatStream, error) {
+func (o *OllamaProvider) ChatStream(ctx context.Context, model common.Model, conversations []common.Conversation) (ChatStream, error) {
 	client, clientErr := ollama.New(ollama.WithServerURL(o.connectContext.Host), ollama.WithModel(model.Name))
 	if clientErr != nil {
 		return nil, clientErr
@@ -54,16 +54,16 @@ func (o *OllamaProvider) ChatStream(ctx context.Context, model entity.Model, con
 	return &OllamaProviderStream{conversations: conversations, reader: r}, nil
 }
 
-func (o *OllamaProvider) Models(ctx context.Context) (models []entity.Model, err error) {
+func (o *OllamaProvider) Models(ctx context.Context) (models []common.Model, err error) {
 	body, err := util.HttpGet(ctx, o.connectContext.Host+"/api/tags")
 	if err != nil {
 		return nil, err
 	}
 
 	gjson.Get(string(body), "models.#.name").ForEach(func(key, value gjson.Result) bool {
-		models = append(models, entity.Model{
+		models = append(models, common.Model{
 			Name:     value.String(),
-			Provider: entity.ProviderNameOllama,
+			Provider: common.ProviderNameOllama,
 		})
 		return true
 	})
@@ -76,13 +76,13 @@ func (o *OllamaProvider) Ping(ctx context.Context) error {
 	return err
 }
 
-func (o *OllamaProvider) convertConversations(conversations []entity.Conversation) (chatMessages []llms.MessageContent) {
+func (o *OllamaProvider) convertConversations(conversations []common.Conversation) (chatMessages []llms.MessageContent) {
 	for _, conversation := range conversations {
 		var msg llms.MessageContent
-		if conversation.Role == entity.ConversationRoleUser {
+		if conversation.Role == common.ConversationRoleUser {
 			msg = llms.TextParts(llms.ChatMessageTypeHuman, conversation.Text)
 		}
-		if conversation.Role == entity.ConversationRoleAI {
+		if conversation.Role == common.ConversationRoleAI {
 			msg = llms.TextParts(llms.ChatMessageTypeAI, conversation.Text)
 		}
 

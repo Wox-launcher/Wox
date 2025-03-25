@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"wox/entity"
+	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/resource"
@@ -64,7 +64,7 @@ func main() {
 	}
 	util.GetLogger().Info(ctx, fmt.Sprintf("server port: %d", serverPort))
 	ui.GetUIManager().UpdateServerPort(serverPort)
-	entity.SetServerPort(serverPort)
+	common.SetServerPort(serverPort)
 
 	// check if there is existing instance running
 	if existingPort := getExistingInstancePort(ctx); existingPort > 0 {

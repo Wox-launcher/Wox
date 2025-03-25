@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"wox/entity"
+	"wox/common"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/setting/validator"
@@ -31,7 +31,7 @@ type webSearch struct {
 	Title      string
 	Keyword    string
 	IsFallback bool //if true, this search will be used when no other search is matched
-	Icon       entity.WoxImage
+	Icon       common.WoxImage
 	Enabled    bool
 }
 
@@ -176,7 +176,7 @@ func (r *WebSearchPlugin) indexIcons(ctx context.Context) {
 	}
 }
 
-func (r *WebSearchPlugin) indexWebSearchIcon(ctx context.Context, search webSearch) entity.WoxImage {
+func (r *WebSearchPlugin) indexWebSearchIcon(ctx context.Context, search webSearch) common.WoxImage {
 	// if search url is google, return google icon
 	if strings.Contains(search.Urls[0], "google.com") {
 		return plugin.GoogleIcon

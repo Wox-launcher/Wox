@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"wox/entity"
+	"wox/common"
 	"wox/plugin"
 	"wox/util"
 	"wox/util/clipboard"
@@ -142,7 +142,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 						{
 							Name: "i18n:plugin_calculator_recalculate",
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-								c.api.ChangeQuery(ctx, entity.PlainQuery{
+								c.api.ChangeQuery(ctx, common.PlainQuery{
 									QueryType: plugin.QueryTypeInput,
 									QueryText: h.Expression,
 								})

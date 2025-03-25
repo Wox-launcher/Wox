@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"wox/entity"
+	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting/definition"
@@ -27,10 +27,10 @@ type commandSetting struct {
 	Vision  bool   `json:"vision"` // does the command interact with vision
 }
 
-func (c *commandSetting) AIModel() (model entity.Model) {
+func (c *commandSetting) AIModel() (model common.Model) {
 	err := json.Unmarshal([]byte(c.Model), &model)
 	if err != nil {
-		return entity.Model{}
+		return common.Model{}
 	}
 
 	return model
@@ -229,24 +229,24 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 			return current
 		}
 
-		var conversations []entity.Conversation
+		var conversations []common.Conversation
 		if query.Selection.Type == selection.SelectionTypeFile {
-			var images []entity.WoxImage
+			var images []common.WoxImage
 			for _, imagePath := range query.Selection.FilePaths {
-				images = append(images, entity.WoxImage{
-					ImageType: entity.WoxImageTypeAbsolutePath,
+				images = append(images, common.WoxImage{
+					ImageType: common.WoxImageTypeAbsolutePath,
 					ImageData: imagePath,
 				})
 			}
-			conversations = append(conversations, entity.Conversation{
-				Role:   entity.ConversationRoleUser,
+			conversations = append(conversations, common.Conversation{
+				Role:   common.ConversationRoleUser,
 				Text:   command.Prompt,
 				Images: images,
 			})
 		}
 		if query.Selection.Type == selection.SelectionTypeText {
-			conversations = append(conversations, entity.Conversation{
-				Role: entity.ConversationRoleUser,
+			conversations = append(conversations, common.Conversation{
+				Role: common.ConversationRoleUser,
 				Text: fmt.Sprintf(command.Prompt, query.Selection.Text),
 			})
 		}
@@ -307,7 +307,7 @@ func (c *Plugin) listAllCommands(ctx context.Context, query plugin.Query) []plug
 					Name:                   "i18n:plugin_ai_command_run",
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						c.api.ChangeQuery(ctx, entity.PlainQuery{
+						c.api.ChangeQuery(ctx, common.PlainQuery{
 							QueryType: plugin.QueryTypeInput,
 							QueryText: fmt.Sprintf("%s %s ", query.TriggerKeyword, command.Command),
 						})
@@ -380,17 +380,17 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	}
 
 	var prompts = strings.Split(aiCommandSetting.Prompt, "{wox:new_ai_conversation}")
-	var conversations []entity.Conversation
+	var conversations []common.Conversation
 	for index, message := range prompts {
 		msg := fmt.Sprintf(message, query.Search)
 		if index%2 == 0 {
-			conversations = append(conversations, entity.Conversation{
-				Role: entity.ConversationRoleUser,
+			conversations = append(conversations, common.Conversation{
+				Role: common.ConversationRoleUser,
 				Text: msg,
 			})
 		} else {
-			conversations = append(conversations, entity.Conversation{
-				Role: entity.ConversationRoleAI,
+			conversations = append(conversations, common.Conversation{
+				Role: common.ConversationRoleAI,
 				Text: msg,
 			})
 		}

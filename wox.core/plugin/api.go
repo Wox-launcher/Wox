@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"path"
-	"wox/entity"
+	"wox/common"
 	"wox/i18n"
 	"wox/setting"
 	"wox/util"
@@ -24,7 +24,7 @@ const (
 )
 
 type API interface {
-	ChangeQuery(ctx context.Context, query entity.PlainQuery)
+	ChangeQuery(ctx context.Context, query common.PlainQuery)
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context)
 	Notify(ctx context.Context, description string)
@@ -37,7 +37,7 @@ type API interface {
 	OnDeepLink(ctx context.Context, callback func(arguments map[string]string))
 	OnUnload(ctx context.Context, callback func())
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
-	AIChatStream(ctx context.Context, model entity.Model, conversations []entity.Conversation, callback entity.ChatStreamFunc) error
+	AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, callback common.ChatStreamFunc) error
 }
 
 type APIImpl struct {
@@ -45,7 +45,7 @@ type APIImpl struct {
 	logger         *util.Log
 }
 
-func (a *APIImpl) ChangeQuery(ctx context.Context, query entity.PlainQuery) {
+func (a *APIImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
 	GetPluginManager().GetUI().ChangeQuery(ctx, query)
 }
 
@@ -54,13 +54,13 @@ func (a *APIImpl) HideApp(ctx context.Context) {
 }
 
 func (a *APIImpl) ShowApp(ctx context.Context) {
-	GetPluginManager().GetUI().ShowApp(ctx, entity.ShowContext{
+	GetPluginManager().GetUI().ShowApp(ctx, common.ShowContext{
 		SelectAll: true,
 	})
 }
 
 func (a *APIImpl) Notify(ctx context.Context, message string) {
-	GetPluginManager().GetUI().Notify(ctx, entity.NotifyMsg{
+	GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{
 		PluginId:       a.pluginInstance.Metadata.Id,
 		Text:           a.GetTranslation(ctx, message),
 		DisplaySeconds: 3,
@@ -172,7 +172,7 @@ func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []Metadata
 	a.pluginInstance.SaveSetting(ctx)
 }
 
-func (a *APIImpl) AIChatStream(ctx context.Context, model entity.Model, conversations []entity.Conversation, callback entity.ChatStreamFunc) error {
+func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, callback common.ChatStreamFunc) error {
 	//check if plugin has the feature permission
 	if !a.pluginInstance.Metadata.IsSupportFeature(MetadataFeatureAI) {
 		return fmt.Errorf("plugin has no access to ai feature")
@@ -211,17 +211,17 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model entity.Model, conversa
 				response, streamErr := stream.Receive(ctx)
 				if errors.Is(streamErr, io.EOF) {
 					util.GetLogger().Info(ctx, "read stream completed")
-					callback(entity.ChatStreamTypeFinished, "")
+					callback(common.ChatStreamTypeFinished, "")
 					return
 				}
 
 				if streamErr != nil {
 					util.GetLogger().Info(ctx, fmt.Sprintf("failed to read stream: %s", streamErr.Error()))
-					callback(entity.ChatStreamTypeError, streamErr.Error())
+					callback(common.ChatStreamTypeError, streamErr.Error())
 					return
 				}
 
-				callback(entity.ChatStreamTypeStreaming, response)
+				callback(common.ChatStreamTypeStreaming, response)
 			}
 		})
 	}
