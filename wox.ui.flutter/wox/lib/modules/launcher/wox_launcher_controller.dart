@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
@@ -35,7 +34,6 @@ import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 import 'package:fuzzywuzzy/fuzzywuzzy.dart';
-import 'package:wox/utils/windows/linux_window_manager.dart';
 
 class WoxLauncherController extends GetxController {
   //query related variables
@@ -47,6 +45,10 @@ class WoxLauncherController extends GetxController {
   //preview related variables
   final currentPreview = WoxPreview.empty().obs;
   final isShowPreviewPanel = false.obs;
+
+  /// The ratio of result panel width to total width, value range: 0.0-1.0
+  /// e.g., 0.3 means result panel takes 30% width, preview panel takes 70%
+  final resultPreviewRatio = 0.5.obs;
 
   // result related variables
   /// The list of query results.
@@ -70,6 +72,9 @@ class WoxLauncherController extends GetxController {
   final actionTextFieldController = TextEditingController();
   final actionFocusNode = FocusNode();
   final actionScrollerController = ScrollController(initialScrollOffset: 0.0);
+
+  // ai chat related variables
+  final aiChatFocusNode = FocusNode();
 
   /// This flag is used to control whether the user can arrow up to show history when the app is first shown.
   var canArrowUpHistory = true;
@@ -579,6 +584,9 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "IsVisible") {
       var isVisible = await windowManager.isVisible();
       responseWoxWebsocketRequest(msg, true, isVisible);
+    } else if (msg.method == "FocusToChatInput") {
+      focusToChatInput(msg.traceId);
+      responseWoxWebsocketRequest(msg, true, null);
     }
   }
 
@@ -980,6 +988,11 @@ class WoxLauncherController extends GetxController {
         }
       });
     }
+  }
+
+  void focusToChatInput(String traceId) {
+    Logger.instance.info(traceId, "focus to chat input");
+    aiChatFocusNode.requestFocus();
   }
 
   void moveQueryBoxCursorToStart() {

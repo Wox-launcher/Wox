@@ -180,7 +180,7 @@ async function onLLMStream(ctx: Context, request: PluginJsonRpcRequest) {
     throw new Error(`llm stream callback not found: ${callbackId}`)
   }
 
-  callbackFunc(<entity.ChatStreamDataType>streamType, data)
+  callbackFunc(<AI.ChatStreamDataType>streamType, data)
 }
 
 async function query(ctx: Context, request: PluginJsonRpcRequest) {

@@ -23,7 +23,6 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
       return Stack(children: [
         Positioned(
             child: Focus(
-                autofocus: true,
                 onKeyEvent: (FocusNode node, KeyEvent event) {
                   var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
                   if (!isAnyModifierPressed) {
@@ -135,7 +134,6 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         hoverColor: Colors.transparent,
                       ),
                       cursorColor: fromCssColor(controller.woxTheme.value.queryBoxCursorColor),
-                      autofocus: true,
                       focusNode: controller.queryBoxFocusNode,
                       controller: controller.queryBoxTextFieldController,
                       scrollController: controller.queryBoxScrollController,

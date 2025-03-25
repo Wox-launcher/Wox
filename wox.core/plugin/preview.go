@@ -1,7 +1,6 @@
 package plugin
 
 import (
-	"encoding/json"
 	"wox/common"
 )
 
@@ -34,13 +33,6 @@ func (p *WoxPreview) IsEmpty() bool {
 }
 
 type WoxPreviewChatData struct {
-	Messages []common.Conversation
-}
-
-func (d *WoxPreviewChatData) Json() string {
-	jsonData, err := json.Marshal(d)
-	if err != nil {
-		return ""
-	}
-	return string(jsonData)
+	Conversations []common.Conversation
+	Model         common.Model
 }

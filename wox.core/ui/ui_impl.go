@@ -86,6 +86,10 @@ func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
 	}
 }
 
+func (u *uiImpl) FocusToChatInput(ctx context.Context) {
+	u.invokeWebsocketMethod(ctx, "FocusToChatInput", nil)
+}
+
 func (u *uiImpl) isNotifyInToolbar(ctx context.Context, pluginId string) bool {
 	isVisible, err := u.invokeWebsocketMethod(ctx, "IsVisible", nil)
 	if err != nil {

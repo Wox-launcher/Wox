@@ -234,7 +234,7 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 
 	tokens, err := c.tokenizer.Tokenize(ctx, query.Search)
 	if err != nil {
-		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Tokenize error: %v", err))
+		// c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Tokenize error: %v", err))
 		return []plugin.QueryResult{}
 	}
 

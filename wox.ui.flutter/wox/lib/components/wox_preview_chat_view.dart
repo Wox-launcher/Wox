@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:from_css_color/from_css_color.dart';
+import 'package:get/get.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
+import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 
 class WoxPreviewChatView extends StatefulWidget {
   final WoxPreviewChatData previewChatData;
@@ -18,7 +21,7 @@ class WoxPreviewChatView extends StatefulWidget {
 class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
-  final FocusNode _focusNode = FocusNode();
+  final controller = Get.find<WoxLauncherController>();
 
   @override
   void initState() {
@@ -38,7 +41,6 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
   void dispose() {
     _scrollController.dispose();
     _textController.dispose();
-    _focusNode.dispose();
     super.dispose();
   }
 
@@ -59,109 +61,129 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
           ),
         ),
         // Input box
-        Container(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  color: fromCssColor(widget.woxTheme.queryBoxBackgroundColor),
-                  borderRadius: BorderRadius.circular(widget.woxTheme.queryBoxBorderRadius.toDouble()),
-                ),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _textController,
-                      focusNode: _focusNode,
-                      decoration: InputDecoration(
-                        hintText: '在这里输入消息，按下 ← 发送',
-                        hintStyle: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor)),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        Focus(
+          onFocusChange: (bool hasFocus) {
+            // when focused, set the preview ratio to 0.3 for better user experience
+            if (!hasFocus) {
+              controller.resultPreviewRatio.value = 0.5;
+            } else {
+              controller.resultPreviewRatio.value = 0.3;
+            }
+          },
+          onKeyEvent: (FocusNode node, KeyEvent event) {
+            if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
+              // delay to ensure the focus node is unfocused, otherwise key event will propagate to query box
+              Future.delayed(const Duration(milliseconds: 120), () {
+                controller.queryBoxFocusNode.requestFocus();
+              });
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: Container(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: fromCssColor(widget.woxTheme.queryBoxBackgroundColor),
+                    borderRadius: BorderRadius.circular(widget.woxTheme.queryBoxBorderRadius.toDouble()),
+                  ),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _textController,
+                        focusNode: controller.aiChatFocusNode,
+                        decoration: InputDecoration(
+                          hintText: '在这里输入消息，按下 ← 发送',
+                          hintStyle: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor)),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        ),
+                        maxLines: null,
+                        keyboardType: TextInputType.multiline,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: fromCssColor(widget.woxTheme.queryBoxFontColor),
+                        ),
+                        onSubmitted: (_) => _sendMessage(),
                       ),
-                      maxLines: null,
-                      keyboardType: TextInputType.multiline,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: fromCssColor(widget.woxTheme.queryBoxFontColor),
-                      ),
-                      onSubmitted: (_) => _sendMessage(),
-                    ),
-                    Container(
-                      height: 36,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          top: BorderSide(
-                            color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.1),
+                      Container(
+                        height: 36,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            top: BorderSide(
+                              color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.1),
+                            ),
                           ),
                         ),
-                      ),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.link, size: 18),
-                            color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
-                            onPressed: () {},
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 32,
-                              minHeight: 32,
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.link, size: 18),
+                              color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
+                              onPressed: () {},
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
+                              ),
                             ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.keyboard_command_key, size: 18),
-                            color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
-                            onPressed: () {},
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 32,
-                              minHeight: 32,
+                            IconButton(
+                              icon: const Icon(Icons.keyboard_command_key, size: 18),
+                              color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
+                              onPressed: () {},
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
+                              ),
                             ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.eco_outlined, size: 18),
-                            color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
-                            onPressed: () {},
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 32,
-                              minHeight: 32,
+                            IconButton(
+                              icon: const Icon(Icons.eco_outlined, size: 18),
+                              color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
+                              onPressed: () {},
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
+                              ),
                             ),
-                          ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: fromCssColor(widget.woxTheme.actionItemActiveBackgroundColor).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.keyboard_return,
-                                  size: 14,
-                                  color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '发送',
-                                  style: TextStyle(
-                                    fontSize: 12,
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: fromCssColor(widget.woxTheme.actionItemActiveBackgroundColor).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.keyboard_return,
+                                    size: 14,
                                     color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '发送',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
@@ -172,9 +194,8 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
 
-    // TODO: Implement send message functionality
     _textController.clear();
-    _focusNode.requestFocus();
+    controller.aiChatFocusNode.requestFocus();
   }
 
   Widget _buildMessageItem(WoxPreviewChatConversation message) {

@@ -48,6 +48,7 @@ type UI interface {
 	UninstallTheme(ctx context.Context, theme Theme)
 	RestoreTheme(ctx context.Context)
 	Notify(ctx context.Context, msg NotifyMsg)
+	FocusToChatInput(ctx context.Context)
 }
 
 type ShowContext struct {
