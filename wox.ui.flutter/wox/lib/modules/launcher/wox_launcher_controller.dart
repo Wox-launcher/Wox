@@ -238,7 +238,16 @@ class WoxLauncherController extends GetxController {
     }
 
     // must invoke after clearQueryResults, because clearQueryResults will trigger resizeHeight, which will cause the focus can't return to the other window in windows
-    await windowManager.hide();
+    // Also,  on windows, the hide method will cause onKeyEvent state inconsistent (the keyup event will be suppressed until the next show, so next time you press the esc key,
+    // the previous keyup event will be triggered, which in our case will not trigger the hide app action. you may need to press the esc key twice),
+    // so we need to delay the hide method on windows. if we someday find a better solution, we can remove this delay
+    if (Platform.isWindows) {
+      Future.delayed(const Duration(milliseconds: 50), () {
+        windowManager.hide();
+      });
+    } else {
+      await windowManager.hide();
+    }
 
     await WoxApi.instance.onHide(currentQuery.value);
   }
