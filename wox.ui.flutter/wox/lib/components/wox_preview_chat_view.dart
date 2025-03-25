@@ -9,27 +9,27 @@ import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 
 class WoxPreviewChatView extends StatefulWidget {
-  final WoxPreviewChatData previewChatData;
+  final WoxPreviewChatData chatData;
   final WoxTheme woxTheme;
 
-  const WoxPreviewChatView({super.key, required this.previewChatData, required this.woxTheme});
+  const WoxPreviewChatView({super.key, required this.chatData, required this.woxTheme});
 
   @override
   State<WoxPreviewChatView> createState() => _WoxPreviewChatViewState();
 }
 
 class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
-  final ScrollController _scrollController = ScrollController();
-  final TextEditingController _textController = TextEditingController();
+  final ScrollController scrollController = ScrollController();
+  final TextEditingController textController = TextEditingController();
   final controller = Get.find<WoxLauncherController>();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+      if (scrollController.hasClients) {
+        scrollController.animateTo(
+          scrollController.position.maxScrollExtent,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
@@ -39,8 +39,8 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
 
   @override
   void dispose() {
-    _scrollController.dispose();
-    _textController.dispose();
+    scrollController.dispose();
+    textController.dispose();
     super.dispose();
   }
 
@@ -51,12 +51,12 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
         // Messages list
         Expanded(
           child: ListView.builder(
-            controller: _scrollController,
+            controller: scrollController,
             padding: const EdgeInsets.symmetric(vertical: 16.0),
-            itemCount: widget.previewChatData.messages.length,
+            itemCount: widget.chatData.conversations.length,
             itemBuilder: (context, index) {
-              final message = widget.previewChatData.messages[index];
-              return _buildMessageItem(message);
+              final message = widget.chatData.conversations[index];
+              return buildMessageItem(message);
             },
           ),
         ),
@@ -71,12 +71,15 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
             }
           },
           onKeyEvent: (FocusNode node, KeyEvent event) {
-            if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
-              // delay to ensure the focus node is unfocused, otherwise key event will propagate to query box
-              Future.delayed(const Duration(milliseconds: 120), () {
-                controller.queryBoxFocusNode.requestFocus();
-              });
-              return KeyEventResult.handled;
+            if (event is KeyDownEvent) {
+              switch (event.logicalKey) {
+                case LogicalKeyboardKey.escape:
+                  controller.queryBoxFocusNode.requestFocus();
+                  return KeyEventResult.handled;
+                case LogicalKeyboardKey.enter:
+                  sendMessage();
+                  return KeyEventResult.handled;
+              }
             }
             return KeyEventResult.ignored;
           },
@@ -92,7 +95,7 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
                   child: Column(
                     children: [
                       TextField(
-                        controller: _textController,
+                        controller: textController,
                         focusNode: controller.aiChatFocusNode,
                         decoration: InputDecoration(
                           hintText: '在这里输入消息，按下 ← 发送',
@@ -106,7 +109,6 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
                           fontSize: 14,
                           color: fromCssColor(widget.woxTheme.queryBoxFontColor),
                         ),
-                        onSubmitted: (_) => _sendMessage(),
                       ),
                       Container(
                         height: 36,
@@ -190,15 +192,23 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
     );
   }
 
-  void _sendMessage() {
-    final text = _textController.text.trim();
+  void sendMessage() {
+    final text = textController.text.trim();
     if (text.isEmpty) return;
 
-    _textController.clear();
-    controller.aiChatFocusNode.requestFocus();
+    textController.clear();
+
+    // append user message to chat data
+    widget.chatData.conversations.add(WoxPreviewChatConversation(role: 'user', text: text, images: [], timestamp: DateTime.now().millisecondsSinceEpoch));
+    widget.chatData.updatedAt = DateTime.now().millisecondsSinceEpoch;
+
+    setState(() {});
+
+    // send message to ai
+    // controller.sendMessageToAi(widget.chatData);
   }
 
-  Widget _buildMessageItem(WoxPreviewChatConversation message) {
+  Widget buildMessageItem(WoxPreviewChatConversation message) {
     final isUser = message.role == 'user';
     final backgroundColor = isUser ? fromCssColor(widget.woxTheme.resultItemActiveBackgroundColor) : fromCssColor(widget.woxTheme.actionContainerBackgroundColor);
     final alignment = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
@@ -209,7 +219,7 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
-          if (!isUser) _buildAvatar(message),
+          if (!isUser) buildAvatar(message),
           const SizedBox(width: 8),
           Flexible(
             child: Column(
@@ -274,7 +284,7 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
                 Padding(
                   padding: const EdgeInsets.only(left: 4, right: 4),
                   child: Text(
-                    _formatTimestamp(message.timestamp),
+                    formatTimestamp(message.timestamp),
                     style: TextStyle(
                       fontSize: 11,
                       color: fromCssColor(widget.woxTheme.resultItemSubTitleColor),
@@ -285,13 +295,13 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
             ),
           ),
           const SizedBox(width: 8),
-          if (isUser) _buildAvatar(message),
+          if (isUser) buildAvatar(message),
         ],
       ),
     );
   }
 
-  Widget _buildAvatar(WoxPreviewChatConversation message) {
+  Widget buildAvatar(WoxPreviewChatConversation message) {
     final isUser = message.role == 'user';
     return Container(
       width: 36,
@@ -320,7 +330,7 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
     );
   }
 
-  String _formatTimestamp(int timestamp) {
+  String formatTimestamp(int timestamp) {
     final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
     return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }

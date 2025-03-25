@@ -291,10 +291,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
             if (event is KeyDownEvent) {
               switch (event.logicalKey) {
                 case LogicalKeyboardKey.escape:
-                  // delay to ensure the focus node is unfocused, otherwise key event will propagate to query box
-                  Future.delayed(const Duration(milliseconds: 120), () {
-                    controller.toggleActionPanel(const UuidV4().generate());
-                  });
+                  controller.toggleActionPanel(const UuidV4().generate());
                   return KeyEventResult.handled;
                 case LogicalKeyboardKey.arrowDown:
                   controller.changeActionScrollPosition(

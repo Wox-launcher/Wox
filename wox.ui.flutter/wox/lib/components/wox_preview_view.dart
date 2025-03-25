@@ -232,7 +232,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
       var previewChatData = WoxPreviewChatData.fromJson(jsonDecode(widget.woxPreview.previewData));
-      contentWidget = WoxPreviewChatView(previewChatData: previewChatData, woxTheme: widget.woxTheme);
+      contentWidget = WoxPreviewChatView(chatData: previewChatData, woxTheme: widget.woxTheme);
     }
 
     if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {

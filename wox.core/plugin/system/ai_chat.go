@@ -12,7 +12,7 @@ import (
 var aiChatIcon = plugin.PluginAIChatIcon
 var aiChatsSettingKey = "ai_chats"
 
-type chat struct {
+type AIChatData struct {
 	Id            string
 	Title         string
 	Conversations []common.Conversation
@@ -27,7 +27,7 @@ func init() {
 }
 
 type AIChatPlugin struct {
-	chats []chat
+	chats []AIChatData
 	api   plugin.API
 }
 
@@ -57,23 +57,23 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 
 	chats, err := r.loadChats(ctx)
 	if err != nil {
-		r.chats = []chat{}
+		r.chats = []AIChatData{}
 		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to load chats: %s", err.Error()))
 	} else {
 		r.chats = chats
 	}
 }
 
-func (r *AIChatPlugin) loadChats(ctx context.Context) ([]chat, error) {
-	chats := []chat{}
+func (r *AIChatPlugin) loadChats(ctx context.Context) ([]AIChatData, error) {
+	chats := []AIChatData{}
 	chatsJson := r.api.GetSetting(ctx, aiChatsSettingKey)
 	if chatsJson == "" {
-		return []chat{}, nil
+		return []AIChatData{}, nil
 	}
 
 	err := json.Unmarshal([]byte(chatsJson), &chats)
 	if err != nil {
-		return []chat{}, err
+		return []AIChatData{}, err
 	}
 
 	sort.Slice(chats, func(i, j int) bool {

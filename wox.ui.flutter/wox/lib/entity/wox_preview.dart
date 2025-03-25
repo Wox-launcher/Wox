@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:uuid/uuid.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
@@ -43,21 +44,52 @@ class WoxPreview {
   }
 }
 
+// should be same as AIChatData in the ai chat plugin
 class WoxPreviewChatData {
-  late List<WoxPreviewChatConversation> messages;
+  late String id;
+  late String title;
+  late List<WoxPreviewChatConversation> conversations;
+  late WoxPreviewChatModel model;
+  late int createdAt;
+  late int updatedAt;
 
-  WoxPreviewChatData({required this.messages});
+  WoxPreviewChatData({required this.id, required this.title, required this.conversations, required this.model, required this.createdAt, required this.updatedAt});
 
   static WoxPreviewChatData fromJson(Map<String, dynamic> json) {
-    List<WoxPreviewChatConversation> messages = [];
-    if (json['Messages'] != null) {
-      messages = (json['Messages'] as List).map((e) => WoxPreviewChatConversation.fromJson(e as Map<String, dynamic>)).toList();
-    }
-    return WoxPreviewChatData(messages: messages);
+    return WoxPreviewChatData(
+      id: json['Id'] ?? const Uuid().v4(),
+      title: json['Title'] ?? "",
+      conversations: json['Conversations']?.map((e) => WoxPreviewChatConversation.fromJson(e)).toList() ?? [],
+      model: json['Model'] != null ? WoxPreviewChatModel.fromJson(json['Model']) : WoxPreviewChatModel(name: "", provider: ""),
+      createdAt: json['CreatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
+      updatedAt: json['UpdatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
+    );
   }
 
   Map<String, dynamic> toJson() {
-    return {'Messages': messages.map((e) => e.toJson()).toList()};
+    return {
+      'Id': id,
+      'Title': title,
+      'Conversations': conversations.map((e) => e.toJson()).toList(),
+      'Model': model.toJson(),
+      'CreatedAt': createdAt,
+      'UpdatedAt': updatedAt,
+    };
+  }
+}
+
+class WoxPreviewChatModel {
+  late String name;
+  late String provider;
+
+  WoxPreviewChatModel({required this.name, required this.provider});
+
+  static WoxPreviewChatModel fromJson(Map<String, dynamic> json) {
+    return WoxPreviewChatModel(name: json['Name'], provider: json['Provider']);
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'Name': name, 'Provider': provider};
   }
 }
 

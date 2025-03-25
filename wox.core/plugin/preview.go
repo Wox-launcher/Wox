@@ -14,7 +14,9 @@ const (
 	WoxPreviewTypeUrl      = "url"
 	WoxPreviewTypeFile     = "file"   // when type is file(can be *.md, *.jpg, *.pdf and so on), data should be url/filepath
 	WoxPreviewTypeRemote   = "remote" // when type is remote, data should be url to load WoxPreview
-	WoxPreviewTypeChat     = "chat"   // when type is chat, data should be Json string of WoxPreviewChatData
+
+	// internal use
+	WoxPreviewTypeChat = "chat" // when type is chat, data should be Json string of AIChatData. this type is only for ai chat plugin
 )
 
 const (
