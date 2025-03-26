@@ -32,6 +32,11 @@ const (
 
 	// enable this feature to execute custom deep link in plugin
 	MetadataFeatureDeepLink MetadataFeatureName = "deepLink"
+
+	// enable this feature to set the width ratio of the result list and  preview panel
+	// by default, the width ratio is 0.5, which means the result list and preview panel have the same width
+	// if the width ratio is 0.3, which means the result list takes 30% of the width and the preview panel takes 70% of the width
+	MetadataFeatureResultPreviewWidthRatio MetadataFeatureName = "resultPreviewWidthRatio"
 )
 
 // Metadata parsed from plugin.json, see `Plugin.json.md` for more detail
@@ -65,7 +70,7 @@ func (m *Metadata) GetIconOrDefault(pluginDirectory string, defaultImage common.
 
 func (m *Metadata) IsSupportFeature(f MetadataFeatureName) bool {
 	for _, feature := range m.Features {
-		if strings.ToLower(feature.Name) == strings.ToLower(f) {
+		if strings.EqualFold(feature.Name, f) {
 			return true
 		}
 	}
@@ -74,8 +79,8 @@ func (m *Metadata) IsSupportFeature(f MetadataFeatureName) bool {
 
 func (m *Metadata) GetFeatureParamsForDebounce() (MetadataFeatureParamsDebounce, error) {
 	for _, feature := range m.Features {
-		if strings.ToLower(feature.Name) == strings.ToLower(MetadataFeatureDebounce) {
-			if v, ok := feature.Params["intervalMs"]; !ok {
+		if strings.EqualFold(feature.Name, MetadataFeatureDebounce) {
+			if v, ok := feature.Params["IntervalMs"]; !ok {
 				return MetadataFeatureParamsDebounce{}, errors.New("debounce feature does not have intervalMs param")
 			} else {
 				timeInMilliseconds, convertErr := strconv.Atoi(v)
@@ -84,7 +89,7 @@ func (m *Metadata) GetFeatureParamsForDebounce() (MetadataFeatureParamsDebounce,
 				}
 
 				return MetadataFeatureParamsDebounce{
-					intervalMs: timeInMilliseconds,
+					IntervalMs: timeInMilliseconds,
 				}, nil
 			}
 		}
@@ -93,9 +98,33 @@ func (m *Metadata) GetFeatureParamsForDebounce() (MetadataFeatureParamsDebounce,
 	return MetadataFeatureParamsDebounce{}, errors.New("plugin does not support debounce feature")
 }
 
+func (m *Metadata) GetFeatureParamsForResultPreviewWidthRatio() (MetadataFeatureParamsResultPreviewWidthRatio, error) {
+	for _, feature := range m.Features {
+		if strings.EqualFold(feature.Name, MetadataFeatureResultPreviewWidthRatio) {
+			if v, ok := feature.Params["WidthRatio"]; !ok {
+				return MetadataFeatureParamsResultPreviewWidthRatio{}, errors.New("resultPreviewWidthRatio feature does not have widthRatio param")
+			} else {
+				widthRatio, convertErr := strconv.ParseFloat(v, 64)
+				if convertErr != nil {
+					return MetadataFeatureParamsResultPreviewWidthRatio{}, fmt.Errorf("resultPreviewWidthRatio feature widthRatio param is not a valid number: %s", convertErr.Error())
+				}
+				if widthRatio < 0 || widthRatio > 1 {
+					return MetadataFeatureParamsResultPreviewWidthRatio{}, fmt.Errorf("resultPreviewWidthRatio feature widthRatio param is not a valid number: %s", convertErr.Error())
+				}
+
+				return MetadataFeatureParamsResultPreviewWidthRatio{
+					WidthRatio: widthRatio,
+				}, nil
+			}
+		}
+	}
+
+	return MetadataFeatureParamsResultPreviewWidthRatio{}, errors.New("plugin does not support resultPreviewWidthRatio feature")
+}
+
 func (m *Metadata) GetFeatureParamsForQueryEnv() (MetadataFeatureParamsQueryEnv, error) {
 	for _, feature := range m.Features {
-		if strings.ToLower(feature.Name) == strings.ToLower(MetadataFeatureQueryEnv) {
+		if strings.EqualFold(feature.Name, MetadataFeatureQueryEnv) {
 			params := MetadataFeatureParamsQueryEnv{
 				RequireActiveWindowName: false,
 				RequireActiveWindowPid:  false,
@@ -147,11 +176,15 @@ type MetadataWithDirectory struct {
 }
 
 type MetadataFeatureParamsDebounce struct {
-	intervalMs int
+	IntervalMs int
 }
 
 type MetadataFeatureParamsQueryEnv struct {
 	RequireActiveWindowName bool
 	RequireActiveWindowPid  bool
 	RequireActiveBrowserUrl bool
+}
+
+type MetadataFeatureParamsResultPreviewWidthRatio struct {
+	WidthRatio float64 // [0-1]
 }

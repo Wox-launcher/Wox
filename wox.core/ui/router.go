@@ -78,6 +78,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/backup/all":       handleBackupAll,
 	"/hotkey/available": handleHotkeyAvailable,
 	"/query/icon":       handleQueryIcon,
+	"/query/ratio":      handleQueryRatio,
 	"/deeplink":         handleDeeplink,
 }
 
@@ -753,6 +754,50 @@ func handleQueryIcon(w http.ResponseWriter, r *http.Request) {
 
 	iconImage := common.ConvertIcon(ctx, iconImg, pluginInstance.PluginDirectory)
 	writeSuccessResponse(w, iconImage)
+}
+
+func handleQueryRatio(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+
+	body, _ := io.ReadAll(r.Body)
+	queryResult := gjson.GetBytes(body, "query")
+	if !queryResult.Exists() {
+		writeErrorResponse(w, "query is empty")
+		return
+	}
+
+	var plainQuery common.PlainQuery
+	unmarshalErr := json.Unmarshal([]byte(queryResult.String()), &plainQuery)
+	if unmarshalErr != nil {
+		logger.Error(ctx, unmarshalErr.Error())
+		writeErrorResponse(w, unmarshalErr.Error())
+		return
+	}
+
+	defaultRatio := 0.5
+
+	_, pluginInstance, err := plugin.GetPluginManager().NewQuery(ctx, plainQuery)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to new query: %s", err.Error()))
+		writeSuccessResponse(w, defaultRatio)
+		return
+	}
+
+	if pluginInstance == nil {
+		// this query is not for any plugin (now a global query)
+		writeSuccessResponse(w, defaultRatio)
+		return
+	}
+
+	metadata := pluginInstance.Metadata
+	featureParams, err := metadata.GetFeatureParamsForResultPreviewWidthRatio()
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to get feature params for result preview width ratio: %s", err.Error()))
+		writeSuccessResponse(w, defaultRatio)
+		return
+	}
+
+	writeSuccessResponse(w, featureParams.WidthRatio)
 }
 
 func handleDeeplink(w http.ResponseWriter, r *http.Request) {

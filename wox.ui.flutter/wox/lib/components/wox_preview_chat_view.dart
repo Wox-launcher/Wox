@@ -337,14 +337,6 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
         ),
         // Input box
         Focus(
-          onFocusChange: (bool hasFocus) {
-            // when focused, set the preview ratio to 0.3 for better user experience
-            if (!hasFocus) {
-              controller.resultPreviewRatio.value = 0.5;
-            } else {
-              controller.resultPreviewRatio.value = 0.3;
-            }
-          },
           onKeyEvent: (FocusNode node, KeyEvent event) {
             if (event is KeyDownEvent) {
               switch (event.logicalKey) {

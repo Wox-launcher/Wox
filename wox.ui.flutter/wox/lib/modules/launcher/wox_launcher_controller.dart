@@ -444,6 +444,7 @@ class WoxLauncherController extends GetxController {
       moveQueryBoxCursorToEnd();
     }
     updateQueryIconOnQueryChanged(traceId, query);
+    updateResultPreviewWidthRatioOnQueryChanged(traceId, query);
     updateToolbarOnQueryChanged(traceId, query);
     if (query.isEmpty) {
       clearQueryResults();
@@ -1130,6 +1131,18 @@ class WoxLauncherController extends GetxController {
     }
 
     queryIcon.value = QueryIconInfo.empty();
+  }
+
+  /// Update the result preview width ratio based on the query
+  Future<void> updateResultPreviewWidthRatioOnQueryChanged(String traceId, PlainQuery query) async {
+    if (query.isEmpty) {
+      resultPreviewRatio.value = 0.5;
+      return;
+    }
+
+    var resultPreviewWidthRatio = await WoxApi.instance.getResultPreviewWidthRatio(query);
+    Logger.instance.debug(traceId, "update result preview width ratio: $resultPreviewWidthRatio");
+    resultPreviewRatio.value = resultPreviewWidthRatio;
   }
 
   void updateToolbarOnQueryChanged(String traceId, PlainQuery query) {

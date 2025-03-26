@@ -44,7 +44,7 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureDebounce,
 				Params: map[string]string{
-					"intervalMs": "500",
+					"IntervalMs": "500",
 				},
 			},
 		},

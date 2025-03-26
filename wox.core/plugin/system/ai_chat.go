@@ -45,6 +45,12 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureAI,
 			},
+			{
+				Name: plugin.MetadataFeatureResultPreviewWidthRatio,
+				Params: map[string]string{
+					"WidthRatio": "0.3",
+				},
+			},
 		},
 	}
 }

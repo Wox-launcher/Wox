@@ -111,6 +111,12 @@ class WoxApi {
     });
   }
 
+  Future<double> getResultPreviewWidthRatio(PlainQuery query) async {
+    return await WoxHttpUtil.instance.postData("/query/ratio", {
+      "query": query.toJson(),
+    });
+  }
+
   Future<List<WoxLang>> getAllLanguages() async {
     return await WoxHttpUtil.instance.postData("/lang/available", {});
   }

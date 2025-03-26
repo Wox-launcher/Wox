@@ -798,14 +798,14 @@ func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryR
 		if pluginInstance.Metadata.IsSupportFeature(MetadataFeatureDebounce) {
 			debounceParams, err := pluginInstance.Metadata.GetFeatureParamsForDebounce()
 			if err == nil {
-				logger.Debug(ctx, fmt.Sprintf("[%s] debounce query, will execute in %d ms", pluginInstance.Metadata.Name, debounceParams.intervalMs))
+				logger.Debug(ctx, fmt.Sprintf("[%s] debounce query, will execute in %d ms", pluginInstance.Metadata.Name, debounceParams.IntervalMs))
 				if v, ok := m.debounceQueryTimer.Load(pluginInstance.Metadata.Id); ok {
 					if v.timer.Stop() {
 						v.onStop()
 					}
 				}
 
-				timer := time.AfterFunc(time.Duration(debounceParams.intervalMs)*time.Millisecond, func() {
+				timer := time.AfterFunc(time.Duration(debounceParams.IntervalMs)*time.Millisecond, func() {
 					m.queryParallel(ctx, pluginInstance, query, results, done, counter)
 				})
 				onStop := func() {
