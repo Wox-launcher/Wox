@@ -675,10 +675,9 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, sub
 	for _, actionResult := range actionResults {
 		var weight int64 = 2
 
-		actionedTime := util.ParseTimeStamp(actionResult.Timestamp)
-		hours := util.GetSystemTime().Sub(actionedTime).Hours()
+		hours := (util.GetSystemTimestamp() - actionResult.Timestamp) / 1000 / 60 / 60
 		if hours < 24*7 {
-			fibonacciIndex := int(math.Ceil(hours / 24))
+			fibonacciIndex := int(math.Ceil(float64(hours) / 24))
 			if fibonacciIndex > 7 {
 				fibonacciIndex = 7
 			}

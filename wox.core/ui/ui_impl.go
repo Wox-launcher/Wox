@@ -90,6 +90,10 @@ func (u *uiImpl) FocusToChatInput(ctx context.Context) {
 	u.invokeWebsocketMethod(ctx, "FocusToChatInput", nil)
 }
 
+func (u *uiImpl) SendChatResponse(ctx context.Context, aiChatData common.AIChatData) {
+	u.invokeWebsocketMethod(ctx, "SendChatResponse", aiChatData)
+}
+
 func (u *uiImpl) isNotifyInToolbar(ctx context.Context, pluginId string) bool {
 	isVisible, err := u.invokeWebsocketMethod(ctx, "IsVisible", nil)
 	if err != nil {

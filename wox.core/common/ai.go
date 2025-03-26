@@ -1,5 +1,7 @@
 package common
 
+import "context"
+
 type ConversationRole string
 type ProviderName string
 type ChatStreamDataType string
@@ -25,6 +27,7 @@ const (
 type ChatStreamFunc func(t ChatStreamDataType, data string)
 
 type Conversation struct {
+	Id        string
 	Role      ConversationRole
 	Text      string
 	Images    []WoxImage
@@ -34,4 +37,18 @@ type Conversation struct {
 type Model struct {
 	Name     string
 	Provider ProviderName
+}
+
+type AIChatData struct {
+	Id            string
+	Title         string
+	Conversations []Conversation
+	Model         Model
+
+	CreatedAt int64
+	UpdatedAt int64
+}
+
+type AIChater interface {
+	Chat(ctx context.Context, aiChatData AIChatData)
 }

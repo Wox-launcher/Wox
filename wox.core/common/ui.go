@@ -49,6 +49,7 @@ type UI interface {
 	RestoreTheme(ctx context.Context)
 	Notify(ctx context.Context, msg NotifyMsg)
 	FocusToChatInput(ctx context.Context)
+	SendChatResponse(ctx context.Context, chatData AIChatData)
 }
 
 type ShowContext struct {

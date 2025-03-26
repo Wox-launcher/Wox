@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
@@ -34,6 +35,8 @@ import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 import 'package:fuzzywuzzy/fuzzywuzzy.dart';
+import 'package:wox/enums/wox_preview_type_enum.dart';
+import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
 
 class WoxLauncherController extends GetxController {
   //query related variables
@@ -596,6 +599,9 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "FocusToChatInput") {
       focusToChatInput(msg.traceId);
       responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "SendChatResponse") {
+      sendChatResponse(msg.traceId, WoxPreviewChatData.fromJson(msg.data));
+      responseWoxWebsocketRequest(msg, true, null);
     }
   }
 
@@ -1002,6 +1008,28 @@ class WoxLauncherController extends GetxController {
   void focusToChatInput(String traceId) {
     Logger.instance.info(traceId, "focus to chat input");
     aiChatFocusNode.requestFocus();
+  }
+
+  Future<void> sendChatRequest(String traceId, WoxPreviewChatData data) async {
+    Logger.instance.info(traceId, "ui send chat request: ${data.toJson()}");
+    WoxApi.instance.sendChatRequest(data);
+  }
+
+  void sendChatResponse(String traceId, WoxPreviewChatData data) {
+    Logger.instance.info(traceId, "ui got chat response: ${data.toJson()}");
+
+    currentPreview.value = WoxPreview(
+      previewType: WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code,
+      previewData: jsonEncode(data.toJson()),
+      previewProperties: {},
+      scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
+    );
+
+    // After updating the preview, trigger a scroll to bottom in the next frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // The scroll position enum will trigger the chat view to scroll to bottom
+      currentPreview.refresh();
+    });
   }
 
   void moveQueryBoxCursorToStart() {

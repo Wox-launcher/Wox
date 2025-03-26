@@ -1,7 +1,6 @@
-import 'dart:convert';
-
 import 'package:uuid/uuid.dart';
 import 'package:wox/entity/wox_image.dart';
+import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
 import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
 
@@ -56,10 +55,17 @@ class WoxPreviewChatData {
   WoxPreviewChatData({required this.id, required this.title, required this.conversations, required this.model, required this.createdAt, required this.updatedAt});
 
   static WoxPreviewChatData fromJson(Map<String, dynamic> json) {
+    List<WoxPreviewChatConversation> conversations = [];
+    if (json['Conversations'] != null) {
+      for (var e in json['Conversations']) {
+        conversations.add(WoxPreviewChatConversation.fromJson(e));
+      }
+    }
+
     return WoxPreviewChatData(
       id: json['Id'] ?? const Uuid().v4(),
       title: json['Title'] ?? "",
-      conversations: json['Conversations']?.map((e) => WoxPreviewChatConversation.fromJson(e)).toList() ?? [],
+      conversations: conversations,
       model: json['Model'] != null ? WoxPreviewChatModel.fromJson(json['Model']) : WoxPreviewChatModel(name: "", provider: ""),
       createdAt: json['CreatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
       updatedAt: json['UpdatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
@@ -94,25 +100,35 @@ class WoxPreviewChatModel {
 }
 
 class WoxPreviewChatConversation {
-  late String role; // user or ai
+  late String id;
+  late WoxAIChatConversationRole role;
   late String text;
   late List<WoxImage> images;
   late int timestamp;
 
-  WoxPreviewChatConversation({required this.role, required this.text, required this.images, required this.timestamp});
+  WoxPreviewChatConversation({required this.id, required this.role, required this.text, required this.images, required this.timestamp});
 
   static WoxPreviewChatConversation fromJson(Map<String, dynamic> json) {
+    List<WoxImage> images = [];
+    if (json['Images'] != null) {
+      for (var e in json['Images']) {
+        images.add(WoxImage.fromJson(e));
+      }
+    }
+
     return WoxPreviewChatConversation(
+      id: json['Id'],
       role: json['Role'],
       text: json['Text'],
-      images: json['Images']?.map((e) => WoxImage.fromJson(e)).toList() ?? [],
+      images: images,
       timestamp: json['Timestamp'],
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'Role': role,
+      'Id': id,
+      'Role': WoxAIChatConversationRoleEnum.getValue(role),
       'Text': text,
       'Images': images.map((e) => e.toJson()).toList(),
       'Timestamp': timestamp,
