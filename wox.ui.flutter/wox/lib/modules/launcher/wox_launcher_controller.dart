@@ -662,7 +662,6 @@ class WoxLauncherController extends GetxController {
     isShowPreviewPanel.value = false;
     isShowActionPanel.value = false;
     resultGlobalKeys.clear();
-    queryIcon.value = QueryIconInfo.empty();
 
     await resizeHeight();
   }
@@ -1123,10 +1122,14 @@ class WoxLauncherController extends GetxController {
     }
 
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
+      // if there is no space in the query, then this must be a global query
+      if (!query.queryText.contains(" ")) {
+        queryIcon.value = QueryIconInfo.empty();
+        return;
+      }
+
       var img = await WoxApi.instance.getQueryIcon(query);
-      queryIcon.value = QueryIconInfo(
-        icon: img,
-      );
+      queryIcon.value = QueryIconInfo(icon: img);
       return;
     }
 
@@ -1136,6 +1139,11 @@ class WoxLauncherController extends GetxController {
   /// Update the result preview width ratio based on the query
   Future<void> updateResultPreviewWidthRatioOnQueryChanged(String traceId, PlainQuery query) async {
     if (query.isEmpty) {
+      resultPreviewRatio.value = 0.5;
+      return;
+    }
+    // if there is no space in the query, then this must be a global query
+    if (!query.queryText.contains(" ")) {
       resultPreviewRatio.value = 0.5;
       return;
     }
@@ -1199,5 +1207,15 @@ class WoxLauncherController extends GetxController {
       Logger.instance.debug(traceId, "update toolbar to empty, no active action");
       toolbar.value = ToolbarInfo.empty();
     }
+  }
+
+  /// Update the toolbar to chat view
+  void updateToolbarByChat(String traceId) {
+    Logger.instance.debug(traceId, "update toolbar to chat");
+    toolbar.value = ToolbarInfo(
+      hotkey: "cmd+j",
+      actionName: "Select models",
+      action: () {},
+    );
   }
 }

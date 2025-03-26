@@ -337,6 +337,14 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
         ),
         // Input box
         Focus(
+          onFocusChange: (bool hasFocus) {
+            final traceId = const UuidV4().generate();
+            if (!hasFocus) {
+              controller.updateToolbarByActiveAction(traceId);
+            } else {
+              controller.updateToolbarByChat(traceId);
+            }
+          },
           onKeyEvent: (FocusNode node, KeyEvent event) {
             if (event is KeyDownEvent) {
               switch (event.logicalKey) {
