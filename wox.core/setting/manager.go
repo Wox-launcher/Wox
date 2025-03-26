@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"slices"
+	"strconv"
 	"sync"
 	"wox/common"
 	"wox/i18n"
@@ -255,6 +256,12 @@ func (m *Manager) UpdateWoxSetting(ctx context.Context, key, value string) error
 		m.woxSetting.ShowPosition = PositionType(value)
 	} else if key == "EnableAutoBackup" {
 		m.woxSetting.EnableAutoBackup = value == "true"
+	} else if key == "AppWidth" {
+		appWidth, parseErr := strconv.Atoi(value)
+		if parseErr != nil {
+			return parseErr
+		}
+		m.woxSetting.AppWidth = appWidth
 	} else {
 		return fmt.Errorf("unknown key: %s", key)
 	}

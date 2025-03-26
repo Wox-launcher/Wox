@@ -84,18 +84,6 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
           }),
         ),
         formField(
-          label: controller.tr("ui_show_tray"),
-          tips: controller.tr("ui_show_tray_tips"),
-          child: Obx(() {
-            return ToggleSwitch(
-              checked: controller.woxSetting.value.showTray,
-              onChanged: (bool value) {
-                controller.updateConfig("ShowTray", value.toString());
-              },
-            );
-          }),
-        ),
-        formField(
           label: controller.tr("ui_switch_input_method_abc"),
           tips: controller.tr("ui_switch_input_method_abc_tips"),
           child: Obx(() {
@@ -103,34 +91,6 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
               checked: controller.woxSetting.value.switchInputMethodABC,
               onChanged: (bool value) {
                 controller.updateConfig("SwitchInputMethodABC", value.toString());
-              },
-            );
-          }),
-        ),
-        formField(
-          label: controller.tr("ui_show_position"),
-          tips: controller.tr("ui_show_position_tips"),
-          child: Obx(() {
-            return ComboBox<String>(
-              items: [
-                ComboBoxItem(
-                  value: "mouse_screen",
-                  child: Text(controller.tr("ui_show_position_mouse_screen")),
-                ),
-                ComboBoxItem(
-                  value: "active_screen",
-                  child: Text(controller.tr("ui_show_position_active_screen")),
-                ),
-                ComboBoxItem(
-                  value: "last_location",
-                  child: Text(controller.tr("ui_show_position_last_location")),
-                ),
-              ],
-              value: controller.woxSetting.value.showPosition,
-              onChanged: (v) {
-                if (v != null) {
-                  controller.updateConfig("ShowPosition", v);
-                }
               },
             );
           }),

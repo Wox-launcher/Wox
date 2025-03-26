@@ -170,7 +170,7 @@ class WoxSettingController extends GetxController {
       pluginList.addAll(installedPlugins);
     }
 
-    activePaneIndex.value = isStorePlugin ? 5 : 6;
+    activePaneIndex.value = isStorePlugin ? 6 : 7;
     isStorePluginList.value = isStorePlugin;
     activePlugin.value = PluginDetail.empty();
     filterPluginKeywordController.text = "";
@@ -342,7 +342,7 @@ class WoxSettingController extends GetxController {
   }
 
   Future<void> switchToThemeList(bool isStoreTheme) async {
-    activePaneIndex.value = isStoreTheme ? 8 : 9;
+    activePaneIndex.value = isStoreTheme ? 9 : 10;
     isStoreThemeList.value = isStoreTheme;
     activeTheme.value = WoxTheme.empty();
     await refreshThemeList();

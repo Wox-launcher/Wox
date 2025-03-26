@@ -213,11 +213,11 @@ func getShowAppParams(ctx context.Context, selectAll bool) map[string]any {
 	// Now we can directly use the ShowPosition as a PositionType
 	switch woxSetting.ShowPosition {
 	case setting.PositionTypeActiveScreen:
-		position = NewActiveScreenPosition()
+		position = NewActiveScreenPosition(woxSetting.AppWidth)
 	case setting.PositionTypeLastLocation:
 		position = NewLastLocationPosition(0, 0) // Initial values, will be updated by UI
 	default: // Default to mouse screen
-		position = NewMouseScreenPosition()
+		position = NewMouseScreenPosition(woxSetting.AppWidth)
 	}
 
 	return map[string]any{

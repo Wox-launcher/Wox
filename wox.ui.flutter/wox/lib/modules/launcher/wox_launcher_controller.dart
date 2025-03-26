@@ -215,7 +215,7 @@ class WoxLauncherController extends GetxController {
       // but if it's the first time to show, we need to set the position to the center of the screen
       var position = await windowManager.getPosition();
       if (position.dx == 0 && position.dy == 0) {
-        await windowManager.center(800, 600);
+        await windowManager.center(WoxSettingUtil.instance.currentSetting.appWidth.toDouble(), 600);
       }
     }
 
@@ -709,7 +709,7 @@ class WoxLauncherController extends GetxController {
     final totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight;
 
     if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window height to $totalHeight");
-    await windowManager.setSize(Size(800, totalHeight.toDouble()));
+    await windowManager.setSize(Size(WoxSettingUtil.instance.currentSetting.appWidth.toDouble(), totalHeight.toDouble()));
   }
 
   void updateActiveResultIndex(String traceId, WoxDirection woxDirection) {

@@ -11,8 +11,8 @@ type Position struct {
 	Y    int
 }
 
-func NewMouseScreenPosition() Position {
-	x, y := getWindowMouseScreenLocation(800)
+func NewMouseScreenPosition(windowWidth int) Position {
+	x, y := getWindowMouseScreenLocation(windowWidth)
 	return Position{
 		Type: setting.PositionTypeMouseScreen,
 		X:    x,
@@ -20,8 +20,8 @@ func NewMouseScreenPosition() Position {
 	}
 }
 
-func NewActiveScreenPosition() Position {
-	x, y := getWindowActiveScreenLocation(800)
+func NewActiveScreenPosition(windowWidth int) Position {
+	x, y := getWindowActiveScreenLocation(windowWidth)
 	return Position{
 		Type: setting.PositionTypeActiveScreen,
 		X:    x,
