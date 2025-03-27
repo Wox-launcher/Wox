@@ -41,26 +41,28 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
               onPointerSignal: (event) {
                 if (event is PointerScrollEvent) {}
               },
-              child: ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                controller: controller.actionScrollerController,
-                itemCount: controller.actions.length,
-                itemExtent: 40,
-                itemBuilder: (context, index) {
-                  WoxResultAction woxResultAction = controller.geActionByIndex(index);
-                  return WoxListItemView(
-                    key: ValueKey(woxResultAction.id),
-                    woxTheme: controller.woxTheme.value,
-                    icon: woxResultAction.icon,
-                    title: woxResultAction.name,
-                    tails: getHotkeyTails(woxResultAction),
-                    subTitle: "".obs,
-                    isActive: controller.isActionActiveByIndex(index),
-                    listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code,
-                    isGroup: false,
-                  );
-                },
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 350),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  controller: controller.actionScrollerController,
+                  itemCount: controller.actions.length,
+                  itemExtent: 40,
+                  itemBuilder: (context, index) {
+                    WoxResultAction woxResultAction = controller.geActionByIndex(index);
+                    return WoxListItemView(
+                      key: ValueKey(woxResultAction.id),
+                      woxTheme: controller.woxTheme.value,
+                      icon: woxResultAction.icon,
+                      title: woxResultAction.name,
+                      tails: getHotkeyTails(woxResultAction),
+                      subTitle: "".obs,
+                      isActive: controller.isActionActiveByIndex(index),
+                      listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code,
+                      isGroup: false,
+                    );
+                  },
+                ),
               )));
     });
   }
@@ -291,7 +293,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
             if (event is KeyDownEvent) {
               switch (event.logicalKey) {
                 case LogicalKeyboardKey.escape:
-                  controller.toggleActionPanel(const UuidV4().generate());
+                  controller.actionEscFunction(const UuidV4().generate());
                   return KeyEventResult.handled;
                 case LogicalKeyboardKey.arrowDown:
                   controller.changeActionScrollPosition(

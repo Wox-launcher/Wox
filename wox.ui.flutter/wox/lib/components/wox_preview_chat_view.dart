@@ -7,6 +7,7 @@ import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_ai.dart';
+import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_toolbar.dart';
@@ -54,9 +55,9 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
 
   Future<void> loadAIModels() async {
     final models = await WoxApi.instance.findAIModels();
-    setState(() {
-      aiModels = models;
+    aiModels = models;
 
+    setState(() {
       // check conversation model
       if (widget.chatData.model.name.isEmpty) {
         selectedModel = models.first;
@@ -74,207 +75,13 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
     super.dispose();
   }
 
-  // Group models by provider
-  Map<String, List<AIModel>> getGroupedModels() {
-    final Map<String, List<AIModel>> grouped = {};
-    for (var model in aiModels) {
-      if (searchQuery.isNotEmpty && !model.name.toLowerCase().contains(searchQuery.toLowerCase()) && !model.provider.toLowerCase().contains(searchQuery.toLowerCase())) {
-        continue;
-      }
-      if (!grouped.containsKey(model.provider)) {
-        grouped[model.provider] = [];
-      }
-      grouped[model.provider]!.add(model);
-    }
-    return grouped;
-  }
-
-  void showModelSelectionDialog() {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return Dialog(
-              backgroundColor: fromCssColor(widget.woxTheme.actionContainerBackgroundColor),
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Container(
-                width: 400,
-                constraints: const BoxConstraints(maxHeight: 500),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Header
-                    Container(
-                      padding: const EdgeInsets.all(16.0),
-                      decoration: BoxDecoration(
-                        color: fromCssColor(widget.woxTheme.actionContainerBackgroundColor),
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(12),
-                          topRight: Radius.circular(12),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Text(
-                            '选择模型',
-                            style: TextStyle(
-                              color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            icon: Icon(
-                              Icons.close,
-                              color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
-                              size: 20,
-                            ),
-                            onPressed: () => Navigator.pop(context),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 32,
-                              minHeight: 32,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Search box
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                        decoration: BoxDecoration(
-                          color: fromCssColor(widget.woxTheme.queryBoxBackgroundColor),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.search,
-                              size: 18,
-                              color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.5),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: searchController,
-                                style: TextStyle(
-                                  color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
-                                  fontSize: 14,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: '搜索模型...',
-                                  hintStyle: TextStyle(
-                                    color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.5),
-                                  ),
-                                  border: InputBorder.none,
-                                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                                ),
-                                onChanged: (value) {
-                                  setState(() {
-                                    searchQuery = value;
-                                  });
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Model list
-                    Flexible(
-                      child: Container(
-                        color: fromCssColor(widget.woxTheme.actionContainerBackgroundColor),
-                        child: SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: getGroupedModels().entries.expand((provider) {
-                              final List<Widget> items = [];
-
-                              // Provider header
-                              items.add(
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                                  child: Text(
-                                    provider.key,
-                                    style: TextStyle(
-                                      color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.7),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              );
-
-                              // Models under this provider
-                              items.addAll(
-                                provider.value.map((model) => InkWell(
-                                      onTap: () {
-                                        // Update both dialog state and parent widget state
-                                        setState(() {
-                                          selectedModel = model;
-                                        });
-                                        this.setState(() {
-                                          selectedModel = model;
-                                        });
-                                        // Update chat data model
-                                        widget.chatData.model = WoxPreviewChatModel(
-                                          name: model.name,
-                                          provider: model.provider,
-                                        );
-                                        Navigator.pop(context);
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: selectedModel?.name == model.name ? fromCssColor(widget.woxTheme.actionItemActiveBackgroundColor) : Colors.transparent,
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                model.name,
-                                                style: TextStyle(
-                                                  color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
-                                                  fontSize: 14,
-                                                ),
-                                              ),
-                                            ),
-                                            if (selectedModel?.name == model.name)
-                                              Icon(
-                                                Icons.check,
-                                                size: 16,
-                                                color: fromCssColor(widget.woxTheme.actionItemActiveFontColor),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                    )),
-                              );
-
-                              return items;
-                            }).toList(),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+  void onModelSelected(AIModel model) {
+    setState(() {
+      selectedModel = model;
+    });
+    widget.chatData.model = WoxPreviewChatModel(
+      name: model.name,
+      provider: model.provider,
     );
   }
 
@@ -286,7 +93,7 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: InkWell(
-            onTap: showModelSelectionDialog,
+            onTap: () => controller.showActionPanelForModelSelection(const UuidV4().generate(), aiModels, onModelSelected),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
               decoration: BoxDecoration(
@@ -356,6 +163,18 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
                   return KeyEventResult.handled;
               }
             }
+
+            var pressedHotkey = WoxHotkey.parseHotkeyFromEvent(event);
+            if (pressedHotkey == null) {
+              return KeyEventResult.ignored;
+            }
+
+            // list all models
+            if (controller.isActionHotkey(pressedHotkey)) {
+              controller.showActionPanelForModelSelection(const UuidV4().generate(), aiModels, onModelSelected);
+              return KeyEventResult.handled;
+            }
+
             return KeyEventResult.ignored;
           },
           child: Container(

@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:lpinyin/lpinyin.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -56,10 +57,10 @@ class WoxLauncherController extends GetxController {
   // result related variables
   /// The list of query results.
   final results = <WoxQueryResult>[].obs;
+  final originalResults = <WoxQueryResult>[]; // the original results, used to filter and restore selection results
   final activeResultIndex = 0.obs;
   final resultGlobalKeys = <GlobalKey>[]; // the global keys for each result item, used to calculate the position of the result item
   final resultScrollerController = ScrollController(initialScrollOffset: 0.0);
-  final originalResults = <WoxQueryResult>[]; // the original results, used to filter and restore selection results
 
   /// The timer to clear query results.
   /// On every query changed, it will reset the timer and will clear the query results after N ms.
@@ -70,11 +71,13 @@ class WoxLauncherController extends GetxController {
   // action related variables
   /// The list of result actions for the active query result.
   final actions = <WoxResultAction>[].obs;
+  final originalActions = <WoxResultAction>[]; // the original actions, used to filter and restore selection actions
   final activeActionIndex = 0.obs;
   final isShowActionPanel = false.obs;
   final actionTextFieldController = TextEditingController();
   final actionFocusNode = FocusNode();
   final actionScrollerController = ScrollController(initialScrollOffset: 0.0);
+  Function(String) actionEscFunction = (String traceId) => {}; // the function to handle the esc key in the action panel
 
   // ai chat related variables
   final aiChatFocusNode = FocusNode();
@@ -108,6 +111,15 @@ class WoxLauncherController extends GetxController {
   /// This flag is used to control whether the result item is selected by mouse hover.
   /// This is used to prevent the result item from being selected when the mouse is just hovering over the item in the result list.
   var isMouseMoved = false;
+
+  @override
+  void onInit() {
+    super.onInit();
+
+    actionEscFunction = (String traceId) {
+      hideActionPanel(traceId);
+    };
+  }
 
   /// Triggered when received query results from the server.
   void onReceivedQueryResults(String traceId, List<WoxQueryResult> receivedResults) {
@@ -289,6 +301,34 @@ class WoxLauncherController extends GetxController {
     resizeHeight();
   }
 
+  Future<void> showActionPanelForModelSelection(String traceId, List<AIModel> models, Function(AIModel) onModelSelected) async {
+    originalActions.assignAll(models.map((model) => WoxResultAction(
+          id: const UuidV4().generate(),
+          name: RxString("${model.name} (${model.provider})"),
+          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖").obs,
+          isDefault: false,
+          preventHideAfterAction: true,
+          hotkey: "",
+          isSystemAction: false,
+          onExecute: (traceId) {
+            onModelSelected(model);
+            hideActionPanel(traceId);
+            focusToChatInput(traceId);
+          },
+        )));
+    actions.assignAll(originalActions);
+    actionEscFunction = (String traceId) {
+      hideActionPanel(traceId);
+      focusToChatInput(traceId);
+
+      // reset the actionEscFunction to the default
+      actionEscFunction = (String traceId) {
+        hideActionPanel(traceId);
+      };
+    };
+    showActionPanel(traceId);
+  }
+
   WoxQueryResult? getActiveResult() {
     if (activeResultIndex.value >= results.length || activeResultIndex.value < 0 || results.isEmpty) {
       return null;
@@ -346,16 +386,20 @@ class WoxLauncherController extends GetxController {
     var preventHideAfterAction = action.preventHideAfterAction;
     Logger.instance.debug(traceId, "execute action: ${action.name}, prevent hide after action: $preventHideAfterAction");
 
-    await WoxWebsocketMsgUtil.instance.sendMessage(WoxWebsocketMsg(
-      requestId: const UuidV4().generate(),
-      traceId: traceId,
-      type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
-      method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
-      data: {
-        "resultId": result.id,
-        "actionId": action.id,
-      },
-    ));
+    if (action.onExecute != null) {
+      action.onExecute!(traceId);
+    } else {
+      await WoxWebsocketMsgUtil.instance.sendMessage(WoxWebsocketMsg(
+        requestId: const UuidV4().generate(),
+        traceId: traceId,
+        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+        method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
+        data: {
+          "resultId": result.id,
+          "actionId": action.id,
+        },
+      ));
+    }
 
     if (!preventHideAfterAction) {
       hideApp(traceId);
@@ -482,12 +526,12 @@ class WoxLauncherController extends GetxController {
     }
 
     if (filteredActionName.isEmpty) {
-      actions.assignAll(activeResult.actions);
+      actions.assignAll(originalActions);
       updateToolbarByActiveAction(traceId);
       return;
     }
 
-    var filteredActions = activeResult.actions.where((element) {
+    var filteredActions = originalActions.where((element) {
       return isFuzzyMatch(traceId, element.name.value, filteredActionName);
     }).toList();
 
@@ -810,6 +854,8 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
+    originalActions.assignAll(activeQueryResult.actions);
+
     Logger.instance.info(
         traceId, "update active actions, reason: $reason, current active result: ${activeQueryResult.title.value}, active action: ${activeQueryResult.actions.first.name.value}");
 
@@ -821,13 +867,13 @@ class WoxLauncherController extends GetxController {
     final filterText = actionTextFieldController.text;
     List<WoxResultAction> newActions;
     if (filterText.isNotEmpty) {
-      newActions = activeQueryResult.actions.where((element) {
+      newActions = originalActions.where((element) {
         return isFuzzyMatch(traceId, element.name.value, filterText);
       }).toList();
       activeActionIndex.value = newActions.isEmpty ? -1 : 0;
       remainIndex = false;
     } else {
-      newActions = List.from(activeQueryResult.actions);
+      newActions = List.from(originalActions);
     }
 
     // Only update actions if they have actually changed

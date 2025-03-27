@@ -267,8 +267,18 @@ class WoxResultAction {
   late bool preventHideAfterAction;
   late String hotkey;
   late bool isSystemAction;
+  late Function(String traceId)? onExecute;
 
-  WoxResultAction({required this.id, required this.name, required this.icon, required this.isDefault, required this.preventHideAfterAction, required this.hotkey, required this.isSystemAction});
+  WoxResultAction({
+    required this.id,
+    required this.name,
+    required this.icon,
+    required this.isDefault,
+    required this.preventHideAfterAction,
+    required this.hotkey,
+    required this.isSystemAction,
+    this.onExecute,
+  });
 
   WoxResultAction.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
@@ -280,6 +290,7 @@ class WoxResultAction {
       hotkey = json['Hotkey'];
     }
     isSystemAction = json['IsSystemAction'];
+    onExecute = json['OnExecute'];
   }
 
   Map<String, dynamic> toJson() {
