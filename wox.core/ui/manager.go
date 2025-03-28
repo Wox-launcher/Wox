@@ -215,25 +215,29 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 
 	managerInstance.selectionHotkey = &hotkey.Hotkey{}
 	return m.selectionHotkey.Register(ctx, combineKey, func() {
-		newCtx := util.NewTraceContext()
-		start := util.GetSystemTimestamp()
-		selection, err := selection.GetSelected(newCtx)
-		logger.Debug(newCtx, fmt.Sprintf("took %d ms to get selection", util.GetSystemTimestamp()-start))
-		if err != nil {
-			logger.Error(newCtx, fmt.Sprintf("failed to get selected: %s", err.Error()))
-			return
-		}
-		if selection.IsEmpty() {
-			logger.Info(newCtx, "no selection")
-			return
-		}
-
-		m.ui.ChangeQuery(newCtx, common.PlainQuery{
-			QueryType:      plugin.QueryTypeSelection,
-			QuerySelection: selection,
-		})
-		m.ui.ShowApp(newCtx, common.ShowContext{SelectAll: false})
+		m.QuerySelection(ctx)
 	})
+}
+
+func (m *Manager) QuerySelection(ctx context.Context) {
+	newCtx := util.NewTraceContext()
+	start := util.GetSystemTimestamp()
+	selection, err := selection.GetSelected(newCtx)
+	logger.Debug(newCtx, fmt.Sprintf("took %d ms to get selection", util.GetSystemTimestamp()-start))
+	if err != nil {
+		logger.Error(newCtx, fmt.Sprintf("failed to get selected: %s", err.Error()))
+		return
+	}
+	if selection.IsEmpty() {
+		logger.Info(newCtx, "no selection")
+		return
+	}
+
+	m.ui.ChangeQuery(newCtx, common.PlainQuery{
+		QueryType:      plugin.QueryTypeSelection,
+		QuerySelection: selection,
+	})
+	m.ui.ShowApp(newCtx, common.ShowContext{SelectAll: false})
 }
 
 func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.QueryHotkey) error {
@@ -559,6 +563,10 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 			})
 			m.ui.ShowApp(ctx, common.ShowContext{SelectAll: false})
 		}
+	}
+
+	if command == "select" {
+		m.QuerySelection(ctx)
 	}
 
 	if command == "toggle" {
