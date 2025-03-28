@@ -139,14 +139,15 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
         ),
         // Messages list
         Expanded(
-          child: ListView.builder(
+          child: Scrollbar(
             controller: scrollController,
-            padding: const EdgeInsets.symmetric(vertical: 16.0),
-            itemCount: widget.chatData.conversations.length,
-            itemBuilder: (context, index) {
-              final message = widget.chatData.conversations[index];
-              return buildMessageItem(message);
-            },
+            child: SingleChildScrollView(
+              controller: scrollController,
+              padding: const EdgeInsets.symmetric(vertical: 16.0),
+              child: Column(
+                children: widget.chatData.conversations.map((message) => buildMessageItem(message)).toList(),
+              ),
+            ),
           ),
         ),
         // Input box
