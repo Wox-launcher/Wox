@@ -13,6 +13,7 @@ import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_toolbar.dart';
 import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
+import 'package:wox/utils/log.dart';
 
 class WoxPreviewChatView extends StatefulWidget {
   final WoxPreviewChatData chatData;
@@ -36,9 +37,13 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
   @override
   void initState() {
     super.initState();
+
+    loadAIModels().then((_) {
+      setSelectedModel();
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       scrollToBottom();
-      loadAIModels();
     });
   }
 
@@ -54,17 +59,20 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
   }
 
   Future<void> loadAIModels() async {
-    final models = await WoxApi.instance.findAIModels();
-    aiModels = models;
+    aiModels = await controller.findAIModelsWithCache();
+    Logger.instance.info(const UuidV4().generate(), "loadAIModels: ${aiModels.length}");
+  }
 
-    setState(() {
-      // check conversation model
-      if (widget.chatData.model.name.isEmpty) {
-        selectedModel = models.first;
-      } else {
-        selectedModel = models.firstWhere((model) => model.name == widget.chatData.model.name && model.provider == widget.chatData.model.provider, orElse: () => models.first);
-      }
-    });
+  void setSelectedModel() {
+    if (aiModels.isEmpty) {
+      return;
+    }
+
+    if (widget.chatData.model.name.isEmpty) {
+      selectedModel = aiModels.first;
+    } else {
+      selectedModel = aiModels.firstWhere((model) => model.name == widget.chatData.model.name && model.provider == widget.chatData.model.provider, orElse: () => aiModels.first);
+    }
   }
 
   @override
@@ -327,10 +335,8 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
 
   void scrollToBottom() {
     if (scrollController.hasClients) {
-      scrollController.animateTo(
+      scrollController.jumpTo(
         scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
       );
     }
   }

@@ -833,10 +833,10 @@ func handleAIModels(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		for i := range models {
-			results = append(results, models[i])
-		}
+		results = append(results, models...)
 	}
+
+	logger.Info(ctx, fmt.Sprintf("found %d ai models", len(results)))
 
 	writeSuccessResponse(w, results)
 }

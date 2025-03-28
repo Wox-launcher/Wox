@@ -9,6 +9,7 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:lpinyin/lpinyin.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/entity/wox_ai.dart';
+import 'package:wox/enums/wox_actions_type_enum.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -78,9 +79,13 @@ class WoxLauncherController extends GetxController {
   final actionFocusNode = FocusNode();
   final actionScrollerController = ScrollController(initialScrollOffset: 0.0);
   Function(String) actionEscFunction = (String traceId) => {}; // the function to handle the esc key in the action panel
+  final actionsTitle = "Actions".obs;
+  var actionsType = WoxActionsTypeEnum.WOX_ACTIONS_TYPE_RESULT.code;
 
   // ai chat related variables
   final aiChatFocusNode = FocusNode();
+  List<AIModel> aiModels = [];
+  var lastUpdateAIModelsTimestamp = 0;
 
   /// This flag is used to control whether the user can arrow up to show history when the app is first shown.
   var canArrowUpHistory = true;
@@ -176,7 +181,7 @@ class WoxLauncherController extends GetxController {
     // this will prevent the active result from being reset to the first one when the query results are received
     if (existingQueryResults.isEmpty || activeResultIndex.value == 0) {
       resetActiveResult();
-      resetActiveAction(traceId, "receive query results: ${currentQuery.value.queryText}");
+      resetActionsByActiveResult(traceId, "receive query results: ${currentQuery.value.queryText}");
     }
 
     resizeHeight();
@@ -252,6 +257,8 @@ class WoxLauncherController extends GetxController {
       isInSettingView.value = false;
     }
 
+    hideActionPanel(traceId);
+
     // must invoke after clearQueryResults, because clearQueryResults will trigger resizeHeight, which will cause the focus can't return to the other window in windows
     // Also,  on windows, the hide method will cause onKeyEvent state inconsistent (the keyup event will be suppressed until the next show, so next time you press the esc key,
     // the previous keyup event will be triggered, which in our case will not trigger the hide app action. you may need to press the esc key twice),
@@ -291,7 +298,7 @@ class WoxLauncherController extends GetxController {
     isShowActionPanel.value = false;
     actionTextFieldController.text = "";
     queryBoxFocusNode.requestFocus();
-    resetActiveAction(traceId, "hide action panel");
+    resetActionsByActiveResult(traceId, "hide action panel");
     resizeHeight();
   }
 
@@ -316,6 +323,8 @@ class WoxLauncherController extends GetxController {
             focusToChatInput(traceId);
           },
         )));
+    actionsType = WoxActionsTypeEnum.WOX_ACTIONS_TYPE_AI_MODEL.code;
+    actionsTitle.value = "Models";
     actions.assignAll(originalActions);
     actionEscFunction = (String traceId) {
       hideActionPanel(traceId);
@@ -401,6 +410,9 @@ class WoxLauncherController extends GetxController {
       ));
     }
 
+    // clear the search text after action is executed
+    actionTextFieldController.text = "";
+
     if (!preventHideAfterAction) {
       hideApp(traceId);
     }
@@ -460,7 +472,7 @@ class WoxLauncherController extends GetxController {
     }
 
     resetActiveResult();
-    resetActiveAction(traceId, "filter selection results: $filterText");
+    resetActionsByActiveResult(traceId, "filter selection results: $filterText");
   }
 
   void onQueryChanged(String traceId, PlainQuery query, String changeReason, {bool moveCursorToEnd = false}) {
@@ -790,7 +802,7 @@ class WoxLauncherController extends GetxController {
     }
     currentPreview.value = results[activeResultIndex.value].preview;
     isShowPreviewPanel.value = currentPreview.value.previewData != "";
-    resetActiveAction(traceId, "update active result index, direction: $woxDirection");
+    resetActionsByActiveResult(traceId, "update active result index, direction: $woxDirection");
   }
 
   void updateActiveAction(String traceId, WoxDirection woxDirection) {
@@ -840,12 +852,12 @@ class WoxLauncherController extends GetxController {
     activeResultIndex.value = index;
     currentPreview.value = results[index].preview;
     isShowPreviewPanel.value = currentPreview.value.previewData != "";
-    resetActiveAction(const UuidV4().generate(), "mouse hover");
+    resetActionsByActiveResult(const UuidV4().generate(), "mouse hover");
     results.refresh();
   }
 
   /// update active actions based on active result and reset active action index to 0
-  void resetActiveAction(String traceId, String reason, {bool remainIndex = false}) {
+  void resetActionsByActiveResult(String traceId, String reason, {bool remainIndex = false}) {
     var activeQueryResult = getActiveResult();
     if (activeQueryResult == null || activeQueryResult.actions.isEmpty) {
       Logger.instance.info(traceId, "update active actions, reason: $reason, current active result: null");
@@ -854,6 +866,8 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
+    actionsType = WoxActionsTypeEnum.WOX_ACTIONS_TYPE_RESULT.code;
+    actionsTitle.value = "Actions";
     originalActions.assignAll(activeQueryResult.actions);
 
     Logger.instance.info(
@@ -966,7 +980,11 @@ class WoxLauncherController extends GetxController {
                 Logger.instance.debug(traceId, "preview panel visibility changed, resize height");
                 resizeHeight();
               }
-              resetActiveAction(traceId, "refresh active result", remainIndex: true);
+
+              // only reset actions when action type is result
+              if (actionsType == WoxActionsTypeEnum.WOX_ACTIONS_TYPE_RESULT.code) {
+                resetActionsByActiveResult(traceId, "refresh active result", remainIndex: true);
+              }
             }
 
             result.contextData = refreshResult.contextData;
@@ -1070,12 +1088,6 @@ class WoxLauncherController extends GetxController {
       previewProperties: {},
       scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
     );
-
-    // After updating the preview, trigger a scroll to bottom in the next frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // The scroll position enum will trigger the chat view to scroll to bottom
-      currentPreview.refresh();
-    });
   }
 
   void moveQueryBoxCursorToStart() {
@@ -1263,5 +1275,16 @@ class WoxLauncherController extends GetxController {
       actionName: "Select models",
       action: () {},
     );
+  }
+
+  Future<List<AIModel>> findAIModelsWithCache() async {
+    if (lastUpdateAIModelsTimestamp > 0 && DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(lastUpdateAIModelsTimestamp)).inMinutes < 1) {
+      return aiModels;
+    }
+
+    aiModels = await WoxApi.instance.findAIModels();
+    lastUpdateAIModelsTimestamp = DateTime.now().millisecondsSinceEpoch;
+
+    return aiModels;
   }
 }
