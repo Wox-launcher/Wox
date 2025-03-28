@@ -1072,6 +1072,7 @@ class WoxLauncherController extends GetxController {
   void focusToChatInput(String traceId) {
     Logger.instance.info(traceId, "focus to chat input");
     aiChatFocusNode.requestFocus();
+    actionsType = WoxActionsTypeEnum.WOX_ACTIONS_TYPE_AI_MODEL.code;
   }
 
   Future<void> sendChatRequest(String traceId, WoxPreviewChatData data) async {

@@ -97,12 +97,12 @@ func (r *AIChatPlugin) saveChats(ctx context.Context) {
 }
 
 func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData) {
-	// add a new conversation
+	// add a new conversation for AI response
 	currentResponseConversationId := uuid.NewString()
 	aiChatData.Conversations = append(aiChatData.Conversations, common.Conversation{
 		Id:        currentResponseConversationId,
 		Role:      common.ConversationRoleAI,
-		Text:      "Thinking...",
+		Text:      "",
 		Images:    []common.WoxImage{},
 		Timestamp: util.GetSystemTimestamp(),
 	})
@@ -152,11 +152,6 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData) {
 		}
 
 		var responseText string = aiResponseConversation.Text
-		// reset the response text if it is "Thinking..."
-		if responseText == "Thinking..." {
-			responseText = ""
-		}
-
 		if t == common.ChatStreamTypeStreaming {
 			responseText += data
 			aiResponseConversation.Text = responseText
@@ -242,13 +237,8 @@ func (r *AIChatPlugin) getLatestRefreshableResult(ctx context.Context, current p
 		if chat.Id == chatId {
 			// update the title
 			current.Title = chat.Title
-
 			// update the preview data
-			previewData, err := json.Marshal(plugin.WoxPreviewChatData{
-				Conversations: chat.Conversations,
-				Model:         chat.Model,
-			})
-			if err == nil {
+			if previewData, err := json.Marshal(chat); err == nil {
 				current.Preview.PreviewData = string(previewData)
 			}
 
@@ -264,10 +254,7 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results [
 	results = append(results, r.getNewChatPreviewData(ctx))
 
 	for i, chat := range r.chats {
-		previewData, err := json.Marshal(plugin.WoxPreviewChatData{
-			Conversations: chat.Conversations,
-			Model:         chat.Model,
-		})
+		previewData, err := json.Marshal(chat)
 		if err != nil {
 			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to marshal chat preview data: %s", err.Error()))
 			continue

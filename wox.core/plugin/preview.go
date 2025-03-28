@@ -16,7 +16,7 @@ const (
 	WoxPreviewTypeRemote   = "remote" // when type is remote, data should be url to load WoxPreview
 
 	// internal use
-	WoxPreviewTypeChat = "chat" // when type is chat, data should be Json string of AIChatData. this type is only for ai chat plugin
+	WoxPreviewTypeChat = "chat" // when type is chat, data should be Json string of common.AIChatData. this type is only for ai chat plugin
 )
 
 const (
