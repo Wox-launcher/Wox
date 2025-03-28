@@ -2,7 +2,6 @@ package hotkey
 
 import (
 	"context"
-	"fmt"
 	"time"
 	"wox/util"
 
@@ -11,7 +10,6 @@ import (
 )
 
 var initialized = false
-var endHookChan chan bool
 var lastKeyUpTimestamp = util.NewHashMap[uint16, int64]()
 var keyCallback = util.NewHashMap[uint16, func()]()
 
@@ -26,16 +24,14 @@ func registerDoubleHotKey(ctx context.Context, modifier hotkey.Modifier, callbac
 		return nil
 	}
 	initialized = true
-	endHookChan = make(chan bool)
 
 	util.Go(context.Background(), "double key listener", func() {
 		evChan := hook.Start()
-		defer hook.End()
-
 		for {
 			select {
 			case ev := <-evChan:
 				if ev.Kind == hook.KeyUp {
+					// util.GetLogger().Info(ctx, fmt.Sprintf("hotkey event received, ev: %v", ev.Keycode))
 					if cb, callbackExist := keyCallback.Load(ev.Keycode); callbackExist {
 						var keyUpMaxInterval int64 = 500
 						if v, ok := lastKeyUpTimestamp.Load(ev.Keycode); ok {
@@ -50,9 +46,6 @@ func registerDoubleHotKey(ctx context.Context, modifier hotkey.Modifier, callbac
 						lastKeyUpTimestamp.Store(ev.Keycode, util.GetSystemTimestamp())
 					}
 				}
-			case <-endHookChan:
-				util.GetLogger().Info(ctx, fmt.Sprintf("unregister double hotkey event received, exit loop"))
-				return
 			default:
 				// avoid 100% cpu usage
 				time.Sleep(20 * time.Millisecond)
@@ -70,11 +63,5 @@ func unregisterDoubleHotkey(ctx context.Context, modifier hotkey.Modifier) error
 	}
 
 	keyCallback.Delete(keyCode)
-	if keyCallback.Len() > 0 {
-		return nil
-	}
-
-	endHookChan <- true
-	initialized = false
 	return nil
 }

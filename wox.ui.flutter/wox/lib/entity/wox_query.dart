@@ -197,7 +197,7 @@ class WoxQueryResultTail {
   late String type;
   late String? text;
   late WoxImage? image;
-  late HotKey? hotkey;
+  late HotkeyX? hotkey;
 
   WoxQueryResultTail({required this.type, this.text, this.image, this.hotkey});
 
@@ -250,7 +250,7 @@ class WoxQueryResultTail {
     return WoxQueryResultTail(type: WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_TEXT.code, text: text);
   }
 
-  factory WoxQueryResultTail.hotkey(HotKey hotkey) {
+  factory WoxQueryResultTail.hotkey(HotkeyX hotkey) {
     return WoxQueryResultTail(type: WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_HOTKEY.code, hotkey: hotkey);
   }
 

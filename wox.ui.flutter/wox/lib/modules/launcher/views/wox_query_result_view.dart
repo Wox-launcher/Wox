@@ -266,7 +266,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
             }
           }
 
-          var pressedHotkey = WoxHotkey.parseHotkeyFromEvent(event);
+          var pressedHotkey = WoxHotkey.parseNormalHotkeyFromEvent(event);
           if (pressedHotkey == null) {
             return KeyEventResult.ignored;
           }

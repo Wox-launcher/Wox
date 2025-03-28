@@ -172,7 +172,7 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
               }
             }
 
-            var pressedHotkey = WoxHotkey.parseHotkeyFromEvent(event);
+            var pressedHotkey = WoxHotkey.parseNormalHotkeyFromEvent(event);
             if (pressedHotkey == null) {
               return KeyEventResult.ignored;
             }

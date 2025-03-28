@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
+import 'package:wox/entity/wox_hotkey.dart';
 
 class WoxHotkeyView extends StatelessWidget {
-  final HotKey hotkey;
+  final HotkeyX hotkey;
   final Color backgroundColor;
   final Color borderColor;
   final Color textColor;
@@ -116,10 +117,15 @@ class WoxHotkeyView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var hotkeyWidgets = <Widget>[];
-    if (hotkey.modifiers != null) {
-      hotkeyWidgets.addAll(hotkey.modifiers!.map((o) => buildSingleKey(getModifierName(o))));
+    if (hotkey.isNormalHotkey) {
+      hotkeyWidgets.addAll(hotkey.normalHotkey!.modifiers!.map((o) => buildSingleKey(getModifierName(o))));
+      hotkeyWidgets.add(buildSingleKey(getKeyName(hotkey.normalHotkey!.key)));
+    } else if (hotkey.isDoubleHotkey) {
+      hotkeyWidgets.add(buildSingleKey(getModifierName(hotkey.doubleHotkey!)));
+      hotkeyWidgets.add(buildSingleKey(getModifierName(hotkey.doubleHotkey!)));
+    } else if (hotkey.isSingleHotkey) {
+      hotkeyWidgets.add(buildSingleKey(getKeyName(hotkey.singleHotkey!)));
     }
-    hotkeyWidgets.add(buildSingleKey(getKeyName(hotkey.key)));
 
     return Wrap(
       spacing: 4,

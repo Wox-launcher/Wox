@@ -218,10 +218,6 @@ class WoxLauncherController extends GetxController {
     latestQueryHistories.assignAll(params.queryHistories);
     lastQueryMode = params.lastQueryMode;
 
-    if (params.selectAll) {
-      selectQueryBoxAllText(traceId);
-    }
-
     // Handle different position types
     // on linux, we need to show first and then set position or center it
     if (Platform.isLinux) {
@@ -240,7 +236,7 @@ class WoxLauncherController extends GetxController {
 
     await windowManager.show();
     await windowManager.focus();
-    focusQueryBox(selectAll: true);
+    focusQueryBox(selectAll: params.selectAll);
 
     WoxApi.instance.onShow();
   }
@@ -290,9 +286,9 @@ class WoxLauncherController extends GetxController {
 
   bool isActionHotkey(HotKey hotkey) {
     if (Platform.isMacOS) {
-      return WoxHotkey.equals(hotkey, WoxHotkey.parseHotkeyFromString("cmd+J"));
+      return WoxHotkey.equals(hotkey, WoxHotkey.parseHotkeyFromString("cmd+J")!.normalHotkey);
     } else {
-      return WoxHotkey.equals(hotkey, WoxHotkey.parseHotkeyFromString("alt+J"));
+      return WoxHotkey.equals(hotkey, WoxHotkey.parseHotkeyFromString("alt+J")!.normalHotkey);
     }
   }
 
@@ -384,7 +380,7 @@ class WoxLauncherController extends GetxController {
 
     var filteredActions = result.actions.where((action) {
       var actionHotkey = WoxHotkey.parseHotkeyFromString(action.hotkey);
-      if (WoxHotkey.equals(actionHotkey, hotkey)) {
+      if (actionHotkey != null && WoxHotkey.equals(actionHotkey.normalHotkey, hotkey)) {
         return true;
       }
 

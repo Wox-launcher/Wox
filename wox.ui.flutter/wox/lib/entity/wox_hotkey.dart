@@ -3,9 +3,28 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
+class HotkeyX {
+  String raw;
+  HotKey? normalHotkey; // normal hotkey, E.g. "ctrl+shift+a"
+  HotKeyModifier? doubleHotkey; // double hotkey, E.g. "ctrl+ctrl"
+  LogicalKeyboardKey? singleHotkey; // single hotkey, E.g. "enter", usually used for default action hotkey
+
+  HotkeyX(this.raw, {this.normalHotkey, this.doubleHotkey, this.singleHotkey});
+
+  bool get isNormalHotkey => normalHotkey != null;
+
+  bool get isDoubleHotkey => doubleHotkey != null;
+
+  bool get isSingleHotkey => singleHotkey != null;
+
+  String toStr() {
+    return raw;
+  }
+}
+
 /// A hotkey in Wox at least consists of a modifier and a key.
 class WoxHotkey {
-  static HotKey? parseHotkeyFromString(String value) {
+  static HotkeyX? parseHotkeyFromString(String value) {
     final modifiers = <HotKeyModifier>[];
     LogicalKeyboardKey? key;
     value.split("+").forEach((element) {
@@ -171,17 +190,20 @@ class WoxHotkey {
       }
     });
 
-    if (key == null) {
-      return null;
+    // double hotkey
+    if (key == null && modifiers.length == 2 && modifiers[0] == modifiers[1]) {
+      return HotkeyX(value, doubleHotkey: modifiers[0]);
     }
 
-    return HotKey(
-      key: key!,
-      modifiers: modifiers.isEmpty ? null : modifiers,
-    );
+    // normal hotkey
+    if (key != null && modifiers.isNotEmpty) {
+      return HotkeyX(value, normalHotkey: HotKey(key: key!, modifiers: modifiers));
+    }
+
+    return HotkeyX(value, singleHotkey: key);
   }
 
-  static HotKey? parseHotkeyFromEvent(KeyEvent event) {
+  static HotKey? parseNormalHotkeyFromEvent(KeyEvent event) {
     if (event is KeyUpEvent) return null;
 
     if (!WoxHotkey.isAllowedKey(event.physicalKey)) {
@@ -211,6 +233,10 @@ class WoxHotkey {
 
   static bool isAnyModifierPressed() {
     return HardwareKeyboard.instance.physicalKeysPressed.any((element) => HotKeyModifier.values.any((e) => e.physicalKeys.contains(element)));
+  }
+
+  static bool isModifierKey(PhysicalKeyboardKey key) {
+    return HotKeyModifier.values.any((e) => e.physicalKeys.contains(key));
   }
 
   static List<HotKeyModifier> getPressedModifiers() {
@@ -304,31 +330,18 @@ class WoxHotkey {
     return a.every((element) => b.map((o) => o.name).contains(element.name)) && b.every((element) => a.map((o) => o.name).contains(element.name));
   }
 
-  static String toStr(HotKey hotKey) {
+  static String normalHotkeyToStr(HotKey hotKey) {
     var modifiers = [];
     if (hotKey.modifiers != null) {
       for (var modifier in hotKey.modifiers!) {
-        if (modifier == HotKeyModifier.shift) {
-          modifiers.add("shift");
-        } else if (modifier == HotKeyModifier.control) {
-          modifiers.add("ctrl");
-        } else if (modifier == HotKeyModifier.alt) {
-          if (Platform.isMacOS) {
-            modifiers.add("option");
-          } else {
-            modifiers.add("alt");
-          }
-        } else if (modifier == HotKeyModifier.meta) {
-          if (Platform.isMacOS) {
-            modifiers.add("cmd");
-          } else {
-            modifiers.add("win");
-          }
-        }
+        modifiers.add(getModifierStr(modifier));
       }
     }
 
     var keyStr = hotKey.key.keyLabel.toLowerCase();
+    if (keyStr.startsWith("key ")) {
+      keyStr = keyStr.substring(4);
+    }
     if (hotKey.key == PhysicalKeyboardKey.space) {
       keyStr = "space";
     } else if (hotKey.key == PhysicalKeyboardKey.enter) {
@@ -348,5 +361,41 @@ class WoxHotkey {
     }
 
     return "${modifiers.join("+")}+$keyStr";
+  }
+
+  static HotKeyModifier? convertToModifier(PhysicalKeyboardKey key) {
+    if (key == PhysicalKeyboardKey.shiftLeft || key == PhysicalKeyboardKey.shiftRight) {
+      return HotKeyModifier.shift;
+    } else if (key == PhysicalKeyboardKey.controlLeft || key == PhysicalKeyboardKey.controlRight) {
+      return HotKeyModifier.control;
+    } else if (key == PhysicalKeyboardKey.altLeft || key == PhysicalKeyboardKey.altRight) {
+      return HotKeyModifier.alt;
+    } else if (key == PhysicalKeyboardKey.metaLeft || key == PhysicalKeyboardKey.metaRight) {
+      return HotKeyModifier.meta;
+    }
+
+    return null;
+  }
+
+  static String getModifierStr(HotKeyModifier modifier) {
+    if (modifier == HotKeyModifier.shift) {
+      return "shift";
+    } else if (modifier == HotKeyModifier.control) {
+      return "ctrl";
+    } else if (modifier == HotKeyModifier.alt) {
+      if (Platform.isMacOS) {
+        return "option";
+      } else {
+        return "alt";
+      }
+    } else if (modifier == HotKeyModifier.meta) {
+      if (Platform.isMacOS) {
+        return "cmd";
+      } else {
+        return "win";
+      }
+    }
+
+    return "";
   }
 }
