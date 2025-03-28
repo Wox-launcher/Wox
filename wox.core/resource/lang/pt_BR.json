@@ -142,6 +142,8 @@
   "ui_ai_model_selector_save": "Salvar",
   "ui_app_width": "Largura da janela",
   "ui_app_width_tips": "Ajuste a largura da janela do Wox (800-1600 pixels)",
+  "ui_max_result_count": "Contagem máxima de resultados",
+  "ui_max_result_count_tips": "Defina o número máximo de resultados a serem exibidos na lista (5-15 itens)",
   "plugin_app_open": "Abrir",
   "plugin_app_open_containing_folder": "Abrir pasta contendo",
   "plugin_app_copy_path": "Copiar caminho",

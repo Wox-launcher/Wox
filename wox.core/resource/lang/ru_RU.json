@@ -142,6 +142,8 @@
   "ui_ai_model_selector_save": "Сохранить",
   "ui_app_width": "Ширина окна",
   "ui_app_width_tips": "Настройте ширину окна Wox (800-1600 пикселей)",
+  "ui_max_result_count": "Максимальное количество результатов",
+  "ui_max_result_count_tips": "Установите максимальное количество результатов, отображаемых в списке (5-15 элементов)",
   "plugin_app_open": "Открыть",
   "plugin_app_open_containing_folder": "Открыть содержащую папку",
   "plugin_app_copy_path": "Копировать путь",

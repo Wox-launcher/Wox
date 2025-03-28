@@ -14,6 +14,7 @@ class WoxSetting {
   late String showPosition;
   late List<AIProvider> aiProviders;
   late int appWidth;
+  late int maxResultCount;
   late String themeId;
   late bool httpProxyEnabled;
   late String httpProxyUrl;
@@ -35,6 +36,7 @@ class WoxSetting {
     required this.showPosition,
     required this.aiProviders,
     required this.appWidth,
+    required this.maxResultCount,
     required this.themeId,
     required this.httpProxyEnabled,
     required this.httpProxyUrl,
@@ -83,6 +85,7 @@ class WoxSetting {
     }
 
     appWidth = json['AppWidth'];
+    maxResultCount = json['MaxResultCount'];
     themeId = json['ThemeId'];
     httpProxyEnabled = json['HttpProxyEnabled'] ?? false;
     httpProxyUrl = json['HttpProxyUrl'] ?? '';
@@ -106,6 +109,7 @@ class WoxSetting {
     data['ShowPosition'] = showPosition;
     data['AIProviders'] = aiProviders;
     data['AppWidth'] = appWidth;
+    data['MaxResultCount'] = maxResultCount;
     data['ThemeId'] = themeId;
     data['HttpProxyEnabled'] = httpProxyEnabled;
     data['HttpProxyUrl'] = httpProxyUrl;

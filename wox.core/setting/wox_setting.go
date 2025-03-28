@@ -32,8 +32,9 @@ type WoxSetting struct {
 	HttpProxyUrl     PlatformSettingValue[string]
 
 	// UI related
-	AppWidth int
-	ThemeId  string
+	AppWidth       int
+	MaxResultCount int
+	ThemeId        string
 }
 
 type LastQueryMode = string
@@ -109,6 +110,7 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 		LastQueryMode:        LastQueryModeEmpty,
 		ShowPosition:         PositionTypeMouseScreen,
 		AppWidth:             800,
+		MaxResultCount:       10,
 		ThemeId:              DefaultThemeId,
 		EnableAutostart: PlatformSettingValue[bool]{
 			WinValue:   false,

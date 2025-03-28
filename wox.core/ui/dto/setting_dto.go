@@ -25,6 +25,7 @@ type WoxSettingDto struct {
 	EnableAutoBackup     bool
 
 	// UI related
-	AppWidth int
-	ThemeId  string
+	AppWidth       int
+	MaxResultCount int
+	ThemeId        string
 }

@@ -142,6 +142,8 @@
   "ui_ai_model_selector_save": "Save",
   "ui_app_width": "Window width",
   "ui_app_width_tips": "Adjust the width of the Wox window (800-1600 pixels)",
+  "ui_max_result_count": "Maximum results",
+  "ui_max_result_count_tips": "Maximum number of results to display in the list (5-15 items)",
   "plugin_app_open": "Open",
   "plugin_app_open_containing_folder": "Open Containing Folder",
   "plugin_app_copy_path": "Copy Path",

@@ -40,13 +40,13 @@ func NewLastLocationPosition(x, y int) Position {
 func getWindowMouseScreenLocation(windowWidth int) (int, int) {
 	size := screen.GetMouseScreen()
 	x := size.X + (size.Width-windowWidth)/2
-	y := size.Height / 6
+	y := size.Height / 7
 	return x, y
 }
 
 func getWindowActiveScreenLocation(windowWidth int) (int, int) {
 	size := screen.GetActiveScreen()
 	x := size.X + (size.Width-windowWidth)/2
-	y := size.Height / 6
+	y := size.Height / 7
 	return x, y
 }

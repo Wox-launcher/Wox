@@ -4,7 +4,6 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
-import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -335,8 +334,10 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
 
   void scrollToBottom() {
     if (scrollController.hasClients) {
-      scrollController.jumpTo(
+      scrollController.animateTo(
         scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
       );
     }
   }

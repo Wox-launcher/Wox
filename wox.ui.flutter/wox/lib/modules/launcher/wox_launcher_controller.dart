@@ -752,9 +752,10 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> resizeHeight() async {
-    double resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(results.length > 10 ? 10 : results.length);
+    final maxResultCount = WoxSettingUtil.instance.currentSetting.maxResultCount;
+    double resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(results.length > maxResultCount ? maxResultCount : results.length);
     if (isShowActionPanel.value || isShowPreviewPanel.value) {
-      resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(10);
+      resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(maxResultCount);
     }
     if (results.isNotEmpty) {
       resultHeight += woxTheme.value.resultContainerPaddingTop + woxTheme.value.resultContainerPaddingBottom;

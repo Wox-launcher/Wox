@@ -117,6 +117,9 @@ func (m *Manager) loadWoxSetting(ctx context.Context) error {
 	if woxSetting.AppWidth == 0 {
 		woxSetting.AppWidth = defaultWoxSetting.AppWidth
 	}
+	if woxSetting.MaxResultCount == 0 {
+		woxSetting.MaxResultCount = defaultWoxSetting.MaxResultCount
+	}
 	if woxSetting.ThemeId == "" {
 		woxSetting.ThemeId = defaultWoxSetting.ThemeId
 	}
@@ -262,6 +265,12 @@ func (m *Manager) UpdateWoxSetting(ctx context.Context, key, value string) error
 			return parseErr
 		}
 		m.woxSetting.AppWidth = appWidth
+	} else if key == "MaxResultCount" {
+		maxResultCount, parseErr := strconv.Atoi(value)
+		if parseErr != nil {
+			return parseErr
+		}
+		m.woxSetting.MaxResultCount = maxResultCount
 	} else {
 		return fmt.Errorf("unknown key: %s", key)
 	}

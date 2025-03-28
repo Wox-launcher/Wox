@@ -142,6 +142,8 @@
   "ui_ai_model_selector_save": "保存",
   "ui_app_width": "窗口宽度",
   "ui_app_width_tips": "调整 Wox 窗口的宽度（800-1600像素）",
+  "ui_max_result_count": "最大结果数",
+  "ui_max_result_count_tips": "显示在列表中的最大结果数量（5-15项）",
   "plugin_app_open": "打开",
   "plugin_app_open_containing_folder": "打开所在文件夹",
   "plugin_app_copy_path": "复制路径",

@@ -80,6 +80,28 @@ class WoxSettingUIView extends WoxSettingBaseView {
             );
           }),
         ),
+        formField(
+          label: controller.tr("ui_max_result_count"),
+          tips: controller.tr("ui_max_result_count_tips"),
+          child: Obx(() {
+            return ComboBox<int>(
+              value: controller.woxSetting.value.maxResultCount,
+              items: List.generate(11, (index) => index + 5)
+                  .map(
+                    (count) => ComboBoxItem<int>(
+                      value: count,
+                      child: Text(count.toString()),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) {
+                  controller.updateConfig("MaxResultCount", v.toString());
+                }
+              },
+            );
+          }),
+        ),
       ]);
     });
   }
