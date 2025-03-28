@@ -171,7 +171,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
           height: 55,
           child: WoxDragMoveArea(
             onDragEnd: () {
-              controller.queryBoxFocusNode.requestFocus();
+              controller.focusQueryBox(selectAll: false);
             },
             child: Container(
               width: 55,
@@ -184,7 +184,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   child: GestureDetector(
                     onTap: () {
                       controller.queryIcon.value.action?.call();
-                      controller.queryBoxFocusNode.requestFocus();
+                      controller.focusQueryBox(selectAll: false);
                     },
                     child: WoxImageView(woxImage: controller.queryIcon.value.icon, width: 24, height: 24),
                   ),

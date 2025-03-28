@@ -134,7 +134,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
         launcherController.resizeHeight();
         await windowManager.setPosition(launcherController.positionBeforeOpenSetting);
         await windowManager.focus();
-        launcherController.queryBoxFocusNode.requestFocus();
+        launcherController.focusQueryBox(selectAll: true);
       }
       setState(() {});
     });

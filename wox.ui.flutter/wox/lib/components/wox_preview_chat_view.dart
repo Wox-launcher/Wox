@@ -163,7 +163,7 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
             if (event is KeyDownEvent) {
               switch (event.logicalKey) {
                 case LogicalKeyboardKey.escape:
-                  controller.queryBoxFocusNode.requestFocus();
+                  controller.focusQueryBox();
                   return KeyEventResult.handled;
                 case LogicalKeyboardKey.enter:
                   sendMessage();

@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:get/get.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:lpinyin/lpinyin.dart';
@@ -60,6 +61,7 @@ class WoxLauncherController extends GetxController {
   final results = <WoxQueryResult>[].obs;
   final originalResults = <WoxQueryResult>[]; // the original results, used to filter and restore selection results
   final activeResultIndex = 0.obs;
+  final hoveredResultIndex = (-1).obs; // -1 means no item is hovered
   final resultGlobalKeys = <GlobalKey>[]; // the global keys for each result item, used to calculate the position of the result item
   final resultScrollerController = ScrollController(initialScrollOffset: 0.0);
 
@@ -238,7 +240,7 @@ class WoxLauncherController extends GetxController {
 
     await windowManager.show();
     await windowManager.focus();
-    queryBoxFocusNode.requestFocus();
+    focusQueryBox(selectAll: true);
 
     WoxApi.instance.onShow();
   }
@@ -297,9 +299,29 @@ class WoxLauncherController extends GetxController {
   void hideActionPanel(String traceId) {
     isShowActionPanel.value = false;
     actionTextFieldController.text = "";
-    queryBoxFocusNode.requestFocus();
+    focusQueryBox(selectAll: true);
     resetActionsByActiveResult(traceId, "hide action panel");
     resizeHeight();
+  }
+
+  void focusQueryBox({bool selectAll = false}) {
+    // Store current cursor position before changing focus
+    final currentPosition = queryBoxTextFieldController.selection.baseOffset;
+
+    // request focus to action query box since it will lose focus when tap
+    queryBoxFocusNode.requestFocus();
+
+    // by default requestFocus will select all text, if selectAll is false, then restore to the previously stored cursor position
+    if (!selectAll) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        // Restore to the previously stored cursor position
+        final currentText = queryBoxTextFieldController.text;
+        queryBoxTextFieldController.value = TextEditingValue(
+          text: currentText,
+          selection: TextSelection.collapsed(offset: currentPosition),
+        );
+      });
+    }
   }
 
   void showActionPanel(String traceId) {
@@ -481,6 +503,8 @@ class WoxLauncherController extends GetxController {
     if (query.queryId == "") {
       query.queryId = const UuidV4().generate();
     }
+
+    clearHoveredResult();
 
     //hide setting view if query changed
     if (isInSettingView.value) {
@@ -849,11 +873,25 @@ class WoxLauncherController extends GetxController {
     return activeActionIndex.value == index;
   }
 
+  bool isResultHoveredByIndex(int index) {
+    return hoveredResultIndex.value == index;
+  }
+
+  void setHoveredResultIndex(int index) {
+    hoveredResultIndex.value = index;
+    results.refresh();
+  }
+
+  void clearHoveredResult() {
+    hoveredResultIndex.value = -1;
+    results.refresh();
+  }
+
   void setActiveResultIndex(int index) {
     activeResultIndex.value = index;
     currentPreview.value = results[index].preview;
     isShowPreviewPanel.value = currentPreview.value.previewData != "";
-    resetActionsByActiveResult(const UuidV4().generate(), "mouse hover");
+    resetActionsByActiveResult(const UuidV4().generate(), "mouse click");
     results.refresh();
   }
 
@@ -1140,7 +1178,7 @@ class WoxLauncherController extends GetxController {
     Logger.instance.info(const UuidV4().generate(), "Received drop files: $details");
 
     await windowManager.focus();
-    queryBoxFocusNode.requestFocus();
+    focusQueryBox(selectAll: false);
 
     canArrowUpHistory = false;
 

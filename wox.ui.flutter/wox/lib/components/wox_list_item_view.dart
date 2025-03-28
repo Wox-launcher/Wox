@@ -16,6 +16,7 @@ import 'wox_hotkey_view.dart';
 
 class WoxListItemView extends StatelessWidget {
   final bool isActive;
+  final bool isHovered;
   final Rx<WoxImage> icon;
   final Rx<String> title;
   final Rx<String> subTitle;
@@ -34,6 +35,7 @@ class WoxListItemView extends StatelessWidget {
     required this.isActive,
     required this.listViewType,
     required this.isGroup,
+    this.isHovered = false,
   });
 
   bool isAction() {
@@ -100,13 +102,24 @@ class WoxListItemView extends StatelessWidget {
     );
   }
 
+  Color getBackgroundColor() {
+    if (isActive) {
+      return fromCssColor(isAction() ? woxTheme.actionItemActiveBackgroundColor : woxTheme.resultItemActiveBackgroundColor);
+    } else if (isHovered) {
+      // Use a lighter version of the active background color for hover state
+      final activeColor = fromCssColor(isAction() ? woxTheme.actionItemActiveBackgroundColor : woxTheme.resultItemActiveBackgroundColor);
+      return activeColor.withOpacity(0.3);
+    }
+    return Colors.transparent;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: list item view ${title.value} - container");
 
     return Container(
       decoration: BoxDecoration(
-        color: isActive ? fromCssColor(isAction() ? woxTheme.actionItemActiveBackgroundColor : woxTheme.resultItemActiveBackgroundColor) : Colors.transparent,
+        color: getBackgroundColor(),
         borderRadius: BorderRadius.circular(isAction() ? 0.0 : woxTheme.resultItemBorderRadius.toDouble()),
         border: Border(
             left: isAction()
