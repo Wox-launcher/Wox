@@ -95,7 +95,7 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 		MainHotkey: PlatformSettingValue[string]{
 			WinValue:   "alt+space",
 			MacValue:   "command+space",
-			LinuxValue: "ctrl+shift+space",
+			LinuxValue: "ctrl+ctrl",
 		},
 		SelectionHotkey: PlatformSettingValue[string]{
 			WinValue:   "win+alt+space",
