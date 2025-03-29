@@ -21,8 +21,9 @@ func init() {
 }
 
 type AIChatPlugin struct {
-	chats []common.AIChatData
-	api   plugin.API
+	chats           []common.AIChatData
+	resultChatIdMap *util.HashMap[string /*chat id*/, string /*result id*/] // map of result id and chat id, used to update the chat title
+	api             plugin.API
 }
 
 func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
@@ -56,6 +57,7 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 }
 
 func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
+	r.resultChatIdMap = util.NewHashMap[string, string]()
 	r.api = initParams.API
 
 	chats, err := r.loadChats(ctx)
@@ -204,10 +206,15 @@ func (r *AIChatPlugin) getNewChatPreviewData(ctx context.Context) plugin.QueryRe
 		return plugin.QueryResult{}
 	}
 
+	resultId := uuid.NewString()
+	r.resultChatIdMap.Store(chatData.Id, resultId)
+
 	return plugin.QueryResult{
-		Title:    "New Chat",
-		SubTitle: "Create a new chat",
-		Icon:     aiChatIcon,
+		Id:          resultId,
+		Title:       "New Chat",
+		SubTitle:    "Create a new chat",
+		Icon:        aiChatIcon,
+		ContextData: chatData.Id,
 		Preview: plugin.WoxPreview{
 			PreviewType:    plugin.WoxPreviewTypeChat,
 			PreviewData:    string(previewData),
@@ -222,34 +229,14 @@ func (r *AIChatPlugin) getNewChatPreviewData(ctx context.Context) plugin.QueryRe
 				},
 			},
 		},
-		RefreshInterval: 1000,
-		OnRefresh: func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
-			return r.getLatestRefreshableResult(ctx, current)
-		},
 		Group:      "New Chat",
 		GroupScore: 1000,
 	}
 }
 
-func (r *AIChatPlugin) getLatestRefreshableResult(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
-	chatId := current.ContextData
-	for _, chat := range r.chats {
-		if chat.Id == chatId {
-			// update the title
-			current.Title = chat.Title
-			// update the preview data
-			if previewData, err := json.Marshal(chat); err == nil {
-				current.Preview.PreviewData = string(previewData)
-			}
-
-			break
-		}
-	}
-
-	return current
-}
-
 func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
+	r.resultChatIdMap.Clear()
+
 	// add the new chat result for user to create a new chat
 	results = append(results, r.getNewChatPreviewData(ctx))
 
@@ -260,8 +247,17 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results [
 			continue
 		}
 
+		resultId := uuid.NewString()
+		r.resultChatIdMap.Store(chat.Id, resultId)
+
+		continueChatText := "Continue Chat"
+		if len(chat.Conversations) == 0 {
+			continueChatText = "Start Chat"
+		}
+
 		group, groupScore := r.getResultGroup(ctx, chat)
 		results = append(results, plugin.QueryResult{
+			Id:          resultId,
 			Title:       chat.Title,
 			Icon:        aiChatIcon,
 			ContextData: chat.Id,
@@ -272,7 +268,7 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results [
 			},
 			Actions: []plugin.QueryResultAction{
 				{
-					Name:                   "Continue Chat",
+					Name:                   continueChatText,
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						// focus to chat input
@@ -310,10 +306,6 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results [
 						}
 					},
 				},
-			},
-			RefreshInterval: 1000,
-			OnRefresh: func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
-				return r.getLatestRefreshableResult(ctx, current)
 			},
 			Group:      group,
 			GroupScore: groupScore,
@@ -357,6 +349,13 @@ func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData
 				}
 			}
 			r.saveChats(ctx)
+
+			if resultId, ok := r.resultChatIdMap.Load(chat.Id); ok {
+				plugin.GetPluginManager().GetUI().UpdateResult(ctx, common.UpdateableResult{
+					Id:    resultId,
+					Title: &title,
+				})
+			}
 		}
 	})
 }

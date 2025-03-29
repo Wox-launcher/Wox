@@ -6,6 +6,7 @@ import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:from_css_color/from_css_color.dart';
+import 'package:get/get.dart';
 import 'package:highlight/highlight.dart';
 import 'package:highlight/languages/all.dart';
 import 'package:highlight/languages/bash.dart';
@@ -22,8 +23,8 @@ import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
+import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/log.dart';
-import 'package:wox/utils/wox_http_util.dart';
 import 'package:flutter_highlight/themes/monokai.dart';
 
 class WoxPreviewView extends StatefulWidget {
@@ -146,24 +147,6 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
   Widget build(BuildContext context) {
     if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: preview view data");
 
-    if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_REMOTE.code) {
-      return FutureBuilder<WoxPreview>(
-        future: WoxHttpUtil.instance.getData<WoxPreview>(widget.woxPreview.previewData),
-        builder: (context, snapshot) {
-          if (snapshot.hasData) {
-            return WoxPreviewView(
-              woxPreview: snapshot.data!,
-              woxTheme: widget.woxTheme,
-            );
-          } else if (snapshot.hasError) {
-            return Text("${snapshot.error}");
-          }
-
-          return const CircularProgressIndicator();
-        },
-      );
-    }
-
     Widget contentWidget = const SizedBox();
     if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_MARKDOWN.code) {
       contentWidget = buildMarkdown(widget.woxPreview.previewData);
@@ -231,8 +214,15 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
         );
       }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
+      var controller = Get.find<WoxLauncherController>();
       var previewChatData = WoxPreviewChatData.fromJson(jsonDecode(widget.woxPreview.previewData));
-      contentWidget = WoxPreviewChatView(chatData: previewChatData, woxTheme: widget.woxTheme);
+      controller.aiChatData.value = previewChatData;
+      contentWidget = WoxPreviewChatView();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (controller.aiChatScrollController.hasClients) {
+          controller.aiChatScrollController.jumpTo(controller.aiChatScrollController.position.maxScrollExtent);
+        }
+      });
     }
 
     if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {

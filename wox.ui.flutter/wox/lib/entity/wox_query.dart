@@ -452,3 +452,15 @@ class QueryIconInfo {
     return QueryIconInfo(icon: WoxImage.empty());
   }
 }
+
+class UpdateableResult {
+  late String id;
+  late String? title;
+
+  UpdateableResult({required this.id, this.title});
+
+  UpdateableResult.fromJson(Map<String, dynamic> json) {
+    id = json['Id'];
+    title = json['Title'];
+  }
+}

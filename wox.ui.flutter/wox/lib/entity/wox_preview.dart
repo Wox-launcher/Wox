@@ -1,8 +1,10 @@
+import 'package:get/get.dart';
 import 'package:uuid/uuid.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
 import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
+import 'package:wox/utils/wox_http_util.dart';
 
 class WoxPreview {
   late WoxPreviewType previewType;
@@ -41,13 +43,22 @@ class WoxPreview {
   static WoxPreview empty() {
     return WoxPreview(previewType: "", previewData: "", previewProperties: {}, scrollPosition: "");
   }
+
+  // unwrap the remote preview
+  Future<WoxPreview> unWrap() async {
+    if (previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_REMOTE.code) {
+      return await WoxHttpUtil.instance.getData<WoxPreview>(previewData);
+    }
+
+    return this;
+  }
 }
 
 // should be same as AIChatData in the ai chat plugin
 class WoxPreviewChatData {
   late String id;
   late String title;
-  late List<WoxPreviewChatConversation> conversations;
+  late RxList<WoxPreviewChatConversation> conversations;
   late WoxPreviewChatModel model;
   late int createdAt;
   late int updatedAt;
@@ -63,9 +74,9 @@ class WoxPreviewChatData {
     }
 
     return WoxPreviewChatData(
-      id: json['Id'] ?? const Uuid().v4(),
+      id: json['Id'] ?? "",
       title: json['Title'] ?? "",
-      conversations: conversations,
+      conversations: RxList<WoxPreviewChatConversation>.from(conversations),
       model: json['Model'] != null ? WoxPreviewChatModel.fromJson(json['Model']) : WoxPreviewChatModel(name: "", provider: ""),
       createdAt: json['CreatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
       updatedAt: json['UpdatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
@@ -81,6 +92,17 @@ class WoxPreviewChatData {
       'CreatedAt': createdAt,
       'UpdatedAt': updatedAt,
     };
+  }
+
+  static WoxPreviewChatData empty() {
+    return WoxPreviewChatData(
+      id: "",
+      title: "",
+      conversations: RxList<WoxPreviewChatConversation>.from([]),
+      model: WoxPreviewChatModel(name: "", provider: ""),
+      createdAt: 0,
+      updatedAt: 0,
+    );
   }
 }
 

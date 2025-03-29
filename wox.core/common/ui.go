@@ -50,6 +50,7 @@ type UI interface {
 	Notify(ctx context.Context, msg NotifyMsg)
 	FocusToChatInput(ctx context.Context)
 	SendChatResponse(ctx context.Context, chatData AIChatData)
+	UpdateResult(ctx context.Context, result UpdateableResult)
 }
 
 type ShowContext struct {
@@ -65,4 +66,12 @@ type NotifyMsg struct {
 	Icon           string // WoxImage.String(), can be empty
 	Text           string // can be empty
 	DisplaySeconds int    // 0 means display forever
+}
+
+// UpdateableResult is used to update the result of a query
+// Unlike Refresh, this directly updates the result instead of doing so through polling
+// This is now used internally by the AI chat plugin
+type UpdateableResult struct {
+	Id    string
+	Title *string
 }

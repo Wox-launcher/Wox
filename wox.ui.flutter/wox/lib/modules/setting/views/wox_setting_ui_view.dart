@@ -1,13 +1,5 @@
-import 'dart:convert';
-
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:get/get.dart';
-import 'package:wox/api/wox_api.dart';
-import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
-import 'package:wox/components/wox_hotkey_recorder_view.dart';
-import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
-import 'package:wox/entity/wox_hotkey.dart';
-import 'package:wox/entity/wox_lang.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
 
 class WoxSettingUIView extends WoxSettingBaseView {

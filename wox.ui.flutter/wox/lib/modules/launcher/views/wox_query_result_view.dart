@@ -12,6 +12,7 @@ import 'package:wox/entity/wox_query.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_event_device_type_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
+import 'package:wox/enums/wox_preview_type_enum.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
@@ -218,10 +219,26 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
       () => controller.isShowPreviewPanel.value
           ? Flexible(
               flex: (100 - controller.resultPreviewRatio.value * 100).toInt(),
-              child: WoxPreviewView(
-                woxPreview: controller.currentPreview.value,
-                woxTheme: controller.woxTheme.value,
-              ),
+              child: controller.currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_REMOTE.code
+                  ? FutureBuilder(
+                      future: controller.currentPreview.value.unWrap(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          SchedulerBinding.instance.addPostFrameCallback((_) {
+                            controller.currentPreview.value = snapshot.data!; // which will trigger the preview view to rebuild
+                          });
+                          return const SizedBox();
+                        } else if (snapshot.hasError) {
+                          return Text("${snapshot.error}");
+                        } else {
+                          return const SizedBox();
+                        }
+                      },
+                    )
+                  : WoxPreviewView(
+                      woxPreview: controller.currentPreview.value,
+                      woxTheme: controller.woxTheme.value,
+                    ),
             )
           : const SizedBox(),
     );

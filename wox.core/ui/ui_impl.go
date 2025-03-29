@@ -94,6 +94,10 @@ func (u *uiImpl) SendChatResponse(ctx context.Context, aiChatData common.AIChatD
 	u.invokeWebsocketMethod(ctx, "SendChatResponse", aiChatData)
 }
 
+func (u *uiImpl) UpdateResult(ctx context.Context, result common.UpdateableResult) {
+	u.invokeWebsocketMethod(ctx, "UpdateResult", result)
+}
+
 func (u *uiImpl) isNotifyInToolbar(ctx context.Context, pluginId string) bool {
 	isVisible, err := u.invokeWebsocketMethod(ctx, "IsVisible", nil)
 	if err != nil {
