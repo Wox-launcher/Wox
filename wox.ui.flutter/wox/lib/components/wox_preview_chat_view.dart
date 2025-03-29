@@ -23,10 +23,10 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
     return Column(
       children: [
         // AI Model Selection
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: InkWell(
-            onTap: () => controller.showActionPanelForModelSelection(const UuidV4().generate()),
+        Obx(() => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: InkWell(
+                onTap: () => controller.showActionPanelForModelSelection(const UuidV4().generate()),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
               decoration: BoxDecoration(
@@ -45,13 +45,14 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      controller.aiChatData.value.model.name,
-                      style: TextStyle(
-                        color: fromCssColor(controller.woxTheme.value.previewPropertyTitleColor),
-                        fontSize: 14,
+                    child: Obx(() => Text(
+                          controller.aiChatData.value.model.name.isEmpty ? "请选择模型" : controller.aiChatData.value.model.name,
+                          style: TextStyle(
+                            color: fromCssColor(controller.woxTheme.value.previewPropertyTitleColor),
+                            fontSize: 14,
+                          ),
+                        ),
                       ),
-                    ),
                   ),
                   Icon(
                     Icons.arrow_forward_ios,
@@ -62,7 +63,7 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
               ),
             ),
           ),
-        ),
+        )),
         // Messages list
         Expanded(
           child: SingleChildScrollView(

@@ -128,9 +128,7 @@ class WoxLauncherController extends GetxController {
       hideActionPanel(traceId);
     };
 
-    WoxApi.instance.findAIModels().then((models) {
-      aiModels.assignAll(models);
-    });
+    reloadAIModels();
   }
 
   /// Triggered when received query results from the server.
@@ -246,6 +244,13 @@ class WoxLauncherController extends GetxController {
     WoxApi.instance.onShow();
   }
 
+  void reloadAIModels() {
+    WoxApi.instance.findAIModels().then((models) {
+      aiModels.assignAll(models);
+      Logger.instance.debug(const UuidV4().generate(), "reload ai models: ${aiModels.length}");
+    });
+  }
+
   Future<void> hideApp(String traceId) async {
     //clear query box text if query type is selection or last query mode is empty
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code || lastQueryMode == WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_EMPTY.code) {
@@ -342,6 +347,32 @@ class WoxLauncherController extends GetxController {
           isSystemAction: false,
           onExecute: (traceId) {
             aiChatData.value.model = WoxPreviewChatModel(name: model.name, provider: model.provider);
+
+            // update the preview data of result, otherwise, when user switch to other result and then switch back, the preview data still the old one
+            for (var result in results) {
+              if (result.contextData == aiChatData.value.id) {
+                result.preview = WoxPreview(
+                  previewType: WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code,
+                  previewData: jsonEncode(aiChatData.value.toJson()),
+                  previewProperties: {},
+                  scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
+                );
+              }
+            }
+
+            // update preview data if it's the same chat
+            if (currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
+              final activeResultAiChatData = WoxPreviewChatData.fromJson(jsonDecode(currentPreview.value.previewData));
+              if (activeResultAiChatData.id == aiChatData.value.id) {
+                currentPreview.value = WoxPreview(
+                  previewType: WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code,
+                  previewData: jsonEncode(aiChatData.value.toJson()),
+                  previewProperties: {},
+                  scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
+                );
+              }
+            }
+
             hideActionPanel(traceId);
             focusToChatInput(traceId);
           },
@@ -1129,8 +1160,10 @@ class WoxLauncherController extends GetxController {
 
   void focusToChatInput(String traceId) {
     Logger.instance.info(traceId, "focus to chat input");
-    aiChatFocusNode.requestFocus();
     actionsType = WoxActionsTypeEnum.WOX_ACTIONS_TYPE_AI_MODEL.code;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      aiChatFocusNode.requestFocus();
+    });
   }
 
   Future<void> sendChatRequest(String traceId, WoxPreviewChatData data) async {

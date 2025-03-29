@@ -53,6 +53,11 @@ class WoxSettingController extends GetxController {
     await WoxApi.instance.updateSetting(key, value);
     await reloadSetting();
     Logger.instance.info(const UuidV4().generate(), 'Setting updated: $key=$value');
+
+
+    if (key == "AIProviders") {
+      Get.find<WoxLauncherController>().reloadAIModels();
+    }
   }
 
   Future<void> updateLang(String langCode) async {

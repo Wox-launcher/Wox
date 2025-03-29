@@ -818,7 +818,7 @@ func handleDeeplink(w http.ResponseWriter, r *http.Request) {
 func handleAIModels(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
 
-	var results []common.Model
+	var results = []common.Model{}
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	for _, providerSetting := range woxSetting.AIProviders {
 		provider, err := ai.NewProvider(ctx, providerSetting)
