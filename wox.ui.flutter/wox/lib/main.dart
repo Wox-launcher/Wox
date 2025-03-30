@@ -126,7 +126,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
         // so we need to wait the resize to complete and then resize the window to the setting view size
         WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
           await windowManager.setSize(const Size(1200, 800));
-          if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window to 1200x800 for setting view");
+          if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.debug(const UuidV4().generate(), "Resize: window to 1200x800 for setting view");
           await windowManager.center(1200, 800);
         });
       } else {

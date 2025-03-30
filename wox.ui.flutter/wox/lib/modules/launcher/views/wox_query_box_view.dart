@@ -14,7 +14,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
 
   @override
   Widget build(BuildContext context) {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: query box view");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: query box view");
 
     return Obx(() {
       return Stack(children: [
@@ -118,7 +118,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                       inputFormatters: [
                         TextInputFormatter.withFunction((oldValue, newValue) {
                           var traceId = const UuidV4().generate();
-                          Logger.instance.info(traceId, "IME Formatter - old: ${oldValue.text}, new: ${newValue.text}, composing: ${newValue.composing}");
+                          Logger.instance.debug(traceId, "IME Formatter - old: ${oldValue.text}, new: ${newValue.text}, composing: ${newValue.composing}");
 
                           // Flutter's IME handling has inconsistencies across platforms, especially on Windows
                           // So we use input formatter to detect IME input completion instead of onChanged event

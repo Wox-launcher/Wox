@@ -85,7 +85,6 @@ class WoxLauncherController extends GetxController {
   var actionsType = WoxActionsTypeEnum.WOX_ACTIONS_TYPE_RESULT.code;
 
   // ai chat related variables
-  final aiChatData = WoxPreviewChatData.empty().obs;
   final aiChatFocusNode = FocusNode();
   final List<AIModel> aiModels = [];
   final ScrollController aiChatScrollController = ScrollController();
@@ -336,7 +335,7 @@ class WoxLauncherController extends GetxController {
     resizeHeight();
   }
 
-  Future<void> showActionPanelForModelSelection(String traceId) async {
+  Future<void> showActionPanelForModelSelection(String traceId, WoxPreviewChatData aiChatData) async {
     originalActions.assignAll(aiModels.map((model) => WoxResultAction(
           id: const UuidV4().generate(),
           name: RxString("${model.name} (${model.provider})"),
@@ -346,30 +345,17 @@ class WoxLauncherController extends GetxController {
           hotkey: "",
           isSystemAction: false,
           onExecute: (traceId) {
-            aiChatData.value.model = WoxPreviewChatModel(name: model.name, provider: model.provider);
+            aiChatData.model = WoxPreviewChatModel(name: model.name, provider: model.provider);
 
-            // update the preview data of result, otherwise, when user switch to other result and then switch back, the preview data still the old one
             for (var result in results) {
-              if (result.contextData == aiChatData.value.id) {
+              if (result.contextData == aiChatData.id) {
                 result.preview = WoxPreview(
                   previewType: WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code,
-                  previewData: jsonEncode(aiChatData.value.toJson()),
+                  previewData: jsonEncode(aiChatData.toJson()),
                   previewProperties: {},
                   scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
                 );
-              }
-            }
-
-            // update preview data if it's the same chat
-            if (currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
-              final activeResultAiChatData = WoxPreviewChatData.fromJson(jsonDecode(currentPreview.value.previewData));
-              if (activeResultAiChatData.id == aiChatData.value.id) {
-                currentPreview.value = WoxPreview(
-                  previewType: WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code,
-                  previewData: jsonEncode(aiChatData.value.toJson()),
-                  previewProperties: {},
-                  scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
-                );
+                currentPreview.value = result.preview;
               }
             }
 
@@ -719,7 +705,7 @@ class WoxLauncherController extends GetxController {
       focusToChatInput(msg.traceId);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "SendChatResponse") {
-      sendChatResponse(msg.traceId, WoxPreviewChatData.fromJson(msg.data));
+      handleChatResponse(msg.traceId, WoxPreviewChatData.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "UpdateResult") {
       updateResult(msg.traceId, UpdateableResult.fromJson(msg.data));
@@ -830,7 +816,7 @@ class WoxLauncherController extends GetxController {
     }
     final totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight;
 
-    if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.info(const UuidV4().generate(), "Resize: window height to $totalHeight");
+    if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.debug(const UuidV4().generate(), "Resize: window height to $totalHeight");
     await windowManager.setSize(Size(WoxSettingUtil.instance.currentSetting.appWidth.toDouble(), totalHeight.toDouble()));
   }
 
@@ -1167,39 +1153,10 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> sendChatRequest(String traceId, WoxPreviewChatData data) async {
-    Logger.instance.info(traceId, "send chat request: ${data.toJson()}");
     WoxApi.instance.sendChatRequest(data);
   }
 
-  void sendChatResponse(String traceId, WoxPreviewChatData data) {
-    Logger.instance.info(traceId, "got chat response: ${data.toJson()}");
-
-    //update the ai chat data only if the preview is chat
-    //if the preview is not chat, then maybe user has changed the query, in that case, do nothing
-    if (currentPreview.value.previewType != WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
-      return;
-    }
-
-    // update preview data if it's the response result
-    final activeResultAiChatData = WoxPreviewChatData.fromJson(jsonDecode(currentPreview.value.previewData));
-    if (activeResultAiChatData.id == data.id) {
-      var lastConversation = data.conversations.last;
-
-      // if last conversation is exist, update it, otherwise add it
-      if (aiChatData.value.conversations.any((element) => element.id == lastConversation.id)) {
-        aiChatData.value.conversations[aiChatData.value.conversations.indexWhere((element) => element.id == lastConversation.id)] = lastConversation;
-      } else {
-        aiChatData.value.conversations.add(lastConversation);
-      }
-
-      aiChatData.value.updatedAt = data.updatedAt;
-
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        scrollToBottomOfAiChat();
-      });
-    }
-
-    // update the preview data of result, otherwise, when user switch to other result and then switch back, the preview data still the old one
+  void handleChatResponse(String traceId, WoxPreviewChatData data) {
     for (var result in results) {
       if (result.contextData == data.id) {
         result.preview = WoxPreview(
@@ -1208,6 +1165,10 @@ class WoxLauncherController extends GetxController {
           previewProperties: {},
           scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
         );
+        currentPreview.value = result.preview;
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          scrollToBottomOfAiChat();
+        });
       }
     }
   }

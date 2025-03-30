@@ -8,32 +8,53 @@ import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_preview.dart';
+import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_toolbar.dart';
 import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
+import 'package:wox/utils/log.dart';
 
-class WoxPreviewChatView extends GetView<WoxLauncherController> {
+class WoxPreviewChatView extends StatefulWidget {
+  final WoxPreviewChatData aiChatData;
+  final WoxTheme woxTheme;
+
+  const WoxPreviewChatView({super.key, required this.aiChatData, required this.woxTheme});
+
+  @override
+  State<WoxPreviewChatView> createState() => _WoxPreviewChatViewState();
+}
+
+class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
   final TextEditingController textController = TextEditingController();
-  final TextEditingController searchController = TextEditingController();
+  final WoxLauncherController controller = Get.find<WoxLauncherController>();
 
-  WoxPreviewChatView({super.key});
+  @override
+  void initState() {
+    super.initState();
+
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      controller.scrollToBottomOfAiChat();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: chat view");
+
     return Column(
       children: [
         // AI Model Selection
-        Obx(() => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: InkWell(
-                onTap: () => controller.showActionPanelForModelSelection(const UuidV4().generate()),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: InkWell(
+            onTap: () => controller.showActionPanelForModelSelection(const UuidV4().generate(), widget.aiChatData),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
               decoration: BoxDecoration(
-                color: fromCssColor(controller.woxTheme.value.queryBoxBackgroundColor),
+                color: fromCssColor(widget.woxTheme.queryBoxBackgroundColor),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: fromCssColor(controller.woxTheme.value.previewPropertyTitleColor).withOpacity(0.1),
+                  color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.1),
                 ),
               ),
               child: Row(
@@ -41,37 +62,36 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
                   Icon(
                     Icons.smart_toy_outlined,
                     size: 20,
-                    color: fromCssColor(controller.woxTheme.value.previewPropertyTitleColor),
+                    color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Obx(() => Text(
-                          controller.aiChatData.value.model.name.isEmpty ? "请选择模型" : controller.aiChatData.value.model.name,
-                          style: TextStyle(
-                            color: fromCssColor(controller.woxTheme.value.previewPropertyTitleColor),
-                            fontSize: 14,
-                          ),
-                        ),
+                    child: Text(
+                      widget.aiChatData.model.name.isEmpty ? "请选择模型" : widget.aiChatData.model.name,
+                      style: TextStyle(
+                        color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
+                        fontSize: 14,
                       ),
+                    ),
                   ),
                   Icon(
                     Icons.arrow_forward_ios,
                     size: 16,
-                    color: fromCssColor(controller.woxTheme.value.previewPropertyTitleColor),
+                    color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
                   ),
                 ],
               ),
             ),
           ),
-        )),
+        ),
         // Messages list
         Expanded(
           child: SingleChildScrollView(
             controller: controller.aiChatScrollController,
             padding: const EdgeInsets.symmetric(vertical: 16.0),
-            child: Obx(() => Column(
-                  children: controller.aiChatData.value.conversations.map((message) => buildMessageItem(message)).toList(),
-                )),
+            child: Column(
+              children: widget.aiChatData.conversations.map((message) => buildMessageItem(message)).toList(),
+            ),
           ),
         ),
         // Input box
@@ -103,7 +123,7 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
 
             // list all models
             if (controller.isActionHotkey(pressedHotkey)) {
-              controller.showActionPanelForModelSelection(const UuidV4().generate());
+              controller.showActionPanelForModelSelection(const UuidV4().generate(), widget.aiChatData);
               return KeyEventResult.handled;
             }
 
@@ -115,8 +135,8 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    color: fromCssColor(controller.woxTheme.value.queryBoxBackgroundColor),
-                    borderRadius: BorderRadius.circular(controller.woxTheme.value.queryBoxBorderRadius.toDouble()),
+                    color: fromCssColor(widget.woxTheme.queryBoxBackgroundColor),
+                    borderRadius: BorderRadius.circular(widget.woxTheme.queryBoxBorderRadius.toDouble()),
                   ),
                   child: Column(
                     children: [
@@ -125,7 +145,7 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
                         focusNode: controller.aiChatFocusNode,
                         decoration: InputDecoration(
                           hintText: '在这里输入消息，按下 ← 发送',
-                          hintStyle: TextStyle(color: fromCssColor(controller.woxTheme.value.previewPropertyTitleColor)),
+                          hintStyle: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor)),
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                         ),
@@ -133,7 +153,7 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
                         keyboardType: TextInputType.multiline,
                         style: TextStyle(
                           fontSize: 14,
-                          color: fromCssColor(controller.woxTheme.value.queryBoxFontColor),
+                          color: fromCssColor(widget.woxTheme.queryBoxFontColor),
                         ),
                       ),
                       Container(
@@ -142,7 +162,7 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
                         decoration: BoxDecoration(
                           border: Border(
                             top: BorderSide(
-                              color: fromCssColor(controller.woxTheme.value.previewPropertyTitleColor).withOpacity(0.1),
+                              color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.1),
                             ),
                           ),
                         ),
@@ -150,7 +170,7 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
                           children: [
                             IconButton(
                               icon: const Icon(Icons.link, size: 18),
-                              color: fromCssColor(controller.woxTheme.value.previewPropertyTitleColor),
+                              color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
                               onPressed: () {},
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(
@@ -160,7 +180,7 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
                             ),
                             IconButton(
                               icon: const Icon(Icons.keyboard_command_key, size: 18),
-                              color: fromCssColor(controller.woxTheme.value.previewPropertyTitleColor),
+                              color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
                               onPressed: () {},
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(
@@ -170,7 +190,7 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
                             ),
                             IconButton(
                               icon: const Icon(Icons.eco_outlined, size: 18),
-                              color: fromCssColor(controller.woxTheme.value.previewPropertyTitleColor),
+                              color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
                               onPressed: () {},
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(
@@ -182,7 +202,7 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: fromCssColor(controller.woxTheme.value.actionItemActiveBackgroundColor).withOpacity(0.1),
+                                color: fromCssColor(widget.woxTheme.actionItemActiveBackgroundColor).withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Row(
@@ -191,14 +211,14 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
                                   Icon(
                                     Icons.keyboard_return,
                                     size: 14,
-                                    color: fromCssColor(controller.woxTheme.value.previewPropertyTitleColor),
+                                    color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
                                     '发送',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: fromCssColor(controller.woxTheme.value.previewPropertyTitleColor),
+                                      color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
                                     ),
                                   ),
                                 ],
@@ -221,7 +241,7 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
   void sendMessage() {
     final text = textController.text.trim();
     // Check if AI model is selected
-    if (controller.aiChatData.value.model.name.isEmpty) {
+    if (widget.aiChatData.model.name.isEmpty) {
       controller.showToolbarMsg(const UuidV4().generate(), ToolbarMsg(text: "Please select a model", displaySeconds: 3));
       return;
     }
@@ -232,32 +252,29 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
     }
 
     // append user message to chat data
-    controller.aiChatData.value.conversations.add(WoxPreviewChatConversation(
+    widget.aiChatData.conversations.add(WoxPreviewChatConversation(
       id: const UuidV4().generate(),
       role: WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value,
       text: text,
       images: [],
       timestamp: DateTime.now().millisecondsSinceEpoch,
     ));
-    controller.aiChatData.value.updatedAt = DateTime.now().millisecondsSinceEpoch;
-    controller.aiChatData.value.model = WoxPreviewChatModel(
-      name: controller.aiChatData.value.model.name,
-      provider: controller.aiChatData.value.model.provider,
-    );
+    widget.aiChatData.updatedAt = DateTime.now().millisecondsSinceEpoch;
 
     textController.clear();
+
+    setState(() {});
 
     SchedulerBinding.instance.addPostFrameCallback((_) {
       controller.scrollToBottomOfAiChat();
     });
 
-    controller.sendChatRequest(const UuidV4().generate(), controller.aiChatData.value);
+    controller.sendChatRequest(const UuidV4().generate(), widget.aiChatData);
   }
 
   Widget buildMessageItem(WoxPreviewChatConversation message) {
     final isUser = message.role == 'user';
-    final backgroundColor =
-        isUser ? fromCssColor(controller.woxTheme.value.resultItemActiveBackgroundColor) : fromCssColor(controller.woxTheme.value.actionContainerBackgroundColor);
+    final backgroundColor = isUser ? fromCssColor(widget.woxTheme.resultItemActiveBackgroundColor) : fromCssColor(widget.woxTheme.actionContainerBackgroundColor);
     final alignment = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
 
     return Padding(
@@ -351,7 +368,7 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        color: fromCssColor(isUser ? controller.woxTheme.value.actionItemActiveBackgroundColor : controller.woxTheme.value.resultItemActiveBackgroundColor),
+        color: fromCssColor(isUser ? widget.woxTheme.actionItemActiveBackgroundColor : widget.woxTheme.resultItemActiveBackgroundColor),
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
@@ -365,7 +382,7 @@ class WoxPreviewChatView extends GetView<WoxLauncherController> {
         child: Text(
           isUser ? 'U' : 'A',
           style: TextStyle(
-            color: fromCssColor(isUser ? controller.woxTheme.value.actionItemActiveFontColor : controller.woxTheme.value.resultItemActiveTitleColor),
+            color: fromCssColor(isUser ? widget.woxTheme.actionItemActiveFontColor : widget.woxTheme.resultItemActiveTitleColor),
             fontSize: 16,
             fontWeight: FontWeight.w500,
           ),

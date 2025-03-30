@@ -34,7 +34,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
 
   Widget getActionListView() {
     return Obx(() {
-      if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: action list view container");
+      if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: action list view container");
 
       return Scrollbar(
           controller: controller.actionScrollerController,
@@ -69,7 +69,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   }
 
   Widget getActionPanelView() {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: action panel view container");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: action panel view container");
 
     return Obx(
       () => controller.isShowActionPanel.value
@@ -196,7 +196,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   }
 
   Widget getResultView() {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: result view container");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: result view container");
 
     return Obx(
       () => controller.results.isNotEmpty
@@ -213,7 +213,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   }
 
   Widget getPreviewView() {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.info(const UuidV4().generate(), "repaint: preview view container");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: preview view container");
 
     return Obx(
       () => controller.isShowPreviewPanel.value
