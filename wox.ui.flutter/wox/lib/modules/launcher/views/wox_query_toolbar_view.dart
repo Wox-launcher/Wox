@@ -58,15 +58,15 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
                           child: GestureDetector(
                             onTap: () {
                               Clipboard.setData(ClipboardData(text: toolbarInfo.text ?? ''));
-                              controller.toolbarCopyText.value = 'Copied'; // 更新状态为 "Copied"
+                              controller.toolbarCopyText.value = 'Copied';
                               Future.delayed(const Duration(seconds: 3), () {
-                                controller.toolbarCopyText.value = 'Copy'; // 3秒后恢复为 "Copy"
+                                controller.toolbarCopyText.value = 'Copy';
                               });
                             },
                             child: Padding(
                               padding: const EdgeInsets.only(left: 8.0),
                               child: Obx(() => Text(
-                                    controller.toolbarCopyText.value, // 使用状态变量
+                                    controller.toolbarCopyText.value,
                                     style: TextStyle(
                                       color: fromCssColor(controller.woxTheme.value.toolbarFontColor),
                                       fontSize: 12,

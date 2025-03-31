@@ -224,10 +224,10 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                       future: controller.currentPreview.value.unWrap(),
                       builder: (context, snapshot) {
                         if (snapshot.hasData) {
-                          SchedulerBinding.instance.addPostFrameCallback((_) {
-                            controller.currentPreview.value = snapshot.data!; // which will trigger the preview view to rebuild
-                          });
-                          return const SizedBox();
+                          return WoxPreviewView(
+                            woxPreview: snapshot.data!,
+                            woxTheme: controller.woxTheme.value,
+                          );
                         } else if (snapshot.hasError) {
                           return Text("${snapshot.error}");
                         } else {
