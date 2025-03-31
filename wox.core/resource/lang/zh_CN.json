@@ -270,6 +270,9 @@
   "plugin_calculator_input_expression": "输入表达式进行计算",
   "plugin_file_open": "打开",
   "plugin_file_open_containing_folder": "打开所在文件夹",
+  "plugin_file_everything_not_running": "Everything 未运行",
+  "plugin_file_everything_please_run_everything": "请运行 Everything",
+  "plugin_file_everything_goto_website": "前往 Everything 官网",
   "plugin_manager_query_failed": "%s 查询失败",
   "plugin_manager_remove_from_favorite": "从收藏夹移除",
   "plugin_manager_add_to_favorite": "添加到收藏夹"

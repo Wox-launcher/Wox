@@ -2,6 +2,7 @@ package file
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"path/filepath"
 	"wox/util/shell"
@@ -12,17 +13,21 @@ var searcher Searcher = &MacSearcher{}
 type MacSearcher struct {
 }
 
-func (m *MacSearcher) Search(pattern SearchPattern) []SearchResult {
+func (m *MacSearcher) Init(ctx context.Context) error {
+	return nil
+}
+
+func (m *MacSearcher) Search(pattern SearchPattern) ([]SearchResult, error) {
 	// if the search pattern is too short, return empty result
 	if len(pattern.Name) <= 3 {
-		return []SearchResult{}
+		return []SearchResult{}, nil
 	}
 
 	// use mdfind to search files
 	cmd := fmt.Sprintf("mdfind \"kMDItemDisplayName=='%s'\" | head -n 20", pattern.Name)
 	output, err := shell.RunOutput("bash", "-c", cmd)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	//read output line by line
@@ -34,5 +39,5 @@ func (m *MacSearcher) Search(pattern SearchPattern) []SearchResult {
 			results = append(results, SearchResult{Name: fileName, Path: path})
 		}
 	}
-	return results
+	return results, nil
 }

@@ -25,6 +25,9 @@ var appIcon []byte
 //go:embed app.ico
 var appIconWindows []byte
 
+//go:embed others
+var OthersFS embed.FS
+
 var embedThemes = []string{}
 
 func Extract(ctx context.Context) error {
@@ -37,6 +40,11 @@ func Extract(ctx context.Context) error {
 	flutterErr := extractFiles(ctx, UIFS, util.GetLocation().GetUIDirectory(), "ui/flutter", true)
 	if flutterErr != nil {
 		return flutterErr
+	}
+
+	othersErr := extractFiles(ctx, OthersFS, util.GetLocation().GetOthersDirectory(), "others", false)
+	if othersErr != nil {
+		return othersErr
 	}
 
 	themeErr := parseThemes(ctx)

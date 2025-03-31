@@ -1,5 +1,7 @@
 package file
 
+import "context"
+
 type SearchPattern struct {
 	Name string // The name of the file or directory.
 }
@@ -10,5 +12,6 @@ type SearchResult struct {
 }
 
 type Searcher interface {
-	Search(pattern SearchPattern) []SearchResult
+	Init(ctx context.Context) error
+	Search(pattern SearchPattern) ([]SearchResult, error)
 }
