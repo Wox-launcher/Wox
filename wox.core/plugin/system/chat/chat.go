@@ -1,4 +1,4 @@
-package system
+package chat
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"sort"
 	"wox/common"
 	"wox/plugin"
+	"wox/setting/definition"
+	"wox/setting/validator"
 	"wox/util"
 	"wox/util/selection"
 
@@ -23,6 +25,7 @@ func init() {
 type AIChatPlugin struct {
 	chats           []common.AIChatData
 	resultChatIdMap *util.HashMap[string /*chat id*/, string /*result id*/] // map of result id and chat id, used to update the chat title
+	mcpServers      []AIChatMCPServerConfig
 	api             plugin.API
 }
 
@@ -39,6 +42,76 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 		Icon:            aiChatIcon.String(),
 		TriggerKeywords: []string{"chat"},
 		SupportedOS:     []string{"Windows", "Macos", "Linux"},
+		SettingDefinitions: definition.PluginSettingDefinitions{
+			{
+				Type: definition.PluginSettingDefinitionTypeTable,
+				Value: &definition.PluginSettingValueTable{
+					Key:     "mcp_servers",
+					Title:   "i18n:plugin_ai_chat_mcp_servers",
+					Tooltip: "i18n:plugin_ai_chat_mcp_servers_tooltip",
+					Columns: []definition.PluginSettingValueTableColumn{
+						{
+							Key:     "name",
+							Label:   "i18n:plugin_ai_chat_mcp_server_name",
+							Type:    definition.PluginSettingValueTableColumnTypeText,
+							Width:   100,
+							Tooltip: "i18n:plugin_ai_chat_mcp_server_name_tooltip",
+							Validators: []validator.PluginSettingValidator{
+								{
+									Type:  validator.PluginSettingValidatorTypeNotEmpty,
+									Value: &validator.PluginSettingValidatorNotEmpty{},
+								},
+							},
+						},
+						{
+							Key:     "type",
+							Label:   "i18n:plugin_ai_chat_mcp_server_type",
+							Type:    definition.PluginSettingValueTableColumnTypeSelect,
+							Width:   100,
+							Tooltip: "i18n:plugin_ai_chat_mcp_server_type_tooltip",
+							SelectOptions: []definition.PluginSettingValueSelectOption{
+								{
+									Label: "STUDIO",
+									Value: string(AIChatMCPServerTypeSTDIO),
+								},
+								{
+									Label: "SSE",
+									Value: string(AIChatMCPServerTypeSSE),
+								},
+							},
+							Validators: []validator.PluginSettingValidator{
+								{
+									Type:  validator.PluginSettingValidatorTypeNotEmpty,
+									Value: &validator.PluginSettingValidatorNotEmpty{},
+								},
+							},
+						},
+						{
+							Key:     "command",
+							Label:   "i18n:plugin_ai_chat_mcp_server_command",
+							Type:    definition.PluginSettingValueTableColumnTypeText,
+							Width:   80,
+							Tooltip: "i18n:plugin_ai_chat_mcp_server_command_tooltip",
+						},
+						{
+							Key:     "environmentVariables",
+							Label:   "i18n:plugin_ai_chat_mcp_server_environment_variables",
+							Type:    definition.PluginSettingValueTableColumnTypeTextList,
+							Width:   100,
+							Tooltip: "i18n:plugin_ai_chat_mcp_server_environment_variables_tooltip",
+						},
+						{
+							Key:          "url",
+							Label:        "i18n:plugin_ai_chat_mcp_server_url",
+							Type:         definition.PluginSettingValueTableColumnTypeText,
+							TextMaxLines: 10,
+							Width:        80,
+							Tooltip:      "i18n:plugin_ai_chat_mcp_server_url_tooltip",
+						},
+					},
+				},
+			},
+		},
 		Features: []plugin.MetadataFeature{
 			{
 				Name: plugin.MetadataFeatureIgnoreAutoScore,
@@ -59,6 +132,14 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.resultChatIdMap = util.NewHashMap[string, string]()
 	r.api = initParams.API
+	r.mcpServers = []AIChatMCPServerConfig{}
+
+	r.reloadMCPServers(ctx)
+	r.api.OnSettingChanged(ctx, func(key string, value string) {
+		if key == "mcp_servers" {
+			r.reloadMCPServers(ctx)
+		}
+	})
 
 	chats, err := r.loadChats(ctx)
 	if err != nil {
@@ -67,6 +148,31 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	} else {
 		r.chats = chats
 	}
+
+}
+
+func (r *AIChatPlugin) reloadMCPServers(ctx context.Context) {
+	mcpServers, err := r.loadMCPServers(ctx)
+	if err != nil {
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to load mcp servers: %s", err.Error()))
+	} else {
+		r.mcpServers = mcpServers
+	}
+}
+
+func (r *AIChatPlugin) loadMCPServers(ctx context.Context) ([]AIChatMCPServerConfig, error) {
+	mcpServersJson := r.api.GetSetting(ctx, "mcp_servers")
+	if mcpServersJson == "" {
+		return []AIChatMCPServerConfig{}, nil
+	}
+
+	var mcpServers []AIChatMCPServerConfig
+	err := json.Unmarshal([]byte(mcpServersJson), &mcpServers)
+	if err != nil {
+		return []AIChatMCPServerConfig{}, err
+	}
+
+	return mcpServers, nil
 }
 
 func (r *AIChatPlugin) loadChats(ctx context.Context) ([]common.AIChatData, error) {
@@ -99,6 +205,13 @@ func (r *AIChatPlugin) saveChats(ctx context.Context) {
 }
 
 func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData) {
+	for _, mcpServer := range r.mcpServers {
+		err := mcpServer.listTool(ctx)
+		if err != nil {
+			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to list tool: %s", err.Error()))
+		}
+	}
+
 	// add a new conversation for AI response
 	currentResponseConversationId := uuid.NewString()
 	aiChatData.Conversations = append(aiChatData.Conversations, common.Conversation{
@@ -137,7 +250,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData) {
 		}
 	}
 
-	chatErr := r.api.AIChatStream(ctx, aiChatData.Model, aiChatData.Conversations, func(t common.ChatStreamDataType, data string) {
+	chatErr := r.api.AIChatStream(ctx, aiChatData.Model, aiChatData.Conversations, common.EmptyChatOptions, func(t common.ChatStreamDataType, data string) {
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("chat stream data: %s", data))
 
 		// find the aiResponseConversation and update
@@ -333,7 +446,7 @@ func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData
 	})
 
 	title := ""
-	r.api.AIChatStream(ctx, chat.Model, conversations, func(t common.ChatStreamDataType, data string) {
+	r.api.AIChatStream(ctx, chat.Model, conversations, common.EmptyChatOptions, func(t common.ChatStreamDataType, data string) {
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("chat stream data: %s", data))
 		if t == common.ChatStreamTypeStreaming {
 			title += data

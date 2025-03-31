@@ -17,6 +17,7 @@ require (
 	github.com/jinzhu/copier v0.4.0
 	github.com/jinzhu/now v1.1.5
 	github.com/lxn/win v0.0.0-20210218163916-a377121e959e
+	github.com/mark3labs/mcp-go v0.17.0
 	github.com/mat/besticon v0.0.0-20231103204413-ee089084f347
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mozillazg/go-pinyin v0.20.0
@@ -67,6 +68,7 @@ require (
 	github.com/saracen/zipextra v0.0.0-20220303013732-0187cb0159ea // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/vcaesar/keycode v0.10.1 // indirect
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.design/x/mainthread v0.3.0 // indirect
 	golang.org/x/net v0.30.0 // indirect

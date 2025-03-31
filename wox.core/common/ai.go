@@ -52,3 +52,14 @@ type AIChatData struct {
 type AIChater interface {
 	Chat(ctx context.Context, aiChatData AIChatData)
 }
+
+var EmptyChatOptions = ChatOptions{}
+
+type ChatOptions struct {
+	Tools []Tool
+}
+
+type Tool struct {
+	Name        string
+	Description string
+}

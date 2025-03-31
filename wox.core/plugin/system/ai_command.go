@@ -258,7 +258,7 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 			Icon:            aiCommandIcon,
 			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: "i18n:plugin_ai_command_enter_to_start"},
 			RefreshInterval: 100,
-			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, command.AIModel(), conversations, func() bool {
+			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, command.AIModel(), conversations, common.EmptyChatOptions, func() bool {
 				return startGenerate
 			}, onPreparing, onAnswering, onAnswerErr),
 			Actions: []plugin.QueryResultAction{
@@ -420,7 +420,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 		Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
 		Icon:            aiCommandIcon,
 		RefreshInterval: 100,
-		OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, aiCommandSetting.AIModel(), conversations, func() bool {
+		OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, aiCommandSetting.AIModel(), conversations, common.EmptyChatOptions, func() bool {
 			return true
 		}, nil, onAnswering, onAnswerErr),
 		Actions: []plugin.QueryResultAction{

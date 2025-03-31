@@ -8,7 +8,7 @@ import (
 )
 
 type Provider interface {
-	ChatStream(ctx context.Context, model common.Model, conversations []common.Conversation) (ChatStream, error)
+	ChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) (ChatStream, error)
 	Models(ctx context.Context) ([]common.Model, error)
 	Ping(ctx context.Context) error
 }

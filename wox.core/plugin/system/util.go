@@ -106,9 +106,10 @@ func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (common.Wox
 }
 
 func createLLMOnRefreshHandler(ctx context.Context,
-	chatStreamAPI func(ctx context.Context, model common.Model, conversations []common.Conversation, callback common.ChatStreamFunc) error,
+	chatStreamAPI func(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error,
 	model common.Model,
 	conversations []common.Conversation,
+	options common.ChatOptions,
 	shouldStartAnswering func() bool,
 	onPreparing func(plugin.RefreshableResult) plugin.RefreshableResult,
 	onAnswering func(plugin.RefreshableResult, string, bool) plugin.RefreshableResult,
@@ -129,7 +130,7 @@ func createLLMOnRefreshHandler(ctx context.Context,
 			if onPreparing != nil {
 				current = onPreparing(current)
 			}
-			err := chatStreamAPI(ctx, model, conversations, func(chatStreamDataType common.ChatStreamDataType, response string) {
+			err := chatStreamAPI(ctx, model, conversations, options, func(chatStreamDataType common.ChatStreamDataType, response string) {
 				locker.Lock()
 				chatStreamDataTypeBuffer = chatStreamDataType
 				if chatStreamDataType == common.ChatStreamTypeStreaming || chatStreamDataTypeBuffer == common.ChatStreamTypeFinished {

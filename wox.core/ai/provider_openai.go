@@ -23,7 +23,7 @@ func NewOpenAIClient(ctx context.Context, connectContext setting.AIProvider) Pro
 	return &OpenAIProvider{connectContext: connectContext}
 }
 
-func (o *OpenAIProvider) ChatStream(ctx context.Context, model common.Model, conversations []common.Conversation) (ChatStream, error) {
+func (o *OpenAIProvider) ChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) (ChatStream, error) {
 	client := o.getClient(ctx)
 	createdStream, createErr := client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
 		Stream:   true,

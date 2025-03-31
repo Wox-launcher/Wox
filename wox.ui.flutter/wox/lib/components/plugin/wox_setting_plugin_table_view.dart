@@ -154,6 +154,10 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       );
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeTextList) {
+      if (value is String && value == "") {
+        value = <String>[];
+      }
+
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -215,7 +219,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       var providerName = row["Name"] ?? "";
       var modelName = row["ApiKey"] ?? "";
       var host = row["Host"] ?? "";
-      
+
       return FutureBuilder<String>(
         future: WoxApi.instance.pingAIModel(providerName, modelName, host),
         builder: (context, snapshot) {

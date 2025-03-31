@@ -276,5 +276,17 @@
   "plugin_manager_query_failed": "Consulta %s falhou",
   "plugin_manager_remove_from_favorite": "Remover dos favoritos",
   "plugin_manager_add_to_favorite": "Adicionar aos favoritos",
-  "plugin_manager_invalid_query_type": "Tipo de consulta inválido"
+  "plugin_manager_invalid_query_type": "Tipo de consulta inválido",
+  "plugin_ai_chat_mcp_servers": "Servidores MCP",
+  "plugin_ai_chat_mcp_servers_tooltip": "Os servidores MCP a serem usados para esta consulta, visite https://mcp.so para mais servidores MCP",
+  "plugin_ai_chat_mcp_server_name": "Nome",
+  "plugin_ai_chat_mcp_server_name_tooltip": "O nome do servidor MCP",
+  "plugin_ai_chat_mcp_server_type": "Tipo",
+  "plugin_ai_chat_mcp_server_type_tooltip": "O tipo do servidor MCP",
+  "plugin_ai_chat_mcp_server_command": "Comando",
+  "plugin_ai_chat_mcp_server_command_tooltip": "O comando para executar o servidor MCP",
+  "plugin_ai_chat_mcp_server_environment_variables": "Variáveis de ambiente",
+  "plugin_ai_chat_mcp_server_environment_variables_tooltip": "As variáveis de ambiente para executar o servidor MCP",
+  "plugin_ai_chat_mcp_server_url": "URL",
+  "plugin_ai_chat_mcp_server_url_tooltip": "A URL do servidor MCP"
 }

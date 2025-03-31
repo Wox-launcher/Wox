@@ -441,6 +441,11 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] AIChatStream method must have a conversations parameter", request.PluginName))
 			return
 		}
+		optionsStr, exist := request.Params["options"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] AIChatStream method must have a options parameter", request.PluginName))
+			return
+		}
 
 		var model common.Model
 		modelStr, modelExist := request.Params["model"]
@@ -461,7 +466,14 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			return
 		}
 
-		llmErr := pluginInstance.API.AIChatStream(ctx, model, conversations, func(streamType common.ChatStreamDataType, data string) {
+		var options common.ChatOptions
+		unmarshalErr = json.Unmarshal([]byte(optionsStr), &options)
+		if unmarshalErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal options: %s", request.PluginName, unmarshalErr))
+			return
+		}
+
+		llmErr := pluginInstance.API.AIChatStream(ctx, model, conversations, options, func(streamType common.ChatStreamDataType, data string) {
 			w.invokeMethod(ctx, pluginInstance.Metadata, "onLLMStream", map[string]string{
 				"CallbackId": callbackId,
 				"StreamType": string(streamType),

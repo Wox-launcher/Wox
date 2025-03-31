@@ -37,7 +37,7 @@ type API interface {
 	OnDeepLink(ctx context.Context, callback func(arguments map[string]string))
 	OnUnload(ctx context.Context, callback func())
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
-	AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, callback common.ChatStreamFunc) error
+	AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error
 }
 
 type APIImpl struct {
@@ -172,7 +172,7 @@ func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []Metadata
 	a.pluginInstance.SaveSetting(ctx)
 }
 
-func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, callback common.ChatStreamFunc) error {
+func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {
 	//check if plugin has the feature permission
 	if !a.pluginInstance.Metadata.IsSupportFeature(MetadataFeatureAI) {
 		return fmt.Errorf("plugin has no access to ai feature")
@@ -199,7 +199,7 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversa
 	// 	}
 	// }
 
-	stream, err := provider.ChatStream(ctx, model, conversations)
+	stream, err := provider.ChatStream(ctx, model, conversations, options)
 	if err != nil {
 		return err
 	}
@@ -207,7 +207,7 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversa
 	if callback != nil {
 		util.Go(ctx, "ai chat stream", func() {
 			for {
-				util.GetLogger().Info(ctx, fmt.Sprintf("reading chat stream"))
+				util.GetLogger().Info(ctx, "reading chat stream")
 				response, streamErr := stream.Receive(ctx)
 				if errors.Is(streamErr, io.EOF) {
 					util.GetLogger().Info(ctx, "read stream completed")

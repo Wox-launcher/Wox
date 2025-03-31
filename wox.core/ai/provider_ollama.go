@@ -31,7 +31,7 @@ func NewOllamaProvider(ctx context.Context, connectContext setting.AIProvider) P
 	return &OllamaProvider{connectContext: connectContext}
 }
 
-func (o *OllamaProvider) ChatStream(ctx context.Context, model common.Model, conversations []common.Conversation) (ChatStream, error) {
+func (o *OllamaProvider) ChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) (ChatStream, error) {
 	client, clientErr := ollama.New(ollama.WithServerURL(o.connectContext.Host), ollama.WithModel(model.Name))
 	if clientErr != nil {
 		return nil, clientErr

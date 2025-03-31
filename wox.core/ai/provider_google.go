@@ -25,7 +25,7 @@ func NewGoogleProvider(ctx context.Context, connectContext setting.AIProvider) P
 	return &GoogleProvider{connectContext: connectContext}
 }
 
-func (g *GoogleProvider) ChatStream(ctx context.Context, model common.Model, conversations []common.Conversation) (ChatStream, error) {
+func (g *GoogleProvider) ChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) (ChatStream, error) {
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:     g.connectContext.ApiKey,
 		Backend:    genai.BackendGeminiAPI,

@@ -31,7 +31,7 @@ func NewGroqProvider(ctx context.Context, connectContext setting.AIProvider) Pro
 	return &GroqProvider{connectContext: connectContext}
 }
 
-func (g *GroqProvider) ChatStream(ctx context.Context, model common.Model, conversations []common.Conversation) (ChatStream, error) {
+func (g *GroqProvider) ChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) (ChatStream, error) {
 	client, clientErr := openai.New(
 		openai.WithModel(model.Name),
 		openai.WithBaseURL(groqBaseUrl),

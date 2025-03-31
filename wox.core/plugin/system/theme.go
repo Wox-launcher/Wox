@@ -258,7 +258,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 			Icon:            themeIcon,
 			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
 			RefreshInterval: 100,
-			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, aiModel, conversations, func() bool {
+			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, aiModel, conversations, common.EmptyChatOptions, func() bool {
 				return startGenerate
 			}, nil, onAnswering, onAnswerErr),
 			Actions: []plugin.QueryResultAction{
