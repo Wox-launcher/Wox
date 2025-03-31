@@ -37,10 +37,11 @@ class WoxLauncherView extends GetView<WoxLauncherController> {
                   ),
                 ),
               ),
-              const SizedBox(
-                height: 40,
-                child: WoxQueryToolbarView(),
-              ),
+              if (controller.results.isNotEmpty)
+                const SizedBox(
+                  height: 40,
+                  child: WoxQueryToolbarView(),
+                ),
             ],
           ),
         ),
