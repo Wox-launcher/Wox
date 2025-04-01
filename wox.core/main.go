@@ -33,8 +33,6 @@ import (
 	_ "wox/plugin/system/converter"
 
 	_ "wox/plugin/system/file"
-
-	_ "wox/plugin/system/chat"
 )
 
 func main() {

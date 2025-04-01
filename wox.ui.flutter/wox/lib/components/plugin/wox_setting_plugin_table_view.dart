@@ -240,6 +240,29 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
         },
       );
     }
+    if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAIMCPServerTools) {
+      return FutureBuilder<List<AIMCPTool>>(
+        future: WoxApi.instance.findAIMCPServerTools(row),
+        builder: (context, snapshot) {
+          return columnWidth(
+            column: column,
+            isHeader: false,
+            isOperation: false,
+            child: snapshot.connectionState == ConnectionState.waiting
+                ? const Icon(material.Icons.circle, color: material.Colors.grey)
+                : snapshot.error != null
+                    ? material.Tooltip(
+                        message: snapshot.error?.toString() ?? "",
+                        child: const Icon(material.Icons.circle, color: material.Colors.red),
+                      )
+                    : material.Tooltip(
+                        message: snapshot.data?.map((e) => "${e.name} - ${e.description}").join("\n") ?? "",
+                        child: Text("${snapshot.data?.length ?? 0} tools"),
+                      ),
+          );
+        },
+      );
+    }
 
     return Text("Unknown column type: ${column.type}");
   }

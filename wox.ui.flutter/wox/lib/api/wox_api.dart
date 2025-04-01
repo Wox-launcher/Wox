@@ -149,6 +149,10 @@ class WoxApi {
     });
   }
 
+  Future<List<AIMCPTool>> findAIMCPServerTools(dynamic data) async {
+    return await WoxHttpUtil.instance.postData("/ai/mcp/tools", data);
+  }
+
   Future<void> sendChatRequest(WoxPreviewChatData data) async {
     return await WoxHttpUtil.instance.postData("/ai/chat", {
       "chatData": data.toJson(),

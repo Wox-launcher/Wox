@@ -1,4 +1,4 @@
-package chat
+package ai
 
 import (
 	"context"
@@ -11,29 +11,13 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-type AIChatMCPServerType string
+// MCPListTools lists the tools for a given MCP server config
+func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) (mcpTools []common.MCPTool, err error) {
+	util.GetLogger().Debug(ctx, fmt.Sprintf("Listing tools for MCP server: %s", config.Name))
 
-const (
-	AIChatMCPServerTypeSTDIO AIChatMCPServerType = "stdio"
-	AIChatMCPServerTypeSSE   AIChatMCPServerType = "sse"
-)
+	command, args := parseCommandArgs(config.Command)
 
-type AIChatMCPServerConfig struct {
-	Name string
-	Type AIChatMCPServerType
-
-	// for stdio server
-	Command              string
-	EnvironmentVariables []string //key=value
-
-	// for sse server
-	Url string
-}
-
-func (a *AIChatMCPServerConfig) listTool(ctx context.Context) (chatTools []common.Tool, err error) {
-	command, args := a.parseCommandArgs()
-
-	c, err := client.NewStdioMCPClient(command, a.EnvironmentVariables, args...)
+	c, err := client.NewStdioMCPClient(command, config.EnvironmentVariables, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -60,21 +44,23 @@ func (a *AIChatMCPServerConfig) listTool(ctx context.Context) (chatTools []commo
 	}
 
 	for _, tool := range tools.Tools {
-		chatTools = append(chatTools, common.Tool{
+		mcpTools = append(mcpTools, common.MCPTool{
 			Name:        tool.Name,
 			Description: tool.Description,
 		})
 	}
+
+	util.GetLogger().Debug(ctx, fmt.Sprintf("Found %d tools", len(mcpTools)))
 
 	return
 }
 
 // raw command is like "npx -y @modelcontextprotocol/server-filesystem /tmp"
 // we need to split it into command and args
-func (a *AIChatMCPServerConfig) parseCommandArgs() (command string, args []string) {
-	parts := strings.Split(a.Command, " ")
+func parseCommandArgs(commands string) (command string, args []string) {
+	parts := strings.Split(commands, " ")
 	if len(parts) <= 1 {
-		return a.Command, []string{}
+		return commands, []string{}
 	}
 
 	command = parts[0]

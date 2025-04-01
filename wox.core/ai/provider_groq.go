@@ -60,7 +60,7 @@ func (g *GroqProvider) ChatStream(ctx context.Context, model common.Model, conve
 	return &GroqProviderStream{conversations: conversations, reader: r}, nil
 }
 
-func (g *GroqProvider) convertTools(tools []common.Tool) []llms.Tool {
+func (g *GroqProvider) convertTools(tools []common.MCPTool) []llms.Tool {
 	convertedTools := make([]llms.Tool, len(tools))
 	for i, tool := range tools {
 		convertedTools[i] = llms.Tool{

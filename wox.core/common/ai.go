@@ -6,6 +6,13 @@ type ConversationRole string
 type ProviderName string
 type ChatStreamDataType string
 
+type AIChatMCPServerType string
+
+const (
+	AIChatMCPServerTypeSTDIO AIChatMCPServerType = "stdio"
+	AIChatMCPServerTypeSSE   AIChatMCPServerType = "sse"
+)
+
 var (
 	ConversationRoleUser ConversationRole = "user"
 	ConversationRoleAI   ConversationRole = "ai"
@@ -56,10 +63,22 @@ type AIChater interface {
 var EmptyChatOptions = ChatOptions{}
 
 type ChatOptions struct {
-	Tools []Tool
+	Tools []MCPTool
 }
 
-type Tool struct {
+type MCPTool struct {
 	Name        string
 	Description string
+}
+
+type AIChatMCPServerConfig struct {
+	Name string
+	Type AIChatMCPServerType
+
+	// for stdio server
+	Command              string
+	EnvironmentVariables []string //key=value
+
+	// for sse server
+	Url string
 }

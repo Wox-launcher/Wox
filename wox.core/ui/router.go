@@ -59,9 +59,10 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/lang/json":      handleLangJson,
 
 	// ai
-	"/ai/models": handleAIModels,
-	"/ai/ping":   handleAIPing,
-	"/ai/chat":   handleAIChat,
+	"/ai/models":    handleAIModels,
+	"/ai/ping":      handleAIPing,
+	"/ai/chat":      handleAIChat,
+	"/ai/mcp/tools": handleAIMCPServerTools,
 
 	// doctor
 	"/doctor/check": handleDoctorCheck,
@@ -917,6 +918,32 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	chater.Chat(ctx, chatData)
 
 	writeSuccessResponse(w, "")
+}
+
+func handleAIMCPServerTools(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+
+	body, _ := io.ReadAll(r.Body)
+	mcpConfigResult := gjson.ParseBytes(body)
+	if !mcpConfigResult.Exists() {
+		writeErrorResponse(w, "mcpConfig is empty")
+		return
+	}
+
+	mcpConfig := common.AIChatMCPServerConfig{}
+	err := json.Unmarshal([]byte(mcpConfigResult.String()), &mcpConfig)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	tools, err := ai.MCPListTools(ctx, mcpConfig)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	writeSuccessResponse(w, tools)
 }
 
 func handleDoctorCheck(w http.ResponseWriter, r *http.Request) {

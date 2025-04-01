@@ -16,3 +16,15 @@ class AIModel {
     return data;
   }
 }
+
+class AIMCPTool {
+  late String name;
+  late String description;
+
+  AIMCPTool({required this.name, required this.description});
+
+  AIMCPTool.fromJson(Map<String, dynamic> json) {
+    name = json['Name'] ?? "";
+    description = json['Description'] ?? "";
+  }
+}

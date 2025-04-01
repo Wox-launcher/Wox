@@ -1,10 +1,11 @@
-package chat
+package system
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
+	"wox/ai"
 	"wox/common"
 	"wox/plugin"
 	"wox/setting/definition"
@@ -25,8 +26,8 @@ func init() {
 type AIChatPlugin struct {
 	chats           []common.AIChatData
 	resultChatIdMap *util.HashMap[string /*chat id*/, string /*result id*/] // map of result id and chat id, used to update the chat title
-	mcpServers      []AIChatMCPServerConfig
-	mcpToolsMap     *util.HashMap[common.Tool, *AIChatMCPServerConfig]
+	mcpServers      []common.AIChatMCPServerConfig
+	mcpToolsMap     *util.HashMap[common.MCPTool, *common.AIChatMCPServerConfig]
 	api             plugin.API
 }
 
@@ -76,19 +77,26 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 							},
 						},
 						{
+							Key:          "tools",
+							Label:        "i18n:plugin_ai_chat_mcp_server_tools",
+							Type:         definition.PluginSettingValueTableColumnTypeAIMCPServerTools,
+							Width:        60,
+							HideInUpdate: true,
+						},
+						{
 							Key:     "type",
 							Label:   "i18n:plugin_ai_chat_mcp_server_type",
 							Type:    definition.PluginSettingValueTableColumnTypeSelect,
-							Width:   100,
+							Width:   60,
 							Tooltip: "i18n:plugin_ai_chat_mcp_server_type_tooltip",
 							SelectOptions: []definition.PluginSettingValueSelectOption{
 								{
 									Label: "STUDIO",
-									Value: string(AIChatMCPServerTypeSTDIO),
+									Value: string(common.AIChatMCPServerTypeSTDIO),
 								},
 								{
 									Label: "SSE",
-									Value: string(AIChatMCPServerTypeSSE),
+									Value: string(common.AIChatMCPServerTypeSSE),
 								},
 							},
 							Validators: []validator.PluginSettingValidator{
@@ -143,9 +151,9 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 
 func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.resultChatIdMap = util.NewHashMap[string, string]()
-	r.mcpToolsMap = util.NewHashMap[common.Tool, *AIChatMCPServerConfig]()
+	r.mcpToolsMap = util.NewHashMap[common.MCPTool, *common.AIChatMCPServerConfig]()
 	r.api = initParams.API
-	r.mcpServers = []AIChatMCPServerConfig{}
+	r.mcpServers = []common.AIChatMCPServerConfig{}
 
 	r.reloadMCPServers(ctx)
 	r.api.OnSettingChanged(ctx, func(key string, value string) {
@@ -197,7 +205,7 @@ func (r *AIChatPlugin) reloadMCPServers(ctx context.Context) {
 	}
 
 	for _, mcpServer := range r.mcpServers {
-		tools, err := mcpServer.listTool(ctx)
+		tools, err := ai.MCPListTools(ctx, mcpServer)
 		if err != nil {
 			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to list tool: %s", err.Error()))
 		}
@@ -208,16 +216,16 @@ func (r *AIChatPlugin) reloadMCPServers(ctx context.Context) {
 	}
 }
 
-func (r *AIChatPlugin) loadMCPServers(ctx context.Context) ([]AIChatMCPServerConfig, error) {
+func (r *AIChatPlugin) loadMCPServers(ctx context.Context) ([]common.AIChatMCPServerConfig, error) {
 	mcpServersJson := r.api.GetSetting(ctx, "mcp_servers")
 	if mcpServersJson == "" {
-		return []AIChatMCPServerConfig{}, nil
+		return []common.AIChatMCPServerConfig{}, nil
 	}
 
-	var mcpServers []AIChatMCPServerConfig
+	var mcpServers []common.AIChatMCPServerConfig
 	err := json.Unmarshal([]byte(mcpServersJson), &mcpServers)
 	if err != nil {
-		return []AIChatMCPServerConfig{}, err
+		return []common.AIChatMCPServerConfig{}, err
 	}
 
 	return mcpServers, nil

@@ -42,6 +42,7 @@ class PluginSettingValueType {
   static const pluginSettingValueTableColumnTypeSelect = "select";
   static const pluginSettingValueTableColumnTypeSelectAIModel = "selectAIModel";
   static const pluginSettingValueTableColumnTypeAIModelStatus = "aiModelStatus";
+  static const pluginSettingValueTableColumnTypeAIMCPServerTools = "aiMCPServerTools";
   static const pluginSettingValueTableColumnTypeWoxImage = "woxImage";
   static const pluginSettingValueTableColumnTypeHotkey = "hotkey";
 }
