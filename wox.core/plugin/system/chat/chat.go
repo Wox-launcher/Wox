@@ -26,6 +26,7 @@ type AIChatPlugin struct {
 	chats           []common.AIChatData
 	resultChatIdMap *util.HashMap[string /*chat id*/, string /*result id*/] // map of result id and chat id, used to update the chat title
 	mcpServers      []AIChatMCPServerConfig
+	mcpToolsMap     *util.HashMap[common.Tool, *AIChatMCPServerConfig]
 	api             plugin.API
 }
 
@@ -131,6 +132,7 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 
 func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.resultChatIdMap = util.NewHashMap[string, string]()
+	r.mcpToolsMap = util.NewHashMap[common.Tool, *AIChatMCPServerConfig]()
 	r.api = initParams.API
 	r.mcpServers = []AIChatMCPServerConfig{}
 
@@ -157,6 +159,17 @@ func (r *AIChatPlugin) reloadMCPServers(ctx context.Context) {
 		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to load mcp servers: %s", err.Error()))
 	} else {
 		r.mcpServers = mcpServers
+	}
+
+	for _, mcpServer := range r.mcpServers {
+		tools, err := mcpServer.listTool(ctx)
+		if err != nil {
+			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to list tool: %s", err.Error()))
+		}
+		for _, tool := range tools {
+			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("%s tool %s: %s", mcpServer.Name, tool.Name, tool.Description))
+			r.mcpToolsMap.Store(tool, &mcpServer)
+		}
 	}
 }
 
@@ -205,13 +218,6 @@ func (r *AIChatPlugin) saveChats(ctx context.Context) {
 }
 
 func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData) {
-	for _, mcpServer := range r.mcpServers {
-		err := mcpServer.listTool(ctx)
-		if err != nil {
-			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to list tool: %s", err.Error()))
-		}
-	}
-
 	// add a new conversation for AI response
 	currentResponseConversationId := uuid.NewString()
 	aiChatData.Conversations = append(aiChatData.Conversations, common.Conversation{
@@ -250,7 +256,9 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData) {
 		}
 	}
 
-	chatErr := r.api.AIChatStream(ctx, aiChatData.Model, aiChatData.Conversations, common.EmptyChatOptions, func(t common.ChatStreamDataType, data string) {
+	chatErr := r.api.AIChatStream(ctx, aiChatData.Model, aiChatData.Conversations, common.ChatOptions{
+		Tools: r.mcpToolsMap.Keys(),
+	}, func(t common.ChatStreamDataType, data string) {
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("chat stream data: %s", data))
 
 		// find the aiResponseConversation and update

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
+	"wox/common"
 	"wox/util"
 
 	"github.com/mark3labs/mcp-go/client"
@@ -30,22 +30,14 @@ type AIChatMCPServerConfig struct {
 	Url string
 }
 
-func (a *AIChatMCPServerConfig) listTool(parentCtx context.Context) error {
+func (a *AIChatMCPServerConfig) listTool(ctx context.Context) (chatTools []common.Tool, err error) {
 	command, args := a.parseCommandArgs()
 
-	c, err := client.NewStdioMCPClient(
-		command,
-		a.EnvironmentVariables,
-		args...,
-	)
+	c, err := client.NewStdioMCPClient(command, a.EnvironmentVariables, args...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer c.Close()
-
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(parentCtx, 30*time.Second)
-	defer cancel()
 
 	// Initialize the client
 	initRequest := mcp.InitializeRequest{}
@@ -56,26 +48,25 @@ func (a *AIChatMCPServerConfig) listTool(parentCtx context.Context) error {
 	}
 	initResult, err := c.Initialize(ctx, initRequest)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	util.GetLogger().Debug(ctx, fmt.Sprintf(
-		"Initialized with server: %s %s",
-		initResult.ServerInfo.Name,
-		initResult.ServerInfo.Version,
-	))
+	util.GetLogger().Debug(ctx, fmt.Sprintf("Initialized with server: %s %s", initResult.ServerInfo.Name, initResult.ServerInfo.Version))
 
 	// List Tools
-	toolsRequest := mcp.ListToolsRequest{}
-	tools, err := c.ListTools(ctx, toolsRequest)
+	tools, err := c.ListTools(ctx, mcp.ListToolsRequest{})
 	if err != nil {
-		return err
-	}
-	for _, tool := range tools.Tools {
-		util.GetLogger().Debug(ctx, fmt.Sprintf("- %s: %s", tool.Name, tool.Description))
+		return nil, err
 	}
 
-	return nil
+	for _, tool := range tools.Tools {
+		chatTools = append(chatTools, common.Tool{
+			Name:        tool.Name,
+			Description: tool.Description,
+		})
+	}
+
+	return
 }
 
 // raw command is like "npx -y @modelcontextprotocol/server-filesystem /tmp"

@@ -60,6 +60,17 @@ func (h *HashMap[K, V]) Load(k K) (V, bool) {
 	return v, ok
 }
 
+func (h *HashMap[K, V]) Keys() []K {
+	h.rw.RLock()
+	defer h.rw.RUnlock()
+
+	keys := make([]K, 0, len(h.inner))
+	for k := range h.inner {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 func (h *HashMap[K, V]) Clear() {
 	h.rw.Lock()
 	defer h.rw.Unlock()

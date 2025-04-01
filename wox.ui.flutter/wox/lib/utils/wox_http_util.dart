@@ -30,14 +30,9 @@ class WoxHttpUtil {
   Future<T> postData<T>(String url, dynamic data) async {
     final traceId = const UuidV4().generate();
     Logger.instance.info(traceId, 'Posting data to $_baseUrl$url');
-    try {
-      final response = await _dio.post(_baseUrl + url, data: data);
-      WoxResponse woxResponse = WoxResponse.fromJson(response.data);
-      if (woxResponse.success == false) throw Exception(woxResponse.message);
-      return EntityFactory.generateOBJ<T>(woxResponse.data);
-    } catch (e, stacktrace) {
-      Logger.instance.error(traceId, 'Failed to post data, url=${_baseUrl + url}, data=$data, err=$e, stacktrace=$stacktrace');
-      rethrow;
-    }
+    final response = await _dio.post(_baseUrl + url, data: data);
+    WoxResponse woxResponse = WoxResponse.fromJson(response.data);
+    if (woxResponse.success == false) throw Exception(woxResponse.message);
+    return EntityFactory.generateOBJ<T>(woxResponse.data);
   }
 }
