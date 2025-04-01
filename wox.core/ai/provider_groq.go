@@ -12,6 +12,7 @@ import (
 	"github.com/djherbis/buffer"
 	"github.com/djherbis/nio/v3"
 	"github.com/tidwall/gjson"
+	"github.com/tmc/langchaingo/jsonschema"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/openai"
 )
@@ -48,7 +49,7 @@ func (g *GroqProvider) ChatStream(ctx context.Context, model common.Model, conve
 		_, err := client.GenerateContent(ctx, g.convertConversations(conversations), llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
 			w.Write(chunk)
 			return nil
-		}))
+		}), llms.WithTools(g.convertTools(options.Tools)))
 		if err != nil {
 			w.CloseWithError(err)
 		} else {
@@ -57,6 +58,37 @@ func (g *GroqProvider) ChatStream(ctx context.Context, model common.Model, conve
 	})
 
 	return &GroqProviderStream{conversations: conversations, reader: r}, nil
+}
+
+func (g *GroqProvider) convertTools(tools []common.Tool) []llms.Tool {
+	convertedTools := make([]llms.Tool, len(tools))
+	for i, tool := range tools {
+		convertedTools[i] = llms.Tool{
+			Type: "function",
+			Function: &llms.FunctionDefinition{
+				Name:        tool.Name,
+				Description: tool.Description,
+				Parameters: jsonschema.Definition{
+					Type: jsonschema.Object,
+					Properties: map[string]jsonschema.Definition{
+						"rationale": {
+							Type:        jsonschema.String,
+							Description: "The rationale for choosing this function call with these parameters",
+						},
+						"suggestions": {
+							Type: jsonschema.Array,
+							Items: &jsonschema.Definition{
+								Type:        jsonschema.String,
+								Description: "A suggested prompt",
+							},
+						},
+					},
+					Required: []string{"rationale", "suggestions"},
+				},
+			},
+		}
+	}
+	return convertedTools
 }
 
 func (g *GroqProvider) Models(ctx context.Context) (models []common.Model, err error) {
