@@ -23,8 +23,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final columnTooltipWidth = 20.0;
   final bool readonly;
   final Future<String?> Function(Map<String, dynamic> rowValues)? onUpdateValidate;
+  final ScrollController scrollController = ScrollController();
 
-  const WoxSettingPluginTable({
+  WoxSettingPluginTable({
     super.key,
     required this.item,
     required super.value,
@@ -418,60 +419,72 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       });
     }
 
-    return material.DataTable(
-      columnSpacing: columnSpacing,
-      horizontalMargin: 5,
-      headingRowHeight: 40,
-      headingRowColor: material.MaterialStateProperty.resolveWith((states) => material.Colors.grey[200]),
-      border: TableBorder.all(color: material.Colors.grey[300]!),
-      columns: [
+    var dataRows = <material.DataRow>[];
+    for (var row in rows) {
+      dataRows.add(material.DataRow(cells: [
         for (var column in item.columns)
           if (!column.hideInTable)
-            material.DataColumn(
-              label: columnWidth(
-                column: column,
-                isHeader: true,
-                isOperation: false,
-                child: buildHeaderCell(column),
-              ),
+            material.DataCell(
+              buildRowCell(column, row),
             ),
-        if (!readonly)
-          material.DataColumn(
-            label: columnWidth(
-              column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
-                "Key": "Operation",
-                "Label": tr("ui_operation"),
-                "Tooltip": "",
-                "Width": operationWidth.toInt(),
-                "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText,
-                "TextMaxLines": 1,
-              }),
-              isHeader: true,
-              isOperation: true,
-              child: Text(
-                tr("ui_operation"),
-                style: const TextStyle(
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
-          ),
-      ],
-      rows: [
-        for (var row in rows)
-          material.DataRow(
-            cells: [
+        if (!readonly) buildOperationCell(context, row, rows),
+      ]));
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[30]),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Scrollbar(
+        thumbVisibility: false,
+        controller: scrollController,
+        child: SingleChildScrollView(
+          controller: scrollController,
+          scrollDirection: Axis.horizontal,
+          child: material.DataTable(
+            columnSpacing: columnSpacing,
+            horizontalMargin: 5,
+            headingRowHeight: 40,
+            headingRowColor: material.MaterialStateProperty.resolveWith((states) => material.Colors.grey[200]),
+            border: TableBorder.all(color: material.Colors.grey[300]!),
+            columns: [
               for (var column in item.columns)
                 if (!column.hideInTable)
-                  material.DataCell(
-                    buildRowCell(column, row),
+                  material.DataColumn(
+                    label: columnWidth(
+                      column: column,
+                      isHeader: true,
+                      isOperation: false,
+                      child: buildHeaderCell(column),
+                    ),
                   ),
               if (!readonly)
-                // operation cell
-                buildOperationCell(context, row, rows),
+                material.DataColumn(
+                  label: columnWidth(
+                    column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
+                      "Key": "Operation",
+                      "Label": tr("ui_operation"),
+                      "Tooltip": "",
+                      "Width": operationWidth.toInt(),
+                      "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText,
+                      "TextMaxLines": 1,
+                    }),
+                    isHeader: true,
+                    isOperation: true,
+                    child: Text(
+                      tr("ui_operation"),
+                      style: const TextStyle(
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ),
             ],
+            rows: dataRows,
           ),
-      ],
+        ),
+      ),
     );
   }
 
@@ -487,16 +500,13 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Row(
-                    children: [
-                      Text(
-                        item.title,
-                      ),
-                      if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip),
-                    ],
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      item.title,
+                    ),
+                    if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip),
+                  ],
                 ),
                 if (!readonly)
                   HyperlinkButton(

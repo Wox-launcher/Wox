@@ -115,6 +115,14 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 			return unmarshalErr
 		}
 		n.Value = &v
+	case "selectAIModel":
+		n.Type = PluginSettingDefinitionTypeSelectAIModel
+		var v PluginSettingValueSelectAIModel
+		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
+		if unmarshalErr != nil {
+			return unmarshalErr
+		}
+		n.Value = &v
 	default:
 		return errors.New("unknown setting type: " + value.String())
 	}

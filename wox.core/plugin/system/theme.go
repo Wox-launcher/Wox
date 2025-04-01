@@ -53,7 +53,7 @@ func (c *ThemePlugin) GetMetadata() plugin.Metadata {
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
 				Type: definition.PluginSettingDefinitionTypeSelectAIModel,
-				Value: &definition.PluginSettingValueSelectAiModel{
+				Value: &definition.PluginSettingValueSelectAIModel{
 					Key:     "model",
 					Label:   "AI model",
 					Tooltip: `AI model to use for generating theme.`,

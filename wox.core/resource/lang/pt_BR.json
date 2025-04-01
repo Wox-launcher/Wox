@@ -288,5 +288,7 @@
   "plugin_ai_chat_mcp_server_environment_variables": "Variáveis de ambiente",
   "plugin_ai_chat_mcp_server_environment_variables_tooltip": "As variáveis de ambiente para executar o servidor MCP",
   "plugin_ai_chat_mcp_server_url": "URL",
-  "plugin_ai_chat_mcp_server_url_tooltip": "A URL do servidor MCP"
+  "plugin_ai_chat_mcp_server_url_tooltip": "A URL do servidor MCP",
+  "plugin_ai_chat_default_model": "Modelo padrão",
+  "plugin_ai_chat_default_model_tooltip": "O modelo padrão a ser usado para esta consulta"
 }

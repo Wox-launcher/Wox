@@ -5,7 +5,7 @@ import (
 	"wox/setting/validator"
 )
 
-type PluginSettingValueSelectAiModel struct {
+type PluginSettingValueSelectAIModel struct {
 	Key          string
 	Label        string
 	Suffix       string
@@ -16,19 +16,19 @@ type PluginSettingValueSelectAiModel struct {
 	Style PluginSettingValueStyle
 }
 
-func (p *PluginSettingValueSelectAiModel) GetPluginSettingType() PluginSettingDefinitionType {
+func (p *PluginSettingValueSelectAIModel) GetPluginSettingType() PluginSettingDefinitionType {
 	return PluginSettingDefinitionTypeSelectAIModel
 }
 
-func (p *PluginSettingValueSelectAiModel) GetKey() string {
+func (p *PluginSettingValueSelectAIModel) GetKey() string {
 	return p.Key
 }
 
-func (p *PluginSettingValueSelectAiModel) GetDefaultValue() string {
+func (p *PluginSettingValueSelectAIModel) GetDefaultValue() string {
 	return p.DefaultValue
 }
 
-func (p *PluginSettingValueSelectAiModel) Translate(translator func(ctx context.Context, key string) string) {
+func (p *PluginSettingValueSelectAIModel) Translate(translator func(ctx context.Context, key string) string) {
 	p.Label = translator(context.Background(), p.Label)
 	p.Suffix = translator(context.Background(), p.Suffix)
 }

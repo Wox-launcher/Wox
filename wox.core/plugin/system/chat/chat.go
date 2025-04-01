@@ -45,6 +45,17 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 		SupportedOS:     []string{"Windows", "Macos", "Linux"},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
+				Type: definition.PluginSettingDefinitionTypeSelectAIModel,
+				Value: &definition.PluginSettingValueSelectAIModel{
+					Key:     "default_model",
+					Label:   "i18n:plugin_ai_chat_default_model",
+					Tooltip: "i18n:plugin_ai_chat_default_model_tooltip",
+					Style: definition.PluginSettingValueStyle{
+						PaddingBottom: 8,
+					},
+				},
+			},
+			{
 				Type: definition.PluginSettingDefinitionTypeTable,
 				Value: &definition.PluginSettingValueTable{
 					Key:     "mcp_servers",
@@ -151,6 +162,30 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		r.chats = chats
 	}
 
+}
+
+func (r *AIChatPlugin) getDefaultModel() common.Model {
+	model := r.api.GetSetting(context.Background(), "default_model")
+	if model != "" {
+		var m common.Model
+		err := json.Unmarshal([]byte(model), &m)
+		if err == nil {
+			return m
+		} else {
+			r.api.Log(context.Background(), plugin.LogLevelError, fmt.Sprintf("Failed to unmarshal default model: %s", err.Error()))
+		}
+	}
+
+	// get last chat model
+	if len(r.chats) > 0 {
+		lastChat := r.chats[0]
+		return common.Model{
+			Name:     lastChat.Model.Name,
+			Provider: lastChat.Model.Provider,
+		}
+	}
+
+	return common.Model{}
 }
 
 func (r *AIChatPlugin) reloadMCPServers(ctx context.Context) {
@@ -311,15 +346,7 @@ func (r *AIChatPlugin) getNewChatPreviewData(ctx context.Context) plugin.QueryRe
 	chatData.CreatedAt = util.GetSystemTimestamp()
 	chatData.UpdatedAt = util.GetSystemTimestamp()
 	chatData.Conversations = []common.Conversation{}
-
-	// get last chat model
-	if len(r.chats) > 0 {
-		lastChat := r.chats[0]
-		chatData.Model = common.Model{
-			Name:     lastChat.Model.Name,
-			Provider: lastChat.Model.Provider,
-		}
-	}
+	chatData.Model = r.getDefaultModel()
 
 	previewData, err := json.Marshal(chatData)
 	if err != nil {

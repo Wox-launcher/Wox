@@ -288,5 +288,7 @@
   "plugin_ai_chat_mcp_server_environment_variables": "Environment Variables",
   "plugin_ai_chat_mcp_server_environment_variables_tooltip": "The environment variables to run the MCP server",
   "plugin_ai_chat_mcp_server_url": "URL",
-  "plugin_ai_chat_mcp_server_url_tooltip": "The URL of the MCP server"
+  "plugin_ai_chat_mcp_server_url_tooltip": "The URL of the MCP server",
+  "plugin_ai_chat_default_model": "Default Model",
+  "plugin_ai_chat_default_model_tooltip": "The default model to use for this command"
 }

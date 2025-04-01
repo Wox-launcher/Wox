@@ -288,5 +288,7 @@
   "plugin_ai_chat_mcp_server_environment_variables": "环境变量",
   "plugin_ai_chat_mcp_server_environment_variables_tooltip": "运行 MCP 服务器的环境变量",
   "plugin_ai_chat_mcp_server_url": "URL",
-  "plugin_ai_chat_mcp_server_url_tooltip": "MCP 服务器的 URL"
+  "plugin_ai_chat_mcp_server_url_tooltip": "MCP 服务器的 URL",
+  "plugin_ai_chat_default_model": "默认模型",
+  "plugin_ai_chat_default_model_tooltip": "用于对话的默认模型"
 }

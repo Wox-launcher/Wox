@@ -1,5 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' as material;
+import 'package:get/get.dart';
+import 'package:wox/modules/setting/wox_setting_controller.dart';
 
 class WoxTooltipView extends StatefulWidget {
   final String tooltip;
@@ -13,12 +15,16 @@ class WoxTooltipView extends StatefulWidget {
 }
 
 class _WoxTooltipViewState extends State<WoxTooltipView> {
+  String tr(String key) {
+    return Get.find<WoxSettingController>().tr(key);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(left: widget.paddingLeft, right: widget.paddingRight),
       child: material.Tooltip(
-        message: widget.tooltip,
+        message: tr(widget.tooltip),
         child: const Icon(FluentIcons.info, size: 14),
       ),
     );

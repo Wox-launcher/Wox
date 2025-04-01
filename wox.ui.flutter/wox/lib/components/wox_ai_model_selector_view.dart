@@ -51,6 +51,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
   }
 
   Future<void> _loadModels() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
 
     try {
@@ -91,7 +92,9 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
     } catch (e) {
       // Handle error
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -105,8 +108,15 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
       return const Center(child: ProgressRing(strokeWidth: 2));
     }
 
-    // Get models for selected provider
-    final providerModels = _selectedProvider != null ? _allModels.where((m) => m.provider == _selectedProvider).toList() : <AIModel>[];
+    List<AIModel> getProviderModels() {
+      if (_selectedProvider != null) {
+        final models = _allModels.where((m) => m.provider == _selectedProvider).toList();
+        models.sort((a, b) => a.name.compareTo(b.name));
+        return models;
+      }
+
+      return <AIModel>[];
+    }
 
     return Row(
       children: [
@@ -163,7 +173,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
                 )
               : ComboBox<String>(
                   value: _selectedModel?.name,
-                  items: providerModels
+                  items: getProviderModels()
                       .map((model) => ComboBoxItem<String>(
                             value: model.name,
                             child: Text(model.name),

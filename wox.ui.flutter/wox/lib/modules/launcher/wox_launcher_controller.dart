@@ -1089,12 +1089,13 @@ class WoxLauncherController extends GetxController {
   Future<void> openSettingWindow(String traceId, SettingWindowContext context) async {
     isInSettingView.value = true;
     if (context.path == "/plugin/setting") {
-      var settingController = Get.find<WoxSettingController>();
-      settingController.filterPluginKeywordController.text = context.param;
-      settingController.filterPlugins();
-      settingController.setFirstFilteredPluginDetailActive();
-
       WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await Future.delayed(const Duration(milliseconds: 100));
+        var settingController = Get.find<WoxSettingController>();
+        settingController.switchToPluginList(false);
+        settingController.filterPluginKeywordController.text = context.param;
+        settingController.filterPlugins();
+        settingController.setFirstFilteredPluginDetailActive();
         settingController.switchToPluginSettingTab();
       });
     }

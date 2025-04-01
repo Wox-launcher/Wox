@@ -287,5 +287,7 @@
   "plugin_ai_chat_mcp_server_environment_variables": "Переменные окружения",
   "plugin_ai_chat_mcp_server_environment_variables_tooltip": "Переменные окружения для запуска сервера MCP",
   "plugin_ai_chat_mcp_server_url": "URL",
-  "plugin_ai_chat_mcp_server_url_tooltip": "URL сервера MCP"
+  "plugin_ai_chat_mcp_server_url_tooltip": "URL сервера MCP",
+  "plugin_ai_chat_default_model": "Модель по умолчанию",
+  "plugin_ai_chat_default_model_tooltip": "Модель по умолчанию для этой команды"
 }
