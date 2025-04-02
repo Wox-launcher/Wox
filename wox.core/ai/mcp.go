@@ -11,17 +11,19 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-// MCPListTools lists the tools for a given MCP server config
-func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) (mcpTools []common.MCPTool, err error) {
-	util.GetLogger().Debug(ctx, fmt.Sprintf("Listing tools for MCP server: %s", config.Name))
+var mcpClients = util.NewHashMap[string, *client.StdioMCPClient]()
+var mcpTools = util.NewHashMap[string, []common.MCPTool]()
+
+func getMCPClient(ctx context.Context, config common.AIChatMCPServerConfig) (c *client.StdioMCPClient, err error) {
+	if client, ok := mcpClients.Load(config.Name); ok {
+		return client, nil
+	}
 
 	command, args := parseCommandArgs(config.Command)
-
-	c, err := client.NewStdioMCPClient(command, config.EnvironmentVariables, args...)
-	if err != nil {
-		return nil, err
+	client, newErr := client.NewStdioMCPClient(command, config.EnvironmentVariables, args...)
+	if newErr != nil {
+		return nil, newErr
 	}
-	defer c.Close()
 
 	// Initialize the client
 	initRequest := mcp.InitializeRequest{}
@@ -30,29 +32,46 @@ func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) (mcp
 		Name:    "Wox",
 		Version: "2.0.0",
 	}
-	initResult, err := c.Initialize(ctx, initRequest)
+	_, initializeErr := client.Initialize(ctx, initRequest)
+	if initializeErr != nil {
+		return nil, initializeErr
+	}
+
+	mcpClients.Store(config.Name, client)
+	return client, nil
+}
+
+// MCPListTools lists the tools for a given MCP server config
+func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) ([]common.MCPTool, error) {
+	if tools, ok := mcpTools.Load(config.Name); ok {
+		util.GetLogger().Debug(ctx, fmt.Sprintf("Listing tools for MCP server from cache: %s", config.Name))
+		return tools, nil
+	}
+
+	util.GetLogger().Debug(ctx, fmt.Sprintf("Listing tools for MCP server: %s", config.Name))
+	client, err := getMCPClient(ctx, config)
 	if err != nil {
 		return nil, err
 	}
-
-	util.GetLogger().Debug(ctx, fmt.Sprintf("Initialized with server: %s %s", initResult.ServerInfo.Name, initResult.ServerInfo.Version))
 
 	// List Tools
-	tools, err := c.ListTools(ctx, mcp.ListToolsRequest{})
+	tools, err := client.ListTools(ctx, mcp.ListToolsRequest{})
 	if err != nil {
 		return nil, err
 	}
 
+	var toolsList []common.MCPTool
 	for _, tool := range tools.Tools {
-		mcpTools = append(mcpTools, common.MCPTool{
+		toolsList = append(toolsList, common.MCPTool{
 			Name:        tool.Name,
 			Description: tool.Description,
 		})
 	}
 
-	util.GetLogger().Debug(ctx, fmt.Sprintf("Found %d tools", len(mcpTools)))
+	util.GetLogger().Debug(ctx, fmt.Sprintf("Found %d tools", len(toolsList)))
+	mcpTools.Store(config.Name, toolsList)
 
-	return
+	return toolsList, nil
 }
 
 // raw command is like "npx -y @modelcontextprotocol/server-filesystem /tmp"

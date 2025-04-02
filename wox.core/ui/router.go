@@ -943,6 +943,8 @@ func handleAIMCPServerTools(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	util.GetLogger().Info(ctx, fmt.Sprintf("Found %d tools for mcp server %s", len(tools), mcpConfig.Name))
+
 	writeSuccessResponse(w, tools)
 }
 

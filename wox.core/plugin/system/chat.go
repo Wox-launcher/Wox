@@ -79,9 +79,16 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 						{
 							Key:          "tools",
 							Label:        "i18n:plugin_ai_chat_mcp_server_tools",
+							Tooltip:      "i18n:plugin_ai_chat_mcp_server_tools_tooltip",
 							Type:         definition.PluginSettingValueTableColumnTypeAIMCPServerTools,
 							Width:        60,
 							HideInUpdate: true,
+						},
+						{
+							Key:   "disabled",
+							Label: "i18n:plugin_ai_chat_mcp_server_disabled",
+							Type:  definition.PluginSettingValueTableColumnTypeCheckbox,
+							Width: 60,
 						},
 						{
 							Key:     "type",
@@ -205,6 +212,10 @@ func (r *AIChatPlugin) reloadMCPServers(ctx context.Context) {
 	}
 
 	for _, mcpServer := range r.mcpServers {
+		if mcpServer.Disabled {
+			continue
+		}
+
 		tools, err := ai.MCPListTools(ctx, mcpServer)
 		if err != nil {
 			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to list tool: %s", err.Error()))

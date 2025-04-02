@@ -76,7 +76,10 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
 
     return SizedBox(
       width: width.toDouble(),
-      child: child,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: child,
+      ),
     );
   }
 
@@ -241,6 +244,11 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       );
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAIMCPServerTools) {
+      var disabled = row["disabled"] ?? false;
+      if (disabled) {
+        return const Icon(material.Icons.circle, color: material.Colors.grey);
+      }
+
       return FutureBuilder<List<AIMCPTool>>(
         future: WoxApi.instance.findAIMCPServerTools(row),
         builder: (context, snapshot) {

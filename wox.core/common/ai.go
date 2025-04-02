@@ -72,8 +72,9 @@ type MCPTool struct {
 }
 
 type AIChatMCPServerConfig struct {
-	Name string
-	Type AIChatMCPServerType
+	Name     string
+	Type     AIChatMCPServerType
+	Disabled bool
 
 	// for stdio server
 	Command              string
