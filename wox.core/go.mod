@@ -54,6 +54,7 @@ require (
 	cloud.google.com/go v0.116.0 // indirect
 	cloud.google.com/go/compute/metadata v0.5.2 // indirect
 	github.com/MegaGrindStone/go-mcp v0.6.0 // indirect
+	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/andybalholm/cascadia v1.3.2 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
@@ -74,6 +75,7 @@ require (
 	github.com/pkoukk/tiktoken-go v0.1.7 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/rkoesters/xdg v0.0.1 // indirect
 	github.com/saracen/zipextra v0.0.0-20220303013732-0187cb0159ea // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect

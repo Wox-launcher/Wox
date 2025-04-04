@@ -8,6 +8,8 @@ github.com/MegaGrindStone/go-mcp v0.6.0 h1:Gm/Ap8XAmD6bNMuoTv7xKhLrs/FhcTqebo09T
 github.com/MegaGrindStone/go-mcp v0.6.0/go.mod h1:Lc+AiPnsHAF/U9acWMilgzKg4hdkzPpymscNrOysMHM=
 github.com/PuerkitoBio/goquery v1.10.0 h1:6fiXdLuUvYs2OJSvNRqlNPoBm6YABE226xrbavY5Wv4=
 github.com/PuerkitoBio/goquery v1.10.0/go.mod h1:TjZZl68Q3eGHNBA8CWaxAN7rOU1EbDz3CWuolcO5Yu4=
+github.com/adrg/xdg v0.5.3 h1:xRnxJXne7+oWDatRhR1JLnvuccuIeCoBu2rtuLqQB78=
+github.com/adrg/xdg v0.5.3/go.mod h1:nlTsY+NNiCBGCK2tpm09vRqfVzrc2fLmXGpBLF0zlTQ=
 github.com/andybalholm/cascadia v1.3.2 h1:3Xi6Dw5lHF15JtdcmAHD3i1+T8plmv7BQ/nsViSLyss=
 github.com/andybalholm/cascadia v1.3.2/go.mod h1:7gtRlve5FxPPgIgX36uWBX58OdBsSS6lUvCFb+h7KvU=
 github.com/bahlo/generic-list-go v0.2.0 h1:5sz/EEAK+ls5wF+NeqDpk5+iNdMDXrh3z3nPnH1Wvgk=
@@ -99,6 +101,8 @@ github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZN
 github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
 github.com/rivo/uniseg v0.4.7 h1:WUdvkW8uEhrYfLC4ZzdpI2ztxP1I582+49Oc5Mq64VQ=
 github.com/rivo/uniseg v0.4.7/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUcx88=
+github.com/rkoesters/xdg v0.0.1 h1:RmfYxghVvIsb4d51u5LtNOcwqY5r3P44u6o86qqvBMA=
+github.com/rkoesters/xdg v0.0.1/go.mod h1:5DcbjvJkY00fIOKkaBnylbC/rmc1NNJP5dmUcnlcm7U=
 github.com/robotn/gohook v0.41.0 h1:h1vK3w/UQpq0YkIiGnxm9Awv85W54esL0/NUYGueggo=
 github.com/robotn/gohook v0.41.0/go.mod h1:FedpuAkVqzM5t67L5fcf3hSSCUDO9cM5YkWCw1U+nuc=
 github.com/rs/cors v1.11.1 h1:eU3gRzXLRK57F5rKMGMZURNdIG4EoAmX8k94r9wXWHA=
