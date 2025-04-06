@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,7 +13,6 @@ import (
 	"github.com/djherbis/buffer"
 	"github.com/djherbis/nio/v3"
 	"github.com/tidwall/gjson"
-	"github.com/tmc/langchaingo/jsonschema"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/openai"
 )
@@ -46,13 +46,41 @@ func (g *GroqProvider) ChatStream(ctx context.Context, model common.Model, conve
 	buf := buffer.New(4 * 1024) // 4KB In memory Buffer
 	r, w := nio.Pipe(buf)
 	util.Go(ctx, "Groq chat stream", func() {
-		_, err := client.GenerateContent(ctx, g.convertConversations(conversations), llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
+		response, err := client.GenerateContent(ctx, g.convertConversations(conversations), llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
 			w.Write(chunk)
 			return nil
-		}), llms.WithTools(g.convertTools(options.Tools)))
+		}), llms.WithTools(g.convertTools(options.Tools)), llms.WithToolChoice("auto"))
 		if err != nil {
 			w.CloseWithError(err)
 		} else {
+			fc := response.Choices[0].FuncCall
+			if fc != nil {
+				toolCall := fc.Name
+				for _, tool := range options.Tools {
+					if tool.Name == toolCall {
+						util.GetLogger().Debug(util.NewTraceContext(), fmt.Sprintf("Groq: Tool call: %s", toolCall))
+						var params map[string]any
+						json.Unmarshal([]byte(fc.Arguments), &params)
+						toolResp, err := tool.Callback(ctx, params)
+						if err != nil {
+							util.GetLogger().Error(util.NewTraceContext(), fmt.Sprintf("Groq: Tool call: %s, error: %s", toolCall, err))
+						} else {
+							// replace the last user conversation with the tool call result
+							lastUserConversation := conversations[len(conversations)-1]
+							conversations[len(conversations)-1].Text = fmt.Sprintf("%s, here is the tool call result: %s, please use this result to answer the question", lastUserConversation.Text, toolResp.Text)
+
+							_, err := client.GenerateContent(ctx, g.convertConversations(conversations), llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
+								w.Write(chunk)
+								return nil
+							}))
+							if err != nil {
+								util.GetLogger().Error(util.NewTraceContext(), fmt.Sprintf("Groq: Post tool call: %s, error: %s", toolCall, err))
+							}
+						}
+					}
+				}
+			}
+
 			w.Close()
 		}
 	})
@@ -61,13 +89,12 @@ func (g *GroqProvider) ChatStream(ctx context.Context, model common.Model, conve
 }
 
 func (g *GroqProvider) convertTools(tools []common.MCPTool) []llms.Tool {
-	convertedTools := make([]llms.Tool, len(tools))
-	for i, tool := range tools {
-		convertedTools[i] = llms.Tool{
+	/*
+		{
 			Type: "function",
 			Function: &llms.FunctionDefinition{
-				Name:        tool.Name,
-				Description: tool.Description,
+				Name:        "getCurrentWeather",
+				Description: "Get the current weather in a given location",
 				Parameters: jsonschema.Definition{
 					Type: jsonschema.Object,
 					Properties: map[string]jsonschema.Definition{
@@ -75,16 +102,28 @@ func (g *GroqProvider) convertTools(tools []common.MCPTool) []llms.Tool {
 							Type:        jsonschema.String,
 							Description: "The rationale for choosing this function call with these parameters",
 						},
-						"suggestions": {
-							Type: jsonschema.Array,
-							Items: &jsonschema.Definition{
-								Type:        jsonschema.String,
-								Description: "A suggested prompt",
-							},
+						"location": {
+							Type:        jsonschema.String,
+							Description: "The city and state, e.g. San Francisco, CA",
+						},
+						"unit": {
+							Type: jsonschema.String,
+							Enum: []string{"celsius", "fahrenheit"},
 						},
 					},
-					Required: []string{"rationale", "suggestions"},
+					Required: []string{"rationale", "location"},
 				},
+			},
+		}
+	*/
+	convertedTools := make([]llms.Tool, len(tools))
+	for i, tool := range tools {
+		convertedTools[i] = llms.Tool{
+			Type: "function",
+			Function: &llms.FunctionDefinition{
+				Name:        tool.Name,
+				Description: tool.Description,
+				Parameters:  tool.Parameters,
 			},
 		}
 	}

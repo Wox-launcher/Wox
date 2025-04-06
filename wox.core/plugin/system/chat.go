@@ -27,7 +27,7 @@ type AIChatPlugin struct {
 	chats           []common.AIChatData
 	resultChatIdMap *util.HashMap[string /*chat id*/, string /*result id*/] // map of result id and chat id, used to update the chat title
 	mcpServers      []common.AIChatMCPServerConfig
-	mcpToolsMap     *util.HashMap[common.MCPTool, *common.AIChatMCPServerConfig]
+	mcpToolsMap     []common.MCPTool
 	api             plugin.API
 }
 
@@ -158,7 +158,6 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 
 func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.resultChatIdMap = util.NewHashMap[string, string]()
-	r.mcpToolsMap = util.NewHashMap[common.MCPTool, *common.AIChatMCPServerConfig]()
 	r.api = initParams.API
 	r.mcpServers = []common.AIChatMCPServerConfig{}
 
@@ -222,7 +221,7 @@ func (r *AIChatPlugin) reloadMCPServers(ctx context.Context) {
 		}
 		for _, tool := range tools {
 			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("%s tool %s: %s", mcpServer.Name, tool.Name, tool.Description))
-			r.mcpToolsMap.Store(tool, &mcpServer)
+			r.mcpToolsMap = append(r.mcpToolsMap, tool)
 		}
 	}
 }
@@ -311,7 +310,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData) {
 	}
 
 	chatErr := r.api.AIChatStream(ctx, aiChatData.Model, aiChatData.Conversations, common.ChatOptions{
-		Tools: r.mcpToolsMap.Keys(),
+		Tools: r.mcpToolsMap,
 	}, func(t common.ChatStreamDataType, data string) {
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("chat stream data: %s", data))
 

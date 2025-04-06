@@ -1,6 +1,11 @@
 package common
 
-import "context"
+import (
+	"context"
+	"fmt"
+
+	"github.com/tmc/langchaingo/jsonschema"
+)
 
 type ConversationRole string
 type ProviderName string
@@ -69,6 +74,14 @@ type ChatOptions struct {
 type MCPTool struct {
 	Name        string
 	Description string
+	Parameters  jsonschema.Definition
+	Callback    func(ctx context.Context, args map[string]any) (Conversation, error)
+
+	ServerConfig *AIChatMCPServerConfig
+}
+
+func (t *MCPTool) Key() string {
+	return fmt.Sprintf("%s:%s", t.ServerConfig.Name, t.Name)
 }
 
 type AIChatMCPServerConfig struct {
