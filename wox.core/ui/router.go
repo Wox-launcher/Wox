@@ -59,6 +59,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/lang/json":      handleLangJson,
 
 	// ai
+	"/ai/providers": handleAIProviders,
 	"/ai/models":    handleAIModels,
 	"/ai/ping":      handleAIPing,
 	"/ai/chat":      handleAIChat,
@@ -816,6 +817,11 @@ func handleDeeplink(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "")
 }
 
+func handleAIProviders(w http.ResponseWriter, r *http.Request) {
+	providers := ai.GetAllProviders()
+	writeSuccessResponse(w, providers)
+}
+
 func handleAIModels(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
 
@@ -863,7 +869,7 @@ func handleAIPing(w http.ResponseWriter, r *http.Request) {
 	}
 
 	provider, err := ai.NewProvider(ctx, setting.AIProvider{
-		Name:   providerResult.String(),
+		Name:   common.ProviderName(providerResult.String()),
 		ApiKey: apiKeyResult.String(),
 		Host:   hostResult.String(),
 	})
@@ -945,7 +951,15 @@ func handleAIMCPServerTools(w http.ResponseWriter, r *http.Request) {
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("Found %d tools for mcp server %s", len(tools), mcpConfig.Name))
 
-	writeSuccessResponse(w, tools)
+	results := lo.Map(tools, func(tool common.MCPTool, _ int) map[string]any {
+		return map[string]any{
+			"Name":        tool.Name,
+			"Description": tool.Description,
+			"Parameters":  tool.Parameters,
+		}
+	})
+
+	writeSuccessResponse(w, results)
 }
 
 func handleDoctorCheck(w http.ResponseWriter, r *http.Request) {

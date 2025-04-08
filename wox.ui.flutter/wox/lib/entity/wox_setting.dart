@@ -1,3 +1,5 @@
+import 'package:wox/entity/wox_image.dart';
+
 class WoxSetting {
   late bool enableAutostart;
   late String mainHotkey;
@@ -194,5 +196,17 @@ class AIProvider {
     data['ApiKey'] = apiKey;
     data['Host'] = host;
     return data;
+  }
+}
+
+class AIProviderInfo {
+  late String name;
+  late WoxImage icon;
+
+  AIProviderInfo({required this.name, required this.icon});
+
+  AIProviderInfo.fromJson(Map<String, dynamic> json) {
+    name = json['Name'];
+    icon = WoxImage.fromJson(json['Icon']);
   }
 }

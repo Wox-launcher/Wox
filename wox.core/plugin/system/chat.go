@@ -275,7 +275,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData) {
 	currentResponseConversationId := uuid.NewString()
 	aiChatData.Conversations = append(aiChatData.Conversations, common.Conversation{
 		Id:        currentResponseConversationId,
-		Role:      common.ConversationRoleAI,
+		Role:      common.ConversationRoleAssistant,
 		Text:      "",
 		Images:    []common.WoxImage{},
 		Timestamp: util.GetSystemTimestamp(),
@@ -335,7 +335,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData) {
 			responseText += data
 			aiResponseConversation.Text = responseText
 		} else if t == common.ChatStreamTypeError {
-			responseText = "Error"
+			responseText = fmt.Sprintf("ERR: %s", data)
 			aiResponseConversation.Text = responseText
 		}
 

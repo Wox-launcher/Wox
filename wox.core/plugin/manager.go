@@ -1203,7 +1203,7 @@ func (m *Manager) GetAIProvider(ctx context.Context, provider common.ProviderNam
 	//check if provider has setting
 	aiProviderSettings := setting.GetSettingManager().GetWoxSetting(ctx).AIProviders
 	providerSetting, providerSettingExist := lo.Find(aiProviderSettings, func(item setting.AIProvider) bool {
-		return item.Name == string(provider)
+		return item.Name == provider
 	})
 	if !providerSettingExist {
 		return nil, fmt.Errorf("ai provider setting not found: %s", provider)

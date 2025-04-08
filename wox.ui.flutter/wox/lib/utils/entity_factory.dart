@@ -34,6 +34,8 @@ class EntityFactory {
       return (json as List).map((e) => WoxBackup.fromJson(e)).toList() as T;
     } else if (T.toString() == "List<AIMCPTool>") {
       return (json as List).map((e) => AIMCPTool.fromJson(e)).toList() as T;
+    } else if (T.toString() == "List<AIProviderInfo>") {
+      return (json as List).map((e) => AIProviderInfo.fromJson(e)).toList() as T;
     } else {
       return json as T;
     }

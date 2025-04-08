@@ -136,7 +136,7 @@ func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) ([]c
 				if v, ok := content[0].(mcp.TextContent); ok {
 					return common.Conversation{
 						Id:   uuid.New().String(),
-						Role: common.ConversationRoleAI,
+						Role: common.ConversationRoleAssistant,
 						Text: v.Text,
 					}, nil
 				} else {

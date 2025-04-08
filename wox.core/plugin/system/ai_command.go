@@ -390,7 +390,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 			})
 		} else {
 			conversations = append(conversations, common.Conversation{
-				Role: common.ConversationRoleAI,
+				Role: common.ConversationRoleAssistant,
 				Text: msg,
 			})
 		}

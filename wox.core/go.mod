@@ -24,6 +24,7 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mozillazg/go-pinyin v0.20.0
 	github.com/olahol/melody v1.2.1
+	github.com/openai/openai-go v0.1.0-beta.6
 	github.com/otiai10/copy v1.14.0
 	github.com/parsiya/golnk v0.0.0-20221103095132-740a4c27c4ff
 	github.com/petermattis/goid v0.0.0-20241025130422-66cb2e6d7274
@@ -45,7 +46,7 @@ require (
 	go.uber.org/zap v1.27.0
 	golang.design/x/hotkey v0.4.1
 	golang.org/x/image v0.21.0
-	golang.org/x/sys v0.26.0
+	golang.org/x/sys v0.29.0
 	google.golang.org/genai v0.6.0
 	howett.net/plist v1.0.1
 )
@@ -83,10 +84,10 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.design/x/mainthread v0.3.0 // indirect
-	golang.org/x/net v0.30.0 // indirect
+	golang.org/x/net v0.34.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect
-	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/text v0.19.0 // indirect
+	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/text v0.21.0 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

@@ -19,15 +19,10 @@ const (
 )
 
 var (
-	ConversationRoleUser ConversationRole = "user"
-	ConversationRoleAI   ConversationRole = "ai"
-)
-
-var (
-	ProviderNameOpenAI ProviderName = "openai"
-	ProviderNameGoogle ProviderName = "google"
-	ProviderNameOllama ProviderName = "ollama"
-	ProviderNameGroq   ProviderName = "groq"
+	ConversationRoleSystem    ConversationRole = "system"
+	ConversationRoleUser      ConversationRole = "user"
+	ConversationRoleAssistant ConversationRole = "assistant"
+	ConversationRoleTool      ConversationRole = "tool"
 )
 
 const (
@@ -38,12 +33,18 @@ const (
 
 type ChatStreamFunc func(t ChatStreamDataType, data string)
 
+type AIProviderInfo struct {
+	Name ProviderName
+	Icon WoxImage
+}
+
 type Conversation struct {
-	Id        string
-	Role      ConversationRole
-	Text      string
-	Images    []WoxImage
-	Timestamp int64
+	Id         string
+	Role       ConversationRole
+	Text       string
+	Images     []WoxImage
+	ToolCallID string
+	Timestamp  int64
 }
 
 type Model struct {

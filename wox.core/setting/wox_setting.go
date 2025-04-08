@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"wox/common"
 	"wox/i18n"
 	"wox/util/shell"
 )
@@ -70,7 +71,7 @@ func (q *QueryShortcut) PlaceholderCount() int {
 }
 
 type AIProvider struct {
-	Name   string // see ai.ProviderName
+	Name   common.ProviderName // see ai.ProviderName
 	ApiKey string
 	Host   string
 }

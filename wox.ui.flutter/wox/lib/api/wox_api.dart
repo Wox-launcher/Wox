@@ -141,6 +141,10 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData("/ai/models", null);
   }
 
+  Future<List<AIProviderInfo>> findAIProviders() async {
+    return await WoxHttpUtil.instance.postData("/ai/providers", null);
+  }
+
   Future<String> pingAIModel(String providerName, String apiKey, String host) async {
     return await WoxHttpUtil.instance.postData("/ai/ping", {
       "name": providerName,

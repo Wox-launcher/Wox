@@ -2,7 +2,9 @@ typedef WoxAIChatConversationRole = String;
 
 enum WoxAIChatConversationRoleEnum {
   WOX_AIChat_CONVERSATION_ROLE_USER("user", "user"),
-  WOX_AIChat_CONVERSATION_ROLE_AI("ai", "ai");
+  WOX_AIChat_CONVERSATION_ROLE_ASSISTANT("assistant", "assistant"),
+  WOX_AIChat_CONVERSATION_ROLE_SYSTEM("system", "system"),
+  WOX_AIChat_CONVERSATION_ROLE_TOOL("tool", "tool");
 
   final String code;
   final String value;
