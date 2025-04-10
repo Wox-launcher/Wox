@@ -4,6 +4,7 @@ import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_list_item.dart';
+import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/enums/wox_result_tail_type_enum.dart';
@@ -14,6 +15,7 @@ import 'wox_hotkey_view.dart';
 
 class WoxListItemView extends StatelessWidget {
   final WoxListItem item;
+  final WoxTheme woxTheme;
   final bool isActive;
   final bool isHovered;
   final WoxListViewType listViewType;
@@ -21,6 +23,7 @@ class WoxListItemView extends StatelessWidget {
   const WoxListItemView({
     super.key,
     required this.item,
+    required this.woxTheme,
     required this.isActive,
     required this.isHovered,
     required this.listViewType,
@@ -50,7 +53,7 @@ class WoxListItemView extends StatelessWidget {
                     child: Text(
                       tail.text!,
                       style: TextStyle(
-                        color: fromCssColor(isActive ? item.woxTheme.resultItemActiveTailTextColor : item.woxTheme.resultItemTailTextColor),
+                        color: fromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
                         fontSize: 12,
                       ),
                       maxLines: 1,
@@ -65,9 +68,9 @@ class WoxListItemView extends StatelessWidget {
                     padding: const EdgeInsets.only(left: 10.0),
                     child: WoxHotkeyView(
                       hotkey: tail.hotkey!,
-                      backgroundColor: isActive ? fromCssColor(item.woxTheme.resultItemActiveBackgroundColor) : fromCssColor(item.woxTheme.actionContainerBackgroundColor),
-                      borderColor: fromCssColor(isActive ? item.woxTheme.resultItemActiveTailTextColor : item.woxTheme.resultItemTailTextColor),
-                      textColor: fromCssColor(isActive ? item.woxTheme.resultItemActiveTailTextColor : item.woxTheme.resultItemTailTextColor),
+                      backgroundColor: isActive ? fromCssColor(woxTheme.resultItemActiveBackgroundColor) : fromCssColor(woxTheme.actionContainerBackgroundColor),
+                      borderColor: fromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
+                      textColor: fromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
                     ),
                   )
                 else if (tail.type == WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_IMAGE.code && tail.image != null && tail.image!.imageData.isNotEmpty)
@@ -89,24 +92,24 @@ class WoxListItemView extends StatelessWidget {
   Color getBackgroundColor() {
     if (isActive) {
       if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code) {
-        return fromCssColor(item.woxTheme.actionItemActiveBackgroundColor);
+        return fromCssColor(woxTheme.actionItemActiveBackgroundColor);
       }
       if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_CHAT.code) {
-        return fromCssColor(item.woxTheme.resultItemActiveBackgroundColor);
+        return fromCssColor(woxTheme.resultItemActiveBackgroundColor);
       }
       if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code) {
-        return fromCssColor(item.woxTheme.resultItemActiveBackgroundColor);
+        return fromCssColor(woxTheme.resultItemActiveBackgroundColor);
       }
     } else if (isHovered) {
       // Use a lighter version of the active background color for hover state
       if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code) {
-        return fromCssColor(item.woxTheme.actionItemActiveBackgroundColor).withOpacity(0.3);
+        return fromCssColor(woxTheme.actionItemActiveBackgroundColor).withOpacity(0.3);
       }
       if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_CHAT.code) {
-        return fromCssColor(item.woxTheme.resultItemActiveBackgroundColor).withOpacity(0.3);
+        return fromCssColor(woxTheme.resultItemActiveBackgroundColor).withOpacity(0.3);
       }
       if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code) {
-        return fromCssColor(item.woxTheme.resultItemActiveBackgroundColor).withOpacity(0.3);
+        return fromCssColor(woxTheme.resultItemActiveBackgroundColor).withOpacity(0.3);
       }
     }
 
@@ -120,21 +123,21 @@ class WoxListItemView extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: getBackgroundColor(),
-        borderRadius: BorderRadius.circular(listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code ? item.woxTheme.resultItemBorderRadius.toDouble() : 0.0),
+        borderRadius: BorderRadius.circular(listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code ? woxTheme.resultItemBorderRadius.toDouble() : 0.0),
         border: Border(
             left: listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
                 ? BorderSide.none
                 : BorderSide(
-                    color: isActive ? fromCssColor(item.woxTheme.resultItemActiveBackgroundColor) : Colors.transparent,
-                    width: isActive ? double.parse(item.woxTheme.resultItemActiveBorderLeft) : double.parse(item.woxTheme.resultItemBorderLeft),
+                    color: isActive ? fromCssColor(woxTheme.resultItemActiveBackgroundColor) : Colors.transparent,
+                    width: isActive ? double.parse(woxTheme.resultItemActiveBorderLeft) : double.parse(woxTheme.resultItemBorderLeft),
                   )),
       ),
       padding: listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code
           ? EdgeInsets.only(
-              top: item.woxTheme.resultItemPaddingTop.toDouble(),
-              right: item.woxTheme.resultItemPaddingRight.toDouble(),
-              bottom: item.woxTheme.resultItemPaddingBottom.toDouble(),
-              left: item.woxTheme.resultItemPaddingLeft.toDouble(),
+              top: woxTheme.resultItemPaddingTop.toDouble(),
+              right: woxTheme.resultItemPaddingRight.toDouble(),
+              bottom: woxTheme.resultItemPaddingBottom.toDouble(),
+              left: woxTheme.resultItemPaddingLeft.toDouble(),
             )
           : EdgeInsets.zero,
       child: Row(
@@ -156,8 +159,8 @@ class WoxListItemView extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 16,
                   color: listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
-                      ? fromCssColor(isActive ? item.woxTheme.actionItemActiveFontColor : item.woxTheme.actionItemFontColor)
-                      : fromCssColor(isActive ? item.woxTheme.resultItemActiveTitleColor : item.woxTheme.resultItemTitleColor),
+                      ? fromCssColor(isActive ? woxTheme.actionItemActiveFontColor : woxTheme.actionItemFontColor)
+                      : fromCssColor(isActive ? woxTheme.resultItemActiveTitleColor : woxTheme.resultItemTitleColor),
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -171,7 +174,7 @@ class WoxListItemView extends StatelessWidget {
                       child: Text(
                         item.subTitle,
                         style: TextStyle(
-                          color: fromCssColor(isActive ? item.woxTheme.resultItemActiveSubTitleColor : item.woxTheme.resultItemSubTitleColor),
+                          color: fromCssColor(isActive ? woxTheme.resultItemActiveSubTitleColor : woxTheme.resultItemSubTitleColor),
                           fontSize: 13,
                         ),
                         maxLines: 1,

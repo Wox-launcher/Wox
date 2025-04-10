@@ -1,6 +1,5 @@
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_query.dart';
-import 'package:wox/entity/wox_theme.dart';
 
 class WoxListItem {
   final String id;
@@ -8,16 +7,16 @@ class WoxListItem {
   final String title;
   final String subTitle;
   final List<WoxQueryResultTail> tails;
-  final WoxTheme woxTheme;
   final bool isGroup;
+  final String? hotkey;
 
   WoxListItem({
     required this.id,
-    required this.woxTheme,
     required this.icon,
     required this.title,
     required this.subTitle,
     required this.tails,
     required this.isGroup,
+    this.hotkey,
   });
 }

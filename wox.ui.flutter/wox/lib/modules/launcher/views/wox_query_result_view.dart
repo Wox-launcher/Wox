@@ -1,17 +1,12 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
-import 'package:wox/components/wox_list_item_view.dart';
 import 'package:wox/components/wox_list_view.dart';
 import 'package:wox/components/wox_preview_view.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/entity/wox_query.dart';
-import 'package:wox/enums/wox_direction_enum.dart';
-import 'package:wox/enums/wox_event_device_type_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
 import 'package:wox/utils/log.dart';
@@ -31,46 +26,6 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
       }
     }
     return tails.obs;
-  }
-
-  Widget getActionListView() {
-    return Obx(() {
-      if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: action list view container");
-
-      return Scrollbar(
-          controller: controller.actionScrollerController,
-          child: Listener(
-              onPointerSignal: (event) {
-                if (event is PointerScrollEvent) {}
-              },
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 350),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  controller: controller.actionScrollerController,
-                  itemCount: controller.actions.length,
-                  itemExtent: 40,
-                  itemBuilder: (context, index) {
-                    WoxResultAction woxResultAction = controller.geActionByIndex(index);
-                    return WoxListItemView(
-                      listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code,
-                      key: ValueKey(woxResultAction.id),
-                      item: WoxListItem(
-                        id: woxResultAction.id,
-                        woxTheme: controller.woxTheme.value,
-                        icon: woxResultAction.icon.value,
-                        title: woxResultAction.name.value,
-                        tails: getHotkeyTails(woxResultAction),
-                        subTitle: "",
-                        isGroup: false,
-                      ),
-                      isActive: controller.isActionActiveByIndex(index),
-                      isHovered: controller.isResultHoveredByIndex(index),
-                    );
-                  },
-                ),
-              )));
-    });
   }
 
   Widget getActionPanelView() {
@@ -108,8 +63,22 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                     children: [
                       Text(controller.actionsTitle.value, style: TextStyle(color: fromCssColor(controller.woxTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
                       const Divider(),
-                      getActionListView(),
-                      getActionQueryBox()
+                      Obx(() => WoxListView(
+                            controller: controller.actionListViewController,
+                            items: controller.actions
+                                .map((action) => WoxListItem(
+                                      id: action.id,
+                                      icon: action.icon.value,
+                                      title: action.name.value,
+                                      hotkey: action.hotkey,
+                                      tails: [],
+                                      subTitle: "",
+                                      isGroup: false,
+                                    ))
+                                .toList(),
+                            woxTheme: controller.woxTheme.value,
+                            listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code,
+                          )),
                     ],
                   ),
                 ),
@@ -130,10 +99,10 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
       child: WoxListView(
         controller: controller.resultListViewController,
         listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code,
+        showFilter: false,
         items: controller.results
             .map((result) => WoxListItem(
                   id: result.id,
-                  woxTheme: controller.woxTheme.value,
                   icon: result.icon.value,
                   title: result.title.value,
                   tails: result.tails,
@@ -141,7 +110,8 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                   isGroup: result.isGroup,
                 ))
             .toList(),
-        onItemDoubleTap: (item) {
+        woxTheme: controller.woxTheme.value,
+        onItemExecuted: (item) {
           controller.onEnter(const UuidV4().generate());
         },
         onItemActive: (item) {
@@ -198,103 +168,6 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
             )
           : const SizedBox(),
     );
-  }
-
-// Action Query Box
-  Widget getActionQueryBox() {
-    return Focus(
-        onKeyEvent: (FocusNode node, KeyEvent event) {
-          var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
-          if (!isAnyModifierPressed) {
-            if (event is KeyDownEvent) {
-              switch (event.logicalKey) {
-                case LogicalKeyboardKey.escape:
-                  controller.actionEscFunction(const UuidV4().generate());
-                  return KeyEventResult.handled;
-                case LogicalKeyboardKey.arrowDown:
-                  controller.changeActionScrollPosition(
-                      const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
-                  return KeyEventResult.handled;
-                case LogicalKeyboardKey.arrowUp:
-                  controller.changeActionScrollPosition(
-                      const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
-                  return KeyEventResult.handled;
-                case LogicalKeyboardKey.enter:
-                  controller.onEnter(const UuidV4().generate());
-                  return KeyEventResult.handled;
-              }
-            }
-
-            if (event is KeyRepeatEvent) {
-              switch (event.logicalKey) {
-                case LogicalKeyboardKey.arrowDown:
-                  controller.changeActionScrollPosition(
-                      const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
-                  return KeyEventResult.handled;
-                case LogicalKeyboardKey.arrowUp:
-                  controller.changeActionScrollPosition(
-                      const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
-                  return KeyEventResult.handled;
-              }
-            }
-          }
-
-          var pressedHotkey = WoxHotkey.parseNormalHotkeyFromEvent(event);
-          if (pressedHotkey == null) {
-            return KeyEventResult.ignored;
-          }
-
-          // list all actions
-          if (controller.isActionHotkey(pressedHotkey)) {
-            controller.toggleActionPanel(const UuidV4().generate());
-            return KeyEventResult.handled;
-          }
-
-          // check if the pressed hotkey is the action hotkey
-          var result = controller.getActiveResult();
-          var action = controller.getActionByHotkey(result, pressedHotkey);
-          if (action != null) {
-            controller.executeAction(const UuidV4().generate(), result, action);
-            return KeyEventResult.handled;
-          }
-
-          return KeyEventResult.ignored;
-        },
-        child: Padding(
-          padding: const EdgeInsets.only(top: 6.0),
-          child: SizedBox(
-            height: 40.0,
-            child: TextField(
-              style: TextStyle(
-                fontSize: 14.0,
-                color: fromCssColor(controller.woxTheme.value.actionQueryBoxFontColor),
-              ),
-              decoration: InputDecoration(
-                isCollapsed: true,
-                contentPadding: const EdgeInsets.only(
-                  left: 8,
-                  right: 8,
-                  top: 20,
-                  bottom: 18,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(controller.woxTheme.value.actionQueryBoxBorderRadius.toDouble()),
-                  borderSide: BorderSide.none,
-                ),
-                filled: true,
-                fillColor: fromCssColor(controller.woxTheme.value.actionQueryBoxBackgroundColor),
-                hoverColor: Colors.transparent,
-              ),
-              cursorColor: fromCssColor(controller.woxTheme.value.queryBoxCursorColor),
-              autofocus: true,
-              focusNode: controller.actionFocusNode,
-              controller: controller.actionTextFieldController,
-              onChanged: (value) {
-                controller.onActionQueryBoxTextChanged(const UuidV4().generate(), value);
-              },
-            ),
-          ),
-        ));
   }
 
   @override

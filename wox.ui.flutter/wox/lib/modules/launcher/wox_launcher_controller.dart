@@ -81,11 +81,11 @@ class WoxLauncherController extends GetxController {
   final activeActionIndex = 0.obs;
   final isShowActionPanel = false.obs;
   final actionTextFieldController = TextEditingController();
-  final actionFocusNode = FocusNode();
   final actionScrollerController = ScrollController(initialScrollOffset: 0.0);
   Function(String) actionEscFunction = (String traceId) => {}; // the function to handle the esc key in the action panel
   final actionsTitle = "Actions".obs;
   var actionsType = WoxActionsTypeEnum.WOX_ACTIONS_TYPE_RESULT.code;
+  final actionListViewController = WoxListViewController();
 
   // ai chat related variables
   final aiChatFocusNode = FocusNode();
@@ -334,7 +334,9 @@ class WoxLauncherController extends GetxController {
 
   void showActionPanel(String traceId) {
     isShowActionPanel.value = true;
-    actionFocusNode.requestFocus();
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      actionListViewController.requestFocus();
+    });
     resizeHeight();
   }
 
@@ -1039,7 +1041,6 @@ class WoxLauncherController extends GetxController {
                 traceId,
                 WoxListItem(
                   id: result.id,
-                  woxTheme: woxTheme.value,
                   icon: result.icon.value,
                   title: result.title.value,
                   tails: result.tails,
