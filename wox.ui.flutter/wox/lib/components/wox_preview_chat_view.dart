@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -9,13 +11,34 @@ import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_toolbar.dart';
 import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
+import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/log.dart';
-import 'package:fluent_ui/fluent_ui.dart' as fluent;
+// 不再需要fluent_ui
+
+// Class to represent an item in the chat select panel
+class ChatSelectItem {
+  final String id;
+  final String name;
+  final WoxImage icon;
+  final bool isCategory;
+  final List<ChatSelectItem> children;
+  final Function(String traceId)? onExecute;
+
+  ChatSelectItem({
+    required this.id,
+    required this.name,
+    required this.icon,
+    required this.isCategory,
+    required this.children,
+    this.onExecute,
+  });
+}
 
 class WoxPreviewChatView extends StatefulWidget {
   final WoxPreviewChatData aiChatData;
@@ -29,14 +52,22 @@ class WoxPreviewChatView extends StatefulWidget {
 
 class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
   final TextEditingController textController = TextEditingController();
+  final TextEditingController chatSelectFilterController = TextEditingController();
+  final FocusNode chatSelectFilterFocusNode = FocusNode();
   final WoxLauncherController controller = Get.find<WoxLauncherController>();
+  final ScrollController _chatSelectScrollController = ScrollController();
+
+  // State for chat select panel
+  bool _isShowChatSelectPanel = false;
+  int _activeChatSelectIndex = 0;
+  List<ChatSelectItem> _chatSelectItems = [];
+  List<ChatSelectItem> _filteredChatSelectItems = [];
+  String _currentChatSelectCategory = "";
 
   // State for tool usage
-  bool _isToolUseEnabled = true;
   Set<String> _selectedTools = {};
   List<AIMCPTool> _availableTools = [];
   bool _isLoadingTools = false;
-  bool _isToolSectionExpanded = false; // State for expandable section
 
   @override
   void initState() {
@@ -46,11 +77,217 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
       controller.scrollToBottomOfAiChat();
     });
 
+    // Initialize chat select items
+    _initChatSelectItems();
+
     // Fetch tools if a model is selected initially
     if (widget.aiChatData.model.name.isNotEmpty) {
       // Don't await here, let it load in background
       _fetchAvailableTools();
     }
+
+    // Add listener to hide chat select panel when filter textbox loses focus
+    chatSelectFilterFocusNode.addListener(() {
+      if (!chatSelectFilterFocusNode.hasFocus && _isShowChatSelectPanel) {
+        // Use a small delay to allow for clicks on items to register first
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (!chatSelectFilterFocusNode.hasFocus && _isShowChatSelectPanel) {
+            _hideChatSelectPanel();
+          }
+        });
+      }
+    });
+  }
+
+  // Initialize chat select items
+  void _initChatSelectItems() {
+    // First level categories
+    _chatSelectItems = [
+      ChatSelectItem(
+          id: "models",
+          name: "Model Selection",
+          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
+          isCategory: true,
+          children: [],
+          onExecute: (String traceId) {
+            setState(() {
+              _currentChatSelectCategory = "models";
+              _activeChatSelectIndex = 0;
+              // Clear filter content
+              chatSelectFilterController.text = "";
+              _updateFilteredChatSelectItems();
+
+              // Ensure focus is on the filter textbox
+              SchedulerBinding.instance.addPostFrameCallback((_) {
+                chatSelectFilterFocusNode.requestFocus();
+              });
+            });
+          }),
+      ChatSelectItem(
+          id: "tools",
+          name: "Tool Configuration",
+          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
+          isCategory: true,
+          children: [],
+          onExecute: (String traceId) {
+            setState(() {
+              _currentChatSelectCategory = "tools";
+              _activeChatSelectIndex = 0;
+              // 清空过滤器内容
+              chatSelectFilterController.text = "";
+              _updateFilteredChatSelectItems();
+
+              // 确保焦点在过滤器文本框上
+              SchedulerBinding.instance.addPostFrameCallback((_) {
+                chatSelectFilterFocusNode.requestFocus();
+              });
+            });
+          }),
+    ];
+
+    _filteredChatSelectItems = List.from(_chatSelectItems);
+  }
+
+  // Update filtered chat select items based on current category and filter text
+  void _updateFilteredChatSelectItems() {
+    final filterText = chatSelectFilterController.text.toLowerCase();
+
+    if (_currentChatSelectCategory.isEmpty) {
+      // Show main categories
+      _filteredChatSelectItems = _chatSelectItems.where((item) => item.name.toLowerCase().contains(filterText)).toList();
+    } else if (_currentChatSelectCategory == "models") {
+      // Show models grouped by provider
+      _filteredChatSelectItems = [];
+
+      // Group models by provider
+      final modelsByProvider = <String, List<AIModel>>{};
+
+      // Filter and group models
+      for (final model in controller.aiModels) {
+        if (filterText.isEmpty || model.name.toLowerCase().contains(filterText) || model.provider.toLowerCase().contains(filterText)) {
+          modelsByProvider.putIfAbsent(model.provider, () => []).add(model);
+        }
+      }
+
+      // Sort providers
+      final providers = modelsByProvider.keys.toList()..sort();
+
+      // Add groups and models
+      for (final provider in providers) {
+        // Skip empty groups
+        if (modelsByProvider[provider]!.isEmpty) continue;
+
+        // Add provider group header
+        _filteredChatSelectItems.add(ChatSelectItem(
+          id: "group_$provider",
+          name: provider,
+          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🏢"),
+          isCategory: true,
+          children: [],
+        ));
+
+        // Sort models within this provider
+        final models = modelsByProvider[provider]!;
+        models.sort((a, b) => a.name.compareTo(b.name));
+
+        // Add models for this provider
+        for (final model in models) {
+          _filteredChatSelectItems.add(ChatSelectItem(
+              id: "${model.provider}_${model.name}",
+              name: model.name,
+              icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
+              isCategory: false,
+              children: [],
+              onExecute: (String traceId) {
+                widget.aiChatData.model = WoxPreviewChatModel(name: model.name, provider: model.provider);
+                _hideChatSelectPanel();
+              }));
+        }
+      }
+    } else if (_currentChatSelectCategory == "tools") {
+      // Show tools
+      _filteredChatSelectItems = _availableTools
+          .map((tool) => ChatSelectItem(
+              id: tool.name,
+              name: tool.name,
+              icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
+              isCategory: false,
+              children: [],
+              onExecute: (String traceId) {
+                setState(() {
+                  if (_selectedTools.contains(tool.name)) {
+                    _selectedTools.remove(tool.name);
+                  } else {
+                    _selectedTools.add(tool.name);
+                  }
+                  // 不关闭面板，让用户可以继续选择其他工具
+                });
+              }))
+          .where((item) => item.name.toLowerCase().contains(filterText))
+          .toList();
+    }
+
+    // Ensure active index is within bounds
+    if (_filteredChatSelectItems.isNotEmpty && _activeChatSelectIndex >= _filteredChatSelectItems.length) {
+      _activeChatSelectIndex = _filteredChatSelectItems.length - 1;
+    }
+  }
+
+  // Show chat select panel
+  void _showChatSelectPanel() {
+    setState(() {
+      _isShowChatSelectPanel = true;
+      _currentChatSelectCategory = "";
+      _activeChatSelectIndex = 0;
+      chatSelectFilterController.text = "";
+      _updateFilteredChatSelectItems();
+    });
+
+    // 确保在下一帧渲染后设置焦点
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      // 先清除任何现有焦点
+      FocusScope.of(context).unfocus();
+      // 然后请求过滤文本框的焦点
+      chatSelectFilterFocusNode.requestFocus();
+
+      // 打印日志以确认焦点请求
+      Logger.instance.debug(const UuidV4().generate(), "Requesting focus for chat select filter");
+    });
+  }
+
+  // Hide chat select panel
+  void _hideChatSelectPanel() {
+    setState(() {
+      _isShowChatSelectPanel = false;
+      chatSelectFilterController.text = "";
+    });
+    controller.aiChatFocusNode.requestFocus();
+  }
+
+  // Scroll to active item in the list
+  void _scrollToActiveItem() {
+    if (_filteredChatSelectItems.isEmpty) return;
+
+    // Use a post frame callback to ensure the list has been built
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      // Fixed item height - we use this for calculation
+      const itemHeight = 40.0;
+
+      // Calculate position to scroll to
+      final offset = _activeChatSelectIndex * itemHeight;
+
+      // Get visible area
+      const viewportHeight = 350.0; // Same as maxHeight constraint
+      final currentOffset = _chatSelectScrollController.offset;
+      final visibleStart = currentOffset;
+      final visibleEnd = currentOffset + viewportHeight;
+
+      // Only scroll if the item is not fully visible
+      if (offset < visibleStart || (offset + itemHeight) > visibleEnd) {
+        // Jump to position that centers the item
+        _chatSelectScrollController.jumpTo(math.max(0, offset - (viewportHeight / 2) + (itemHeight / 2)));
+      }
+    });
   }
 
   // Method to fetch available tools based on the current model
@@ -76,14 +313,13 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
     }
 
     try {
-      final apiParams = <String, dynamic>{}; // TODO: Fix tool fetching parameters
-
-      final tools = await WoxApi.instance.findAIMCPServerTools(apiParams);
+      // 使用findAIMCPServerToolsAll获取所有工具
+      final tools = await WoxApi.instance.findAIMCPServerToolsAll({});
       if (mounted) {
         setState(() {
           _availableTools = tools;
           // Default select all tools
-          _selectedTools = tools.map((tool) => tool.name).toSet(); // Assuming tool has 'name'
+          _selectedTools = tools.map((tool) => tool.name).toSet();
         });
       }
     } catch (e, s) {
@@ -103,321 +339,487 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
     }
   }
 
+  // Handle chat select panel keyboard navigation
+  void _handleChatSelectKeyboard(KeyEvent event) {
+    // 只处理特定的键盘事件，让其他键盘输入正常工作
+    if (event is KeyDownEvent) {
+      switch (event.logicalKey) {
+        case LogicalKeyboardKey.escape:
+          if (_currentChatSelectCategory.isNotEmpty) {
+            // Go back to main categories
+            setState(() {
+              _currentChatSelectCategory = "";
+              _activeChatSelectIndex = 0;
+              chatSelectFilterController.text = "";
+              _updateFilteredChatSelectItems();
+
+              // 返回主类别时，确保焦点在过滤器文本框上
+              SchedulerBinding.instance.addPostFrameCallback((_) {
+                chatSelectFilterFocusNode.requestFocus();
+              });
+            });
+          } else {
+            // Close panel
+            _hideChatSelectPanel();
+          }
+          return; // 返回KeyEventResult.handled
+        case LogicalKeyboardKey.arrowDown:
+          setState(() {
+            if (_filteredChatSelectItems.isNotEmpty) {
+              _activeChatSelectIndex = (_activeChatSelectIndex + 1) % _filteredChatSelectItems.length;
+              _scrollToActiveItem();
+            }
+          });
+          return; // 返回KeyEventResult.handled
+        case LogicalKeyboardKey.arrowUp:
+          setState(() {
+            if (_filteredChatSelectItems.isNotEmpty) {
+              _activeChatSelectIndex = (_activeChatSelectIndex - 1 + _filteredChatSelectItems.length) % _filteredChatSelectItems.length;
+              _scrollToActiveItem();
+            }
+          });
+          return; // 返回KeyEventResult.handled
+        case LogicalKeyboardKey.enter:
+          if (_filteredChatSelectItems.isNotEmpty) {
+            final selectedItem = _filteredChatSelectItems[_activeChatSelectIndex];
+            if (selectedItem.onExecute != null) {
+              selectedItem.onExecute!(const UuidV4().generate());
+            }
+          }
+          return; // 返回KeyEventResult.handled
+        default:
+          // 对于其他键，让它们正常处理（如文本输入）
+          return; // 返回KeyEventResult.ignored
+      }
+    }
+  }
+
+  // Build chat select panel
+  Widget _buildChatSelectPanel() {
+    return Positioned(
+      right: 10,
+      bottom: 10,
+      child: Material(
+        elevation: 8,
+        borderRadius: BorderRadius.circular(controller.woxTheme.value.actionQueryBoxBorderRadius.toDouble()),
+        child: Container(
+          padding: EdgeInsets.only(
+            top: controller.woxTheme.value.actionContainerPaddingTop.toDouble(),
+            bottom: controller.woxTheme.value.actionContainerPaddingBottom.toDouble(),
+            left: controller.woxTheme.value.actionContainerPaddingLeft.toDouble(),
+            right: controller.woxTheme.value.actionContainerPaddingRight.toDouble(),
+          ),
+          decoration: BoxDecoration(
+            color: fromCssColor(controller.woxTheme.value.actionContainerBackgroundColor),
+            borderRadius: BorderRadius.circular(controller.woxTheme.value.actionQueryBoxBorderRadius.toDouble()),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 320),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_currentChatSelectCategory.isEmpty ? "Chat Options" : (_currentChatSelectCategory == "models" ? "Select Model" : "Configure Tools"),
+                    style: TextStyle(color: fromCssColor(controller.woxTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
+                const Divider(),
+                // List of items
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 350),
+                  child: _filteredChatSelectItems.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Text(
+                              "No items found",
+                              style: TextStyle(color: fromCssColor(controller.woxTheme.value.actionItemFontColor)),
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          controller: _chatSelectScrollController,
+                          itemCount: _filteredChatSelectItems.length,
+                          // Variable height for items
+                          itemBuilder: (context, index) {
+                            final item = _filteredChatSelectItems[index];
+                            final isActive = index == _activeChatSelectIndex;
+
+                            // For tools category, show checkbox
+                            Widget? trailing;
+                            if (_currentChatSelectCategory == "tools") {
+                              trailing = Checkbox(
+                                value: _selectedTools.contains(item.id),
+                                onChanged: (value) {
+                                  setState(() {
+                                    if (value == true) {
+                                      _selectedTools.add(item.id);
+                                    } else {
+                                      _selectedTools.remove(item.id);
+                                    }
+                                  });
+                                },
+                              );
+                            } else if (item.isCategory) {
+                              trailing = const Icon(Icons.arrow_forward_ios, size: 16);
+                            }
+
+                            // Different styling for group headers vs regular items
+                            if (item.isCategory && _currentChatSelectCategory == "models") {
+                              // Group header style
+                              return Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.transparent,
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: fromCssColor(controller.woxTheme.value.actionItemFontColor).withOpacity(0.1),
+                                      width: 1,
+                                    ),
+                                  ),
+                                ),
+                                padding: const EdgeInsets.only(top: 8, left: 8, right: 8),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        WoxImageView(
+                                          woxImage: item.icon,
+                                          width: 16,
+                                          height: 16,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          item.name.toUpperCase(),
+                                          style: TextStyle(
+                                            color: fromCssColor(controller.woxTheme.value.actionItemFontColor),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                  ],
+                                ),
+                              );
+                            } else {
+                              // Regular item style
+                              return Container(
+                                decoration: BoxDecoration(
+                                  color: isActive ? fromCssColor(controller.woxTheme.value.actionItemActiveBackgroundColor) : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: ListTile(
+                                  dense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                                  leading: WoxImageView(
+                                    woxImage: item.icon,
+                                    width: 24,
+                                    height: 24,
+                                  ),
+                                  title: Text(
+                                    item.name,
+                                    style: TextStyle(
+                                      color: fromCssColor(isActive ? controller.woxTheme.value.actionItemActiveFontColor : controller.woxTheme.value.actionItemFontColor),
+                                    ),
+                                  ),
+                                  trailing: trailing,
+                                  onTap: () {
+                                    setState(() {
+                                      _activeChatSelectIndex = index;
+                                    });
+                                    if (item.onExecute != null) {
+                                      item.onExecute!(const UuidV4().generate());
+                                    }
+                                    if (item.isCategory) {
+                                      SchedulerBinding.instance.addPostFrameCallback((_) {
+                                        chatSelectFilterFocusNode.requestFocus();
+                                      });
+                                    }
+                                  },
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                ),
+                // Filter box
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: fromCssColor(controller.woxTheme.value.queryBoxBackgroundColor),
+                    borderRadius: BorderRadius.circular(controller.woxTheme.value.queryBoxBorderRadius.toDouble()),
+                  ),
+                  child: Focus(
+                    onKeyEvent: (FocusNode node, KeyEvent event) {
+                      // Only handle navigation keys, let TextField handle other keys
+                      if (event is KeyDownEvent) {
+                        switch (event.logicalKey) {
+                          case LogicalKeyboardKey.escape:
+                          case LogicalKeyboardKey.arrowDown:
+                          case LogicalKeyboardKey.arrowUp:
+                          case LogicalKeyboardKey.enter:
+                            _handleChatSelectKeyboard(event);
+                            return KeyEventResult.handled;
+                          default:
+                            return KeyEventResult.ignored;
+                        }
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: TextField(
+                      controller: chatSelectFilterController,
+                      focusNode: chatSelectFilterFocusNode,
+                      decoration: InputDecoration(
+                        hintText: 'Filter...',
+                        hintStyle: TextStyle(color: fromCssColor(controller.woxTheme.value.queryBoxFontColor).withOpacity(0.5)),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      style: TextStyle(
+                        color: fromCssColor(controller.woxTheme.value.queryBoxFontColor),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          _updateFilteredChatSelectItems();
+                        });
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: chat view");
 
-    return Column(
+    return Stack(
       children: [
-        // AI Model Selection
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: InkWell(
-            onTap: () => controller.showActionPanelForModelSelection(const UuidV4().generate(), widget.aiChatData),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-              decoration: BoxDecoration(
-                color: fromCssColor(widget.woxTheme.queryBoxBackgroundColor),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.1),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.smart_toy_outlined,
-                    size: 20,
-                    color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      widget.aiChatData.model.name.isEmpty ? "请选择模型" : widget.aiChatData.model.name,
-                      style: TextStyle(
-                        color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                  Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                    color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        // Messages list
-        Expanded(
-          child: SingleChildScrollView(
-            controller: controller.aiChatScrollController,
-            padding: const EdgeInsets.symmetric(vertical: 16.0),
-            child: Column(
-              children: widget.aiChatData.conversations.map((message) => buildMessageItem(message)).toList(),
-            ),
-          ),
-        ),
-        // Input box and controls area
-        Focus(
-          onFocusChange: (bool hasFocus) {
-            final traceId = const UuidV4().generate();
-            if (!hasFocus) {
-              controller.updateToolbarByActiveAction(traceId);
-            } else {
-              controller.updateToolbarByChat(traceId);
-            }
-          },
-          onKeyEvent: (FocusNode node, KeyEvent event) {
-            if (event is KeyDownEvent) {
-              switch (event.logicalKey) {
-                case LogicalKeyboardKey.escape:
-                  controller.focusQueryBox();
-                  return KeyEventResult.handled;
-                case LogicalKeyboardKey.enter:
-                  sendMessage();
-                  return KeyEventResult.handled;
-              }
-            }
+        Column(
+          children: [
+            // AI Model Selection
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: InkWell(
+                onTap: () {
+                  _showChatSelectPanel();
+                  setState(() {
+                    _currentChatSelectCategory = "models";
+                    _activeChatSelectIndex = 0;
+                    chatSelectFilterController.text = "";
+                    _updateFilteredChatSelectItems();
 
-            var pressedHotkey = WoxHotkey.parseNormalHotkeyFromEvent(event);
-            if (pressedHotkey == null) {
-              return KeyEventResult.ignored;
-            }
-
-            // list all models
-            if (controller.isActionHotkey(pressedHotkey)) {
-              controller.showActionPanelForModelSelection(const UuidV4().generate(), widget.aiChatData);
-              return KeyEventResult.handled;
-            }
-
-            return KeyEventResult.ignored;
-          },
-          // Wrap the input area content in a Column to place the expandable section above
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              // New outer Column
-              mainAxisSize: MainAxisSize.min, // Important for Column height
-              children: [
-                // --- Expandable Tool Section ---
-                _isToolSectionExpanded
-                    ? Column(
-                        children: [
-                          buildToolSelectionContent(),
-                          const SizedBox(height: 12),
-                        ],
-                      )
-                    : const SizedBox.shrink(),
-                // --- Input Box Container ---
-                Container(
+                    SchedulerBinding.instance.addPostFrameCallback((_) {
+                      chatSelectFilterFocusNode.requestFocus();
+                    });
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
                   decoration: BoxDecoration(
                     color: fromCssColor(widget.woxTheme.queryBoxBackgroundColor),
-                    borderRadius: BorderRadius.circular(widget.woxTheme.queryBoxBorderRadius.toDouble()),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.1),
+                    ),
                   ),
-                  child: Column(
+                  child: Row(
                     children: [
-                      TextField(
-                        controller: textController,
-                        focusNode: controller.aiChatFocusNode,
-                        decoration: InputDecoration(
-                          hintText: '在这里输入消息，按下 ← 发送',
-                          hintStyle: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor)),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        ),
-                        maxLines: null,
-                        keyboardType: TextInputType.multiline,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: fromCssColor(widget.woxTheme.queryBoxFontColor),
-                        ),
+                      Icon(
+                        Icons.smart_toy_outlined,
+                        size: 20,
+                        color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
                       ),
-                      // Input Box Toolbar (Send button, Tool icon)
-                      Container(
-                        height: 36,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            top: BorderSide(
-                              color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.1),
-                            ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          widget.aiChatData.model.name.isEmpty ? "请选择模型" : widget.aiChatData.model.name,
+                          style: TextStyle(
+                            color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
+                            fontSize: 14,
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            // tool use IconButton
-                            IconButton(
-                              tooltip: 'Configure Tool Usage',
-                              // Change icon based on expanded state? Optional.
-                              icon: Icon(Icons.build,
-                                  size: 18,
-                                  color: _isToolUseEnabled
-                                      ? Theme.of(context).colorScheme.primary // Use theme accent if enabled
-                                      : fromCssColor(widget.woxTheme.previewPropertyTitleColor)),
-                              color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
-                              // Toggle the expansion state on press
-                              onPressed: () {
-                                setState(() {
-                                  _isToolSectionExpanded = !_isToolSectionExpanded;
-                                });
-                                // Fetch tools only when expanding and if needed
-                                if (_isToolSectionExpanded && widget.aiChatData.model.name.isNotEmpty && _availableTools.isEmpty && !_isLoadingTools) {
-                                  _fetchAvailableTools();
-                                }
-                              },
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 32,
-                                minHeight: 32,
-                              ),
-                            ),
-                            const Spacer(),
-                            // Send button container (unchanged)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: fromCssColor(widget.woxTheme.actionItemActiveBackgroundColor).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.keyboard_return,
-                                    size: 14,
-                                    color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '发送',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                      ),
+                      Icon(
+                        Icons.arrow_forward_ios,
+                        size: 16,
+                        color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
                       ),
                     ],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget buildToolSelectionContent() {
-    // Use a container to provide background and shape
-    return Container(
-      margin: const EdgeInsets.only(bottom: 0), // Remove bottom margin if input box is directly below
-      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-      decoration: BoxDecoration(
-        color: fromCssColor(widget.woxTheme.queryBoxBackgroundColor), // Match input box background
-        borderRadius: BorderRadius.circular(widget.woxTheme.queryBoxBorderRadius.toDouble()),
-        border: Border(
-          top: BorderSide(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.1)),
-          left: BorderSide(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.1)),
-          right: BorderSide(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.1)),
-          bottom: BorderSide(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.1)),
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          // Enable/Disable Toggle
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Enable Tool Usage',
-                  style: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor)),
-                ),
-                Switch(
-                  value: _isToolUseEnabled,
-                  onChanged: (bool value) {
-                    // Use setState directly here as this content is built within the main state
-                    setState(() {
-                      _isToolUseEnabled = value;
-                    });
-                  },
-                ),
-              ],
-            ),
-          ),
-          // Conditional Divider and Tool List
-          if (_isToolUseEnabled) ...[
-            Divider(
-              color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.1),
-            ),
-            // Status messages or Tool List
-            if (widget.aiChatData.model.name.isEmpty)
-              Padding(
+            // Messages list
+            Expanded(
+              child: SingleChildScrollView(
+                controller: controller.aiChatScrollController,
                 padding: const EdgeInsets.symmetric(vertical: 16.0),
-                child: Center(child: Text('Please select a model first.', style: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor)))),
-              )
-            else if (_isLoadingTools)
-              const Padding(padding: EdgeInsets.symmetric(vertical: 16.0), child: Center(child: CircularProgressIndicator())) // Smaller progress ring
-            else if (_availableTools.isEmpty)
-              Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16.0),
-                  child: Center(child: Text('No tools available for this model.', style: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor)))))
-            else
-              // Constrain height and make scrollable if list is long
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 150), // Limit max height
-                child: ListView(
-                  padding: const EdgeInsets.only(top: 4.0, bottom: 4.0), // Add some padding
-                  shrinkWrap: true,
-                  children: _availableTools.map((tool) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 1.0),
-                      child: Row(
+                child: Column(
+                  children: widget.aiChatData.conversations.map((message) => buildMessageItem(message)).toList(),
+                ),
+              ),
+            ),
+            // Input box and controls area
+            Focus(
+              onFocusChange: (bool hasFocus) {
+                final traceId = const UuidV4().generate();
+                if (!hasFocus) {
+                  controller.updateToolbarByActiveAction(traceId);
+                } else {
+                  controller.updateToolbarByChat(traceId);
+                }
+              },
+              onKeyEvent: (FocusNode node, KeyEvent event) {
+                if (event is KeyDownEvent) {
+                  switch (event.logicalKey) {
+                    case LogicalKeyboardKey.escape:
+                      controller.focusQueryBox();
+                      return KeyEventResult.handled;
+                    case LogicalKeyboardKey.enter:
+                      sendMessage();
+                      return KeyEventResult.handled;
+                  }
+                }
+
+                var pressedHotkey = WoxHotkey.parseNormalHotkeyFromEvent(event);
+                if (pressedHotkey == null) {
+                  return KeyEventResult.ignored;
+                }
+
+                // Show chat select panel on Cmd+J
+                if (controller.isActionHotkey(pressedHotkey)) {
+                  _showChatSelectPanel();
+                  return KeyEventResult.handled;
+                }
+
+                return KeyEventResult.ignored;
+              },
+              // Wrap the input area content in a Column to place the expandable section above
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  // New outer Column
+                  mainAxisSize: MainAxisSize.min, // Important for Column height
+                  children: [
+                    // 不再需要可展开的工具部分，使用chat select panel代替
+                    const SizedBox.shrink(),
+                    // --- Input Box Container ---
+                    Container(
+                      decoration: BoxDecoration(
+                        color: fromCssColor(widget.woxTheme.queryBoxBackgroundColor),
+                        borderRadius: BorderRadius.circular(widget.woxTheme.queryBoxBorderRadius.toDouble()),
+                      ),
+                      child: Column(
                         children: [
-                          fluent.Checkbox(
-                            checked: _selectedTools.contains(tool.name),
-                            onChanged: (bool? selected) {
-                              setState(() {
-                                // Directly use setState
-                                if (selected == true) {
-                                  _selectedTools.add(tool.name);
-                                } else {
-                                  _selectedTools.remove(tool.name);
-                                }
-                              });
-                            },
+                          TextField(
+                            controller: textController,
+                            focusNode: controller.aiChatFocusNode,
+                            decoration: InputDecoration(
+                              hintText: '在这里输入消息，按下 ← 发送',
+                              hintStyle: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor)),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            ),
+                            maxLines: null,
+                            keyboardType: TextInputType.multiline,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: fromCssColor(widget.woxTheme.queryBoxFontColor),
+                            ),
                           ),
-                          const SizedBox(width: 8),
-                          fluent.Expanded(
-                            child: fluent.Text(
-                              tool.name,
-                              style: fluent.TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor)),
-                              overflow: fluent.TextOverflow.ellipsis,
+                          // Input Box Toolbar (Send button, Tool icon)
+                          Container(
+                            height: 36,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                top: BorderSide(
+                                  color: fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.1),
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                // Tool configuration button - opens chat select panel
+                                IconButton(
+                                  tooltip: 'Configure Tool Usage',
+                                  icon: Icon(Icons.build,
+                                      size: 18,
+                                      color: _selectedTools.isNotEmpty
+                                          ? Theme.of(context).colorScheme.primary
+                                          : fromCssColor(widget.woxTheme.previewPropertyTitleColor).withOpacity(0.5)),
+                                  color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
+                                  onPressed: () {
+                                    _showChatSelectPanel();
+                                    setState(() {
+                                      _currentChatSelectCategory = "tools";
+                                      _activeChatSelectIndex = 0;
+                                      chatSelectFilterController.text = "";
+                                      _updateFilteredChatSelectItems();
+
+                                      SchedulerBinding.instance.addPostFrameCallback((_) {
+                                        chatSelectFilterFocusNode.requestFocus();
+                                      });
+                                    });
+                                  },
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 32,
+                                    minHeight: 32,
+                                  ),
+                                ),
+                                const Spacer(),
+                                // Send button container (unchanged)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: fromCssColor(widget.woxTheme.actionItemActiveBackgroundColor).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.keyboard_return,
+                                        size: 14,
+                                        color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '发送',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: fromCssColor(widget.woxTheme.previewPropertyTitleColor),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    );
-                  }).toList(),
+                    ),
+                  ],
                 ),
               ),
+            ),
           ],
-        ],
-      ),
+        ),
+        if (_isShowChatSelectPanel) _buildChatSelectPanel(),
+      ],
     );
   }
-  // --- End Expandable Section Logic ---
 
   void sendMessage() {
     final text = textController.text.trim();
@@ -457,15 +859,10 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
       controller.scrollToBottomOfAiChat();
     });
 
-    // Pass tool usage info to the controller method
-    // IMPORTANT: Assumes sendChatRequest signature is updated like:
-    // sendChatRequest(String traceId, WoxPreviewChatData aiChatData, {bool isToolUseEnabled, Set<String> selectedTools})
+    widget.aiChatData.selectedTools = _selectedTools.toList();
     controller.sendChatRequest(
       const UuidV4().generate(),
       widget.aiChatData,
-      // TODO: Update WoxLauncherController.sendChatRequest to accept tool usage parameters
-      // isToolUseEnabled: _isToolUseEnabled,
-      // selectedTools: _selectedTools,
     );
   }
 

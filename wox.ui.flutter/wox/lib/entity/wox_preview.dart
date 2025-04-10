@@ -63,7 +63,18 @@ class WoxPreviewChatData {
   late int createdAt;
   late int updatedAt;
 
-  WoxPreviewChatData({required this.id, required this.title, required this.conversations, required this.model, required this.createdAt, required this.updatedAt});
+  // Selected tools list, not persisted
+  List<String>? selectedTools;
+
+  WoxPreviewChatData({
+    required this.id,
+    required this.title,
+    required this.conversations,
+    required this.model,
+    required this.createdAt,
+    required this.updatedAt,
+    this.selectedTools,
+  });
 
   static WoxPreviewChatData fromJson(Map<String, dynamic> json) {
     List<WoxPreviewChatConversation> conversations = [];
@@ -84,7 +95,7 @@ class WoxPreviewChatData {
   }
 
   Map<String, dynamic> toJson() {
-    return {
+    final Map<String, dynamic> json = {
       'Id': id,
       'Title': title,
       'Conversations': conversations.map((e) => e.toJson()).toList(),
@@ -92,6 +103,13 @@ class WoxPreviewChatData {
       'CreatedAt': createdAt,
       'UpdatedAt': updatedAt,
     };
+
+    // Add selected tools to JSON if available
+    if (selectedTools != null && selectedTools!.isNotEmpty) {
+      json['SelectedTools'] = selectedTools;
+    }
+
+    return json;
   }
 
   static WoxPreviewChatData empty() {
@@ -102,6 +120,7 @@ class WoxPreviewChatData {
       model: WoxPreviewChatModel(name: "", provider: ""),
       createdAt: 0,
       updatedAt: 0,
+      selectedTools: null,
     );
   }
 }

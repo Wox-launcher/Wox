@@ -60,6 +60,9 @@ type AIChatData struct {
 
 	CreatedAt int64
 	UpdatedAt int64
+
+	// Selected tools list, not persisted
+	SelectedTools []string `json:"omitempty"`
 }
 
 type AIChater interface {

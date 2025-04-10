@@ -14,6 +14,7 @@ import (
 	"wox/util/selection"
 
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 )
 
 var aiChatIcon = plugin.PluginAIChatIcon
@@ -313,8 +314,17 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData) {
 		}
 	}
 
+	var tools []common.MCPTool
+	if aiChatData.SelectedTools != nil && len(aiChatData.SelectedTools) > 0 {
+		tools = lo.Filter(r.mcpToolsMap, func(tool common.MCPTool, _ int) bool {
+			return lo.Contains(aiChatData.SelectedTools, tool.Name)
+		})
+	} else {
+		tools = r.mcpToolsMap
+	}
+
 	chatErr := r.api.AIChatStream(ctx, aiChatData.Model, aiChatData.Conversations, common.ChatOptions{
-		Tools: r.mcpToolsMap,
+		Tools: tools,
 	}, func(t common.ChatStreamDataType, data string) {
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("chat stream data: %s", data))
 
@@ -493,7 +503,7 @@ func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData
 		Id:   uuid.NewString(),
 		Role: common.ConversationRoleUser,
 		Text: `Please summarize our conversation above and provide a clear and concise title. Requirements:
-		1. The title should be no more than 10 characters. 
+		1. The title should be no more than 10 characters.
 		2. The language of the title should be the same as the language of the conversation.
 		3. The title should be a single sentence.
 		4. The response should be only the title, no other text.

@@ -899,7 +899,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// chat data should be AIChatData
+	// Parse chat data
 	chatData := common.AIChatData{}
 	err := json.Unmarshal([]byte(chatDataResult.String()), &chatData)
 	if err != nil {
@@ -907,7 +907,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// get ai chat plugin instance
+	// Get AI chat plugin instance
 	aiChatPlugin := plugin.GetPluginManager().GetPluginInstances()
 	aiChatPluginInstance, exist := lo.Find(aiChatPlugin, func(item *plugin.Instance) bool {
 		return item.Metadata.Id == "a9cfd85a-6e53-415c-9d44-68777aa6323d"
