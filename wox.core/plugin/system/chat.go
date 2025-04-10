@@ -270,6 +270,10 @@ func (r *AIChatPlugin) saveChats(ctx context.Context) {
 	r.api.SaveSetting(ctx, aiChatsSettingKey, string(chatsJson), false)
 }
 
+func (r *AIChatPlugin) GetAllTools(ctx context.Context) []common.MCPTool {
+	return r.mcpToolsMap
+}
+
 func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData) {
 	// add a new conversation for AI response
 	currentResponseConversationId := uuid.NewString()

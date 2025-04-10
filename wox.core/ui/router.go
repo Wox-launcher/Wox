@@ -59,11 +59,12 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/lang/json":      handleLangJson,
 
 	// ai
-	"/ai/providers": handleAIProviders,
-	"/ai/models":    handleAIModels,
-	"/ai/ping":      handleAIPing,
-	"/ai/chat":      handleAIChat,
-	"/ai/mcp/tools": handleAIMCPServerTools,
+	"/ai/providers":     handleAIProviders,
+	"/ai/models":        handleAIModels,
+	"/ai/ping":          handleAIPing,
+	"/ai/chat":          handleAIChat,
+	"/ai/mcp/tools":     handleAIMCPServerTools,
+	"/ai/mcp/tools/all": handleAIMCPServerToolsAll,
 
 	// doctor
 	"/doctor/check": handleDoctorCheck,
@@ -924,6 +925,36 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	chater.Chat(ctx, chatData)
 
 	writeSuccessResponse(w, "")
+}
+
+func handleAIMCPServerToolsAll(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+
+	// get ai chat plugin instance
+	aiChatPlugin := plugin.GetPluginManager().GetPluginInstances()
+	aiChatPluginInstance, exist := lo.Find(aiChatPlugin, func(item *plugin.Instance) bool {
+		return item.Metadata.Id == "a9cfd85a-6e53-415c-9d44-68777aa6323d"
+	})
+	if !exist {
+		writeErrorResponse(w, "ai chat plugin not found")
+		return
+	}
+	chater, ok := aiChatPluginInstance.Plugin.(common.AIChater)
+	if !ok {
+		writeErrorResponse(w, "ai chat plugin is not a AIChater")
+		return
+	}
+
+	tools := chater.GetAllTools(ctx)
+	results := lo.Map(tools, func(tool common.MCPTool, _ int) map[string]any {
+		return map[string]any{
+			"Name":        tool.Name,
+			"Description": tool.Description,
+			"Parameters":  tool.Parameters,
+		}
+	})
+
+	writeSuccessResponse(w, results)
 }
 
 func handleAIMCPServerTools(w http.ResponseWriter, r *http.Request) {

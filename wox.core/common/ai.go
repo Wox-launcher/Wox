@@ -64,6 +64,7 @@ type AIChatData struct {
 
 type AIChater interface {
 	Chat(ctx context.Context, aiChatData AIChatData)
+	GetAllTools(ctx context.Context) []MCPTool
 }
 
 var EmptyChatOptions = ChatOptions{}
