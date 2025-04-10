@@ -9,7 +9,9 @@ import 'package:get/get.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:lpinyin/lpinyin.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/wox_list_view.dart';
 import 'package:wox/entity/wox_ai.dart';
+import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/enums/wox_actions_type_enum.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
@@ -64,6 +66,7 @@ class WoxLauncherController extends GetxController {
   final hoveredResultIndex = (-1).obs; // -1 means no item is hovered
   final resultGlobalKeys = <GlobalKey>[]; // the global keys for each result item, used to calculate the position of the result item
   final resultScrollerController = ScrollController(initialScrollOffset: 0.0);
+  final resultListViewController = WoxListViewController();
 
   /// The timer to clear query results.
   /// On every query changed, it will reset the timer and will clear the query results after N ms.
@@ -618,39 +621,6 @@ class WoxLauncherController extends GetxController {
     return score > 50;
   }
 
-  void changeResultScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
-    final prevResultIndex = activeResultIndex.value;
-    updateActiveResultIndex(traceId, direction);
-    if (results.length < MAX_LIST_VIEW_ITEM_COUNT) {
-      results.refresh();
-      return;
-    }
-
-    if (direction == WoxDirectionEnum.WOX_DIRECTION_DOWN.code) {
-      if (activeResultIndex.value < prevResultIndex) {
-        resultScrollerController.jumpTo(0);
-      } else {
-        bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code
-            ? isResultItemAtBottom(activeResultIndex.value - 1)
-            : !isResultItemAtBottom(results.length - 1);
-        if (shouldJump) {
-          resultScrollerController.jumpTo(resultScrollerController.offset.ceil() + WoxThemeUtil.instance.getResultItemHeight() * (activeResultIndex.value - prevResultIndex).abs());
-        }
-      }
-    }
-    if (direction == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
-      if (activeResultIndex.value > prevResultIndex) {
-        resultScrollerController.jumpTo(WoxThemeUtil.instance.getResultListViewHeightByCount(results.length - MAX_LIST_VIEW_ITEM_COUNT));
-      } else {
-        bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code ? isResultItemAtTop(activeResultIndex.value + 1) : !isResultItemAtTop(0);
-        if (shouldJump) {
-          resultScrollerController.jumpTo(resultScrollerController.offset.ceil() - WoxThemeUtil.instance.getResultItemHeight() * (activeResultIndex.value - prevResultIndex).abs());
-        }
-      }
-    }
-    results.refresh();
-  }
-
   void changeActionScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
     updateActiveAction(traceId, direction);
     actions.refresh();
@@ -1046,8 +1016,7 @@ class WoxLauncherController extends GetxController {
             result.actions.assignAll(refreshResult.actions);
 
             // only update preview and toolbar when current result is active
-            final resultIndex = results.indexWhere((element) => element.id == result.id);
-            if (isResultActiveByIndex(resultIndex)) {
+            if (resultListViewController.isItemActive(result.id)) {
               currentPreview.value = result.preview;
               final oldShowPreview = isShowPreviewPanel.value;
               isShowPreviewPanel.value = currentPreview.value.previewData != "";
@@ -1064,6 +1033,20 @@ class WoxLauncherController extends GetxController {
 
             result.contextData = refreshResult.contextData;
             result.refreshInterval = refreshResult.refreshInterval;
+
+            // update result list view item
+            resultListViewController.update(
+                traceId,
+                WoxListItem(
+                  id: result.id,
+                  woxTheme: woxTheme.value,
+                  icon: result.icon.value,
+                  title: result.title.value,
+                  tails: result.tails,
+                  subTitle: result.subTitle.value,
+                  isGroup: result.isGroup,
+                ));
+
             isRequesting.remove(result.id);
           });
         }
@@ -1202,12 +1185,22 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
-    changeResultScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
+    resultListViewController.changeScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
   }
 
   void handleQueryBoxArrowDown() {
     canArrowUpHistory = false;
-    changeResultScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+    resultListViewController.changeScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+  }
+
+  void onResultItemActivated(String traceId, WoxListItem item) {
+    // find the result by item id
+    final resultIndex = results.indexWhere((element) => element.id == item.id);
+    if (resultIndex != -1) {
+      currentPreview.value = results[resultIndex].preview;
+      isShowPreviewPanel.value = currentPreview.value.previewData != "";
+      resetActionsByActiveResult(traceId, "update active result index");
+    }
   }
 
   String transferChineseToPinYin(String str) {

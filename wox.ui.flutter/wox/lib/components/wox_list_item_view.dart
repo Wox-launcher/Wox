@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:from_css_color/from_css_color.dart';
-import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
-import 'package:wox/entity/wox_query.dart';
-import 'package:wox/entity/wox_theme.dart';
+import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/enums/wox_result_tail_type_enum.dart';
@@ -15,32 +13,18 @@ import 'package:wox/utils/wox_setting_util.dart';
 import 'wox_hotkey_view.dart';
 
 class WoxListItemView extends StatelessWidget {
+  final WoxListItem item;
   final bool isActive;
   final bool isHovered;
-  final Rx<WoxImage> icon;
-  final Rx<String> title;
-  final Rx<String> subTitle;
-  final RxList<WoxQueryResultTail> tails;
-  final WoxTheme woxTheme;
   final WoxListViewType listViewType;
-  final bool isGroup;
 
   const WoxListItemView({
     super.key,
-    required this.woxTheme,
-    required this.icon,
-    required this.title,
-    required this.subTitle,
-    required this.tails,
+    required this.item,
     required this.isActive,
+    required this.isHovered,
     required this.listViewType,
-    required this.isGroup,
-    this.isHovered = false,
   });
-
-  bool isAction() {
-    return listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code;
-  }
 
   double getImageSize(WoxImage img, double defaultSize) {
     if (img.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
@@ -59,14 +43,14 @@ class WoxListItemView extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              for (final tail in tails)
+              for (final tail in item.tails)
                 if (tail.type == WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_TEXT.code && tail.text != null)
                   Padding(
                     padding: const EdgeInsets.only(left: 10.0),
                     child: Text(
                       tail.text!,
                       style: TextStyle(
-                        color: fromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
+                        color: fromCssColor(isActive ? item.woxTheme.resultItemActiveTailTextColor : item.woxTheme.resultItemTailTextColor),
                         fontSize: 12,
                       ),
                       maxLines: 1,
@@ -81,9 +65,9 @@ class WoxListItemView extends StatelessWidget {
                     padding: const EdgeInsets.only(left: 10.0),
                     child: WoxHotkeyView(
                       hotkey: tail.hotkey!,
-                      backgroundColor: isActive ? fromCssColor(woxTheme.resultItemActiveBackgroundColor) : fromCssColor(woxTheme.actionContainerBackgroundColor),
-                      borderColor: fromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
-                      textColor: fromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
+                      backgroundColor: isActive ? fromCssColor(item.woxTheme.resultItemActiveBackgroundColor) : fromCssColor(item.woxTheme.actionContainerBackgroundColor),
+                      borderColor: fromCssColor(isActive ? item.woxTheme.resultItemActiveTailTextColor : item.woxTheme.resultItemTailTextColor),
+                      textColor: fromCssColor(isActive ? item.woxTheme.resultItemActiveTailTextColor : item.woxTheme.resultItemTailTextColor),
                     ),
                   )
                 else if (tail.type == WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_IMAGE.code && tail.image != null && tail.image!.imageData.isNotEmpty)
@@ -104,106 +88,104 @@ class WoxListItemView extends StatelessWidget {
 
   Color getBackgroundColor() {
     if (isActive) {
-      return fromCssColor(isAction() ? woxTheme.actionItemActiveBackgroundColor : woxTheme.resultItemActiveBackgroundColor);
+      if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code) {
+        return fromCssColor(item.woxTheme.actionItemActiveBackgroundColor);
+      }
+      if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_CHAT.code) {
+        return fromCssColor(item.woxTheme.resultItemActiveBackgroundColor);
+      }
+      if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code) {
+        return fromCssColor(item.woxTheme.resultItemActiveBackgroundColor);
+      }
     } else if (isHovered) {
       // Use a lighter version of the active background color for hover state
-      final activeColor = fromCssColor(isAction() ? woxTheme.actionItemActiveBackgroundColor : woxTheme.resultItemActiveBackgroundColor);
-      return activeColor.withOpacity(0.3);
+      if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code) {
+        return fromCssColor(item.woxTheme.actionItemActiveBackgroundColor).withOpacity(0.3);
+      }
+      if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_CHAT.code) {
+        return fromCssColor(item.woxTheme.resultItemActiveBackgroundColor).withOpacity(0.3);
+      }
+      if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code) {
+        return fromCssColor(item.woxTheme.resultItemActiveBackgroundColor).withOpacity(0.3);
+      }
     }
+
     return Colors.transparent;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: list item view ${title.value} - container");
+    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: list item view ${item.title} - container");
 
     return Container(
       decoration: BoxDecoration(
         color: getBackgroundColor(),
-        borderRadius: BorderRadius.circular(isAction() ? 0.0 : woxTheme.resultItemBorderRadius.toDouble()),
+        borderRadius: BorderRadius.circular(listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code ? item.woxTheme.resultItemBorderRadius.toDouble() : 0.0),
         border: Border(
-            left: isAction()
+            left: listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
                 ? BorderSide.none
                 : BorderSide(
-                    color: isActive ? fromCssColor(woxTheme.resultItemActiveBackgroundColor) : Colors.transparent,
-                    width: isActive ? double.parse(woxTheme.resultItemActiveBorderLeft) : double.parse(woxTheme.resultItemBorderLeft),
+                    color: isActive ? fromCssColor(item.woxTheme.resultItemActiveBackgroundColor) : Colors.transparent,
+                    width: isActive ? double.parse(item.woxTheme.resultItemActiveBorderLeft) : double.parse(item.woxTheme.resultItemBorderLeft),
                   )),
       ),
-      padding: isAction()
-          ? EdgeInsets.zero
-          : EdgeInsets.only(
-              top: woxTheme.resultItemPaddingTop.toDouble(),
-              right: woxTheme.resultItemPaddingRight.toDouble(),
-              bottom: woxTheme.resultItemPaddingBottom.toDouble(),
-              left: woxTheme.resultItemPaddingLeft.toDouble(),
-            ),
+      padding: listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code
+          ? EdgeInsets.only(
+              top: item.woxTheme.resultItemPaddingTop.toDouble(),
+              right: item.woxTheme.resultItemPaddingRight.toDouble(),
+              bottom: item.woxTheme.resultItemPaddingBottom.toDouble(),
+              left: item.woxTheme.resultItemPaddingLeft.toDouble(),
+            )
+          : EdgeInsets.zero,
       child: Row(
         children: [
-          isGroup
+          item.isGroup
               ? const SizedBox()
               : Padding(
                   padding: const EdgeInsets.only(left: 5.0, right: 10.0),
-                  child: Obx(() {
-                    if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: list item view ${title.value} - icon");
-
-                    return WoxImageView(
-                      woxImage: icon.value,
-                      width: getImageSize(icon.value, 30),
-                      height: getImageSize(icon.value, 30),
-                    );
-                  })),
+                  child: WoxImageView(
+                    woxImage: item.icon,
+                    width: getImageSize(item.icon, 30),
+                    height: getImageSize(item.icon, 30),
+                  ),
+                ),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-              Obx(() {
-                if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: list item view ${title.value} - title");
-
-                return Text(
-                  title.value,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: isAction()
-                        ? fromCssColor(isActive ? woxTheme.actionItemActiveFontColor : woxTheme.actionItemFontColor)
-                        : fromCssColor(isActive ? woxTheme.resultItemActiveTitleColor : woxTheme.resultItemTitleColor),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  strutStyle: const StrutStyle(
-                    forceStrutHeight: true,
-                  ),
-                );
-              }),
-              Obx(() {
-                if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: list item view ${title.value} - subtitle");
-
-                return subTitle.isNotEmpty
-                    ? Padding(
-                        padding: const EdgeInsets.only(top: 2.0),
-                        child: Text(
-                          subTitle.value,
-                          style: TextStyle(
-                            color: fromCssColor(isActive ? woxTheme.resultItemActiveSubTitleColor : woxTheme.resultItemSubTitleColor),
-                            fontSize: 13,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          strutStyle: const StrutStyle(
-                            forceStrutHeight: true,
-                          ),
+              Text(
+                item.title,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
+                      ? fromCssColor(isActive ? item.woxTheme.actionItemActiveFontColor : item.woxTheme.actionItemFontColor)
+                      : fromCssColor(isActive ? item.woxTheme.resultItemActiveTitleColor : item.woxTheme.resultItemTitleColor),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                strutStyle: const StrutStyle(
+                  forceStrutHeight: true,
+                ),
+              ),
+              item.subTitle.isNotEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 2.0),
+                      child: Text(
+                        item.subTitle,
+                        style: TextStyle(
+                          color: fromCssColor(isActive ? item.woxTheme.resultItemActiveSubTitleColor : item.woxTheme.resultItemSubTitleColor),
+                          fontSize: 13,
                         ),
-                      )
-                    : const SizedBox();
-              }),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        strutStyle: const StrutStyle(
+                          forceStrutHeight: true,
+                        ),
+                      ),
+                    )
+                  : const SizedBox(),
             ]),
           ),
           // Tails
-          Obx(() {
-            if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: list item view ${title.value} - tails");
-            if (tails.isNotEmpty) {
-              return buildTails();
-            } else {
-              return const SizedBox();
-            }
-          }),
+          if (item.tails.isNotEmpty) buildTails() else const SizedBox(),
         ],
       ),
     );

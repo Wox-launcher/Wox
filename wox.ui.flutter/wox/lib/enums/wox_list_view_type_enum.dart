@@ -2,6 +2,7 @@ typedef WoxListViewType = String;
 
 enum WoxListViewTypeEnum {
   WOX_LIST_VIEW_TYPE_RESULT("result", "for query result list view"),
+  WOX_LIST_VIEW_TYPE_CHAT("chat", "for chat select panel view"),
   WOX_LIST_VIEW_TYPE_ACTION("action", "for result action list view");
 
   final String code;

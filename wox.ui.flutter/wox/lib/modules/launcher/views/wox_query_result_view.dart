@@ -1,13 +1,14 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_list_item_view.dart';
+import 'package:wox/components/wox_list_view.dart';
 import 'package:wox/components/wox_preview_view.dart';
 import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_event_device_type_enum.dart';
@@ -52,15 +53,19 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                   itemBuilder: (context, index) {
                     WoxResultAction woxResultAction = controller.geActionByIndex(index);
                     return WoxListItemView(
-                      key: ValueKey(woxResultAction.id),
-                      woxTheme: controller.woxTheme.value,
-                      icon: woxResultAction.icon,
-                      title: woxResultAction.name,
-                      tails: getHotkeyTails(woxResultAction),
-                      subTitle: "".obs,
-                      isActive: controller.isActionActiveByIndex(index),
                       listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code,
-                      isGroup: false,
+                      key: ValueKey(woxResultAction.id),
+                      item: WoxListItem(
+                        id: woxResultAction.id,
+                        woxTheme: controller.woxTheme.value,
+                        icon: woxResultAction.icon.value,
+                        title: woxResultAction.name.value,
+                        tails: getHotkeyTails(woxResultAction),
+                        subTitle: "",
+                        isGroup: false,
+                      ),
+                      isActive: controller.isActionActiveByIndex(index),
+                      isHovered: controller.isResultHoveredByIndex(index),
                     );
                   },
                 ),
@@ -122,75 +127,26 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
         bottom: controller.woxTheme.value.resultContainerPaddingBottom.toDouble(),
         left: controller.woxTheme.value.resultContainerPaddingLeft.toDouble(),
       ),
-      child: Scrollbar(
-        controller: controller.resultScrollerController,
-        child: Listener(
-          onPointerSignal: (event) {
-            if (event is PointerScrollEvent) {
-              controller.changeResultScrollPosition(
-                const UuidV4().generate(),
-                WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_MOUSE.code,
-                event.scrollDelta.dy > 0 ? WoxDirectionEnum.WOX_DIRECTION_DOWN.code : WoxDirectionEnum.WOX_DIRECTION_UP.code,
-              );
-            }
-          },
-          child: ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            controller: controller.resultScrollerController,
-            itemCount: controller.results.length,
-            itemExtent: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
-            itemBuilder: (context, index) {
-              WoxQueryResult woxQueryResult = controller.getQueryResultByIndex(index);
-              return MouseRegion(
-                onEnter: (_) {
-                  if (controller.isMouseMoved && !woxQueryResult.isGroup) {
-                    Logger.instance.info(const UuidV4().generate(), "MOUSE: onenter, is mouse moved: ${controller.isMouseMoved}, is group: ${woxQueryResult.isGroup}");
-                    controller.setHoveredResultIndex(index);
-                  }
-                },
-                onHover: (_) {
-                  if (!controller.isMouseMoved && !woxQueryResult.isGroup) {
-                    Logger.instance.info(const UuidV4().generate(), "MOUSE: onHover, is mouse moved: ${controller.isMouseMoved}, is group: ${woxQueryResult.isGroup}");
-                    controller.isMouseMoved = true;
-                    controller.setHoveredResultIndex(index);
-                  }
-                },
-                onExit: (_) {
-                  if (!woxQueryResult.isGroup && controller.hoveredResultIndex.value == index) {
-                    controller.clearHoveredResult();
-                  }
-                },
-                child: GestureDetector(
-                  onTap: () {
-                    if (!woxQueryResult.isGroup) {
-                      controller.focusQueryBox();
-                      controller.setActiveResultIndex(index);
-                    }
-                  },
-                  onDoubleTap: () {
-                    if (!woxQueryResult.isGroup) {
-                      controller.focusQueryBox();
-                      controller.onEnter(const UuidV4().generate());
-                    }
-                  },
-                  child: WoxListItemView(
-                    key: controller.getResultItemGlobalKeyByIndex(index),
-                    woxTheme: controller.woxTheme.value,
-                    icon: woxQueryResult.icon,
-                    title: woxQueryResult.title,
-                    tails: woxQueryResult.tails,
-                    subTitle: woxQueryResult.subTitle,
-                    isActive: controller.isResultActiveByIndex(index),
-                    isHovered: controller.isResultHoveredByIndex(index),
-                    listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code,
-                    isGroup: woxQueryResult.isGroup,
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
+      child: WoxListView(
+        controller: controller.resultListViewController,
+        listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code,
+        items: controller.results
+            .map((result) => WoxListItem(
+                  id: result.id,
+                  woxTheme: controller.woxTheme.value,
+                  icon: result.icon.value,
+                  title: result.title.value,
+                  tails: result.tails,
+                  subTitle: result.subTitle.value,
+                  isGroup: result.isGroup,
+                ))
+            .toList(),
+        onItemDoubleTap: (item) {
+          controller.onEnter(const UuidV4().generate());
+        },
+        onItemActive: (item) {
+          controller.onResultItemActivated(const UuidV4().generate(), item);
+        },
       ),
     );
   }
