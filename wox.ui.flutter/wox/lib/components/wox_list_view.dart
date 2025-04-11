@@ -13,7 +13,6 @@ import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_event_device_type_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
-import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
@@ -24,7 +23,7 @@ class WoxListView extends StatefulWidget {
   final WoxListViewType listViewType;
   final bool showFilter;
   final WoxListViewController? controller;
-
+  final double maxHeight;
   // events
   final Function(WoxListItem item)? onItemExecuted; // double tap on item or enter on filter box
   final Function(WoxListItem item)? onItemActive;
@@ -37,6 +36,7 @@ class WoxListView extends StatefulWidget {
     required this.woxTheme,
     this.showFilter = true,
     this.controller,
+    required this.maxHeight,
     this.onItemExecuted,
     this.onItemActive,
     this.onFilterEscPressed,
@@ -160,8 +160,7 @@ class _WoxListViewState extends State<WoxListView> {
     RenderBox? renderBox = resultGlobalKeys[index].currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return false;
 
-    if (renderBox.localToGlobal(Offset.zero).dy.ceil() >=
-        WoxThemeUtil.instance.getQueryBoxHeight() + WoxThemeUtil.instance.getResultListViewHeightByCount(MAX_LIST_VIEW_ITEM_COUNT - 1)) {
+    if (renderBox.localToGlobal(Offset.zero).dy.ceil() >= WoxThemeUtil.instance.getQueryBoxHeight() + WoxThemeUtil.instance.getMaxResultListViewHeight()) {
       return true;
     }
     return false;
@@ -177,7 +176,7 @@ class _WoxListViewState extends State<WoxListView> {
   void changeScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
     final prevResultIndex = activeIndex;
     updateActiveIndex(traceId, direction);
-    if (widget.items.length < MAX_LIST_VIEW_ITEM_COUNT) {
+    if (widget.items.length < WoxThemeUtil.instance.getMaxResultCount()) {
       return;
     }
 
@@ -193,7 +192,7 @@ class _WoxListViewState extends State<WoxListView> {
     }
     if (direction == WoxDirectionEnum.WOX_DIRECTION_UP.code) {
       if (activeIndex > prevResultIndex) {
-        scrollerController.jumpTo(WoxThemeUtil.instance.getResultListViewHeightByCount(widget.items.length - MAX_LIST_VIEW_ITEM_COUNT));
+        scrollerController.jumpTo(WoxThemeUtil.instance.getMaxResultListViewHeight());
       } else {
         bool shouldJump = deviceType == WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code ? isItemAtTop(activeIndex + 1) : !isItemAtTop(0);
         if (shouldJump) {
@@ -233,201 +232,216 @@ class _WoxListViewState extends State<WoxListView> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // list view
-        Scrollbar(
-          controller: scrollerController,
-          child: Listener(
-            onPointerSignal: (event) {
-              if (event is PointerScrollEvent) {
-                changeScrollPosition(
-                  const UuidV4().generate(),
-                  WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_MOUSE.code,
-                  event.scrollDelta.dy > 0 ? WoxDirectionEnum.WOX_DIRECTION_DOWN.code : WoxDirectionEnum.WOX_DIRECTION_UP.code,
-                );
-              }
-            },
-            child: ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              controller: scrollerController,
-              itemCount: getFilteredItems().length,
-              itemExtent: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
-              itemBuilder: (context, index) {
-                WoxListItem item = getFilteredItems()[index];
-                return MouseRegion(
-                  key: resultGlobalKeys[index],
-                  onEnter: (_) {
-                    if (isMouseMoved && !item.isGroup) {
-                      Logger.instance.info(const UuidV4().generate(), "MOUSE: onenter, is mouse moved: $isMouseMoved, is group: ${item.isGroup}");
-                      setState(() {
-                        hoveredResultIndex = index;
-                      });
-                    }
-                  },
-                  onHover: (_) {
-                    if (!isMouseMoved && !item.isGroup) {
-                      Logger.instance.info(const UuidV4().generate(), "MOUSE: onHover, is mouse moved: $isMouseMoved, is group: ${item.isGroup}");
-                      isMouseMoved = true;
-                      setState(() {
-                        hoveredResultIndex = index;
-                      });
-                    }
-                  },
-                  onExit: (_) {
-                    if (!item.isGroup && hoveredResultIndex == index) {
-                      setState(() {
-                        hoveredResultIndex = -1;
-                      });
-                    }
-                  },
-                  child: GestureDetector(
-                    onTap: () {
-                      if (!item.isGroup) {
-                        setState(() {
-                          activeIndex = index;
-                        });
-                        widget.onItemActive?.call(item);
-                      }
-                    },
-                    onDoubleTap: () {
-                      if (!item.isGroup) {
-                        widget.onItemExecuted?.call(item);
-                      }
-                    },
-                    child: WoxListItemView(
-                      item: WoxListItem(
-                        id: item.id,
-                        icon: item.icon,
-                        title: item.title,
-                        tails: item.tails,
-                        subTitle: item.subTitle,
-                        isGroup: item.isGroup,
-                      ),
-                      woxTheme: widget.woxTheme,
-                      isActive: activeIndex == index,
-                      isHovered: hoveredResultIndex == index,
-                      listViewType: widget.listViewType,
-                    ),
-                  ),
-                );
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: widget.maxHeight, maxWidth: 200),
+      child: Column(
+        children: [
+          // list view
+          Scrollbar(
+            controller: scrollerController,
+            thumbVisibility: true,
+            child: Listener(
+              onPointerSignal: (event) {
+                if (event is PointerScrollEvent) {
+                  changeScrollPosition(
+                    const UuidV4().generate(),
+                    WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_MOUSE.code,
+                    event.scrollDelta.dy > 0 ? WoxDirectionEnum.WOX_DIRECTION_DOWN.code : WoxDirectionEnum.WOX_DIRECTION_UP.code,
+                  );
+                }
               },
+              child: ListView.builder(
+                shrinkWrap: true,
+                controller: scrollerController,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: getFilteredItems().length,
+                itemExtent: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
+                itemBuilder: (context, index) {
+                  WoxListItem item = getFilteredItems()[index];
+                  return MouseRegion(
+                    key: resultGlobalKeys[index],
+                    onEnter: (_) {
+                      if (isMouseMoved && !item.isGroup) {
+                        Logger.instance.info(const UuidV4().generate(), "MOUSE: onenter, is mouse moved: $isMouseMoved, is group: ${item.isGroup}");
+                        setState(() {
+                          hoveredResultIndex = index;
+                        });
+                      }
+                    },
+                    onHover: (_) {
+                      if (!isMouseMoved && !item.isGroup) {
+                        Logger.instance.info(const UuidV4().generate(), "MOUSE: onHover, is mouse moved: $isMouseMoved, is group: ${item.isGroup}");
+                        isMouseMoved = true;
+                        setState(() {
+                          hoveredResultIndex = index;
+                        });
+                      }
+                    },
+                    onExit: (_) {
+                      if (!item.isGroup && hoveredResultIndex == index) {
+                        setState(() {
+                          hoveredResultIndex = -1;
+                        });
+                      }
+                    },
+                    child: GestureDetector(
+                      onTap: () {
+                        if (!item.isGroup) {
+                          setState(() {
+                            activeIndex = index;
+                          });
+                          widget.onItemActive?.call(item);
+                        }
+                      },
+                      onDoubleTap: () {
+                        if (!item.isGroup) {
+                          widget.onItemExecuted?.call(item);
+                        }
+                      },
+                      child: WoxListItemView(
+                        item: WoxListItem(
+                          id: item.id,
+                          icon: item.icon,
+                          title: item.title,
+                          tails: item.tails,
+                          subTitle: item.subTitle,
+                          isGroup: item.isGroup,
+                        ),
+                        woxTheme: widget.woxTheme,
+                        isActive: activeIndex == index,
+                        isHovered: hoveredResultIndex == index,
+                        listViewType: widget.listViewType,
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
-        ),
 
-        // optional filterbox
-        if (widget.showFilter)
-          Focus(
-              onKeyEvent: (FocusNode node, KeyEvent event) {
-                var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
-                if (!isAnyModifierPressed) {
-                  if (event is KeyDownEvent) {
-                    switch (event.logicalKey) {
-                      case LogicalKeyboardKey.escape:
-                        widget.onFilterEscPressed?.call();
-                        return KeyEventResult.handled;
-                      case LogicalKeyboardKey.arrowDown:
-                        changeScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
-                        return KeyEventResult.handled;
-                      case LogicalKeyboardKey.arrowUp:
-                        changeScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
-                        return KeyEventResult.handled;
-                      case LogicalKeyboardKey.enter:
-                        widget.onItemExecuted?.call(widget.items[activeIndex]);
-                        return KeyEventResult.handled;
+          // optional filterbox
+          if (widget.showFilter)
+            Focus(
+                onKeyEvent: (FocusNode node, KeyEvent event) {
+                  var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
+                  if (!isAnyModifierPressed) {
+                    if (event is KeyDownEvent) {
+                      switch (event.logicalKey) {
+                        case LogicalKeyboardKey.escape:
+                          widget.onFilterEscPressed?.call();
+                          return KeyEventResult.handled;
+                        case LogicalKeyboardKey.arrowDown:
+                          changeScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+                          return KeyEventResult.handled;
+                        case LogicalKeyboardKey.arrowUp:
+                          changeScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
+                          return KeyEventResult.handled;
+                        case LogicalKeyboardKey.enter:
+                          widget.onItemExecuted?.call(widget.items[activeIndex]);
+                          return KeyEventResult.handled;
+                      }
+                    }
+
+                    if (event is KeyRepeatEvent) {
+                      switch (event.logicalKey) {
+                        case LogicalKeyboardKey.arrowDown:
+                          changeScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+                          return KeyEventResult.handled;
+                        case LogicalKeyboardKey.arrowUp:
+                          changeScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
+                          return KeyEventResult.handled;
+                      }
                     }
                   }
 
-                  if (event is KeyRepeatEvent) {
-                    switch (event.logicalKey) {
-                      case LogicalKeyboardKey.arrowDown:
-                        changeScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
-                        return KeyEventResult.handled;
-                      case LogicalKeyboardKey.arrowUp:
-                        changeScrollPosition(const UuidV4().generate(), WoxEventDeviceTypeEnum.WOX_EVENT_DEVEICE_TYPE_KEYBOARD.code, WoxDirectionEnum.WOX_DIRECTION_UP.code);
-                        return KeyEventResult.handled;
-                    }
+                  var pressedHotkey = WoxHotkey.parseNormalHotkeyFromEvent(event);
+                  if (pressedHotkey == null) {
+                    return KeyEventResult.ignored;
                   }
-                }
 
-                var pressedHotkey = WoxHotkey.parseNormalHotkeyFromEvent(event);
-                if (pressedHotkey == null) {
-                  return KeyEventResult.ignored;
-                }
+                  // check if the pressed hotkey is matched with any item
+                  WoxListItem? itemMatchedHotkey = widget.items.firstWhereOrNull((element) {
+                    if (element.hotkey == null || element.hotkey!.isEmpty) {
+                      return false;
+                    }
 
-                // check if the pressed hotkey is matched with any item
-                WoxListItem? itemMatchedHotkey = widget.items.firstWhereOrNull((element) {
-                  if (element.hotkey == null || element.hotkey!.isEmpty) {
+                    var elementHotkey = WoxHotkey.parseHotkeyFromString(element.hotkey!);
+                    if (elementHotkey != null && WoxHotkey.equals(elementHotkey.normalHotkey, pressedHotkey)) {
+                      return true;
+                    }
+
                     return false;
+                  });
+
+                  if (itemMatchedHotkey == null) {
+                    return KeyEventResult.ignored;
+                  } else {
+                    widget.onItemExecuted?.call(itemMatchedHotkey);
+                    return KeyEventResult.handled;
                   }
-
-                  var elementHotkey = WoxHotkey.parseHotkeyFromString(element.hotkey!);
-                  if (elementHotkey != null && WoxHotkey.equals(elementHotkey.normalHotkey, pressedHotkey)) {
-                    return true;
-                  }
-
-                  return false;
-                });
-
-                if (itemMatchedHotkey == null) {
-                  return KeyEventResult.ignored;
-                } else {
-                  widget.onItemExecuted?.call(itemMatchedHotkey);
-                  return KeyEventResult.handled;
-                }
-              },
-              child: Padding(
-                padding: const EdgeInsets.only(top: 6.0),
-                child: SizedBox(
-                  height: 40.0,
-                  child: TextField(
-                    style: TextStyle(
-                      fontSize: 14.0,
-                      color: fromCssColor(widget.woxTheme.actionQueryBoxFontColor),
-                    ),
-                    decoration: InputDecoration(
-                      isCollapsed: true,
-                      contentPadding: const EdgeInsets.only(
-                        left: 8,
-                        right: 8,
-                        top: 20,
-                        bottom: 18,
+                },
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6.0),
+                  child: SizedBox(
+                    height: 40.0,
+                    child: TextField(
+                      style: TextStyle(
+                        fontSize: 14.0,
+                        color: fromCssColor(widget.woxTheme.actionQueryBoxFontColor),
                       ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(widget.woxTheme.actionQueryBoxBorderRadius.toDouble()),
-                        borderSide: BorderSide.none,
+                      decoration: InputDecoration(
+                        isCollapsed: true,
+                        contentPadding: const EdgeInsets.only(
+                          left: 8,
+                          right: 8,
+                          top: 20,
+                          bottom: 18,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(widget.woxTheme.actionQueryBoxBorderRadius.toDouble()),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: fromCssColor(widget.woxTheme.actionQueryBoxBackgroundColor),
+                        hoverColor: Colors.transparent,
                       ),
-                      filled: true,
-                      fillColor: fromCssColor(widget.woxTheme.actionQueryBoxBackgroundColor),
-                      hoverColor: Colors.transparent,
+                      cursorColor: fromCssColor(widget.woxTheme.queryBoxCursorColor),
+                      focusNode: filterBoxFocusNode,
+                      controller: filterBoxController,
+                      onChanged: (value) {
+                        //refresh
+                        setState(() {
+                          activeIndex = 0;
+                        });
+                      },
                     ),
-                    cursorColor: fromCssColor(widget.woxTheme.queryBoxCursorColor),
-                    focusNode: filterBoxFocusNode,
-                    controller: filterBoxController,
-                    onChanged: (value) {
-                      //refresh
-                      setState(() {});
-                    },
                   ),
-                ),
-              ))
-      ],
+                ))
+        ],
+      ),
     );
   }
 }
 
 class WoxListViewController extends ChangeNotifier {
-  _WoxListViewState? _state;
+  final Map<String, _WoxListViewState> _states = {};
+  String? _activeStateId;
 
   void _attach(_WoxListViewState state) {
-    _state = state;
+    String viewId = state.widget.key?.toString() ?? const UuidV4().generate();
+    _states[viewId] = state;
+    _activeStateId = viewId;
   }
 
   void _detach() {
-    _state = null;
+    if (_activeStateId != null) {
+      _states.remove(_activeStateId);
+      _activeStateId = _states.isNotEmpty ? _states.keys.first : null;
+    }
   }
+
+  // 获取当前活跃的State
+  _WoxListViewState? get _state => _activeStateId != null ? _states[_activeStateId] : null;
 
   void changeScrollPosition(String traceId, WoxEventDeviceType deviceType, WoxDirection direction) {
     if (_state != null) {

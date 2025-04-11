@@ -1,6 +1,7 @@
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/utils/consts.dart';
+import 'package:wox/utils/wox_setting_util.dart';
 
 class WoxThemeUtil {
   late WoxTheme _currentTheme;
@@ -41,7 +42,19 @@ class WoxThemeUtil {
     return getResultItemHeight() * count;
   }
 
-  double getResultContainerMaxHeight() {
-    return getResultListViewHeightByCount(MAX_LIST_VIEW_ITEM_COUNT) + currentTheme.resultContainerPaddingTop + currentTheme.resultContainerPaddingBottom;
+  int getMaxResultCount() {
+    var maxResultCount = WoxSettingUtil.instance.currentSetting.maxResultCount;
+    if (maxResultCount == 0) {
+      maxResultCount = MAX_LIST_VIEW_ITEM_COUNT;
+    }
+    return maxResultCount;
+  }
+
+  double getMaxResultListViewHeight() {
+    return getResultListViewHeightByCount(getMaxResultCount());
+  }
+
+  double getMaxResultContainerHeight() {
+    return getMaxResultListViewHeight() + currentTheme.resultContainerPaddingTop + currentTheme.resultContainerPaddingBottom;
   }
 }

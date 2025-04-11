@@ -17,7 +17,7 @@ import '../wox_launcher_controller.dart';
 class WoxQueryResultView extends GetView<WoxLauncherController> {
   const WoxQueryResultView({super.key});
 
-  RxList<WoxQueryResultTail> getHotkeyTails(WoxResultAction action) {
+  List<WoxQueryResultTail> getHotkeyTails(WoxResultAction action) {
     var tails = <WoxQueryResultTail>[];
     if (action.hotkey != "") {
       var hotkey = WoxHotkey.parseHotkeyFromString(action.hotkey);
@@ -25,7 +25,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
         tails.add(WoxQueryResultTail.hotkey(hotkey));
       }
     }
-    return tails.obs;
+    return tails;
   }
 
   Widget getActionPanelView() {
@@ -48,39 +48,40 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                   borderRadius: BorderRadius.circular(controller.woxTheme.value.actionQueryBoxBorderRadius.toDouble()),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Colors.black.withValues(alpha: 0.1),
                       spreadRadius: 2,
                       blurRadius: 8,
                       offset: const Offset(0, 3),
                     ),
                   ],
                 ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 320),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(controller.actionsTitle.value, style: TextStyle(color: fromCssColor(controller.woxTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
-                      const Divider(),
-                      Obx(() => WoxListView(
-                            controller: controller.actionListViewController,
-                            items: controller.actions
-                                .map((action) => WoxListItem(
-                                      id: action.id,
-                                      icon: action.icon.value,
-                                      title: action.name.value,
-                                      hotkey: action.hotkey,
-                                      tails: [],
-                                      subTitle: "",
-                                      isGroup: false,
-                                    ))
-                                .toList(),
-                            woxTheme: controller.woxTheme.value,
-                            listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code,
-                          )),
-                    ],
-                  ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(controller.actionsTitle.value, style: TextStyle(color: fromCssColor(controller.woxTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
+                    const Divider(),
+                    Obx(() => WoxListView(
+                          controller: controller.actionListViewController,
+                          maxHeight: 320,
+                          items: controller.actions
+                              .map((action) => WoxListItem(
+                                    id: action.id,
+                                    icon: action.icon.value,
+                                    title: action.name.value,
+                                    hotkey: action.hotkey,
+                                    tails: getHotkeyTails(action),
+                                    subTitle: "",
+                                    isGroup: false,
+                                  ))
+                              .toList(),
+                          woxTheme: controller.woxTheme.value,
+                          listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code,
+                          onFilterEscPressed: () {
+                            controller.hideActionPanel(const UuidV4().generate());
+                          },
+                        )),
+                  ],
                 ),
               ),
             )
@@ -99,6 +100,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
       child: WoxListView(
         controller: controller.resultListViewController,
         listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code,
+        maxHeight: WoxThemeUtil.instance.getMaxResultListViewHeight(),
         showFilter: false,
         items: controller.results
             .map((result) => WoxListItem(
@@ -173,7 +175,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
   @override
   Widget build(BuildContext context) {
     return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: WoxThemeUtil.instance.getResultContainerMaxHeight()),
+      constraints: BoxConstraints(maxHeight: WoxThemeUtil.instance.getMaxResultContainerHeight()),
       child: Obx(() => Stack(
             fit: controller.isShowActionPanel.value || controller.isShowPreviewPanel.value ? StackFit.expand : StackFit.loose,
             children: [
