@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:get/get.dart';
 import 'package:wox/api/wox_api.dart';
+import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
-import 'package:wox/modules/setting/wox_setting_controller.dart';
 
 class WoxAIModelSelectorView extends StatefulWidget {
   /// Initial selected model in JSON string format

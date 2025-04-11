@@ -1,7 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:get/get.dart';
+import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_plugin_setting.dart';
-import 'package:wox/modules/setting/wox_setting_controller.dart';
 
 abstract class WoxSettingPluginItem extends StatelessWidget {
   final String value;

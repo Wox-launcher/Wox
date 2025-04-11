@@ -1,7 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' as material;
 import 'package:get/get.dart';
-import 'package:wox/modules/setting/wox_setting_controller.dart';
+import 'package:wox/controllers/wox_setting_controller.dart';
 
 class WoxTooltipView extends StatefulWidget {
   final String tooltip;

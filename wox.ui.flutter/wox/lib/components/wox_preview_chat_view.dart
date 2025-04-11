@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_image.dart';
@@ -17,11 +18,9 @@ import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_toolbar.dart';
 import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
-import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/log.dart';
-// 不再需要fluent_ui
+import 'package:wox/utils/wox_theme_util.dart';
 
-// Class to represent an item in the chat select panel
 class ChatSelectItem {
   final String id;
   final String name;
@@ -401,17 +400,17 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
       bottom: 10,
       child: Material(
         elevation: 8,
-        borderRadius: BorderRadius.circular(controller.woxTheme.value.actionQueryBoxBorderRadius.toDouble()),
+        borderRadius: BorderRadius.circular(WoxThemeUtil.instance.currentTheme.value.actionQueryBoxBorderRadius.toDouble()),
         child: Container(
           padding: EdgeInsets.only(
-            top: controller.woxTheme.value.actionContainerPaddingTop.toDouble(),
-            bottom: controller.woxTheme.value.actionContainerPaddingBottom.toDouble(),
-            left: controller.woxTheme.value.actionContainerPaddingLeft.toDouble(),
-            right: controller.woxTheme.value.actionContainerPaddingRight.toDouble(),
+            top: WoxThemeUtil.instance.currentTheme.value.actionContainerPaddingTop.toDouble(),
+            bottom: WoxThemeUtil.instance.currentTheme.value.actionContainerPaddingBottom.toDouble(),
+            left: WoxThemeUtil.instance.currentTheme.value.actionContainerPaddingLeft.toDouble(),
+            right: WoxThemeUtil.instance.currentTheme.value.actionContainerPaddingRight.toDouble(),
           ),
           decoration: BoxDecoration(
-            color: fromCssColor(controller.woxTheme.value.actionContainerBackgroundColor),
-            borderRadius: BorderRadius.circular(controller.woxTheme.value.actionQueryBoxBorderRadius.toDouble()),
+            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionContainerBackgroundColor),
+            borderRadius: BorderRadius.circular(WoxThemeUtil.instance.currentTheme.value.actionQueryBoxBorderRadius.toDouble()),
           ),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 320),
@@ -421,7 +420,7 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(_currentChatSelectCategory.isEmpty ? "Chat Options" : (_currentChatSelectCategory == "models" ? "Select Model" : "Configure Tools"),
-                    style: TextStyle(color: fromCssColor(controller.woxTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
+                    style: TextStyle(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
                 const Divider(),
                 // List of items
                 ConstrainedBox(
@@ -432,7 +431,7 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
                             padding: const EdgeInsets.all(16.0),
                             child: Text(
                               "No items found",
-                              style: TextStyle(color: fromCssColor(controller.woxTheme.value.actionItemFontColor)),
+                              style: TextStyle(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemFontColor)),
                             ),
                           ),
                         )
@@ -472,7 +471,7 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
                                   color: Colors.transparent,
                                   border: Border(
                                     bottom: BorderSide(
-                                      color: fromCssColor(controller.woxTheme.value.actionItemFontColor).withOpacity(0.1),
+                                      color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemFontColor).withOpacity(0.1),
                                       width: 1,
                                     ),
                                   ),
@@ -492,7 +491,7 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
                                         Text(
                                           item.name.toUpperCase(),
                                           style: TextStyle(
-                                            color: fromCssColor(controller.woxTheme.value.actionItemFontColor),
+                                            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemFontColor),
                                             fontSize: 12,
                                             fontWeight: FontWeight.bold,
                                           ),
@@ -507,7 +506,7 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
                               // Regular item style
                               return Container(
                                 decoration: BoxDecoration(
-                                  color: isActive ? fromCssColor(controller.woxTheme.value.actionItemActiveBackgroundColor) : Colors.transparent,
+                                  color: isActive ? fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor) : Colors.transparent,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: ListTile(
@@ -521,7 +520,9 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
                                   title: Text(
                                     item.name,
                                     style: TextStyle(
-                                      color: fromCssColor(isActive ? controller.woxTheme.value.actionItemActiveFontColor : controller.woxTheme.value.actionItemFontColor),
+                                      color: fromCssColor(isActive
+                                          ? WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor
+                                          : WoxThemeUtil.instance.currentTheme.value.actionItemFontColor),
                                     ),
                                   ),
                                   trailing: trailing,
@@ -549,8 +550,8 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
                   margin: const EdgeInsets.only(top: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   decoration: BoxDecoration(
-                    color: fromCssColor(controller.woxTheme.value.queryBoxBackgroundColor),
-                    borderRadius: BorderRadius.circular(controller.woxTheme.value.queryBoxBorderRadius.toDouble()),
+                    color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxBackgroundColor),
+                    borderRadius: BorderRadius.circular(WoxThemeUtil.instance.currentTheme.value.queryBoxBorderRadius.toDouble()),
                   ),
                   child: Focus(
                     onKeyEvent: (FocusNode node, KeyEvent event) {
@@ -574,12 +575,12 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
                       focusNode: chatSelectFilterFocusNode,
                       decoration: InputDecoration(
                         hintText: 'Filter...',
-                        hintStyle: TextStyle(color: fromCssColor(controller.woxTheme.value.queryBoxFontColor).withOpacity(0.5)),
+                        hintStyle: TextStyle(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor).withOpacity(0.5)),
                         border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(vertical: 8),
                       ),
                       style: TextStyle(
-                        color: fromCssColor(controller.woxTheme.value.queryBoxFontColor),
+                        color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor),
                       ),
                       onChanged: (value) {
                         setState(() {
@@ -671,12 +672,12 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
             // Input box and controls area
             Focus(
               onFocusChange: (bool hasFocus) {
-                final traceId = const UuidV4().generate();
-                if (!hasFocus) {
-                  controller.updateToolbarByActiveAction(traceId);
-                } else {
-                  controller.updateToolbarByChat(traceId);
-                }
+                // final traceId = const UuidV4().generate();
+                // if (!hasFocus) {
+                //   controller.updateToolbarByActiveAction(traceId);
+                // } else {
+                //   controller.updateToolbarByChat(traceId);
+                // }
               },
               onKeyEvent: (FocusNode node, KeyEvent event) {
                 if (event is KeyDownEvent) {
@@ -911,7 +912,8 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
                         selectable: true,
                         styleSheet: MarkdownStyleSheet(
                           p: TextStyle(
-                            color: fromCssColor(isUser ? controller.woxTheme.value.resultItemActiveTitleColor : controller.woxTheme.value.resultItemTitleColor),
+                            color: fromCssColor(
+                                isUser ? WoxThemeUtil.instance.currentTheme.value.resultItemActiveTitleColor : WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
                             fontSize: 14,
                           ),
                           // TODO: Add styling for code blocks, lists etc based on theme
@@ -943,7 +945,7 @@ class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
                     formatTimestamp(message.timestamp),
                     style: TextStyle(
                       fontSize: 11,
-                      color: fromCssColor(controller.woxTheme.value.resultItemSubTitleColor),
+                      color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor),
                     ),
                   ),
                 ),

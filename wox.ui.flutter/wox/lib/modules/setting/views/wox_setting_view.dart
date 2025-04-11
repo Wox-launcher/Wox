@@ -2,11 +2,11 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/modules/setting/views/wox_setting_ui_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_ai_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_data_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_theme_view.dart';
-import 'package:wox/modules/setting/wox_setting_controller.dart';
 
 import 'wox_setting_plugin_view.dart';
 import 'wox_setting_general_view.dart';

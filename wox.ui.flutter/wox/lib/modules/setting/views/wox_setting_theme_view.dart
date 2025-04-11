@@ -5,7 +5,7 @@ import 'package:get/get.dart';
 import 'package:wox/components/wox_theme_icon_view.dart';
 import 'package:wox/components/wox_theme_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
-import 'package:wox/modules/setting/wox_setting_controller.dart';
+import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/strings.dart';
 

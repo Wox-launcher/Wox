@@ -91,14 +91,14 @@ class QueryHistory {
 class WoxQueryResult {
   late String queryId;
   late String id;
-  late Rx<String> title;
-  late Rx<String> subTitle;
-  late Rx<WoxImage> icon;
+  late String title;
+  late String subTitle;
+  late WoxImage icon;
   late WoxPreview preview;
   late int score;
   late String group;
   late int groupScore;
-  late RxList<WoxQueryResultTail> tails;
+  late List<WoxQueryResultTail> tails;
   late String contextData;
 
   late List<WoxResultAction> actions;
@@ -126,16 +126,16 @@ class WoxQueryResult {
   WoxQueryResult.empty() {
     queryId = "";
     id = "";
-    title = "".obs;
-    subTitle = "".obs;
-    icon = WoxImage.empty().obs;
+    title = "";
+    subTitle = "";
+    icon = WoxImage.empty();
     preview = WoxPreview.empty();
     score = 0;
     group = "";
     groupScore = 0;
-    tails = RxList<WoxQueryResultTail>();
+    tails = [];
     contextData = "";
-    actions = RxList<WoxResultAction>();
+    actions = [];
     refreshInterval = 0;
     isGroup = false;
   }
@@ -143,9 +143,9 @@ class WoxQueryResult {
   WoxQueryResult.fromJson(Map<String, dynamic> json) {
     queryId = json['QueryId'];
     id = json['Id'];
-    title = RxString(json['Title']);
-    subTitle = RxString(json['SubTitle']);
-    icon = (json['Icon'] != null ? WoxImage.fromJson(json['Icon']).obs : null)!;
+    title = json['Title'];
+    subTitle = json['SubTitle'];
+    icon = (json['Icon'] != null ? WoxImage.fromJson(json['Icon']) : null)!;
     preview = (json['Preview'] != null ? WoxPreview.fromJson(json['Preview']) : null)!;
     score = json['Score'];
     group = json['Group'];
@@ -153,21 +153,21 @@ class WoxQueryResult {
     contextData = json['ContextData'];
 
     if (json['Tails'] != null) {
-      tails = RxList();
+      tails = [];
       json['Tails'].forEach((v) {
         tails.add(WoxQueryResultTail.fromJson(v));
       });
     } else {
-      tails = RxList();
+      tails = [];
     }
 
     if (json['Actions'] != null) {
-      actions = RxList<WoxResultAction>();
+      actions = [];
       json['Actions'].forEach((v) {
         actions.add(WoxResultAction.fromJson(v));
       });
     } else {
-      actions = RxList<WoxResultAction>();
+      actions = [];
     }
 
     refreshInterval = json['RefreshInterval'];
@@ -261,8 +261,8 @@ class WoxQueryResultTail {
 
 class WoxResultAction {
   late String id;
-  late Rx<String> name;
-  late Rx<WoxImage> icon;
+  late String name;
+  late WoxImage icon;
   late bool isDefault;
   late bool preventHideAfterAction;
   late String hotkey;
@@ -282,8 +282,8 @@ class WoxResultAction {
 
   WoxResultAction.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
-    name = RxString(json['Name']);
-    icon = (json['Icon'] != null ? WoxImage.fromJson(json['Icon']).obs : null)!;
+    name = json['Name'];
+    icon = (json['Icon'] != null ? WoxImage.fromJson(json['Icon']) : null)!;
     isDefault = json['IsDefault'];
     preventHideAfterAction = json['PreventHideAfterAction'];
     if (json['Hotkey'] != null) {
@@ -296,8 +296,8 @@ class WoxResultAction {
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
     data['Id'] = id;
-    data['Name'] = name.value;
-    data['Icon'] = icon.value.toJson();
+    data['Name'] = name;
+    data['Icon'] = icon.toJson();
     data['IsDefault'] = isDefault;
     data['PreventHideAfterAction'] = preventHideAfterAction;
     data['Hotkey'] = hotkey;
@@ -306,13 +306,13 @@ class WoxResultAction {
   }
 
   static WoxResultAction empty() {
-    return WoxResultAction(id: "", name: "".obs, icon: WoxImage.empty().obs, isDefault: false, preventHideAfterAction: false, hotkey: "", isSystemAction: false);
+    return WoxResultAction(id: "", name: "", icon: WoxImage.empty(), isDefault: false, preventHideAfterAction: false, hotkey: "", isSystemAction: false);
   }
 
   bool equals(WoxResultAction other) {
     return id == other.id &&
-        name.value == other.name.value &&
-        icon.value.imageData == other.icon.value.imageData &&
+        name == other.name &&
+        icon.imageData == other.icon.imageData &&
         isDefault == other.isDefault &&
         preventHideAfterAction == other.preventHideAfterAction &&
         hotkey == other.hotkey &&

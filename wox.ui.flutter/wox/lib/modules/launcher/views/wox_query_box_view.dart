@@ -5,9 +5,10 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_drag_move_view.dart';
 import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
-import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/wox_theme_util.dart';
 
 class WoxQueryBoxView extends GetView<WoxLauncherController> {
   const WoxQueryBoxView({super.key});
@@ -87,13 +88,13 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   child: Theme(
                     data: ThemeData(
                       textSelectionTheme: TextSelectionThemeData(
-                        selectionColor: fromCssColor(controller.woxTheme.value.queryBoxTextSelectionColor),
+                        selectionColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionColor),
                       ),
                     ),
                     child: TextField(
                       style: TextStyle(
                         fontSize: 28.0,
-                        color: fromCssColor(controller.woxTheme.value.queryBoxFontColor),
+                        color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor),
                       ),
                       decoration: InputDecoration(
                         contentPadding: const EdgeInsets.only(
@@ -103,14 +104,14 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                           bottom: 17,
                         ),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(controller.woxTheme.value.queryBoxBorderRadius.toDouble()),
+                          borderRadius: BorderRadius.circular(WoxThemeUtil.instance.currentTheme.value.queryBoxBorderRadius.toDouble()),
                           borderSide: BorderSide.none,
                         ),
                         filled: true,
-                        fillColor: fromCssColor(controller.woxTheme.value.queryBoxBackgroundColor),
+                        fillColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxBackgroundColor),
                         hoverColor: Colors.transparent,
                       ),
-                      cursorColor: fromCssColor(controller.woxTheme.value.queryBoxCursorColor),
+                      cursorColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxCursorColor),
                       focusNode: controller.queryBoxFocusNode,
                       controller: controller.queryBoxTextFieldController,
                       scrollController: controller.queryBoxScrollController,

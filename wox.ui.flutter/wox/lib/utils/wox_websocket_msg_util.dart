@@ -4,12 +4,12 @@ import 'dart:convert';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_toolbar.dart';
 import 'package:wox/entity/wox_websocket_msg.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/enums/wox_msg_method_enum.dart';
-import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/log.dart';
 
 class WoxWebsocketMsgUtil {

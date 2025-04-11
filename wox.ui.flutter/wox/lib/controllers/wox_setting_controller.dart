@@ -3,10 +3,10 @@ import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
+import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_backup.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_theme.dart';
-import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 
@@ -53,7 +53,6 @@ class WoxSettingController extends GetxController {
     await WoxApi.instance.updateSetting(key, value);
     await reloadSetting();
     Logger.instance.info(const UuidV4().generate(), 'Setting updated: $key=$value');
-
 
     if (key == "AIProviders") {
       Get.find<WoxLauncherController>().reloadAIModels();

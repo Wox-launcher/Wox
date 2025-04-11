@@ -13,6 +13,7 @@ import 'package:wox/components/plugin/wox_setting_plugin_select_ai_model_view.da
 import 'package:wox/components/plugin/wox_setting_plugin_select_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_label.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select_ai_model.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
@@ -24,7 +25,6 @@ import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_textbox.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_checkbox_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_textbox_view.dart';
-import 'package:wox/modules/setting/wox_setting_controller.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/strings.dart';
 

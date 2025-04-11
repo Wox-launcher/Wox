@@ -4,9 +4,9 @@ import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_ai_model_selector_view.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
+import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_hotkey.dart';
-import 'package:wox/modules/setting/wox_setting_controller.dart';
 import 'package:wox/utils/picker.dart';
 import 'package:get/get.dart';
 

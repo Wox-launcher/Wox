@@ -5,8 +5,8 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_hotkey_view.dart';
 import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
-import 'package:wox/modules/launcher/wox_launcher_controller.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
@@ -32,7 +32,7 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
                 builder: (context, constraints) {
                   final textSpan = TextSpan(
                     text: toolbarInfo.text ?? '',
-                    style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor)),
+                    style: TextStyle(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
                   );
                   final textPainter = TextPainter(
                     text: textSpan,
@@ -47,7 +47,7 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
                       Expanded(
                         child: Text(
                           toolbarInfo.text ?? '',
-                          style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor)),
+                          style: TextStyle(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),
@@ -68,7 +68,7 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
                               child: Obx(() => Text(
                                     controller.toolbarCopyText.value,
                                     style: TextStyle(
-                                      color: fromCssColor(controller.woxTheme.value.toolbarFontColor),
+                                      color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
                                       fontSize: 12,
                                       decoration: TextDecoration.underline,
                                     ),
@@ -102,15 +102,15 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
         children: [
           Text(
             toolbarInfo.actionName ?? '',
-            style: TextStyle(color: fromCssColor(controller.woxTheme.value.toolbarFontColor)),
+            style: TextStyle(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(width: 8),
           WoxHotkeyView(
             hotkey: hotkey!,
-            backgroundColor: fromCssColor(controller.woxTheme.value.toolbarBackgroundColor),
-            borderColor: fromCssColor(controller.woxTheme.value.toolbarFontColor),
-            textColor: fromCssColor(controller.woxTheme.value.toolbarFontColor),
+            backgroundColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor),
+            borderColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+            textColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
           )
         ],
       );
@@ -126,16 +126,19 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
         height: WoxThemeUtil.instance.getToolbarHeight(),
         child: Container(
           decoration: BoxDecoration(
-            color: fromCssColor(controller.woxTheme.value.toolbarBackgroundColor),
+            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor),
             border: Border(
               top: BorderSide(
-                color: fromCssColor(controller.woxTheme.value.toolbarFontColor).withOpacity(0.1),
+                color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor).withOpacity(0.1),
                 width: 1,
               ),
             ),
           ),
           child: Padding(
-            padding: EdgeInsets.only(left: controller.woxTheme.value.toolbarPaddingLeft.toDouble(), right: controller.woxTheme.value.toolbarPaddingRight.toDouble()),
+            padding: EdgeInsets.only(
+              left: WoxThemeUtil.instance.currentTheme.value.toolbarPaddingLeft.toDouble(),
+              right: WoxThemeUtil.instance.currentTheme.value.toolbarPaddingRight.toDouble(),
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,

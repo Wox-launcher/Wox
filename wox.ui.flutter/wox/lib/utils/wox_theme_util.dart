@@ -1,10 +1,11 @@
+import 'package:get/get.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 
 class WoxThemeUtil {
-  late WoxTheme _currentTheme;
+  final Rx<WoxTheme> _currentTheme = WoxTheme.empty().obs;
 
   WoxThemeUtil._privateConstructor();
 
@@ -18,17 +19,17 @@ class WoxThemeUtil {
   }
 
   changeTheme(WoxTheme theme) {
-    _currentTheme = theme;
+    _currentTheme.value = theme;
   }
 
-  WoxTheme get currentTheme => _currentTheme;
+  Rx<WoxTheme> get currentTheme => _currentTheme;
 
   double getQueryBoxHeight() {
-    return QUERY_BOX_BASE_HEIGHT + currentTheme.appPaddingTop + currentTheme.appPaddingBottom;
+    return QUERY_BOX_BASE_HEIGHT + currentTheme.value.appPaddingTop + currentTheme.value.appPaddingBottom;
   }
 
   double getResultItemHeight() {
-    return RESULT_ITEM_BASE_HEIGHT + currentTheme.resultItemPaddingTop + currentTheme.resultItemPaddingBottom;
+    return RESULT_ITEM_BASE_HEIGHT + currentTheme.value.resultItemPaddingTop + currentTheme.value.resultItemPaddingBottom;
   }
 
   double getToolbarHeight() {
@@ -55,6 +56,6 @@ class WoxThemeUtil {
   }
 
   double getMaxResultContainerHeight() {
-    return getMaxResultListViewHeight() + currentTheme.resultContainerPaddingTop + currentTheme.resultContainerPaddingBottom;
+    return getMaxResultListViewHeight() + currentTheme.value.resultContainerPaddingTop + currentTheme.value.resultContainerPaddingBottom;
   }
 }
