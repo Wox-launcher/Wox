@@ -60,9 +60,6 @@ class WoxAIChatController extends GetxController {
       onFilterBoxEscPressed: (traceId) => hideChatSelectPanel(),
     );
 
-    // Initialize chat select items
-    _initChatSelectItems();
-
     // Load AI models
     reloadAIModels();
 
@@ -81,7 +78,6 @@ class WoxAIChatController extends GetxController {
     });
   }
 
-  // 处理聊天选择项的执行
   void _onChatSelectItemExecuted(String traceId, WoxListItem<ChatSelectItem> item) {
     final chatSelectItem = item.data;
     if (chatSelectItem.onExecute != null) {
@@ -89,55 +85,9 @@ class WoxAIChatController extends GetxController {
     }
   }
 
-  // Initialize chat select items
-  void _initChatSelectItems() {
-    // First level categories
-    final List<WoxListItem<ChatSelectItem>> items = [
-      WoxListItem<ChatSelectItem>(
-        id: "models",
-        icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
-        title: "Model Selection",
-        subTitle: "",
-        tails: [],
-        isGroup: true,
-        data: ChatSelectItem(
-            id: "models",
-            name: "Model Selection",
-            icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
-            isCategory: true,
-            children: [],
-            onExecute: (String traceId) {
-              currentChatSelectCategory.value = "models";
-              updateChatSelectItems();
-            }),
-      ),
-      WoxListItem<ChatSelectItem>(
-        id: "tools",
-        icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
-        title: "Tool Configuration",
-        subTitle: "",
-        tails: [],
-        isGroup: true,
-        data: ChatSelectItem(
-            id: "tools",
-            name: "Tool Configuration",
-            icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
-            isCategory: true,
-            children: [],
-            onExecute: (String traceId) {
-              currentChatSelectCategory.value = "tools";
-              updateChatSelectItems();
-            }),
-      ),
-    ];
-
-    chatSelectListController.updateItems(const UuidV4().generate(), items);
-  }
-
   // Update chat select items based on current category
   void updateChatSelectItems() {
     final List<WoxListItem<ChatSelectItem>> items = [];
-    final filterText = chatSelectListController.filterBoxController.text.toLowerCase();
 
     if (currentChatSelectCategory.isEmpty) {
       // Show main categories
@@ -147,7 +97,7 @@ class WoxAIChatController extends GetxController {
         title: "Model Selection",
         subTitle: "",
         tails: [],
-        isGroup: true,
+        isGroup: false,
         data: ChatSelectItem(
             id: "models",
             name: "Model Selection",
@@ -156,6 +106,7 @@ class WoxAIChatController extends GetxController {
             children: [],
             onExecute: (String traceId) {
               currentChatSelectCategory.value = "models";
+              chatSelectListController.clearFilter(traceId);
               updateChatSelectItems();
             }),
       ));
@@ -166,7 +117,7 @@ class WoxAIChatController extends GetxController {
         title: "Tool Configuration",
         subTitle: "",
         tails: [],
-        isGroup: true,
+        isGroup: false,
         data: ChatSelectItem(
             id: "tools",
             name: "Tool Configuration",
@@ -175,6 +126,7 @@ class WoxAIChatController extends GetxController {
             children: [],
             onExecute: (String traceId) {
               currentChatSelectCategory.value = "tools";
+              chatSelectListController.clearFilter(traceId);
               updateChatSelectItems();
             }),
       ));
@@ -182,12 +134,8 @@ class WoxAIChatController extends GetxController {
       // Show models grouped by provider
       // Group models by provider
       final modelsByProvider = <String, List<AIModel>>{};
-
-      // Filter and group models
       for (final model in aiModels) {
-        if (filterText.isEmpty || model.name.toLowerCase().contains(filterText) || model.provider.toLowerCase().contains(filterText)) {
-          modelsByProvider.putIfAbsent(model.provider, () => []).add(model);
-        }
+        modelsByProvider.putIfAbsent(model.provider, () => []).add(model);
       }
 
       // Sort providers
@@ -245,30 +193,27 @@ class WoxAIChatController extends GetxController {
     } else if (currentChatSelectCategory.value == "tools") {
       // Show tools
       for (final tool in availableTools) {
-        if (filterText.isEmpty || tool.name.toLowerCase().contains(filterText)) {
-          items.add(WoxListItem<ChatSelectItem>(
-            id: tool.name,
-            icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
-            title: tool.name,
-            subTitle: "",
-            tails: [],
-            isGroup: false,
-            data: ChatSelectItem(
-                id: tool.name,
-                name: tool.name,
-                icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
-                isCategory: false,
-                children: [],
-                onExecute: (String traceId) {
-                  if (selectedTools.contains(tool.name)) {
-                    selectedTools.remove(tool.name);
-                  } else {
-                    selectedTools.add(tool.name);
-                  }
-                  // 不关闭面板，让用户可以继续选择其他工具
-                }),
-          ));
-        }
+        items.add(WoxListItem<ChatSelectItem>(
+          id: tool.name,
+          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
+          title: tool.name,
+          subTitle: "",
+          tails: [],
+          isGroup: false,
+          data: ChatSelectItem(
+              id: tool.name,
+              name: tool.name,
+              icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
+              isCategory: false,
+              children: [],
+              onExecute: (String traceId) {
+                if (selectedTools.contains(tool.name)) {
+                  selectedTools.remove(tool.name);
+                } else {
+                  selectedTools.add(tool.name);
+                }
+              }),
+        ));
       }
     }
 
@@ -310,7 +255,7 @@ class WoxAIChatController extends GetxController {
   // Hide chat select panel
   void hideChatSelectPanel() {
     isShowChatSelectPanel.value = false;
-    chatSelectListController.filterBoxController.text = "";
+    chatSelectListController.clearFilter(const UuidV4().generate());
     aiChatFocusNode.requestFocus();
   }
 

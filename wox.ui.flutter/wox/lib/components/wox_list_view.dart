@@ -121,16 +121,10 @@ class WoxListView<T> extends StatelessWidget {
                       controller.onFilterBoxEscPressed?.call(traceId);
                       return KeyEventResult.handled;
                     case LogicalKeyboardKey.arrowDown:
-                      controller.updateActiveIndexByDirection(
-                        traceId,
-                        WoxDirectionEnum.WOX_DIRECTION_DOWN.code,
-                      );
+                      controller.updateActiveIndexByDirection(traceId, WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
                       return KeyEventResult.handled;
                     case LogicalKeyboardKey.arrowUp:
-                      controller.updateActiveIndexByDirection(
-                        traceId,
-                        WoxDirectionEnum.WOX_DIRECTION_UP.code,
-                      );
+                      controller.updateActiveIndexByDirection(traceId, WoxDirectionEnum.WOX_DIRECTION_UP.code);
                       return KeyEventResult.handled;
                     case LogicalKeyboardKey.enter:
                       if (controller.items.isNotEmpty && controller.activeIndex.value < controller.items.length) {

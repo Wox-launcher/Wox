@@ -6,6 +6,7 @@ import 'package:wox/components/wox_list_view.dart';
 import 'package:wox/components/wox_preview_view.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
@@ -15,12 +16,12 @@ import 'package:wox/utils/wox_theme_util.dart';
 class WoxQueryResultView extends GetView<WoxLauncherController> {
   const WoxQueryResultView({super.key});
 
-  List<WoxQueryResultTail> getHotkeyTails(WoxResultAction action) {
-    var tails = <WoxQueryResultTail>[];
+  List<WoxListItemTail> getHotkeyTails(WoxResultAction action) {
+    var tails = <WoxListItemTail>[];
     if (action.hotkey != "") {
       var hotkey = WoxHotkey.parseHotkeyFromString(action.hotkey);
       if (hotkey != null) {
-        tails.add(WoxQueryResultTail.hotkey(hotkey));
+        tails.add(WoxListItemTail.hotkey(hotkey));
       }
     }
     return tails;

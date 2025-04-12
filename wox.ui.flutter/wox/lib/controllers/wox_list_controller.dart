@@ -44,7 +44,7 @@ class WoxListController<T> extends GetxController {
   WoxListItem<T> get activeItem => _items[_activeIndex.value];
 
   void updateActiveIndexByDirection(String traceId, WoxDirection direction) {
-    Logger.instance.debug(traceId, "updateActiveIndex start, direction: $direction, activeIndex: ${_activeIndex.value}");
+    Logger.instance.debug(traceId, "updateActiveIndex start, direction: $direction, current activeIndex: ${_activeIndex.value}");
 
     if (_items.isEmpty) {
       Logger.instance.debug(traceId, "updateActiveIndex: items list is empty");
@@ -110,38 +110,90 @@ class WoxListController<T> extends GetxController {
       return;
     }
 
-    if (_items.length <= WoxThemeUtil.instance.getMaxResultCount()) {
+    final itemHeight = WoxThemeUtil.instance.getResultItemHeight();
+
+    // If there are too few items, no need to scroll
+    if (_items.isEmpty) {
       return;
     }
 
-    final itemHeight = WoxThemeUtil.instance.getResultItemHeight();
-    final maxResultCount = WoxThemeUtil.instance.getMaxResultCount();
+    // Calculate how many items can be displayed in the current viewport
+    final viewportHeight = scrollController.position.viewportDimension;
+    final visibleItemCount = (viewportHeight / itemHeight).floor();
+
+    // If all items can be displayed in the viewport, no need to scroll
+    if (_items.length <= visibleItemCount) {
+      return;
+    }
 
     // Calculate the range of currently visible items
     final currentOffset = scrollController.offset;
     final firstVisibleItemIndex = (currentOffset / itemHeight).floor();
-    final lastVisibleItemIndex = firstVisibleItemIndex + maxResultCount - 1;
+    final lastVisibleItemIndex = firstVisibleItemIndex + visibleItemCount - 1;
 
-    Logger.instance.debug(traceId, "Visible range: $firstVisibleItemIndex - $lastVisibleItemIndex, active: ${_activeIndex.value}");
+    Logger.instance.debug(traceId, "Visible range: $firstVisibleItemIndex - $lastVisibleItemIndex, active: ${_activeIndex.value}, visibleItemCount: $visibleItemCount");
 
     // If the active item is already in the visible range, no need to scroll
     if (_activeIndex.value >= firstVisibleItemIndex && _activeIndex.value <= lastVisibleItemIndex) {
       return;
     }
 
+    // Find the group header before the active item
+    int groupIndex = -1;
+    if (_activeIndex.value > 0) {
+      // Search backward from the active item for the nearest group header
+      for (int i = _activeIndex.value - 1; i >= 0; i--) {
+        if (_items[i].isGroup) {
+          groupIndex = i;
+          break;
+        }
+      }
+    } else if (_activeIndex.value == 0 && _items.length > 1) {
+      // If the active item is the first item, check if there are any group headers in the list
+      for (int i = 0; i < _items.length; i++) {
+        if (_items[i].isGroup) {
+          // If a group header is found, set the scroll position to 0 to show the first item
+          scrollController.jumpTo(0);
+          return;
+        }
+      }
+    }
+
     // If the active item is before the visible range, scroll up to make it visible
     if (_activeIndex.value < firstVisibleItemIndex) {
-      // Scroll the active item to the top of the visible area
-      final newOffset = _activeIndex.value * itemHeight;
-      scrollController.jumpTo(newOffset);
+      // If there's a group header before the active item and it's close enough, show the group header
+      if (groupIndex != -1 && _activeIndex.value - groupIndex <= 3) {
+        // Scroll the group header to the top of the visible area
+        final newOffset = groupIndex * itemHeight;
+        scrollController.jumpTo(newOffset);
+      } else {
+        // Scroll the active item to the top of the visible area
+        final newOffset = _activeIndex.value * itemHeight;
+        scrollController.jumpTo(newOffset);
+      }
       return;
     }
 
     // If the active item is after the visible range, scroll down to make it visible
     if (_activeIndex.value > lastVisibleItemIndex) {
-      // Scroll the active item to the bottom of the visible area
-      final newOffset = (_activeIndex.value - maxResultCount + 1) * itemHeight;
-      scrollController.jumpTo(newOffset);
+      // If there's a group header before the active item and it's close enough, ensure the group header is also visible
+      if (groupIndex != -1 && _activeIndex.value - groupIndex <= 3) {
+        // Calculate the number of items to show (including the group header and active item)
+        int itemsToShow = _activeIndex.value - groupIndex + 1;
+        // If the number of items to show is less than the number of items that can be displayed in the viewport, show the group header
+        if (itemsToShow <= visibleItemCount) {
+          final newOffset = groupIndex * itemHeight;
+          scrollController.jumpTo(newOffset);
+        } else {
+          // Otherwise, scroll the active item to the bottom of the visible area
+          final newOffset = (_activeIndex.value - visibleItemCount + 1) * itemHeight;
+          scrollController.jumpTo(newOffset);
+        }
+      } else {
+        // Scroll the active item to the bottom of the visible area
+        final newOffset = (_activeIndex.value - visibleItemCount + 1) * itemHeight;
+        scrollController.jumpTo(newOffset);
+      }
       return;
     }
   }
@@ -211,9 +263,55 @@ class WoxListController<T> extends GetxController {
     if (filterText.isEmpty) {
       _items.assignAll(_originalItems);
     } else {
-      _items.assignAll(_originalItems.where((element) => isFuzzyMatch(traceId, element.title, filterText)).toList());
+      // Find all non-group items that match the filter text
+      var matchedItems = _originalItems.where((element) => !element.isGroup && isFuzzyMatch(traceId, element.title, filterText)).toList();
+
+      // Find all items to include (matched items and their parent groups)
+      var filteredItems = _findItemsToInclude(matchedItems);
+
+      _items.assignAll(filteredItems);
     }
     updateActiveIndex(traceId, 0);
+  }
+
+  /// Find all items to include in the filtered list (matched items and their parent groups)
+  List<WoxListItem<T>> _findItemsToInclude(List<WoxListItem<T>> matchedItems) {
+    // Create a set of IDs of matched items for faster lookup
+    final matchedItemIds = matchedItems.map((item) => item.id).toSet();
+
+    // Create a map to track which groups have matching children
+    final groupsWithMatchingChildren = <String, bool>{};
+
+    // Track the current group for each item
+    String? currentGroupId;
+
+    // Single pass through the original items to find groups with matching children
+    for (var item in _originalItems) {
+      if (item.isGroup) {
+        // This is a group item, set as current group
+        currentGroupId = item.id;
+      } else if (matchedItemIds.contains(item.id) && currentGroupId != null) {
+        // This is a matched item under a group, mark the group
+        groupsWithMatchingChildren[currentGroupId] = true;
+      }
+    }
+
+    // Create the final filtered list with both matched items and their parent groups
+    final result = <WoxListItem<T>>[];
+
+    for (var item in _originalItems) {
+      if (item.isGroup) {
+        // Include group if it has matching children
+        if (groupsWithMatchingChildren.containsKey(item.id)) {
+          result.add(item);
+        }
+      } else if (matchedItemIds.contains(item.id)) {
+        // Include all matched items
+        result.add(item);
+      }
+    }
+
+    return result;
   }
 
   void clearFilter(String traceId) {

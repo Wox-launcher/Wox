@@ -1,12 +1,9 @@
-import 'package:get/get.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
-import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_image.dart';
+import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/enums/wox_last_query_mode_enum.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
-import 'package:wox/enums/wox_result_tail_type_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
 
 class PlainQuery {
@@ -98,7 +95,7 @@ class WoxQueryResult {
   late int score;
   late String group;
   late int groupScore;
-  late List<WoxQueryResultTail> tails;
+  late List<WoxListItemTail> tails;
   late String contextData;
 
   late List<WoxResultAction> actions;
@@ -155,7 +152,7 @@ class WoxQueryResult {
     if (json['Tails'] != null) {
       tails = [];
       json['Tails'].forEach((v) {
-        tails.add(WoxQueryResultTail.fromJson(v));
+        tails.add(WoxListItemTail.fromJson(v));
       });
     } else {
       tails = [];
@@ -192,72 +189,6 @@ class WoxQueryResult {
     data['RefreshInterval'] = refreshInterval;
     data['Tails'] = tails.map((v) => v.toJson()).toList();
     return data;
-  }
-}
-
-class WoxQueryResultTail {
-  late String type;
-  late String? text;
-  late WoxImage? image;
-  late HotkeyX? hotkey;
-
-  WoxQueryResultTail({required this.type, this.text, this.image, this.hotkey});
-
-  WoxQueryResultTail.fromJson(Map<String, dynamic> json) {
-    type = json['Type'];
-    if (json['Text'] != null) {
-      text = json['Text'];
-    } else {
-      text = null;
-    }
-
-    if (json['Image'] != null) {
-      image = WoxImage.fromJson(json['Image']);
-    } else {
-      image = null;
-    }
-
-    if (json['Hotkey'] != null) {
-      hotkey = WoxHotkey.parseHotkeyFromString(json['Hotkey']);
-    } else {
-      hotkey = null;
-    }
-  }
-
-  Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = <String, dynamic>{};
-    data['Type'] = type;
-
-    if (text != null) {
-      data['Text'] = text;
-    } else {
-      data['Text'] = null;
-    }
-
-    if (image != null) {
-      data['Image'] = image!.toJson();
-    } else {
-      data['Image'] = null;
-    }
-
-    if (hotkey != null) {
-      data['Hotkey'] = hotkey!.toString();
-    } else {
-      data['Hotkey'] = null;
-    }
-    return data;
-  }
-
-  factory WoxQueryResultTail.text(String text) {
-    return WoxQueryResultTail(type: WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_TEXT.code, text: text);
-  }
-
-  factory WoxQueryResultTail.hotkey(HotkeyX hotkey) {
-    return WoxQueryResultTail(type: WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_HOTKEY.code, hotkey: hotkey);
-  }
-
-  factory WoxQueryResultTail.image(WoxImage image) {
-    return WoxQueryResultTail(type: WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_IMAGE.code, image: image);
   }
 }
 
@@ -370,7 +301,7 @@ class WoxRefreshableResult {
   late String subTitle;
   late WoxImage icon;
   late WoxPreview preview;
-  late List<WoxQueryResultTail> tails;
+  late List<WoxListItemTail> tails;
   late String contextData;
   late int refreshInterval;
   late List<WoxResultAction> actions;
@@ -393,10 +324,10 @@ class WoxRefreshableResult {
     subTitle = json['SubTitle'] ?? "";
     icon = WoxImage.fromJson(json['Icon']);
     preview = WoxPreview.fromJson(json['Preview']);
-    tails = <WoxQueryResultTail>[];
+    tails = <WoxListItemTail>[];
     if (json['Tails'] != null) {
       json['Tails'].forEach((v) {
-        tails.add(WoxQueryResultTail.fromJson(v));
+        tails.add(WoxListItemTail.fromJson(v));
       });
     }
     contextData = json['ContextData'];
