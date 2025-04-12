@@ -59,16 +59,15 @@ class WoxLauncherController extends GetxController {
   // result related variables
   late final WoxListController<WoxQueryResult> resultListViewController;
 
+  // action related variables
+  late final WoxListController<WoxResultAction> actionListViewController;
+  final isShowActionPanel = false.obs;
+
   /// The timer to clear query results.
   /// On every query changed, it will reset the timer and will clear the query results after N ms.
   /// If there is no this delay mechanism, the window will flicker for fast typing.
   Timer clearQueryResultsTimer = Timer(const Duration(), () => {});
   final clearQueryResultDelay = 100;
-
-  // action related variables
-  /// The list of result actions for the active query result.
-  final isShowActionPanel = false.obs;
-  late final WoxListController<WoxResultAction> actionListViewController;
 
   // ai chat related variables
   final aiChatFocusNode = FocusNode();
@@ -120,7 +119,8 @@ class WoxLauncherController extends GetxController {
           executeToolbarAction(traceId);
         },
         onItemActive: onActionItemActivated,
-        onFilterEscPressed: hideActionPanel,
+        onFilterBoxEscPressed: hideActionPanel,
+        onFilterBoxLostFocus: hideActionPanel,
       ),
       tag: 'action',
     );
@@ -562,7 +562,7 @@ class WoxLauncherController extends GetxController {
       focusToChatInput(msg.traceId);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "SendChatResponse") {
-      handleChatResponse(msg.traceId, WoxPreviewChatData.fromJson(msg.data));
+      handleChatResponse(msg.traceId, WoxAIChatData.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "UpdateResult") {
       updateResult(msg.traceId, UpdateableResult.fromJson(msg.data));
@@ -717,13 +717,14 @@ class WoxLauncherController extends GetxController {
             }
 
             final refreshResult = WoxRefreshableResult.fromJson(resp);
-            final resultIndex = resultListViewController.items.indexWhere((element) => element.data.id == result.data.id);
-            resultListViewController.items[resultIndex].data.title = refreshResult.title;
-            resultListViewController.items[resultIndex].data.subTitle = refreshResult.subTitle;
-            resultListViewController.items[resultIndex].data.icon = refreshResult.icon;
-            resultListViewController.items[resultIndex].data.preview = refreshResult.preview;
-            resultListViewController.items[resultIndex].data.tails.assignAll(refreshResult.tails);
-            resultListViewController.items[resultIndex].data.actions.assignAll(refreshResult.actions);
+            result.data.title = refreshResult.title;
+            result.data.subTitle = refreshResult.subTitle;
+            result.data.icon = refreshResult.icon;
+            result.data.preview = refreshResult.preview;
+            result.data.tails.assignAll(refreshResult.tails);
+            result.data.actions.assignAll(refreshResult.actions);
+            result.data.contextData = refreshResult.contextData;
+            result.data.refreshInterval = refreshResult.refreshInterval;
 
             // only update preview and toolbar when current result is active
             if (resultListViewController.isItemActive(result.data.id)) {
@@ -735,9 +736,6 @@ class WoxLauncherController extends GetxController {
                 resizeHeight();
               }
             }
-
-            result.data.contextData = refreshResult.contextData;
-            result.data.refreshInterval = refreshResult.refreshInterval;
 
             // update result list view item
             resultListViewController.updateItem(
@@ -770,6 +768,8 @@ class WoxLauncherController extends GetxController {
   void dispose() {
     queryBoxFocusNode.dispose();
     queryBoxTextFieldController.dispose();
+    actionListViewController.dispose();
+    resultListViewController.dispose();
     super.dispose();
   }
 
@@ -844,11 +844,11 @@ class WoxLauncherController extends GetxController {
     });
   }
 
-  Future<void> sendChatRequest(String traceId, WoxPreviewChatData data) async {
+  Future<void> sendChatRequest(String traceId, WoxAIChatData data) async {
     WoxApi.instance.sendChatRequest(data);
   }
 
-  void handleChatResponse(String traceId, WoxPreviewChatData data) {
+  void handleChatResponse(String traceId, WoxAIChatData data) {
     for (var result in resultListViewController.items) {
       if (result.data.contextData == data.id) {
         result.data.preview = WoxPreview(

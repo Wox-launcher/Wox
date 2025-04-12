@@ -39,17 +39,17 @@ class ChatSelectItem {
   });
 }
 
-class WoxPreviewChatView extends StatefulWidget {
-  final WoxPreviewChatData aiChatData;
+class WoxAIChatView extends StatefulWidget {
+  final WoxAIChatData aiChatData;
   final WoxTheme woxTheme;
 
-  const WoxPreviewChatView({super.key, required this.aiChatData, required this.woxTheme});
+  const WoxAIChatView({super.key, required this.aiChatData, required this.woxTheme});
 
   @override
-  State<WoxPreviewChatView> createState() => _WoxPreviewChatViewState();
+  State<WoxAIChatView> createState() => _WoxAIChatViewState();
 }
 
-class _WoxPreviewChatViewState extends State<WoxPreviewChatView> {
+class _WoxAIChatViewState extends State<WoxAIChatView> {
   final TextEditingController textController = TextEditingController();
   final TextEditingController chatSelectFilterController = TextEditingController();
   final FocusNode chatSelectFilterFocusNode = FocusNode();

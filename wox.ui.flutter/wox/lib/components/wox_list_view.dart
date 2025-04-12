@@ -106,6 +106,11 @@ class WoxListView<T> extends StatelessWidget {
         ),
         if (showFilter)
           Focus(
+            onFocusChange: (hasFocus) {
+              if (!hasFocus) {
+                controller.onFilterBoxLostFocus?.call(const UuidV4().generate());
+              }
+            },
             onKeyEvent: (FocusNode node, KeyEvent event) {
               var traceId = const UuidV4().generate();
               var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
@@ -113,7 +118,7 @@ class WoxListView<T> extends StatelessWidget {
                 if (event is KeyDownEvent) {
                   switch (event.logicalKey) {
                     case LogicalKeyboardKey.escape:
-                      controller.onFilterEscPressed?.call(traceId);
+                      controller.onFilterBoxEscPressed?.call(traceId);
                       return KeyEventResult.handled;
                     case LogicalKeyboardKey.arrowDown:
                       controller.updateActiveIndexByDirection(

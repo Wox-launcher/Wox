@@ -55,7 +55,7 @@ class WoxPreview {
 }
 
 // should be same as AIChatData in the ai chat plugin
-class WoxPreviewChatData {
+class WoxAIChatData {
   late String id;
   late String title;
   late RxList<WoxPreviewChatConversation> conversations;
@@ -66,7 +66,7 @@ class WoxPreviewChatData {
   // Selected tools list, not persisted
   List<String>? selectedTools;
 
-  WoxPreviewChatData({
+  WoxAIChatData({
     required this.id,
     required this.title,
     required this.conversations,
@@ -76,7 +76,7 @@ class WoxPreviewChatData {
     this.selectedTools,
   });
 
-  static WoxPreviewChatData fromJson(Map<String, dynamic> json) {
+  static WoxAIChatData fromJson(Map<String, dynamic> json) {
     List<WoxPreviewChatConversation> conversations = [];
     if (json['Conversations'] != null) {
       for (var e in json['Conversations']) {
@@ -84,7 +84,7 @@ class WoxPreviewChatData {
       }
     }
 
-    return WoxPreviewChatData(
+    return WoxAIChatData(
       id: json['Id'] ?? "",
       title: json['Title'] ?? "",
       conversations: RxList<WoxPreviewChatConversation>.from(conversations),
@@ -112,8 +112,8 @@ class WoxPreviewChatData {
     return json;
   }
 
-  static WoxPreviewChatData empty() {
-    return WoxPreviewChatData(
+  static WoxAIChatData empty() {
+    return WoxAIChatData(
       id: "",
       title: "",
       conversations: RxList<WoxPreviewChatConversation>.from([]),

@@ -17,7 +17,8 @@ class WoxListController<T> extends GetxController {
 
   final Function(String traceId, WoxListItem<T> item)? onItemExecuted;
   final Function(String traceId, WoxListItem<T> item)? onItemActive;
-  final Function(String traceId)? onFilterEscPressed;
+  final Function(String traceId)? onFilterBoxEscPressed;
+  final Function(String traceId)? onFilterBoxLostFocus;
 
   /// This flag is used to control whether the item is selected by mouse hover.
   /// This is used to prevent the item from being selected when the mouse is just hovering over the item in the result list.
@@ -30,7 +31,8 @@ class WoxListController<T> extends GetxController {
   WoxListController({
     this.onItemExecuted,
     this.onItemActive,
-    this.onFilterEscPressed,
+    this.onFilterBoxEscPressed,
+    this.onFilterBoxLostFocus,
   });
 
   RxList<WoxListItem<T>> get items => _items;

@@ -161,7 +161,7 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData("/ai/mcp/tools/all", data);
   }
 
-  Future<void> sendChatRequest(WoxPreviewChatData data) async {
+  Future<void> sendChatRequest(WoxAIChatData data) async {
     return await WoxHttpUtil.instance.postData("/ai/chat", {
       "chatData": data.toJson(),
     });

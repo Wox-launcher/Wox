@@ -16,7 +16,7 @@ import 'package:highlight/languages/yaml.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
-import 'package:wox/components/wox_preview_chat_view.dart';
+import 'package:wox/components/wox_ai_chat_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
@@ -212,8 +212,8 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
         );
       }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
-      var previewChatData = WoxPreviewChatData.fromJson(jsonDecode(widget.woxPreview.previewData));
-      contentWidget = WoxPreviewChatView(aiChatData: previewChatData, woxTheme: widget.woxTheme);
+      var previewChatData = WoxAIChatData.fromJson(jsonDecode(widget.woxPreview.previewData));
+      contentWidget = WoxAIChatView(aiChatData: previewChatData, woxTheme: widget.woxTheme);
     }
 
     if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {
