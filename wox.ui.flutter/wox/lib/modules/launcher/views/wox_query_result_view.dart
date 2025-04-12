@@ -59,14 +59,13 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                     mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(controller.actionsTitle.value,
-                          style: TextStyle(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
+                      Text("Actions", style: TextStyle(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
                       const Divider(),
-                      Obx(() => WoxListView(
-                            controller: controller.actionListViewController,
-                            maxHeight: 400,
-                            listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code,
-                          )),
+                      WoxListView<WoxResultAction>(
+                        controller: controller.actionListViewController,
+                        maxHeight: 400,
+                        listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code,
+                      ),
                     ],
                   ),
                 ),
@@ -84,7 +83,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
         bottom: WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingBottom.toDouble(),
         left: WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingLeft.toDouble(),
       ),
-      child: WoxListView(
+      child: WoxListView<WoxQueryResult>(
         controller: controller.resultListViewController,
         listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code,
         showFilter: false,

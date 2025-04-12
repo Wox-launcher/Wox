@@ -164,7 +164,9 @@ class WoxQueryResult {
     if (json['Actions'] != null) {
       actions = [];
       json['Actions'].forEach((v) {
-        actions.add(WoxResultAction.fromJson(v));
+        var action = WoxResultAction.fromJson(v);
+        action.resultId = id;
+        actions.add(action);
       });
     } else {
       actions = [];
@@ -267,7 +269,7 @@ class WoxResultAction {
   late bool preventHideAfterAction;
   late String hotkey;
   late bool isSystemAction;
-  late Function(String traceId)? onExecute;
+  late String resultId;
 
   WoxResultAction({
     required this.id,
@@ -277,7 +279,7 @@ class WoxResultAction {
     required this.preventHideAfterAction,
     required this.hotkey,
     required this.isSystemAction,
-    this.onExecute,
+    required this.resultId,
   });
 
   WoxResultAction.fromJson(Map<String, dynamic> json) {
@@ -290,7 +292,7 @@ class WoxResultAction {
       hotkey = json['Hotkey'];
     }
     isSystemAction = json['IsSystemAction'];
-    onExecute = json['OnExecute'];
+    resultId = json['ResultId'] ?? "";
   }
 
   Map<String, dynamic> toJson() {
@@ -302,29 +304,12 @@ class WoxResultAction {
     data['PreventHideAfterAction'] = preventHideAfterAction;
     data['Hotkey'] = hotkey;
     data['IsSystemAction'] = isSystemAction;
+    data['ResultId'] = resultId;
     return data;
   }
 
   static WoxResultAction empty() {
-    return WoxResultAction(id: "", name: "", icon: WoxImage.empty(), isDefault: false, preventHideAfterAction: false, hotkey: "", isSystemAction: false);
-  }
-
-  bool equals(WoxResultAction other) {
-    return id == other.id &&
-        name == other.name &&
-        icon.imageData == other.icon.imageData &&
-        isDefault == other.isDefault &&
-        preventHideAfterAction == other.preventHideAfterAction &&
-        hotkey == other.hotkey &&
-        isSystemAction == other.isSystemAction;
-  }
-
-  static bool listEquals(List<WoxResultAction> actions1, List<WoxResultAction> actions2) {
-    if (actions1.length != actions2.length) return false;
-    for (var i = 0; i < actions1.length; i++) {
-      if (!actions1[i].equals(actions2[i])) return false;
-    }
-    return true;
+    return WoxResultAction(id: "", name: "", icon: WoxImage.empty(), isDefault: false, preventHideAfterAction: false, hotkey: "", isSystemAction: false, resultId: "");
   }
 }
 

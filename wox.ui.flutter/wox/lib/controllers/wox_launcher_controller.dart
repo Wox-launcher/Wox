@@ -12,7 +12,6 @@ import 'package:uuid/v4.dart';
 import 'package:wox/controllers/wox_list_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_list_item.dart';
-import 'package:wox/enums/wox_actions_type_enum.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -68,16 +67,8 @@ class WoxLauncherController extends GetxController {
 
   // action related variables
   /// The list of result actions for the active query result.
-  final actions = <WoxResultAction>[].obs;
-  final originalActions = <WoxResultAction>[]; // the original actions, used to filter and restore selection actions
-  final activeActionIndex = 0.obs;
   final isShowActionPanel = false.obs;
-  final actionTextFieldController = TextEditingController();
-  final actionScrollerController = ScrollController(initialScrollOffset: 0.0);
-  Function(String) actionEscFunction = (String traceId) => {}; // the function to handle the esc key in the action panel
-  final actionsTitle = "Actions".obs;
-  var actionsType = WoxActionsTypeEnum.WOX_ACTIONS_TYPE_RESULT.code;
-  final actionListViewController = Get.put(WoxListController<WoxResultAction>(), tag: 'action');
+  late final WoxListController<WoxResultAction> actionListViewController;
 
   // ai chat related variables
   final aiChatFocusNode = FocusNode();
@@ -115,19 +106,24 @@ class WoxLauncherController extends GetxController {
 
     resultListViewController = Get.put(
       WoxListController<WoxQueryResult>(
-        onItemExecuted: (item) {
-          onEnter(const UuidV4().generate());
+        onItemExecuted: (traceId, item) {
+          executeToolbarAction(traceId);
         },
-        onItemActive: (item) {
-          onResultItemActivated(const UuidV4().generate(), item);
-        },
+        onItemActive: onResultItemActivated,
       ),
       tag: 'result',
     );
 
-    actionEscFunction = (String traceId) {
-      hideActionPanel(traceId);
-    };
+    actionListViewController = Get.put(
+      WoxListController<WoxResultAction>(
+        onItemExecuted: (traceId, item) {
+          executeToolbarAction(traceId);
+        },
+        onItemActive: onActionItemActivated,
+        onFilterEscPressed: hideActionPanel,
+      ),
+      tag: 'action',
+    );
 
     reloadAIModels();
   }
@@ -148,7 +144,7 @@ class WoxLauncherController extends GetxController {
     clearQueryResultsTimer.cancel();
 
     //merge results
-    final existingQueryResults = resultListViewController.items.where((item) => item.data.queryId == currentQuery.value.queryId).toList();
+    final existingQueryResults = resultListViewController.items.where((item) => item.data.queryId == currentQuery.value.queryId).map((e) => e.data).toList();
     final finalResults = List<WoxQueryResult>.from(existingQueryResults)..addAll(receivedResults);
 
     //group results
@@ -183,7 +179,6 @@ class WoxLauncherController extends GetxController {
     // this will prevent the active result from being reset to the first one when the query results are received
     if (existingQueryResults.isEmpty || resultListViewController.activeIndex.value == 0) {
       resetActiveResult();
-      resetActionsByActiveResult(traceId, "receive query results: ${currentQuery.value.queryText}");
     }
 
     resizeHeight();
@@ -253,7 +248,7 @@ class WoxLauncherController extends GetxController {
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code || lastQueryMode == WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_EMPTY.code) {
       currentQuery.value = PlainQuery.emptyInput();
       queryBoxTextFieldController.clear();
-      actionTextFieldController.clear();
+      hideActionPanel(traceId);
       await clearQueryResults();
     }
 
@@ -301,9 +296,8 @@ class WoxLauncherController extends GetxController {
 
   void hideActionPanel(String traceId) {
     isShowActionPanel.value = false;
-    actionTextFieldController.text = "";
+    actionListViewController.clearFilter(traceId);
     focusQueryBox(selectAll: true);
-    resetActionsByActiveResult(traceId, "hide action panel");
     resizeHeight();
   }
 
@@ -335,49 +329,6 @@ class WoxLauncherController extends GetxController {
     resizeHeight();
   }
 
-  Future<void> showActionPanelForModelSelection(String traceId, WoxPreviewChatData aiChatData) async {
-    originalActions.assignAll(aiModels.map((model) => WoxResultAction(
-          id: const UuidV4().generate(),
-          name: "${model.name} (${model.provider})",
-          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
-          isDefault: false,
-          preventHideAfterAction: true,
-          hotkey: "",
-          isSystemAction: false,
-          onExecute: (traceId) {
-            aiChatData.model = WoxPreviewChatModel(name: model.name, provider: model.provider);
-
-            for (var result in resultListViewController.items) {
-              if (result.data.contextData == aiChatData.id) {
-                result.data.preview = WoxPreview(
-                  previewType: WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code,
-                  previewData: jsonEncode(aiChatData.toJson()),
-                  previewProperties: {},
-                  scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
-                );
-                currentPreview.value = result.data.preview;
-              }
-            }
-
-            hideActionPanel(traceId);
-            focusToChatInput(traceId);
-          },
-        )));
-    actionsType = WoxActionsTypeEnum.WOX_ACTIONS_TYPE_AI_MODEL.code;
-    actionsTitle.value = "Models";
-    actions.assignAll(originalActions);
-    actionEscFunction = (String traceId) {
-      hideActionPanel(traceId);
-      focusToChatInput(traceId);
-
-      // reset the actionEscFunction to the default
-      actionEscFunction = (String traceId) {
-        hideActionPanel(traceId);
-      };
-    };
-    showActionPanel(traceId);
-  }
-
   void scrollToBottomOfAiChat() {
     if (aiChatScrollController.hasClients) {
       aiChatScrollController.jumpTo(aiChatScrollController.position.maxScrollExtent);
@@ -392,14 +343,6 @@ class WoxLauncherController extends GetxController {
     }
 
     return resultListViewController.items[resultListViewController.activeIndex.value].data;
-  }
-
-  WoxResultAction? getActiveAction() {
-    if (actions.isEmpty || resultListViewController.activeIndex.value >= actions.length || resultListViewController.activeIndex.value < 0) {
-      return null;
-    }
-
-    return actions[resultListViewController.activeIndex.value];
   }
 
   /// given a hotkey, find the action in the result
@@ -424,10 +367,6 @@ class WoxLauncherController extends GetxController {
     return filteredActions.first;
   }
 
-  Future<void> onEnter(String traceId) async {
-    toolbar.value.action?.call();
-  }
-
   Future<void> executeAction(String traceId, WoxQueryResult? result, WoxResultAction? action) async {
     Logger.instance.debug(traceId, "user execute result action: ${action?.name}");
 
@@ -443,23 +382,19 @@ class WoxLauncherController extends GetxController {
     var preventHideAfterAction = action.preventHideAfterAction;
     Logger.instance.debug(traceId, "execute action: ${action.name}, prevent hide after action: $preventHideAfterAction");
 
-    if (action.onExecute != null) {
-      action.onExecute!(traceId);
-    } else {
-      await WoxWebsocketMsgUtil.instance.sendMessage(WoxWebsocketMsg(
-        requestId: const UuidV4().generate(),
-        traceId: traceId,
-        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
-        method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
-        data: {
-          "resultId": result.id,
-          "actionId": action.id,
-        },
-      ));
-    }
+    await WoxWebsocketMsgUtil.instance.sendMessage(WoxWebsocketMsg(
+      requestId: const UuidV4().generate(),
+      traceId: traceId,
+      type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+      method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
+      data: {
+        "resultId": result.id,
+        "actionId": action.id,
+      },
+    ));
 
     // clear the search text after action is executed
-    actionTextFieldController.text = "";
+    actionListViewController.clearFilter(traceId);
 
     if (!preventHideAfterAction) {
       hideApp(traceId);
@@ -494,7 +429,7 @@ class WoxLauncherController extends GetxController {
 
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
       // do local filter if query type is selection
-      filterSelectionResults(const UuidV4().generate(), value);
+      resultListViewController.filterItems(const UuidV4().generate(), value);
     } else {
       onQueryChanged(
         const UuidV4().generate(),
@@ -507,10 +442,6 @@ class WoxLauncherController extends GetxController {
         "user input changed",
       );
     }
-  }
-
-  void filterSelectionResults(String traceId, String filterText) {
-    resultListViewController.filterItems(traceId, filterText);
   }
 
   void onQueryChanged(String traceId, PlainQuery query, String changeReason, {bool moveCursorToEnd = false}) {
@@ -666,7 +597,7 @@ class WoxLauncherController extends GetxController {
 
   Future<void> clearQueryResults() async {
     resultListViewController.clearItems();
-    actions.clear();
+    actionListViewController.clearItems();
     toolbar.value = ToolbarInfo.empty();
     isShowPreviewPanel.value = false;
     isShowActionPanel.value = false;
@@ -712,60 +643,6 @@ class WoxLauncherController extends GetxController {
 
   void clearHoveredResult() {
     resultListViewController.clearHoveredResult();
-  }
-
-  /// update active actions based on active result and reset active action index to 0
-  void resetActionsByActiveResult(String traceId, String reason, {bool remainIndex = false}) {
-    var activeQueryResult = getActiveResult();
-    if (activeQueryResult == null || activeQueryResult.actions.isEmpty) {
-      Logger.instance.info(traceId, "update active actions, reason: $reason, current active result: null");
-      activeActionIndex.value = -1;
-      actions.clear();
-      return;
-    }
-
-    actionsType = WoxActionsTypeEnum.WOX_ACTIONS_TYPE_RESULT.code;
-    actionsTitle.value = "Actions";
-    originalActions.assignAll(activeQueryResult.actions);
-
-    Logger.instance
-        .info(traceId, "update active actions, reason: $reason, current active result: ${activeQueryResult.title}, active action: ${activeQueryResult.actions.first.name}");
-
-    String? previousActionName;
-    if (remainIndex && actions.isNotEmpty && activeActionIndex.value >= 0 && activeActionIndex.value < actions.length) {
-      previousActionName = actions[activeActionIndex.value].name;
-    }
-
-    final filterText = actionTextFieldController.text;
-    List<WoxResultAction> newActions;
-    if (filterText.isNotEmpty) {
-      newActions = originalActions.where((element) {
-        return isFuzzyMatch(traceId, element.name, filterText);
-      }).toList();
-      activeActionIndex.value = newActions.isEmpty ? -1 : 0;
-      remainIndex = false;
-    } else {
-      newActions = List.from(originalActions);
-    }
-
-    // Only update actions if they have actually changed
-    if (!WoxResultAction.listEquals(actions, newActions)) {
-      actions.assignAll(newActions);
-    }
-
-    // remain the same action index
-    if (remainIndex && previousActionName != null) {
-      final newIndex = actions.indexWhere((action) => action.name == previousActionName);
-      if (newIndex != -1) {
-        activeActionIndex.value = newIndex;
-      } else {
-        activeActionIndex.value = 0;
-      }
-    } else {
-      activeActionIndex.value = 0;
-    }
-
-    updateToolbarByActiveAction(traceId);
   }
 
   updateResult(String traceId, UpdateableResult updateableResult) {
@@ -856,11 +733,6 @@ class WoxLauncherController extends GetxController {
               if (oldShowPreview != isShowPreviewPanel.value) {
                 Logger.instance.debug(traceId, "preview panel visibility changed, resize height");
                 resizeHeight();
-              }
-
-              // only reset actions when action type is result
-              if (actionsType == WoxActionsTypeEnum.WOX_ACTIONS_TYPE_RESULT.code) {
-                resetActionsByActiveResult(traceId, "refresh active result", remainIndex: true);
               }
             }
 
@@ -960,9 +832,13 @@ class WoxLauncherController extends GetxController {
     }
   }
 
+  void executeToolbarAction(String traceId) {
+    Logger.instance.info(traceId, "execute toolbar action");
+    toolbar.value.action?.call();
+  }
+
   void focusToChatInput(String traceId) {
     Logger.instance.info(traceId, "focus to chat input");
-    actionsType = WoxActionsTypeEnum.WOX_ACTIONS_TYPE_AI_MODEL.code;
     SchedulerBinding.instance.addPostFrameCallback((_) {
       aiChatFocusNode.requestFocus();
     });
@@ -1025,11 +901,46 @@ class WoxLauncherController extends GetxController {
     resultListViewController.updateActiveIndexByDirection(const UuidV4().generate(), WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
   }
 
-  void onResultItemActivated(String traceId, WoxListItem item) {
+  void onResultItemActivated(String traceId, WoxListItem<WoxQueryResult> item) {
     currentPreview.value = item.data.preview;
     isShowPreviewPanel.value = currentPreview.value.previewData != "";
 
-    resetActionsByActiveResult(traceId, "update active result index");
+    // update actions list
+    var actions = item.data.actions.map((e) => WoxListItem.fromResultAction(e)).toList();
+    actionListViewController.updateItems(traceId, actions);
+
+    // update active index to default action
+    var defaultActionIndex = actions.indexWhere((element) => element.data.isDefault);
+    if (defaultActionIndex != -1) {
+      actionListViewController.updateActiveIndex(traceId, defaultActionIndex);
+    }
+  }
+
+  void onActionItemActivated(String traceId, WoxListItem<WoxResultAction> item) {
+    Logger.instance.debug(traceId, "on result action item activated: ${item.data.name}");
+
+    // update toolbar to active action
+    var action = item.data;
+    Logger.instance.debug(traceId, "update toolbar to active result: ${item.data.name}, default action: ${action.name}");
+
+    // cancel the timer if it is running
+    cleanToolbarTimer.cancel();
+
+    // only update action and hotkey if it's different from the current one
+    if (toolbar.value.actionName != action.name || toolbar.value.hotkey != action.hotkey) {
+      toolbar.value = ToolbarInfo(
+        hotkey: "enter",
+        actionName: action.name,
+        action: () {
+          var result = resultListViewController.items.firstWhereOrNull((element) => element.data.id == action.resultId);
+          if (result != null) {
+            executeAction(traceId, result.data, action);
+          } else {
+            Logger.instance.error(traceId, "associated result not found, cannot execute action: ${action.name}");
+          }
+        },
+      );
+    }
   }
 
   String transferChineseToPinYin(String str) {
@@ -1146,31 +1057,6 @@ class WoxLauncherController extends GetxController {
       Logger.instance.debug(traceId, "update toolbar to empty because of query changed");
       toolbar.value = ToolbarInfo.empty();
     });
-  }
-
-  /// Update the toolbar based on the active action
-  void updateToolbarByActiveAction(String traceId) {
-    var activeAction = getActiveAction();
-    if (activeAction != null) {
-      Logger.instance.debug(traceId, "update toolbar to active action: ${activeAction.name}");
-
-      // cancel the timer if it is running
-      cleanToolbarTimer.cancel();
-
-      // only update action and hotkey if it's different from the current one
-      if (toolbar.value.actionName != activeAction.name || toolbar.value.hotkey != activeAction.hotkey) {
-        toolbar.value = ToolbarInfo(
-          hotkey: "enter",
-          actionName: activeAction.name,
-          action: () {
-            executeAction(traceId, getActiveResult(), activeAction);
-          },
-        );
-      }
-    } else {
-      Logger.instance.debug(traceId, "update toolbar to empty, no active action");
-      toolbar.value = ToolbarInfo.empty();
-    }
   }
 
   /// Update the toolbar to chat view

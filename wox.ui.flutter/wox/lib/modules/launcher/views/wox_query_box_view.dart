@@ -30,7 +30,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                           controller.hideApp(const UuidV4().generate());
                           return KeyEventResult.handled;
                         case LogicalKeyboardKey.enter:
-                          controller.onEnter(const UuidV4().generate());
+                          controller.executeToolbarAction(const UuidV4().generate());
                           return KeyEventResult.handled;
                         case LogicalKeyboardKey.arrowDown:
                           controller.handleQueryBoxArrowDown();

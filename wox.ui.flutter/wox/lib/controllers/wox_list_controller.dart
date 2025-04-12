@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:fuzzywuzzy/fuzzywuzzy.dart';
 import 'package:get/get.dart';
+import 'package:lpinyin/lpinyin.dart';
 import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
 class WoxListController<T> extends GetxController {
@@ -12,9 +15,9 @@ class WoxListController<T> extends GetxController {
   final RxInt _activeIndex = 0.obs;
   final RxInt _hoveredIndex = (-1).obs;
 
-  final Function(WoxListItem item)? onItemExecuted;
-  final Function(WoxListItem item)? onItemActive;
-  final Function()? onFilterEscPressed;
+  final Function(String traceId, WoxListItem<T> item)? onItemExecuted;
+  final Function(String traceId, WoxListItem<T> item)? onItemActive;
+  final Function(String traceId)? onFilterEscPressed;
 
   /// This flag is used to control whether the item is selected by mouse hover.
   /// This is used to prevent the item from being selected when the mouse is just hovering over the item in the result list.
@@ -85,10 +88,14 @@ class WoxListController<T> extends GetxController {
   }
 
   void updateActiveIndex(String traceId, int index) {
+    if (index < 0 || index >= _items.length) {
+      return;
+    }
+
     _activeIndex.value = index;
     _syncScrollPositionWithActiveIndex(traceId);
 
-    onItemActive?.call(_items[index]);
+    onItemActive?.call(traceId, _items[index]);
 
     Logger.instance.debug(traceId, "updateActiveIndex end, new activeIndex: ${_activeIndex.value}");
   }
@@ -138,8 +145,6 @@ class WoxListController<T> extends GetxController {
   }
 
   void updateItem(String traceId, WoxListItem<T> item) {
-    Logger.instance.debug(traceId, "updateItem, item: $item");
-
     // update original items
     final originalIndex = _originalItems.indexWhere((element) => element.id == item.id);
     if (originalIndex != -1) {
@@ -153,21 +158,21 @@ class WoxListController<T> extends GetxController {
     }
   }
 
+  void updateItems(String traceId, List<WoxListItem<T>> newItems) {
+    _items.assignAll(newItems);
+    _originalItems.assignAll(newItems);
+
+    if (_activeIndex.value >= _items.length && _items.isNotEmpty) {
+      updateActiveIndex(traceId, 0);
+    }
+  }
+
   void updateHoveredIndex(int index) {
     _hoveredIndex.value = index;
   }
 
   void clearHoveredResult() {
     _hoveredIndex.value = -1;
-  }
-
-  void updateItems(String traceId, List<WoxListItem<T>> newItems) {
-    _items.value = newItems;
-
-    if (_activeIndex.value >= _items.length && _items.isNotEmpty) {
-      updateActiveIndex(traceId, 0);
-    }
-    Logger.instance.debug(traceId, "setItems end, items: ${_items.length}");
   }
 
   bool isItemActive(String itemId) {
@@ -179,11 +184,39 @@ class WoxListController<T> extends GetxController {
     filterBoxFocusNode.requestFocus();
   }
 
-  void filterItems(String traceId, String filterText) {
-    _items.assignAll(_originalItems.where((element) => element.title.contains(filterText)).toList());
-    if (_items.isNotEmpty) {
-      updateActiveIndex(traceId, 0);
+  /// check if the query text is fuzzy match with the filter text based on the setting
+  bool isFuzzyMatch(String traceId, String queryText, String filterText) {
+    if (WoxSettingUtil.instance.currentSetting.usePinYin) {
+      queryText = transferChineseToPinYin(queryText).toLowerCase();
+    } else {
+      queryText = queryText.toLowerCase();
     }
+
+    var score = weightedRatio(queryText, filterText.toLowerCase());
+    Logger.instance.debug(traceId, "calculate fuzzy match score, queryText: $queryText, filterText: $filterText, score: $score");
+    return score > 50;
+  }
+
+  String transferChineseToPinYin(String str) {
+    RegExp regExp = RegExp(r'[\u4e00-\u9fa5]');
+    if (regExp.hasMatch(str)) {
+      return PinyinHelper.getPinyin(str, separator: "", format: PinyinFormat.WITHOUT_TONE);
+    }
+    return str;
+  }
+
+  void filterItems(String traceId, String filterText) {
+    if (filterText.isEmpty) {
+      _items.assignAll(_originalItems);
+    } else {
+      _items.assignAll(_originalItems.where((element) => isFuzzyMatch(traceId, element.title, filterText)).toList());
+    }
+    updateActiveIndex(traceId, 0);
+  }
+
+  void clearFilter(String traceId) {
+    filterBoxController.clear();
+    updateActiveIndex(traceId, 0);
   }
 
   void clearItems() {

@@ -13,8 +13,8 @@ import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
-class WoxListView extends StatelessWidget {
-  final WoxListController controller;
+class WoxListView<T> extends StatelessWidget {
+  final WoxListController<T> controller;
   final WoxListViewType listViewType;
   final bool showFilter;
   final double maxHeight;
@@ -47,57 +47,59 @@ class WoxListView extends StatelessWidget {
                   );
                 }
               },
-              child: ListView.builder(
-                shrinkWrap: true,
-                controller: controller.scrollController,
-                physics: const ClampingScrollPhysics(),
-                itemCount: controller.items.length,
-                itemExtent: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
-                itemBuilder: (context, index) {
-                  WoxListItem item = controller.items[index];
-                  return MouseRegion(
-                    onEnter: (_) {
-                      if (controller.isMouseMoved && !item.isGroup) {
-                        Logger.instance.info(const UuidV4().generate(), "MOUSE: onenter, is mouse moved: ${controller.isMouseMoved}, is group: ${item.isGroup}");
-                        controller.updateHoveredIndex(index);
-                      }
-                    },
-                    onHover: (_) {
-                      if (!controller.isMouseMoved && !item.isGroup) {
-                        Logger.instance.info(const UuidV4().generate(), "MOUSE: onHover, is mouse moved: ${controller.isMouseMoved}, is group: ${item.isGroup}");
-                        controller.isMouseMoved = true;
-                        controller.updateHoveredIndex(index);
-                      }
-                    },
-                    onExit: (_) {
-                      if (!item.isGroup && controller.hoveredIndex.value == index) {
-                        controller.clearHoveredResult();
-                      }
-                    },
-                    child: GestureDetector(
-                      onTap: () {
-                        if (!item.isGroup) {
-                          controller.updateActiveIndex(const UuidV4().generate(), index);
-                          controller.onItemActive?.call(item);
+              child: Obx(
+                () => ListView.builder(
+                  shrinkWrap: true,
+                  controller: controller.scrollController,
+                  physics: const ClampingScrollPhysics(),
+                  itemCount: controller.items.length,
+                  itemExtent: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
+                  itemBuilder: (context, index) {
+                    var item = controller.items[index];
+                    return MouseRegion(
+                      onEnter: (_) {
+                        if (controller.isMouseMoved && !item.isGroup) {
+                          Logger.instance.info(const UuidV4().generate(), "MOUSE: onenter, is mouse moved: ${controller.isMouseMoved}, is group: ${item.isGroup}");
+                          controller.updateHoveredIndex(index);
                         }
                       },
-                      onDoubleTap: () {
-                        if (!item.isGroup) {
-                          controller.onItemExecuted?.call(item);
+                      onHover: (_) {
+                        if (!controller.isMouseMoved && !item.isGroup) {
+                          Logger.instance.info(const UuidV4().generate(), "MOUSE: onHover, is mouse moved: ${controller.isMouseMoved}, is group: ${item.isGroup}");
+                          controller.isMouseMoved = true;
+                          controller.updateHoveredIndex(index);
                         }
                       },
-                      child: Obx(
-                        () => WoxListItemView(
-                          item: item,
-                          woxTheme: WoxThemeUtil.instance.currentTheme.value,
-                          isActive: controller.activeIndex.value == index,
-                          isHovered: controller.hoveredIndex.value == index,
-                          listViewType: listViewType,
+                      onExit: (_) {
+                        if (!item.isGroup && controller.hoveredIndex.value == index) {
+                          controller.clearHoveredResult();
+                        }
+                      },
+                      child: GestureDetector(
+                        onTap: () {
+                          if (!item.isGroup) {
+                            controller.updateActiveIndex(const UuidV4().generate(), index);
+                            controller.onItemActive?.call(const UuidV4().generate(), item);
+                          }
+                        },
+                        onDoubleTap: () {
+                          if (!item.isGroup) {
+                            controller.onItemExecuted?.call(const UuidV4().generate(), item);
+                          }
+                        },
+                        child: Obx(
+                          () => WoxListItemView(
+                            item: item,
+                            woxTheme: WoxThemeUtil.instance.currentTheme.value,
+                            isActive: controller.activeIndex.value == index,
+                            isHovered: controller.hoveredIndex.value == index,
+                            listViewType: listViewType,
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
           ),
@@ -105,28 +107,29 @@ class WoxListView extends StatelessWidget {
         if (showFilter)
           Focus(
             onKeyEvent: (FocusNode node, KeyEvent event) {
+              var traceId = const UuidV4().generate();
               var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
               if (!isAnyModifierPressed) {
                 if (event is KeyDownEvent) {
                   switch (event.logicalKey) {
                     case LogicalKeyboardKey.escape:
-                      controller.onFilterEscPressed?.call();
+                      controller.onFilterEscPressed?.call(traceId);
                       return KeyEventResult.handled;
                     case LogicalKeyboardKey.arrowDown:
                       controller.updateActiveIndexByDirection(
-                        const UuidV4().generate(),
+                        traceId,
                         WoxDirectionEnum.WOX_DIRECTION_DOWN.code,
                       );
                       return KeyEventResult.handled;
                     case LogicalKeyboardKey.arrowUp:
                       controller.updateActiveIndexByDirection(
-                        const UuidV4().generate(),
+                        traceId,
                         WoxDirectionEnum.WOX_DIRECTION_UP.code,
                       );
                       return KeyEventResult.handled;
                     case LogicalKeyboardKey.enter:
                       if (controller.items.isNotEmpty && controller.activeIndex.value < controller.items.length) {
-                        controller.onItemExecuted?.call(controller.items[controller.activeIndex.value]);
+                        controller.onItemExecuted?.call(traceId, controller.items[controller.activeIndex.value]);
                       }
                       return KeyEventResult.handled;
                   }
@@ -136,13 +139,13 @@ class WoxListView extends StatelessWidget {
                   switch (event.logicalKey) {
                     case LogicalKeyboardKey.arrowDown:
                       controller.updateActiveIndexByDirection(
-                        const UuidV4().generate(),
+                        traceId,
                         WoxDirectionEnum.WOX_DIRECTION_DOWN.code,
                       );
                       return KeyEventResult.handled;
                     case LogicalKeyboardKey.arrowUp:
                       controller.updateActiveIndexByDirection(
-                        const UuidV4().generate(),
+                        traceId,
                         WoxDirectionEnum.WOX_DIRECTION_UP.code,
                       );
                       return KeyEventResult.handled;
@@ -155,7 +158,7 @@ class WoxListView extends StatelessWidget {
                 return KeyEventResult.ignored;
               }
 
-              WoxListItem? itemMatchedHotkey = controller.items.firstWhereOrNull((element) {
+              WoxListItem<T>? itemMatchedHotkey = controller.items.firstWhereOrNull((element) {
                 if (element.hotkey == null || element.hotkey!.isEmpty) {
                   return false;
                 }
@@ -171,7 +174,7 @@ class WoxListView extends StatelessWidget {
               if (itemMatchedHotkey == null) {
                 return KeyEventResult.ignored;
               } else {
-                controller.onItemExecuted?.call(itemMatchedHotkey);
+                controller.onItemExecuted?.call(traceId, itemMatchedHotkey);
                 return KeyEventResult.handled;
               }
             },
@@ -204,7 +207,7 @@ class WoxListView extends StatelessWidget {
                   focusNode: controller.filterBoxFocusNode,
                   controller: controller.filterBoxController,
                   onChanged: (value) {
-                    controller.updateActiveIndex(const UuidV4().generate(), 0);
+                    controller.filterItems(const UuidV4().generate(), value);
                   },
                 ),
               ),
