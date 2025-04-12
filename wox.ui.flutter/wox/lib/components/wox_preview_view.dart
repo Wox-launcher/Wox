@@ -6,6 +6,7 @@ import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:from_css_color/from_css_color.dart';
+import 'package:get/get.dart';
 import 'package:highlight/highlight.dart';
 import 'package:highlight/languages/all.dart';
 import 'package:highlight/languages/bash.dart';
@@ -17,6 +18,7 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_ai_chat_view.dart';
+import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
@@ -213,7 +215,9 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
       var previewChatData = WoxAIChatData.fromJson(jsonDecode(widget.woxPreview.previewData));
-      contentWidget = WoxAIChatView(aiChatData: previewChatData, woxTheme: widget.woxTheme);
+      Get.find<WoxAIChatController>().aiChatData.title = previewChatData.title;
+      Get.find<WoxAIChatController>().aiChatData.conversations.assignAll(previewChatData.conversations);
+      contentWidget = const WoxAIChatView();
     }
 
     if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {

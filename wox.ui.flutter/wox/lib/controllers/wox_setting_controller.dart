@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
+import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/entity/wox_backup.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_theme.dart';
@@ -55,7 +56,7 @@ class WoxSettingController extends GetxController {
     Logger.instance.info(const UuidV4().generate(), 'Setting updated: $key=$value');
 
     if (key == "AIProviders") {
-      Get.find<WoxLauncherController>().reloadAIModels();
+      Get.find<WoxAIChatController>().reloadAIModels();
     }
   }
 

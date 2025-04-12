@@ -10,7 +10,7 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:lpinyin/lpinyin.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/controllers/wox_list_controller.dart';
-import 'package:wox/entity/wox_ai.dart';
+import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
@@ -70,9 +70,6 @@ class WoxLauncherController extends GetxController {
   final clearQueryResultDelay = 100;
 
   // ai chat related variables
-  final aiChatFocusNode = FocusNode();
-  final List<AIModel> aiModels = [];
-  final ScrollController aiChatScrollController = ScrollController();
 
   /// This flag is used to control whether the user can arrow up to show history when the app is first shown.
   var canArrowUpHistory = true;
@@ -125,7 +122,7 @@ class WoxLauncherController extends GetxController {
       tag: 'action',
     );
 
-    reloadAIModels();
+    // Initialize AI models is now handled by WoxAIChatController
   }
 
   /// Triggered when received query results from the server.
@@ -236,13 +233,6 @@ class WoxLauncherController extends GetxController {
     WoxApi.instance.onShow();
   }
 
-  void reloadAIModels() {
-    WoxApi.instance.findAIModels().then((models) {
-      aiModels.assignAll(models);
-      Logger.instance.debug(const UuidV4().generate(), "reload ai models: ${aiModels.length}");
-    });
-  }
-
   Future<void> hideApp(String traceId) async {
     //clear query box text if query type is selection or last query mode is empty
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code || lastQueryMode == WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_EMPTY.code) {
@@ -327,12 +317,6 @@ class WoxLauncherController extends GetxController {
       actionListViewController.requestFocus();
     });
     resizeHeight();
-  }
-
-  void scrollToBottomOfAiChat() {
-    if (aiChatScrollController.hasClients) {
-      aiChatScrollController.jumpTo(aiChatScrollController.position.maxScrollExtent);
-    }
   }
 
   WoxQueryResult? getActiveResult() {
@@ -839,13 +823,8 @@ class WoxLauncherController extends GetxController {
 
   void focusToChatInput(String traceId) {
     Logger.instance.info(traceId, "focus to chat input");
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      aiChatFocusNode.requestFocus();
-    });
-  }
-
-  Future<void> sendChatRequest(String traceId, WoxAIChatData data) async {
-    WoxApi.instance.sendChatRequest(data);
+    // Find the WoxAIChatController and call its focusToChatInput method
+    Get.find<WoxAIChatController>().focusToChatInput(traceId);
   }
 
   void handleChatResponse(String traceId, WoxAIChatData data) {
@@ -858,9 +837,7 @@ class WoxLauncherController extends GetxController {
           scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
         );
         currentPreview.value = result.data.preview;
-        SchedulerBinding.instance.addPostFrameCallback((_) {
-          scrollToBottomOfAiChat();
-        });
+        Get.find<WoxAIChatController>().handleChatResponse(traceId, data);
       }
     }
   }

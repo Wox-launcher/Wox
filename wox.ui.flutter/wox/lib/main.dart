@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:protocol_handler/protocol_handler.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/utils/windows/window_manager.dart';
@@ -62,6 +63,8 @@ Future<void> initialServices(List<String> arguments) async {
   Get.put(launcherController);
   var woxSettingController = WoxSettingController();
   Get.put(woxSettingController);
+  var woxAIChatController = WoxAIChatController();
+  Get.put(woxAIChatController);
 
   //load lang
   var langCode = WoxSettingUtil.instance.currentSetting.langCode;
