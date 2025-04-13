@@ -215,8 +215,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       }
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
       var previewChatData = WoxAIChatData.fromJson(jsonDecode(widget.woxPreview.previewData));
-      Get.find<WoxAIChatController>().aiChatData.title = previewChatData.title;
-      Get.find<WoxAIChatController>().aiChatData.conversations.assignAll(previewChatData.conversations);
+      Get.find<WoxAIChatController>().aiChatData.value = previewChatData;
       contentWidget = const WoxAIChatView();
     }
 

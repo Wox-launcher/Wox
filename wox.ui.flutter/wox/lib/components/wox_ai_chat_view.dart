@@ -7,6 +7,7 @@ import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_list_view.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
+import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
@@ -54,7 +55,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Obx(() => Text(
-                              controller.aiChatData.model.name.isEmpty ? "请选择模型" : controller.aiChatData.model.name,
+                              controller.aiChatData.value.model.value.name.isEmpty ? "请选择模型" : controller.aiChatData.value.model.value.name,
                               style: TextStyle(
                                 color: fromCssColor(woxTheme.previewPropertyTitleColor),
                                 fontSize: 14,
@@ -77,7 +78,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                 controller: controller.aiChatScrollController,
                 padding: const EdgeInsets.symmetric(vertical: 16.0),
                 child: Obx(() => Column(
-                      children: controller.aiChatData.conversations.map((message) => _buildMessageItem(message)).toList(),
+                      children: controller.aiChatData.value.conversations.map((message) => _buildMessageItem(message)).toList(),
                     )),
               ),
             ),

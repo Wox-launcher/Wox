@@ -1,5 +1,5 @@
 import 'package:get/get.dart';
-import 'package:uuid/uuid.dart';
+import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
 import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
@@ -59,7 +59,7 @@ class WoxAIChatData {
   late String id;
   late String title;
   late RxList<WoxPreviewChatConversation> conversations;
-  late WoxPreviewChatModel model;
+  late Rx<AIModel> model;
   late int createdAt;
   late int updatedAt;
 
@@ -88,7 +88,7 @@ class WoxAIChatData {
       id: json['Id'] ?? "",
       title: json['Title'] ?? "",
       conversations: RxList<WoxPreviewChatConversation>.from(conversations),
-      model: json['Model'] != null ? WoxPreviewChatModel.fromJson(json['Model']) : WoxPreviewChatModel(name: "", provider: ""),
+      model: json['Model'] != null ? AIModel.fromJson(json['Model']).obs : AIModel(name: "", provider: "").obs,
       createdAt: json['CreatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
       updatedAt: json['UpdatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
     );
@@ -117,26 +117,11 @@ class WoxAIChatData {
       id: "",
       title: "",
       conversations: RxList<WoxPreviewChatConversation>.from([]),
-      model: WoxPreviewChatModel(name: "", provider: ""),
+      model: AIModel(name: "", provider: "").obs,
       createdAt: 0,
       updatedAt: 0,
       selectedTools: null,
     );
-  }
-}
-
-class WoxPreviewChatModel {
-  late String name;
-  late String provider;
-
-  WoxPreviewChatModel({required this.name, required this.provider});
-
-  static WoxPreviewChatModel fromJson(Map<String, dynamic> json) {
-    return WoxPreviewChatModel(name: json['Name'], provider: json['Provider']);
-  }
-
-  Map<String, dynamic> toJson() {
-    return {'Name': name, 'Provider': provider};
   }
 }
 

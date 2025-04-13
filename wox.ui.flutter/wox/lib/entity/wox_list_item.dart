@@ -78,7 +78,7 @@ class WoxListItem<T> {
 }
 
 class WoxListItemTail {
-  late String type;
+  late String type; // see @WoxListItemTailTypeEnum
   late String? text;
   late WoxImage? image;
   late HotkeyX? hotkey;
@@ -131,14 +131,14 @@ class WoxListItemTail {
   }
 
   factory WoxListItemTail.text(String text) {
-    return WoxListItemTail(type: WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_TEXT.code, text: text);
+    return WoxListItemTail(type: WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_TEXT.code, text: text);
   }
 
   factory WoxListItemTail.hotkey(HotkeyX hotkey) {
-    return WoxListItemTail(type: WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_HOTKEY.code, hotkey: hotkey);
+    return WoxListItemTail(type: WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_HOTKEY.code, hotkey: hotkey);
   }
 
   factory WoxListItemTail.image(WoxImage image) {
-    return WoxListItemTail(type: WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_IMAGE.code, image: image);
+    return WoxListItemTail(type: WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_IMAGE.code, image: image);
   }
 }

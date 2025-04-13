@@ -47,7 +47,7 @@ class WoxListItemView extends StatelessWidget {
           child: Row(
             children: [
               for (final tail in item.tails)
-                if (tail.type == WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_TEXT.code && tail.text != null)
+                if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_TEXT.code && tail.text != null)
                   Padding(
                     padding: const EdgeInsets.only(left: 10.0),
                     child: Text(
@@ -63,7 +63,7 @@ class WoxListItemView extends StatelessWidget {
                       ),
                     ),
                   )
-                else if (tail.type == WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_HOTKEY.code && tail.hotkey != null)
+                else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_HOTKEY.code && tail.hotkey != null)
                   Padding(
                     padding: const EdgeInsets.only(left: 10.0),
                     child: WoxHotkeyView(
@@ -73,7 +73,7 @@ class WoxListItemView extends StatelessWidget {
                       textColor: fromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
                     ),
                   )
-                else if (tail.type == WoxQueryResultTailTypeEnum.WOX_QUERY_RESULT_TAIL_TYPE_IMAGE.code && tail.image != null && tail.image!.imageData.isNotEmpty)
+                else if (tail.type == WoxListItemTailTypeEnum.WOX_LIST_ITEM_TAIL_TYPE_IMAGE.code && tail.image != null && tail.image!.imageData.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(left: 10.0),
                     child: WoxImageView(

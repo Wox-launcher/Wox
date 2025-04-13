@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"wox/ai"
 	"wox/common"
 	"wox/plugin"
@@ -315,18 +316,16 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData) {
 	}
 
 	var tools []common.MCPTool
-	if aiChatData.SelectedTools != nil && len(aiChatData.SelectedTools) > 0 {
+	if len(aiChatData.SelectedTools) > 0 {
 		tools = lo.Filter(r.mcpToolsMap, func(tool common.MCPTool, _ int) bool {
 			return lo.Contains(aiChatData.SelectedTools, tool.Name)
 		})
-	} else {
-		tools = r.mcpToolsMap
 	}
 
 	chatErr := r.api.AIChatStream(ctx, aiChatData.Model, aiChatData.Conversations, common.ChatOptions{
 		Tools: tools,
 	}, func(t common.ChatStreamDataType, data string) {
-		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("chat stream data: %s", data))
+		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("chat stream start receiving delta data: %s", data))
 
 		// find the aiResponseConversation and update
 		var aiResponseConversation common.Conversation
@@ -347,6 +346,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData) {
 			aiResponseConversation.Text = responseText
 		} else if t == common.ChatStreamTypeFinished {
 			responseText += data
+			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("chat stream finished: %s", responseText))
 			aiResponseConversation.Text = responseText
 		} else if t == common.ChatStreamTypeError {
 			responseText = fmt.Sprintf("ERR: %s", data)
@@ -519,6 +519,11 @@ func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData
 			title += data
 		} else if t == common.ChatStreamTypeFinished {
 			title += data
+
+			// remove the thinking tags
+			_, title = processAIThinking(title)
+			title = strings.ReplaceAll(title, "\n", "")
+
 			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Summarized chat title: %s", title))
 
 			// update the chat title

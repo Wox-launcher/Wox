@@ -38,15 +38,22 @@ func (o *OpenAIBaseProvider) ChatStream(ctx context.Context, model common.Model,
 
 	util.GetLogger().Debug(ctx, fmt.Sprintf("chat stream with model: %s", model.Name))
 
-	createdStream := client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
-		Model:    model.Name,
-		Messages: o.convertConversations(conversations),
-		Tools:    o.convertTools(options.Tools),
-		ToolChoice: openai.ChatCompletionToolChoiceOptionUnionParam{
-			OfAuto: param.Opt[string]{},
-		},
-	})
-	util.GetLogger().Debug(ctx, fmt.Sprintf("chat stream created: %v", createdStream))
+	var createdStream *ssestream.Stream[openai.ChatCompletionChunk]
+	if len(options.Tools) > 0 {
+		createdStream = client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
+			Model:    model.Name,
+			Messages: o.convertConversations(conversations),
+			Tools:    o.convertTools(options.Tools),
+			ToolChoice: openai.ChatCompletionToolChoiceOptionUnionParam{
+				OfAuto: param.Opt[string]{},
+			},
+		})
+	} else {
+		createdStream = client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
+			Model:    model.Name,
+			Messages: o.convertConversations(conversations),
+		})
+	}
 
 	return &OpenAIBaseProviderStream{conversations: conversations, stream: createdStream}, nil
 }

@@ -58,38 +58,38 @@ class WoxListView<T> extends StatelessWidget {
                     var item = controller.items[index];
                     return MouseRegion(
                       onEnter: (_) {
-                        if (controller.isMouseMoved && !item.isGroup) {
-                          Logger.instance.info(const UuidV4().generate(), "MOUSE: onenter, is mouse moved: ${controller.isMouseMoved}, is group: ${item.isGroup}");
+                        if (controller.isMouseMoved && !item.value.isGroup) {
+                          Logger.instance.info(const UuidV4().generate(), "MOUSE: onenter, is mouse moved: ${controller.isMouseMoved}, is group: ${item.value.isGroup}");
                           controller.updateHoveredIndex(index);
                         }
                       },
                       onHover: (_) {
-                        if (!controller.isMouseMoved && !item.isGroup) {
-                          Logger.instance.info(const UuidV4().generate(), "MOUSE: onHover, is mouse moved: ${controller.isMouseMoved}, is group: ${item.isGroup}");
+                        if (!controller.isMouseMoved && !item.value.isGroup) {
+                          Logger.instance.info(const UuidV4().generate(), "MOUSE: onHover, is mouse moved: ${controller.isMouseMoved}, is group: ${item.value.isGroup}");
                           controller.isMouseMoved = true;
                           controller.updateHoveredIndex(index);
                         }
                       },
                       onExit: (_) {
-                        if (!item.isGroup && controller.hoveredIndex.value == index) {
+                        if (!item.value.isGroup && controller.hoveredIndex.value == index) {
                           controller.clearHoveredResult();
                         }
                       },
                       child: GestureDetector(
                         onTap: () {
-                          if (!item.isGroup) {
+                          if (!item.value.isGroup) {
                             controller.updateActiveIndex(const UuidV4().generate(), index);
-                            controller.onItemActive?.call(const UuidV4().generate(), item);
+                            controller.onItemActive?.call(const UuidV4().generate(), item.value);
                           }
                         },
                         onDoubleTap: () {
-                          if (!item.isGroup) {
-                            controller.onItemExecuted?.call(const UuidV4().generate(), item);
+                          if (!item.value.isGroup) {
+                            controller.onItemExecuted?.call(const UuidV4().generate(), item.value);
                           }
                         },
                         child: Obx(
                           () => WoxListItemView(
-                            item: item,
+                            item: item.value,
                             woxTheme: WoxThemeUtil.instance.currentTheme.value,
                             isActive: controller.activeIndex.value == index,
                             isHovered: controller.hoveredIndex.value == index,
@@ -128,7 +128,7 @@ class WoxListView<T> extends StatelessWidget {
                       return KeyEventResult.handled;
                     case LogicalKeyboardKey.enter:
                       if (controller.items.isNotEmpty && controller.activeIndex.value < controller.items.length) {
-                        controller.onItemExecuted?.call(traceId, controller.items[controller.activeIndex.value]);
+                        controller.onItemExecuted?.call(traceId, controller.items[controller.activeIndex.value].value);
                       }
                       return KeyEventResult.handled;
                   }
@@ -157,12 +157,12 @@ class WoxListView<T> extends StatelessWidget {
                 return KeyEventResult.ignored;
               }
 
-              WoxListItem<T>? itemMatchedHotkey = controller.items.firstWhereOrNull((element) {
-                if (element.hotkey == null || element.hotkey!.isEmpty) {
+              Rx<WoxListItem<T>>? itemMatchedHotkey = controller.items.firstWhereOrNull((element) {
+                if (element.value.hotkey == null || element.value.hotkey!.isEmpty) {
                   return false;
                 }
 
-                var elementHotkey = WoxHotkey.parseHotkeyFromString(element.hotkey!);
+                var elementHotkey = WoxHotkey.parseHotkeyFromString(element.value.hotkey!);
                 if (elementHotkey != null && WoxHotkey.equals(elementHotkey.normalHotkey, pressedHotkey)) {
                   return true;
                 }
@@ -173,7 +173,7 @@ class WoxListView<T> extends StatelessWidget {
               if (itemMatchedHotkey == null) {
                 return KeyEventResult.ignored;
               } else {
-                controller.onItemExecuted?.call(traceId, itemMatchedHotkey);
+                controller.onItemExecuted?.call(traceId, itemMatchedHotkey.value);
                 return KeyEventResult.handled;
               }
             },

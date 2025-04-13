@@ -1,3 +1,5 @@
+import 'package:wox/entity/wox_image.dart';
+
 class AIModel {
   late String name;
   late String provider;
@@ -27,4 +29,22 @@ class AIMCPTool {
     name = json['Name'] ?? "";
     description = json['Description'] ?? "";
   }
+}
+
+class ChatSelectItem {
+  final String id;
+  final String name;
+  final WoxImage icon;
+  final bool isCategory;
+  final List<ChatSelectItem> children;
+  Function(String traceId)? onExecute;
+
+  ChatSelectItem({
+    required this.id,
+    required this.name,
+    required this.icon,
+    required this.isCategory,
+    required this.children,
+    this.onExecute,
+  });
 }

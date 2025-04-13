@@ -141,7 +141,7 @@ class WoxLauncherController extends GetxController {
     clearQueryResultsTimer.cancel();
 
     //merge results
-    final existingQueryResults = resultListViewController.items.where((item) => item.data.queryId == currentQuery.value.queryId).map((e) => e.data).toList();
+    final existingQueryResults = resultListViewController.items.where((item) => item.value.data.queryId == currentQuery.value.queryId).map((e) => e.value.data).toList();
     final finalResults = List<WoxQueryResult>.from(existingQueryResults)..addAll(receivedResults);
 
     //group results
@@ -326,7 +326,7 @@ class WoxLauncherController extends GetxController {
       return null;
     }
 
-    return resultListViewController.items[resultListViewController.activeIndex.value].data;
+    return resultListViewController.items[resultListViewController.activeIndex.value].value.data;
   }
 
   /// given a hotkey, find the action in the result
@@ -485,19 +485,6 @@ class WoxLauncherController extends GetxController {
     ));
   }
 
-  /// check if the query text is fuzzy match with the filter text based on the setting
-  bool isFuzzyMatch(String traceId, String queryText, String filterText) {
-    if (WoxSettingUtil.instance.currentSetting.usePinYin) {
-      queryText = transferChineseToPinYin(queryText).toLowerCase();
-    } else {
-      queryText = queryText.toLowerCase();
-    }
-
-    var score = weightedRatio(queryText, filterText.toLowerCase());
-    Logger.instance.debug(traceId, "calculate fuzzy match score, queryText: $queryText, filterText: $filterText, score: $score");
-    return score > 50;
-  }
-
   Future<void> handleWebSocketMessage(WoxWebsocketMsg msg) async {
     if (msg.method != WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code && msg.type == WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code) {
       Logger.instance.info(msg.traceId, "Received message: ${msg.method}");
@@ -598,7 +585,7 @@ class WoxLauncherController extends GetxController {
   /// reset and jump active result to top of the list
   void resetActiveResult() {
     if (resultListViewController.items.isNotEmpty) {
-      if (resultListViewController.items.first.data.isGroup) {
+      if (resultListViewController.items.first.value.isGroup) {
         resultListViewController.updateActiveIndexByDirection(const UuidV4().generate(), WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
       } else {
         resultListViewController.updateActiveIndex(const UuidV4().generate(), 0);
@@ -630,9 +617,9 @@ class WoxLauncherController extends GetxController {
   }
 
   updateResult(String traceId, UpdateableResult updateableResult) {
-    final result = resultListViewController.items.firstWhere((element) => element.data.id == updateableResult.id);
+    final result = resultListViewController.items.firstWhere((element) => element.value.data.id == updateableResult.id);
     var needUpdate = false;
-    var updatedResult = result.copyWith();
+    var updatedResult = result.value.copyWith();
 
     if (updateableResult.title != null) {
       updatedResult = updatedResult.copyWith(title: updateableResult.title);
@@ -657,11 +644,11 @@ class WoxLauncherController extends GetxController {
 
       refreshCounter = refreshCounter + 100;
       for (var result in resultListViewController.items) {
-        if (result.data.refreshInterval > 0 && refreshCounter % result.data.refreshInterval == 0) {
-          if (isRequesting.containsKey(result.data.id)) {
+        if (result.value.data.refreshInterval > 0 && refreshCounter % result.value.data.refreshInterval == 0) {
+          if (isRequesting.containsKey(result.value.data.id)) {
             continue;
           } else {
-            isRequesting[result.data.id] = true;
+            isRequesting[result.value.data.id] = true;
           }
 
           final traceId = const UuidV4().generate();
@@ -671,17 +658,17 @@ class WoxLauncherController extends GetxController {
             type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
             method: WoxMsgMethodEnum.WOX_MSG_METHOD_REFRESH.code,
             data: {
-              "queryId": result.data.queryId,
+              "queryId": result.value.data.queryId,
               "refreshableResult": WoxRefreshableResult(
-                resultId: result.data.id,
-                title: result.data.title,
-                subTitle: result.data.subTitle,
-                icon: result.data.icon,
-                preview: result.data.preview,
-                tails: result.data.tails,
-                contextData: result.data.contextData,
-                refreshInterval: result.data.refreshInterval,
-                actions: result.data.actions,
+                resultId: result.value.data.id,
+                title: result.value.data.title,
+                subTitle: result.value.data.subTitle,
+                icon: result.value.data.icon,
+                preview: result.value.data.preview,
+                tails: result.value.data.tails,
+                contextData: result.value.data.contextData,
+                refreshInterval: result.value.data.refreshInterval,
+                actions: result.value.data.actions,
               ).toJson(),
             },
           );
@@ -689,30 +676,30 @@ class WoxLauncherController extends GetxController {
           WoxWebsocketMsgUtil.instance.sendMessage(msg).then((resp) {
             final endTime = DateTime.now().millisecondsSinceEpoch;
             if (endTime - startTime > 100) {
-              Logger.instance.warn(traceId, "refresh result <${result.title}> (resultId: ${result.id}) too slow, cost ${endTime - startTime} ms");
+              Logger.instance.warn(traceId, "refresh result <${result.value.data.title}> (resultId: ${result.value.data.id}) too slow, cost ${endTime - startTime} ms");
             }
 
             // check result id, because the result may be removed during the refresh
-            if (!resultListViewController.items.any((element) => element.data.id == result.data.id)) {
-              isRequesting.remove(result.data.id);
-              Logger.instance
-                  .info(traceId, "result <${result.data.title}> (resultId: ${result.data.id}) is removed (maybe caused by new query) during refresh, skip update result");
+            if (!resultListViewController.items.any((element) => element.value.data.id == result.value.data.id)) {
+              isRequesting.remove(result.value.data.id);
+              Logger.instance.info(
+                  traceId, "result <${result.value.data.title}> (resultId: ${result.value.data.id}) is removed (maybe caused by new query) during refresh, skip update result");
               return;
             }
 
             final refreshResult = WoxRefreshableResult.fromJson(resp);
-            result.data.title = refreshResult.title;
-            result.data.subTitle = refreshResult.subTitle;
-            result.data.icon = refreshResult.icon;
-            result.data.preview = refreshResult.preview;
-            result.data.tails.assignAll(refreshResult.tails);
-            result.data.actions.assignAll(refreshResult.actions);
-            result.data.contextData = refreshResult.contextData;
-            result.data.refreshInterval = refreshResult.refreshInterval;
+            result.value.data.title = refreshResult.title;
+            result.value.data.subTitle = refreshResult.subTitle;
+            result.value.data.icon = refreshResult.icon;
+            result.value.data.preview = refreshResult.preview;
+            result.value.data.tails.assignAll(refreshResult.tails);
+            result.value.data.actions.assignAll(refreshResult.actions);
+            result.value.data.contextData = refreshResult.contextData;
+            result.value.data.refreshInterval = refreshResult.refreshInterval;
 
             // only update preview and toolbar when current result is active
-            if (resultListViewController.isItemActive(result.data.id)) {
-              currentPreview.value = result.data.preview;
+            if (resultListViewController.isItemActive(result.value.data.id)) {
+              currentPreview.value = result.value.data.preview;
               final oldShowPreview = isShowPreviewPanel.value;
               isShowPreviewPanel.value = currentPreview.value.previewData != "";
               if (oldShowPreview != isShowPreviewPanel.value) {
@@ -725,16 +712,16 @@ class WoxLauncherController extends GetxController {
             resultListViewController.updateItem(
                 traceId,
                 WoxListItem(
-                  id: result.data.id,
-                  icon: result.data.icon,
-                  title: result.data.title,
-                  tails: result.data.tails,
-                  subTitle: result.data.subTitle,
-                  isGroup: result.data.isGroup,
-                  data: result.data,
+                  id: result.value.data.id,
+                  icon: result.value.data.icon,
+                  title: result.value.data.title,
+                  tails: result.value.data.tails,
+                  subTitle: result.value.data.subTitle,
+                  isGroup: result.value.data.isGroup,
+                  data: result.value.data,
                 ));
 
-            isRequesting.remove(result.data.id);
+            isRequesting.remove(result.value.data.id);
           });
         }
       }
@@ -823,20 +810,21 @@ class WoxLauncherController extends GetxController {
 
   void focusToChatInput(String traceId) {
     Logger.instance.info(traceId, "focus to chat input");
-    // Find the WoxAIChatController and call its focusToChatInput method
     Get.find<WoxAIChatController>().focusToChatInput(traceId);
   }
 
   void handleChatResponse(String traceId, WoxAIChatData data) {
     for (var result in resultListViewController.items) {
-      if (result.data.contextData == data.id) {
-        result.data.preview = WoxPreview(
+      if (result.value.data.contextData == data.id) {
+        // update preview in result list view item
+        // otherwise, the preview will lost when user switch to other result and back
+        result.value.data.preview = WoxPreview(
           previewType: WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code,
           previewData: jsonEncode(data.toJson()),
           previewProperties: {},
           scrollPosition: WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code,
         );
-        currentPreview.value = result.data.preview;
+
         Get.find<WoxAIChatController>().handleChatResponse(traceId, data);
       }
     }
@@ -909,23 +897,15 @@ class WoxLauncherController extends GetxController {
         hotkey: "enter",
         actionName: action.name,
         action: () {
-          var result = resultListViewController.items.firstWhereOrNull((element) => element.data.id == action.resultId);
+          var result = resultListViewController.items.firstWhereOrNull((element) => element.value.data.id == action.resultId);
           if (result != null) {
-            executeAction(traceId, result.data, action);
+            executeAction(traceId, result.value.data, action);
           } else {
             Logger.instance.error(traceId, "associated result not found, cannot execute action: ${action.name}");
           }
         },
       );
     }
-  }
-
-  String transferChineseToPinYin(String str) {
-    RegExp regExp = RegExp(r'[\u4e00-\u9fa5]');
-    if (regExp.hasMatch(str)) {
-      return PinyinHelper.getPinyin(str, separator: "", format: PinyinFormat.WITHOUT_TONE);
-    }
-    return str;
   }
 
   Future<void> handleDropFiles(DropDoneDetails details) async {

@@ -13,28 +13,11 @@ import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_toolbar.dart';
 import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
+import 'package:wox/enums/wox_result_tail_type_enum.dart';
 import 'package:wox/utils/log.dart';
 
-class ChatSelectItem {
-  final String id;
-  final String name;
-  final WoxImage icon;
-  final bool isCategory;
-  final List<ChatSelectItem> children;
-  final Function(String traceId)? onExecute;
-
-  ChatSelectItem({
-    required this.id,
-    required this.name,
-    required this.icon,
-    required this.isCategory,
-    required this.children,
-    this.onExecute,
-  });
-}
-
 class WoxAIChatController extends GetxController {
-  final WoxAIChatData aiChatData = WoxAIChatData.empty();
+  final Rx<WoxAIChatData> aiChatData = WoxAIChatData.empty().obs;
   late final WoxListController<ChatSelectItem> chatSelectListController;
 
   // Controllers and focus nodes
@@ -54,20 +37,13 @@ class WoxAIChatController extends GetxController {
   final RxBool isLoadingTools = false.obs;
 
   WoxAIChatController() {
-    // Initialize chat select list controller
     chatSelectListController = WoxListController<ChatSelectItem>(
       onItemExecuted: _onChatSelectItemExecuted,
       onFilterBoxEscPressed: (traceId) => hideChatSelectPanel(),
     );
 
-    // Load AI models
     reloadAIModels();
-
-    // Fetch tools if a model is selected initially
-    if (aiChatData.model.name.isNotEmpty) {
-      // Don't await here, let it load in background
-      fetchAvailableTools();
-    }
+    fetchAvailableTools();
   }
 
   // Load available AI models
@@ -184,7 +160,7 @@ class WoxAIChatController extends GetxController {
                 isCategory: false,
                 children: [],
                 onExecute: (String traceId) {
-                  aiChatData.model = WoxPreviewChatModel(name: model.name, provider: model.provider);
+                  aiChatData.value.model.value = AIModel(name: model.name, provider: model.provider);
                   hideChatSelectPanel();
                 }),
           ));
@@ -193,12 +169,15 @@ class WoxAIChatController extends GetxController {
     } else if (currentChatSelectCategory.value == "tools") {
       // Show tools
       for (final tool in availableTools) {
+        // Check if this tool is selected to determine if we should show the checkmark
+        final bool isSelected = selectedTools.contains(tool.name);
+
         items.add(WoxListItem<ChatSelectItem>(
           id: tool.name,
           icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🔧"),
           title: tool.name,
           subTitle: "",
-          tails: [],
+          tails: isSelected ? [WoxListItemTail.image(WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "✅"))] : [],
           isGroup: false,
           data: ChatSelectItem(
               id: tool.name,
@@ -212,6 +191,8 @@ class WoxAIChatController extends GetxController {
                 } else {
                   selectedTools.add(tool.name);
                 }
+                // Update the items to reflect the change in selection status
+                updateChatSelectItems();
               }),
         ));
       }
@@ -278,29 +259,15 @@ class WoxAIChatController extends GetxController {
     });
   }
 
-  // Send chat request to backend
-  Future<void> sendChatRequest(String traceId, WoxAIChatData data) async {
-    WoxApi.instance.sendChatRequest(data);
-  }
-
   // Method to fetch available tools based on the current model
   Future<void> fetchAvailableTools() async {
-    // Prevent concurrent fetches
     if (isLoadingTools.value) return;
-
-    if (aiChatData.model.name.isEmpty) {
-      availableTools.clear();
-      selectedTools.clear();
-      isLoadingTools.value = false;
-      return;
-    }
-
     isLoadingTools.value = true;
 
     try {
-      // 使用findAIMCPServerToolsAll获取所有工具
-      final tools = await WoxApi.instance.findAIMCPServerToolsAll({});
+      final tools = await WoxApi.instance.findAIMCPServerToolsAll();
       availableTools.assignAll(tools);
+
       // Default select all tools
       selectedTools.assignAll(tools.map((tool) => tool.name).toSet());
     } catch (e, s) {
@@ -312,39 +279,10 @@ class WoxAIChatController extends GetxController {
     }
   }
 
-  // Handle chat select panel keyboard navigation
-  KeyEventResult handleChatSelectKeyboard(KeyEvent event) {
-    // 只处理特定的键盘事件，让其他键盘输入正常工作
-    if (event is KeyDownEvent) {
-      switch (event.logicalKey) {
-        case LogicalKeyboardKey.escape:
-          if (currentChatSelectCategory.isNotEmpty) {
-            // Go back to main categories
-            currentChatSelectCategory.value = "";
-            updateChatSelectItems();
-
-            // 返回主类别时，确保焦点在过滤器文本框上
-            SchedulerBinding.instance.addPostFrameCallback((_) {
-              chatSelectListController.filterBoxFocusNode.requestFocus();
-            });
-          } else {
-            // Close panel
-            hideChatSelectPanel();
-          }
-          return KeyEventResult.handled;
-        default:
-          // 对于其他键，让 WoxListController 处理
-          return KeyEventResult.ignored;
-      }
-    }
-    return KeyEventResult.ignored;
-  }
-
-  // Send message
   void sendMessage() {
     final text = textController.text.trim();
     // Check if AI model is selected
-    if (aiChatData.model.name.isEmpty) {
+    if (aiChatData.value.model.value.name.isEmpty) {
       launcherController.showToolbarMsg(const UuidV4().generate(), ToolbarMsg(text: "Please select a model", displaySeconds: 3));
       return;
     }
@@ -355,14 +293,14 @@ class WoxAIChatController extends GetxController {
     }
 
     // append user message to chat data
-    aiChatData.conversations.add(WoxPreviewChatConversation(
+    aiChatData.value.conversations.add(WoxPreviewChatConversation(
       id: const UuidV4().generate(),
       role: WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value,
       text: text,
-      images: [], // TODO: Support images if needed
+      images: [],
       timestamp: DateTime.now().millisecondsSinceEpoch,
     ));
-    aiChatData.updatedAt = DateTime.now().millisecondsSinceEpoch;
+    aiChatData.value.updatedAt = DateTime.now().millisecondsSinceEpoch;
 
     textController.clear();
 
@@ -370,14 +308,9 @@ class WoxAIChatController extends GetxController {
       scrollToBottomOfAiChat();
     });
 
-    aiChatData.selectedTools = selectedTools.toList();
-    sendChatRequest(
-      const UuidV4().generate(),
-      aiChatData,
-    );
+    aiChatData.value.selectedTools = selectedTools.toList();
 
-    // Update toolbar
-    updateToolbarByChat(const UuidV4().generate());
+    WoxApi.instance.sendChatRequest(aiChatData.value);
   }
 
   String formatTimestamp(int timestamp) {
@@ -385,12 +318,12 @@ class WoxAIChatController extends GetxController {
     return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
 
-  // Handle chat response from backend
   void handleChatResponse(String traceId, WoxAIChatData data) {
     // Update the chat data with the response
-    if (data.id == aiChatData.id) {
-      aiChatData.conversations.assignAll(data.conversations);
-      aiChatData.updatedAt = data.updatedAt;
+    if (data.id == aiChatData.value.id) {
+      aiChatData.value.title = data.title;
+      aiChatData.value.conversations.assignAll(data.conversations);
+      aiChatData.value.updatedAt = data.updatedAt;
 
       // Scroll to bottom after a short delay to ensure the new message is rendered
       SchedulerBinding.instance.addPostFrameCallback((_) {
@@ -399,21 +332,8 @@ class WoxAIChatController extends GetxController {
     }
   }
 
-  // Update the toolbar to chat view
-  void updateToolbarByChat(String traceId) {
-    Logger.instance.debug(traceId, "update toolbar to chat");
-    launcherController.toolbar.value = ToolbarInfo(
-      hotkey: "cmd+j",
-      actionName: "Select models",
-      action: () {
-        showModelsPanel();
-      },
-    );
-  }
-
   @override
   void onClose() {
-    // Dispose controllers and focus nodes
     textController.dispose();
     chatSelectListController.dispose();
     aiChatFocusNode.dispose();

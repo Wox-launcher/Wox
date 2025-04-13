@@ -9,8 +9,8 @@ import 'package:wox/utils/wox_setting_util.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
 class WoxListController<T> extends GetxController {
-  final RxList<WoxListItem<T>> _originalItems = <WoxListItem<T>>[].obs; // original items for filter and restore
-  final RxList<WoxListItem<T>> _items = <WoxListItem<T>>[].obs;
+  final List<WoxListItem<T>> _originalItems = []; // original items for filter and restore
+  final RxList<Rx<WoxListItem<T>>> _items = <Rx<WoxListItem<T>>>[].obs;
 
   final RxInt _activeIndex = 0.obs;
   final RxInt _hoveredIndex = (-1).obs;
@@ -35,13 +35,13 @@ class WoxListController<T> extends GetxController {
     this.onFilterBoxLostFocus,
   });
 
-  RxList<WoxListItem<T>> get items => _items;
+  RxList<Rx<WoxListItem<T>>> get items => _items;
 
   RxInt get hoveredIndex => _hoveredIndex;
 
   RxInt get activeIndex => _activeIndex;
 
-  WoxListItem<T> get activeItem => _items[_activeIndex.value];
+  WoxListItem<T> get activeItem => _items[_activeIndex.value].value;
 
   void updateActiveIndexByDirection(String traceId, WoxDirection direction) {
     Logger.instance.debug(traceId, "updateActiveIndex start, direction: $direction, current activeIndex: ${_activeIndex.value}");
@@ -59,7 +59,7 @@ class WoxListController<T> extends GetxController {
       }
 
       int safetyCounter = 0;
-      while (newIndex < _items.length && _items[newIndex].isGroup && safetyCounter < _items.length) {
+      while (newIndex < _items.length && _items[newIndex].value.isGroup && safetyCounter < _items.length) {
         newIndex++;
         safetyCounter++;
         if (newIndex >= _items.length) {
@@ -76,7 +76,7 @@ class WoxListController<T> extends GetxController {
       }
 
       int safetyCounter = 0;
-      while (newIndex >= 0 && _items[newIndex].isGroup && safetyCounter < _items.length) {
+      while (newIndex >= 0 && _items[newIndex].value.isGroup && safetyCounter < _items.length) {
         newIndex--;
         safetyCounter++;
         if (newIndex < 0) {
@@ -97,7 +97,7 @@ class WoxListController<T> extends GetxController {
     _activeIndex.value = index;
     _syncScrollPositionWithActiveIndex(traceId);
 
-    onItemActive?.call(traceId, _items[index]);
+    onItemActive?.call(traceId, _items[index].value);
 
     Logger.instance.debug(traceId, "updateActiveIndex end, new activeIndex: ${_activeIndex.value}");
   }
@@ -143,7 +143,7 @@ class WoxListController<T> extends GetxController {
     if (_activeIndex.value > 0) {
       // Search backward from the active item for the nearest group header
       for (int i = _activeIndex.value - 1; i >= 0; i--) {
-        if (_items[i].isGroup) {
+        if (_items[i].value.isGroup) {
           groupIndex = i;
           break;
         }
@@ -151,7 +151,7 @@ class WoxListController<T> extends GetxController {
     } else if (_activeIndex.value == 0 && _items.length > 1) {
       // If the active item is the first item, check if there are any group headers in the list
       for (int i = 0; i < _items.length; i++) {
-        if (_items[i].isGroup) {
+        if (_items[i].value.isGroup) {
           // If a group header is found, set the scroll position to 0 to show the first item
           scrollController.jumpTo(0);
           return;
@@ -162,7 +162,7 @@ class WoxListController<T> extends GetxController {
     // If the active item is before the visible range, scroll up to make it visible
     if (_activeIndex.value < firstVisibleItemIndex) {
       // If there's a group header before the active item and it's close enough, show the group header
-      if (groupIndex != -1 && _activeIndex.value - groupIndex <= 3) {
+      if (groupIndex != -1 && _activeIndex.value - groupIndex <= 2) {
         // Scroll the group header to the top of the visible area
         final newOffset = groupIndex * itemHeight;
         scrollController.jumpTo(newOffset);
@@ -176,24 +176,9 @@ class WoxListController<T> extends GetxController {
 
     // If the active item is after the visible range, scroll down to make it visible
     if (_activeIndex.value > lastVisibleItemIndex) {
-      // If there's a group header before the active item and it's close enough, ensure the group header is also visible
-      if (groupIndex != -1 && _activeIndex.value - groupIndex <= 3) {
-        // Calculate the number of items to show (including the group header and active item)
-        int itemsToShow = _activeIndex.value - groupIndex + 1;
-        // If the number of items to show is less than the number of items that can be displayed in the viewport, show the group header
-        if (itemsToShow <= visibleItemCount) {
-          final newOffset = groupIndex * itemHeight;
-          scrollController.jumpTo(newOffset);
-        } else {
-          // Otherwise, scroll the active item to the bottom of the visible area
-          final newOffset = (_activeIndex.value - visibleItemCount + 1) * itemHeight;
-          scrollController.jumpTo(newOffset);
-        }
-      } else {
-        // Scroll the active item to the bottom of the visible area
-        final newOffset = (_activeIndex.value - visibleItemCount + 1) * itemHeight;
-        scrollController.jumpTo(newOffset);
-      }
+      // Scroll the active item to the bottom of the visible area
+      final newOffset = (_activeIndex.value - visibleItemCount + 1) * itemHeight;
+      scrollController.jumpTo(newOffset);
       return;
     }
   }
@@ -206,14 +191,14 @@ class WoxListController<T> extends GetxController {
     }
 
     // update items
-    final index = _items.indexWhere((element) => element.id == item.id);
+    final index = _items.indexWhere((element) => element.value.id == item.id);
     if (index != -1) {
-      _items[index] = item;
+      _items[index] = item.obs;
     }
   }
 
   void updateItems(String traceId, List<WoxListItem<T>> newItems) {
-    _items.assignAll(newItems);
+    _items.assignAll(newItems.map((item) => item.obs));
     _originalItems.assignAll(newItems);
 
     if (_activeIndex.value >= _items.length && _items.isNotEmpty) {
@@ -230,7 +215,7 @@ class WoxListController<T> extends GetxController {
   }
 
   bool isItemActive(String itemId) {
-    final index = _items.indexWhere((element) => element.id == itemId);
+    final index = _items.indexWhere((element) => element.value.id == itemId);
     return index != -1 && index == _activeIndex.value;
   }
 
@@ -247,7 +232,7 @@ class WoxListController<T> extends GetxController {
     }
 
     var score = weightedRatio(queryText, filterText.toLowerCase());
-    Logger.instance.debug(traceId, "calculate fuzzy match score, queryText: $queryText, filterText: $filterText, score: $score");
+    // Logger.instance.debug(traceId, "calculate fuzzy match score, queryText: $queryText, filterText: $filterText, score: $score");
     return score > 50;
   }
 
@@ -261,7 +246,7 @@ class WoxListController<T> extends GetxController {
 
   void filterItems(String traceId, String filterText) {
     if (filterText.isEmpty) {
-      _items.assignAll(_originalItems);
+      _items.assignAll(_originalItems.map((item) => item.obs));
     } else {
       // Find all non-group items that match the filter text
       var matchedItems = _originalItems.where((element) => !element.isGroup && isFuzzyMatch(traceId, element.title, filterText)).toList();
@@ -269,7 +254,7 @@ class WoxListController<T> extends GetxController {
       // Find all items to include (matched items and their parent groups)
       var filteredItems = _findItemsToInclude(matchedItems);
 
-      _items.assignAll(filteredItems);
+      _items.assignAll(filteredItems.map((item) => item.obs));
     }
     updateActiveIndex(traceId, 0);
   }
