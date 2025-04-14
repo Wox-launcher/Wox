@@ -29,6 +29,7 @@ const (
 	ChatStreamTypeStreaming ChatStreamDataType = "streaming"
 	ChatStreamTypeFinished  ChatStreamDataType = "finished"
 	ChatStreamTypeError     ChatStreamDataType = "error"
+	ChatStreamTypeToolCall  ChatStreamDataType = "tool_call" // when response is a tool call, then the response is json(ToolCallInfo)
 )
 
 type ChatStreamFunc func(t ChatStreamDataType, data string)
@@ -38,13 +39,34 @@ type AIProviderInfo struct {
 	Icon WoxImage
 }
 
+const (
+	ToolCallStatusPending   ToolCallStatus = "pending"
+	ToolCallStatusRunning   ToolCallStatus = "running"
+	ToolCallStatusSucceeded ToolCallStatus = "succeeded"
+	ToolCallStatusFailed    ToolCallStatus = "failed"
+)
+
+type ToolCallInfo struct {
+	Id        string
+	Name      string
+	Arguments map[string]any
+	Status    ToolCallStatus
+
+	Response       string
+	StartTimestamp int64
+	EndTimestamp   int64
+}
+
+type ToolCallStatus string
+
 type Conversation struct {
-	Id         string
-	Role       ConversationRole
-	Text       string
-	Images     []WoxImage
-	ToolCallID string
-	Timestamp  int64
+	Id           string
+	Role         ConversationRole
+	Text         string
+	Images       []WoxImage
+	ToolCallID   string
+	ToolCallInfo *ToolCallInfo
+	Timestamp    int64
 }
 
 type Model struct {

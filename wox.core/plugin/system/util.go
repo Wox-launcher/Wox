@@ -243,6 +243,14 @@ func getPasteToActiveWindowAction(ctx context.Context, api plugin.API, actionCal
 	return plugin.QueryResultAction{}, fmt.Errorf("no active window")
 }
 
+// truncateString 截断字符串到指定长度，并在超出长度时添加省略号
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
 // processThinking parse the text to get the thinking and content
 func processAIThinking(text string) (thinking string, content string) {
 	const thinkStart = "<think>"

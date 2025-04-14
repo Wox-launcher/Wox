@@ -265,7 +265,18 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
 
   Widget _buildMessageItem(WoxPreviewChatConversation message) {
     final isUser = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value;
-    final backgroundColor = isUser ? fromCssColor(woxTheme.resultItemActiveBackgroundColor) : fromCssColor(woxTheme.actionContainerBackgroundColor);
+    final isTool = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_TOOL.value;
+
+    // 为工具调用添加特殊的背景色
+    Color backgroundColor;
+    if (isUser) {
+      backgroundColor = fromCssColor(woxTheme.resultItemActiveBackgroundColor);
+    } else if (isTool) {
+      // 工具调用使用不同的背景色
+      backgroundColor = fromCssColor(woxTheme.resultItemActiveBackgroundColor).withAlpha(150);
+    } else {
+      backgroundColor = fromCssColor(woxTheme.actionContainerBackgroundColor);
+    }
     final alignment = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
 
     return Padding(
@@ -302,7 +313,10 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Text content
+                      // 工具调用标记
+                      if (isTool || message.toolCallId != null || message.toolCallInfo != null) _buildToolCallBadge(message, isTool),
+
+                      // 文本内容
                       MarkdownBody(
                         data: message.text,
                         selectable: true,
@@ -314,7 +328,8 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                           ),
                         ),
                       ),
-                      // Images if any
+
+                      // 图片（如果有）
                       if (message.images.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         Wrap(
@@ -354,13 +369,227 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
+  // 构建工具调用标记
+  Widget _buildToolCallBadge(WoxPreviewChatConversation message, bool isTool) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 工具调用标题栏
+          InkWell(
+            onTap: () {
+              if (message.toolCallInfo != null) {
+                controller.toggleToolCallExpanded(message.id);
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+              decoration: BoxDecoration(
+                color: fromCssColor(woxTheme.actionItemActiveBackgroundColor).withAlpha(25),
+                borderRadius: BorderRadius.circular(4.0),
+                border: Border.all(
+                  color: fromCssColor(woxTheme.actionItemActiveBackgroundColor).withAlpha(75),
+                  width: 1.0,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.build,
+                    size: 14,
+                    color: fromCssColor(woxTheme.actionItemActiveFontColor),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    isTool ? '工具响应' : '工具调用',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: fromCssColor(woxTheme.actionItemActiveFontColor),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (message.toolCallInfo != null) ...[
+                    const SizedBox(width: 4),
+                    // 状态指示器
+                    _buildStatusIndicator(message.toolCallInfo!),
+                    const SizedBox(width: 4),
+                    // 展开/折叠图标
+                    Obx(() => Icon(
+                          controller.isToolCallExpanded(message.id) ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                          size: 14,
+                          color: fromCssColor(woxTheme.actionItemActiveFontColor),
+                        )),
+                  ],
+                ],
+              ),
+            ),
+          ),
+
+          // 工具调用详情（展开时显示）
+          if (message.toolCallInfo != null) Obx(() => controller.isToolCallExpanded(message.id) ? _buildToolCallDetails(message.toolCallInfo!) : const SizedBox.shrink()),
+        ],
+      ),
+    );
+  }
+
+  // 构建状态指示器
+  Widget _buildStatusIndicator(ToolCallInfo info) {
+    IconData icon;
+    Color color;
+    String tooltip;
+
+    switch (info.status) {
+      case ToolCallStatus.pending:
+        icon = Icons.hourglass_empty;
+        color = Colors.grey;
+        tooltip = '等待执行';
+        break;
+      case ToolCallStatus.running:
+        icon = Icons.refresh;
+        color = Colors.blue;
+        tooltip = '正在执行';
+        break;
+      case ToolCallStatus.succeeded:
+        icon = Icons.check_circle;
+        color = Colors.green;
+        tooltip = '执行成功';
+        break;
+      case ToolCallStatus.failed:
+        icon = Icons.error;
+        color = Colors.red;
+        tooltip = '执行失败';
+        break;
+    }
+
+    return Tooltip(
+      message: tooltip,
+      child: Icon(
+        icon,
+        size: 14,
+        color: color,
+      ),
+    );
+  }
+
+  // 构建工具调用详情
+  Widget _buildToolCallDetails(ToolCallInfo info) {
+    return Container(
+      margin: const EdgeInsets.only(top: 4.0),
+      padding: const EdgeInsets.all(8.0),
+      decoration: BoxDecoration(
+        color: fromCssColor(woxTheme.actionItemActiveBackgroundColor).withAlpha(15),
+        borderRadius: BorderRadius.circular(4.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 工具名称
+          _buildDetailItem('工具名称', info.name),
+
+          // 参数
+          _buildDetailItem('参数', info.arguments, isCode: true),
+
+          // 响应
+          if (info.response.isNotEmpty) _buildDetailItem('响应', info.response, isCode: true),
+
+          // 执行状态和耗时
+          Row(
+            children: [
+              _buildDetailItem('状态', _getStatusText(info.status)),
+              const SizedBox(width: 16),
+              if (info.duration > 0) _buildDetailItem('耗时', '${info.duration}ms'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 构建详情项
+  Widget _buildDetailItem(String label, String value, {bool isCode = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: fromCssColor(woxTheme.resultItemSubTitleColor),
+            ),
+          ),
+          const SizedBox(height: 2),
+          isCode
+              ? Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(4.0),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withAlpha(20),
+                    borderRadius: BorderRadius.circular(4.0),
+                  ),
+                  child: SelectableText(
+                    value,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontFamily: 'monospace',
+                      color: fromCssColor(woxTheme.resultItemTitleColor),
+                    ),
+                  ),
+                )
+              : Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: fromCssColor(woxTheme.resultItemTitleColor),
+                  ),
+                ),
+        ],
+      ),
+    );
+  }
+
+  // 获取状态文本
+  String _getStatusText(ToolCallStatus status) {
+    switch (status) {
+      case ToolCallStatus.pending:
+        return '等待执行';
+      case ToolCallStatus.running:
+        return '正在执行';
+      case ToolCallStatus.succeeded:
+        return '执行成功';
+      case ToolCallStatus.failed:
+        return '执行失败';
+    }
+  }
+
   Widget _buildAvatar(WoxPreviewChatConversation message) {
     final isUser = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value;
+    final isTool = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_TOOL.value;
+
+    // 为工具调用添加特殊的头像
+    Color avatarColor;
+    String avatarText;
+
+    if (isUser) {
+      avatarColor = fromCssColor(woxTheme.actionItemActiveBackgroundColor);
+      avatarText = 'U';
+    } else if (isTool) {
+      avatarColor = fromCssColor(woxTheme.actionItemActiveBackgroundColor);
+      avatarText = 'T';
+    } else {
+      avatarColor = fromCssColor(woxTheme.resultItemActiveBackgroundColor);
+      avatarText = 'A';
+    }
+
     return Container(
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        color: fromCssColor(isUser ? woxTheme.actionItemActiveBackgroundColor : woxTheme.resultItemActiveBackgroundColor),
+        color: avatarColor,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
@@ -372,7 +601,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       ),
       child: Center(
         child: Text(
-          isUser ? 'U' : 'A', // Consider using user/model icons later
+          avatarText, // U for user, A for assistant, T for tool
           style: TextStyle(
             color: fromCssColor(isUser ? woxTheme.actionItemActiveFontColor : woxTheme.resultItemActiveTitleColor),
             fontSize: 16,

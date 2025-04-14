@@ -2,10 +2,9 @@ package plugin
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"path"
+	"time"
 	"wox/common"
 	"wox/i18n"
 	"wox/setting"
@@ -207,21 +206,35 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversa
 	if callback != nil {
 		util.Go(ctx, "ai chat stream", func() {
 			for {
-				util.GetLogger().Info(ctx, "reading chat stream")
-				response, streamErr := stream.Receive(ctx)
-				if errors.Is(streamErr, io.EOF) {
-					util.GetLogger().Info(ctx, "read stream completed")
+				response, msgType, streamErr := stream.Receive(ctx)
+
+				// maybe we for loop too fast and the stream is not ready yet
+				if msgType == common.ChatStreamTypeStreaming && response == "" {
+					time.Sleep(time.Millisecond * 200)
+					continue
+				}
+
+				util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Received from stream: type=%s, response=%s, err=%v", msgType, response, streamErr))
+
+				if msgType == common.ChatStreamTypeFinished {
+					util.GetLogger().Info(ctx, "AI: read stream completed")
 					callback(common.ChatStreamTypeFinished, "")
 					return
 				}
 
 				if streamErr != nil {
-					util.GetLogger().Info(ctx, fmt.Sprintf("failed to read stream: %s", streamErr.Error()))
+					util.GetLogger().Info(ctx, fmt.Sprintf("AI: failed to read stream: %s", streamErr.Error()))
 					callback(common.ChatStreamTypeError, streamErr.Error())
 					return
 				}
 
-				callback(common.ChatStreamTypeStreaming, response)
+				callback(msgType, response)
+
+				// 注意：我们不再在工具调用后结束流，而是继续处理
+				if msgType == common.ChatStreamTypeToolCall {
+					util.GetLogger().Info(ctx, fmt.Sprintf("AI: tool call detected, but continuing stream: %s", response))
+					// 不返回，继续处理
+				}
 			}
 		})
 	}

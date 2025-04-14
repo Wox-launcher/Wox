@@ -125,14 +125,89 @@ class WoxAIChatData {
   }
 }
 
+// 工具调用状态
+enum ToolCallStatus {
+  pending("pending"),
+  running("running"),
+  succeeded("succeeded"),
+  failed("failed");
+
+  final String value;
+  const ToolCallStatus(this.value);
+
+  static ToolCallStatus fromString(String? value) {
+    if (value == null) return ToolCallStatus.pending;
+    return ToolCallStatus.values.firstWhere(
+      (e) => e.value == value,
+      orElse: () => ToolCallStatus.pending,
+    );
+  }
+}
+
+// 工具调用信息
+class ToolCallInfo {
+  late String name;
+  late String arguments;
+  late String response;
+  late int duration;
+  late ToolCallStatus status;
+  late int startTime;
+  late int endTime;
+
+  // 是否展开显示详情
+  bool isExpanded = false;
+
+  ToolCallInfo({
+    required this.name,
+    required this.arguments,
+    required this.response,
+    required this.duration,
+    required this.status,
+    required this.startTime,
+    required this.endTime,
+  });
+
+  ToolCallInfo.fromJson(Map<String, dynamic> json) {
+    name = json['name'] ?? "";
+    arguments = json['arguments'] ?? "";
+    response = json['response'] ?? "";
+    duration = json['duration'] ?? 0;
+    status = ToolCallStatus.fromString(json['status']);
+    startTime = json['startTime'] ?? 0;
+    endTime = json['endTime'] ?? 0;
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'arguments': arguments,
+      'response': response,
+      'duration': duration,
+      'status': status.value,
+      'startTime': startTime,
+      'endTime': endTime,
+    };
+  }
+}
+
 class WoxPreviewChatConversation {
   late String id;
   late WoxAIChatConversationRole role;
   late String text;
   late List<WoxImage> images;
   late int timestamp;
+  String? toolCallId; // 添加工具调用ID字段
+  ToolCallInfo? toolCallInfo; // 添加工具调用信息
 
-  WoxPreviewChatConversation({required this.id, required this.role, required this.text, required this.images, required this.timestamp});
+  WoxPreviewChatConversation({
+    required this.id,
+    required this.role,
+    required this.text,
+    required this.images,
+    required this.timestamp,
+    this.toolCallId,
+    this.toolCallInfo,
+  });
 
   static WoxPreviewChatConversation fromJson(Map<String, dynamic> json) {
     List<WoxImage> images = [];
@@ -142,22 +217,42 @@ class WoxPreviewChatConversation {
       }
     }
 
+    // 解析工具调用信息
+    ToolCallInfo? toolCallInfo;
+    if (json['ToolCallInfo'] != null) {
+      toolCallInfo = ToolCallInfo.fromJson(json['ToolCallInfo']);
+    }
+
     return WoxPreviewChatConversation(
       id: json['Id'],
       role: json['Role'],
       text: json['Text'],
       images: images,
       timestamp: json['Timestamp'],
+      toolCallId: json['ToolCallID'], // 添加工具调用ID
+      toolCallInfo: toolCallInfo, // 添加工具调用信息
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
+    final Map<String, dynamic> json = {
       'Id': id,
       'Role': WoxAIChatConversationRoleEnum.getValue(role),
       'Text': text,
       'Images': images.map((e) => e.toJson()).toList(),
       'Timestamp': timestamp,
     };
+
+    // 如果有工具调用ID，添加到JSON中
+    if (toolCallId != null) {
+      json['ToolCallID'] = toolCallId;
+    }
+
+    // 如果有工具调用信息，添加到JSON中
+    if (toolCallInfo != null) {
+      json['ToolCallInfo'] = toolCallInfo!.toJson();
+    }
+
+    return json;
   }
 }

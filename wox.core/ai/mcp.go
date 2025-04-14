@@ -110,6 +110,8 @@ func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) ([]c
 			Description: tool.Description,
 			Parameters:  parameters,
 			Callback: func(ctx context.Context, args map[string]any) (common.Conversation, error) {
+				util.GetLogger().Debug(ctx, fmt.Sprintf("MCP: Tool call: %s, args: %v", tool.Name, args))
+
 				request := mcp.CallToolRequest{
 					Request: mcp.Request{
 						Method: "tools/call",

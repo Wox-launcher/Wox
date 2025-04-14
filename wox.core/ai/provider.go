@@ -17,7 +17,7 @@ type Provider interface {
 }
 
 type ChatStream interface {
-	Receive(ctx context.Context) (string, error) // will return io.EOF if no more messages
+	Receive(ctx context.Context) (string, common.ChatStreamDataType, error)
 }
 
 func NewProvider(ctx context.Context, providerSetting setting.AIProvider) (Provider, error) {

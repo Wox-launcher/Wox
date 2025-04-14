@@ -36,6 +36,23 @@ class WoxAIChatController extends GetxController {
   final RxList<AIMCPTool> availableTools = <AIMCPTool>[].obs;
   final RxBool isLoadingTools = false.obs;
 
+  // 工具调用展开/折叠状态
+  final RxMap<String, bool> toolCallExpandedStates = <String, bool>{}.obs;
+
+  // 切换工具调用展开/折叠状态
+  void toggleToolCallExpanded(String conversationId) {
+    if (toolCallExpandedStates.containsKey(conversationId)) {
+      toolCallExpandedStates[conversationId] = !toolCallExpandedStates[conversationId]!;
+    } else {
+      toolCallExpandedStates[conversationId] = true;
+    }
+  }
+
+  // 获取工具调用展开/折叠状态
+  bool isToolCallExpanded(String conversationId) {
+    return toolCallExpandedStates[conversationId] ?? false;
+  }
+
   WoxAIChatController() {
     chatSelectListController = WoxListController<ChatSelectItem>(
       onItemExecuted: _onChatSelectItemExecuted,
