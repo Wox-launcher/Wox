@@ -57,12 +57,10 @@ type AIChatData struct {
 	Title         string
 	Conversations []Conversation
 	Model         Model
+	SelectedTools []string
 
 	CreatedAt int64
 	UpdatedAt int64
-
-	// Selected tools list, not persisted
-	SelectedTools []string `json:"omitempty"`
 }
 
 type AIChater interface {
