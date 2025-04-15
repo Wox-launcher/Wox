@@ -9,7 +9,6 @@ import 'package:wox/components/wox_list_view.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_hotkey.dart';
-import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
@@ -121,6 +120,9 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                       decoration: BoxDecoration(
                         color: fromCssColor(woxTheme.queryBoxBackgroundColor),
                         borderRadius: BorderRadius.circular(woxTheme.queryBoxBorderRadius.toDouble()),
+                        border: Border.all(
+                          color: fromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(25),
+                        ),
                       ),
                       child: Column(
                         children: [
@@ -135,6 +137,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                             ),
                             maxLines: null,
                             keyboardType: TextInputType.multiline,
+                            cursorColor: fromCssColor(woxTheme.queryBoxCursorColor),
                             style: TextStyle(
                               fontSize: 14,
                               color: fromCssColor(woxTheme.queryBoxFontColor),
@@ -159,9 +162,9 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                                       icon: Icon(Icons.build,
                                           size: 18,
                                           color: controller.selectedTools.isNotEmpty
-                                              ? Theme.of(context).colorScheme.primary
+                                              ? fromCssColor(woxTheme.actionItemActiveFontColor)
                                               : fromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(128)),
-                                      color: fromCssColor(woxTheme.previewPropertyTitleColor),
+                                      color: fromCssColor(woxTheme.actionItemActiveBackgroundColor),
                                       onPressed: () {
                                         controller.showToolsPanel();
                                       },
@@ -178,7 +181,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: fromCssColor(woxTheme.actionItemActiveBackgroundColor).withAlpha(25),
+                                      color: fromCssColor(woxTheme.actionItemActiveBackgroundColor),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Row(
@@ -187,14 +190,14 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                                         Icon(
                                           Icons.keyboard_return,
                                           size: 14,
-                                          color: fromCssColor(woxTheme.previewPropertyTitleColor),
+                                          color: fromCssColor(woxTheme.actionItemActiveFontColor),
                                         ),
                                         const SizedBox(width: 4),
                                         Text(
                                           '发送',
                                           style: TextStyle(
                                             fontSize: 12,
-                                            color: fromCssColor(woxTheme.previewPropertyTitleColor),
+                                            color: fromCssColor(woxTheme.actionItemActiveFontColor),
                                           ),
                                         ),
                                       ],
@@ -248,7 +251,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                       style: TextStyle(color: fromCssColor(woxTheme.actionContainerHeaderFontColor), fontSize: 16.0),
                     )),
                 const Divider(),
-                // List of items using WoxListView
                 WoxListView<ChatSelectItem>(
                   controller: controller.chatSelectListController,
                   listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_CHAT.code,
@@ -263,17 +265,15 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
-  Widget _buildMessageItem(WoxPreviewChatConversation message) {
+  Widget _buildMessageItem(WoxAIChatConversation message) {
     final isUser = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value;
     final isTool = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_TOOL.value;
 
-    // 为工具调用添加特殊的背景色
     Color backgroundColor;
     if (isUser) {
-      backgroundColor = fromCssColor(woxTheme.resultItemActiveBackgroundColor);
+      backgroundColor = fromCssColor(woxTheme.actionItemActiveBackgroundColor);
     } else if (isTool) {
-      // 工具调用使用不同的背景色
-      backgroundColor = fromCssColor(woxTheme.resultItemActiveBackgroundColor).withAlpha(150);
+      backgroundColor = fromCssColor(woxTheme.actionItemActiveBackgroundColor).withAlpha(150);
     } else {
       backgroundColor = fromCssColor(woxTheme.actionContainerBackgroundColor);
     }
@@ -313,23 +313,23 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 只在有工具调用时显示工具调用 Badge
-                      if (message.toolCallInfo != null) _buildToolCallBadge(message, isTool),
-
-                      // 文本内容
+                      if (isTool && message.toolCallInfo.id.isNotEmpty) _buildToolCallBadge(message),
                       MarkdownBody(
                         data: message.text,
                         selectable: true,
                         styleSheet: MarkdownStyleSheet(
+                          a: TextStyle(
+                            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveTitleColor),
+                            fontSize: 14,
+                            decoration: TextDecoration.underline,
+                            decorationColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveTitleColor),
+                          ),
                           p: TextStyle(
-                            color: fromCssColor(
-                                isUser ? WoxThemeUtil.instance.currentTheme.value.resultItemActiveTitleColor : WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
+                            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveTitleColor),
                             fontSize: 14,
                           ),
                         ),
                       ),
-
-                      // 图片（如果有）
                       if (message.images.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         Wrap(
@@ -369,19 +369,15 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
-  // 构建工具调用标记
-  Widget _buildToolCallBadge(WoxPreviewChatConversation message, bool isTool) {
+  Widget _buildToolCallBadge(WoxAIChatConversation message) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 工具调用标题栏
           InkWell(
             onTap: () {
-              if (message.toolCallInfo != null) {
-                controller.toggleToolCallExpanded(message.id);
-              }
+              controller.toggleToolCallExpanded(message.id);
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
@@ -403,19 +399,17 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    isTool ? '工具响应' : '工具调用',
+                    message.toolCallInfo.name,
                     style: TextStyle(
                       fontSize: 12,
                       color: fromCssColor(woxTheme.actionItemActiveFontColor),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  if (message.toolCallInfo != null) ...[
+                  ...[
                     const SizedBox(width: 4),
-                    // 状态指示器
-                    _buildStatusIndicator(message.toolCallInfo!),
+                    _buildStatusIndicator(message.toolCallInfo),
                     const SizedBox(width: 4),
-                    // 展开/折叠图标
                     Obx(() => Icon(
                           controller.isToolCallExpanded(message.id) ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
                           size: 14,
@@ -426,21 +420,25 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
               ),
             ),
           ),
-
-          // 工具调用详情（展开时显示）
-          if (message.toolCallInfo != null) Obx(() => controller.isToolCallExpanded(message.id) ? _buildToolCallDetails(message.toolCallInfo!) : const SizedBox.shrink()),
+          Obx(
+            () => controller.isToolCallExpanded(message.id) ? _buildToolCallDetails(message.toolCallInfo) : const SizedBox.shrink(),
+          ),
         ],
       ),
     );
   }
 
-  // 构建状态指示器
   Widget _buildStatusIndicator(ToolCallInfo info) {
     IconData icon;
     Color color;
     String tooltip;
 
     switch (info.status) {
+      case ToolCallStatus.streaming:
+        icon = Icons.play_arrow;
+        color = Colors.blue;
+        tooltip = '正在调用';
+        break;
       case ToolCallStatus.pending:
         icon = Icons.hourglass_empty;
         color = Colors.grey;
@@ -473,7 +471,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
-  // 构建工具调用详情
   Widget _buildToolCallDetails(ToolCallInfo info) {
     return Container(
       margin: const EdgeInsets.only(top: 4.0),
@@ -485,29 +482,15 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 工具名称
-          _buildDetailItem('工具名称', info.name),
-
-          // 参数
-          _buildDetailItem('参数', info.arguments, isCode: true),
-
-          // 响应
+          _buildDetailItem('名称', info.name),
+          _buildDetailItem('参数', info.arguments.toString(), isCode: true),
+          _buildDetailItem('耗时', '${info.duration}ms'),
           if (info.response.isNotEmpty) _buildDetailItem('响应', info.response, isCode: true),
-
-          // 执行状态和耗时
-          Row(
-            children: [
-              _buildDetailItem('状态', _getStatusText(info.status)),
-              const SizedBox(width: 16),
-              if (info.duration > 0) _buildDetailItem('耗时', '${info.duration}ms'),
-            ],
-          ),
         ],
       ),
     );
   }
 
-  // 构建详情项
   Widget _buildDetailItem(String label, String value, {bool isCode = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4.0),
@@ -552,25 +535,10 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
-  // 获取状态文本
-  String _getStatusText(ToolCallStatus status) {
-    switch (status) {
-      case ToolCallStatus.pending:
-        return '等待执行';
-      case ToolCallStatus.running:
-        return '正在执行';
-      case ToolCallStatus.succeeded:
-        return '执行成功';
-      case ToolCallStatus.failed:
-        return '执行失败';
-    }
-  }
-
-  Widget _buildAvatar(WoxPreviewChatConversation message) {
+  Widget _buildAvatar(WoxAIChatConversation message) {
     final isUser = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value;
     final isTool = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_TOOL.value;
 
-    // 为工具调用添加特殊的头像
     Color avatarColor;
     String avatarText;
 
@@ -581,7 +549,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       avatarColor = fromCssColor(woxTheme.actionItemActiveBackgroundColor);
       avatarText = 'T';
     } else {
-      avatarColor = fromCssColor(woxTheme.resultItemActiveBackgroundColor);
+      avatarColor = fromCssColor(woxTheme.actionItemActiveBackgroundColor);
       avatarText = 'A';
     }
 
@@ -601,7 +569,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       ),
       child: Center(
         child: Text(
-          avatarText, // U for user, A for assistant, T for tool
+          avatarText,
           style: TextStyle(
             color: fromCssColor(isUser ? woxTheme.actionItemActiveFontColor : woxTheme.resultItemActiveTitleColor),
             fontSize: 16,

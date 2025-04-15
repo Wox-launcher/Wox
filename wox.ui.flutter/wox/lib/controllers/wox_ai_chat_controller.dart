@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
@@ -9,11 +8,9 @@ import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_list_item.dart';
-import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_toolbar.dart';
 import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
-import 'package:wox/enums/wox_result_tail_type_enum.dart';
 import 'package:wox/utils/log.dart';
 
 class WoxAIChatController extends GetxController {
@@ -310,12 +307,13 @@ class WoxAIChatController extends GetxController {
     }
 
     // append user message to chat data
-    aiChatData.value.conversations.add(WoxPreviewChatConversation(
+    aiChatData.value.conversations.add(WoxAIChatConversation(
       id: const UuidV4().generate(),
       role: WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value,
       text: text,
       images: [],
       timestamp: DateTime.now().millisecondsSinceEpoch,
+      toolCallInfo: ToolCallInfo.empty(),
     ));
     aiChatData.value.updatedAt = DateTime.now().millisecondsSinceEpoch;
 

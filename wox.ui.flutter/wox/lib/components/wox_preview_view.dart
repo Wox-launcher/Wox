@@ -19,6 +19,7 @@ import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_ai_chat_view.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
+import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_theme.dart';
