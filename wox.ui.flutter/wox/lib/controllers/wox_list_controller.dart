@@ -44,10 +44,10 @@ class WoxListController<T> extends GetxController {
   WoxListItem<T> get activeItem => _items[_activeIndex.value].value;
 
   void updateActiveIndexByDirection(String traceId, WoxDirection direction) {
-    Logger.instance.debug(traceId, "updateActiveIndex start, direction: $direction, current activeIndex: ${_activeIndex.value}");
+    Logger.instance.debug(traceId, "updateActiveIndexByDirection start, direction: $direction, current activeIndex: ${_activeIndex.value}");
 
     if (_items.isEmpty) {
-      Logger.instance.debug(traceId, "updateActiveIndex: items list is empty");
+      Logger.instance.debug(traceId, "updateActiveIndexByDirection: items list is empty");
       return;
     }
 
@@ -94,16 +94,16 @@ class WoxListController<T> extends GetxController {
       return;
     }
 
+    Logger.instance.debug(traceId, "update active index, before: ${_activeIndex.value}, after: $index");
+
     _activeIndex.value = index;
     _syncScrollPositionWithActiveIndex(traceId);
 
     onItemActive?.call(traceId, _items[index].value);
-
-    Logger.instance.debug(traceId, "updateActiveIndex end, new activeIndex: ${_activeIndex.value}");
   }
 
   void _syncScrollPositionWithActiveIndex(String traceId) {
-    Logger.instance.debug(traceId, "changeScrollPosition, activeIndex: ${_activeIndex.value}");
+    Logger.instance.debug(traceId, "sync ScrollPosition, current activeIndex: ${_activeIndex.value}");
 
     if (!scrollController.hasClients) {
       Logger.instance.debug(traceId, "ScrollController not attached to any scroll views yet");

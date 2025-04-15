@@ -585,7 +585,7 @@ class WoxLauncherController extends GetxController {
   void resetActiveResult() {
     if (resultListViewController.items.isNotEmpty) {
       if (resultListViewController.items.first.value.isGroup) {
-        resultListViewController.updateActiveIndexByDirection(const UuidV4().generate(), WoxDirectionEnum.WOX_DIRECTION_DOWN.code);
+        resultListViewController.updateActiveIndex(const UuidV4().generate(), 1);
       } else {
         resultListViewController.updateActiveIndex(const UuidV4().generate(), 0);
       }
