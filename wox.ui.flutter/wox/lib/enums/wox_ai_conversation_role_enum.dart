@@ -1,3 +1,5 @@
+import 'package:get/get.dart';
+
 typedef WoxAIChatConversationRole = String;
 
 enum WoxAIChatConversationRoleEnum {
@@ -11,5 +13,5 @@ enum WoxAIChatConversationRoleEnum {
 
   const WoxAIChatConversationRoleEnum(this.code, this.value);
 
-  static String getValue(String code) => WoxAIChatConversationRoleEnum.values.firstWhere((activity) => activity.code == code).value;
+  static String getValue(String code) => WoxAIChatConversationRoleEnum.values.firstWhereOrNull((activity) => activity.code == code)?.value ?? "";
 }

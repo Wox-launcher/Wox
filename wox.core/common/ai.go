@@ -29,22 +29,24 @@ const (
 	ChatStreamTypeStreaming ChatStreamDataType = "streaming"
 	ChatStreamTypeFinished  ChatStreamDataType = "finished"
 	ChatStreamTypeError     ChatStreamDataType = "error"
-	ChatStreamTypeToolCall  ChatStreamDataType = "tool_call" // when response is a tool call, then the response is json(ToolCallInfo)
+	ChatStreamTypeToolCall  ChatStreamDataType = "tool_call" // json string of common.ToolCallInfo
 )
 
-type ChatStreamFunc func(t ChatStreamDataType, data string)
-
-type AIProviderInfo struct {
-	Name ProviderName
-	Icon WoxImage
-}
-
 const (
+	ToolCallStatusStreaming ToolCallStatus = "streaming" // tool call is streaming, after streaming finished, tool call will be pending to be running
 	ToolCallStatusPending   ToolCallStatus = "pending"
 	ToolCallStatusRunning   ToolCallStatus = "running"
 	ToolCallStatusSucceeded ToolCallStatus = "succeeded"
 	ToolCallStatusFailed    ToolCallStatus = "failed"
 )
+
+type ChatStreamFunc func(result ChatStreamData)
+
+type ChatStreamData struct {
+	Type     ChatStreamDataType
+	Data     string
+	ToolCall ToolCallInfo // only available when type is common.ChatStreamTypeToolCall
+}
 
 type ToolCallInfo struct {
 	Id        string
@@ -52,6 +54,7 @@ type ToolCallInfo struct {
 	Arguments map[string]any
 	Status    ToolCallStatus
 
+	Delta          string // when toolcall is streaming, we will put the delta content here
 	Response       string
 	StartTimestamp int64
 	EndTimestamp   int64
@@ -64,9 +67,13 @@ type Conversation struct {
 	Role         ConversationRole
 	Text         string
 	Images       []WoxImage
-	ToolCallID   string
-	ToolCallInfo *ToolCallInfo
+	ToolCallInfo ToolCallInfo
 	Timestamp    int64
+}
+
+type AIProviderInfo struct {
+	Name ProviderName
+	Icon WoxImage
 }
 
 type Model struct {
@@ -86,7 +93,7 @@ type AIChatData struct {
 }
 
 type AIChater interface {
-	Chat(ctx context.Context, aiChatData AIChatData)
+	Chat(ctx context.Context, aiChatData AIChatData, chatLoopCount int)
 	GetAllTools(ctx context.Context) []MCPTool
 }
 

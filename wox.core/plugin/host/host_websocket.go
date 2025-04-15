@@ -473,11 +473,11 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			return
 		}
 
-		llmErr := pluginInstance.API.AIChatStream(ctx, model, conversations, options, func(streamType common.ChatStreamDataType, data string) {
+		llmErr := pluginInstance.API.AIChatStream(ctx, model, conversations, options, func(streamResult common.ChatStreamData) {
 			w.invokeMethod(ctx, pluginInstance.Metadata, "onLLMStream", map[string]string{
 				"CallbackId": callbackId,
-				"StreamType": string(streamType),
-				"Data":       data,
+				"StreamType": string(streamResult.Type),
+				"Data":       streamResult.Data,
 			})
 		})
 		if llmErr != nil {

@@ -313,8 +313,8 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 工具调用标记
-                      if (isTool || message.toolCallId != null || message.toolCallInfo != null) _buildToolCallBadge(message, isTool),
+                      // 只在有工具调用时显示工具调用 Badge
+                      if (message.toolCallInfo != null) _buildToolCallBadge(message, isTool),
 
                       // 文本内容
                       MarkdownBody(

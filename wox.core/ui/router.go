@@ -922,7 +922,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chater.Chat(ctx, chatData)
+	chater.Chat(ctx, chatData, 0)
 
 	writeSuccessResponse(w, "")
 }

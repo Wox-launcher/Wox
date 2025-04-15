@@ -7,6 +7,8 @@ import (
 	"wox/setting"
 )
 
+var ChatStreamNoContentErr = errors.New("chat stream no content")
+
 var providerFactories = map[common.ProviderName]func(ctx context.Context, providerSetting setting.AIProvider) Provider{}
 
 type Provider interface {
@@ -17,7 +19,8 @@ type Provider interface {
 }
 
 type ChatStream interface {
-	Receive(ctx context.Context) (string, common.ChatStreamDataType, error)
+	// when chat stream data type is tool call, the data is json string of common.ToolCallInfo
+	Receive(ctx context.Context) (common.ChatStreamData, error)
 }
 
 func NewProvider(ctx context.Context, providerSetting setting.AIProvider) (Provider, error) {

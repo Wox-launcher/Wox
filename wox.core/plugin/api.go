@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path"
 	"time"
+	"wox/ai"
 	"wox/common"
 	"wox/i18n"
 	"wox/setting"
@@ -206,34 +207,103 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversa
 	if callback != nil {
 		util.Go(ctx, "ai chat stream", func() {
 			for {
-				response, msgType, streamErr := stream.Receive(ctx)
-
-				// maybe we for loop too fast and the stream is not ready yet
-				if msgType == common.ChatStreamTypeStreaming && response == "" {
-					time.Sleep(time.Millisecond * 200)
-					continue
-				}
-
-				util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Received from stream: type=%s, response=%s, err=%v", msgType, response, streamErr))
-
-				if msgType == common.ChatStreamTypeFinished {
-					util.GetLogger().Info(ctx, "AI: read stream completed")
-					callback(common.ChatStreamTypeFinished, "")
-					return
-				}
-
+				streamResult, streamErr := stream.Receive(ctx)
 				if streamErr != nil {
-					util.GetLogger().Info(ctx, fmt.Sprintf("AI: failed to read stream: %s", streamErr.Error()))
-					callback(common.ChatStreamTypeError, streamErr.Error())
+					// may be for loop too fast
+					if streamErr == ai.ChatStreamNoContentErr {
+						time.Sleep(time.Millisecond * 200)
+						continue
+					}
+
+					util.GetLogger().Info(ctx, fmt.Sprintf("AI: failed to read stream from ai provider: %s", streamErr.Error()))
+					callback(common.ChatStreamData{
+						Type:     common.ChatStreamTypeError,
+						Data:     streamErr.Error(),
+						ToolCall: common.ToolCallInfo{},
+					})
 					return
 				}
 
-				callback(msgType, response)
+				util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Received stream from ai provider: type=%s, response=%s", streamResult.Type, streamResult.Data))
 
-				// 注意：我们不再在工具调用后结束流，而是继续处理
-				if msgType == common.ChatStreamTypeToolCall {
-					util.GetLogger().Info(ctx, fmt.Sprintf("AI: tool call detected, but continuing stream: %s", response))
-					// 不返回，继续处理
+				if streamResult.Type == common.ChatStreamTypeFinished {
+					util.GetLogger().Info(ctx, "AI: read stream from ai provider completed")
+					callback(common.ChatStreamData{
+						Type:     common.ChatStreamTypeFinished,
+						Data:     "",
+						ToolCall: common.ToolCallInfo{},
+					})
+					return
+				}
+
+				if streamResult.Type == common.ChatStreamTypeToolCall {
+					if streamResult.ToolCall.Status == common.ToolCallStatusStreaming {
+						delta := streamResult.ToolCall.Name
+						if delta == "" {
+							delta = streamResult.ToolCall.Delta
+						}
+						util.GetLogger().Info(ctx, fmt.Sprintf("AI: Tool call is streaming, delta: %s", delta))
+						time.Sleep(time.Millisecond * 100)
+						continue
+					}
+
+					if streamResult.ToolCall.Status == common.ToolCallStatusPending {
+						util.GetLogger().Info(ctx, fmt.Sprintf("AI: Tool call is pending to execute, name: %s, args: %v", streamResult.ToolCall.Name, streamResult.ToolCall.Arguments))
+
+						for _, tool := range options.Tools {
+							if tool.Name == streamResult.ToolCall.Name {
+								util.GetLogger().Info(ctx, fmt.Sprintf("AI: Executing tool: %s with args: %v, toolcall id: %s, toolcall status: %s", tool.Name, streamResult.ToolCall.Arguments, streamResult.ToolCall.Id, streamResult.ToolCall.Status))
+
+								startTime := util.GetSystemTimestamp()
+								toolResponse, toolErr := tool.Callback(ctx, streamResult.ToolCall.Arguments)
+								endTime := util.GetSystemTimestamp()
+								duration := endTime - startTime
+
+								if toolErr != nil {
+									util.GetLogger().Error(ctx, fmt.Sprintf("AI: tool execution failed: %s", toolErr.Error()))
+									callback(common.ChatStreamData{
+										Type: common.ChatStreamTypeToolCall,
+										Data: "",
+										ToolCall: common.ToolCallInfo{
+											Id:             streamResult.ToolCall.Id,
+											Name:           streamResult.ToolCall.Name,
+											Arguments:      streamResult.ToolCall.Arguments,
+											Response:       toolErr.Error(),
+											Status:         common.ToolCallStatusFailed,
+											StartTimestamp: startTime,
+											EndTimestamp:   endTime,
+										},
+									})
+									break
+								}
+
+								util.GetLogger().Info(ctx, fmt.Sprintf("AI: Tool execution completed - name: %s, toolCallID: %s, duration: %dms", tool.Name, streamResult.ToolCall.Id, duration))
+								util.GetLogger().Info(ctx, fmt.Sprintf("AI: Tool response text: %s", toolResponse.Text))
+
+								callback(common.ChatStreamData{
+									Type: common.ChatStreamTypeToolCall,
+									Data: "",
+									ToolCall: common.ToolCallInfo{
+										Id:             streamResult.ToolCall.Id,
+										Name:           streamResult.ToolCall.Name,
+										Arguments:      streamResult.ToolCall.Arguments,
+										Response:       toolResponse.Text,
+										Status:         common.ToolCallStatusSucceeded,
+										StartTimestamp: startTime,
+										EndTimestamp:   endTime,
+									},
+								})
+								break
+							}
+						}
+
+						// if tool call executed, break the loop
+						break
+					}
+				}
+
+				if streamResult.Type == common.ChatStreamTypeStreaming {
+					callback(streamResult)
 				}
 			}
 		})

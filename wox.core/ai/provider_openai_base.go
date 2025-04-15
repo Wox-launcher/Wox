@@ -37,16 +37,12 @@ func (o *OpenAIBaseProvider) ChatStream(ctx context.Context, model common.Model,
 	client := o.getClient(ctx)
 
 	util.GetLogger().Debug(ctx, fmt.Sprintf("AI: chat stream with model: %s, conversations: %d, tools: %d", model.Name, len(conversations), len(options.Tools)))
-	// 记录对话内容的摘要
-	for i, conv := range conversations {
-		util.GetLogger().Debug(ctx, fmt.Sprintf("AI: conversation[%d] - role: %s, text: %s, toolCallID: %s",
-			i, conv.Role, truncateString(conv.Text, 100), conv.ToolCallID))
-	}
 
-	// 记录工具信息
+	for i, conv := range conversations {
+		util.GetLogger().Debug(ctx, fmt.Sprintf("AI: conversation[%d] - role: %s, text: %s, toolCallID: %s", i, conv.Role, conv.Text, conv.ToolCallInfo.Id))
+	}
 	for i, tool := range options.Tools {
-		util.GetLogger().Debug(ctx, fmt.Sprintf("AI: tool[%d] - name: %s, description: %s",
-			i, tool.Name, truncateString(tool.Description, 100)))
+		util.GetLogger().Debug(ctx, fmt.Sprintf("AI: tool[%d] - name: %s, description: %s", i, tool.Name, tool.Description))
 	}
 
 	var createdStream *ssestream.Stream[openai.ChatCompletionChunk]
@@ -152,112 +148,97 @@ func (o *OpenAIBaseProvider) convertTools(tools []common.MCPTool) []openai.ChatC
 	return convertedTools
 }
 
-// Receive receives the next message from the stream
-func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (string, common.ChatStreamDataType, error) {
+func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStreamData, error) {
 	if !s.stream.Next() {
 		if s.stream.Err() != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("AI: Stream error: %v", s.stream.Err()))
-			return "", common.ChatStreamTypeError, s.stream.Err()
+			return common.ChatStreamData{}, s.stream.Err()
+		}
+
+		// check if tool call finished
+		var toolCall openai.ChatCompletionMessageToolCall
+		// somehow acc.JustFinishedToolCall is not working in my test, so we need to check the last tool call
+		// and if that failed, we check the just finished tool call
+		if len(s.acc.Choices) > 0 && len(s.acc.Choices[0].Message.ToolCalls) > 0 {
+			toolCall = s.acc.Choices[0].Message.ToolCalls[len(s.acc.Choices[0].Message.ToolCalls)-1]
+		}
+		if toolCall.Function.Name == "" {
+			if justFinishedToolCall, ok := s.acc.JustFinishedToolCall(); ok {
+				toolCall = openai.ChatCompletionMessageToolCall{
+					ID: justFinishedToolCall.Id,
+					Function: openai.ChatCompletionMessageToolCallFunction{
+						Name:      justFinishedToolCall.Name,
+						Arguments: justFinishedToolCall.Arguments,
+					},
+				}
+			}
+		}
+		if toolCall.Function.Name != "" {
+			util.GetLogger().Debug(ctx, "AI: Tool call streaming finished")
+			toolCallInfo := common.ToolCallInfo{
+				Id:             toolCall.ID,
+				Name:           toolCall.Function.Name,
+				Delta:          toolCall.Function.Arguments,
+				StartTimestamp: util.GetSystemTimestamp(),
+			}
+
+			// try to unmarshal tool call arguments if possible
+			var argsMap map[string]any
+			if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &argsMap); err == nil {
+				toolCallInfo.Arguments = argsMap
+				toolCallInfo.Status = common.ToolCallStatusPending
+			} else {
+				util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal tool call arguments, json=%s, err: %s", toolCall.Function.Arguments, err.Error()))
+				toolCallInfo.Arguments = map[string]any{}
+				toolCallInfo.Status = common.ToolCallStatusFailed
+				toolCallInfo.Response = err.Error()
+			}
+
+			return common.ChatStreamData{
+				Type:     common.ChatStreamTypeToolCall,
+				Data:     "",
+				ToolCall: toolCallInfo,
+			}, nil
 		}
 
 		// no more messages
 		util.GetLogger().Debug(ctx, "AI: Stream ended")
-		return "", common.ChatStreamTypeFinished, nil
+		return common.ChatStreamData{
+			Type: common.ChatStreamTypeFinished,
+			Data: "",
+		}, nil
 	}
 
 	chunk := s.stream.Current()
+	s.acc.AddChunk(chunk)
+
 	// skip empty chunk, maybe invoke receive too fast
 	if s.isChunkEmpty(chunk) {
-		return "", common.ChatStreamTypeStreaming, nil
+		return common.ChatStreamData{}, ChatStreamNoContentErr
 	}
 
-	s.acc.AddChunk(chunk)
-	util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Received chunk - id: %s, model: %s, choices count: %d, acc content: %s", chunk.ID, chunk.Model, len(chunk.Choices), s.acc.ChatCompletion.RawJSON()))
-
-	if content, ok := s.acc.JustFinishedContent(); ok {
-		util.GetLogger().Debug(ctx, fmt.Sprintf("AI: acc just finished content: %s", content))
-		return content, common.ChatStreamTypeFinished, nil
-	}
-
-	if tool, ok := s.acc.JustFinishedToolCall(); ok {
-		util.GetLogger().Debug(ctx, fmt.Sprintf("AI: acc just finished tool call: index: %d, id: %s, name: %s, arguments: %s", tool.Index, tool.Id, tool.Name, tool.Arguments))
-
-		toolcallInfo := common.ToolCallInfo{
-			Id:             tool.Id,
-			Name:           tool.Name,
+	// check if tool call streaming
+	if len(chunk.Choices[0].Delta.ToolCalls) > 0 {
+		toolCall := chunk.Choices[0].Delta.ToolCalls[0]
+		toolCallInfo := common.ToolCallInfo{
+			Id:             toolCall.ID,
+			Name:           toolCall.Function.Name,
 			Arguments:      map[string]any{},
-			Status:         common.ToolCallStatusPending,
-			Response:       "",
+			Delta:          toolCall.Function.Arguments,
+			Status:         common.ToolCallStatusStreaming,
 			StartTimestamp: util.GetSystemTimestamp(),
 		}
-
-		// try to unmarshal arguments to map if possible
-		var argsMap map[string]any
-		unmarshalErr := json.Unmarshal([]byte(tool.Arguments), &argsMap)
-		if unmarshalErr == nil {
-			toolcallInfo.Arguments = argsMap
-		} else {
-			util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal tool call arguments: %s", unmarshalErr.Error()))
-			toolcallInfo.Arguments = map[string]any{}
-		}
-
-		// marshal tool call info to json
-		toolCallJSON, marshalErr := json.Marshal(toolcallInfo)
-		if marshalErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to marshal tool call info: %s", marshalErr.Error()))
-			return "", common.ChatStreamTypeError, marshalErr
-		}
-
-		util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Returning tool call: %s", toolCallJSON))
-		return string(toolCallJSON), common.ChatStreamTypeToolCall, nil
+		return common.ChatStreamData{
+			Type:     common.ChatStreamTypeToolCall,
+			Data:     "",
+			ToolCall: toolCallInfo,
+		}, nil
 	}
 
-	if refusal, ok := s.acc.JustFinishedRefusal(); ok {
-		util.GetLogger().Debug(ctx, fmt.Sprintf("AI: acc just finished refusal: %s", refusal))
-		return refusal, common.ChatStreamTypeFinished, nil
-	}
-
-	// parse tool from delta
-	var toolCallInfo common.ToolCallInfo
-	if len(chunk.Choices) > 0 && len(chunk.Choices[0].Delta.ToolCalls) > 0 {
-		util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Found tool call in delta - count: %d", len(chunk.Choices[0].Delta.ToolCalls)))
-		firstToolCall := chunk.Choices[0].Delta.ToolCalls[0]
-		toolCallInfo = common.ToolCallInfo{
-			Id:             firstToolCall.ID,
-			Name:           firstToolCall.Function.Name,
-			Arguments:      map[string]any{},
-			Status:         common.ToolCallStatusPending,
-			Response:       "",
-			StartTimestamp: util.GetSystemTimestamp(),
-		}
-
-		// try to unmarshal arguments to map if possible
-		var argsMap map[string]any
-		unmarshalErr := json.Unmarshal([]byte(firstToolCall.Function.Arguments), &argsMap)
-		if unmarshalErr == nil {
-			toolCallInfo.Arguments = argsMap
-		} else {
-			util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal tool call arguments: %s", unmarshalErr.Error()))
-		}
-	}
-	if toolCallInfo.Name != "" {
-		toolCallData, marshalErr := json.Marshal(toolCallInfo)
-		if marshalErr != nil {
-			util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to marshal tool call info: %s", marshalErr.Error()))
-			return "", common.ChatStreamTypeError, marshalErr
-		}
-
-		util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Returning tool call from delta: %s", toolCallData))
-		return string(toolCallData), common.ChatStreamTypeToolCall, nil
-	}
-
-	// it's best to use chunks after handling JustFinished events
-	if len(chunk.Choices) > 0 {
-		content := chunk.Choices[0].Delta.Content
-		return content, common.ChatStreamTypeStreaming, nil
-	}
-
-	return "", common.ChatStreamTypeFinished, nil
+	return common.ChatStreamData{
+		Type: common.ChatStreamTypeStreaming,
+		Data: chunk.Choices[0].Delta.Content,
+	}, nil
 }
 
 func (s *OpenAIBaseProviderStream) isChunkEmpty(chunk openai.ChatCompletionChunk) bool {
@@ -273,12 +254,8 @@ func (s *OpenAIBaseProviderStream) isChunkEmpty(chunk openai.ChatCompletionChunk
 
 // convertConversations converts the conversations to OpenAI format
 func (o *OpenAIBaseProvider) convertConversations(conversations []common.Conversation) []openai.ChatCompletionMessageParamUnion {
-	util.GetLogger().Debug(context.Background(), fmt.Sprintf("AI: Converting %d conversations to OpenAI format", len(conversations)))
-
 	var chatMessages []openai.ChatCompletionMessageParamUnion
-	for i, conversation := range conversations {
-		util.GetLogger().Debug(context.Background(), fmt.Sprintf("AI: Converting conversation %d: Role=%s, Text=%s, ToolCallID=%s", i, conversation.Role, truncateString(conversation.Text, 50), conversation.ToolCallID))
-
+	for _, conversation := range conversations {
 		if conversation.Role == common.ConversationRoleSystem {
 			chatMessages = append(chatMessages, openai.SystemMessage(conversation.Text))
 		}
@@ -289,9 +266,7 @@ func (o *OpenAIBaseProvider) convertConversations(conversations []common.Convers
 			chatMessages = append(chatMessages, openai.AssistantMessage(conversation.Text))
 		}
 		if conversation.Role == common.ConversationRoleTool {
-			util.GetLogger().Debug(context.Background(), fmt.Sprintf("AI: Adding tool message: %s, ID: %s",
-				truncateString(conversation.Text, 50), conversation.ToolCallID))
-			chatMessages = append(chatMessages, openai.ToolMessage(conversation.Text, conversation.ToolCallID))
+			chatMessages = append(chatMessages, openai.ToolMessage(conversation.Text, conversation.ToolCallInfo.Id))
 		}
 	}
 
@@ -305,12 +280,4 @@ func (o *OpenAIBaseProvider) getClient(ctx context.Context) openai.Client {
 		option.WithAPIKey(o.connectContext.ApiKey),
 		option.WithHTTPClient(util.GetHTTPClient(ctx)),
 	)
-}
-
-// truncateString truncates a string to the given length and adds ellipsis if needed
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
 }

@@ -131,14 +131,14 @@ func createLLMOnRefreshHandler(ctx context.Context,
 			if onPreparing != nil {
 				current = onPreparing(current)
 			}
-			err := chatStreamAPI(ctx, model, conversations, options, func(chatStreamDataType common.ChatStreamDataType, response string) {
+			err := chatStreamAPI(ctx, model, conversations, options, func(streamResult common.ChatStreamData) {
 				locker.Lock()
-				chatStreamDataTypeBuffer = chatStreamDataType
-				if chatStreamDataType == common.ChatStreamTypeStreaming || chatStreamDataTypeBuffer == common.ChatStreamTypeFinished {
-					responseBuffer += response
+				chatStreamDataTypeBuffer = streamResult.Type
+				if chatStreamDataTypeBuffer == common.ChatStreamTypeStreaming || chatStreamDataTypeBuffer == common.ChatStreamTypeFinished {
+					responseBuffer += streamResult.Data
 				}
-				if chatStreamDataType == common.ChatStreamTypeError {
-					responseBuffer = response
+				if chatStreamDataTypeBuffer == common.ChatStreamTypeError {
+					responseBuffer = streamResult.Data
 				}
 				util.GetLogger().Info(ctx, fmt.Sprintf("stream buffered: %s", responseBuffer))
 				locker.Unlock()
