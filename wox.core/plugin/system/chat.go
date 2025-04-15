@@ -283,27 +283,11 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Selected tools: %v", aiChatData.SelectedTools))
 	}
 
-	// find the chat by id
-	found := false
-	for i, chat := range r.chats {
-		if chat.Id == aiChatData.Id {
-			r.chats[i] = aiChatData
-			found = true
-			break
-		}
-	}
-	// if not found, add it
-	if !found {
-		r.chats = append(r.chats, aiChatData)
-		sort.Slice(r.chats, func(i, j int) bool {
-			return r.chats[i].UpdatedAt > r.chats[j].UpdatedAt
-		})
-	}
-
+	r.appendOrUpdateChatData(aiChatData)
 	r.saveChats(ctx)
 
-	// summarize the chat on 2th, 6th, 12th, 24th conversation
-	summarizeIndex := []int{2, 6, 12, 24}
+	// summarize the chat
+	summarizeIndex := []int{2, 8, 16}
 	for _, index := range summarizeIndex {
 		if len(aiChatData.Conversations) == index {
 			r.summarizeChat(ctx, aiChatData)
@@ -329,7 +313,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 			r.appendOrUpdateConversation(&aiChatData, common.Conversation{
 				Id:        responseId,
 				Role:      common.ConversationRoleAssistant,
-				Text:      streamResult.Data,
+				Text:      responseText,
 				Timestamp: util.GetSystemTimestamp(),
 			})
 		} else if streamResult.Type == common.ChatStreamTypeFinished {
@@ -340,6 +324,8 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 				Text:      responseText,
 				Timestamp: util.GetSystemTimestamp(),
 			})
+			r.appendOrUpdateChatData(aiChatData)
+			r.saveChats(ctx)
 		} else if streamResult.Type == common.ChatStreamTypeError {
 			responseText = fmt.Sprintf("CHAT ERR: %s", streamResult.Data)
 			r.appendOrUpdateConversation(&aiChatData, common.Conversation{
@@ -358,10 +344,14 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 				Timestamp:    util.GetSystemTimestamp(),
 			})
 
+			r.appendOrUpdateChatData(aiChatData)
+			r.saveChats(ctx)
+			plugin.GetPluginManager().GetUI().SendChatResponse(ctx, aiChatData)
+
 			// recursively call the chat to continue
 			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: recursively calling the chat to continue, loop: %d", chatLoopCount+1))
-			// r.Chat(ctx, aiChatData, chatLoopCount+1)
-			// return
+			r.Chat(ctx, aiChatData, chatLoopCount+1)
+			return
 		}
 
 		// send the chat response to UI
@@ -383,6 +373,20 @@ func (r *AIChatPlugin) appendOrUpdateConversation(aiChatData *common.AIChatData,
 	}
 
 	aiChatData.Conversations = append(aiChatData.Conversations, conversation)
+}
+
+func (r *AIChatPlugin) appendOrUpdateChatData(aiChatData common.AIChatData) {
+	for i := range r.chats {
+		if r.chats[i].Id == aiChatData.Id {
+			r.chats[i] = aiChatData
+			return
+		}
+	}
+
+	r.chats = append(r.chats, aiChatData)
+	sort.Slice(r.chats, func(i, j int) bool {
+		return r.chats[i].UpdatedAt > r.chats[j].UpdatedAt
+	})
 }
 
 func (r *AIChatPlugin) getNewChatPreviewData(ctx context.Context) plugin.QueryResult {
@@ -512,7 +516,11 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results [
 func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData) {
 	r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Summarizing chat: %s", chat.Id))
 
-	conversations := chat.Conversations
+	var conversations []common.Conversation
+	// skip tool conversations
+	conversations = lo.Filter(chat.Conversations, func(conversation common.Conversation, _ int) bool {
+		return conversation.Role != common.ConversationRoleTool
+	})
 	conversations = append(conversations, common.Conversation{
 		Id:   uuid.NewString(),
 		Role: common.ConversationRoleUser,

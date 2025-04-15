@@ -15,9 +15,14 @@ import (
 	"github.com/openai/openai-go/packages/ssestream"
 )
 
+type OpenAIBaseProviderOptions struct {
+	Headers map[string]string
+}
+
 // OpenAIBaseProvider is the base provider for all OpenAI compatible providers
 type OpenAIBaseProvider struct {
 	connectContext setting.AIProvider
+	options        OpenAIBaseProviderOptions
 }
 
 // OpenAIBaseProviderStream represents a stream from OpenAI compatible providers
@@ -30,6 +35,10 @@ type OpenAIBaseProviderStream struct {
 // NewOpenAIBaseProvider creates a new OpenAI base provider
 func NewOpenAIBaseProvider(connectContext setting.AIProvider) *OpenAIBaseProvider {
 	return &OpenAIBaseProvider{connectContext: connectContext}
+}
+
+func NewOpenAIBaseProviderWithOptions(connectContext setting.AIProvider, options OpenAIBaseProviderOptions) *OpenAIBaseProvider {
+	return &OpenAIBaseProvider{connectContext: connectContext, options: options}
 }
 
 // ChatStream starts a chat stream with the OpenAI compatible provider
@@ -161,6 +170,7 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 		// and if that failed, we check the just finished tool call
 		if len(s.acc.Choices) > 0 && len(s.acc.Choices[0].Message.ToolCalls) > 0 {
 			toolCall = s.acc.Choices[0].Message.ToolCalls[len(s.acc.Choices[0].Message.ToolCalls)-1]
+			s.acc.Choices[0].Message.ToParam()
 		}
 		if toolCall.Function.Name == "" {
 			if justFinishedToolCall, ok := s.acc.JustFinishedToolCall(); ok {
@@ -266,7 +276,20 @@ func (o *OpenAIBaseProvider) convertConversations(conversations []common.Convers
 			chatMessages = append(chatMessages, openai.AssistantMessage(conversation.Text))
 		}
 		if conversation.Role == common.ConversationRoleTool {
-			chatMessages = append(chatMessages, openai.ToolMessage(conversation.Text, conversation.ToolCallInfo.Id))
+			// add tool message first, and then add tool output message
+			chatMessages = append(chatMessages, openai.ChatCompletionMessageParamUnion{OfAssistant: &openai.ChatCompletionAssistantMessageParam{
+				ToolCalls: []openai.ChatCompletionMessageToolCallParam{
+					{
+						ID:   conversation.ToolCallInfo.Id,
+						Type: "function",
+						Function: openai.ChatCompletionMessageToolCallFunctionParam{
+							Name:      conversation.ToolCallInfo.Name,
+							Arguments: conversation.ToolCallInfo.Delta,
+						},
+					},
+				},
+			}})
+			chatMessages = append(chatMessages, openai.ToolMessage(conversation.ToolCallInfo.Response, conversation.ToolCallInfo.Id))
 		}
 	}
 
@@ -275,9 +298,18 @@ func (o *OpenAIBaseProvider) convertConversations(conversations []common.Convers
 
 // getClient returns an OpenAI client
 func (o *OpenAIBaseProvider) getClient(ctx context.Context) openai.Client {
-	return openai.NewClient(
+	var requestOption = []option.RequestOption{
 		option.WithBaseURL(o.connectContext.Host),
 		option.WithAPIKey(o.connectContext.ApiKey),
 		option.WithHTTPClient(util.GetHTTPClient(ctx)),
-	)
+	}
+
+	// with custom headers
+	if o.options.Headers != nil {
+		for k, v := range o.options.Headers {
+			requestOption = append(requestOption, option.WithHeaderAdd(k, v))
+		}
+	}
+
+	return openai.NewClient(requestOption...)
 }
