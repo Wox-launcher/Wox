@@ -273,7 +273,8 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     if (isUser) {
       backgroundColor = fromCssColor(woxTheme.actionItemActiveBackgroundColor);
     } else if (isTool) {
-      backgroundColor = fromCssColor(woxTheme.actionItemActiveBackgroundColor).withAlpha(150);
+      // 使用与 AI 助手相同的背景色
+      backgroundColor = fromCssColor(woxTheme.actionContainerBackgroundColor);
     } else {
       backgroundColor = fromCssColor(woxTheme.actionContainerBackgroundColor);
     }
@@ -296,12 +297,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
                   decoration: BoxDecoration(
                     color: backgroundColor,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(16),
-                      topRight: const Radius.circular(16),
-                      bottomLeft: Radius.circular(isUser ? 16 : 4),
-                      bottomRight: Radius.circular(isUser ? 4 : 16),
-                    ),
+                    borderRadius: BorderRadius.circular(8),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withAlpha(13),
@@ -370,61 +366,66 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
   }
 
   Widget _buildToolCallBadge(WoxAIChatConversation message) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InkWell(
-            onTap: () {
-              controller.toggleToolCallExpanded(message.id);
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-              decoration: BoxDecoration(
-                color: fromCssColor(woxTheme.actionItemActiveBackgroundColor).withAlpha(25),
-                borderRadius: BorderRadius.circular(4.0),
-                border: Border.all(
-                  color: fromCssColor(woxTheme.actionItemActiveBackgroundColor).withAlpha(75),
-                  width: 1.0,
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () {
+            controller.toggleToolCallExpanded(message.id);
+          },
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: fromCssColor(woxTheme.actionContainerBackgroundColor).withAlpha(25),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: fromCssColor(woxTheme.actionContainerBackgroundColor).withAlpha(75),
+                width: 1.0,
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.build,
-                    size: 14,
-                    color: fromCssColor(woxTheme.actionItemActiveFontColor),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.max,
+              children: [
+                Icon(
+                  Icons.build,
+                  size: 14,
+                  color: fromCssColor(woxTheme.resultItemActiveTitleColor),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
                     message.toolCallInfo.name,
                     style: TextStyle(
                       fontSize: 12,
-                      color: fromCssColor(woxTheme.actionItemActiveFontColor),
+                      color: fromCssColor(woxTheme.resultItemActiveTitleColor),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  ...[
-                    const SizedBox(width: 4),
-                    _buildStatusIndicator(message.toolCallInfo),
-                    const SizedBox(width: 4),
-                    Obx(() => Icon(
-                          controller.isToolCallExpanded(message.id) ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                          size: 14,
-                          color: fromCssColor(woxTheme.actionItemActiveFontColor),
-                        )),
-                  ],
-                ],
-              ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '${message.toolCallInfo.duration}ms',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: fromCssColor(woxTheme.resultItemActiveTitleColor),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                _buildStatusIndicator(message.toolCallInfo),
+                const SizedBox(width: 6),
+                Obx(() => Icon(
+                      controller.isToolCallExpanded(message.id) ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                      size: 14,
+                      color: fromCssColor(woxTheme.resultItemActiveTitleColor),
+                    )),
+              ],
             ),
           ),
-          Obx(
-            () => controller.isToolCallExpanded(message.id) ? _buildToolCallDetails(message.toolCallInfo) : const SizedBox.shrink(),
-          ),
-        ],
-      ),
+        ),
+        Obx(
+          () => controller.isToolCallExpanded(message.id) ? _buildToolCallDetails(message.toolCallInfo) : const SizedBox.shrink(),
+        ),
+      ],
     );
   }
 
@@ -457,7 +458,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       case ToolCallStatus.failed:
         icon = Icons.error;
         color = Colors.red;
-        tooltip = '执行失败';
+        tooltip = '执行失败: ${info.response}';
         break;
     }
 
@@ -473,11 +474,16 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
 
   Widget _buildToolCallDetails(ToolCallInfo info) {
     return Container(
-      margin: const EdgeInsets.only(top: 4.0),
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8.0),
       padding: const EdgeInsets.all(8.0),
       decoration: BoxDecoration(
-        color: fromCssColor(woxTheme.actionItemActiveBackgroundColor).withAlpha(15),
-        borderRadius: BorderRadius.circular(4.0),
+        color: fromCssColor(woxTheme.actionContainerBackgroundColor).withAlpha(15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: fromCssColor(woxTheme.actionContainerBackgroundColor).withAlpha(40),
+          width: 1.0,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -493,7 +499,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
 
   Widget _buildDetailItem(String label, String value, {bool isCode = false}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4.0),
+      padding: const EdgeInsets.only(bottom: 8.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -505,14 +511,17 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
               color: fromCssColor(woxTheme.resultItemSubTitleColor),
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           isCode
               ? Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(4.0),
+                  padding: const EdgeInsets.all(6.0),
                   decoration: BoxDecoration(
                     color: Colors.black.withAlpha(20),
-                    borderRadius: BorderRadius.circular(4.0),
+                    border: Border.all(
+                      color: Colors.black.withAlpha(10),
+                      width: 1.0,
+                    ),
                   ),
                   child: SelectableText(
                     value,
@@ -537,21 +546,9 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
 
   Widget _buildAvatar(WoxAIChatConversation message) {
     final isUser = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value;
-    final isTool = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_TOOL.value;
 
-    Color avatarColor;
-    String avatarText;
-
-    if (isUser) {
-      avatarColor = fromCssColor(woxTheme.actionItemActiveBackgroundColor);
-      avatarText = 'U';
-    } else if (isTool) {
-      avatarColor = fromCssColor(woxTheme.actionItemActiveBackgroundColor);
-      avatarText = 'T';
-    } else {
-      avatarColor = fromCssColor(woxTheme.actionItemActiveBackgroundColor);
-      avatarText = 'A';
-    }
+    // 根据角色使用不同的背景色
+    Color avatarColor = isUser ? fromCssColor(woxTheme.actionItemActiveBackgroundColor) : fromCssColor(woxTheme.actionContainerBackgroundColor);
 
     return Container(
       width: 36,
@@ -568,14 +565,17 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
         ],
       ),
       child: Center(
-        child: Text(
-          avatarText,
-          style: TextStyle(
-            color: fromCssColor(isUser ? woxTheme.actionItemActiveFontColor : woxTheme.resultItemActiveTitleColor),
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        child: isUser
+            ? Icon(
+                Icons.person,
+                size: 20,
+                color: fromCssColor(woxTheme.actionItemActiveFontColor),
+              )
+            : Icon(
+                Icons.smart_toy_outlined,
+                size: 20,
+                color: fromCssColor(woxTheme.resultItemActiveTitleColor),
+              ),
       ),
     );
   }
