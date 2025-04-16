@@ -151,5 +151,22 @@
     ],
     "DateCreated": "2024-08-07 14:00:00",
     "DateUpdated": "2024-08-07 14:00:00"
+  },
+  {
+    "Id": "9575a1fc-d81b-4947-bcce-bd075f118f3e",
+    "Name": "Custom Commands",
+    "Author": "Sacha Duvivier",
+    "Version": "1.0.4",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "nodejs",
+    "Description": "Custom Commands Plugin for Wox 2.0",
+    "IconUrl": "https://raw.githubusercontent.com/sachadvr/Wox.Custom.Commands.Plugin/main/images/shell.png",
+    "Website": "https://github.com/sachadvr/Wox.Custom.Commands.Plugin",
+    "DownloadUrl": "https://github.com/sachadvr/Wox.Custom.Commands.Plugin/releases/latest/download/CustomCommands.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/sachadvr/Wox.Custom.Commands.Plugin/main/images/screenshot.png"
+    ],
+    "DateCreated": "2025-04-16 18:40:00",
+    "DateUpdated": "2025-04-16 18:40:00"
   }
 ]
