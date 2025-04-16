@@ -335,7 +335,9 @@ class WoxRefreshableResult {
     actions = <WoxResultAction>[];
     if (json['Actions'] != null) {
       json['Actions'].forEach((v) {
-        actions.add(WoxResultAction.fromJson(v));
+        var action = WoxResultAction.fromJson(v);
+        action.resultId = resultId;
+        actions.add(action);
       });
     }
   }

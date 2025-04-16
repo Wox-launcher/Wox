@@ -705,6 +705,25 @@ class WoxLauncherController extends GetxController {
                 Logger.instance.debug(traceId, "preview panel visibility changed, resize height");
                 resizeHeight();
               }
+
+              // update actions list
+              var actions = result.value.data.actions.map((e) => WoxListItem.fromResultAction(e)).toList();
+              var oldActionIndex = actionListViewController.activeIndex.value;
+              var oldActionCount = actionListViewController.items.length;
+              actionListViewController.updateItems(traceId, actions);
+              // update active index to default action
+              // if action panel is visible, prefer to keep the active index
+              if (!isShowActionPanel.value || oldActionIndex >= actions.length || oldActionCount != actions.length) {
+                var defaultActionIndex = actions.indexWhere((element) => element.data.isDefault);
+                if (defaultActionIndex != -1) {
+                  actionListViewController.updateActiveIndex(traceId, defaultActionIndex);
+                } else {
+                  actionListViewController.updateActiveIndex(traceId, 0);
+                }
+              } else {
+                // keep the active index, we need to this to trigger the onItemActive callback, so the toolbar info can be updated
+                actionListViewController.updateActiveIndex(traceId, actionListViewController.activeIndex.value);
+              }
             }
 
             // update result list view item

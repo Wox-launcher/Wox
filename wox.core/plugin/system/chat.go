@@ -287,9 +287,12 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 	r.saveChats(ctx)
 
 	// summarize the chat
-	summarizeIndex := []int{2, 8, 16}
+	summarizeIndex := []int{2, 4, 10}
 	for _, index := range summarizeIndex {
-		if len(aiChatData.Conversations) == index {
+		nonToolConversationCount := lo.CountBy(aiChatData.Conversations, func(conversation common.Conversation) bool {
+			return conversation.Role != common.ConversationRoleTool
+		})
+		if nonToolConversationCount == index {
 			r.summarizeChat(ctx, aiChatData)
 			break
 		}
