@@ -336,6 +336,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 			})
 		} else if streamResult.Type == common.ChatStreamTypeToolCall {
 			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: received tool call: %s", streamResult.ToolCall.Id))
+
 			r.appendOrUpdateConversation(&aiChatData, common.Conversation{
 				Id:           uuid.NewString(),
 				Role:         common.ConversationRoleTool,
@@ -343,15 +344,24 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 				ToolCallInfo: streamResult.ToolCall,
 				Timestamp:    util.GetSystemTimestamp(),
 			})
-
 			r.appendOrUpdateChatData(aiChatData)
+
+			// if tool call is streaming, send the chat response to UI and return
+			// no need to save chat
+			if streamResult.ToolCall.Status == common.ToolCallStatusStreaming {
+				plugin.GetPluginManager().GetUI().SendChatResponse(ctx, aiChatData)
+				return
+			}
+
 			r.saveChats(ctx)
 			plugin.GetPluginManager().GetUI().SendChatResponse(ctx, aiChatData)
 
-			// recursively call the chat to continue
-			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: recursively calling the chat to continue, loop: %d", chatLoopCount+1))
-			r.Chat(ctx, aiChatData, chatLoopCount+1)
-			return
+			if streamResult.ToolCall.Status == common.ToolCallStatusSucceeded {
+				// recursively call the chat to continue
+				r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: recursively calling the chat to continue, loop: %d", chatLoopCount+1))
+				r.Chat(ctx, aiChatData, chatLoopCount+1)
+				return
+			}
 		}
 
 		// send the chat response to UI
@@ -368,6 +378,11 @@ func (r *AIChatPlugin) appendOrUpdateConversation(aiChatData *common.AIChatData,
 	for i := range aiChatData.Conversations {
 		if aiChatData.Conversations[i].Id == conversation.Id {
 			aiChatData.Conversations[i] = conversation
+			return
+		}
+		// if the tool call id is the same, update it too
+		if aiChatData.Conversations[i].Role == common.ConversationRoleTool && aiChatData.Conversations[i].ToolCallInfo.Id == conversation.ToolCallInfo.Id {
+			aiChatData.Conversations[i].ToolCallInfo = conversation.ToolCallInfo
 			return
 		}
 	}

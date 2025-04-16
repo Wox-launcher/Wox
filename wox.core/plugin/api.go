@@ -41,8 +41,9 @@ type API interface {
 }
 
 type APIImpl struct {
-	pluginInstance *Instance
-	logger         *util.Log
+	pluginInstance   *Instance
+	logger           *util.Log
+	toolCallStartMap *util.HashMap[string, int64]
 }
 
 func (a *APIImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
@@ -237,6 +238,14 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversa
 				}
 
 				if streamResult.Type == common.ChatStreamTypeToolCall {
+					startTime := util.GetSystemTimestamp()
+					if v, ok := a.toolCallStartMap.Load(streamResult.ToolCall.Id); ok {
+						startTime = v
+					} else {
+						a.toolCallStartMap.Store(streamResult.ToolCall.Id, startTime)
+					}
+					streamResult.ToolCall.StartTimestamp = startTime
+
 					if streamResult.ToolCall.Status == common.ToolCallStatusStreaming {
 						delta := streamResult.ToolCall.Name
 						if delta == "" {
@@ -244,6 +253,7 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversa
 						}
 						util.GetLogger().Info(ctx, fmt.Sprintf("AI: Tool call is streaming, delta: %s", delta))
 						time.Sleep(time.Millisecond * 100)
+						callback(streamResult)
 						continue
 					}
 
@@ -254,7 +264,19 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversa
 							if tool.Name == streamResult.ToolCall.Name {
 								util.GetLogger().Info(ctx, fmt.Sprintf("AI: Executing tool: %s with args: %v, toolcall id: %s, toolcall status: %s", tool.Name, streamResult.ToolCall.Arguments, streamResult.ToolCall.Id, streamResult.ToolCall.Status))
 
-								startTime := util.GetSystemTimestamp()
+								callback(common.ChatStreamData{
+									Type: common.ChatStreamTypeToolCall,
+									Data: "",
+									ToolCall: common.ToolCallInfo{
+										Id:             streamResult.ToolCall.Id,
+										Name:           streamResult.ToolCall.Name,
+										Arguments:      streamResult.ToolCall.Arguments,
+										Response:       "",
+										Status:         common.ToolCallStatusRunning,
+										StartTimestamp: startTime,
+									},
+								})
+
 								toolResponse, toolErr := tool.Callback(ctx, streamResult.ToolCall.Arguments)
 								endTime := util.GetSystemTimestamp()
 								duration := endTime - startTime
@@ -316,5 +338,6 @@ func NewAPI(instance *Instance) API {
 	apiImpl := &APIImpl{pluginInstance: instance}
 	logFolder := path.Join(util.GetLocation().GetLogPluginDirectory(), instance.Metadata.Name)
 	apiImpl.logger = util.CreateLogger(logFolder)
+	apiImpl.toolCallStartMap = util.NewHashMap[string, int64]()
 	return apiImpl
 }

@@ -186,10 +186,9 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 		if toolCall.Function.Name != "" {
 			util.GetLogger().Debug(ctx, "AI: Tool call streaming finished")
 			toolCallInfo := common.ToolCallInfo{
-				Id:             toolCall.ID,
-				Name:           toolCall.Function.Name,
-				Delta:          toolCall.Function.Arguments,
-				StartTimestamp: util.GetSystemTimestamp(),
+				Id:    toolCall.ID,
+				Name:  toolCall.Function.Name,
+				Delta: toolCall.Function.Arguments,
 			}
 
 			// try to unmarshal tool call arguments if possible
@@ -230,13 +229,18 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 	// check if tool call streaming
 	if len(chunk.Choices[0].Delta.ToolCalls) > 0 {
 		toolCall := chunk.Choices[0].Delta.ToolCalls[0]
+
+		// somehow the tool call id is not returned after the first chunk, so we need to get it from the previous chunk
+		if toolCall.ID == "" && len(s.acc.Choices) > 0 && len(s.acc.Choices[0].Message.ToolCalls) > 0 {
+			toolCall.ID = s.acc.Choices[0].Message.ToolCalls[len(s.acc.Choices[0].Message.ToolCalls)-1].ID
+		}
+
 		toolCallInfo := common.ToolCallInfo{
-			Id:             toolCall.ID,
-			Name:           toolCall.Function.Name,
-			Arguments:      map[string]any{},
-			Delta:          toolCall.Function.Arguments,
-			Status:         common.ToolCallStatusStreaming,
-			StartTimestamp: util.GetSystemTimestamp(),
+			Id:        toolCall.ID,
+			Name:      toolCall.Function.Name,
+			Arguments: map[string]any{},
+			Delta:     toolCall.Function.Arguments,
+			Status:    common.ToolCallStatusStreaming,
 		}
 		return common.ChatStreamData{
 			Type:     common.ChatStreamTypeToolCall,

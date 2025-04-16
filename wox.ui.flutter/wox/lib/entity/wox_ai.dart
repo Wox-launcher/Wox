@@ -154,7 +154,9 @@ class ToolCallInfo {
 
   bool isExpanded = false;
 
-  int get duration => endTimestamp - startTimestamp;
+  int get duration => (status == ToolCallStatus.streaming || status == ToolCallStatus.pending || status == ToolCallStatus.running)
+      ? DateTime.now().millisecondsSinceEpoch - startTimestamp
+      : endTimestamp - startTimestamp;
 
   ToolCallInfo({
     required this.id,

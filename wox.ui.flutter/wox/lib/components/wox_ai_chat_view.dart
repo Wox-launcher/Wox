@@ -273,7 +273,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     if (isUser) {
       backgroundColor = fromCssColor(woxTheme.actionItemActiveBackgroundColor);
     } else if (isTool) {
-      // 使用与 AI 助手相同的背景色
       backgroundColor = fromCssColor(woxTheme.actionContainerBackgroundColor);
     } else {
       backgroundColor = fromCssColor(woxTheme.actionContainerBackgroundColor);
@@ -310,22 +309,23 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (isTool && message.toolCallInfo.id.isNotEmpty) _buildToolCallBadge(message),
-                      MarkdownBody(
-                        data: message.text,
-                        selectable: true,
-                        styleSheet: MarkdownStyleSheet(
-                          a: TextStyle(
-                            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveTitleColor),
-                            fontSize: 14,
-                            decoration: TextDecoration.underline,
-                            decorationColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveTitleColor),
-                          ),
-                          p: TextStyle(
-                            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveTitleColor),
-                            fontSize: 14,
+                      if (!isTool)
+                        MarkdownBody(
+                          data: message.text,
+                          selectable: true,
+                          styleSheet: MarkdownStyleSheet(
+                            a: TextStyle(
+                              color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveTitleColor),
+                              fontSize: 14,
+                              decoration: TextDecoration.underline,
+                              decorationColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveTitleColor),
+                            ),
+                            p: TextStyle(
+                              color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveTitleColor),
+                              fontSize: 14,
+                            ),
                           ),
                         ),
-                      ),
                       if (message.images.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         Wrap(
