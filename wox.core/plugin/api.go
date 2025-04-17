@@ -247,11 +247,7 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversa
 					streamResult.ToolCall.StartTimestamp = startTime
 
 					if streamResult.ToolCall.Status == common.ToolCallStatusStreaming {
-						delta := streamResult.ToolCall.Name
-						if delta == "" {
-							delta = streamResult.ToolCall.Delta
-						}
-						util.GetLogger().Info(ctx, fmt.Sprintf("AI: Tool call is streaming, delta: %s", delta))
+						util.GetLogger().Info(ctx, fmt.Sprintf("AI: Tool call is streaming, delta: %s", streamResult.ToolCall.Delta))
 						time.Sleep(time.Millisecond * 100)
 						callback(streamResult)
 						continue
@@ -277,7 +273,43 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversa
 									},
 								})
 
-								toolResponse, toolErr := tool.Callback(ctx, streamResult.ToolCall.Arguments)
+								// execute tool call in a new goroutine, and send callback continuously to refresh the status
+								execCtx, cancelExec := context.WithCancel(ctx)
+								var toolResponse common.Conversation
+								var toolErr error
+
+								util.Go(ctx, "ai tool call execution", func() {
+									toolResponse, toolErr = tool.Callback(ctx, streamResult.ToolCall.Arguments)
+									cancelExec()
+								}, func() {
+									toolErr = fmt.Errorf("tool execution failed with panic")
+									cancelExec()
+								})
+
+								util.Go(ctx, "ai tool call status update", func() {
+									for {
+										select {
+										case <-execCtx.Done():
+											return
+										case <-time.After(time.Millisecond * 200):
+											callback(common.ChatStreamData{
+												Type: common.ChatStreamTypeToolCall,
+												Data: "",
+												ToolCall: common.ToolCallInfo{
+													Id:             streamResult.ToolCall.Id,
+													Name:           streamResult.ToolCall.Name,
+													Arguments:      streamResult.ToolCall.Arguments,
+													Response:       "",
+													Status:         common.ToolCallStatusRunning,
+													StartTimestamp: startTime,
+												},
+											})
+										}
+									}
+								})
+
+								<-execCtx.Done()
+
 								endTime := util.GetSystemTimestamp()
 								duration := endTime - startTime
 

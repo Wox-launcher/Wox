@@ -488,16 +488,17 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildDetailItem('Id', info.id),
           _buildDetailItem('名称', info.name),
-          _buildDetailItem('参数', info.arguments.toString(), isCode: true),
+          _buildDetailItem('参数', info.status == ToolCallStatus.streaming ? info.delta : info.arguments.toString()),
           _buildDetailItem('耗时', '${info.duration}ms'),
-          if (info.response.isNotEmpty) _buildDetailItem('响应', info.response, isCode: true),
+          if (info.response.isNotEmpty) _buildDetailItem('响应', info.response),
         ],
       ),
     );
   }
 
-  Widget _buildDetailItem(String label, String value, {bool isCode = false}) {
+  Widget _buildDetailItem(String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
       child: Column(
@@ -512,33 +513,25 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
             ),
           ),
           const SizedBox(height: 4),
-          isCode
-              ? Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(6.0),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withAlpha(20),
-                    border: Border.all(
-                      color: Colors.black.withAlpha(10),
-                      width: 1.0,
-                    ),
-                  ),
-                  child: SelectableText(
-                    value,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontFamily: 'monospace',
-                      color: fromCssColor(woxTheme.resultItemTitleColor),
-                    ),
-                  ),
-                )
-              : Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: fromCssColor(woxTheme.resultItemTitleColor),
-                  ),
-                ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(6.0),
+            decoration: BoxDecoration(
+              color: Colors.black.withAlpha(20),
+              border: Border.all(
+                color: Colors.black.withAlpha(10),
+                width: 1.0,
+              ),
+            ),
+            child: SelectableText(
+              value,
+              style: TextStyle(
+                fontSize: 12,
+                fontFamily: 'monospace',
+                color: fromCssColor(woxTheme.resultItemTitleColor),
+              ),
+            ),
+          )
         ],
       ),
     );

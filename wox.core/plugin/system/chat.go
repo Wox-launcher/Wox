@@ -151,7 +151,7 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureResultPreviewWidthRatio,
 				Params: map[string]string{
-					"WidthRatio": "0.3",
+					"WidthRatio": "0.25",
 				},
 			},
 		},
@@ -205,15 +205,19 @@ func (r *AIChatPlugin) getDefaultModel() common.Model {
 }
 
 func (r *AIChatPlugin) reloadMCPServers(ctx context.Context) {
+	r.api.Log(ctx, plugin.LogLevelInfo, "AI: Reloading MCP servers")
+
 	mcpServers, err := r.loadMCPServers(ctx)
 	if err != nil {
 		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to load mcp servers: %s", err.Error()))
 	} else {
 		r.mcpServers = mcpServers
+		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Loaded %d mcp servers", len(r.mcpServers)))
 	}
 
 	for _, mcpServer := range r.mcpServers {
 		if mcpServer.Disabled {
+			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: MCP server %s is disabled", mcpServer.Name))
 			continue
 		}
 
@@ -221,8 +225,10 @@ func (r *AIChatPlugin) reloadMCPServers(ctx context.Context) {
 		if err != nil {
 			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to list tool: %s", err.Error()))
 		}
+
+		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Found %d tools for MCP server %s", len(tools), mcpServer.Name))
 		for _, tool := range tools {
-			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: %s tool %s: %s", mcpServer.Name, tool.Name, tool.Description))
+			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: %s tool %s", mcpServer.Name, tool.Name))
 			r.mcpToolsMap = append(r.mcpToolsMap, tool)
 		}
 	}

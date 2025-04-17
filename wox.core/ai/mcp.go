@@ -96,9 +96,38 @@ func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) ([]c
 							Description: propertyDescription,
 						}
 					case "array":
+						var itemsDefinition *jsonschema.Definition
+
+						if itemsRaw, hasItems := propertyMap["items"]; hasItems {
+							if itemsMap, ok := itemsRaw.(map[string]any); ok {
+								itemTypeRaw, hasType := itemsMap["type"]
+								if hasType {
+									itemType, isString := itemTypeRaw.(string)
+									if isString {
+										switch itemType {
+										case "string":
+											itemsDefinition = &jsonschema.Definition{Type: jsonschema.String}
+										case "integer":
+											itemsDefinition = &jsonschema.Definition{Type: jsonschema.Integer}
+										case "boolean":
+											itemsDefinition = &jsonschema.Definition{Type: jsonschema.Boolean}
+										default:
+											// 默认使用字符串类型
+											itemsDefinition = &jsonschema.Definition{Type: jsonschema.String}
+										}
+									}
+								}
+							}
+						}
+
+						if itemsDefinition == nil {
+							itemsDefinition = &jsonschema.Definition{Type: jsonschema.String}
+						}
+
 						parameters.Properties[name] = jsonschema.Definition{
 							Type:        jsonschema.Array,
 							Description: propertyDescription,
+							Items:       itemsDefinition,
 						}
 					}
 				}
@@ -127,7 +156,12 @@ func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) ([]c
 				}
 
 				if result.IsError {
-					return common.Conversation{}, fmt.Errorf("MCP: Tool call ended with error")
+					errMsg := "unkown error"
+					if len(result.Content) > 0 {
+						errMsg = fmt.Sprintf("%v", result.Content[0])
+					}
+
+					return common.Conversation{}, fmt.Errorf("MCP: Tool call ended with error: %s ", errMsg)
 				}
 
 				content := result.Content

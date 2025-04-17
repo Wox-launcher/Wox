@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"wox/common"
 	"wox/setting"
 	"wox/util"
@@ -50,8 +51,9 @@ func (o *OpenAIBaseProvider) ChatStream(ctx context.Context, model common.Model,
 	for i, conv := range conversations {
 		util.GetLogger().Debug(ctx, fmt.Sprintf("AI: conversation[%d] - role: %s, text: %s, toolCallID: %s", i, conv.Role, conv.Text, conv.ToolCallInfo.Id))
 	}
-	for i, tool := range options.Tools {
-		util.GetLogger().Debug(ctx, fmt.Sprintf("AI: tool[%d] - name: %s, description: %s", i, tool.Name, tool.Description))
+	convertedTools := o.convertTools(options.Tools)
+	for i, tool := range convertedTools {
+		util.GetLogger().Debug(ctx, fmt.Sprintf("AI: converted tool[%d] name: %s, paramters: %v", i, tool.Function.Name, tool.Function.Parameters))
 	}
 
 	var createdStream *ssestream.Stream[openai.ChatCompletionChunk]
@@ -59,7 +61,7 @@ func (o *OpenAIBaseProvider) ChatStream(ctx context.Context, model common.Model,
 		chatParams := openai.ChatCompletionNewParams{
 			Model:    model.Name,
 			Messages: o.convertConversations(conversations),
-			Tools:    o.convertTools(options.Tools),
+			Tools:    convertedTools,
 			ToolChoice: openai.ChatCompletionToolChoiceOptionUnionParam{
 				OfAuto: param.Opt[string]{},
 			},
@@ -194,7 +196,7 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 			// try to unmarshal tool call arguments if possible
 			var argsMap map[string]any
 			if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &argsMap); err == nil {
-				toolCallInfo.Arguments = argsMap
+				toolCallInfo.Arguments = s.normalizeArguments(ctx, toolCall.Function.Name, argsMap)
 				toolCallInfo.Status = common.ToolCallStatusPending
 			} else {
 				util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal tool call arguments, json=%s, err: %s", toolCall.Function.Arguments, err.Error()))
@@ -219,6 +221,8 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 	}
 
 	chunk := s.stream.Current()
+	util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Received raw chunk: %s", chunk.RawJSON()))
+
 	s.acc.AddChunk(chunk)
 
 	// skip empty chunk, maybe invoke receive too fast
@@ -228,13 +232,7 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 
 	// check if tool call streaming
 	if len(chunk.Choices[0].Delta.ToolCalls) > 0 {
-		toolCall := chunk.Choices[0].Delta.ToolCalls[0]
-
-		// somehow the tool call id is not returned after the first chunk, so we need to get it from the previous chunk
-		if toolCall.ID == "" && len(s.acc.Choices) > 0 && len(s.acc.Choices[0].Message.ToolCalls) > 0 {
-			toolCall.ID = s.acc.Choices[0].Message.ToolCalls[len(s.acc.Choices[0].Message.ToolCalls)-1].ID
-		}
-
+		toolCall := s.acc.Choices[0].Message.ToolCalls[len(s.acc.Choices[0].Message.ToolCalls)-1]
 		toolCallInfo := common.ToolCallInfo{
 			Id:        toolCall.ID,
 			Name:      toolCall.Function.Name,
@@ -253,6 +251,101 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 		Type: common.ChatStreamTypeStreaming,
 		Data: chunk.Choices[0].Delta.Content,
 	}, nil
+}
+
+// normalizeArguments normalizes the tool call arguments
+// Case 1:
+//
+//		because we unmarshal the tool call arguments as map[string]any, some types are not correct, E.g. int64 will be unmarshaled as float64
+//	 so we need to normalize the types base on the tool call definition
+//
+// Case 2:
+//
+//	the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema.
+//
+// E.g. {"sequenceNumber": 123} -> {"sequence_number": 123}
+//
+// Case 3:
+//
+//	sometimes required arguments are not provided, so we need to add them to the arguments
+func (s *OpenAIBaseProviderStream) normalizeArguments(ctx context.Context, toolName string, argsMap map[string]any) map[string]any {
+	util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Start normalizing tool call arguments for tool: %s, args: %v", toolName, argsMap))
+
+	var tool common.MCPTool
+	mcpTools.Range(func(key string, value []common.MCPTool) bool {
+		for _, t := range value {
+			if t.Name == toolName {
+				tool = t
+				return false
+			}
+		}
+		return true
+	})
+
+	if tool.Name == "" {
+		util.GetLogger().Error(ctx, fmt.Sprintf("AI: Tool not found: %s", toolName))
+		return argsMap
+	}
+
+	// fix argument types
+	for toolRequiredName, param := range tool.Parameters.Properties {
+		if param.Type == "integer" {
+			// name sometimes is not the same as the tool call argument name, so we need to map the name to the tool call argument name
+			// E.g. sequenceNumber -> sequence_number
+			for aiReturnName, value := range argsMap {
+				if s.isToolCallArgumentNameSame(toolRequiredName, aiReturnName) {
+					if f, ok := value.(float64); ok {
+						argsMap[toolRequiredName] = int64(f)
+						util.GetLogger().Debug(ctx, fmt.Sprintf("AI: argument type fixed %s, from float to int", toolRequiredName))
+					}
+				}
+			}
+		}
+	}
+
+	// fix required arguments
+	for _, requiredName := range tool.Parameters.Required {
+		if _, ok := argsMap[requiredName]; !ok {
+			// add the required argument to the arguments based on the property definition
+			if prop, ok := tool.Parameters.Properties[requiredName]; ok {
+				if prop.Type == "string" {
+					argsMap[requiredName] = ""
+				} else if prop.Type == "integer" {
+					argsMap[requiredName] = int64(0)
+				} else if prop.Type == "object" {
+					argsMap[requiredName] = map[string]any{}
+				} else if prop.Type == "array" {
+					argsMap[requiredName] = []any{}
+				} else if prop.Type == "boolean" {
+					argsMap[requiredName] = false
+				} else {
+					argsMap[requiredName] = nil
+				}
+
+				util.GetLogger().Debug(ctx, fmt.Sprintf("AI: required argument %s missing, added with default value: %s", requiredName, argsMap[requiredName]))
+			} else {
+				argsMap[requiredName] = nil
+			}
+		}
+	}
+
+	util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Normalized tool call arguments successfully, args: %v", argsMap))
+
+	return argsMap
+}
+
+func (s *OpenAIBaseProviderStream) isToolCallArgumentNameSame(toolRequiredName string, aiReturnName string) bool {
+	if strings.EqualFold(toolRequiredName, aiReturnName) {
+		return true
+	}
+
+	// name sometimes is not the same as the tool call argument name, so we need to map the name to the tool call argument name
+	// E.g. sequenceNumber -> sequence_number
+	if strings.EqualFold(strings.ReplaceAll(toolRequiredName, "_", ""), strings.ReplaceAll(aiReturnName, "_", "")) {
+		return true
+	}
+
+	return false
 }
 
 func (s *OpenAIBaseProviderStream) isChunkEmpty(chunk openai.ChatCompletionChunk) bool {
