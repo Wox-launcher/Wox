@@ -293,5 +293,9 @@
   "plugin_ai_chat_mcp_server_url": "URL",
   "plugin_ai_chat_mcp_server_url_tooltip": "MCP 服务器的 URL",
   "plugin_ai_chat_default_model": "默认模型",
-  "plugin_ai_chat_default_model_tooltip": "用于对话的默认模型"
+  "plugin_ai_chat_default_model_tooltip": "用于对话的默认模型",
+  "plugin_ai_chat_enable_fallback_search": "回退搜索",
+  "plugin_ai_chat_enable_fallback_search_tooltip": "当查询结果为空时，Wox 将返回一个 '使用 AI Chat 查询 %s' 的结果",
+  "plugin_ai_chat_fallback_search_chat_for": "使用 AI Chat 查询 %s",
+  "plugin_ai_chat_start_chat": "开始对话"
 }

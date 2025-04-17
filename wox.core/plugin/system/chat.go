@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 	"wox/ai"
 	"wox/common"
 	"wox/plugin"
@@ -47,6 +48,19 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 		TriggerKeywords: []string{"chat"},
 		SupportedOS:     []string{"Windows", "Macos", "Linux"},
 		SettingDefinitions: definition.PluginSettingDefinitions{
+			{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
+					Key:          "enable_fallback_search",
+					DefaultValue: "true",
+					Label:        "i18n:plugin_ai_chat_enable_fallback_search",
+					Tooltip:      "i18n:plugin_ai_chat_enable_fallback_search_tooltip",
+				},
+			},
+			{
+				Type:  definition.PluginSettingDefinitionTypeNewLine,
+				Value: &definition.PluginSettingValueNewLine{},
+			},
 			{
 				Type: definition.PluginSettingDefinitionTypeSelectAIModel,
 				Value: &definition.PluginSettingValueSelectAIModel{
@@ -177,7 +191,62 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	} else {
 		r.chats = chats
 	}
+}
 
+func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	fallbackSearchSetting := r.api.GetSetting(ctx, "enable_fallback_search")
+	isEnableFallbackSearch := fallbackSearchSetting == "true"
+	if !isEnableFallbackSearch {
+		return []plugin.QueryResult{}
+	}
+
+	fallbackSearchTitle := r.api.GetTranslation(ctx, "plugin_ai_chat_fallback_search_chat_for")
+	fallbackSearchTitle = strings.ReplaceAll(fallbackSearchTitle, "%s", query.RawQuery)
+
+	return []plugin.QueryResult{
+		{
+			Title: fallbackSearchTitle,
+			Icon:  aiChatIcon,
+			Actions: []plugin.QueryResultAction{
+				{
+					Name:                   "i18n:plugin_ai_chat_start_chat",
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						r.Chat(ctx, common.AIChatData{
+							Id:    uuid.NewString(),
+							Title: query.RawQuery,
+							Model: r.getDefaultModel(),
+							Conversations: []common.Conversation{
+								{
+									Id:        uuid.NewString(),
+									Role:      common.ConversationRoleUser,
+									Text:      query.RawQuery,
+									Timestamp: util.GetSystemTimestamp(),
+								},
+							},
+							//TODO: let user customize the default tools, just like model
+							SelectedTools: lo.Map(r.GetAllTools(ctx), func(tool common.MCPTool, _ int) string {
+								return tool.Name
+							}),
+							CreatedAt: util.GetSystemTimestamp(),
+							UpdatedAt: util.GetSystemTimestamp(),
+						}, 0)
+
+						r.api.ChangeQuery(ctx, common.PlainQuery{
+							QueryType:      plugin.QueryTypeInput,
+							QueryText:      "chat " + query.RawQuery,
+							QuerySelection: selection.Selection{},
+						})
+
+						util.Go(ctx, "focus to chat input", func() {
+							time.Sleep(time.Millisecond * 300)
+							plugin.GetPluginManager().GetUI().FocusToChatInput(ctx)
+						})
+					},
+				},
+			},
+		},
+	}
 }
 
 func (r *AIChatPlugin) getDefaultModel() common.Model {
@@ -459,13 +528,20 @@ func (r *AIChatPlugin) getNewChatPreviewData(ctx context.Context) plugin.QueryRe
 func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
 	r.resultChatIdMap.Clear()
 
-	// add the new chat result for user to create a new chat
-	results = append(results, r.getNewChatPreviewData(ctx))
+	if query.Search == "" {
+		// add the new chat result for user to create a new chat if there is no search
+		results = append(results, r.getNewChatPreviewData(ctx))
+	}
 
 	for i, chat := range r.chats {
 		previewData, err := json.Marshal(chat)
 		if err != nil {
 			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to marshal chat preview data: %s", err.Error()))
+			continue
+		}
+
+		// filter chat by query
+		if query.Search != "" && !strings.Contains(chat.Title, query.Search) {
 			continue
 		}
 

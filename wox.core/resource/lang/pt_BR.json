@@ -293,5 +293,9 @@
   "plugin_ai_chat_mcp_server_url": "URL",
   "plugin_ai_chat_mcp_server_url_tooltip": "A URL do servidor MCP",
   "plugin_ai_chat_default_model": "Modelo padrão",
-  "plugin_ai_chat_default_model_tooltip": "O modelo padrão a ser usado para esta consulta"
+  "plugin_ai_chat_default_model_tooltip": "O modelo padrão a ser usado para esta consulta",
+  "plugin_ai_chat_enable_fallback_search": "Busca de fallback",
+  "plugin_ai_chat_enable_fallback_search_tooltip": "Quando selecionado, se o resultado da consulta estiver vazio, o Wox retornará um resultado de 'usar IA para %s'",
+  "plugin_ai_chat_fallback_search_chat_for": "Usar IA para %s",
+  "plugin_ai_chat_start_chat": "Iniciar conversa"
 }

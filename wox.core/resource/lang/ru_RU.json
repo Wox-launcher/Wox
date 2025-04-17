@@ -292,5 +292,9 @@
   "plugin_ai_chat_mcp_server_url": "URL",
   "plugin_ai_chat_mcp_server_url_tooltip": "URL сервера MCP",
   "plugin_ai_chat_default_model": "Модель по умолчанию",
-  "plugin_ai_chat_default_model_tooltip": "Модель по умолчанию для этой команды"
+  "plugin_ai_chat_default_model_tooltip": "Модель по умолчанию для этой команды",
+  "plugin_ai_chat_enable_fallback_search": "Резервный поиск",
+  "plugin_ai_chat_enable_fallback_search_tooltip": "Если включено, если результат запроса пуст, Wox вернет результат 'использовать AI Chat для %s'",
+  "plugin_ai_chat_fallback_search_chat_for": "Использовать AI Chat для %s",
+  "plugin_ai_chat_start_chat": "Начать чат"
 }

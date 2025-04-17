@@ -866,13 +866,14 @@ func (m *Manager) QuerySilent(ctx context.Context, query Query) bool {
 func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *Instance) (results []QueryResultUI) {
 	var queryResults []QueryResult
 	if query.IsGlobalQuery() {
-		for _, instance := range m.instances {
-			pluginInstance := instance
+		for _, pluginInstance := range m.instances {
 			if v, ok := pluginInstance.Plugin.(FallbackSearcher); ok {
-				queryResults = v.QueryFallback(ctx, query)
-				for i := range queryResults {
-					queryResults[i] = m.PolishResult(ctx, pluginInstance, query, queryResults[i])
+				fallbackResults := v.QueryFallback(ctx, query)
+				for _, fallbackResult := range fallbackResults {
+					polishedFallbackResult := m.PolishResult(ctx, pluginInstance, query, fallbackResult)
+					queryResults = append(queryResults, polishedFallbackResult)
 				}
+				continue
 			}
 		}
 	} else {

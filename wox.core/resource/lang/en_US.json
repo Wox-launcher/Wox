@@ -293,5 +293,9 @@
   "plugin_ai_chat_mcp_server_url": "URL",
   "plugin_ai_chat_mcp_server_url_tooltip": "The URL of the MCP server",
   "plugin_ai_chat_default_model": "Default Model",
-  "plugin_ai_chat_default_model_tooltip": "The default model to use for this command"
+  "plugin_ai_chat_default_model_tooltip": "The default model to use for this command",
+  "plugin_ai_chat_enable_fallback_search": "Fallback Search",
+  "plugin_ai_chat_enable_fallback_search_tooltip": "When enabled, if the query result is empty, Wox will return a result of 'use AI Chat for %s'",
+  "plugin_ai_chat_fallback_search_chat_for": "Use AI Chat for %s",
+  "plugin_ai_chat_start_chat": "Start Chat"
 }
