@@ -12,6 +12,9 @@ class WoxSettingPluginTextBox extends WoxSettingPluginItem {
 
   WoxSettingPluginTextBox({super.key, required this.item, required super.value, required super.onUpdate}) {
     controller.text = getSetting(item.key);
+    if (item.maxLines < 1) {
+      item.maxLines = 1;
+    }
   }
 
   @override
@@ -37,6 +40,7 @@ class WoxSettingPluginTextBox extends WoxSettingPluginItem {
               }
             },
             child: TextBox(
+              maxLines: item.maxLines,
               controller: controller,
               onChanged: (value) {
                 for (var element in item.validators) {

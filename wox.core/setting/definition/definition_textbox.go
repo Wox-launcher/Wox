@@ -11,6 +11,7 @@ type PluginSettingValueTextBox struct {
 	Suffix       string
 	DefaultValue string
 	Tooltip      string
+	MaxLines     int                                // max lines for textbox, default 1
 	Validators   []validator.PluginSettingValidator // validators for this setting, every validator should be satisfied
 
 	Style PluginSettingValueStyle

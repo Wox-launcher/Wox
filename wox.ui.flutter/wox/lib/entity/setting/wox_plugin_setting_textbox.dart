@@ -8,6 +8,7 @@ class PluginSettingValueTextBox {
   late String suffix;
   late String defaultValue;
   late String tooltip;
+  late int maxLines;
   late List<PluginSettingValidatorItem> validators;
 
   late PluginSettingValueStyle style;
@@ -18,6 +19,7 @@ class PluginSettingValueTextBox {
     suffix = json['Suffix'];
     defaultValue = json['DefaultValue'];
     tooltip = json['Tooltip'];
+    maxLines = json['MaxLines'] ?? 1;
 
     if (json['Style'] != null) {
       style = PluginSettingValueStyle.fromJson(json['Style']);
