@@ -1,6 +1,7 @@
 ﻿#include "flutter_window.h"
 
 #include <optional>
+#include <thread>
 #include <flutter/plugin_registrar_windows.h>
 #include <windows.h>
 
@@ -9,8 +10,15 @@
 // Store window instance for window procedure
 FlutterWindow *g_window_instance = nullptr;
 
+// Global log function
+void LogMessage(const std::string &message) {
+  if (g_window_instance) {
+    g_window_instance->Log(message);
+  }
+}
+
 FlutterWindow::FlutterWindow(const flutter::DartProject &project)
-    : project_(project), 
+    : project_(project),
       original_window_proc_(nullptr),
       previous_active_window_(nullptr)
 {
@@ -28,8 +36,9 @@ FlutterWindow::~FlutterWindow()
 
 void FlutterWindow::Log(const std::string &message)
 {
-  //print to console
-  std::cout << message << std::endl;
+  if (window_manager_channel_) {
+    window_manager_channel_->InvokeMethod("log", std::make_unique<flutter::EncodableValue>(message));
+  }
 }
 
 // Get the DPI scaling factor for the window
@@ -42,9 +51,9 @@ float FlutterWindow::GetDpiScale(HWND hwnd)
   HMODULE user32 = GetModuleHandle(TEXT("user32.dll"));
   if (user32) {
     typedef UINT (WINAPI *GetDpiForWindowFunc)(HWND);
-    GetDpiForWindowFunc getDpiForWindow = 
+    GetDpiForWindowFunc getDpiForWindow =
         reinterpret_cast<GetDpiForWindowFunc>(GetProcAddress(user32, "GetDpiForWindow"));
-    
+
     if (getDpiForWindow) {
       UINT dpi = getDpiForWindow(hwnd);
       dpiScale = dpi / 96.0f;
@@ -58,7 +67,7 @@ float FlutterWindow::GetDpiScale(HWND hwnd)
       }
     }
   }
-  
+
   return dpiScale;
 }
 
@@ -220,7 +229,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
           // Get DPI scale factor
           float dpiScale = GetDpiScale(hwnd);
-          
+
           // Apply DPI scaling to get physical pixels
           int scaledWidth = static_cast<int>(width * dpiScale);
           int scaledHeight = static_cast<int>(height * dpiScale);
@@ -244,14 +253,14 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     {
       RECT rect;
       GetWindowRect(hwnd, &rect);
-      
+
       // Get DPI scale factor
       float dpiScale = GetDpiScale(hwnd);
-      
+
       // Apply DPI scaling to logical pixels (physical to logical)
       double scaledX = static_cast<double>(rect.left) / dpiScale;
       double scaledY = static_cast<double>(rect.top) / dpiScale;
-      
+
       flutter::EncodableMap position;
       position[flutter::EncodableValue("x")] = flutter::EncodableValue(scaledX);
       position[flutter::EncodableValue("y")] = flutter::EncodableValue(scaledY);
@@ -271,7 +280,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
           // Get DPI scale factor
           float dpiScale = GetDpiScale(hwnd);
-          
+
           // Apply DPI scaling to get physical pixels
           int scaledX = static_cast<int>(x * dpiScale);
           int scaledY = static_cast<int>(y * dpiScale);
@@ -303,7 +312,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
       auto width_it = arguments->find(flutter::EncodableValue("width"));
       auto height_it = arguments->find(flutter::EncodableValue("height"));
-      
+
       if (width_it == arguments->end() || height_it == arguments->end()) {
         result->Error("INVALID_ARGUMENTS", "Both width and height must be provided for center");
         return;
@@ -314,7 +323,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
 
       // Get DPI scale factor
       float dpiScale = GetDpiScale(hwnd);
-      
+
       // Apply DPI scaling to get physical pixels
       int scaledWidth = static_cast<int>(width * dpiScale);
       int scaledHeight = static_cast<int>(height * dpiScale);
@@ -322,7 +331,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       // Get system metrics for the primary monitor
       int screenWidth = GetSystemMetrics(SM_CXSCREEN);
       int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-      
+
       // Calculate center position
       int x = (screenWidth - scaledWidth) / 2;
       int y = (screenHeight - scaledHeight) / 2;

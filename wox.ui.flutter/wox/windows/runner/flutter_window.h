@@ -18,6 +18,9 @@ public:
   explicit FlutterWindow(const flutter::DartProject &project);
   virtual ~FlutterWindow();
 
+  // Log message to console and Flutter
+  void Log(const std::string &message);
+
 protected:
   // Win32Window:
   bool OnCreate() override;
@@ -40,9 +43,6 @@ private:
 
   // Previous active window handle
   HWND previous_active_window_;
-
-  // Log message to console
-  void Log(const std::string &message);
 
   // Get the DPI scaling factor for the window
   float GetDpiScale(HWND hwnd);

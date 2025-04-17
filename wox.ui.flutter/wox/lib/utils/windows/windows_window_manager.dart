@@ -20,6 +20,11 @@ class WindowsWindowManager extends BaseWindowManager {
       case 'onWindowBlur':
         notifyWindowBlur();
         break;
+      case 'log':
+        // Log messages from native code
+        final message = call.arguments as String;
+        Logger.instance.info(const UuidV4().generate(), " [NATIVE] $message");
+        break;
       default:
         Logger.instance.warn(const UuidV4().generate(), "Unhandled method call: ${call.method}");
     }
@@ -88,9 +93,14 @@ class WindowsWindowManager extends BaseWindowManager {
   @override
   Future<void> hide() async {
     try {
-      await _channel.invokeMethod('hide');
+      // add a delay to avoid the keyboard state issue on windows (let flutter handle the keyboard state as quickly as possible)
+      // if we hide the window immediately, the keyboard state will be inconsistent
+      // E.g. if you press the esc key to hide the window, the keyup event will be suppressed until the next show, so next time you press the esc key, the previous keyup event will be triggered, which in our case will not trigger the hide app action. you may need to press the esc key twice
+      Future.delayed(const Duration(milliseconds: 100), () {
+        Logger.instance.info(const UuidV4().generate(), "[HideWindow] Delayed execution after 100ms");
+        _channel.invokeMethod('hide');
+      });
     } catch (e) {
-      Logger.instance.error(const UuidV4().generate(), "Error hiding window: $e");
       rethrow;
     }
   }
