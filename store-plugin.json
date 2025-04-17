@@ -156,7 +156,7 @@
     "Id": "09785021-7f9e-4482-903a-51c90a585a7d",
     "Name": "Custom Commands",
     "Author": "Sacha Duvivier",
-    "Version": "1.0.5",
+    "Version": "1.0.6",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "Custom Commands Plugin for Wox 2.0",
@@ -167,6 +167,6 @@
       "https://raw.githubusercontent.com/sachadvr/Wox.Custom.Commands.Plugin/main/images/screenshot.png"
     ],
     "DateCreated": "2025-04-17 11:00:00",
-    "DateUpdated": "2025-04-17 11:00:00"
+    "DateUpdated": "2025-04-17 23:02:38"
   }
 ]
