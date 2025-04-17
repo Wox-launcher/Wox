@@ -25,6 +25,8 @@ func (h *Hotkey) parseCombineKey(combineKey string) ([]hotkey.Modifier, hotkey.K
 			mods = append(mods, hotkey.ModCtrl)
 		case "shift":
 			mods = append(mods, hotkey.ModShift)
+		case "alt":
+			mods = append(mods, hotkey.Mod1)
 		case "a":
 			key = hotkey.KeyA
 		case "b":
