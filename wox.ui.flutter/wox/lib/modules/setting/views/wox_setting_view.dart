@@ -1,12 +1,15 @@
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
+import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/modules/setting/views/wox_setting_ui_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_ai_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_data_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_theme_view.dart';
+import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/wox_theme_util.dart';
 
 import 'wox_setting_plugin_view.dart';
 import 'wox_setting_general_view.dart';
@@ -30,46 +33,69 @@ class WoxSettingView extends GetView<WoxSettingController> {
             }
             return KeyEventResult.ignored;
           },
-          child: Scaffold(
-            body: FluentApp(
-              debugShowCheckedModeBanner: false,
-              home: NavigationView(
-                transitionBuilder: (child, animation) {
-                  return SuppressPageTransition(child: child);
-                },
-                pane: NavigationPane(
-                  header: const SizedBox(height: 10),
-                  selected: controller.activePaneIndex.value,
-                  onChanged: (index) => controller.activePaneIndex.value = index,
-                  displayMode: PaneDisplayMode.open,
-                  size: const NavigationPaneSize(openWidth: 200),
-                  items: [
-                    PaneItem(
-                      icon: const Icon(FluentIcons.settings),
-                      title: Text(controller.tr('ui_general')),
-                      body: const WoxSettingGeneralView(),
-                    ),
-                    PaneItem(
-                      icon: const Icon(FluentIcons.color),
-                      title: Text(controller.tr('ui_ui')),
-                      body: const WoxSettingUIView(),
-                    ),
-                    PaneItem(
-                      icon: const Icon(Icons.grain),
-                      title: Text(controller.tr('ui_ai')),
-                      body: const WoxSettingAIView(),
-                    ),
-                    PaneItem(
-                      icon: const Icon(FluentIcons.globe),
-                      title: Text(controller.tr('ui_network')),
-                      body: const WoxSettingNetworkView(),
-                    ),
-                    PaneItem(
-                      icon: const Icon(FluentIcons.database),
-                      title: Text(controller.tr('ui_data')),
-                      body: const WoxSettingDataView(),
-                    ),
-                    PaneItemExpander(
+          child: material.Scaffold(
+              backgroundColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor),
+              body: FluentApp(
+                debugShowCheckedModeBanner: false,
+                theme: FluentThemeData(
+                  accentColor: AccentColor.swatch({
+                    'normal': getThemeActiveBackgroundColor(),
+                  }),
+                  visualDensity: VisualDensity.standard,
+                  brightness: getThemeBackgroundColor().computeLuminance() < 0.5 ? Brightness.dark : Brightness.light,
+                  scaffoldBackgroundColor: Colors.transparent,
+                  micaBackgroundColor: Colors.transparent,
+                  acrylicBackgroundColor: Colors.transparent,
+                  cardColor: getThemeCardBackgroundColor(),
+                  shadowColor: getThemeTextColor().withAlpha(50),
+                  inactiveBackgroundColor: getThemeBackgroundColor(),
+                  inactiveColor: getThemeSubTextColor(),
+                  // typography: Typography.raw(caption: TextStyle(color: getThemeSubTextColor())),
+                  focusTheme: FocusThemeData(
+                    glowColor: getThemeActiveBackgroundColor().withAlpha(25),
+                    primaryBorder: BorderSide(color: getThemeActiveBackgroundColor(), width: 2),
+                  ),
+                  navigationPaneTheme: const NavigationPaneThemeData(
+                    backgroundColor: Colors.transparent,
+                  ),
+                ),
+                home: NavigationView(
+                  transitionBuilder: (child, animation) {
+                    return SuppressPageTransition(child: child);
+                  },
+                  pane: NavigationPane(
+                    selected: controller.activePaneIndex.value,
+                    onChanged: (index) => controller.activePaneIndex.value = index,
+                    header: const SizedBox(height: 10),
+                    displayMode: PaneDisplayMode.open,
+                    size: const NavigationPaneSize(openWidth: 200),
+                    items: [
+                      PaneItem(
+                        icon: const Icon(FluentIcons.settings),
+                        title: Text(controller.tr('ui_general')),
+                        body: const WoxSettingGeneralView(),
+                      ),
+                      PaneItem(
+                        icon: const Icon(FluentIcons.color),
+                        title: Text(controller.tr('ui_ui')),
+                        body: const WoxSettingUIView(),
+                      ),
+                      PaneItem(
+                        icon: const Icon(FluentIcons.code),
+                        title: Text(controller.tr('ui_ai')),
+                        body: const WoxSettingAIView(),
+                      ),
+                      PaneItem(
+                        icon: const Icon(FluentIcons.globe),
+                        title: Text(controller.tr('ui_network')),
+                        body: const WoxSettingNetworkView(),
+                      ),
+                      PaneItem(
+                        icon: const Icon(FluentIcons.database),
+                        title: Text(controller.tr('ui_data')),
+                        body: const WoxSettingDataView(),
+                      ),
+                      PaneItemExpander(
                         icon: const Icon(FluentIcons.app_icon_default_add),
                         title: Text(controller.tr('ui_plugins')),
                         body: const WoxSettingPluginView(),
@@ -91,44 +117,44 @@ class WoxSettingView extends GetView<WoxSettingController> {
                               await controller.switchToPluginList(false);
                             },
                           ),
-                        ]),
-                    PaneItemExpander(
-                      icon: const Icon(FluentIcons.color),
-                      title: Text(controller.tr('ui_themes')),
-                      body: const WoxSettingThemeView(),
-                      initiallyExpanded: true,
-                      items: [
-                        PaneItem(
-                          icon: const Icon(FluentIcons.mail),
-                          title: Text(controller.tr('ui_store_themes')),
-                          body: const WoxSettingThemeView(),
-                          onTap: () async {
-                            await controller.switchToThemeList(true);
-                          },
-                        ),
-                        PaneItem(
-                          icon: const Icon(FluentIcons.installation),
-                          title: Text(controller.tr('ui_installed_themes')),
-                          body: const WoxSettingThemeView(),
-                          onTap: () async {
-                            await controller.switchToThemeList(false);
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
-                  footerItems: [
-                    PaneItem(
-                      icon: const Icon(FluentIcons.back),
-                      title: Text(controller.tr('ui_back')),
-                      body: Text(controller.tr('ui_back')),
-                      onTap: () => controller.hideWindow(),
-                    ),
-                  ],
+                        ],
+                      ),
+                      PaneItemExpander(
+                        icon: const Icon(FluentIcons.color),
+                        title: Text(controller.tr('ui_themes')),
+                        body: const WoxSettingThemeView(),
+                        initiallyExpanded: true,
+                        items: [
+                          PaneItem(
+                            icon: const Icon(FluentIcons.mail),
+                            title: Text(controller.tr('ui_store_themes')),
+                            body: const WoxSettingThemeView(),
+                            onTap: () async {
+                              await controller.switchToThemeList(true);
+                            },
+                          ),
+                          PaneItem(
+                            icon: const Icon(FluentIcons.installation),
+                            title: Text(controller.tr('ui_installed_themes')),
+                            body: const WoxSettingThemeView(),
+                            onTap: () async {
+                              await controller.switchToThemeList(false);
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                    footerItems: [
+                      PaneItem(
+                        icon: const Icon(FluentIcons.back),
+                        title: Text(controller.tr('ui_back')),
+                        body: Text(controller.tr('ui_back')),
+                        onTap: () => controller.hideWindow(),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-          ));
+              )));
     });
   }
 }

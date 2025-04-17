@@ -152,12 +152,12 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
           children: [
             Container(
               decoration: BoxDecoration(
-                border: Border.all(color: _isFocused ? SettingPrimaryColor : Colors.grey[600]!),
+                border: Border.all(color: _isFocused ? getThemeActiveBackgroundColor() : getThemeSubTextColor()),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
-                child: _hotKey == null
+                child: _hotKey == null || _hotKey!.normalHotkey == null
                     ? SizedBox(
                         width: 80,
                         height: 18,

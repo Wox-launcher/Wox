@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_head.dart';
+import 'package:wox/utils/colors.dart';
 
 import 'wox_setting_plugin_item_view.dart';
 
@@ -28,7 +29,7 @@ class WoxSettingPluginHead extends WoxSettingPluginItem {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip),
+            if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip, color: getThemeTextColor()),
           ],
         ),
       ],

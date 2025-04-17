@@ -51,8 +51,8 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                 return Center(
                   child: Text(
                     controller.tr('ui_setting_theme_empty_data'),
-                    style: const TextStyle(
-                      color: base.Colors.grey,
+                    style: TextStyle(
+                      color: getThemeSubTextColor(),
                     ),
                   ),
                 );
@@ -68,7 +68,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                       final isActive = controller.activeTheme.value.themeId == theme.themeId;
                       return Container(
                         decoration: BoxDecoration(
-                          color: isActive ? SettingPrimaryColor : base.Colors.transparent,
+                          color: isActive ? getThemeActiveBackgroundColor() : base.Colors.transparent,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: GestureDetector(
@@ -83,7 +83,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: 15,
-                                  color: isActive ? base.Colors.white : base.Colors.black,
+                                  color: isActive ? getThemeActionItemActiveColor() : getThemeTextColor(),
                                 )),
                             subtitle: base.Row(
                               mainAxisAlignment: MainAxisAlignment.start,
@@ -94,7 +94,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    color: isActive ? base.Colors.white : base.Colors.grey,
+                                    color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
                                     fontSize: 12,
                                   ),
                                 ),
@@ -104,7 +104,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    color: isActive ? base.Colors.white : base.Colors.grey,
+                                    color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
                                     fontSize: 12,
                                   ),
                                 ),
@@ -115,14 +115,14 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(3),
                                       border: Border.all(
-                                        color: isActive ? base.Colors.white.withOpacity(0.3) : Colors.blue.lighter,
+                                        color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
                                         width: 0.5,
                                       ),
                                     ),
                                     child: Text(
                                       controller.tr('ui_setting_theme_system_tag'),
                                       style: TextStyle(
-                                        color: isActive ? base.Colors.white : Colors.blue,
+                                        color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
                                         fontSize: 11,
                                         height: 1.1,
                                       ),
@@ -177,8 +177,8 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                   padding: const EdgeInsets.only(left: 10.0),
                   child: Text(
                     theme.version,
-                    style: const TextStyle(
-                      color: base.Colors.grey,
+                    style: TextStyle(
+                      color: getThemeSubTextColor(),
                     ),
                   ),
                 ),
@@ -194,8 +194,8 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                   children: [
                     Text(
                       theme.themeAuthor,
-                      style: const TextStyle(
-                        color: base.Colors.grey,
+                      style: TextStyle(
+                        color: getThemeSubTextColor(),
                       ),
                     ),
                   ],
@@ -210,16 +210,16 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                       children: [
                         Text(
                           controller.tr('ui_setting_theme_website'),
-                          style: const TextStyle(
-                            color: base.Colors.blue,
+                          style: TextStyle(
+                            color: getThemeTextColor(),
                           ),
                         ),
-                        const Padding(
-                          padding: EdgeInsets.only(left: 4.0),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4.0),
                           child: Icon(
                             FluentIcons.open_in_new_tab,
                             size: 12,
-                            color: base.Colors.blue,
+                            color: getThemeTextColor(),
                           ),
                         ),
                       ],
@@ -276,8 +276,9 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                   base.TabBar(
                     isScrollable: true,
                     tabAlignment: base.TabAlignment.start,
-                    labelColor: SettingPrimaryColor,
-                    indicatorColor: SettingPrimaryColor,
+                    labelColor: getThemeTextColor(),
+                    unselectedLabelColor: getThemeTextColor(),
+                    indicatorColor: getThemeActiveBackgroundColor(),
                     tabs: [
                       base.Tab(
                         child: Text(controller.tr('ui_setting_theme_preview')),
@@ -341,7 +342,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
           Container(
             width: 1,
             height: double.infinity,
-            color: Colors.grey[30],
+            color: getThemeDividerColor(),
             margin: const EdgeInsets.only(right: 10, left: 10),
           ),
           themeDetail(),

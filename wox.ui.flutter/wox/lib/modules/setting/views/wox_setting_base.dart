@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
+import 'package:wox/utils/colors.dart';
 
 abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
   const WoxSettingBaseView({super.key});
@@ -53,7 +54,7 @@ abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
                   Flexible(
                     child: Text(
                       tips,
-                      style: TextStyle(color: Colors.grey[90], fontSize: 13),
+                      style: TextStyle(color: getThemeSubTextColor(), fontSize: 13),
                     ),
                   ),
                 ],

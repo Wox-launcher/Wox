@@ -8,6 +8,7 @@ import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/utils/picker.dart';
+import 'package:wox/utils/colors.dart';
 import 'package:get/get.dart';
 
 class WoxSettingPluginTableUpdate extends StatefulWidget {
@@ -133,6 +134,60 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     return Get.find<WoxSettingController>().tr(key);
   }
 
+  Future<void> _saveData(BuildContext context) async {
+    // validate field validators first
+    for (var column in columns) {
+      if (column.validators.isNotEmpty) {
+        for (var element in column.validators) {
+          var errMsg = element.validator.validate(getValue(column.key));
+          if (errMsg != "") {
+            fieldValidationErrors[column.key] = errMsg;
+          } else {
+            fieldValidationErrors.remove(column.key);
+          }
+        }
+      }
+    }
+    if (fieldValidationErrors.isNotEmpty) {
+      setState(() {});
+      return;
+    }
+
+    // remove empty text list
+    for (var column in columns) {
+      if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeTextList) {
+        var columnValues = getValue(column.key);
+        if (columnValues is List) {
+          columnValues.removeWhere((element) => element == "");
+        }
+      }
+    }
+
+    // validate with onUpdateValidate if provided
+    if (widget.onUpdateValidate != null) {
+      String? validationError = await widget.onUpdateValidate!(values);
+      if (validationError != null) {
+        if (mounted) {
+          setState(() {
+            customValidationError = validationError;
+          });
+        }
+        return;
+      } else {
+        if (mounted) {
+          setState(() {
+            customValidationError = null;
+          });
+        }
+      }
+    }
+
+    widget.onUpdate(widget.item.key, values);
+    if (mounted && context.mounted) {
+      Navigator.pop(context);
+    }
+  }
+
   Widget buildColumn(PluginSettingValueTableColumn column) {
     switch (column.type) {
       case PluginSettingValueType.pluginSettingValueTableColumnTypeText:
@@ -213,7 +268,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                       }
                       disableBrowse = false;
                     },
-              child: const Text('Browse'),
+              child: Text('Browse', style: TextStyle(color: getThemeTextColor())),
             ),
           ),
         );
@@ -292,14 +347,15 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                               setState(() {});
                             },
                             maxLines: 1,
-                            style: const TextStyle(
+                            style: TextStyle(
                               overflow: TextOverflow.ellipsis,
+                              color: getThemeTextColor(),
                             ),
                           ),
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(FluentIcons.delete),
+                        icon: Icon(FluentIcons.delete, color: getThemeActiveBackgroundColor()),
                         onPressed: () {
                           columnValues.removeAt(i);
                           //remove controller
@@ -323,7 +379,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                       // last row show add button
                       if (i == columnValues.length - 1)
                         IconButton(
-                          icon: const Icon(FluentIcons.add),
+                          icon: Icon(FluentIcons.add, color: getThemeActiveBackgroundColor()),
                           onPressed: () {
                             columnValues.add("");
                             textboxEditingController[column.key + (columnValues.length - 1).toString()] = TextEditingController();
@@ -337,7 +393,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 ),
               if (columnValues.isEmpty)
                 IconButton(
-                  icon: const Icon(FluentIcons.add),
+                  icon: Icon(FluentIcons.add, color: getThemeActiveBackgroundColor()),
                   onPressed: () {
                     columnValues.add("");
                     values[column.key] = columnValues;
@@ -354,124 +410,114 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
 
   @override
   Widget build(BuildContext context) {
-    return FluentApp(
-      debugShowCheckedModeBanner: false,
-      home: Focus(
-        autofocus: true,
-        onKeyEvent: (node, event) {
-          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
-            Navigator.pop(context);
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
-        child: ContentDialog(
-          constraints: const BoxConstraints(maxWidth: 800),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (var column in columns)
-                  if (!column.hideInUpdate)
+    return Obx(() {
+      return FluentApp(
+        debugShowCheckedModeBanner: false,
+        theme: FluentThemeData(
+          accentColor: AccentColor.swatch({
+            'normal': getThemeActiveBackgroundColor(),
+          }),
+          visualDensity: VisualDensity.standard,
+          brightness: getThemeBackgroundColor().computeLuminance() < 0.5 ? Brightness.dark : Brightness.light,
+          scaffoldBackgroundColor: Colors.transparent,
+          micaBackgroundColor: Colors.transparent,
+          acrylicBackgroundColor: Colors.transparent,
+          cardColor: getThemeCardBackgroundColor(),
+          shadowColor: getThemeTextColor().withAlpha(50),
+          inactiveBackgroundColor: getThemeBackgroundColor(),
+          inactiveColor: getThemeSubTextColor(),
+          focusTheme: FocusThemeData(
+            glowColor: getThemeActiveBackgroundColor().withAlpha(25),
+            primaryBorder: BorderSide(color: getThemeActiveBackgroundColor(), width: 2),
+          ),
+        ),
+        home: Focus(
+          autofocus: true,
+          onKeyEvent: (node, event) {
+            if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
+              Navigator.pop(context);
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: ContentDialog(
+            constraints: const BoxConstraints(maxWidth: 800),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var column in columns)
+                    if (!column.hideInUpdate)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: getMaxColumnWidth(),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    tr(column.label),
+                                    style: TextStyle(color: getThemeTextColor()),
+                                  ),
+                                  if (column.tooltip != "")
+                                    WoxTooltipView(
+                                      tooltip: tr(column.tooltip),
+                                      color: getThemeTextColor(),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            buildColumn(column),
+                          ],
+                        ),
+                      ),
+                  if (customValidationError != null)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.only(top: 10),
                       child: Row(
                         children: [
-                          SizedBox(
-                            width: getMaxColumnWidth(),
-                            child: Row(
-                              children: [
-                                Text(tr(column.label)),
-                                if (column.tooltip != "") WoxTooltipView(tooltip: tr(column.tooltip)),
-                              ],
+                          Expanded(
+                            child: Text(
+                              customValidationError!,
+                              style: TextStyle(color: Colors.red.toAccentColor()),
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          buildColumn(column),
                         ],
                       ),
                     ),
-                if (customValidationError != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            customValidationError!,
-                            style: TextStyle(color: Colors.red.toAccentColor()),
-                          ),
-                        ),
-                      ],
+                ],
+              ),
+            ),
+            actions: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Button(
+                    style: ButtonStyle(
+                      foregroundColor: WidgetStateProperty.all(getThemeTextColor()),
                     ),
+                    child: const Text('Cancel'),
+                    onPressed: () => Navigator.pop(context),
                   ),
-              ],
-            ),
+                  const SizedBox(width: 16),
+                  FilledButton(
+                    style: ButtonStyle(
+                      backgroundColor: WidgetStateProperty.all(getThemeActiveBackgroundColor()),
+                      foregroundColor: WidgetStateProperty.all(getThemeActionItemActiveColor()),
+                    ),
+                    onPressed: () {
+                      _saveData(context);
+                    },
+                    child: const Text('Save'),
+                  ),
+                ],
+              ),
+            ],
           ),
-          actions: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Button(
-                  child: const Text('Cancel'),
-                  onPressed: () => Navigator.pop(context),
-                ),
-                const SizedBox(width: 16),
-                FilledButton(
-                  onPressed: () async {
-                    // validate field validators first
-                    for (var column in columns) {
-                      if (column.validators.isNotEmpty) {
-                        for (var element in column.validators) {
-                          var errMsg = element.validator.validate(getValue(column.key));
-                          if (errMsg != "") {
-                            fieldValidationErrors[column.key] = errMsg;
-                          } else {
-                            fieldValidationErrors.remove(column.key);
-                          }
-                        }
-                      }
-                    }
-                    if (fieldValidationErrors.isNotEmpty) {
-                      setState(() {});
-                      return;
-                    }
-
-                    // remove empty text list
-                    for (var column in columns) {
-                      if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeTextList) {
-                        var columnValues = getValue(column.key);
-                        if (columnValues is List) {
-                          columnValues.removeWhere((element) => element == "");
-                        }
-                      }
-                    }
-
-                    // validate with onUpdateValidate if provided
-                    if (widget.onUpdateValidate != null) {
-                      String? validationError = await widget.onUpdateValidate!(values);
-                      if (validationError != null) {
-                        setState(() {
-                          customValidationError = validationError;
-                        });
-                        return;
-                      } else {
-                        setState(() {
-                          customValidationError = null;
-                        });
-                      }
-                    }
-
-                    widget.onUpdate(widget.item.key, values);
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
-            ),
-          ],
         ),
-      ),
-    );
+      );
+    });
   }
 }

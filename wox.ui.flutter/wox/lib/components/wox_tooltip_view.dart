@@ -7,8 +7,9 @@ class WoxTooltipView extends StatefulWidget {
   final String tooltip;
   final double paddingLeft;
   final double paddingRight;
+  final Color color;
 
-  const WoxTooltipView({super.key, required this.tooltip, this.paddingLeft = 4.0, this.paddingRight = 4.0});
+  const WoxTooltipView({super.key, required this.tooltip, this.paddingLeft = 4.0, this.paddingRight = 4.0, this.color = Colors.black});
 
   @override
   State<WoxTooltipView> createState() => _WoxTooltipViewState();
@@ -25,7 +26,11 @@ class _WoxTooltipViewState extends State<WoxTooltipView> {
       padding: EdgeInsets.only(left: widget.paddingLeft, right: widget.paddingRight),
       child: material.Tooltip(
         message: tr(widget.tooltip),
-        child: const Icon(FluentIcons.info, size: 14),
+        child: Icon(
+          FluentIcons.info,
+          size: 13,
+          color: widget.color,
+        ),
       ),
     );
   }

@@ -55,9 +55,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 controller: controller.filterPluginKeywordController,
                 placeholder: Strings.format(controller.tr('ui_search_plugins'), [controller.filteredPluginList.length]),
                 padding: const EdgeInsets.all(10),
-                suffix: const Padding(
-                  padding: EdgeInsets.only(right: 8.0),
-                  child: Icon(FluentIcons.search),
+                suffix: Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: Icon(FluentIcons.search, color: getThemeSubTextColor()),
                 ),
                 onChanged: (value) {
                   controller.filterPlugins();
@@ -75,8 +75,8 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 return Center(
                   child: Text(
                     controller.tr('ui_setting_plugin_empty_data'),
-                    style: const TextStyle(
-                      color: material.Colors.grey,
+                    style: TextStyle(
+                      color: getThemeSubTextColor(),
                     ),
                   ),
                 );
@@ -93,7 +93,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                       final isActive = controller.activePlugin.value.id == plugin.id;
                       return Container(
                         decoration: BoxDecoration(
-                          color: isActive ? SettingPrimaryColor : Colors.transparent,
+                          color: isActive ? getThemeActiveBackgroundColor() : Colors.transparent,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: GestureDetector(
@@ -110,7 +110,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: 15,
-                                  color: isActive ? Colors.white : Colors.black,
+                                  color: isActive ? getThemeActionItemActiveColor() : getThemeTextColor(),
                                 )),
                             subtitle: Row(
                               mainAxisAlignment: MainAxisAlignment.start,
@@ -120,7 +120,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                                   maxLines: 1, // Limiting the description to two lines
                                   overflow: TextOverflow.ellipsis, // Add ellipsis for overflow
                                   style: TextStyle(
-                                    color: isActive ? Colors.white : Colors.grey,
+                                    color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
                                     fontSize: 12,
                                   ),
                                 ),
@@ -130,7 +130,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                                   maxLines: 1, // Limiting the description to two lines
                                   overflow: TextOverflow.ellipsis, // Add ellipsis for overflow
                                   style: TextStyle(
-                                    color: isActive ? Colors.white : Colors.grey,
+                                    color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
                                     fontSize: 12,
                                   ),
                                 ),
@@ -141,14 +141,14 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(3),
                                       border: Border.all(
-                                        color: isActive ? Colors.white.withOpacity(0.3) : Colors.blue.lighter,
+                                        color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
                                         width: 0.5,
                                       ),
                                     ),
                                     child: Text(
                                       controller.tr('ui_setting_plugin_system_tag'),
                                       style: TextStyle(
-                                        color: isActive ? Colors.white : Colors.blue,
+                                        color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
                                         fontSize: 11,
                                         height: 1.1,
                                       ),
@@ -175,7 +175,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   Widget pluginTrailIcon(PluginDetail plugin, bool isActive) {
     if (controller.isStorePluginList.value) {
       if (plugin.isInstalled) {
-        return Icon(FluentIcons.skype_circle_check, color: isActive ? Colors.white : Colors.green);
+        return Icon(FluentIcons.skype_circle_check, color: isActive ? getThemeActionItemActiveColor() : Colors.green);
       }
     }
     return const SizedBox();
@@ -188,8 +188,8 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
           return Center(
             child: Text(
               controller.tr('ui_setting_plugin_empty_data'),
-              style: const TextStyle(
-                color: material.Colors.grey,
+              style: TextStyle(
+                color: getThemeSubTextColor(),
               ),
             ),
           );
@@ -206,8 +206,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   padding: const EdgeInsets.only(left: 8.0),
                   child: Text(
                     plugin.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 20,
+                      color: getThemeTextColor(),
                     ),
                   ),
                 ),
@@ -215,8 +216,8 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   padding: const EdgeInsets.only(left: 10.0),
                   child: Text(
                     plugin.version,
-                    style: const TextStyle(
-                      color: Colors.grey,
+                    style: TextStyle(
+                      color: getThemeSubTextColor(),
                     ),
                   ),
                 ),
@@ -227,8 +228,8 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: SettingWarningColor,
-                        border: Border.all(color: SettingWarningColor),
+                        color: getThemeSubTextColor(),
+                        border: Border.all(color: getThemeSubTextColor()),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
@@ -250,8 +251,8 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
               children: [
                 Text(
                   plugin.author,
-                  style: const TextStyle(
-                    color: Colors.grey,
+                  style: TextStyle(
+                    color: getThemeSubTextColor(),
                   ),
                 ),
                 Padding(
@@ -265,7 +266,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                         Text(
                           controller.tr('ui_plugin_website'),
                           style: TextStyle(
-                            color: Colors.blue,
+                            color: getThemeTextColor(),
                           ),
                         ),
                         Padding(
@@ -273,7 +274,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                           child: Icon(
                             FluentIcons.open_in_new_tab,
                             size: 12,
-                            color: Colors.blue,
+                            color: getThemeTextColor(),
                           ),
                         ),
                       ],
@@ -291,6 +292,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   Padding(
                     padding: const EdgeInsets.only(right: 8.0),
                     child: Button(
+                      style: ButtonStyle(
+                        foregroundColor: WidgetStateProperty.all(getThemeTextColor()),
+                      ),
                       onPressed: () {
                         controller.uninstallPlugin(plugin);
                       },
@@ -301,6 +305,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   Padding(
                     padding: const EdgeInsets.only(right: 8.0),
                     child: Obx(() => Button(
+                          style: ButtonStyle(
+                            foregroundColor: WidgetStateProperty.all(getThemeTextColor()),
+                          ),
                           onPressed: controller.isInstallingPlugin.value
                               ? null
                               : () {
@@ -325,6 +332,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   Padding(
                     padding: const EdgeInsets.only(right: 8.0),
                     child: Button(
+                      style: ButtonStyle(
+                        foregroundColor: WidgetStateProperty.all(getThemeTextColor()),
+                      ),
                       onPressed: () {
                         controller.disablePlugin(plugin);
                       },
@@ -335,6 +345,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   Padding(
                     padding: const EdgeInsets.only(right: 8.0),
                     child: Button(
+                      style: ButtonStyle(
+                        foregroundColor: WidgetStateProperty.all(getThemeTextColor()),
+                      ),
                       onPressed: () {
                         controller.enablePlugin(plugin);
                       },
@@ -353,8 +366,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
               physicsTabBarView: const NeverScrollableScrollPhysics(),
               tabAlignment: material.TabAlignment.start,
               onAddTabMoveTo: dt.MoveToTab.idol,
-              labelColor: SettingPrimaryColor,
-              indicatorColor: SettingPrimaryColor,
+              labelColor: getThemeTextColor(),
+              unselectedLabelColor: getThemeTextColor(),
+              indicatorColor: getThemeActiveBackgroundColor(),
               dynamicTabs: [
                 if (controller.shouldShowSettingTab())
                   dt.TabData(
@@ -418,7 +432,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
               ? ImageSlideshow(
                   width: double.infinity,
                   height: 400,
-                  indicatorColor: SettingPrimaryColor,
+                  indicatorColor: getThemeActiveBackgroundColor(),
                   children: [
                     ...controller.activePlugin.value.screenshotUrls.map((e) => Image.network(e)),
                   ],
@@ -531,7 +545,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(controller.tr('ui_plugin_no_trigger_keywords')),
+            Text(controller.tr('ui_plugin_no_trigger_keywords'), style: TextStyle(color: getThemeTextColor())),
           ],
         ),
       );
@@ -575,7 +589,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(controller.tr('ui_plugin_no_commands')),
+            Text(controller.tr('ui_plugin_no_commands'), style: TextStyle(color: getThemeTextColor())),
           ],
         ),
       );
@@ -618,7 +632,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     var plugin = controller.activePlugin.value;
     var noDataAccess = Padding(
       padding: const EdgeInsets.all(16),
-      child: Text(controller.tr('ui_plugin_no_data_access')),
+      child: Text(controller.tr('ui_plugin_no_data_access'), style: TextStyle(color: getThemeTextColor())),
     );
 
     if (plugin.features.isEmpty) {
@@ -653,7 +667,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(controller.tr('ui_plugin_data_access_title')),
+            Text(controller.tr('ui_plugin_data_access_title'), style: TextStyle(color: getThemeTextColor())),
             ...params.map((e) {
               if (e == "requireActiveWindowName") {
                 return privacyItem(
@@ -698,9 +712,9 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         children: [
           Row(
             children: [
-              Icon(icon),
+              Icon(icon, color: getThemeTextColor()),
               const SizedBox(width: 10),
-              Text(title),
+              Text(title, style: TextStyle(color: getThemeTextColor())),
             ],
           ),
           const SizedBox(height: 6),
@@ -711,7 +725,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 child: Text(
                   description,
                   style: TextStyle(
-                    color: Colors.grey[100],
+                    color: getThemeSubTextColor(),
                   ),
                 ),
               ),
@@ -736,7 +750,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
           Container(
             width: 1,
             height: double.infinity,
-            color: Colors.grey[30],
+            color: getThemeDividerColor(),
             margin: const EdgeInsets.only(right: 10, left: 10),
           ),
           pluginDetail(),
