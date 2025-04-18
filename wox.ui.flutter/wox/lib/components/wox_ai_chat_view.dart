@@ -7,18 +7,25 @@ import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_list_view.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
+import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/strings.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
 class WoxAIChatView extends GetView<WoxAIChatController> {
   const WoxAIChatView({super.key});
 
   WoxTheme get woxTheme => WoxThemeUtil.instance.currentTheme.value;
+
+  // Get translation from WoxSettingController
+  String tr(String key) {
+    return Get.find<WoxSettingController>().tr(key);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +61,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Obx(() => Text(
-                              controller.aiChatData.value.model.value.name.isEmpty ? "请选择模型" : controller.aiChatData.value.model.value.name,
+                              controller.aiChatData.value.model.value.name.isEmpty ? tr("ui_ai_chat_select_model") : controller.aiChatData.value.model.value.name,
                               style: TextStyle(
                                 color: fromCssColor(woxTheme.previewPropertyTitleColor),
                                 fontSize: 14,
@@ -130,7 +137,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                             controller: controller.textController,
                             focusNode: controller.aiChatFocusNode,
                             decoration: InputDecoration(
-                              hintText: '在这里输入消息，按下 ← 发送',
+                              hintText: tr('ui_ai_chat_input_hint'),
                               hintStyle: TextStyle(color: fromCssColor(woxTheme.previewPropertyTitleColor)),
                               border: InputBorder.none,
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -158,7 +165,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                               children: [
                                 // Tool configuration button - opens chat select panel
                                 Obx(() => IconButton(
-                                      tooltip: 'Configure Tool Usage',
+                                      tooltip: tr('ui_ai_chat_configure_tools'),
                                       icon: Icon(Icons.build,
                                           size: 18,
                                           color: controller.selectedTools.isNotEmpty
@@ -194,7 +201,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                                         ),
                                         const SizedBox(width: 4),
                                         Text(
-                                          '发送',
+                                          tr('ui_ai_chat_send'),
                                           style: TextStyle(
                                             fontSize: 12,
                                             color: fromCssColor(woxTheme.actionItemActiveFontColor),
@@ -247,7 +254,9 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Obx(() => Text(
-                      controller.currentChatSelectCategory.isEmpty ? "Chat Options" : (controller.currentChatSelectCategory.value == "models" ? "Select Model" : "Configure Tools"),
+                      controller.currentChatSelectCategory.isEmpty
+                          ? tr("ui_ai_chat_options")
+                          : (controller.currentChatSelectCategory.value == "models" ? tr("ui_ai_chat_select_model_title") : tr("ui_ai_chat_configure_tools_title")),
                       style: TextStyle(color: fromCssColor(woxTheme.actionContainerHeaderFontColor), fontSize: 16.0),
                     )),
                 const Divider(),
@@ -438,27 +447,27 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       case ToolCallStatus.streaming:
         icon = Icons.play_arrow;
         color = Colors.blue;
-        tooltip = '正在调用';
+        tooltip = tr('ui_ai_chat_tool_status_streaming');
         break;
       case ToolCallStatus.pending:
         icon = Icons.hourglass_empty;
         color = Colors.grey;
-        tooltip = '等待执行';
+        tooltip = tr('ui_ai_chat_tool_status_pending');
         break;
       case ToolCallStatus.running:
         icon = Icons.refresh;
         color = Colors.blue;
-        tooltip = '正在执行';
+        tooltip = tr('ui_ai_chat_tool_status_running');
         break;
       case ToolCallStatus.succeeded:
         icon = Icons.check_circle;
         color = Colors.green;
-        tooltip = '执行成功';
+        tooltip = tr('ui_ai_chat_tool_status_succeeded');
         break;
       case ToolCallStatus.failed:
         icon = Icons.error;
         color = Colors.red;
-        tooltip = '执行失败: ${info.response}';
+        tooltip = Strings.format(tr('ui_ai_chat_tool_status_failed'), [info.response]);
         break;
     }
 
@@ -488,11 +497,11 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildDetailItem('Id', info.id),
-          _buildDetailItem('名称', info.name),
-          _buildDetailItem('参数', info.status == ToolCallStatus.streaming ? info.delta : info.arguments.toString()),
-          _buildDetailItem('耗时', '${info.duration}ms'),
-          if (info.response.isNotEmpty) _buildDetailItem('响应', info.response),
+          _buildDetailItem(tr('ui_ai_chat_tool_detail_id'), info.id),
+          _buildDetailItem(tr('ui_ai_chat_tool_detail_name'), info.name),
+          _buildDetailItem(tr('ui_ai_chat_tool_detail_params'), info.status == ToolCallStatus.streaming ? info.delta : info.arguments.toString()),
+          _buildDetailItem(tr('ui_ai_chat_tool_detail_duration'), '${info.duration}ms'),
+          if (info.response.isNotEmpty) _buildDetailItem(tr('ui_ai_chat_tool_detail_response'), info.response),
         ],
       ),
     );
