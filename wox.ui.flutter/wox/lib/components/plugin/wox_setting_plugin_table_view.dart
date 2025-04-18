@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/gestures.dart';
 import 'package:uuid/v4.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:wox/api/wox_api.dart';
@@ -87,15 +88,22 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   }
 
   Widget buildHeaderCell(PluginSettingValueTableColumn column) {
+    final String translatedLabel = tr(column.label);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
-          tr(column.label),
-          style: TextStyle(
-            overflow: TextOverflow.ellipsis,
-            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
-            fontWeight: FontWeight.bold,
+        Flexible(
+          child: material.Tooltip(
+            message: translatedLabel,
+            child: Text(
+              translatedLabel,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: TextStyle(
+                color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ),
         if (column.tooltip != "")
@@ -391,7 +399,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           horizontalMargin: 5,
           clipBehavior: Clip.hardEdge,
           headingRowHeight: 48,
-          headingRowColor: material.MaterialStateProperty.resolveWith((states) => fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
+          headingRowColor: material.WidgetStateProperty.resolveWith((states) => fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
           border: TableBorder.all(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
           columns: [
             for (var column in item.columns)
@@ -400,12 +408,16 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                   column: column,
                   isHeader: false,
                   isOperation: false,
-                  child: Text(
-                    column.label,
-                    style: TextStyle(
+                  child: material.Tooltip(
+                    message: tr(column.label),
+                    child: Text(
+                      tr(column.label),
                       overflow: TextOverflow.ellipsis,
-                      color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
-                      fontWeight: FontWeight.bold,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
@@ -422,12 +434,16 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 }),
                 isHeader: false,
                 isOperation: true,
-                child: Text(
-                  tr("operation"),
-                  style: TextStyle(
+                child: material.Tooltip(
+                  message: tr("operation"),
+                  child: Text(
+                    tr("operation"),
                     overflow: TextOverflow.ellipsis,
-                    color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
-                    fontWeight: FontWeight.bold,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -488,51 +504,65 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     return Scrollbar(
       thumbVisibility: false,
       controller: scrollController,
-      child: SingleChildScrollView(
-        controller: scrollController,
-        scrollDirection: Axis.horizontal,
-        child: material.DataTable(
-          columnSpacing: columnSpacing,
-          horizontalMargin: 5,
-          headingRowHeight: 40,
-          headingRowColor: material.WidgetStateProperty.resolveWith((states) => fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
-          border: TableBorder.all(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
-          columns: [
-            for (var column in item.columns)
-              if (!column.hideInTable)
+      child: Listener(
+        onPointerSignal: (event) {
+          if (event is PointerScrollEvent) {
+            if (scrollController.hasClients && event.scrollDelta.dy != 0) {
+              final double newOffset = scrollController.offset + (event.scrollDelta.dy * 3);
+              scrollController.jumpTo(newOffset.clamp(0.0, scrollController.position.maxScrollExtent));
+            }
+          }
+        },
+        child: SingleChildScrollView(
+          controller: scrollController,
+          scrollDirection: Axis.horizontal,
+          child: material.DataTable(
+            columnSpacing: columnSpacing,
+            horizontalMargin: 5,
+            headingRowHeight: 40,
+            headingRowColor: material.WidgetStateProperty.resolveWith((states) => fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
+            border: TableBorder.all(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
+            columns: [
+              for (var column in item.columns)
+                if (!column.hideInTable)
+                  material.DataColumn(
+                    label: columnWidth(
+                      column: column,
+                      isHeader: true,
+                      isOperation: false,
+                      child: buildHeaderCell(column),
+                    ),
+                  ),
+              if (!readonly)
                 material.DataColumn(
                   label: columnWidth(
-                    column: column,
+                    column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
+                      "Key": "Operation",
+                      "Label": tr("ui_operation"),
+                      "Tooltip": "",
+                      "Width": operationWidth.toInt(),
+                      "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText,
+                      "TextMaxLines": 1,
+                    }),
                     isHeader: true,
-                    isOperation: false,
-                    child: buildHeaderCell(column),
-                  ),
-                ),
-            if (!readonly)
-              material.DataColumn(
-                label: columnWidth(
-                  column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
-                    "Key": "Operation",
-                    "Label": tr("ui_operation"),
-                    "Tooltip": "",
-                    "Width": operationWidth.toInt(),
-                    "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText,
-                    "TextMaxLines": 1,
-                  }),
-                  isHeader: true,
-                  isOperation: true,
-                  child: Text(
-                    tr("ui_operation"),
-                    style: TextStyle(
-                      overflow: TextOverflow.ellipsis,
-                      color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
-                      fontWeight: FontWeight.bold,
+                    isOperation: true,
+                    child: material.Tooltip(
+                      message: tr("ui_operation"),
+                      child: Text(
+                        tr("ui_operation"),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-          ],
-          rows: dataRows,
+            ],
+            rows: dataRows,
+          ),
         ),
       ),
     );

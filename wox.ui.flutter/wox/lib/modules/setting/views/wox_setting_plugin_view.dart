@@ -101,9 +101,8 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                           onTap: () {
                             controller.activePlugin.value = plugin;
                           },
-                          // fluent listTile is not clickable
                           child: material.ListTile(
-                            contentPadding: const EdgeInsets.only(left: 6, right: 6),
+                            contentPadding: const EdgeInsets.only(left: 6, right: 0),
                             leading: WoxImageView(woxImage: plugin.icon, width: 32),
                             title: Text(plugin.name,
                                 maxLines: 1,
@@ -114,24 +113,27 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                                 )),
                             subtitle: Row(
                               mainAxisAlignment: MainAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 Text(
                                   plugin.version,
-                                  maxLines: 1, // Limiting the description to two lines
-                                  overflow: TextOverflow.ellipsis, // Add ellipsis for overflow
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
                                     fontSize: 12,
                                   ),
                                 ),
                                 const SizedBox(width: 10),
-                                Text(
-                                  plugin.author,
-                                  maxLines: 1, // Limiting the description to two lines
-                                  overflow: TextOverflow.ellipsis, // Add ellipsis for overflow
-                                  style: TextStyle(
-                                    color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
-                                    fontSize: 12,
+                                Flexible(
+                                  child: Text(
+                                    plugin.author,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ),
                                 if (plugin.isSystem) ...[
@@ -744,7 +746,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 250,
+            width: 260,
             child: pluginList(),
           ),
           Container(

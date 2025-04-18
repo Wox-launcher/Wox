@@ -335,7 +335,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 300,
+            width: 260,
             child: themeList(),
           ),
           // This is your divider
