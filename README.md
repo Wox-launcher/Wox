@@ -10,10 +10,13 @@ Wox
 
 ![Snapshot](https://raw.githubusercontent.com/Wox-launcher/Wox/master/docs/images/app.png)
 
+[More screenshots](https://github.com/Wox-launcher/Wox/master/screenshots)
+
 Features
 --------
 
 - Search for applications, folders, files and more
+- AI Chat with MCP support
 - [Plugins](https://wox-launcher.github.io/Wox/#/plugin_store) and [AI Themes](https://wox-launcher.github.io/Wox/#/ai_theme)
 - Single executable file, no installation required
 - Develop plugins with Javascript, Python
@@ -40,8 +43,8 @@ Usages
 
 | Action | Shortcut |
 |--------|----------|
-| Toggle App | <kbd>Alt</kbd>/<kbd>Command</kbd>+<kbd>Space</kbd> |
-| Show Actions | <kbd>Alt</kbd>/<kbd>Command</kbd>+<kbd>J</kbd> |
+| Toggle App | <kbd>Alt</kbd>/<kbd>Command</kbd> + <kbd>Space</kbd> |
+| Show Actions | <kbd>Alt</kbd>/<kbd>Command</kbd> + <kbd>J</kbd> |
 | Cancel/Return | <kbd>Esc</kbd> |
 
 Contribution
