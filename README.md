@@ -10,7 +10,7 @@ Wox
 
 ![Snapshot](https://raw.githubusercontent.com/Wox-launcher/Wox/master/docs/images/app.png)
 
-[More screenshots](https://github.com/Wox-launcher/Wox/master/screenshots)
+[More screenshots](https://github.com/Wox-launcher/Wox/tree/master/screenshots)
 
 Features
 --------
