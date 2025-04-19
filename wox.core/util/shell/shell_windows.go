@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,6 +52,7 @@ func OpenFileInFolder(path string) error {
 		return err
 	}
 
-	_, err = Run("explorer.exe", "/select,", absPath)
+	powershellCmd := fmt.Sprintf("Start-Process \"explorer.exe\" -ArgumentList \"/select,%s\"", absPath)
+	_, err = Run("powershell.exe", "-Command", powershellCmd)
 	return err
 }
