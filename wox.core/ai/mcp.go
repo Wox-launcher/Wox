@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 	"wox/common"
 	"wox/util"
 
@@ -13,18 +14,40 @@ import (
 	"github.com/tmc/langchaingo/jsonschema"
 )
 
-var mcpClients = util.NewHashMap[string, *client.StdioMCPClient]()
+var mcpClients = util.NewHashMap[string, client.MCPClient]()
 var mcpTools = util.NewHashMap[string, []common.MCPTool]()
 
-func getMCPClient(ctx context.Context, config common.AIChatMCPServerConfig) (c *client.StdioMCPClient, err error) {
+func getMCPClient(ctx context.Context, config common.AIChatMCPServerConfig) (c client.MCPClient, err error) {
 	if client, ok := mcpClients.Load(config.Name); ok {
 		return client, nil
 	}
 
-	command, args := parseCommandArgs(config.Command)
-	client, newErr := client.NewStdioMCPClient(command, config.EnvironmentVariables, args...)
-	if newErr != nil {
-		return nil, newErr
+	var mcpClient client.MCPClient
+	if config.Type == common.AIChatMCPServerTypeSTDIO {
+		command, args := parseCommandArgs(config.Command)
+		stdioClient, newErr := client.NewStdioMCPClient(command, config.EnvironmentVariables, args...)
+		if newErr != nil {
+			return nil, newErr
+		}
+		mcpClient = stdioClient
+	}
+	if config.Type == common.AIChatMCPServerTypeSSE {
+		sseClient, newErr := client.NewSSEMCPClient(config.Url, client.WithSSEReadTimeout(time.Second*30))
+		if newErr != nil {
+			return nil, newErr
+		}
+
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := sseClient.Start(timeoutCtx); err != nil {
+			return nil, err
+		}
+
+		mcpClient = sseClient
+	}
+	if mcpClient == nil {
+		return nil, fmt.Errorf("unsupported MCP server type: %s", config.Type)
 	}
 
 	// Initialize the client
@@ -34,13 +57,13 @@ func getMCPClient(ctx context.Context, config common.AIChatMCPServerConfig) (c *
 		Name:    "Wox",
 		Version: "2.0.0",
 	}
-	_, initializeErr := client.Initialize(ctx, initRequest)
+	_, initializeErr := mcpClient.Initialize(ctx, initRequest)
 	if initializeErr != nil {
 		return nil, initializeErr
 	}
 
-	mcpClients.Store(config.Name, client)
-	return client, nil
+	mcpClients.Store(config.Name, mcpClient)
+	return mcpClient, nil
 }
 
 // MCPListTools lists the tools for a given MCP server config

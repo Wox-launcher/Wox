@@ -174,7 +174,7 @@ func (m *Manager) Restore(ctx context.Context, backupId string) error {
 }
 
 func (m *Manager) FindAllBackups(ctx context.Context) ([]Backup, error) {
-	var backupList []Backup
+	var backupList []Backup = make([]Backup, 0)
 
 	backupDir := util.GetLocation().GetBackupDirectory()
 	backupDirEntries, readDirErr := os.ReadDir(backupDir)
