@@ -907,18 +907,9 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get AI chat plugin instance
-	aiChatPlugin := plugin.GetPluginManager().GetPluginInstances()
-	aiChatPluginInstance, exist := lo.Find(aiChatPlugin, func(item *plugin.Instance) bool {
-		return item.Metadata.Id == "a9cfd85a-6e53-415c-9d44-68777aa6323d"
-	})
-	if !exist {
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
 		writeErrorResponse(w, "ai chat plugin not found")
-		return
-	}
-	chater, ok := aiChatPluginInstance.Plugin.(common.AIChater)
-	if !ok {
-		writeErrorResponse(w, "ai chat plugin is not a AIChater")
 		return
 	}
 
@@ -930,18 +921,9 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 func handleAIMCPServerToolsAll(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
 
-	// get ai chat plugin instance
-	aiChatPlugin := plugin.GetPluginManager().GetPluginInstances()
-	aiChatPluginInstance, exist := lo.Find(aiChatPlugin, func(item *plugin.Instance) bool {
-		return item.Metadata.Id == "a9cfd85a-6e53-415c-9d44-68777aa6323d"
-	})
-	if !exist {
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
 		writeErrorResponse(w, "ai chat plugin not found")
-		return
-	}
-	chater, ok := aiChatPluginInstance.Plugin.(common.AIChater)
-	if !ok {
-		writeErrorResponse(w, "ai chat plugin is not a AIChater")
 		return
 	}
 

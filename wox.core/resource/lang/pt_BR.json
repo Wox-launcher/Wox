@@ -314,5 +314,7 @@
   "plugin_ai_chat_enable_fallback_search": "Busca de fallback",
   "plugin_ai_chat_enable_fallback_search_tooltip": "Quando selecionado, se o resultado da consulta estiver vazio, o Wox retornará um resultado de 'usar IA para %s'",
   "plugin_ai_chat_fallback_search_chat_for": "Usar IA para %s",
-  "plugin_ai_chat_start_chat": "Iniciar conversa"
+  "plugin_ai_chat_start_chat": "Iniciar conversa",
+  "plugin_ai_chat_enable_auto_focus_to_chat_input": "Focar automaticamente na entrada de chat ao abrir com atalho de consulta",
+  "plugin_ai_chat_enable_auto_focus_to_chat_input_tooltip": "Quando selecionado, o Wox focará automaticamente na entrada de chat ao abrir com atalho de consulta, permitindo que você digite sua consulta imediatamente"
 }

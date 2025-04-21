@@ -10,6 +10,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
@@ -251,8 +252,8 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 			QueryText: query,
 		}
 
+		q, _, err := plugin.GetPluginManager().NewQuery(ctx, plainQuery)
 		if queryHotkey.IsSilentExecution {
-			q, _, err := plugin.GetPluginManager().NewQuery(ctx, plainQuery)
 			if err != nil {
 				logger.Error(ctx, fmt.Sprintf("failed to create silent query: %s", err.Error()))
 				return
@@ -266,6 +267,16 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 		} else {
 			m.ui.ChangeQuery(newCtx, plainQuery)
 			m.ui.ShowApp(newCtx, common.ShowContext{SelectAll: false})
+		}
+
+		// check if query is chat plugin, and auto focus if enabled
+		if plugin.GetPluginManager().IsTriggerKeywordAIChat(ctx, q.TriggerKeyword) {
+			if plugin.GetPluginManager().GetAIChatPluginChater(ctx).IsAutoFocusToChatInputWhenOpenWithQueryHotkey(ctx) {
+				util.Go(ctx, "focus to chat input", func() {
+					time.Sleep(time.Millisecond * 500)
+					m.ui.FocusToChatInput(ctx)
+				})
+			}
 		}
 	})
 	if err != nil {

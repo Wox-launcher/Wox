@@ -314,5 +314,7 @@
   "plugin_ai_chat_enable_fallback_search": "Fallback Search",
   "plugin_ai_chat_enable_fallback_search_tooltip": "When enabled, if the query result is empty, Wox will return a result of 'use AI Chat for %s'",
   "plugin_ai_chat_fallback_search_chat_for": "Use AI Chat for %s",
-  "plugin_ai_chat_start_chat": "Start Chat"
+  "plugin_ai_chat_start_chat": "Start Chat",
+  "plugin_ai_chat_enable_auto_focus_to_chat_input": "Auto focus to chat input when open with query hotkey",
+  "plugin_ai_chat_enable_auto_focus_to_chat_input_tooltip": "When enabled, Wox will automatically focus to chat input when open with query hotkey, this will enable you to type your query immediately"
 }

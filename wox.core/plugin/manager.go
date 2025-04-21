@@ -1196,6 +1196,41 @@ func (m *Manager) IsHostStarted(ctx context.Context, runtime Runtime) bool {
 	return false
 }
 
+func (m *Manager) IsTriggerKeywordAIChat(ctx context.Context, triggerKeyword string) bool {
+	aiChatPluginInstance := m.GetAIChatPluginInstance(ctx)
+	if aiChatPluginInstance == nil {
+		return false
+	}
+
+	return lo.Contains(aiChatPluginInstance.GetTriggerKeywords(), triggerKeyword)
+}
+
+func (m *Manager) GetAIChatPluginInstance(ctx context.Context) *Instance {
+	aiChatPlugin := m.GetPluginInstances()
+	aiChatPluginInstance, exist := lo.Find(aiChatPlugin, func(item *Instance) bool {
+		return item.Metadata.Id == "a9cfd85a-6e53-415c-9d44-68777aa6323d"
+	})
+	if exist {
+		return aiChatPluginInstance
+	}
+
+	return nil
+}
+
+func (m *Manager) GetAIChatPluginChater(ctx context.Context) common.AIChater {
+	aiChatPluginInstance := m.GetAIChatPluginInstance(ctx)
+	if aiChatPluginInstance == nil {
+		return nil
+	}
+
+	chater, ok := aiChatPluginInstance.Plugin.(common.AIChater)
+	if ok {
+		return chater
+	}
+
+	return nil
+}
+
 func (m *Manager) GetAIProvider(ctx context.Context, provider common.ProviderName) (ai.Provider, error) {
 	if v, exist := m.aiProviders.Load(provider); exist {
 		return v, nil

@@ -62,6 +62,19 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 				Value: &definition.PluginSettingValueNewLine{},
 			},
 			{
+				Type: definition.PluginSettingDefinitionTypeCheckBox,
+				Value: &definition.PluginSettingValueCheckBox{
+					Key:          "enable_auto_focus_to_chat_input",
+					DefaultValue: "true",
+					Label:        "i18n:plugin_ai_chat_enable_auto_focus_to_chat_input",
+					Tooltip:      "i18n:plugin_ai_chat_enable_auto_focus_to_chat_input_tooltip",
+				},
+			},
+			{
+				Type:  definition.PluginSettingDefinitionTypeNewLine,
+				Value: &definition.PluginSettingValueNewLine{},
+			},
+			{
 				Type: definition.PluginSettingDefinitionTypeSelectAIModel,
 				Value: &definition.PluginSettingValueSelectAIModel{
 					Key:     "default_model",
@@ -191,6 +204,11 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	} else {
 		r.chats = chats
 	}
+}
+
+func (r *AIChatPlugin) IsAutoFocusToChatInputWhenOpenWithQueryHotkey(ctx context.Context) bool {
+	enableAutoFocusToChatInput := r.api.GetSetting(ctx, "enable_auto_focus_to_chat_input")
+	return enableAutoFocusToChatInput == "true"
 }
 
 func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -362,7 +380,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 	r.saveChats(ctx)
 
 	// summarize the chat
-	summarizeIndex := []int{2, 4, 10}
+	summarizeIndex := []int{2, 3, 4, 10}
 	for _, index := range summarizeIndex {
 		nonToolConversationCount := lo.CountBy(aiChatData.Conversations, func(conversation common.Conversation) bool {
 			return conversation.Role != common.ConversationRoleTool

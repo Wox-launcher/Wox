@@ -314,5 +314,7 @@
   "plugin_ai_chat_enable_fallback_search": "回退搜索",
   "plugin_ai_chat_enable_fallback_search_tooltip": "当查询结果为空时，Wox 将返回一个 '使用 AI Chat 查询 %s' 的结果",
   "plugin_ai_chat_fallback_search_chat_for": "使用 AI Chat 查询 %s",
-  "plugin_ai_chat_start_chat": "开始对话"
+  "plugin_ai_chat_start_chat": "开始对话",
+  "plugin_ai_chat_enable_auto_focus_to_chat_input": "使用查询快捷键打开时自动聚焦到对话输入框",
+  "plugin_ai_chat_enable_auto_focus_to_chat_input_tooltip": "当启用时，Wox 将在使用查询快捷键打开时自动聚焦到对话输入框，这将允许您立即输入查询"
 }

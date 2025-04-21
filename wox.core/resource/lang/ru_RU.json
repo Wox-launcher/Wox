@@ -313,5 +313,7 @@
   "plugin_ai_chat_enable_fallback_search": "Резервный поиск",
   "plugin_ai_chat_enable_fallback_search_tooltip": "Если включено, если результат запроса пуст, Wox вернет результат 'использовать AI Chat для %s'",
   "plugin_ai_chat_fallback_search_chat_for": "Использовать AI Chat для %s",
-  "plugin_ai_chat_start_chat": "Начать чат"
+  "plugin_ai_chat_start_chat": "Начать чат",
+  "plugin_ai_chat_enable_auto_focus_to_chat_input": "Автоматически фокусировать на вводе чата при открытии с горячей клавишей запроса",
+  "plugin_ai_chat_enable_auto_focus_to_chat_input_tooltip": "Если включено, Wox автоматически фокусируется на вводе чата при открытии с горячей клавишей запроса, что позволяет вам ввести свой запрос немедленно"
 }
