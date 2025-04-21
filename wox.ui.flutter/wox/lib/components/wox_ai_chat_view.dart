@@ -13,6 +13,7 @@ import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
+import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/strings.dart';
 import 'package:wox/utils/wox_theme_util.dart';
@@ -84,7 +85,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                 controller: controller.aiChatScrollController,
                 padding: const EdgeInsets.symmetric(vertical: 16.0),
                 child: Obx(() => Column(
-                      children: controller.aiChatData.value.conversations.map((message) => _buildMessageItem(message)).toList(),
+                      children: controller.aiChatData.value.conversations.map((message) => _buildMessageItem(message, context)).toList(),
                     )),
               ),
             ),
@@ -119,8 +120,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: Column(
-                  // New outer Column
-                  mainAxisSize: MainAxisSize.min, // Important for Column height
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     const SizedBox.shrink(),
                     Container(
@@ -166,11 +166,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                                 // Tool configuration button - opens chat select panel
                                 Obx(() => IconButton(
                                       tooltip: tr('ui_ai_chat_configure_tools'),
-                                      icon: Icon(Icons.build,
-                                          size: 18,
-                                          color: controller.selectedTools.isNotEmpty
-                                              ? fromCssColor(woxTheme.actionItemActiveFontColor)
-                                              : fromCssColor(woxTheme.previewPropertyTitleColor).withAlpha(128)),
+                                      icon: Icon(Icons.build, size: 18, color: controller.selectedTools.isNotEmpty ? getThemeTextColor() : getThemeTextColor().withAlpha(128)),
                                       color: fromCssColor(woxTheme.actionItemActiveBackgroundColor),
                                       onPressed: () {
                                         controller.showToolsPanel();
@@ -274,19 +270,29 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
-  Widget _buildMessageItem(WoxAIChatConversation message) {
+  Widget _buildMessageItem(WoxAIChatConversation message, BuildContext context) {
     final isUser = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value;
     final isTool = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_TOOL.value;
 
     Color backgroundColor;
+    Color fontColor;
     if (isUser) {
-      backgroundColor = fromCssColor(woxTheme.actionItemActiveBackgroundColor);
-    } else if (isTool) {
-      backgroundColor = fromCssColor(woxTheme.actionContainerBackgroundColor);
+      backgroundColor = fromCssColor(woxTheme.resultItemActiveBackgroundColor);
+      fontColor = fromCssColor(woxTheme.resultItemActiveTitleColor);
     } else {
-      backgroundColor = fromCssColor(woxTheme.actionContainerBackgroundColor);
+      backgroundColor = fromCssColor(woxTheme.queryBoxBackgroundColor);
+      fontColor = fromCssColor(woxTheme.resultItemTitleColor);
     }
+
     final alignment = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+
+    ThemeData styleTheme = Theme.of(context).copyWith(
+      textTheme: Theme.of(context).textTheme.apply(
+            bodyColor: fontColor,
+            displayColor: fontColor,
+          ),
+      cardColor: Colors.transparent,
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
@@ -306,13 +312,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                   decoration: BoxDecoration(
                     color: backgroundColor,
                     borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(13),
-                        blurRadius: 5,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,16 +321,9 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                         MarkdownBody(
                           data: message.text,
                           selectable: true,
-                          styleSheet: MarkdownStyleSheet(
-                            a: TextStyle(
-                              color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveTitleColor),
-                              fontSize: 14,
+                          styleSheet: MarkdownStyleSheet.fromTheme(styleTheme).copyWith(
+                            a: const TextStyle(
                               decoration: TextDecoration.underline,
-                              decorationColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveTitleColor),
-                            ),
-                            p: TextStyle(
-                              color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemActiveTitleColor),
-                              fontSize: 14,
                             ),
                           ),
                         ),
@@ -378,27 +370,19 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
+        GestureDetector(
           onTap: () {
             controller.toggleToolCallExpanded(message.id);
           },
-          child: Container(
+          child: SizedBox(
             width: double.infinity,
-            decoration: BoxDecoration(
-              color: fromCssColor(woxTheme.actionContainerBackgroundColor).withAlpha(25),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: fromCssColor(woxTheme.actionContainerBackgroundColor).withAlpha(75),
-                width: 1.0,
-              ),
-            ),
             child: Row(
               mainAxisSize: MainAxisSize.max,
               children: [
                 Icon(
                   Icons.build,
                   size: 14,
-                  color: fromCssColor(woxTheme.resultItemActiveTitleColor),
+                  color: fromCssColor(woxTheme.queryBoxFontColor),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
@@ -406,7 +390,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                     message.toolCallInfo.name,
                     style: TextStyle(
                       fontSize: 12,
-                      color: fromCssColor(woxTheme.resultItemActiveTitleColor),
+                      color: fromCssColor(woxTheme.queryBoxFontColor),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -416,7 +400,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                   '${message.toolCallInfo.duration}ms',
                   style: TextStyle(
                     fontSize: 12,
-                    color: fromCssColor(woxTheme.resultItemActiveTitleColor),
+                    color: fromCssColor(woxTheme.queryBoxFontColor),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -425,7 +409,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                 Obx(() => Icon(
                       controller.isToolCallExpanded(message.id) ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
                       size: 14,
-                      color: fromCssColor(woxTheme.resultItemActiveTitleColor),
+                      color: fromCssColor(woxTheme.queryBoxFontColor),
                     )),
               ],
             ),
@@ -549,8 +533,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
   Widget _buildAvatar(WoxAIChatConversation message) {
     final isUser = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value;
 
-    // 根据角色使用不同的背景色
-    Color avatarColor = isUser ? fromCssColor(woxTheme.actionItemActiveBackgroundColor) : fromCssColor(woxTheme.actionContainerBackgroundColor);
+    Color avatarColor = isUser ? fromCssColor(woxTheme.actionItemActiveBackgroundColor) : fromCssColor(woxTheme.queryBoxBackgroundColor);
 
     return Container(
       width: 36,
@@ -558,13 +541,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       decoration: BoxDecoration(
         color: avatarColor,
         shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(25),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
       child: Center(
         child: isUser
@@ -576,7 +552,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
             : Icon(
                 Icons.smart_toy_outlined,
                 size: 20,
-                color: fromCssColor(woxTheme.resultItemActiveTitleColor),
+                color: fromCssColor(woxTheme.queryBoxFontColor),
               ),
       ),
     );
