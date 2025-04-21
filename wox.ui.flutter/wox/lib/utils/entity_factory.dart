@@ -23,18 +23,39 @@ class EntityFactory {
     } else if (T.toString() == "PluginDetail") {
       return PluginDetail.fromJson(json) as T;
     } else if (T.toString() == "List<PluginDetail>") {
+      if (json == null) {
+        return <PluginDetail>[] as T;
+      }
       return (json as List).map((e) => PluginDetail.fromJson(e)).toList() as T;
     } else if (T.toString() == "List<WoxTheme>") {
+      if (json == null) {
+        return <WoxTheme>[] as T;
+      }
       return (json as List).map((e) => WoxTheme.fromJson(e)).toList() as T;
     } else if (T.toString() == "List<AIModel>") {
+      if (json == null) {
+        return <AIModel>[] as T;
+      }
       return (json as List).map((e) => AIModel.fromJson(e)).toList() as T;
     } else if (T.toString() == "List<WoxLang>") {
+      if (json == null) {
+        return <WoxLang>[] as T;
+      }
       return (json as List).map((e) => WoxLang.fromJson(e)).toList() as T;
     } else if (T.toString() == "List<WoxBackup>") {
+      if (json == null) {
+        return <WoxBackup>[] as T;
+      }
       return (json as List).map((e) => WoxBackup.fromJson(e)).toList() as T;
     } else if (T.toString() == "List<AIMCPTool>") {
+      if (json == null) {
+        return <AIMCPTool>[] as T;
+      }
       return (json as List).map((e) => AIMCPTool.fromJson(e)).toList() as T;
     } else if (T.toString() == "List<AIProviderInfo>") {
+      if (json == null) {
+        return <AIProviderInfo>[] as T;
+      }
       return (json as List).map((e) => AIProviderInfo.fromJson(e)).toList() as T;
     } else {
       return json as T;
