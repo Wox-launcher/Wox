@@ -582,7 +582,7 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 }
 
 // ChangeUserDataDirectory handles changing the user data directory location
-// This includes creating the new directory structure and copying all data
+// This includes creating the new directory structure and copying necessary data
 func (m *Manager) ChangeUserDataDirectory(ctx context.Context, newDirectory string) error {
 	location := util.GetLocation()
 	oldDirectory := location.GetUserDataDirectory()
@@ -612,13 +612,40 @@ func (m *Manager) ChangeUserDataDirectory(ctx context.Context, newDirectory stri
 		return fmt.Errorf("failed to create new directory: %w", err)
 	}
 
-	// Copy existing data to the new location if the old location exists and differs from new
+	// Copy only necessary directories instead of the entire user data directory
+	// This prevents recursive copying issues when new directory is inside old directory
+	// #4192
 	if oldDirectory != "" && oldDirectory != newDirectory {
-		logger.Info(ctx, fmt.Sprintf("Copying data from %s to %s", oldDirectory, newDirectory))
-		// Use the copy library to copy all directories and files recursively
-		// The library will automatically create subdirectories as needed
-		if err := cp.Copy(oldDirectory, newDirectory); err != nil {
-			return fmt.Errorf("failed to copy user data: %w", err)
+		// Define the directories we need to copy
+		directoriesToCopy := []struct {
+			srcPath string
+			dstPath string
+		}{
+			{
+				srcPath: path.Join(oldDirectory, "plugins"),
+				dstPath: path.Join(newDirectory, "plugins"),
+			},
+			{
+				srcPath: path.Join(oldDirectory, "settings"),
+				dstPath: path.Join(newDirectory, "settings"),
+			},
+			{
+				srcPath: path.Join(oldDirectory, "themes"),
+				dstPath: path.Join(newDirectory, "themes"),
+			},
+		}
+
+		// Copy each directory if it exists
+		for _, dir := range directoriesToCopy {
+			if _, err := os.Stat(dir.srcPath); os.IsNotExist(err) {
+				logger.Info(ctx, fmt.Sprintf("Source directory %s does not exist, skipping", dir.srcPath))
+				continue
+			}
+
+			logger.Info(ctx, fmt.Sprintf("Copying directory from %s to %s", dir.srcPath, dir.dstPath))
+			if err := cp.Copy(dir.srcPath, dir.dstPath); err != nil {
+				return fmt.Errorf("failed to copy directory %s: %w", dir.srcPath, err)
+			}
 		}
 	}
 
