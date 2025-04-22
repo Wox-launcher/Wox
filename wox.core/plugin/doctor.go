@@ -8,12 +8,19 @@ import (
 	"wox/updater"
 	"wox/util"
 	"wox/util/permission"
-	"wox/util/shell"
+)
+
+type DoctorCheckType string
+
+const (
+	DoctorCheckUpdate        DoctorCheckType = "update"
+	DoctorCheckAccessibility DoctorCheckType = "accessibility"
 )
 
 type DoctorCheckResult struct {
 	Name        string
-	Status      bool
+	Type        DoctorCheckType
+	Passed      bool
 	Description string
 	ActionName  string
 	Action      func(ctx context.Context)
@@ -31,44 +38,58 @@ func RunDoctorChecks(ctx context.Context) []DoctorCheckResult {
 
 	//sort by status, false first
 	sort.Slice(results, func(i, j int) bool {
-		return !results[i].Status && results[j].Status
+		return !results[i].Passed && results[j].Passed
 	})
 
 	return results
 }
 
 func checkWoxVersion(ctx context.Context) DoctorCheckResult {
-	latestVersion, err := updater.CheckUpdate(ctx)
-	if err != nil {
-		if latestVersion.LatestVersion == updater.CURRENT_VERSION {
-			return DoctorCheckResult{
-				Name:        "i18n:plugin_doctor_version",
-				Status:      true,
-				Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_latest"), latestVersion.LatestVersion),
-				ActionName:  "",
-				Action: func(ctx context.Context) {
-				},
-			}
-		}
-
+	updateStatus := updater.CheckUpdate(ctx)
+	if updateStatus.Status == updater.UpdateStatusError {
 		return DoctorCheckResult{
 			Name:        "i18n:plugin_doctor_version",
-			Status:      true,
-			Description: err.Error(),
+			Type:        DoctorCheckUpdate,
+			Passed:      false,
+			Description: updateStatus.UpdateError.Error(),
 			ActionName:  "",
 			Action: func(ctx context.Context) {
 			},
 		}
 	}
 
-	return DoctorCheckResult{
-		Name:        "i18n:plugin_doctor_version",
-		Status:      false,
-		Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_update_available"), latestVersion.CurrentVersion, latestVersion.LatestVersion),
-		ActionName:  "i18n:plugin_doctor_version_download",
-		Action: func(ctx context.Context) {
-			shell.Open(latestVersion.DownloadUrl)
-		},
+	if !updateStatus.HasUpdate {
+		return DoctorCheckResult{
+			Name:        "i18n:plugin_doctor_version",
+			Type:        DoctorCheckUpdate,
+			Passed:      true,
+			Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_latest"), updateStatus.LatestVersion),
+			ActionName:  "",
+			Action: func(ctx context.Context) {
+			},
+		}
+	} else {
+		actionName := "i18n:plugin_doctor_version_download"
+		if updateStatus.Status == updater.UpdateStatusReady {
+			actionName = "i18n:plugin_doctor_version_apply_update"
+		}
+
+		return DoctorCheckResult{
+			Name:        "i18n:plugin_doctor_version",
+			Type:        DoctorCheckUpdate,
+			Passed:      false,
+			Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_update_available"), updateStatus.CurrentVersion, updateStatus.LatestVersion, updateStatus.Status),
+			ActionName:  actionName,
+			Action: func(ctx context.Context) {
+				updateStatus := updater.GetUpdateInfo()
+				if updateStatus.Status == updater.UpdateStatusReady {
+					updater.ApplyUpdate(ctx)
+				}
+				if updateStatus.Status == updater.UpdateStatusError {
+					updater.DownloadUpdate(ctx)
+				}
+			},
+		}
 	}
 }
 
@@ -77,7 +98,8 @@ func checkAccessibilityPermission(ctx context.Context) DoctorCheckResult {
 	if !hasPermission {
 		return DoctorCheckResult{
 			Name:        "i18n:plugin_doctor_accessibility",
-			Status:      false,
+			Type:        DoctorCheckAccessibility,
+			Passed:      false,
 			Description: "i18n:plugin_doctor_accessibility_required",
 			ActionName:  "i18n:plugin_doctor_accessibility_open_settings",
 			Action: func(ctx context.Context) {
@@ -88,7 +110,8 @@ func checkAccessibilityPermission(ctx context.Context) DoctorCheckResult {
 
 	return DoctorCheckResult{
 		Name:        "i18n:plugin_doctor_accessibility",
-		Status:      hasPermission,
+		Type:        DoctorCheckAccessibility,
+		Passed:      hasPermission,
 		Description: "i18n:plugin_doctor_accessibility_granted",
 		ActionName:  "",
 		Action: func(ctx context.Context) {

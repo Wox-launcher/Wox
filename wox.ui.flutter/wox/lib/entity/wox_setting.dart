@@ -21,6 +21,7 @@ class WoxSetting {
   late bool httpProxyEnabled;
   late String httpProxyUrl;
   late bool enableAutoBackup;
+  late bool enableAutoUpdate;
 
   WoxSetting({
     required this.enableAutostart,
@@ -43,6 +44,7 @@ class WoxSetting {
     required this.httpProxyEnabled,
     required this.httpProxyUrl,
     required this.enableAutoBackup,
+    required this.enableAutoUpdate,
   });
 
   WoxSetting.fromJson(Map<String, dynamic> json) {
@@ -92,6 +94,7 @@ class WoxSetting {
     httpProxyEnabled = json['HttpProxyEnabled'] ?? false;
     httpProxyUrl = json['HttpProxyUrl'] ?? '';
     enableAutoBackup = json['EnableAutoBackup'] ?? false;
+    enableAutoUpdate = json['EnableAutoUpdate'] ?? true;
   }
 
   Map<String, dynamic> toJson() {
@@ -116,6 +119,7 @@ class WoxSetting {
     data['HttpProxyEnabled'] = httpProxyEnabled;
     data['HttpProxyUrl'] = httpProxyUrl;
     data['EnableAutoBackup'] = enableAutoBackup;
+    data['EnableAutoUpdate'] = enableAutoUpdate;
     return data;
   }
 }

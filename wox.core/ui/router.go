@@ -982,7 +982,7 @@ func handleDoctorCheck(w http.ResponseWriter, r *http.Request) {
 	results := plugin.RunDoctorChecks(ctx)
 	allPassed := true
 	for _, result := range results {
-		if !result.Status {
+		if !result.Passed {
 			allPassed = false
 			break
 		}

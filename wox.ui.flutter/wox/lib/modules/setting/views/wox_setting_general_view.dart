@@ -96,6 +96,18 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
           }),
         ),
         formField(
+          label: controller.tr("ui_enable_auto_update"),
+          tips: controller.tr("ui_enable_auto_update_tips"),
+          child: Obx(() {
+            return ToggleSwitch(
+              checked: controller.woxSetting.value.enableAutoUpdate,
+              onChanged: (bool value) {
+                controller.updateConfig("EnableAutoUpdate", value.toString());
+              },
+            );
+          }),
+        ),
+        formField(
           label: controller.tr("ui_lang"),
           child: FutureBuilder(
               future: WoxApi.instance.getAllLanguages(),

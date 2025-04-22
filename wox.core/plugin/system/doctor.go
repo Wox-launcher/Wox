@@ -45,7 +45,7 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) (results [
 
 	for _, check := range checkResults {
 		icon := plugin.ErrorIcon
-		if check.Status {
+		if check.Passed {
 			icon = plugin.CorrectIcon
 		}
 

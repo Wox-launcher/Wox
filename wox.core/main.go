@@ -14,6 +14,7 @@ import (
 	"wox/resource"
 	"wox/setting"
 	"wox/ui"
+	"wox/updater"
 	"wox/util"
 	"wox/util/selection"
 
@@ -139,6 +140,12 @@ func main() {
 	plugin.GetPluginManager().Start(ctx, shareUI)
 
 	selection.InitSelection()
+
+	// Start auto backup if enabled
+	setting.GetSettingManager().StartAutoBackup(ctx)
+
+	// Start auto update checker if enabled
+	updater.StartAutoUpdateChecker(ctx)
 
 	// hotkey must be registered in main thread
 	mainthread.Init(func() {

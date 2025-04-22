@@ -27,6 +27,7 @@ type WoxSetting struct {
 	ShowPosition         PositionType
 	AIProviders          []AIProvider
 	EnableAutoBackup     bool // Enable automatic data backup
+	EnableAutoUpdate     bool // Enable automatic update check and download
 
 	// HTTP proxy settings
 	HttpProxyEnabled PlatformSettingValue[bool]
@@ -129,6 +130,7 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 			LinuxValue: "",
 		},
 		EnableAutoBackup: true,
+		EnableAutoUpdate: true,
 	}
 }
 

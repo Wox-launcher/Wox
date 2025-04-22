@@ -259,6 +259,8 @@ func (m *Manager) UpdateWoxSetting(ctx context.Context, key, value string) error
 		m.woxSetting.ShowPosition = PositionType(value)
 	} else if key == "EnableAutoBackup" {
 		m.woxSetting.EnableAutoBackup = value == "true"
+	} else if key == "EnableAutoUpdate" {
+		m.woxSetting.EnableAutoUpdate = value == "true"
 	} else if key == "AppWidth" {
 		appWidth, parseErr := strconv.Atoi(value)
 		if parseErr != nil {

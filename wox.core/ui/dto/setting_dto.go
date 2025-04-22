@@ -23,6 +23,7 @@ type WoxSettingDto struct {
 	HttpProxyUrl         string
 	ShowPosition         setting.PositionType
 	EnableAutoBackup     bool
+	EnableAutoUpdate     bool
 
 	// UI related
 	AppWidth       int
