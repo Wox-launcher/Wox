@@ -194,4 +194,8 @@ class WoxApi {
   Future<void> open(String path) async {
     await WoxHttpUtil.instance.postData("/open", {"path": path});
   }
+
+  Future<String> getWoxVersion() async {
+    return await WoxHttpUtil.instance.postData("/version", null);
+  }
 }

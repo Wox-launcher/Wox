@@ -316,5 +316,10 @@
   "plugin_ai_chat_fallback_search_chat_for": "使用 AI Chat 查询 %s",
   "plugin_ai_chat_start_chat": "开始对话",
   "plugin_ai_chat_enable_auto_focus_to_chat_input": "使用查询快捷键打开时自动聚焦到对话输入框",
-  "plugin_ai_chat_enable_auto_focus_to_chat_input_tooltip": "当启用时，Wox 将在使用查询快捷键打开时自动聚焦到对话输入框，这将允许您立即输入查询"
+  "plugin_ai_chat_enable_auto_focus_to_chat_input_tooltip": "当启用时，Wox 将在使用查询快捷键打开时自动聚焦到对话输入框，这将允许您立即输入查询",
+  "ui_about": "关于",
+  "ui_about_version": "版本",
+  "ui_about_docs": "文档",
+  "ui_about_github": "GitHub",
+  "ui_about_description": "Wox 是一个适用于 Windows、macOS 和 Linux 的启动器，简单易用。"
 }

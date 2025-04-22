@@ -14,6 +14,7 @@ import (
 	"wox/plugin"
 	"wox/setting"
 	"wox/ui/dto"
+	"wox/updater"
 	"wox/util"
 	"wox/util/hotkey"
 	"wox/util/shell"
@@ -83,6 +84,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/query/icon":       handleQueryIcon,
 	"/query/ratio":      handleQueryRatio,
 	"/deeplink":         handleDeeplink,
+	"/version":          handleVersion,
 }
 
 func handleHome(w http.ResponseWriter, r *http.Request) {
@@ -1047,4 +1049,8 @@ func handlePluginDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeSuccessResponse(w, pluginDto)
+}
+
+func handleVersion(w http.ResponseWriter, r *http.Request) {
+	writeSuccessResponse(w, updater.CURRENT_VERSION)
 }

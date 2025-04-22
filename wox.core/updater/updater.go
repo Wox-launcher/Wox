@@ -10,14 +10,26 @@ import (
 	"github.com/Masterminds/semver/v3"
 )
 
+var ErrNoUpdate = errors.New("no update")
+
 const versionManifestUrl = "https://raw.githubusercontent.com/Wox-launcher/Wox/master/updater.json"
 
 type VersionManifest struct {
-	Version            string
-	MacDownloadUrl     string
+	Version string
+
+	MacArm64DownloadUrl string
+	MacArm64Checksum    string
+
+	MacAmd64DownloadUrl string
+	MacAmd64Checksum    string
+
 	WindowsDownloadUrl string
-	LinuxDownloadUrl   string
-	ReleaseNotes       string
+	WindowsChecksum    string
+
+	LinuxDownloadUrl string
+	LinuxChecksum    string
+
+	ReleaseNotes string // newline separated with \n
 }
 
 type UpdateInfo struct {
@@ -52,14 +64,18 @@ func CheckUpdate(ctx context.Context) (info UpdateInfo, err error) {
 			CurrentVersion: existingVersion.String(),
 			LatestVersion:  newVersion.String(),
 			ReleaseNotes:   latestVersion.ReleaseNotes,
-		}, errors.New("no new version available")
+		}, ErrNoUpdate
 	}
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("new version available, current: %s, latest: %s", existingVersion.String(), newVersion.String()))
 
 	var downloadUrl string
 	if util.IsMacOS() {
-		downloadUrl = latestVersion.MacDownloadUrl
+		if util.IsArm64() {
+			downloadUrl = latestVersion.MacArm64DownloadUrl
+		} else {
+			downloadUrl = latestVersion.MacAmd64DownloadUrl
+		}
 	}
 	if util.IsWindows() {
 		downloadUrl = latestVersion.WindowsDownloadUrl

@@ -56,4 +56,8 @@ class WoxImage {
   static WoxImage empty() {
     return WoxImage(imageType: "", imageData: "");
   }
+
+  static WoxImage newBase64(String imageData) {
+    return WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: imageData);
+  }
 }

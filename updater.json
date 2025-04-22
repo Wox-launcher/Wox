@@ -1,7 +1,12 @@
 {
-  "Version": "2.0.0",
-  "MacDownloadUrl": "",
+  "Version": "2.0.0-beta.2",
+  "MacArm64DownloadUrl": "",
+  "MacArm64Checksum": "",
+  "MacAmd64DownloadUrl": "",
+  "MacAmd64Checksum": "",
   "WindowsDownloadUrl": "",
+  "WindowsChecksum": "",
   "LinuxDownloadUrl": "",
+  "LinuxChecksum": "",
   "ReleaseNotes": ""
 }

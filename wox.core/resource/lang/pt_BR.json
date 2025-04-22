@@ -316,5 +316,10 @@
   "plugin_ai_chat_fallback_search_chat_for": "Usar IA para %s",
   "plugin_ai_chat_start_chat": "Iniciar conversa",
   "plugin_ai_chat_enable_auto_focus_to_chat_input": "Focar automaticamente na entrada de chat ao abrir com atalho de consulta",
-  "plugin_ai_chat_enable_auto_focus_to_chat_input_tooltip": "Quando selecionado, o Wox focará automaticamente na entrada de chat ao abrir com atalho de consulta, permitindo que você digite sua consulta imediatamente"
+  "plugin_ai_chat_enable_auto_focus_to_chat_input_tooltip": "Quando selecionado, o Wox focará automaticamente na entrada de chat ao abrir com atalho de consulta, permitindo que você digite sua consulta imediatamente",
+  "ui_about": "Sobre",
+  "ui_about_version": "Versão",
+  "ui_about_docs": "Docs",
+  "ui_about_github": "GitHub",
+  "ui_about_description": "Wox é um launcher para Windows, macOS e Linux que simplesmente funciona."
 }

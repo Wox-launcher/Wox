@@ -8,6 +8,7 @@ import 'package:wox/modules/setting/views/wox_setting_ui_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_ai_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_data_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_theme_view.dart';
+import 'package:wox/modules/setting/views/wox_setting_about_view.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
@@ -142,6 +143,11 @@ class WoxSettingView extends GetView<WoxSettingController> {
                             },
                           ),
                         ],
+                      ),
+                      PaneItem(
+                        icon: const Icon(FluentIcons.info),
+                        title: Text(controller.tr('ui_about')),
+                        body: const WoxSettingAboutView(),
                       ),
                     ],
                     footerItems: [

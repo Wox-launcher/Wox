@@ -16,6 +16,7 @@ class WoxSettingController extends GetxController {
   final woxSetting = WoxSettingUtil.instance.currentSetting.obs;
   final userDataLocation = "".obs;
   final backups = <WoxBackup>[].obs;
+  final woxVersion = "".obs;
 
   //plugins
   final pluginList = <PluginDetail>[];
@@ -44,6 +45,12 @@ class WoxSettingController extends GetxController {
     refreshThemeList();
     loadUserDataLocation();
     refreshBackups();
+    loadWoxVersion();
+  }
+
+  Future<void> loadWoxVersion() async {
+    final version = await WoxApi.instance.getWoxVersion();
+    woxVersion.value = version;
   }
 
   void hideWindow() {
