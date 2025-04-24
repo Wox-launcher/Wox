@@ -57,6 +57,11 @@ class EntityFactory {
         return <AIProviderInfo>[] as T;
       }
       return (json as List).map((e) => AIProviderInfo.fromJson(e)).toList() as T;
+    } else if (T.toString() == "List<AIAgent>") {
+      if (json == null) {
+        return <AIAgent>[] as T;
+      }
+      return (json as List).map((e) => AIAgent.fromJson(e)).toList() as T;
     } else {
       return json as T;
     }

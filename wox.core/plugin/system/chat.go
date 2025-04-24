@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
+	"github.com/tidwall/gjson"
 )
 
 var aiChatIcon = plugin.PluginAIChatIcon
@@ -28,6 +29,7 @@ func init() {
 
 type AIChatPlugin struct {
 	chats           []common.AIChatData
+	agents          []common.AIAgent
 	resultChatIdMap *util.HashMap[string /*chat id*/, string /*result id*/] // map of result id and chat id, used to update the chat title
 	mcpServers      []common.AIChatMCPServerConfig
 	mcpToolsMap     []common.MCPTool
@@ -82,6 +84,51 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 					Tooltip: "i18n:plugin_ai_chat_default_model_tooltip",
 					Style: definition.PluginSettingValueStyle{
 						PaddingBottom: 8,
+					},
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeTable,
+				Value: &definition.PluginSettingValueTable{
+					Key:     "agents",
+					Title:   "i18n:plugin_ai_chat_agents",
+					Tooltip: "i18n:plugin_ai_chat_agents_tooltip",
+					Columns: []definition.PluginSettingValueTableColumn{
+						{
+							Key:     "name",
+							Label:   "i18n:plugin_ai_chat_agent_name",
+							Type:    definition.PluginSettingValueTableColumnTypeText,
+							Width:   100,
+							Tooltip: "i18n:plugin_ai_chat_agent_name_tooltip",
+							Validators: []validator.PluginSettingValidator{
+								{
+									Type:  validator.PluginSettingValidatorTypeNotEmpty,
+									Value: &validator.PluginSettingValidatorNotEmpty{},
+								},
+							},
+						},
+						{
+							Key:          "prompt",
+							Label:        "i18n:plugin_ai_chat_agent_prompt",
+							Type:         definition.PluginSettingValueTableColumnTypeText,
+							TextMaxLines: 10,
+							Width:        200,
+							Tooltip:      "i18n:plugin_ai_chat_agent_prompt_tooltip",
+						},
+						{
+							Key:     "model",
+							Label:   "i18n:plugin_ai_chat_agent_model",
+							Type:    definition.PluginSettingValueTableColumnTypeSelectAIModel,
+							Width:   100,
+							Tooltip: "i18n:plugin_ai_chat_agent_model_tooltip",
+						},
+						{
+							Key:     "tools",
+							Label:   "i18n:plugin_ai_chat_agent_tools",
+							Type:    definition.PluginSettingValueTableColumnTypeAIMCPServerTools,
+							Width:   100,
+							Tooltip: "i18n:plugin_ai_chat_agent_tools_tooltip",
+						},
 					},
 				},
 			},
@@ -190,13 +237,6 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.api = initParams.API
 	r.mcpServers = []common.AIChatMCPServerConfig{}
 
-	r.reloadMCPServers(ctx)
-	r.api.OnSettingChanged(ctx, func(key string, value string) {
-		if key == "mcp_servers" {
-			r.reloadMCPServers(ctx)
-		}
-	})
-
 	chats, err := r.loadChats(ctx)
 	if err != nil {
 		r.chats = []common.AIChatData{}
@@ -204,6 +244,33 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	} else {
 		r.chats = chats
 	}
+
+	agents, err := r.loadAgents(ctx)
+	if err != nil {
+		r.agents = []common.AIAgent{}
+		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to load agents: %s", err.Error()))
+	} else {
+		r.agents = agents
+	}
+
+	r.api.OnSettingChanged(ctx, func(key string, value string) {
+		if key == "agents" {
+			agents, err := r.loadAgents(ctx)
+			if err != nil {
+				r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to load agents: %s", err.Error()))
+				return
+			}
+
+			r.agents = agents
+		}
+	})
+
+	r.reloadMCPServers(ctx)
+	r.api.OnSettingChanged(ctx, func(key string, value string) {
+		if key == "mcp_servers" {
+			r.reloadMCPServers(ctx)
+		}
+	})
 }
 
 func (r *AIChatPlugin) IsAutoFocusToChatInputWhenOpenWithQueryHotkey(ctx context.Context) bool {
@@ -243,7 +310,7 @@ func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []
 								},
 							},
 							//TODO: let user customize the default tools, just like model
-							SelectedTools: lo.Map(r.GetAllTools(ctx), func(tool common.MCPTool, _ int) string {
+							Tools: lo.Map(r.GetAllTools(ctx), func(tool common.MCPTool, _ int) string {
 								return tool.Name
 							}),
 							CreatedAt: util.GetSystemTimestamp(),
@@ -365,15 +432,75 @@ func (r *AIChatPlugin) saveChats(ctx context.Context) {
 	r.api.SaveSetting(ctx, aiChatsSettingKey, string(chatsJson), false)
 }
 
+func (r *AIChatPlugin) loadAgents(ctx context.Context) ([]common.AIAgent, error) {
+	agents := []common.AIAgent{}
+	agentsJson := r.api.GetSetting(ctx, "agents")
+	if agentsJson == "" {
+		return []common.AIAgent{}, nil
+	}
+
+	gjson.Parse(agentsJson).ForEach(func(_, agent gjson.Result) bool {
+		gModel := gjson.Parse(agent.Get("Model").String())
+		modelName := gModel.Get("Name").String()
+		modelProvider := gModel.Get("Provider").String()
+
+		agents = append(agents, common.AIAgent{
+			Id:     agent.Get("Id").String(),
+			Name:   agent.Get("Name").String(),
+			Prompt: agent.Get("Prompt").String(),
+			Model:  common.Model{Name: modelName, Provider: common.ProviderName(modelProvider)},
+			Tools: lo.Map(agent.Get("Tools").Array(), func(tool gjson.Result, _ int) string {
+				return tool.String()
+			}),
+		})
+		return true
+	})
+
+	return agents, nil
+}
+
 func (r *AIChatPlugin) GetAllTools(ctx context.Context) []common.MCPTool {
 	return r.mcpToolsMap
+}
+
+func (r *AIChatPlugin) GetAllAgents(ctx context.Context) []common.AIAgent {
+	return r.agents
 }
 
 func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, chatLoopCount int) {
 	r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Starting chat with ID: %s, loop: %d, title: %s, model: %s, conversations: %d", aiChatData.Id, chatLoopCount, aiChatData.Title, aiChatData.Model.Name, len(aiChatData.Conversations)))
 
-	if len(aiChatData.SelectedTools) > 0 {
-		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Selected tools: %v", aiChatData.SelectedTools))
+	if len(aiChatData.Tools) > 0 {
+		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Selected tools: %v", aiChatData.Tools))
+	}
+
+	if aiChatData.AgentId != "" && chatLoopCount == 0 {
+		for _, agent := range r.agents {
+			if agent.Id == aiChatData.AgentId {
+				r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Using agent: %s", agent.Name))
+
+				if agent.Prompt != "" {
+					systemPrompt := common.Conversation{
+						Id:        uuid.NewString(),
+						Role:      common.ConversationRoleSystem,
+						Text:      agent.Prompt,
+						Timestamp: util.GetSystemTimestamp(),
+					}
+
+					aiChatData.Conversations = append([]common.Conversation{systemPrompt}, aiChatData.Conversations...)
+				}
+
+				if agent.Model.Name != "" {
+					aiChatData.Model = agent.Model
+				}
+
+				if len(agent.Tools) > 0 {
+					aiChatData.Tools = agent.Tools
+				}
+
+				break
+			}
+		}
 	}
 
 	r.appendOrUpdateChatData(aiChatData)
@@ -392,9 +519,9 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 	}
 
 	var tools []common.MCPTool
-	if len(aiChatData.SelectedTools) > 0 {
+	if len(aiChatData.Tools) > 0 {
 		tools = lo.Filter(r.mcpToolsMap, func(tool common.MCPTool, _ int) bool {
-			return lo.Contains(aiChatData.SelectedTools, tool.Name)
+			return lo.Contains(aiChatData.Tools, tool.Name)
 		})
 	}
 

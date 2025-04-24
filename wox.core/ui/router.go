@@ -66,6 +66,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/ai/chat":          handleAIChat,
 	"/ai/mcp/tools":     handleAIMCPServerTools,
 	"/ai/mcp/tools/all": handleAIMCPServerToolsAll,
+	"/ai/agents":        handleAIAgents,
 
 	// doctor
 	"/doctor/check": handleDoctorCheck,
@@ -939,6 +940,19 @@ func handleAIMCPServerToolsAll(w http.ResponseWriter, r *http.Request) {
 	})
 
 	writeSuccessResponse(w, results)
+}
+
+func handleAIAgents(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+
+	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
+	if chater == nil {
+		writeErrorResponse(w, "ai chat plugin not found")
+		return
+	}
+
+	agents := chater.GetAllAgents(ctx)
+	writeSuccessResponse(w, agents)
 }
 
 func handleAIMCPServerTools(w http.ResponseWriter, r *http.Request) {

@@ -20,6 +20,10 @@ class AIModel {
     data['Provider'] = provider;
     return data;
   }
+
+  static AIModel empty() {
+    return AIModel(name: "", provider: "");
+  }
 }
 
 class AIMCPTool {
@@ -31,6 +35,50 @@ class AIMCPTool {
   AIMCPTool.fromJson(Map<String, dynamic> json) {
     name = json['Name'] ?? "";
     description = json['Description'] ?? "";
+  }
+}
+
+class AIAgent {
+  late String id;
+  late String name;
+  late String prompt;
+  late AIModel model;
+  late List<String> tools;
+
+  AIAgent({
+    required this.id,
+    required this.name,
+    required this.prompt,
+    required this.model,
+    required this.tools,
+  });
+
+  AIAgent.fromJson(Map<String, dynamic> json) {
+    id = json['Id'] ?? "";
+    name = json['Name'] ?? "";
+    prompt = json['Prompt'] ?? "";
+    model = json['Model'] != null ? AIModel.fromJson(json['Model']) : AIModel(name: "", provider: "");
+    tools = json['Tools'] != null ? List<String>.from(json['Tools']) : [];
+  }
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    data['Id'] = id;
+    data['Name'] = name;
+    data['Prompt'] = prompt;
+    data['Model'] = model.toJson();
+    data['Tools'] = tools;
+    return data;
+  }
+
+  static AIAgent empty() {
+    return AIAgent(
+      id: "",
+      name: "",
+      prompt: "",
+      model: AIModel(name: "", provider: ""),
+      tools: [],
+    );
   }
 }
 
@@ -61,6 +109,7 @@ class WoxAIChatData {
   late int createdAt;
   late int updatedAt;
   List<String>? selectedTools;
+  String? agentId; // 使用agent时的ID
 
   WoxAIChatData({
     required this.id,
@@ -70,6 +119,7 @@ class WoxAIChatData {
     required this.createdAt,
     required this.updatedAt,
     this.selectedTools,
+    this.agentId,
   });
 
   static WoxAIChatData fromJson(Map<String, dynamic> json) {
@@ -87,6 +137,7 @@ class WoxAIChatData {
       model: json['Model'] != null ? AIModel.fromJson(json['Model']).obs : AIModel(name: "", provider: "").obs,
       createdAt: json['CreatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
       updatedAt: json['UpdatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
+      agentId: json['AgentId'],
     );
   }
 
@@ -105,6 +156,11 @@ class WoxAIChatData {
       json['SelectedTools'] = selectedTools;
     }
 
+    // Add agent ID if available
+    if (agentId != null && agentId!.isNotEmpty) {
+      json['AgentId'] = agentId;
+    }
+
     return json;
   }
 
@@ -117,6 +173,7 @@ class WoxAIChatData {
       createdAt: 0,
       updatedAt: 0,
       selectedTools: null,
+      agentId: null,
     );
   }
 }

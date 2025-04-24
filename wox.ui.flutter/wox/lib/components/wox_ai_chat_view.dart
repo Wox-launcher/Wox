@@ -149,6 +149,14 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                               fontSize: 14,
                               color: fromCssColor(woxTheme.queryBoxFontColor),
                             ),
+                            onChanged: (value) {
+                              if (value.endsWith('@')) {
+                                controller.currentChatSelectCategory.value = "agents";
+                                controller.showChatSelectPanel();
+                                controller.chatSelectListController.clearFilter(const UuidV4().generate());
+                                controller.updateChatSelectItems();
+                              }
+                            },
                           ),
                           // Input Box Toolbar (Send button, Tool icon)
                           Container(
@@ -170,6 +178,23 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                                       color: fromCssColor(woxTheme.actionItemActiveBackgroundColor),
                                       onPressed: () {
                                         controller.showToolsPanel();
+                                      },
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(
+                                        minWidth: 32,
+                                        minHeight: 32,
+                                      ),
+                                    )),
+                                // Agent selection button
+                                Obx(() => IconButton(
+                                      tooltip: tr('ui_ai_chat_select_agent'),
+                                      icon: Icon(Icons.smart_toy, size: 18, color: controller.currentAgentId.isNotEmpty ? getThemeTextColor() : getThemeTextColor().withAlpha(128)),
+                                      color: fromCssColor(woxTheme.actionItemActiveBackgroundColor),
+                                      onPressed: () {
+                                        controller.currentChatSelectCategory.value = "agents";
+                                        controller.showChatSelectPanel();
+                                        controller.chatSelectListController.clearFilter(const UuidV4().generate());
+                                        controller.updateChatSelectItems();
                                       },
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints(
@@ -252,7 +277,9 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                 Obx(() => Text(
                       controller.currentChatSelectCategory.isEmpty
                           ? tr("ui_ai_chat_options")
-                          : (controller.currentChatSelectCategory.value == "models" ? tr("ui_ai_chat_select_model_title") : tr("ui_ai_chat_configure_tools_title")),
+                          : (controller.currentChatSelectCategory.value == "models"
+                              ? tr("ui_ai_chat_select_model_title")
+                              : (controller.currentChatSelectCategory.value == "tools" ? tr("ui_ai_chat_configure_tools_title") : tr("ui_ai_chat_select_agent_title"))),
                       style: TextStyle(color: fromCssColor(woxTheme.actionContainerHeaderFontColor), fontSize: 16.0),
                     )),
                 const Divider(),
@@ -322,8 +349,9 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                           data: message.text,
                           selectable: true,
                           styleSheet: MarkdownStyleSheet.fromTheme(styleTheme).copyWith(
-                            a: const TextStyle(
+                            a: TextStyle(
                               decoration: TextDecoration.underline,
+                              color: fontColor,
                             ),
                           ),
                         ),

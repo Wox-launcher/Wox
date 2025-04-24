@@ -81,12 +81,21 @@ type Model struct {
 	Provider ProviderName
 }
 
+type AIAgent struct {
+	Id     string
+	Name   string
+	Prompt string
+	Model  Model
+	Tools  []string
+}
+
 type AIChatData struct {
 	Id            string
 	Title         string
 	Conversations []Conversation
 	Model         Model
-	SelectedTools []string
+	Tools         []string
+	AgentId       string
 
 	CreatedAt int64
 	UpdatedAt int64
@@ -95,6 +104,7 @@ type AIChatData struct {
 type AIChater interface {
 	Chat(ctx context.Context, aiChatData AIChatData, chatLoopCount int)
 	GetAllTools(ctx context.Context) []MCPTool
+	GetAllAgents(ctx context.Context) []AIAgent
 	IsAutoFocusToChatInputWhenOpenWithQueryHotkey(ctx context.Context) bool
 }
 

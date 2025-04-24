@@ -1,11 +1,13 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_ai_model_selector_view.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
+import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/colors.dart';
@@ -38,6 +40,10 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   List<PluginSettingValueTableColumn> columns = [];
   String? customValidationError;
 
+  // Store tool list to avoid repeated requests
+  List<AIMCPTool> allMCPTools = [];
+  bool isLoadingTools = true;
+
   @override
   void initState() {
     super.initState();
@@ -46,6 +52,11 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
       if (!element.hideInUpdate) {
         columns.add(element);
       }
+    }
+
+    // Check if there are any tool list type columns, if so, preload the tool list
+    if (columns.any((column) => column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAIMCPServerTools)) {
+      _loadAllTools();
     }
 
     widget.row.forEach((key, value) {
@@ -132,6 +143,25 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
 
   String tr(String key) {
     return Get.find<WoxSettingController>().tr(key);
+  }
+
+  // Load all tools list
+  Future<void> _loadAllTools() async {
+    try {
+      final tools = await WoxApi.instance.findAIMCPServerToolsAll();
+      if (mounted) {
+        setState(() {
+          allMCPTools = tools;
+          isLoadingTools = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isLoadingTools = false;
+        });
+      }
+    }
   }
 
   Future<void> _saveData(BuildContext context) async {
@@ -290,11 +320,73 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeSelectAIModel:
         return Expanded(
-          child: WoxAIModelSelectorView(
-            initialValue: getValue(column.key),
-            onModelSelected: (modelJson) {
-              updateValue(column.key, modelJson);
-              setState(() {});
+          child: SizedBox(
+            width: 400, // Limit width to prevent overflow
+            child: WoxAIModelSelectorView(
+              initialValue: getValue(column.key),
+              onModelSelected: (modelJson) {
+                updateValue(column.key, modelJson);
+                setState(() {});
+              },
+            ),
+          ),
+        );
+      case PluginSettingValueType.pluginSettingValueTableColumnTypeAIMCPServerTools:
+        return Expanded(
+          child: Builder(
+            builder: (context) {
+              if (isLoadingTools) {
+                return const Center(child: ProgressRing());
+              }
+
+              final selectedTools = getValue(column.key) is List ? getValue(column.key) : [];
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("${selectedTools.length} tools selected", style: TextStyle(color: getThemeTextColor())),
+                  const SizedBox(height: 8),
+                  Container(
+                    height: 200,
+                    width: 400, // Limit width to prevent overflow
+                    decoration: BoxDecoration(
+                      border: Border.all(color: getThemeSubTextColor().withAlpha(76)), // 0.3 * 255 ≈ 76
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: ListView.builder(
+                      itemCount: allMCPTools.length,
+                      itemBuilder: (context, index) {
+                        final tool = allMCPTools[index];
+                        final isSelected = selectedTools.contains(tool.name);
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
+                          child: Checkbox(
+                            checked: isSelected,
+                            onChanged: (value) {
+                              setState(() {
+                                if (value == true) {
+                                  if (!selectedTools.contains(tool.name)) {
+                                    selectedTools.add(tool.name);
+                                  }
+                                } else {
+                                  selectedTools.remove(tool.name);
+                                }
+                                updateValue(column.key, selectedTools);
+                              });
+                            },
+                            content: Text(
+                              tool.name, // Only display tool name
+                              style: TextStyle(color: getThemeTextColor()),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
             },
           ),
         );

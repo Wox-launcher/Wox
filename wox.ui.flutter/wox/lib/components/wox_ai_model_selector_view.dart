@@ -128,7 +128,13 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
             items: _providers
                 .map((provider) => ComboBoxItem<String>(
                       value: provider,
-                      child: Text(provider),
+                      child: SizedBox(
+                        width: 100, // Limit width to prevent overflow
+                        child: Text(
+                          provider,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ))
                 .toList(),
             onChanged: (provider) {
@@ -173,10 +179,17 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
                 )
               : ComboBox<String>(
                   value: _selectedModel?.name,
+                  popupColor: Colors.transparent,
                   items: getProviderModels()
                       .map((model) => ComboBoxItem<String>(
                             value: model.name,
-                            child: Text(model.name),
+                            child: SizedBox(
+                              width: 200, // Limit width to prevent overflow
+                              child: Text(
+                                model.name,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                           ))
                       .toList(),
                   onChanged: (modelName) {

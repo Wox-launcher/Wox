@@ -64,6 +64,9 @@ class WoxSettingController extends GetxController {
 
     if (key == "AIProviders") {
       Get.find<WoxAIChatController>().reloadAIModels();
+    } else if (key == "agents") {
+      // Refresh agent list when agent settings are updated
+      Get.find<WoxAIChatController>().fetchAvailableAgents();
     }
   }
 
@@ -262,6 +265,11 @@ class WoxSettingController extends GetxController {
     await WoxApi.instance.updatePluginSetting(pluginId, key, value);
     await refreshPlugin(pluginId, "update");
     Logger.instance.info(const UuidV4().generate(), 'plugin setting updated: $key=$value');
+
+    // Refresh agent list if agents setting is updated
+    if (key == "agents") {
+      Get.find<WoxAIChatController>().fetchAvailableAgents();
+    }
 
     // switch to the tab that was active before the update
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
