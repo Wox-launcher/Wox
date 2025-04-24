@@ -1,0 +1,38 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Wox Project General Coding Standards
+
+## General Guidelines
+
+* Avoid redundant comments, add necessary explanations only for complex logic
+* Variables, functions, and class names should be descriptive, clearly expressing their purpose
+* Keep code concise, avoid unnecessary complexity
+
+## Naming Conventions
+
+* **Go code**: Use camelCase, e.g., `pluginManager`, public methods start with an uppercase letter
+* **Python code**: Use snake_case, e.g., `plugin_manager`, class names use CamelCase with the first letter capitalized
+* **Dart code**: Use camelCase, class names start with an uppercase letter
+* **File names**: Use lowercase letters and underscores, e.g., `plugin_manager.py`
+
+## Error Handling
+
+* All potential error locations must have appropriate error handling
+* Error messages should be clear and understandable, helping to understand the problem
+* Avoid swallowing exceptions, ensure errors are properly logged or handled
+
+## Version Control
+
+* Run relevant tests before committing to ensure code works properly
+* Commit messages should clearly express the content of changes
+* Each commit should focus on a single feature or fix
+* Follow the project's branch management strategy
+
+## Internationalization
+
+* All user-facing text should support internationalization
+* Use the project's provided internationalization tools, don't hardcode text
+* Test appearance in different language environments

@@ -440,16 +440,15 @@ func (r *AIChatPlugin) loadAgents(ctx context.Context) ([]common.AIAgent, error)
 	}
 
 	gjson.Parse(agentsJson).ForEach(func(_, agent gjson.Result) bool {
-		gModel := gjson.Parse(agent.Get("Model").String())
+		gModel := gjson.Parse(agent.Get("model").String())
 		modelName := gModel.Get("Name").String()
 		modelProvider := gModel.Get("Provider").String()
 
 		agents = append(agents, common.AIAgent{
-			Id:     agent.Get("Id").String(),
-			Name:   agent.Get("Name").String(),
-			Prompt: agent.Get("Prompt").String(),
+			Name:   agent.Get("name").String(),
+			Prompt: agent.Get("prompt").String(),
 			Model:  common.Model{Name: modelName, Provider: common.ProviderName(modelProvider)},
-			Tools: lo.Map(agent.Get("Tools").Array(), func(tool gjson.Result, _ int) string {
+			Tools: lo.Map(agent.Get("tools").Array(), func(tool gjson.Result, _ int) string {
 				return tool.String()
 			}),
 		})
@@ -474,9 +473,9 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Selected tools: %v", aiChatData.Tools))
 	}
 
-	if aiChatData.AgentId != "" && chatLoopCount == 0 {
+	if aiChatData.AgentName != "" && chatLoopCount == 0 {
 		for _, agent := range r.agents {
-			if agent.Id == aiChatData.AgentId {
+			if agent.Name == aiChatData.AgentName {
 				r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Using agent: %s", agent.Name))
 
 				if agent.Prompt != "" {

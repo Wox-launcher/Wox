@@ -6,7 +6,6 @@ import 'package:wox/entity/wox_backup.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_lang.dart';
 import 'package:wox/entity/wox_plugin.dart';
-import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';

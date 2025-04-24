@@ -82,7 +82,6 @@ type Model struct {
 }
 
 type AIAgent struct {
-	Id     string
 	Name   string
 	Prompt string
 	Model  Model
@@ -95,7 +94,7 @@ type AIChatData struct {
 	Conversations []Conversation
 	Model         Model
 	Tools         []string
-	AgentId       string
+	AgentName     string
 
 	CreatedAt int64
 	UpdatedAt int64

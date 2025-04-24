@@ -39,14 +39,12 @@ class AIMCPTool {
 }
 
 class AIAgent {
-  late String id;
   late String name;
   late String prompt;
   late AIModel model;
   late List<String> tools;
 
   AIAgent({
-    required this.id,
     required this.name,
     required this.prompt,
     required this.model,
@@ -54,7 +52,6 @@ class AIAgent {
   });
 
   AIAgent.fromJson(Map<String, dynamic> json) {
-    id = json['Id'] ?? "";
     name = json['Name'] ?? "";
     prompt = json['Prompt'] ?? "";
     model = json['Model'] != null ? AIModel.fromJson(json['Model']) : AIModel(name: "", provider: "");
@@ -63,7 +60,6 @@ class AIAgent {
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
-    data['Id'] = id;
     data['Name'] = name;
     data['Prompt'] = prompt;
     data['Model'] = model.toJson();
@@ -73,7 +69,6 @@ class AIAgent {
 
   static AIAgent empty() {
     return AIAgent(
-      id: "",
       name: "",
       prompt: "",
       model: AIModel(name: "", provider: ""),
@@ -109,7 +104,7 @@ class WoxAIChatData {
   late int createdAt;
   late int updatedAt;
   List<String>? selectedTools;
-  String? agentId; // 使用agent时的ID
+  String? agentName;
 
   WoxAIChatData({
     required this.id,
@@ -119,7 +114,7 @@ class WoxAIChatData {
     required this.createdAt,
     required this.updatedAt,
     this.selectedTools,
-    this.agentId,
+    this.agentName,
   });
 
   static WoxAIChatData fromJson(Map<String, dynamic> json) {
@@ -137,7 +132,7 @@ class WoxAIChatData {
       model: json['Model'] != null ? AIModel.fromJson(json['Model']).obs : AIModel(name: "", provider: "").obs,
       createdAt: json['CreatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
       updatedAt: json['UpdatedAt'] ?? DateTime.now().millisecondsSinceEpoch,
-      agentId: json['AgentId'],
+      agentName: json['AgentName'],
     );
   }
 
@@ -156,9 +151,9 @@ class WoxAIChatData {
       json['SelectedTools'] = selectedTools;
     }
 
-    // Add agent ID if available
-    if (agentId != null && agentId!.isNotEmpty) {
-      json['AgentId'] = agentId;
+    // Add agent name if available
+    if (agentName != null && agentName!.isNotEmpty) {
+      json['AgentName'] = agentName;
     }
 
     return json;
@@ -173,7 +168,7 @@ class WoxAIChatData {
       createdAt: 0,
       updatedAt: 0,
       selectedTools: null,
-      agentId: null,
+      agentName: null,
     );
   }
 }

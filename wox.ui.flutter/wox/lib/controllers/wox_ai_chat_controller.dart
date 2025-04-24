@@ -36,7 +36,7 @@ class WoxAIChatController extends GetxController {
   // State for agents
   final RxList<AIAgent> availableAgents = <AIAgent>[].obs;
   final RxBool isLoadingAgents = false.obs;
-  final RxString currentAgentId = "".obs;
+  final RxString currentAgentName = "".obs;
 
   // Tool call expanded/collapsed states
   final RxMap<String, bool> toolCallExpandedStates = <String, bool>{}.obs;
@@ -84,6 +84,7 @@ class WoxAIChatController extends GetxController {
   // Update chat select items based on current category
   void updateChatSelectItems() {
     final List<WoxListItem<ChatSelectItem>> items = [];
+    Logger.instance.debug(const UuidV4().generate(), "AI: Updating chat select items for category: ${currentChatSelectCategory.value}");
 
     if (currentChatSelectCategory.isEmpty) {
       // Show main categories
@@ -237,56 +238,37 @@ class WoxAIChatController extends GetxController {
         ));
       }
     } else if (currentChatSelectCategory.value == "agents") {
-      // Add "No Agent" option
-      items.add(WoxListItem<ChatSelectItem>(
-        id: "no_agent",
-        icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "❌"),
-        title: "No Agent",
-        subTitle: "",
-        tails: currentAgentId.isEmpty ? [WoxListItemTail.image(WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "✅"))] : [],
-        isGroup: false,
-        data: ChatSelectItem(
-            id: "no_agent",
-            name: "No Agent",
-            icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "❌"),
-            isCategory: false,
-            children: [],
-            onExecute: (String traceId) {
-              setCurrentAgent("");
-              hideChatSelectPanel();
-            }),
-      ));
-
       // Display all available agents
       for (final agent in availableAgents) {
-        final bool isSelected = currentAgentId.value == agent.id;
-
+        final bool isSelected = currentAgentName.value == agent.name;
         items.add(WoxListItem<ChatSelectItem>(
-          id: agent.id,
+          id: agent.name,
           icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
           title: agent.name,
           subTitle: "Model: ${agent.model.name}",
           tails: isSelected ? [WoxListItemTail.image(WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "✅"))] : [],
           isGroup: false,
           data: ChatSelectItem(
-              id: agent.id,
+              id: agent.name,
               name: agent.name,
               icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖"),
               isCategory: false,
               children: [],
               onExecute: (String traceId) {
-                setCurrentAgent(agent.id);
+                setCurrentAgent(agent.name);
                 hideChatSelectPanel();
               }),
         ));
       }
     }
 
+    Logger.instance.debug(const UuidV4().generate(), "AI: Updating chat select list with ${items.length} items");
     chatSelectListController.updateItems(const UuidV4().generate(), items);
   }
 
   // Show chat select panel
   void showChatSelectPanel() {
+    Logger.instance.debug(const UuidV4().generate(), "AI: Showing chat select panel");
     isShowChatSelectPanel.value = true;
     currentChatSelectCategory.value = "";
     updateChatSelectItems();
@@ -310,6 +292,17 @@ class WoxAIChatController extends GetxController {
   void showToolsPanel() {
     showChatSelectPanel();
     currentChatSelectCategory.value = "tools";
+    updateChatSelectItems();
+
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      chatSelectListController.filterBoxFocusNode.requestFocus();
+    });
+  }
+
+  // Show agents panel directly
+  void showAgentsPanel() {
+    showChatSelectPanel();
+    currentChatSelectCategory.value = "agents";
     updateChatSelectItems();
 
     SchedulerBinding.instance.addPostFrameCallback((_) {
@@ -371,14 +364,19 @@ class WoxAIChatController extends GetxController {
     try {
       final agents = await WoxApi.instance.findAIAgents();
       availableAgents.assignAll(agents);
-      Logger.instance.debug(const UuidV4().generate(), "loaded ${agents.length} agents");
+      Logger.instance.debug(const UuidV4().generate(), "AI: loaded ${agents.length} agents");
+
+      // Log each agent for debugging
+      for (final agent in agents) {
+        Logger.instance.debug(const UuidV4().generate(), "AI: agent details - Name: ${agent.name}, Model: ${agent.model.name}");
+      }
 
       // If currently displaying agent selection panel, update the list
       if (isShowChatSelectPanel.value && currentChatSelectCategory.value == "agents") {
         updateChatSelectItems();
       }
     } catch (e, s) {
-      Logger.instance.error(const UuidV4().generate(), 'Error fetching AI agents: $e $s');
+      Logger.instance.error(const UuidV4().generate(), 'AI: Error fetching AI agents: $e $s');
       availableAgents.clear();
     } finally {
       isLoadingAgents.value = false;
@@ -386,19 +384,44 @@ class WoxAIChatController extends GetxController {
   }
 
   // Method to set current agent
-  void setCurrentAgent(String agentId) {
-    currentAgentId.value = agentId;
-    aiChatData.value.agentId = agentId;
+  void setCurrentAgent(String agentName) {
+    Logger.instance.debug(const UuidV4().generate(), "AI: Setting current agent to: $agentName");
+    currentAgentName.value = agentName;
+    aiChatData.value.agentName = agentName;
 
     // If an agent is selected, try to get agent details
-    if (agentId.isNotEmpty) {
+    if (agentName.isNotEmpty) {
+      bool agentFound = false;
       for (var agent in availableAgents) {
-        if (agent.id == agentId) {
+        if (agent.name == agentName) {
+          Logger.instance.debug(const UuidV4().generate(), "AI: Found agent: ${agent.name}, setting model to ${agent.model.name} and tools to ${agent.tools.length} tools");
           aiChatData.value.model.value = agent.model;
           aiChatData.value.selectedTools = agent.tools;
+          agentFound = true;
+          break;
         }
       }
+      if (!agentFound) {
+        Logger.instance.error(const UuidV4().generate(), "AI: Agent with name $agentName not found in available agents");
+      }
+    } else {
+      Logger.instance.debug(const UuidV4().generate(), "AI: No agent selected (empty agentName)");
     }
+  }
+
+  // Get the name of the current agent
+  String getCurrentAgentName() {
+    if (currentAgentName.isEmpty) {
+      return "";
+    }
+
+    for (var agent in availableAgents) {
+      if (agent.name == currentAgentName.value) {
+        return agent.name;
+      }
+    }
+
+    return "";
   }
 
   void sendMessage() {
@@ -425,7 +448,7 @@ class WoxAIChatController extends GetxController {
       for (final agent in availableAgents) {
         if (agent.name.toLowerCase() == agentName.toLowerCase()) {
           Logger.instance.debug(const UuidV4().generate(), "Found agent: ${agent.name}");
-          setCurrentAgent(agent.id);
+          setCurrentAgent(agent.name);
           break;
         }
       }
