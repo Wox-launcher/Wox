@@ -108,6 +108,13 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 							},
 						},
 						{
+							Key:     "icon",
+							Label:   "i18n:plugin_ai_chat_agent_icon",
+							Type:    definition.PluginSettingValueTableColumnTypeWoxImage,
+							Width:   60,
+							Tooltip: "i18n:plugin_ai_chat_agent_icon_tooltip",
+						},
+						{
 							Key:          "prompt",
 							Label:        "i18n:plugin_ai_chat_agent_prompt",
 							Type:         definition.PluginSettingValueTableColumnTypeText,
@@ -300,7 +307,7 @@ func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []
 						r.Chat(ctx, common.AIChatData{
 							Id:    uuid.NewString(),
 							Title: query.RawQuery,
-							Model: r.getDefaultModel(),
+							Model: r.GetDefaultModel(ctx),
 							Conversations: []common.Conversation{
 								{
 									Id:        uuid.NewString(),
@@ -334,7 +341,7 @@ func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []
 	}
 }
 
-func (r *AIChatPlugin) getDefaultModel() common.Model {
+func (r *AIChatPlugin) GetDefaultModel(ctx context.Context) common.Model {
 	model := r.api.GetSetting(context.Background(), "default_model")
 	if model != "" {
 		var m common.Model
@@ -444,6 +451,23 @@ func (r *AIChatPlugin) loadAgents(ctx context.Context) ([]common.AIAgent, error)
 		modelName := gModel.Get("Name").String()
 		modelProvider := gModel.Get("Provider").String()
 
+		// Parse icon if available
+		var icon common.WoxImage
+		iconJson := agent.Get("icon").String()
+		if iconJson != "" {
+			gIcon := gjson.Parse(iconJson)
+			icon = common.WoxImage{
+				ImageType: gIcon.Get("ImageType").String(),
+				ImageData: gIcon.Get("ImageData").String(),
+			}
+		} else {
+			// Default icon if not set
+			icon = common.WoxImage{
+				ImageType: common.WoxImageTypeEmoji,
+				ImageData: "🤖",
+			}
+		}
+
 		agents = append(agents, common.AIAgent{
 			Name:   agent.Get("name").String(),
 			Prompt: agent.Get("prompt").String(),
@@ -451,6 +475,7 @@ func (r *AIChatPlugin) loadAgents(ctx context.Context) ([]common.AIAgent, error)
 			Tools: lo.Map(agent.Get("tools").Array(), func(tool gjson.Result, _ int) string {
 				return tool.String()
 			}),
+			Icon: icon,
 		})
 		return true
 	})
@@ -505,18 +530,6 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 	r.appendOrUpdateChatData(aiChatData)
 	r.saveChats(ctx)
 
-	// summarize the chat
-	summarizeIndex := []int{2, 3, 4, 10}
-	for _, index := range summarizeIndex {
-		nonToolConversationCount := lo.CountBy(aiChatData.Conversations, func(conversation common.Conversation) bool {
-			return conversation.Role != common.ConversationRoleTool
-		})
-		if nonToolConversationCount == index {
-			r.summarizeChat(ctx, aiChatData)
-			break
-		}
-	}
-
 	var tools []common.MCPTool
 	if len(aiChatData.Tools) > 0 {
 		tools = lo.Filter(r.mcpToolsMap, func(tool common.MCPTool, _ int) bool {
@@ -548,6 +561,8 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 			})
 			r.appendOrUpdateChatData(aiChatData)
 			r.saveChats(ctx)
+
+			r.summaryTitleIfNecessary(ctx, aiChatData)
 		} else if streamResult.Type == common.ChatStreamTypeError {
 			responseText = fmt.Sprintf("CHAT ERR: %s", streamResult.Data)
 			r.appendOrUpdateConversation(&aiChatData, common.Conversation{
@@ -596,6 +611,20 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 	}
 }
 
+func (r *AIChatPlugin) summaryTitleIfNecessary(ctx context.Context, aiChatData common.AIChatData) {
+	summarizeIndex := []int{2, 3, 4, 10}
+	for _, index := range summarizeIndex {
+		nonToolConversationCount := lo.CountBy(aiChatData.Conversations, func(conversation common.Conversation) bool {
+			return conversation.Role != common.ConversationRoleTool
+		})
+		if nonToolConversationCount == index {
+			r.summarizeChat(ctx, aiChatData)
+			break
+		}
+	}
+
+}
+
 func (r *AIChatPlugin) appendOrUpdateConversation(aiChatData *common.AIChatData, conversation common.Conversation) {
 	for i := range aiChatData.Conversations {
 		if aiChatData.Conversations[i].Id == conversation.Id {
@@ -633,7 +662,7 @@ func (r *AIChatPlugin) getNewChatPreviewData(ctx context.Context) plugin.QueryRe
 	chatData.CreatedAt = util.GetSystemTimestamp()
 	chatData.UpdatedAt = util.GetSystemTimestamp()
 	chatData.Conversations = []common.Conversation{}
-	chatData.Model = r.getDefaultModel()
+	chatData.Model = r.GetDefaultModel(ctx)
 
 	previewData, err := json.Marshal(chatData)
 	if err != nil {
@@ -697,11 +726,22 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results [
 			continueChatText = "Start Chat"
 		}
 
+		// use agent icon
+		resultIcon := aiChatIcon
+		if chat.AgentName != "" {
+			for _, agent := range r.agents {
+				if agent.Name == chat.AgentName {
+					resultIcon = agent.Icon
+					break
+				}
+			}
+		}
+
 		group, groupScore := r.getResultGroup(ctx, chat)
 		results = append(results, plugin.QueryResult{
 			Id:          resultId,
 			Title:       chat.Title,
-			Icon:        aiChatIcon,
+			Icon:        resultIcon,
 			ContextData: chat.Id,
 			Preview: plugin.WoxPreview{
 				PreviewType:    plugin.WoxPreviewTypeChat,

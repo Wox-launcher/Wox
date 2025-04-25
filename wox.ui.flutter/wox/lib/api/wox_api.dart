@@ -164,6 +164,10 @@ class WoxApi {
     return await WoxHttpUtil.instance.postData("/ai/agents", null);
   }
 
+  Future<AIModel> findDefaultAIModel() async {
+    return await WoxHttpUtil.instance.postData("/ai/model/default", null);
+  }
+
   Future<void> sendChatRequest(WoxAIChatData data) async {
     return await WoxHttpUtil.instance.postData("/ai/chat", {
       "chatData": data.toJson(),

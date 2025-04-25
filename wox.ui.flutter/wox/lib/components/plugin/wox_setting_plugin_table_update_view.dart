@@ -1,14 +1,21 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_ai_model_selector_view.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
+import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/entity/wox_image.dart';
+import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:get/get.dart';
@@ -143,6 +150,157 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
 
   String tr(String key) {
     return Get.find<WoxSettingController>().tr(key);
+  }
+
+  Widget _buildWoxImageEditor(PluginSettingValueTableColumn column) {
+    // 获取当前图像值
+    String imageJson = getValue(column.key);
+    WoxImage? currentImage;
+
+    if (imageJson.isNotEmpty) {
+      try {
+        Map<String, dynamic> imageData = json.decode(imageJson);
+        currentImage = WoxImage.fromJson(imageData);
+      } catch (e) {
+        // 解析失败，使用默认图像
+        currentImage = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖");
+      }
+    } else {
+      // 默认使用机器人表情
+      currentImage = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖");
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 显示当前图像
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            border: Border.all(color: getThemeSubTextColor().withAlpha(76)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: WoxImageView(
+              woxImage: currentImage,
+              width: 80,
+              height: 80,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // 图像类型选择
+        Row(
+          children: [
+            // 表情选择
+            Button(
+              child: Text(tr('ui_emoji'), style: TextStyle(color: getThemeTextColor())),
+              onPressed: () async {
+                // 显示表情选择对话框
+                final emojiResult = await _showEmojiPicker(context);
+                if (emojiResult != null && emojiResult.isNotEmpty) {
+                  final newImage = WoxImage(
+                    imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code,
+                    imageData: emojiResult,
+                  );
+                  updateValue(column.key, json.encode(newImage.toJson()));
+                  setState(() {});
+                }
+              },
+            ),
+            const SizedBox(width: 8),
+
+            // 上传图片
+            Button(
+              child: Text(tr('ui_upload_image'), style: TextStyle(color: getThemeTextColor())),
+              onPressed: () async {
+                // 使用FilePicker直接选择图片
+                final result = await FilePicker.platform.pickFiles(
+                  type: FileType.image,
+                  allowMultiple: false,
+                );
+
+                if (result != null && result.files.isNotEmpty && result.files.first.path != null) {
+                  final filePath = result.files.first.path!;
+                  final file = File(filePath);
+                  if (await file.exists()) {
+                    try {
+                      // 读取文件并转换为base64
+                      final bytes = await file.readAsBytes();
+                      final base64Image = base64Encode(bytes);
+
+                      final newImage = WoxImage(
+                        imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code,
+                        imageData: "data:image/png;base64,$base64Image",
+                      );
+
+                      updateValue(column.key, json.encode(newImage.toJson()));
+                      setState(() {});
+                    } catch (e) {
+                      // 处理错误
+                    }
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<String?> _showEmojiPicker(BuildContext context) async {
+    // 常用表情列表
+    final commonEmojis = ["🤖", "👨‍💻", "👩‍💻", "🧠", "💡", "🔍", "📊", "📈", "📝", "🛠️", "⚙️", "🧩", "🎮", "🎯", "🏆", "🎨", "🎭", "🎬", "📱", "💻"];
+
+    String? selectedEmoji;
+
+    await material.showDialog(
+      context: context,
+      builder: (context) {
+        return material.AlertDialog(
+          title: Text(tr('ui_select_emoji')),
+          content: SizedBox(
+            width: 300,
+            height: 200,
+            child: material.GridView.builder(
+              gridDelegate: const material.SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 5,
+                childAspectRatio: 1,
+              ),
+              itemCount: commonEmojis.length,
+              itemBuilder: (context, index) {
+                return material.InkWell(
+                  onTap: () {
+                    selectedEmoji = commonEmojis[index];
+                    Navigator.pop(context);
+                  },
+                  child: Center(
+                    child: Text(
+                      commonEmojis[index],
+                      style: const TextStyle(fontSize: 24),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            material.TextButton(
+              child: Text(tr('ui_cancel')),
+              onPressed: () {
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        );
+      },
+    );
+
+    return selectedEmoji;
   }
 
   // Load all tools list
@@ -391,7 +549,9 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           ),
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeWoxImage:
-        return const Text("wox image...");
+        return Expanded(
+          child: _buildWoxImageEditor(column),
+        );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeTextList:
         var columnValues = getValue(column.key);
         return Expanded(

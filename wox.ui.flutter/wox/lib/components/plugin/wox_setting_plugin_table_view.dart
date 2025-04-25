@@ -204,7 +204,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
         return const SizedBox.shrink();
       }
 
-      final woxImage = WoxImage.fromJson(value);
+      final woxImage = WoxImage.fromJson(jsonDecode(value));
       return Row(
         children: [
           WoxImageView(woxImage: woxImage, width: 24, height: 24),

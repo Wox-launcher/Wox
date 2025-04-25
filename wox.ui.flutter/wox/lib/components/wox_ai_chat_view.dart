@@ -109,7 +109,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                           ),
 
                         // Agent
-                        if (controller.currentAgentName.isNotEmpty)
+                        if (controller.aiChatData.value.agentName != null && controller.aiChatData.value.agentName!.isNotEmpty)
                           Row(
                             children: [
                               Icon(
@@ -127,7 +127,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                                 ),
                               ),
                               Text(
-                                controller.currentAgentName.isEmpty ? tr("ui_ai_chat_select_agent") : controller.currentAgentName.value,
+                                controller.aiChatData.value.agentName ?? tr("ui_ai_chat_select_agent"),
                                 style: TextStyle(
                                   color: fromCssColor(woxTheme.previewPropertyTitleColor),
                                   fontSize: 12,
@@ -259,8 +259,11 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                                 // Agent selection button
                                 Obx(() => IconButton(
                                       tooltip: tr('ui_ai_chat_select_agent'),
-                                      icon:
-                                          Icon(Icons.smart_toy, size: 18, color: controller.currentAgentName.isNotEmpty ? getThemeTextColor() : getThemeTextColor().withAlpha(128)),
+                                      icon: Icon(Icons.smart_toy,
+                                          size: 18,
+                                          color: (controller.aiChatData.value.agentName != null && controller.aiChatData.value.agentName!.isNotEmpty)
+                                              ? getThemeTextColor()
+                                              : getThemeTextColor().withAlpha(128)),
                                       color: fromCssColor(woxTheme.actionItemActiveBackgroundColor),
                                       onPressed: () {
                                         controller.showAgentsPanel();
@@ -450,12 +453,47 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                 ),
                 Padding(
                   padding: const EdgeInsets.only(left: 4, right: 4),
-                  child: Text(
-                    controller.formatTimestamp(message.timestamp),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor),
-                    ),
+                  child: Row(
+                    mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+                    children: [
+                      if (!isUser) ...[
+                        Text(
+                          controller.formatTimestamp(message.timestamp),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          "•", // 添加圆点分隔符
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        _buildInlineActionButtons(message, false),
+                      ] else ...[
+                        _buildInlineActionButtons(message, true),
+                        const SizedBox(width: 12),
+                        Text(
+                          "•", // 添加圆点分隔符
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          controller.formatTimestamp(message.timestamp),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],
@@ -632,30 +670,113 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
     );
   }
 
+  Widget _buildInlineActionButtons(WoxAIChatConversation message, bool isUser) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Copy button
+        Tooltip(
+          message: tr('ui_ai_chat_copy_message'),
+          child: InkWell(
+            onTap: () => controller.copyMessageContent(message),
+            child: Icon(
+              Icons.copy,
+              size: 14,
+              color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Refresh button (only for AI messages) or Edit button (only for user messages)
+        if (!isUser)
+          Tooltip(
+            message: tr('ui_ai_chat_regenerate_response'),
+            child: InkWell(
+              onTap: () => controller.regenerateAIResponse(message.id),
+              child: Icon(
+                Icons.refresh,
+                size: 14,
+                color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor),
+              ),
+            ),
+          ),
+        if (isUser)
+          Tooltip(
+            message: tr('ui_ai_chat_edit_message'),
+            child: InkWell(
+              onTap: () => controller.editUserMessage(message),
+              child: Icon(
+                Icons.edit,
+                size: 14,
+                color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildAvatar(WoxAIChatConversation message) {
     final isUser = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value;
 
-    Color avatarColor = isUser ? fromCssColor(woxTheme.actionItemActiveBackgroundColor) : fromCssColor(woxTheme.queryBoxBackgroundColor);
+    // 如果是用户消息，显示用户头像
+    if (isUser) {
+      return Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: fromCssColor(woxTheme.actionItemActiveBackgroundColor),
+          shape: BoxShape.circle,
+        ),
+        child: Center(
+          child: Icon(
+            Icons.person,
+            size: 20,
+            color: fromCssColor(woxTheme.actionItemActiveFontColor),
+          ),
+        ),
+      );
+    }
 
+    // 如果是AI消息，并且使用了agent，显示agent头像
+    if (controller.aiChatData.value.agentName != null && controller.aiChatData.value.agentName!.isNotEmpty) {
+      // 查找当前agent
+      final currentAgent = controller.availableAgents.firstWhere(
+        (agent) => agent.name == controller.aiChatData.value.agentName,
+        orElse: () => AIAgent.empty(),
+      );
+
+      // 如果agent有自定义头像，使用它
+      if (currentAgent.name.isNotEmpty && currentAgent.icon.imageData.isNotEmpty) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: SizedBox(
+            width: 36,
+            height: 36,
+            child: WoxImageView(
+              woxImage: currentAgent.icon,
+              width: 36,
+              height: 36,
+            ),
+          ),
+        );
+      }
+    }
+
+    // 默认AI头像
     return Container(
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        color: avatarColor,
+        color: fromCssColor(woxTheme.queryBoxBackgroundColor),
         shape: BoxShape.circle,
       ),
       child: Center(
-        child: isUser
-            ? Icon(
-                Icons.person,
-                size: 20,
-                color: fromCssColor(woxTheme.actionItemActiveFontColor),
-              )
-            : Icon(
-                Icons.smart_toy_outlined,
-                size: 20,
-                color: fromCssColor(woxTheme.queryBoxFontColor),
-              ),
+        child: Icon(
+          Icons.smart_toy_outlined,
+          size: 20,
+          color: fromCssColor(woxTheme.queryBoxFontColor),
+        ),
       ),
     );
   }

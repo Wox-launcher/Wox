@@ -1,7 +1,3 @@
-import 'package:get/get.dart';
-import 'package:wox/entity/wox_ai.dart';
-import 'package:wox/entity/wox_image.dart';
-import 'package:wox/enums/wox_ai_conversation_role_enum.dart';
 import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
 import 'package:wox/utils/wox_http_util.dart';

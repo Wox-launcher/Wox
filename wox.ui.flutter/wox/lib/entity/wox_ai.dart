@@ -43,19 +43,22 @@ class AIAgent {
   late String prompt;
   late AIModel model;
   late List<String> tools;
+  late WoxImage icon;
 
   AIAgent({
     required this.name,
     required this.prompt,
     required this.model,
     required this.tools,
-  });
+    WoxImage? icon,
+  }) : icon = icon ?? WoxImage(imageType: "emoji", imageData: "🤖");
 
   AIAgent.fromJson(Map<String, dynamic> json) {
     name = json['Name'] ?? "";
     prompt = json['Prompt'] ?? "";
     model = json['Model'] != null ? AIModel.fromJson(json['Model']) : AIModel(name: "", provider: "");
     tools = json['Tools'] != null ? List<String>.from(json['Tools']) : [];
+    icon = json['Icon'] != null ? WoxImage.fromJson(json['Icon']) : WoxImage(imageType: "emoji", imageData: "🤖");
   }
 
   Map<String, dynamic> toJson() {
@@ -64,6 +67,7 @@ class AIAgent {
     data['Prompt'] = prompt;
     data['Model'] = model.toJson();
     data['Tools'] = tools;
+    data['Icon'] = icon.toJson();
     return data;
   }
 
@@ -73,6 +77,7 @@ class AIAgent {
       prompt: "",
       model: AIModel(name: "", provider: ""),
       tools: [],
+      icon: WoxImage(imageType: "emoji", imageData: "🤖"),
     );
   }
 }

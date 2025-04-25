@@ -1,3 +1,5 @@
+import 'package:get/get.dart';
+import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_backup.dart';
 import 'package:wox/entity/wox_image.dart';
@@ -8,62 +10,79 @@ import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
 
 class EntityFactory {
+  // 获取翻译
+  static String tr(String key) {
+    try {
+      return Get.find<WoxSettingController>().tr(key);
+    } catch (e) {
+      // 如果WoxSettingController还未初始化，直接返回key
+      return key;
+    }
+  }
+
   static T generateOBJ<T>(dynamic json) {
     // Logger.instance.debug(const UuidV4().generate(), "try to unmarshal post data, datatype=${T.toString()}");
-    if (T.toString() == "WoxTheme") {
-      return WoxTheme.fromJson(json) as T;
-    } else if (T.toString() == "WoxSetting") {
-      return WoxSetting.fromJson(json) as T;
-    } else if (T.toString() == "WoxPreview") {
-      return WoxPreview.fromJson(json) as T;
-    } else if (T.toString() == "WoxImage") {
-      return WoxImage.fromJson(json) as T;
-    } else if (T.toString() == "WoxLang") {
-      return WoxLang.fromJson(json) as T;
-    } else if (T.toString() == "PluginDetail") {
-      return PluginDetail.fromJson(json) as T;
-    } else if (T.toString() == "List<PluginDetail>") {
-      if (json == null) {
-        return <PluginDetail>[] as T;
+    try {
+      if (T.toString() == "WoxTheme") {
+        return WoxTheme.fromJson(json) as T;
+      } else if (T.toString() == "WoxSetting") {
+        return WoxSetting.fromJson(json) as T;
+      } else if (T.toString() == "WoxPreview") {
+        return WoxPreview.fromJson(json) as T;
+      } else if (T.toString() == "WoxImage") {
+        return WoxImage.fromJson(json) as T;
+      } else if (T.toString() == "WoxLang") {
+        return WoxLang.fromJson(json) as T;
+      } else if (T.toString() == "PluginDetail") {
+        return PluginDetail.fromJson(json) as T;
+      } else if (T.toString() == "AIModel") {
+        return AIModel.fromJson(json) as T;
+      } else if (T.toString() == "List<PluginDetail>") {
+        if (json == null) {
+          return <PluginDetail>[] as T;
+        }
+        return (json as List).map((e) => PluginDetail.fromJson(e)).toList() as T;
+      } else if (T.toString() == "List<WoxTheme>") {
+        if (json == null) {
+          return <WoxTheme>[] as T;
+        }
+        return (json as List).map((e) => WoxTheme.fromJson(e)).toList() as T;
+      } else if (T.toString() == "List<AIModel>") {
+        if (json == null) {
+          return <AIModel>[] as T;
+        }
+        return (json as List).map((e) => AIModel.fromJson(e)).toList() as T;
+      } else if (T.toString() == "List<WoxLang>") {
+        if (json == null) {
+          return <WoxLang>[] as T;
+        }
+        return (json as List).map((e) => WoxLang.fromJson(e)).toList() as T;
+      } else if (T.toString() == "List<WoxBackup>") {
+        if (json == null) {
+          return <WoxBackup>[] as T;
+        }
+        return (json as List).map((e) => WoxBackup.fromJson(e)).toList() as T;
+      } else if (T.toString() == "List<AIMCPTool>") {
+        if (json == null) {
+          return <AIMCPTool>[] as T;
+        }
+        return (json as List).map((e) => AIMCPTool.fromJson(e)).toList() as T;
+      } else if (T.toString() == "List<AIProviderInfo>") {
+        if (json == null) {
+          return <AIProviderInfo>[] as T;
+        }
+        return (json as List).map((e) => AIProviderInfo.fromJson(e)).toList() as T;
+      } else if (T.toString() == "List<AIAgent>") {
+        if (json == null) {
+          return <AIAgent>[] as T;
+        }
+        return (json as List).map((e) => AIAgent.fromJson(e)).toList() as T;
+      } else {
+        return json as T;
       }
-      return (json as List).map((e) => PluginDetail.fromJson(e)).toList() as T;
-    } else if (T.toString() == "List<WoxTheme>") {
-      if (json == null) {
-        return <WoxTheme>[] as T;
-      }
-      return (json as List).map((e) => WoxTheme.fromJson(e)).toList() as T;
-    } else if (T.toString() == "List<AIModel>") {
-      if (json == null) {
-        return <AIModel>[] as T;
-      }
-      return (json as List).map((e) => AIModel.fromJson(e)).toList() as T;
-    } else if (T.toString() == "List<WoxLang>") {
-      if (json == null) {
-        return <WoxLang>[] as T;
-      }
-      return (json as List).map((e) => WoxLang.fromJson(e)).toList() as T;
-    } else if (T.toString() == "List<WoxBackup>") {
-      if (json == null) {
-        return <WoxBackup>[] as T;
-      }
-      return (json as List).map((e) => WoxBackup.fromJson(e)).toList() as T;
-    } else if (T.toString() == "List<AIMCPTool>") {
-      if (json == null) {
-        return <AIMCPTool>[] as T;
-      }
-      return (json as List).map((e) => AIMCPTool.fromJson(e)).toList() as T;
-    } else if (T.toString() == "List<AIProviderInfo>") {
-      if (json == null) {
-        return <AIProviderInfo>[] as T;
-      }
-      return (json as List).map((e) => AIProviderInfo.fromJson(e)).toList() as T;
-    } else if (T.toString() == "List<AIAgent>") {
-      if (json == null) {
-        return <AIAgent>[] as T;
-      }
-      return (json as List).map((e) => AIAgent.fromJson(e)).toList() as T;
-    } else {
-      return json as T;
+    } catch (e) {
+      // 添加错误处理并使用国际化
+      throw Exception(tr('entity_factory_parse_error').replaceAll('%s', T.toString()));
     }
   }
 }
