@@ -141,7 +141,7 @@
   "ui_ai_model_selector_cancel": "Cancelar",
   "ui_ai_model_selector_save": "Salvar",
   "ui_app_width": "Largura da janela",
-  "ui_app_width_tips": "Ajuste a largura da janela do Wox (800-1600 pixels)",
+  "ui_app_width_tips": "Ajuste a largura da janela do Wox",
   "ui_max_result_count": "Contagem máxima de resultados",
   "ui_max_result_count_tips": "Defina o número máximo de resultados a serem exibidos na lista (5-15 itens)",
   "ui_ai_chat_select_model": "Por favor, selecione um modelo",

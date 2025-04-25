@@ -58,9 +58,9 @@ class WoxSettingUIView extends WoxSettingBaseView {
                 Expanded(
                   child: Slider(
                     value: controller.woxSetting.value.appWidth.toDouble(),
-                    min: 800,
+                    min: 600,
                     max: 1600,
-                    divisions: 8,
+                    divisions: 20,
                     onChanged: (double value) {
                       controller.updateConfig("AppWidth", value.toInt().toString());
                     },

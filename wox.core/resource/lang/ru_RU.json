@@ -141,7 +141,7 @@
   "ui_ai_model_selector_cancel": "Отмена",
   "ui_ai_model_selector_save": "Сохранить",
   "ui_app_width": "Ширина окна",
-  "ui_app_width_tips": "Настройте ширину окна Wox (800-1600 пикселей)",
+  "ui_app_width_tips": "Настройте ширину окна Wox",
   "ui_max_result_count": "Максимальное количество результатов",
   "ui_max_result_count_tips": "Установите максимальное количество результатов, отображаемых в списке (5-15 элементов)",
   "ui_ai_chat_select_model": "Пожалуйста, выберите модель",

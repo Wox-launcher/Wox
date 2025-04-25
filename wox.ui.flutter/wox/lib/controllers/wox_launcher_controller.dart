@@ -226,8 +226,19 @@ class WoxLauncherController extends GetxController {
     }
 
     await windowManager.show();
-    await windowManager.focus();
-    focusQueryBox(selectAll: params.selectAll);
+
+    if (Platform.isWindows) {
+      // https://github.com/Wox-launcher/Wox/issues/4197
+      // On Windows, it may be necessary to add a delay before focusing to correctly focus on the window, similar to hideApp.
+      // But, this is not very sure, maybe if we found the root cause, we can remove this delay
+      Future.delayed(const Duration(milliseconds: 50), () async {
+        await windowManager.focus();
+        focusQueryBox(selectAll: params.selectAll);
+      });
+    } else {
+      await windowManager.focus();
+      focusQueryBox(selectAll: params.selectAll);
+    }
 
     WoxApi.instance.onShow();
   }
