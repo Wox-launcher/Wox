@@ -1,12 +1,12 @@
 {
   "Version": "2.0.0-beta.2",
-  "MacArm64DownloadUrl": "",
-  "MacArm64Checksum": "",
-  "MacAmd64DownloadUrl": "",
-  "MacAmd64Checksum": "",
-  "WindowsDownloadUrl": "",
-  "WindowsChecksum": "",
-  "LinuxDownloadUrl": "",
-  "LinuxChecksum": "",
-  "ReleaseNotes": ""
+  "MacArm64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.0-beta.2/wox-mac-arm64.dmg",
+  "MacArm64Checksum": "8e7adcdcdcd907178e6694c1f4de95fa",
+  "MacAmd64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.0-beta.2/wox-mac-amd64.dmg",
+  "MacAmd64Checksum": "d6087212bcc1117a5e5b120bb4abad6d",
+  "WindowsDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.0-beta.2/wox-windows-amd64.exe",
+  "WindowsChecksum": "866c8796315567fd270f7e55af4aff92",
+  "LinuxDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.0-beta.2/wox-linux-amd64",
+  "LinuxChecksum": "881e387d92dc6620a97ce0617f8be96b",
+  "ReleaseNotes": "1. Added Chat plugin, you can now chat with AI directly through this plugin, supporting MCP. \n 2. The settings interface now follows the theme color. \n 3. Added double modifiers hotkey as a shortcut, E.g. double-click ctrl key."
 }
