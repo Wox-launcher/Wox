@@ -49,7 +49,7 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) (results [
 			icon = plugin.CorrectIcon
 		}
 
-		results = append(results, plugin.QueryResult{
+		result := plugin.QueryResult{
 			Title:    check.Name,
 			SubTitle: check.Description,
 			Icon:     icon,
@@ -61,7 +61,12 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) (results [
 					},
 				},
 			},
-		})
+		}
+
+		// Add preview
+		result.Preview = check.Preview
+
+		results = append(results, result)
 	}
 
 	return results

@@ -18,8 +18,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 )
 
-var ErrUpdateInProgress = errors.New("update already in progress")
-
 type UpdateStatus string
 
 const (
@@ -30,9 +28,7 @@ const (
 	UpdateStatusError       UpdateStatus = "error"       // Error occurred during update
 )
 
-var (
-	currentUpdateInfo = UpdateInfo{Status: UpdateStatusNone}
-)
+var currentUpdateInfo = UpdateInfo{Status: UpdateStatusNone} // global variable to store update info
 
 const versionManifestUrl = "https://raw.githubusercontent.com/Wox-launcher/Wox/master/updater.json"
 
@@ -66,8 +62,47 @@ type UpdateInfo struct {
 	HasUpdate      bool // Whether there is an update available
 }
 
-func CheckUpdate(ctx context.Context) UpdateInfo {
+// StartAutoUpdateChecker starts a background task that periodically checks for updates
+func StartAutoUpdateChecker(ctx context.Context) {
+	util.Go(ctx, "auto-update-checker", func() {
+		newCtx := util.NewTraceContext()
+		checkForUpdates(newCtx)
+		for range time.NewTicker(time.Hour * 6).C {
+			checkForUpdates(newCtx)
+		}
+	})
+}
+
+func checkForUpdates(ctx context.Context) {
 	util.GetLogger().Info(ctx, "start checking for updates")
+
+	setting := setting.GetSettingManager().GetWoxSetting(ctx)
+	if setting != nil && !setting.EnableAutoUpdate {
+		util.GetLogger().Info(ctx, "auto update is disabled, skipping")
+		return
+	}
+
+	if currentUpdateInfo.Status == UpdateStatusDownloading {
+		util.GetLogger().Info(ctx, "update is downloading, skipping")
+		return
+	}
+
+	if currentUpdateInfo.Status == UpdateStatusReady && currentUpdateInfo.DownloadedPath != "" {
+		util.GetLogger().Info(ctx, "update is ready to install, skipping")
+		return
+	}
+
+	currentUpdateInfo = parseLatestVersion(ctx)
+	if !currentUpdateInfo.HasUpdate {
+		util.GetLogger().Info(ctx, "no update available, skipping")
+		return
+	}
+
+	downloadUpdate(ctx)
+}
+
+func parseLatestVersion(ctx context.Context) UpdateInfo {
+	util.GetLogger().Info(ctx, "start parsing lastest version")
 	latestVersion, err := getLatestVersion(ctx)
 	if err != nil {
 		util.GetLogger().Error(ctx, err.Error())
@@ -95,7 +130,6 @@ func CheckUpdate(ctx context.Context) UpdateInfo {
 		}
 	}
 
-	// Create base UpdateInfo with common fields
 	info := UpdateInfo{
 		CurrentVersion: existingVersion.String(),
 		LatestVersion:  newVersion.String(),
@@ -163,61 +197,25 @@ func GetUpdateInfo() UpdateInfo {
 	return currentUpdateInfo
 }
 
-func StartUpdateCheck(ctx context.Context) {
-	// Don't start a new check if we're already downloading or have an update ready
-	if currentUpdateInfo.Status == UpdateStatusDownloading || currentUpdateInfo.Status == UpdateStatusReady {
+func downloadUpdate(ctx context.Context) {
+	if currentUpdateInfo.DownloadUrl == "" {
+		util.GetLogger().Error(ctx, "no download URL provided")
 		return
 	}
 
-	util.Go(ctx, "check-update", func() {
-		// Copy all fields from info to currentUpdateInfo
-		currentUpdateInfo = CheckUpdate(ctx)
-		// If there's an update, download it
-		// The download happens in background and doesn't affect user experience
-		if currentUpdateInfo.HasUpdate {
-			DownloadUpdate(ctx)
-		}
-	})
-}
-
-// DownloadUpdate downloads the update file
-func DownloadUpdate(ctx context.Context) error {
-	// If already downloading, return error
-	if currentUpdateInfo.Status == UpdateStatusDownloading {
-		return ErrUpdateInProgress
-	}
-
-	// If already downloaded and ready to install, return success
-	if currentUpdateInfo.Status == UpdateStatusReady && currentUpdateInfo.DownloadedPath != "" {
-		util.GetLogger().Info(ctx, "update already downloaded and ready to install")
-		return nil
-	}
-
-	// Check if update is available
-	if !currentUpdateInfo.HasUpdate || currentUpdateInfo.Status != UpdateStatusAvailable {
-		return errors.New("no update available to download")
-	}
-
-	// Check download URL and checksum
-	if currentUpdateInfo.DownloadUrl == "" {
-		return errors.New("no download URL provided")
-	}
-
 	if currentUpdateInfo.Checksum == "" {
-		return errors.New("no checksum provided")
+		util.GetLogger().Error(ctx, "no checksum provided")
+		return
 	}
 
 	// Check if the same version has already been downloaded
-	updatesDir := filepath.Join(util.GetLocation().GetWoxDataDirectory(), "updates")
-	// Ensure updates directory exists
-	os.MkdirAll(updatesDir, 0755)
 	fileName := fmt.Sprintf("wox-%s", currentUpdateInfo.LatestVersion)
 	if util.IsWindows() {
 		fileName += ".exe"
 	} else if util.IsMacOS() {
-		fileName += ".app"
+		fileName += ".dmg"
 	}
-	downloadPath := filepath.Join(updatesDir, fileName)
+	downloadPath := filepath.Join(util.GetLocation().GetUpdatesDirectory(), fileName)
 
 	// If file already exists, verify checksum
 	if _, err := os.Stat(downloadPath); err == nil {
@@ -228,7 +226,7 @@ func DownloadUpdate(ctx context.Context) error {
 			currentUpdateInfo.Status = UpdateStatusReady
 			currentUpdateInfo.DownloadedPath = downloadPath
 			util.GetLogger().Info(ctx, "existing update verified and ready to install")
-			return nil
+			return
 		} else {
 			// Checksum doesn't match or verification failed, delete file and download again
 			util.GetLogger().Info(ctx, "existing update invalid or corrupted, will download again")
@@ -237,19 +235,17 @@ func DownloadUpdate(ctx context.Context) error {
 	}
 
 	currentUpdateInfo.Status = UpdateStatusDownloading
-	updateInfo := currentUpdateInfo
 
 	util.Go(ctx, "download-update", func() {
-		// Download the file
-		util.GetLogger().Info(ctx, fmt.Sprintf("downloading update from %s to %s", updateInfo.DownloadUrl, downloadPath))
-		err := util.HttpDownload(ctx, updateInfo.DownloadUrl, downloadPath)
+		util.GetLogger().Info(ctx, fmt.Sprintf("downloading update from %s to %s", currentUpdateInfo.DownloadUrl, downloadPath))
+		err := util.HttpDownload(ctx, currentUpdateInfo.DownloadUrl, downloadPath)
 		if err != nil {
 			currentUpdateInfo.Status = UpdateStatusError
 			currentUpdateInfo.UpdateError = fmt.Errorf("failed to download update: %w", err)
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to download update: %s", err.Error()))
 			return
 		}
 
-		// Verify checksum if provided
 		util.GetLogger().Info(ctx, "verifying checksum")
 		fileChecksum, checksumErr := calculateFileChecksum(downloadPath)
 		if checksumErr != nil {
@@ -257,10 +253,9 @@ func DownloadUpdate(ctx context.Context) error {
 			currentUpdateInfo.UpdateError = fmt.Errorf("failed to calculate checksum: %w", checksumErr)
 			return
 		}
-
-		if fileChecksum != updateInfo.Checksum {
+		if fileChecksum != currentUpdateInfo.Checksum {
 			currentUpdateInfo.Status = UpdateStatusError
-			currentUpdateInfo.UpdateError = fmt.Errorf("checksum verification failed: expected %s, got %s", updateInfo.Checksum, fileChecksum)
+			currentUpdateInfo.UpdateError = fmt.Errorf("checksum verification failed: expected %s, got %s", currentUpdateInfo.Checksum, fileChecksum)
 			// Remove the invalid file
 			os.Remove(downloadPath)
 			return
@@ -272,8 +267,6 @@ func DownloadUpdate(ctx context.Context) error {
 
 		util.GetLogger().Info(ctx, "update downloaded and ready to install")
 	})
-
-	return nil
 }
 
 // ApplyUpdate applies the downloaded update
@@ -391,25 +384,6 @@ func ApplyUpdate(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// StartAutoUpdateChecker starts a background task that periodically checks for updates
-func StartAutoUpdateChecker(ctx context.Context) {
-	util.Go(ctx, "auto-update-checker", func() {
-		for range time.NewTicker(time.Hour * 6).C {
-			checkForUpdatesIfEnabled(ctx)
-		}
-	})
-}
-
-// checkForUpdatesIfEnabled checks for updates if auto-update is enabled
-func checkForUpdatesIfEnabled(ctx context.Context) {
-	// Check if auto-update is enabled
-	setting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if setting != nil && setting.EnableAutoUpdate {
-		util.GetLogger().Info(ctx, "checking for updates (auto)")
-		StartUpdateCheck(ctx)
-	}
 }
 
 // calculateFileChecksum calculates the MD5 checksum of a file

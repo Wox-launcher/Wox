@@ -758,7 +758,7 @@ class WoxLauncherController extends GetxController {
   }
 
   startDoctorCheckSchedule() {
-    Timer.periodic(const Duration(minutes: 15), (timer) async {
+    Timer.periodic(const Duration(minutes: 1), (timer) async {
       doctorCheckPassed = await WoxApi.instance.doctorCheck();
       Logger.instance.debug(const UuidV4().generate(), "doctor check result: $doctorCheckPassed");
     });

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"wox/common"
 	"wox/i18n"
 	"wox/updater"
 	"wox/util"
@@ -24,6 +25,7 @@ type DoctorCheckResult struct {
 	Description string
 	ActionName  string
 	Action      func(ctx context.Context)
+	Preview     WoxPreview // Preview content for the check result
 }
 
 // RunDoctorChecks runs all doctor checks
@@ -45,49 +47,78 @@ func RunDoctorChecks(ctx context.Context) []DoctorCheckResult {
 }
 
 func checkWoxVersion(ctx context.Context) DoctorCheckResult {
-	updateStatus := updater.CheckUpdate(ctx)
-	if updateStatus.Status == updater.UpdateStatusError {
+	updateInfo := updater.GetUpdateInfo()
+	if updateInfo.Status == updater.UpdateStatusError {
 		return DoctorCheckResult{
 			Name:        "i18n:plugin_doctor_version",
 			Type:        DoctorCheckUpdate,
 			Passed:      false,
-			Description: updateStatus.UpdateError.Error(),
+			Description: updateInfo.UpdateError.Error(),
 			ActionName:  "",
 			Action: func(ctx context.Context) {
+			},
+			Preview: WoxPreview{
+				PreviewType:       WoxPreviewTypeText,
+				PreviewData:       updateInfo.UpdateError.Error(),
+				PreviewProperties: map[string]string{},
+				ScrollPosition:    WoxPreviewScrollPositionBottom,
 			},
 		}
 	}
 
-	if !updateStatus.HasUpdate {
+	if !updateInfo.HasUpdate {
 		return DoctorCheckResult{
 			Name:        "i18n:plugin_doctor_version",
 			Type:        DoctorCheckUpdate,
 			Passed:      true,
-			Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_latest"), updateStatus.LatestVersion),
+			Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_latest"), updateInfo.LatestVersion),
 			ActionName:  "",
 			Action: func(ctx context.Context) {
+			},
+			Preview: WoxPreview{
+				PreviewType:       WoxPreviewTypeText,
+				PreviewData:       fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_latest"), updateInfo.LatestVersion),
+				PreviewProperties: map[string]string{},
+				ScrollPosition:    WoxPreviewScrollPositionBottom,
 			},
 		}
 	} else {
 		actionName := "i18n:plugin_doctor_version_download"
-		if updateStatus.Status == updater.UpdateStatusReady {
+		if updateInfo.Status == updater.UpdateStatusReady {
 			actionName = "i18n:plugin_doctor_version_apply_update"
+		}
+
+		// Create preview with release notes
+		previewData := fmt.Sprintf("# %s\n\n%s",
+			i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_update_notes"),
+			updateInfo.ReleaseNotes)
+
+		if updateInfo.ReleaseNotes == "" {
+			previewData = i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_no_release_notes")
 		}
 
 		return DoctorCheckResult{
 			Name:        "i18n:plugin_doctor_version",
 			Type:        DoctorCheckUpdate,
 			Passed:      false,
-			Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_update_available"), updateStatus.CurrentVersion, updateStatus.LatestVersion, updateStatus.Status),
+			Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_update_available"), updateInfo.CurrentVersion, updateInfo.LatestVersion, updateInfo.Status),
 			ActionName:  actionName,
 			Action: func(ctx context.Context) {
 				updateStatus := updater.GetUpdateInfo()
 				if updateStatus.Status == updater.UpdateStatusReady {
 					updater.ApplyUpdate(ctx)
+				} else if updateStatus.Status == updater.UpdateStatusError {
+					GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{
+						Text:           updateStatus.UpdateError.Error(),
+						DisplaySeconds: 3,
+					})
 				}
-				if updateStatus.Status == updater.UpdateStatusError {
-					updater.DownloadUpdate(ctx)
-				}
+			},
+			Preview: WoxPreview{
+				PreviewType:       WoxPreviewTypeMarkdown,
+				PreviewData:       previewData,
+				PreviewProperties: map[string]string{},
+				ScrollPosition:    WoxPreviewScrollPositionBottom,
 			},
 		}
 	}
@@ -95,6 +126,10 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 
 func checkAccessibilityPermission(ctx context.Context) DoctorCheckResult {
 	hasPermission := permission.HasAccessibilityPermission(ctx)
+
+	// Create preview with accessibility permission explanation
+	previewData := i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_accessibility_explanation")
+
 	if !hasPermission {
 		return DoctorCheckResult{
 			Name:        "i18n:plugin_doctor_accessibility",
@@ -104,6 +139,12 @@ func checkAccessibilityPermission(ctx context.Context) DoctorCheckResult {
 			ActionName:  "i18n:plugin_doctor_accessibility_open_settings",
 			Action: func(ctx context.Context) {
 				permission.GrantAccessibilityPermission(ctx)
+			},
+			Preview: WoxPreview{
+				PreviewType:       WoxPreviewTypeMarkdown,
+				PreviewData:       previewData,
+				PreviewProperties: map[string]string{},
+				ScrollPosition:    WoxPreviewScrollPositionBottom,
 			},
 		}
 	}
@@ -115,6 +156,12 @@ func checkAccessibilityPermission(ctx context.Context) DoctorCheckResult {
 		Description: "i18n:plugin_doctor_accessibility_granted",
 		ActionName:  "",
 		Action: func(ctx context.Context) {
+		},
+		Preview: WoxPreview{
+			PreviewType:       WoxPreviewTypeMarkdown,
+			PreviewData:       previewData,
+			PreviewProperties: map[string]string{},
+			ScrollPosition:    WoxPreviewScrollPositionBottom,
 		},
 	}
 }
