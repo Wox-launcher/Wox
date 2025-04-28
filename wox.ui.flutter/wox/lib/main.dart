@@ -56,7 +56,10 @@ Future<void> initialServices(List<String> arguments) async {
 
   var launcherController = WoxLauncherController();
   launcherController.startRefreshSchedule();
-  launcherController.startDoctorCheckSchedule();
+
+  Timer.periodic(const Duration(minutes: 1), (timer) async {
+    launcherController.doctorCheck();
+  });
 
   await WoxWebsocketMsgUtil.instance.initialize(Uri.parse("ws://localhost:${Env.serverPort}/ws"), onMessageReceived: launcherController.handleWebSocketMessage);
   HeartbeatChecker().startChecking();

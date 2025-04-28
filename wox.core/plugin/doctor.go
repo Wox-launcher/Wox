@@ -24,8 +24,8 @@ type DoctorCheckResult struct {
 	Passed      bool
 	Description string
 	ActionName  string
-	Action      func(ctx context.Context)
-	Preview     WoxPreview // Preview content for the check result
+	Action      func(ctx context.Context) `json:"-"`
+	Preview     WoxPreview                // Preview content for the check result
 }
 
 // RunDoctorChecks runs all doctor checks
@@ -101,7 +101,7 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 			Name:        "i18n:plugin_doctor_version",
 			Type:        DoctorCheckUpdate,
 			Passed:      false,
-			Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_update_available"), updateInfo.CurrentVersion, updateInfo.LatestVersion, updateInfo.Status),
+			Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_update_available"), updateInfo.CurrentVersion, updateInfo.LatestVersion),
 			ActionName:  actionName,
 			Action: func(ctx context.Context) {
 				updateStatus := updater.GetUpdateInfo()

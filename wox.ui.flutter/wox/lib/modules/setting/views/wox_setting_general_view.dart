@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
+import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_lang.dart';
@@ -103,6 +104,11 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
               checked: controller.woxSetting.value.enableAutoUpdate,
               onChanged: (bool value) {
                 controller.updateConfig("EnableAutoUpdate", value.toString());
+
+                // add some delay for backend to update the version check
+                Future.delayed(const Duration(seconds: 2), () {
+                  Get.find<WoxLauncherController>().doctorCheck();
+                });
               },
             );
           }),

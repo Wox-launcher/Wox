@@ -19,7 +19,6 @@ class WoxAIChatController extends GetxController {
   final Rx<WoxAIChatData> aiChatData = WoxAIChatData.empty().obs;
   late final WoxListController<ChatSelectItem> chatSelectListController;
 
-  // Get translation from WoxSettingController
   String tr(String key) {
     return Get.find<WoxSettingController>().tr(key);
   }

@@ -12,6 +12,7 @@ import 'package:wox/controllers/wox_list_controller.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_list_item.dart';
+import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -85,6 +86,7 @@ class WoxLauncherController extends GetxController {
 
   /// The result of the doctor check.
   var doctorCheckPassed = true;
+  final doctorCheckInfo = DoctorCheckInfo.empty().obs;
 
   // toolbar related variables
   final toolbar = ToolbarInfo.empty().obs;
@@ -120,6 +122,9 @@ class WoxLauncherController extends GetxController {
       ),
       tag: 'action',
     );
+
+    // Initialize doctor check info
+    doctorCheckInfo.value = DoctorCheckInfo.empty();
 
     // Initialize AI models is now handled by WoxAIChatController
   }
@@ -249,7 +254,7 @@ class WoxLauncherController extends GetxController {
       currentQuery.value = PlainQuery.emptyInput();
       queryBoxTextFieldController.clear();
       hideActionPanel(traceId);
-      await clearQueryResults();
+      await clearQueryResults(traceId);
     }
 
     // switch to the launcher view if in setting view
@@ -327,6 +332,10 @@ class WoxLauncherController extends GetxController {
       actionListViewController.requestFocus();
     });
     resizeHeight();
+  }
+
+  String tr(String key) {
+    return Get.find<WoxSettingController>().tr(key);
   }
 
   WoxQueryResult? getActiveResult() {
@@ -468,7 +477,7 @@ class WoxLauncherController extends GetxController {
     updateResultPreviewWidthRatioOnQueryChanged(traceId, query);
     updateToolbarOnQueryChanged(traceId, query);
     if (query.isEmpty) {
-      clearQueryResults();
+      clearQueryResults(traceId);
       return;
     }
 
@@ -478,7 +487,7 @@ class WoxLauncherController extends GetxController {
     clearQueryResultsTimer = Timer(
       Duration(milliseconds: clearQueryResultDelay),
       () {
-        clearQueryResults();
+        clearQueryResults(traceId);
       },
     );
     WoxWebsocketMsgUtil.instance.sendMessage(WoxWebsocketMsg(
@@ -576,12 +585,27 @@ class WoxLauncherController extends GetxController {
     );
   }
 
-  Future<void> clearQueryResults() async {
+  Future<void> clearQueryResults(String traceId) async {
     resultListViewController.clearItems();
     actionListViewController.clearItems();
-    toolbar.value = ToolbarInfo.empty();
     isShowPreviewPanel.value = false;
     isShowActionPanel.value = false;
+
+    if (shouldShowDoctorCheckInfo()) {
+      Logger.instance.debug(traceId, "update toolbar to doctor warning, query is empty and doctor check not passed");
+      toolbar.value = ToolbarInfo(
+        text: doctorCheckInfo.value.message,
+        icon: doctorCheckInfo.value.icon,
+        hotkey: "enter",
+        actionName: tr("plugin_doctor_check"),
+        action: () {
+          onQueryChanged(traceId, PlainQuery.text("doctor "), "user click doctor icon");
+        },
+      );
+    } else {
+      Logger.instance.debug(traceId, "update toolbar to empty because of query changed and is empty");
+      toolbar.value = ToolbarInfo.empty();
+    }
 
     await resizeHeight();
   }
@@ -757,11 +781,48 @@ class WoxLauncherController extends GetxController {
     });
   }
 
-  startDoctorCheckSchedule() {
-    Timer.periodic(const Duration(minutes: 1), (timer) async {
-      doctorCheckPassed = await WoxApi.instance.doctorCheck();
-      Logger.instance.debug(const UuidV4().generate(), "doctor check result: $doctorCheckPassed");
-    });
+  /// Process doctor check results and update the doctor check info
+  DoctorCheckInfo processDoctorCheckResults(List<DoctorCheckResult> results) {
+    // Check if all tests passed
+    bool allPassed = true;
+    for (var result in results) {
+      if (!result.passed) {
+        allPassed = false;
+        break;
+      }
+    }
+    doctorCheckPassed = allPassed;
+
+    // Determine appropriate icon and message based on issue type
+    WoxImage icon = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: QUERY_ICON_DOCTOR_WARNING);
+    String message = "";
+
+    for (var result in results) {
+      if (!result.passed) {
+        message = result.description;
+        if (result.isVersionIssue) {
+          icon = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: UPDATE_ICON);
+          break;
+        } else if (result.isPermissionIssue) {
+          icon = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code, imageData: PERMISSION_ICON);
+          break;
+        }
+      }
+    }
+
+    return DoctorCheckInfo(
+      results: results,
+      allPassed: allPassed,
+      icon: icon,
+      message: message,
+    );
+  }
+
+  void doctorCheck() async {
+    var results = await WoxApi.instance.doctorCheck();
+    final checkInfo = processDoctorCheckResults(results);
+    doctorCheckInfo.value = checkInfo;
+    Logger.instance.debug(const UuidV4().generate(), "doctor check result: ${checkInfo.allPassed}, details: ${checkInfo.results.length} items");
   }
 
   @override
@@ -957,17 +1018,6 @@ class WoxLauncherController extends GetxController {
 
   /// Change the query icon based on the query
   Future<void> updateQueryIconOnQueryChanged(String traceId, PlainQuery query) async {
-    //if doctor check is not passed and query is empty, show doctor icon
-    if (query.isEmpty && !doctorCheckPassed) {
-      queryIcon.value = QueryIconInfo(
-        icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: QUERY_ICON_DOCTOR_WARNING),
-        action: () {
-          onQueryChanged(traceId, PlainQuery.text("doctor "), "user click query icon");
-        },
-      );
-      return;
-    }
-
     if (query.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
       if (query.querySelection.type == WoxSelectionTypeEnum.WOX_SELECTION_TYPE_FILE.code) {
         queryIcon.value = QueryIconInfo(
@@ -1017,24 +1067,7 @@ class WoxLauncherController extends GetxController {
   void updateToolbarOnQueryChanged(String traceId, PlainQuery query) {
     cleanToolbarTimer.cancel();
 
-    // if query is empty, we need to immediately update the toolbar
-    if (query.isEmpty) {
-      // if query is empty and doctor check is not passed, show doctor warning
-      if (!doctorCheckPassed) {
-        Logger.instance.debug(traceId, "update toolbar to doctor warning, query is empty and doctor check not passed");
-        toolbar.value = ToolbarInfo(
-          text: "Doctor check not passed",
-          icon: WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code, imageData: QUERY_ICON_DOCTOR_WARNING),
-          hotkey: "enter",
-          actionName: "Check",
-          action: () {
-            onQueryChanged(traceId, PlainQuery.text("doctor "), "user click query icon");
-          },
-        );
-      } else {
-        Logger.instance.debug(traceId, "update toolbar to empty because of query changed and is empty");
-        toolbar.value = ToolbarInfo.empty();
-      }
+    if (shouldShowDoctorCheckInfo()) {
       return;
     }
 
@@ -1043,6 +1076,10 @@ class WoxLauncherController extends GetxController {
       Logger.instance.debug(traceId, "update toolbar to empty because of query changed");
       toolbar.value = ToolbarInfo.empty();
     });
+  }
+
+  bool shouldShowDoctorCheckInfo() {
+    return currentQuery.value.isEmpty && !doctorCheckInfo.value.allPassed;
   }
 
   /// Update the toolbar to chat view

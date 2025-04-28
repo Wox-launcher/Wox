@@ -9,6 +9,7 @@ import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_query.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
+import 'package:wox/models/doctor_check_result.dart';
 import 'package:wox/utils/wox_http_util.dart';
 
 class WoxApi {
@@ -174,8 +175,8 @@ class WoxApi {
     });
   }
 
-  Future<bool> doctorCheck() async {
-    return await WoxHttpUtil.instance.postData("/doctor/check", null);
+  Future<List<DoctorCheckResult>> doctorCheck() async {
+    return await WoxHttpUtil.instance.postData<List<DoctorCheckResult>>("/doctor/check", null);
   }
 
   Future<String> getUserDataLocation() async {

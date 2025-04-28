@@ -38,7 +38,7 @@ class WoxLauncherView extends GetView<WoxLauncherController> {
                   ),
                 ),
               ),
-              if (controller.resultListViewController.items.isNotEmpty)
+              if (controller.resultListViewController.items.isNotEmpty || controller.shouldShowDoctorCheckInfo())
                 const SizedBox(
                   height: 40,
                   child: WoxQueryToolbarView(),

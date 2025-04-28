@@ -16,6 +16,7 @@ import (
 	"wox/plugin"
 	"wox/resource"
 	"wox/setting"
+	"wox/updater"
 	"wox/util"
 	"wox/util/autostart"
 	"wox/util/hotkey"
@@ -513,6 +514,9 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key, value string) {
 		if err != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to set autostart: %s", err.Error()))
 		}
+	}
+	if key == "EnableAutoUpdate" {
+		updater.CheckForUpdates(ctx)
 	}
 }
 

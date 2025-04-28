@@ -66,19 +66,23 @@ type UpdateInfo struct {
 func StartAutoUpdateChecker(ctx context.Context) {
 	util.Go(ctx, "auto-update-checker", func() {
 		newCtx := util.NewTraceContext()
-		checkForUpdates(newCtx)
+		CheckForUpdates(newCtx)
 		for range time.NewTicker(time.Hour * 6).C {
-			checkForUpdates(newCtx)
+			CheckForUpdates(newCtx)
 		}
 	})
 }
 
-func checkForUpdates(ctx context.Context) {
+func CheckForUpdates(ctx context.Context) {
 	util.GetLogger().Info(ctx, "start checking for updates")
 
 	setting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if setting != nil && !setting.EnableAutoUpdate {
 		util.GetLogger().Info(ctx, "auto update is disabled, skipping")
+		currentUpdateInfo.Status = UpdateStatusNone
+		currentUpdateInfo.HasUpdate = false
+		currentUpdateInfo.DownloadedPath = ""
+		currentUpdateInfo.UpdateError = nil
 		return
 	}
 

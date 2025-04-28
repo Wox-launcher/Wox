@@ -1008,14 +1008,7 @@ func handleAIMCPServerTools(w http.ResponseWriter, r *http.Request) {
 func handleDoctorCheck(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
 	results := plugin.RunDoctorChecks(ctx)
-	allPassed := true
-	for _, result := range results {
-		if !result.Passed {
-			allPassed = false
-			break
-		}
-	}
-	writeSuccessResponse(w, allPassed)
+	writeSuccessResponse(w, results)
 }
 
 func handleUserDataLocation(w http.ResponseWriter, r *http.Request) {
