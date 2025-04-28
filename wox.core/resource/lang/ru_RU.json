@@ -223,6 +223,7 @@
   "plugin_doctor_version_download": "Перейти на страницу загрузки",
   "plugin_doctor_version_apply_update": "Применить обновление",
   "plugin_doctor_version_update_notes": "Примечания к обновлению",
+  "plugin_doctor_version_update_error": "Ошибка проверки обновления",
   "plugin_doctor_version_no_release_notes": "Для этого обновления нет доступных примечаний к выпуску.",
   "plugin_doctor_accessibility": "Доступность",
   "plugin_doctor_accessibility_required": "Вам нужно предоставить Wox разрешение на доступность для использования этого плагина",

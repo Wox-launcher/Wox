@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:from_css_color/from_css_color.dart';
@@ -144,6 +145,84 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
     );
   }
 
+  Widget buildHtml(String htmlContent) {
+    return Container(
+      color: Colors.transparent,
+      child: InAppWebView(
+        initialData: InAppWebViewInitialData(
+          data: htmlContent,
+          mimeType: 'text/html',
+          encoding: 'utf8',
+        ),
+        initialSettings: InAppWebViewSettings(
+          supportZoom: false,
+          transparentBackground: true,
+          disableHorizontalScroll: false,
+          disableVerticalScroll: false,
+          javaScriptEnabled: true,
+          isInspectable: true,
+        ),
+        gestureRecognizers: const {},
+        onScrollChanged: (controller, x, y) {
+          if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {
+            controller.scrollTo(x: x, y: y);
+          }
+        },
+        onPageCommitVisible: (controller, url) {
+          // inject css color variables
+          final fontColor = widget.woxTheme.previewFontColor;
+          final backgroundColor = widget.woxTheme.appBackgroundColor;
+          final splitLineColor = widget.woxTheme.previewSplitLineColor;
+          final propertyTitleColor = widget.woxTheme.previewPropertyTitleColor;
+          final propertyContentColor = widget.woxTheme.previewPropertyContentColor;
+          final selectionColor = widget.woxTheme.previewTextSelectionColor;
+
+          controller.evaluateJavascript(source: """
+            var themeStyle = document.createElement('style');
+            themeStyle.innerHTML = ":root { " +
+              "--preview-font-color: $fontColor; " +
+              "--preview-background-color: $backgroundColor; " +
+              "--preview-split-line-color: $splitLineColor; " +
+              "--preview-property-title-color: $propertyTitleColor; " +
+              "--preview-property-content-color: $propertyContentColor; " +
+              "--preview-selection-color: $selectionColor; " +
+            "}";
+            document.head.appendChild(themeStyle);
+          """);
+
+          var defaultFontFamily = DefaultTextStyle.of(context).style.fontFamily; // default maybe Roboto
+          var fallbackFontFamily = "PingFang SC,Segoe UI,Microsoft YaHei,sans-serif";
+          if (defaultFontFamily != null) {
+            defaultFontFamily += ",$fallbackFontFamily";
+          } else {
+            defaultFontFamily = fallbackFontFamily;
+          }
+
+          // inject font css to match Flutter fonts
+          controller.evaluateJavascript(source: """
+            var fontStyle = document.createElement('style');
+            fontStyle.innerHTML = `
+              @import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap');
+
+              body, html {
+                font-family: $defaultFontFamily;
+                font-size: 14px;
+                line-height: 1.5;
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
+                margin: 0;
+                padding: 0;
+                background-color: transparent;
+                color: var(--preview-font-color);
+              }
+            `;
+            document.head.appendChild(fontStyle);
+          """);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: preview view data");
@@ -219,6 +298,8 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
       var chatController = Get.find<WoxAIChatController>();
       chatController.aiChatData.value = previewChatData;
       contentWidget = const WoxAIChatView();
+    } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_HTML.code) {
+      contentWidget = buildHtml(widget.woxPreview.previewData);
     }
 
     if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {

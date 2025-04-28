@@ -62,6 +62,7 @@ dependencies:
   highlight: ^0.7.0
   lottie: ^3.1.2
   fuzzywuzzy: ^1.2.0
+  flutter_inappwebview: ^6.1.5
 
 dev_dependencies:
   flutter_test:

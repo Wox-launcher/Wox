@@ -12,6 +12,7 @@ const (
 	WoxPreviewTypeText     = "text"
 	WoxPreviewTypeImage    = "image" // when type is image, data should be WoxImage.String()
 	WoxPreviewTypeUrl      = "url"
+	WoxPreviewTypeHtml     = "html"
 	WoxPreviewTypeFile     = "file"   // when type is file(can be *.md, *.jpg, *.pdf and so on), data should be url/filepath
 	WoxPreviewTypeRemote   = "remote" // when type is remote, data should be url to load WoxPreview
 

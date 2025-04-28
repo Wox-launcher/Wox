@@ -225,6 +225,7 @@
   "plugin_doctor_version_download": "Go to download page",
   "plugin_doctor_version_apply_update": "Apply update",
   "plugin_doctor_version_update_notes": "Update Notes",
+  "plugin_doctor_version_update_error": "Update Check Failed",
   "plugin_doctor_version_no_release_notes": "No release notes available for this update.",
   "plugin_doctor_accessibility": "Accessibility",
   "plugin_doctor_accessibility_required": "You need to grant Wox Accessibility permission to use this plugin",
