@@ -27,7 +27,9 @@ class WoxLauncherView extends GetView<WoxLauncherController> {
                   padding: EdgeInsets.only(
                     top: WoxThemeUtil.instance.currentTheme.value.appPaddingTop.toDouble(),
                     right: WoxThemeUtil.instance.currentTheme.value.appPaddingRight.toDouble(),
-                    bottom: WoxThemeUtil.instance.currentTheme.value.appPaddingBottom.toDouble(),
+                    bottom: controller.isToolbarShowedWithoutResults
+                        ? 0
+                        : WoxThemeUtil.instance.currentTheme.value.appPaddingBottom.toDouble(), //WoxThemeUtil.instance.currentTheme.value.appPaddingBottom.toDouble(),
                     left: WoxThemeUtil.instance.currentTheme.value.appPaddingLeft.toDouble(),
                   ),
                   child: const Column(
@@ -38,7 +40,7 @@ class WoxLauncherView extends GetView<WoxLauncherController> {
                   ),
                 ),
               ),
-              if (controller.resultListViewController.items.isNotEmpty || controller.shouldShowDoctorCheckInfo())
+              if (controller.isShowToolbar)
                 const SizedBox(
                   height: 40,
                   child: WoxQueryToolbarView(),

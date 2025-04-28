@@ -13,6 +13,8 @@ import 'package:wox/utils/wox_theme_util.dart';
 class WoxQueryToolbarView extends GetView<WoxLauncherController> {
   const WoxQueryToolbarView({super.key});
 
+  bool get hasResultItems => controller.resultListViewController.items.isNotEmpty;
+
   Widget leftPart() {
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: toolbar view - left part");
 
@@ -108,7 +110,9 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
           const SizedBox(width: 8),
           WoxHotkeyView(
             hotkey: hotkey!,
-            backgroundColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor),
+            backgroundColor: hasResultItems
+                ? fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor)
+                : fromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor).withValues(alpha: 0.1),
             borderColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
             textColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
           )
@@ -126,10 +130,10 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
         height: WoxThemeUtil.instance.getToolbarHeight(),
         child: Container(
           decoration: BoxDecoration(
-            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor),
+            color: hasResultItems ? fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor) : Colors.transparent,
             border: Border(
               top: BorderSide(
-                color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor).withOpacity(0.1),
+                color: hasResultItems ? fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor).withValues(alpha: 0.1) : Colors.transparent,
                 width: 1,
               ),
             ),

@@ -125,9 +125,13 @@ class WoxLauncherController extends GetxController {
 
     // Initialize doctor check info
     doctorCheckInfo.value = DoctorCheckInfo.empty();
-
-    // Initialize AI models is now handled by WoxAIChatController
   }
+
+  bool get isShowDoctorCheckInfo => currentQuery.value.isEmpty && !doctorCheckInfo.value.allPassed;
+
+  bool get isShowToolbar => resultListViewController.items.isNotEmpty || isShowDoctorCheckInfo;
+
+  bool get isToolbarShowedWithoutResults => isShowToolbar && resultListViewController.items.isEmpty;
 
   /// Triggered when received query results from the server.
   void onReceivedQueryResults(String traceId, List<WoxQueryResult> receivedResults) {
@@ -591,7 +595,7 @@ class WoxLauncherController extends GetxController {
     isShowPreviewPanel.value = false;
     isShowActionPanel.value = false;
 
-    if (shouldShowDoctorCheckInfo()) {
+    if (isShowDoctorCheckInfo) {
       Logger.instance.debug(traceId, "update toolbar to doctor warning, query is empty and doctor check not passed");
       toolbar.value = ToolbarInfo(
         text: doctorCheckInfo.value.message,
@@ -640,7 +644,12 @@ class WoxLauncherController extends GetxController {
     if (toolbar.value.isNotEmpty()) {
       resultHeight += WoxThemeUtil.instance.getToolbarHeight();
     }
-    final totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight;
+    var totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight;
+
+    // if toolbar is showed without results, remove the bottom padding, This way, the toolbar can blend seamlessly with the query box.
+    if (isToolbarShowedWithoutResults) {
+      totalHeight -= WoxThemeUtil.instance.currentTheme.value.appPaddingBottom;
+    }
 
     if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.debug(const UuidV4().generate(), "Resize: window height to $totalHeight");
     await windowManager.setSize(Size(WoxSettingUtil.instance.currentSetting.appWidth.toDouble(), totalHeight.toDouble()));
@@ -1067,7 +1076,7 @@ class WoxLauncherController extends GetxController {
   void updateToolbarOnQueryChanged(String traceId, PlainQuery query) {
     cleanToolbarTimer.cancel();
 
-    if (shouldShowDoctorCheckInfo()) {
+    if (isShowDoctorCheckInfo) {
       return;
     }
 
@@ -1076,10 +1085,6 @@ class WoxLauncherController extends GetxController {
       Logger.instance.debug(traceId, "update toolbar to empty because of query changed");
       toolbar.value = ToolbarInfo.empty();
     });
-  }
-
-  bool shouldShowDoctorCheckInfo() {
-    return currentQuery.value.isEmpty && !doctorCheckInfo.value.allPassed;
   }
 
   /// Update the toolbar to chat view
