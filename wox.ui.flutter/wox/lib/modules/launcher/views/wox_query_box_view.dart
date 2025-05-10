@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:from_css_color/from_css_color.dart';
@@ -13,6 +15,23 @@ import 'package:wox/utils/wox_theme_util.dart';
 class WoxQueryBoxView extends GetView<WoxLauncherController> {
   const WoxQueryBoxView({super.key});
 
+  // On Windows, if the callback might hide the window and is called from onKeyEvent,
+  // it may cause Flutter to miss handling the keyboard state after hiding (it seems the key state is not dispatched to Flutter after hiding).
+  // This will cause the user needing to press ESC or Enter twice to execute the corresponding action.
+  // Therefore, we need to delay by 100ms to give Flutter a chance to handle the keyboard state.
+  // This is a workaround for the issue (100ms here). We may need to find a better solution in the future.
+  asyncExecuteOnWindows(VoidCallback callback) {
+    if (Platform.isWindows) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        callback();
+      });
+      
+      return;
+    }
+
+    callback();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: query box view");
@@ -27,10 +46,14 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                     if (event is KeyDownEvent) {
                       switch (event.logicalKey) {
                         case LogicalKeyboardKey.escape:
-                          controller.hideApp(const UuidV4().generate());
+                          asyncExecuteOnWindows(() {
+                            controller.hideApp(const UuidV4().generate());
+                          });
                           return KeyEventResult.handled;
                         case LogicalKeyboardKey.enter:
-                          controller.executeToolbarAction(const UuidV4().generate());
+                          asyncExecuteOnWindows(() {
+                            controller.executeToolbarAction(const UuidV4().generate());
+                          });
                           return KeyEventResult.handled;
                         case LogicalKeyboardKey.arrowDown:
                           controller.handleQueryBoxArrowDown();

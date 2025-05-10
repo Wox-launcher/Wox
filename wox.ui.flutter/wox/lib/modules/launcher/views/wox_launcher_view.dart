@@ -2,7 +2,6 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
-import 'package:wox/components/wox_border_drag_move_view.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/modules/launcher/views/wox_query_box_view.dart';
 import 'package:wox/modules/launcher/views/wox_query_result_view.dart';
@@ -21,38 +20,32 @@ class WoxLauncherView extends GetView<WoxLauncherController> {
           onDragDone: (DropDoneDetails details) {
             controller.handleDropFiles(details);
           },
-          child: WoxBorderDragMoveArea(
-            borderWidth: WoxThemeUtil.instance.currentTheme.value.appPaddingTop.toDouble(),
-            onDragEnd: () {
-              controller.focusQueryBox(selectAll: false);
-            },
-            child: Column(
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                      top: WoxThemeUtil.instance.currentTheme.value.appPaddingTop.toDouble(),
-                      right: WoxThemeUtil.instance.currentTheme.value.appPaddingRight.toDouble(),
-                      bottom: controller.isToolbarShowedWithoutResults
-                          ? 0
-                          : WoxThemeUtil.instance.currentTheme.value.appPaddingBottom.toDouble(), //WoxThemeUtil.instance.currentTheme.value.appPaddingBottom.toDouble(),
-                      left: WoxThemeUtil.instance.currentTheme.value.appPaddingLeft.toDouble(),
-                    ),
-                    child: const Column(
-                      children: [
-                        WoxQueryBoxView(),
-                        Expanded(child: WoxQueryResultView()),
-                      ],
-                    ),
+          child: Column(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    top: WoxThemeUtil.instance.currentTheme.value.appPaddingTop.toDouble(),
+                    right: WoxThemeUtil.instance.currentTheme.value.appPaddingRight.toDouble(),
+                    bottom: controller.isToolbarShowedWithoutResults
+                        ? 0
+                        : WoxThemeUtil.instance.currentTheme.value.appPaddingBottom.toDouble(), //WoxThemeUtil.instance.currentTheme.value.appPaddingBottom.toDouble(),
+                    left: WoxThemeUtil.instance.currentTheme.value.appPaddingLeft.toDouble(),
+                  ),
+                  child: const Column(
+                    children: [
+                      WoxQueryBoxView(),
+                      Expanded(child: WoxQueryResultView()),
+                    ],
                   ),
                 ),
-                if (controller.isShowToolbar)
-                  const SizedBox(
-                    height: 40,
-                    child: WoxQueryToolbarView(),
-                  ),
-              ],
-            ),
+              ),
+              if (controller.isShowToolbar)
+                const SizedBox(
+                  height: 40,
+                  child: WoxQueryToolbarView(),
+                ),
+            ],
           ),
         ),
       );

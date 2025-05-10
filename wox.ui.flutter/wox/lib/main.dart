@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:protocol_handler/protocol_handler.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/wox_border_drag_move_view.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
@@ -108,16 +109,17 @@ class WoxApp extends StatefulWidget {
 }
 
 class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
+  final launcherController = Get.find<WoxLauncherController>();
+  final settingController = Get.find<WoxSettingController>();
+
   @override
   void initState() {
     super.initState();
 
     protocolHandler.addListener(this);
 
-    var launcherController = Get.find<WoxLauncherController>();
     launcherController.isInSettingView.listen((isShowSetting) async {
       if (isShowSetting) {
-        final settingController = Get.find<WoxSettingController>();
         await windowManager.setAlwaysOnTop(false);
         await WoxThemeUtil.instance.loadTheme();
         await WoxSettingUtil.instance.loadSetting();
@@ -181,7 +183,6 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
     }
 
     // if in setting view, return
-    final launcherController = Get.find<WoxLauncherController>();
     if (launcherController.isInSettingView.value) {
       return;
     }
@@ -191,12 +192,16 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
 
   @override
   Widget build(BuildContext context) {
-    final launcherController = Get.find<WoxLauncherController>();
+    return WoxBorderDragMoveArea(
+      borderWidth: WoxThemeUtil.instance.currentTheme.value.appPaddingTop.toDouble(),
+      onDragEnd: () {
+        if (launcherController.isInSettingView.value) {
+          return;
+        }
 
-    if (launcherController.isInSettingView.value) {
-      return const WoxSettingView();
-    }
-
-    return const WoxLauncherView();
+        launcherController.focusQueryBox(selectAll: false);
+      },
+      child: launcherController.isInSettingView.value ? const WoxSettingView() : const WoxLauncherView(),
+    );
   }
 }
