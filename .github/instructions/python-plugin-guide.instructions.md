@@ -1,8 +1,7 @@
 ---
-description: 
-globs: *.py
-alwaysApply: false
+applyTo: '**/*.py'
 ---
+
 # Wox Python Plugin Development Guide
 
 ## Basic Standards

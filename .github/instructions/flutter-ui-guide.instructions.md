@@ -1,8 +1,7 @@
 ---
-description: 
-globs: *.dart
-alwaysApply: false
+applyTo: '**/*.dart'
 ---
+
 # Wox Flutter UI Development Guide
 
 ## Directory Structure

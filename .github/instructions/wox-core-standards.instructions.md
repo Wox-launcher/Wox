@@ -1,8 +1,7 @@
 ---
-description: 
-globs: *.go
-alwaysApply: false
+applyTo: '**/*.go'
 ---
+
 # wox.core Go Code Standards
 
 ## General Guidelines
