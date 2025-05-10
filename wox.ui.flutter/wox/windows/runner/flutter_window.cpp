@@ -11,8 +11,10 @@
 FlutterWindow *g_window_instance = nullptr;
 
 // Global log function
-void LogMessage(const std::string &message) {
-  if (g_window_instance) {
+void LogMessage(const std::string &message)
+{
+  if (g_window_instance)
+  {
     g_window_instance->Log(message);
   }
 }
@@ -36,7 +38,8 @@ FlutterWindow::~FlutterWindow()
 
 void FlutterWindow::Log(const std::string &message)
 {
-  if (window_manager_channel_) {
+  if (window_manager_channel_)
+  {
     window_manager_channel_->InvokeMethod("log", std::make_unique<flutter::EncodableValue>(message));
   }
 }
@@ -49,18 +52,23 @@ float FlutterWindow::GetDpiScale(HWND hwnd)
 
   // Try to use GetDpiForWindow which is available on Windows 10 1607 and later
   HMODULE user32 = GetModuleHandle(TEXT("user32.dll"));
-  if (user32) {
-    typedef UINT (WINAPI *GetDpiForWindowFunc)(HWND);
+  if (user32)
+  {
+    typedef UINT(WINAPI * GetDpiForWindowFunc)(HWND);
     GetDpiForWindowFunc getDpiForWindow =
         reinterpret_cast<GetDpiForWindowFunc>(GetProcAddress(user32, "GetDpiForWindow"));
 
-    if (getDpiForWindow) {
+    if (getDpiForWindow)
+    {
       UINT dpi = getDpiForWindow(hwnd);
       dpiScale = dpi / 96.0f;
-    } else {
+    }
+    else
+    {
       // Fallback for older Windows versions
       HDC hdc = GetDC(hwnd);
-      if (hdc) {
+      if (hdc)
+      {
         int dpiX = GetDeviceCaps(hdc, LOGPIXELSX);
         dpiScale = dpiX / 96.0f;
         ReleaseDC(hwnd, hdc);
@@ -187,7 +195,7 @@ LRESULT CALLBACK FlutterWindow::WindowProc(HWND hwnd, UINT message, WPARAM wpara
   case WM_ACTIVATE:
     if (LOWORD(wparam) == WA_ACTIVE || LOWORD(wparam) == WA_CLICKACTIVE)
     {
-      //g_window_instance->SendWindowEvent("onWindowFocus");
+      // g_window_instance->SendWindowEvent("onWindowFocus");
     }
     else
     {
@@ -304,8 +312,9 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     }
     else if (method_name == "center")
     {
-      const auto* arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());
-      if (!arguments) {
+      const auto *arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());
+      if (!arguments)
+      {
         result->Error("INVALID_ARGUMENTS", "Arguments must be provided for center");
         return;
       }
@@ -313,7 +322,8 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       auto width_it = arguments->find(flutter::EncodableValue("width"));
       auto height_it = arguments->find(flutter::EncodableValue("height"));
 
-      if (width_it == arguments->end() || height_it == arguments->end()) {
+      if (width_it == arguments->end() || height_it == arguments->end())
+      {
         result->Error("INVALID_ARGUMENTS", "Both width and height must be provided for center");
         return;
       }
@@ -352,7 +362,20 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     }
     else if (method_name == "focus")
     {
+      // see https://gist.github.com/Aetopia/1581b40f00cc0cadc93a0e8ccb65dc8c
+      INPUT pInputs[2];
+      ZeroMemory(pInputs, sizeof(pInputs));
+
+      pInputs[0].type = INPUT_KEYBOARD;
+      pInputs[0].ki.wVk = VK_MENU;
+      pInputs[0].ki.dwFlags = 0;
+
+      pInputs[1].type = INPUT_KEYBOARD;
+      pInputs[1].ki.wVk = VK_MENU;
+      pInputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+      SendInput(2, pInputs, sizeof(INPUT));
       SetForegroundWindow(hwnd);
+
       result->Success();
     }
     else if (method_name == "isVisible")
@@ -366,10 +389,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       if (arguments)
       {
         bool always_on_top = *arguments;
-        HWND insert_after = always_on_top ? HWND_TOPMOST : HWND_NOTOPMOST;
-        RECT rect;
-        GetWindowRect(hwnd, &rect);
-        SetWindowPos(hwnd, insert_after, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOSIZE);
+        SetWindowPos(hwnd, always_on_top ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
         result->Success();
       }
       else
@@ -385,7 +405,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     }
     else if (method_name == "waitUntilReadyToShow")
     {
-        result->Success();
+      result->Success();
     }
     else
     {
