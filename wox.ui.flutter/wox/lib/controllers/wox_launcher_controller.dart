@@ -70,6 +70,7 @@ class WoxLauncherController extends GetxController {
   final clearQueryResultDelay = 100;
 
   // ai chat related variables
+  bool hasPendingAutoFocusToChatInput = false;
 
   /// This flag is used to control whether the user can arrow up to show history when the app is first shown.
   var canArrowUpHistory = true;
@@ -237,6 +238,10 @@ class WoxLauncherController extends GetxController {
     await windowManager.show();
     await windowManager.focus();
     focusQueryBox(selectAll: params.selectAll);
+
+    if (params.autoFocusToChatInput) {
+      hasPendingAutoFocusToChatInput = true;
+    }
 
     WoxApi.instance.onShow();
   }

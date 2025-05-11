@@ -54,7 +54,8 @@ type UI interface {
 }
 
 type ShowContext struct {
-	SelectAll bool
+	SelectAll            bool
+	AutoFocusToChatInput bool // auto focus chat input on next ui update
 }
 
 type PickFilesParams struct {

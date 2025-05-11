@@ -34,13 +34,13 @@ func (u *uiImpl) HideApp(ctx context.Context) {
 func (u *uiImpl) ShowApp(ctx context.Context, showContext common.ShowContext) {
 	GetUIManager().SetActiveWindowName(window.GetActiveWindowName())
 	GetUIManager().SetActiveWindowPid(window.GetActiveWindowPid())
-	u.invokeWebsocketMethod(ctx, "ShowApp", getShowAppParams(ctx, showContext.SelectAll))
+	u.invokeWebsocketMethod(ctx, "ShowApp", getShowAppParams(ctx, showContext))
 }
 
 func (u *uiImpl) ToggleApp(ctx context.Context) {
 	GetUIManager().SetActiveWindowName(window.GetActiveWindowName())
 	GetUIManager().SetActiveWindowPid(window.GetActiveWindowPid())
-	u.invokeWebsocketMethod(ctx, "ToggleApp", getShowAppParams(ctx, true))
+	u.invokeWebsocketMethod(ctx, "ToggleApp", getShowAppParams(ctx, common.ShowContext{SelectAll: true}))
 }
 
 func (u *uiImpl) GetServerPort(ctx context.Context) int {
@@ -210,7 +210,7 @@ func (u *uiImpl) invokeWebsocketMethod(ctx context.Context, method string, data 
 	}
 }
 
-func getShowAppParams(ctx context.Context, selectAll bool) map[string]any {
+func getShowAppParams(ctx context.Context, showContext common.ShowContext) map[string]any {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	var position Position
 
@@ -225,10 +225,11 @@ func getShowAppParams(ctx context.Context, selectAll bool) map[string]any {
 	}
 
 	return map[string]any{
-		"SelectAll":      selectAll,
-		"Position":       position,
-		"QueryHistories": setting.GetSettingManager().GetLatestQueryHistory(ctx, 10),
-		"LastQueryMode":  woxSetting.LastQueryMode,
+		"SelectAll":            showContext.SelectAll,
+		"AutoFocusToChatInput": showContext.AutoFocusToChatInput,
+		"Position":             position,
+		"QueryHistories":       setting.GetSettingManager().GetLatestQueryHistory(ctx, 10),
+		"LastQueryMode":        woxSetting.LastQueryMode,
 	}
 }
 

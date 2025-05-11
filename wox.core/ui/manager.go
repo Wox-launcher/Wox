@@ -10,7 +10,6 @@ import (
 	"path"
 	"strings"
 	"sync"
-	"time"
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
@@ -266,18 +265,15 @@ func (m *Manager) RegisterQueryHotkey(ctx context.Context, queryHotkey setting.Q
 				logger.Info(ctx, fmt.Sprintf("silent query executed: %s", query))
 			}
 		} else {
-			m.ui.ChangeQuery(newCtx, plainQuery)
-			m.ui.ShowApp(newCtx, common.ShowContext{SelectAll: false})
-		}
-
-		// check if query is chat plugin, and auto focus if enabled
-		if plugin.GetPluginManager().IsTriggerKeywordAIChat(ctx, q.TriggerKeyword) {
-			if plugin.GetPluginManager().GetAIChatPluginChater(ctx).IsAutoFocusToChatInputWhenOpenWithQueryHotkey(ctx) {
-				util.Go(ctx, "focus to chat input", func() {
-					time.Sleep(time.Millisecond * 500)
-					m.ui.FocusToChatInput(ctx)
-				})
+			autoFocusToChatInput := false
+			// check if query is chat plugin, and auto focus if enabled
+			if plugin.GetPluginManager().IsTriggerKeywordAIChat(ctx, q.TriggerKeyword) {
+				if plugin.GetPluginManager().GetAIChatPluginChater(ctx).IsAutoFocusToChatInputWhenOpenWithQueryHotkey(ctx) {
+					autoFocusToChatInput = true
+				}
 			}
+			m.ui.ChangeQuery(newCtx, plainQuery)
+			m.ui.ShowApp(newCtx, common.ShowContext{SelectAll: false, AutoFocusToChatInput: autoFocusToChatInput})
 		}
 	})
 	if err != nil {

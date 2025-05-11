@@ -263,8 +263,9 @@ class ShowAppParams {
   late Position position;
   late List<QueryHistory> queryHistories;
   late WoxLastQueryMode lastQueryMode;
+  late bool autoFocusToChatInput;
 
-  ShowAppParams({required this.selectAll, required this.position, required this.queryHistories, required this.lastQueryMode});
+  ShowAppParams({required this.selectAll, required this.position, required this.queryHistories, required this.lastQueryMode, this.autoFocusToChatInput = false});
 
   ShowAppParams.fromJson(Map<String, dynamic> json) {
     selectAll = json['SelectAll'];
@@ -280,6 +281,7 @@ class ShowAppParams {
       queryHistories = <QueryHistory>[];
     }
     lastQueryMode = json['LastQueryMode'];
+    autoFocusToChatInput = json['AutoFocusToChatInput'] ?? false;
   }
 }
 

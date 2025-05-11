@@ -20,6 +20,7 @@ import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_ai_chat_view.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
+import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
@@ -296,7 +297,15 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
       var previewChatData = WoxAIChatData.fromJson(jsonDecode(widget.woxPreview.previewData));
       var chatController = Get.find<WoxAIChatController>();
+      var launcherController = Get.find<WoxLauncherController>();
       chatController.aiChatData.value = previewChatData;
+
+      // If hasPendingAutoFocusToChatInput is true, focus to chat input after the UI has been built
+      if (launcherController.hasPendingAutoFocusToChatInput) {
+        chatController.focusToChatInput(const UuidV4().toString());
+        launcherController.hasPendingAutoFocusToChatInput = false;
+      }
+
       contentWidget = const WoxAIChatView();
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_HTML.code) {
       contentWidget = buildHtml(widget.woxPreview.previewData);
