@@ -3,6 +3,7 @@ package file
 import (
 	"context"
 	"path"
+	"path/filepath"
 	"syscall"
 	"unsafe"
 	"wox/util"
@@ -48,7 +49,7 @@ func (m *WindowsSearcher) Search(pattern SearchPattern) ([]SearchResult, error) 
 		}
 
 		results = append(results, SearchResult{
-			Name: info.Name(),
+			Name: filepath.Base(path),
 			Path: path,
 		})
 
