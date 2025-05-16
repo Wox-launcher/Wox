@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
@@ -19,6 +18,7 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_ai_chat_view.dart';
+import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
@@ -54,40 +54,10 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
   };
 
   Widget buildMarkdown(String markdownData) {
-    var styleTheme = Theme.of(context).copyWith(
-      textTheme: Theme.of(context).textTheme.apply(
-            bodyColor: fromCssColor(widget.woxTheme.previewFontColor),
-            displayColor: fromCssColor(widget.woxTheme.previewFontColor),
-          ),
-      cardColor: Colors.transparent,
+    return WoxMarkdownView(
+      data: markdownData,
+      fontColor: fromCssColor(widget.woxTheme.previewFontColor),
     );
-
-    return Markdown(
-        controller: scrollController,
-        data: markdownData,
-        padding: EdgeInsets.zero,
-        selectable: true,
-        physics: const ClampingScrollPhysics(),
-        styleSheet: MarkdownStyleSheet.fromTheme(styleTheme).copyWith(
-          horizontalRuleDecoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(
-                color: fromCssColor(widget.woxTheme.previewFontColor).withAlpha((0.6 * 255).round()),
-                width: 1,
-              ),
-              bottom: const BorderSide(
-                color: Colors.transparent,
-                width: 10,
-              ),
-            ),
-          ),
-          blockquoteDecoration: BoxDecoration(
-            color: fromCssColor(widget.woxTheme.previewFontColor).withAlpha((0.1 * 255).round()),
-            border: Border(
-              left: BorderSide(color: fromCssColor(widget.woxTheme.previewFontColor).withAlpha((0.2 * 255).round()), width: 2),
-            ),
-          ),
-        ));
   }
 
   Widget buildText(String txtData) {
@@ -347,7 +317,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 80),
+                                constraints: const BoxConstraints(maxWidth: 120),
                                 child: Text(e.key, overflow: TextOverflow.ellipsis, style: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor))),
                               ),
                               ConstrainedBox(

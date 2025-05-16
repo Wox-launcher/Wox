@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
+import 'package:markdown_widget/markdown_widget.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_list_view.dart';
+import 'package:wox/components/wox_markdown.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
@@ -422,15 +423,9 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                     children: [
                       if (isTool && message.toolCallInfo.id.isNotEmpty) _buildToolCallBadge(message),
                       if (!isTool)
-                        MarkdownBody(
+                        WoxMarkdownView(
                           data: message.text,
-                          selectable: true,
-                          styleSheet: MarkdownStyleSheet.fromTheme(styleTheme).copyWith(
-                            a: TextStyle(
-                              decoration: TextDecoration.underline,
-                              color: fontColor,
-                            ),
-                          ),
+                          fontColor: fontColor,
                         ),
                       if (message.images.isNotEmpty) ...[
                         const SizedBox(height: 8),
@@ -466,7 +461,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          "•", // 添加圆点分隔符
+                          "•",
                           style: TextStyle(
                             fontSize: 11,
                             color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor),
@@ -478,7 +473,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                         _buildInlineActionButtons(message, true),
                         const SizedBox(width: 12),
                         Text(
-                          "•", // 添加圆点分隔符
+                          "•",
                           style: TextStyle(
                             fontSize: 11,
                             color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor),
@@ -719,7 +714,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
   Widget _buildAvatar(WoxAIChatConversation message) {
     final isUser = message.role == WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value;
 
-    // 如果是用户消息，显示用户头像
     if (isUser) {
       return Container(
         width: 36,
@@ -738,15 +732,12 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       );
     }
 
-    // 如果是AI消息，并且使用了agent，显示agent头像
     if (controller.aiChatData.value.agentName != null && controller.aiChatData.value.agentName!.isNotEmpty) {
-      // 查找当前agent
       final currentAgent = controller.availableAgents.firstWhere(
         (agent) => agent.name == controller.aiChatData.value.agentName,
         orElse: () => AIAgent.empty(),
       );
 
-      // 如果agent有自定义头像，使用它
       if (currentAgent.name.isNotEmpty && currentAgent.icon.imageData.isNotEmpty) {
         return ClipRRect(
           borderRadius: BorderRadius.circular(18),
@@ -763,7 +754,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       }
     }
 
-    // 默认AI头像
     return Container(
       width: 36,
       height: 36,
