@@ -108,7 +108,7 @@ class WoxAIChatData {
   late Rx<AIModel> model;
   late int createdAt;
   late int updatedAt;
-  List<String>? selectedTools;
+  List<String>? tools;
   String? agentName;
 
   WoxAIChatData({
@@ -118,7 +118,7 @@ class WoxAIChatData {
     required this.model,
     required this.createdAt,
     required this.updatedAt,
-    this.selectedTools,
+    this.tools,
     this.agentName,
   });
 
@@ -152,8 +152,8 @@ class WoxAIChatData {
     };
 
     // Add selected tools to JSON if available
-    if (selectedTools != null && selectedTools!.isNotEmpty) {
-      json['SelectedTools'] = selectedTools;
+    if (tools != null && tools!.isNotEmpty) {
+      json['Tools'] = tools;
     }
 
     // Add agent name if available
@@ -172,7 +172,7 @@ class WoxAIChatData {
       model: AIModel(name: "", provider: "").obs,
       createdAt: 0,
       updatedAt: 0,
-      selectedTools: null,
+      tools: null,
       agentName: null,
     );
   }

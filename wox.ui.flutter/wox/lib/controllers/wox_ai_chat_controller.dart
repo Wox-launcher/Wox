@@ -421,7 +421,7 @@ class WoxAIChatController extends GetxController {
         if (agent.name == agentName) {
           Logger.instance.debug(const UuidV4().generate(), "AI: Found agent: ${agent.name}, setting model to ${agent.model.name} and tools to ${agent.tools.length} tools");
           aiChatData.value.model.value = agent.model;
-          aiChatData.value.selectedTools = agent.tools;
+          aiChatData.value.tools = agent.tools;
           agentFound = true;
           break;
         }
@@ -437,7 +437,7 @@ class WoxAIChatController extends GetxController {
       // Select all available tools
       selectedTools.clear();
       selectedTools.addAll(availableTools.map((tool) => tool.name).toSet());
-      aiChatData.value.selectedTools = selectedTools.toList();
+      aiChatData.value.tools = selectedTools.toList();
     }
   }
 
@@ -474,30 +474,6 @@ class WoxAIChatController extends GetxController {
       return;
     }
 
-    // Handle @agent mentions
-    final RegExp atRegex = RegExp(r'@(\S+)');
-    final Match? match = atRegex.firstMatch(text);
-    if (match != null) {
-      final String agentName = match.group(1)!;
-      Logger.instance.debug(const UuidV4().generate(), "Detected agent mention: $agentName");
-
-      // Find matching agent
-      for (final agent in availableAgents) {
-        if (agent.name.toLowerCase() == agentName.toLowerCase()) {
-          Logger.instance.debug(const UuidV4().generate(), "Found agent: ${agent.name}");
-          setCurrentAgent(agent.name);
-          break;
-        }
-      }
-
-      // Remove @agent part
-      text = text.replaceFirst(match.group(0)!, '').trim();
-      if (text.isEmpty) {
-        launcherController.showToolbarMsg(const UuidV4().generate(), ToolbarMsg(text: tr("ui_ai_chat_enter_message"), displaySeconds: 3));
-        return;
-      }
-    }
-
     // append user message to chat data
     aiChatData.value.conversations.add(WoxAIChatConversation(
       id: const UuidV4().generate(),
@@ -515,7 +491,7 @@ class WoxAIChatController extends GetxController {
       scrollToBottomOfAiChat();
     });
 
-    aiChatData.value.selectedTools = selectedTools.toList();
+    aiChatData.value.tools = selectedTools.toList();
 
     WoxApi.instance.sendChatRequest(aiChatData.value);
   }
@@ -580,7 +556,7 @@ class WoxAIChatController extends GetxController {
     }
 
     // Send the chat request to regenerate the response
-    aiChatData.value.selectedTools = selectedTools.toList();
+    aiChatData.value.tools = selectedTools.toList();
     WoxApi.instance.sendChatRequest(aiChatData.value);
   }
 
