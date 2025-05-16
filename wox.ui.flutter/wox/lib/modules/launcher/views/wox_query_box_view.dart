@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:extended_text_field/extended_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:from_css_color/from_css_color.dart';
@@ -25,7 +26,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
       Future.delayed(const Duration(milliseconds: 100), () {
         callback();
       });
-      
+
       return;
     }
 
@@ -114,7 +115,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         selectionColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionColor),
                       ),
                     ),
-                    child: TextField(
+                    child: ExtendedTextField(
                       style: TextStyle(
                         fontSize: 28.0,
                         color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor),
@@ -195,7 +196,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
           height: 55,
           child: WoxDragMoveArea(
             onDragEnd: () {
-              controller.focusQueryBox(selectAll: false);
+              controller.focusQueryBox();
             },
             child: Container(
               width: 55,
@@ -208,7 +209,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   child: GestureDetector(
                     onTap: () {
                       controller.queryIcon.value.action?.call();
-                      controller.focusQueryBox(selectAll: false);
+                      controller.focusQueryBox();
                     },
                     child: WoxImageView(woxImage: controller.queryIcon.value.icon, width: 24, height: 24),
                   ),

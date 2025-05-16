@@ -289,27 +289,17 @@ class WoxLauncherController extends GetxController {
   void hideActionPanel(String traceId) {
     isShowActionPanel.value = false;
     actionListViewController.clearFilter(traceId);
-    focusQueryBox(selectAll: true);
+    focusQueryBox();
     resizeHeight();
   }
 
   void focusQueryBox({bool selectAll = false}) {
-    // Store current cursor position before changing focus
-    final currentPosition = queryBoxTextFieldController.selection.baseOffset;
-
     // request focus to action query box since it will lose focus when tap
     queryBoxFocusNode.requestFocus();
 
     // by default requestFocus will select all text, if selectAll is false, then restore to the previously stored cursor position
-    if (!selectAll) {
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        // Restore to the previously stored cursor position
-        final currentText = queryBoxTextFieldController.text;
-        queryBoxTextFieldController.value = TextEditingValue(
-          text: currentText,
-          selection: TextSelection.collapsed(offset: currentPosition),
-        );
-      });
+    if (selectAll) {
+      queryBoxTextFieldController.selection = TextSelection(baseOffset: 0, extentOffset: queryBoxTextFieldController.text.length);
     }
   }
 
@@ -994,7 +984,7 @@ class WoxLauncherController extends GetxController {
     Logger.instance.info(const UuidV4().generate(), "Received drop files: $details");
 
     await windowManager.focus();
-    focusQueryBox(selectAll: false);
+    focusQueryBox();
 
     canArrowUpHistory = false;
 

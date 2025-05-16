@@ -199,7 +199,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
           return;
         }
 
-        launcherController.focusQueryBox(selectAll: false);
+        launcherController.focusQueryBox();
       },
       child: launcherController.isInSettingView.value ? const WoxSettingView() : const WoxLauncherView(),
     );
