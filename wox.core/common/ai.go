@@ -9,7 +9,7 @@ import (
 
 type ConversationRole string
 type ProviderName string
-type ChatStreamDataType string
+type ChatStreamDataStatus string
 
 type AIChatMCPServerType string
 
@@ -26,15 +26,16 @@ var (
 )
 
 const (
-	ChatStreamTypeStreaming ChatStreamDataType = "streaming"
-	ChatStreamTypeFinished  ChatStreamDataType = "finished"
-	ChatStreamTypeError     ChatStreamDataType = "error"
-	ChatStreamTypeToolCall  ChatStreamDataType = "tool_call" // json string of common.ToolCallInfo
+	ChatStreamStatusStreaming       ChatStreamDataStatus = "streaming"         // steaming data or tool call
+	ChatStreamStatusStreamed        ChatStreamDataStatus = "streamed"          // all data and tool call streamed, if there is any tool call, it will be running_tool_call next, otherwise finished
+	ChatStreamStatusRunningToolCall ChatStreamDataStatus = "running_tool_call" // running all tool calls, after all tool call finished, it will be finished
+	ChatStreamStatusFinished        ChatStreamDataStatus = "finished"          // all data and tool call(if any) finished
+	ChatStreamStatusError           ChatStreamDataStatus = "error"             // error occurred between sreaming or tool call
 )
 
 const (
 	ToolCallStatusStreaming ToolCallStatus = "streaming" // tool call is streaming, after streaming finished, tool call will be pending to be running
-	ToolCallStatusPending   ToolCallStatus = "pending"
+	ToolCallStatusPending   ToolCallStatus = "pending"   // streaming finished, ready to run
 	ToolCallStatusRunning   ToolCallStatus = "running"
 	ToolCallStatusSucceeded ToolCallStatus = "succeeded"
 	ToolCallStatusFailed    ToolCallStatus = "failed"
@@ -43,9 +44,31 @@ const (
 type ChatStreamFunc func(result ChatStreamData)
 
 type ChatStreamData struct {
-	Type     ChatStreamDataType
-	Data     string
-	ToolCall ToolCallInfo // only available when type is common.ChatStreamTypeToolCall
+	Status ChatStreamDataStatus
+	// Aggregated data, E.g. Data is streamed by 3 chunks, then Data1 = chunk1, Data2 = chunk1 + chunk2, Data3 = chunk1 + chunk2 + chunk3
+	Data      string
+	ToolCalls []ToolCallInfo
+}
+
+func (c *ChatStreamData) IsNotFinished() bool {
+	return c.Status == ChatStreamStatusStreaming || c.Status == ChatStreamStatusStreamed || c.Status == ChatStreamStatusRunningToolCall
+}
+
+func (c *ChatStreamData) IsAllToolCallsSucceeded() bool {
+	if c.Status != ChatStreamStatusFinished {
+		return false
+	}
+	if len(c.ToolCalls) == 0 {
+		return false
+	}
+
+	for _, toolCall := range c.ToolCalls {
+		if toolCall.Status != ToolCallStatusSucceeded {
+			return false
+		}
+	}
+
+	return true
 }
 
 type ToolCallInfo struct {

@@ -166,57 +166,39 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 			return common.ChatStreamData{}, s.stream.Err()
 		}
 
-		// check if tool call finished
-		var toolCall openai.ChatCompletionMessageToolCall
-		// somehow acc.JustFinishedToolCall is not working in my test, so we need to check the last tool call
-		// and if that failed, we check the just finished tool call
+		var toolCallInfos []common.ToolCallInfo
 		if len(s.acc.Choices) > 0 && len(s.acc.Choices[0].Message.ToolCalls) > 0 {
-			toolCall = s.acc.Choices[0].Message.ToolCalls[len(s.acc.Choices[0].Message.ToolCalls)-1]
-			s.acc.Choices[0].Message.ToParam()
-		}
-		if toolCall.Function.Name == "" {
-			if justFinishedToolCall, ok := s.acc.JustFinishedToolCall(); ok {
-				toolCall = openai.ChatCompletionMessageToolCall{
-					ID: justFinishedToolCall.Id,
-					Function: openai.ChatCompletionMessageToolCallFunction{
-						Name:      justFinishedToolCall.Name,
-						Arguments: justFinishedToolCall.Arguments,
-					},
+			toolCalls := s.acc.Choices[0].Message.ToolCalls
+			util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Tool call streaming finished, tool calls count: %d", len(toolCalls)))
+
+			for _, toolCall := range toolCalls {
+				toolCallInfo := common.ToolCallInfo{
+					Id:    toolCall.ID,
+					Name:  toolCall.Function.Name,
+					Delta: toolCall.Function.Arguments,
 				}
+
+				// try to unmarshal tool call arguments if possible
+				var argsMap map[string]any
+				if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &argsMap); err == nil {
+					toolCallInfo.Arguments = s.normalizeArguments(ctx, toolCall.Function.Name, argsMap)
+					toolCallInfo.Status = common.ToolCallStatusPending
+				} else {
+					util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal tool call arguments, json=%s, err: %s", toolCall.Function.Arguments, err.Error()))
+					toolCallInfo.Arguments = map[string]any{}
+					toolCallInfo.Status = common.ToolCallStatusFailed
+					toolCallInfo.Response = err.Error()
+				}
+
+				toolCallInfos = append(toolCallInfos, toolCallInfo)
 			}
 		}
-		if toolCall.Function.Name != "" {
-			util.GetLogger().Debug(ctx, "AI: Tool call streaming finished")
-			toolCallInfo := common.ToolCallInfo{
-				Id:    toolCall.ID,
-				Name:  toolCall.Function.Name,
-				Delta: toolCall.Function.Arguments,
-			}
 
-			// try to unmarshal tool call arguments if possible
-			var argsMap map[string]any
-			if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &argsMap); err == nil {
-				toolCallInfo.Arguments = s.normalizeArguments(ctx, toolCall.Function.Name, argsMap)
-				toolCallInfo.Status = common.ToolCallStatusPending
-			} else {
-				util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal tool call arguments, json=%s, err: %s", toolCall.Function.Arguments, err.Error()))
-				toolCallInfo.Arguments = map[string]any{}
-				toolCallInfo.Status = common.ToolCallStatusFailed
-				toolCallInfo.Response = err.Error()
-			}
-
-			return common.ChatStreamData{
-				Type:     common.ChatStreamTypeToolCall,
-				Data:     "",
-				ToolCall: toolCallInfo,
-			}, nil
-		}
-
-		// no more messages
-		util.GetLogger().Debug(ctx, "AI: Stream ended")
+		util.GetLogger().Debug(ctx, "AI: Stream ended, final message received"+s.acc.Choices[0].Message.Content)
 		return common.ChatStreamData{
-			Type: common.ChatStreamTypeFinished,
-			Data: "",
+			Status:    common.ChatStreamStatusStreamed,
+			Data:      s.acc.Choices[0].Message.Content,
+			ToolCalls: toolCallInfos,
 		}, nil
 	}
 
@@ -230,27 +212,36 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 		return common.ChatStreamData{}, ChatStreamNoContentErr
 	}
 
-	// check if tool call streaming
-	if len(chunk.Choices[0].Delta.ToolCalls) > 0 {
-		toolCall := s.acc.Choices[0].Message.ToolCalls[len(s.acc.Choices[0].Message.ToolCalls)-1]
-		toolCallInfo := common.ToolCallInfo{
-			Id:        toolCall.ID,
-			Name:      toolCall.Function.Name,
-			Arguments: map[string]any{},
-			Delta:     toolCall.Function.Arguments,
-			Status:    common.ToolCallStatusStreaming,
+	streamData := common.ChatStreamData{
+		Status: common.ChatStreamStatusStreaming,
+		Data:   s.acc.Choices[0].Message.Content,
+	}
+	var totalToolCallCount = len(s.acc.Choices[0].Message.ToolCalls)
+	if totalToolCallCount > 0 {
+		var toolCallInfos []common.ToolCallInfo
+		for index, toolcall := range s.acc.Choices[0].Message.ToolCalls {
+			isLastToolCall := index == totalToolCallCount-1
+
+			// if the toolcall is not the last one, we will set the status to pending, because the tool call streaming is one by one
+			// the prev toolcall streaming must be finished before the next one
+			status := common.ToolCallStatusStreaming
+			if totalToolCallCount > 1 && !isLastToolCall {
+				status = common.ToolCallStatusPending
+			}
+
+			toolCallInfo := common.ToolCallInfo{
+				Id:        toolcall.ID,
+				Name:      toolcall.Function.Name,
+				Arguments: map[string]any{},
+				Delta:     toolcall.Function.Arguments,
+				Status:    status,
+			}
+			toolCallInfos = append(toolCallInfos, toolCallInfo)
 		}
-		return common.ChatStreamData{
-			Type:     common.ChatStreamTypeToolCall,
-			Data:     "",
-			ToolCall: toolCallInfo,
-		}, nil
+		streamData.ToolCalls = toolCallInfos
 	}
 
-	return common.ChatStreamData{
-		Type: common.ChatStreamTypeStreaming,
-		Data: chunk.Choices[0].Delta.Content,
-	}, nil
+	return streamData, nil
 }
 
 // normalizeArguments normalizes the tool call arguments

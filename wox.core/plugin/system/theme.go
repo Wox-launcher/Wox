@@ -209,7 +209,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 
 	onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
 		current.SubTitle = "Generating..."
-		current.Preview.PreviewData += deltaAnswer
+		current.Preview.PreviewData = deltaAnswer
 		current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
 
 		if isFinished {

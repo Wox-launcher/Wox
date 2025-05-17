@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"image/png"
 	"io"
@@ -118,7 +119,7 @@ func createLLMOnRefreshHandler(ctx context.Context,
 
 	var isStreamCreated bool
 	var locker sync.Locker = &sync.Mutex{}
-	var chatStreamDataTypeBuffer common.ChatStreamDataType
+	var chatStreamDataStatus common.ChatStreamDataStatus
 	var responseBuffer string
 	return func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
 		if !shouldStartAnswering() {
@@ -133,13 +134,8 @@ func createLLMOnRefreshHandler(ctx context.Context,
 			}
 			err := chatStreamAPI(ctx, model, conversations, options, func(streamResult common.ChatStreamData) {
 				locker.Lock()
-				chatStreamDataTypeBuffer = streamResult.Type
-				if chatStreamDataTypeBuffer == common.ChatStreamTypeStreaming || chatStreamDataTypeBuffer == common.ChatStreamTypeFinished {
-					responseBuffer += streamResult.Data
-				}
-				if chatStreamDataTypeBuffer == common.ChatStreamTypeError {
-					responseBuffer = streamResult.Data
-				}
+				chatStreamDataStatus = streamResult.Status
+				responseBuffer = streamResult.Data
 				util.GetLogger().Info(ctx, fmt.Sprintf("stream buffered: %s", responseBuffer))
 				locker.Unlock()
 			})
@@ -149,27 +145,24 @@ func createLLMOnRefreshHandler(ctx context.Context,
 			}
 		}
 
-		if chatStreamDataTypeBuffer == common.ChatStreamTypeFinished {
+		if chatStreamDataStatus == common.ChatStreamStatusFinished {
 			util.GetLogger().Info(ctx, "stream finished")
 			locker.Lock()
 			buf := responseBuffer
-			responseBuffer = ""
 			locker.Unlock()
 			return onAnswering(current, buf, true)
 		}
-		if chatStreamDataTypeBuffer == common.ChatStreamTypeError {
+		if chatStreamDataStatus == common.ChatStreamStatusError {
 			util.GetLogger().Info(ctx, fmt.Sprintf("stream error: %s", responseBuffer))
 			locker.Lock()
-			err := fmt.Errorf(responseBuffer)
-			responseBuffer = ""
+			err := errors.New(responseBuffer)
 			locker.Unlock()
 			return onAnswerErr(current, err)
 		}
-		if chatStreamDataTypeBuffer == common.ChatStreamTypeStreaming {
+		if chatStreamDataStatus == common.ChatStreamStatusStreaming {
 			util.GetLogger().Info(ctx, fmt.Sprintf("streaming: %s", responseBuffer))
 			locker.Lock()
 			buf := responseBuffer
-			responseBuffer = ""
 			locker.Unlock()
 			return onAnswering(current, buf, false)
 		}

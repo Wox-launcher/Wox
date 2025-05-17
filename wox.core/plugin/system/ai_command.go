@@ -194,7 +194,7 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 			}
 
 			current.SubTitle = "i18n:plugin_ai_command_answering"
-			current.ContextData += deltaAnswer
+			current.ContextData = deltaAnswer
 
 			// Process thinking tags to convert them to markdown quote format
 			thinking, content := processAIThinking(current.ContextData)
@@ -397,7 +397,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	}
 
 	onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
-		current.ContextData += deltaAnswer
+		current.ContextData = deltaAnswer
 		// Process thinking tags to convert them to markdown quote format
 		thinking, content := processAIThinking(current.ContextData)
 		current.Preview.PreviewData = convertAIThinkingToMarkdown(thinking, content)

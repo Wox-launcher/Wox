@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"sync"
 	"time"
 	"wox/ai"
 	"wox/common"
@@ -41,9 +42,9 @@ type API interface {
 }
 
 type APIImpl struct {
-	pluginInstance   *Instance
-	logger           *util.Log
-	toolCallStartMap *util.HashMap[string, int64]
+	pluginInstance       *Instance
+	logger               *util.Log
+	toolCallStartTimeMap *util.HashMap[string, int64] // store the start time of tool calls
 }
 
 func (a *APIImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
@@ -218,146 +219,79 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversa
 
 					util.GetLogger().Info(ctx, fmt.Sprintf("AI: failed to read stream from ai provider: %s", streamErr.Error()))
 					callback(common.ChatStreamData{
-						Type:     common.ChatStreamTypeError,
-						Data:     streamErr.Error(),
-						ToolCall: common.ToolCallInfo{},
+						Status:    common.ChatStreamStatusError,
+						Data:      streamErr.Error(),
+						ToolCalls: []common.ToolCallInfo{},
 					})
 					return
 				}
 
-				util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Received stream from ai provider: type=%s, response=%s", streamResult.Type, streamResult.Data))
+				util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Received stream from ai provider: status=%s, data=%s, tool calls=%d", streamResult.Status, streamResult.Data, len(streamResult.ToolCalls)))
 
-				if streamResult.Type == common.ChatStreamTypeFinished {
-					util.GetLogger().Info(ctx, "AI: read stream from ai provider completed")
-					callback(common.ChatStreamData{
-						Type:     common.ChatStreamTypeFinished,
-						Data:     "",
-						ToolCall: common.ToolCallInfo{},
-					})
-					return
+				a.applyStartTimeIfAbsent(&streamResult)
+
+				if streamResult.Status == common.ChatStreamStatusStreaming {
+					callback(streamResult)
+					continue
 				}
 
-				if streamResult.Type == common.ChatStreamTypeToolCall {
-					startTime := util.GetSystemTimestamp()
-					if v, ok := a.toolCallStartMap.Load(streamResult.ToolCall.Id); ok {
-						startTime = v
-					} else {
-						a.toolCallStartMap.Store(streamResult.ToolCall.Id, startTime)
-					}
-					streamResult.ToolCall.StartTimestamp = startTime
+				if streamResult.Status == common.ChatStreamStatusStreamed {
+					// execute tool calls
+					// we execute tool calls asynchronously, but wait for all tool calls to finish before sending the final result
+					var sw = sync.WaitGroup{}
 
-					if streamResult.ToolCall.Status == common.ToolCallStatusStreaming {
-						util.GetLogger().Info(ctx, fmt.Sprintf("AI: Tool call is streaming, delta: %s", streamResult.ToolCall.Delta))
-						time.Sleep(time.Millisecond * 100)
-						callback(streamResult)
-						continue
-					}
-
-					if streamResult.ToolCall.Status == common.ToolCallStatusPending {
-						util.GetLogger().Info(ctx, fmt.Sprintf("AI: Tool call is pending to execute, name: %s, args: %v", streamResult.ToolCall.Name, streamResult.ToolCall.Arguments))
+					for toolCallIndex, toolCall := range streamResult.ToolCalls {
+						util.GetLogger().Info(ctx, fmt.Sprintf("AI: Tool call is pending to execute, name: %s, args: %v", toolCall.Name, toolCall.Arguments))
 
 						for _, tool := range options.Tools {
-							if tool.Name == streamResult.ToolCall.Name {
-								util.GetLogger().Info(ctx, fmt.Sprintf("AI: Executing tool: %s with args: %v, toolcall id: %s, toolcall status: %s", tool.Name, streamResult.ToolCall.Arguments, streamResult.ToolCall.Id, streamResult.ToolCall.Status))
+							if tool.Name == toolCall.Name {
+								sw.Add(1)
 
-								callback(common.ChatStreamData{
-									Type: common.ChatStreamTypeToolCall,
-									Data: "",
-									ToolCall: common.ToolCallInfo{
-										Id:             streamResult.ToolCall.Id,
-										Name:           streamResult.ToolCall.Name,
-										Arguments:      streamResult.ToolCall.Arguments,
-										Response:       "",
-										Status:         common.ToolCallStatusRunning,
-										StartTimestamp: startTime,
-									},
-								})
+								util.GetLogger().Info(ctx, fmt.Sprintf("AI: Executing tool: %s with args: %v, toolcall id: %s, toolcall status: %s", tool.Name, toolCall.Arguments, toolCall.Id, toolCall.Status))
 
-								// execute tool call in a new goroutine, and send callback continuously to refresh the status
-								execCtx, cancelExec := context.WithCancel(ctx)
-								var toolResponse common.Conversation
-								var toolErr error
+								// update tool call status to running and sync to caller
+								streamResult.Status = common.ChatStreamStatusRunningToolCall
+								streamResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusRunning
 
 								util.Go(ctx, "ai tool call execution", func() {
-									toolResponse, toolErr = tool.Callback(ctx, streamResult.ToolCall.Arguments)
-									cancelExec()
-								}, func() {
-									toolErr = fmt.Errorf("tool execution failed with panic")
-									cancelExec()
-								})
-
-								util.Go(ctx, "ai tool call status update", func() {
-									for {
-										select {
-										case <-execCtx.Done():
-											return
-										case <-time.After(time.Millisecond * 200):
-											callback(common.ChatStreamData{
-												Type: common.ChatStreamTypeToolCall,
-												Data: "",
-												ToolCall: common.ToolCallInfo{
-													Id:             streamResult.ToolCall.Id,
-													Name:           streamResult.ToolCall.Name,
-													Arguments:      streamResult.ToolCall.Arguments,
-													Response:       "",
-													Status:         common.ToolCallStatusRunning,
-													StartTimestamp: startTime,
-												},
-											})
-										}
+									toolResponse, toolErr := tool.Callback(ctx, toolCall.Arguments)
+									if toolErr != nil {
+										util.GetLogger().Error(ctx, fmt.Sprintf("AI: tool execution failed: %s", toolErr.Error()))
+										streamResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusFailed
+										streamResult.ToolCalls[toolCallIndex].Response = toolErr.Error()
+									} else {
+										streamResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusSucceeded
+										streamResult.ToolCalls[toolCallIndex].Response = toolResponse.Text
+										streamResult.ToolCalls[toolCallIndex].EndTimestamp = util.GetSystemTimestamp()
 									}
+
+									callback(streamResult)
+									sw.Done()
+								}, func() {
+									util.GetLogger().Error(ctx, fmt.Sprintf("AI: tool execution failed with panic, name: %s", tool.Name))
+									streamResult.ToolCalls[toolCallIndex].Status = common.ToolCallStatusFailed
+									streamResult.ToolCalls[toolCallIndex].Response = "tool execution failed with panic"
+
+									callback(streamResult)
+									sw.Done()
 								})
-
-								<-execCtx.Done()
-
-								endTime := util.GetSystemTimestamp()
-								duration := endTime - startTime
-
-								if toolErr != nil {
-									util.GetLogger().Error(ctx, fmt.Sprintf("AI: tool execution failed: %s", toolErr.Error()))
-									callback(common.ChatStreamData{
-										Type: common.ChatStreamTypeToolCall,
-										Data: "",
-										ToolCall: common.ToolCallInfo{
-											Id:             streamResult.ToolCall.Id,
-											Name:           streamResult.ToolCall.Name,
-											Arguments:      streamResult.ToolCall.Arguments,
-											Response:       toolErr.Error(),
-											Status:         common.ToolCallStatusFailed,
-											StartTimestamp: startTime,
-											EndTimestamp:   endTime,
-										},
-									})
-									break
-								}
-
-								util.GetLogger().Info(ctx, fmt.Sprintf("AI: Tool execution completed - name: %s, toolCallID: %s, duration: %dms", tool.Name, streamResult.ToolCall.Id, duration))
-								util.GetLogger().Info(ctx, fmt.Sprintf("AI: Tool response text: %s", toolResponse.Text))
-
-								callback(common.ChatStreamData{
-									Type: common.ChatStreamTypeToolCall,
-									Data: "",
-									ToolCall: common.ToolCallInfo{
-										Id:             streamResult.ToolCall.Id,
-										Name:           streamResult.ToolCall.Name,
-										Arguments:      streamResult.ToolCall.Arguments,
-										Response:       toolResponse.Text,
-										Status:         common.ToolCallStatusSucceeded,
-										StartTimestamp: startTime,
-										EndTimestamp:   endTime,
-									},
-								})
-								break
 							}
 						}
-
-						// if tool call executed, break the loop
-						break
 					}
-				}
 
-				if streamResult.Type == common.ChatStreamTypeStreaming {
-					callback(streamResult)
+					sw.Wait()
+
+					anyToolCallFailed := lo.SomeBy(streamResult.ToolCalls, func(toolCall common.ToolCallInfo) bool {
+						return toolCall.Status == common.ToolCallStatusFailed
+					})
+					if anyToolCallFailed {
+						streamResult.Status = common.ChatStreamStatusError
+						callback(streamResult)
+					} else {
+						streamResult.Status = common.ChatStreamStatusFinished
+						callback(streamResult)
+					}
+					return
 				}
 			}
 		})
@@ -366,10 +300,22 @@ func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversa
 	return nil
 }
 
+func (a *APIImpl) applyStartTimeIfAbsent(streamResult *common.ChatStreamData) {
+	for toolCallIndex, toolCall := range streamResult.ToolCalls {
+		startTime := util.GetSystemTimestamp()
+		if v, ok := a.toolCallStartTimeMap.Load(toolCall.Id); ok {
+			startTime = v
+		} else {
+			a.toolCallStartTimeMap.Store(toolCall.Id, startTime)
+		}
+		streamResult.ToolCalls[toolCallIndex].StartTimestamp = startTime
+	}
+}
+
 func NewAPI(instance *Instance) API {
 	apiImpl := &APIImpl{pluginInstance: instance}
 	logFolder := path.Join(util.GetLocation().GetLogPluginDirectory(), instance.Metadata.Name)
 	apiImpl.logger = util.CreateLogger(logFolder)
-	apiImpl.toolCallStartMap = util.NewHashMap[string, int64]()
+	apiImpl.toolCallStartTimeMap = util.NewHashMap[string, int64]()
 	return apiImpl
 }

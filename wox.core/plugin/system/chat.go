@@ -538,71 +538,49 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 	}
 
 	var responseId = uuid.NewString()
-	var responseText string
 	chatErr := r.api.AIChatStream(ctx, aiChatData.Model, aiChatData.Conversations, common.ChatOptions{
 		Tools: tools,
 	}, func(streamResult common.ChatStreamData) {
-		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat stream receiving data type: %s, data: %s", streamResult.Type, streamResult.Data))
-		if streamResult.Type == common.ChatStreamTypeStreaming {
-			responseText += streamResult.Data
+		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat stream receiving data, status: %s, data: %s", streamResult.Status, streamResult.Data))
+
+		// update conversations and sync to UI
+		if streamResult.Data != "" {
 			r.appendOrUpdateConversation(&aiChatData, common.Conversation{
 				Id:        responseId,
 				Role:      common.ConversationRoleAssistant,
-				Text:      responseText,
+				Text:      streamResult.Data,
 				Timestamp: util.GetSystemTimestamp(),
 			})
-		} else if streamResult.Type == common.ChatStreamTypeFinished {
-			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat stream finished: %s", responseText))
-			r.appendOrUpdateConversation(&aiChatData, common.Conversation{
-				Id:        responseId,
-				Role:      common.ConversationRoleAssistant,
-				Text:      responseText,
-				Timestamp: util.GetSystemTimestamp(),
-			})
-			r.appendOrUpdateChatData(aiChatData)
+		}
+		if len(streamResult.ToolCalls) > 0 {
+			for _, toolCall := range streamResult.ToolCalls {
+				r.appendOrUpdateConversation(&aiChatData, common.Conversation{
+					Id:           toolCall.Id,
+					Role:         common.ConversationRoleTool,
+					Text:         toolCall.Delta,
+					ToolCallInfo: toolCall,
+					Timestamp:    toolCall.StartTimestamp,
+				})
+			}
+		}
+		plugin.GetPluginManager().GetUI().SendChatResponse(ctx, aiChatData)
+
+		if streamResult.Status == common.ChatStreamStatusFinished {
+			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat stream finished: %s", streamResult.Data))
 			r.saveChats(ctx)
 
-			r.summaryTitleIfNecessary(ctx, aiChatData)
-		} else if streamResult.Type == common.ChatStreamTypeError {
-			responseText = fmt.Sprintf("CHAT ERR: %s", streamResult.Data)
-			r.appendOrUpdateConversation(&aiChatData, common.Conversation{
-				Id:        responseId,
-				Role:      common.ConversationRoleAssistant,
-				Text:      responseText,
-				Timestamp: util.GetSystemTimestamp(),
-			})
-		} else if streamResult.Type == common.ChatStreamTypeToolCall {
-			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: received tool call: %s", streamResult.ToolCall.Id))
-
-			r.appendOrUpdateConversation(&aiChatData, common.Conversation{
-				Id:           uuid.NewString(),
-				Role:         common.ConversationRoleTool,
-				Text:         streamResult.ToolCall.Delta,
-				ToolCallInfo: streamResult.ToolCall,
-				Timestamp:    util.GetSystemTimestamp(),
-			})
-			r.appendOrUpdateChatData(aiChatData)
-
-			// if tool call is streaming, send the chat response to UI and return
-			// no need to save chat
-			if streamResult.ToolCall.Status == common.ToolCallStatusStreaming {
-				plugin.GetPluginManager().GetUI().SendChatResponse(ctx, aiChatData)
-				return
+			// only summarize the chat title if there is no tool call
+			// if there is any toolcall, we need to wait for the tool call to finish
+			if len(streamResult.ToolCalls) == 0 {
+				r.summaryTitleIfNecessary(ctx, aiChatData)
 			}
 
-			r.saveChats(ctx)
-			plugin.GetPluginManager().GetUI().SendChatResponse(ctx, aiChatData)
-
-			if streamResult.ToolCall.Status == common.ToolCallStatusSucceeded {
+			if streamResult.IsAllToolCallsSucceeded() {
 				// recursively call the chat to continue
 				r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: recursively calling the chat to continue, loop: %d", chatLoopCount+1))
 				r.Chat(ctx, aiChatData, chatLoopCount+1)
-				return
 			}
 		}
-
-		// send the chat response to UI
-		plugin.GetPluginManager().GetUI().SendChatResponse(ctx, aiChatData)
 	})
 
 	if chatErr != nil {
@@ -629,11 +607,6 @@ func (r *AIChatPlugin) appendOrUpdateConversation(aiChatData *common.AIChatData,
 	for i := range aiChatData.Conversations {
 		if aiChatData.Conversations[i].Id == conversation.Id {
 			aiChatData.Conversations[i] = conversation
-			return
-		}
-		// if the tool call id is the same, update it too
-		if aiChatData.Conversations[i].Role == common.ConversationRoleTool && aiChatData.Conversations[i].ToolCallInfo.Id == conversation.ToolCallInfo.Id {
-			aiChatData.Conversations[i].ToolCallInfo = conversation.ToolCallInfo
 			return
 		}
 	}
@@ -818,12 +791,11 @@ func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData
 		Timestamp: util.GetSystemTimestamp(),
 	})
 
-	title := ""
 	r.api.AIChatStream(ctx, chat.Model, conversations, common.EmptyChatOptions, func(streamResult common.ChatStreamData) {
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat summarize stream data: %s", streamResult.Data))
-		if streamResult.Type == common.ChatStreamTypeStreaming {
-			title += streamResult.Data
-		} else if streamResult.Type == common.ChatStreamTypeFinished {
+		if streamResult.Status == common.ChatStreamStatusFinished {
+			title := streamResult.Data
+
 			// remove the thinking tags
 			_, title = processAIThinking(title)
 			title = strings.ReplaceAll(title, "\n", "")

@@ -53,21 +53,29 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
     "py": python,
   };
 
+  Widget scrollableContent({required Widget child}) {
+    return SingleChildScrollView(
+      controller: scrollController,
+      child: Scrollbar(
+        child: child,
+      ),
+    );
+  }
+
   Widget buildMarkdown(String markdownData) {
-    return WoxMarkdownView(
-      data: markdownData,
-      fontColor: fromCssColor(widget.woxTheme.previewFontColor),
+    return scrollableContent(
+      child: WoxMarkdownView(
+        data: markdownData,
+        fontColor: fromCssColor(widget.woxTheme.previewFontColor),
+      ),
     );
   }
 
   Widget buildText(String txtData) {
-    return SingleChildScrollView(
-      controller: scrollController,
-      child: Scrollbar(
-        child: SelectableText(
-          txtData,
-          style: TextStyle(color: fromCssColor(widget.woxTheme.previewFontColor)),
-        ),
+    return scrollableContent(
+      child: SelectableText(
+        txtData,
+        style: TextStyle(color: fromCssColor(widget.woxTheme.previewFontColor)),
       ),
     );
   }
@@ -317,7 +325,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 120),
+                                constraints: const BoxConstraints(maxWidth: 80),
                                 child: Text(e.key, overflow: TextOverflow.ellipsis, style: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor))),
                               ),
                               ConstrainedBox(
