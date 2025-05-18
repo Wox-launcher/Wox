@@ -612,7 +612,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 
 	ignoreAutoScore := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureIgnoreAutoScore)
 	if !ignoreAutoScore {
-		score := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
+		score := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle, query.RawQuery)
 		if score > 0 {
 			logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) add score: %d", pluginInstance.Metadata.Name, result.Title, score))
 			result.Score += score
@@ -656,7 +656,7 @@ func (m *Manager) formatFileListPreview(ctx context.Context, filePaths []string)
 	return sb.String()
 }
 
-func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string) int64 {
+func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string, currentQuery string) int64 {
 	var score int64 = 0
 
 	resultHash := setting.NewResultHash(pluginId, title, subTitle)
@@ -686,6 +686,11 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, sub
 			}
 			fibonacci := []int64{5, 8, 13, 21, 34, 55, 89}
 			score += fibonacci[7-fibonacciIndex]
+		}
+
+		// If the current query is within the historical selected actions, it indicates a stronger connection and increases the score.
+		if currentQuery != "" && actionResult.Query == currentQuery {
+			score += 20
 		}
 
 		score += weight
@@ -1049,7 +1054,7 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 	})
 
 	util.Go(ctx, fmt.Sprintf("[%s] add actioned result", resultCache.PluginInstance.Metadata.Name), func() {
-		setting.GetSettingManager().AddActionedResult(ctx, resultCache.PluginInstance.Metadata.Id, resultCache.ResultTitle, resultCache.ResultSubTitle)
+		setting.GetSettingManager().AddActionedResult(ctx, resultCache.PluginInstance.Metadata.Id, resultCache.ResultTitle, resultCache.ResultSubTitle, resultCache.Query.RawQuery)
 	})
 
 	return nil

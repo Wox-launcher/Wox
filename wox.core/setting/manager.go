@@ -422,9 +422,12 @@ func (m *Manager) GetLatestQueryHistory(ctx context.Context, n int) []QueryHisto
 	return result
 }
 
-func (m *Manager) AddActionedResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string) {
+func (m *Manager) AddActionedResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string, query string) {
 	resultHash := NewResultHash(pluginId, resultTitle, resultSubTitle)
-	actionedResult := ActionedResult{Timestamp: util.GetSystemTimestamp()}
+	actionedResult := ActionedResult{
+		Timestamp: util.GetSystemTimestamp(),
+		Query:     query,
+	}
 
 	if v, ok := m.woxAppData.ActionedResults.Load(resultHash); ok {
 		v = append(v, actionedResult)

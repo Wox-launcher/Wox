@@ -22,6 +22,7 @@ type QueryHistory struct {
 
 type ActionedResult struct {
 	Timestamp int64
+	Query     string // Record the raw query text when the user performs action on this result
 }
 
 func NewResultHash(pluginId string, title, subTitle string) ResultHash {
