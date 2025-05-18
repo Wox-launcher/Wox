@@ -4,6 +4,7 @@ import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/wox_chat_toolcall_duration.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_list_view.dart';
 import 'package:wox/components/wox_markdown.dart';
@@ -389,16 +390,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
       fontColor = fromCssColor(woxTheme.resultItemTitleColor);
     }
 
-    final alignment = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-
-    ThemeData styleTheme = Theme.of(context).copyWith(
-      textTheme: Theme.of(context).textTheme.apply(
-            bodyColor: fontColor,
-            displayColor: fontColor,
-          ),
-      cardColor: Colors.transparent,
-    );
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
       child: Row(
@@ -409,7 +400,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
           const SizedBox(width: 8),
           Flexible(
             child: Column(
-              crossAxisAlignment: alignment,
+              crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
                 Container(
                   margin: const EdgeInsets.only(bottom: 4),
@@ -531,8 +522,14 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  '${message.toolCallInfo.duration}ms',
+                WoxChatToolcallDuration(
+                  id: message.id,
+                  startTimestamp: message.toolCallInfo.startTimestamp,
+                  endTimestamp: (message.toolCallInfo.status == ToolCallStatus.streaming ||
+                          message.toolCallInfo.status == ToolCallStatus.pending ||
+                          message.toolCallInfo.status == ToolCallStatus.running)
+                      ? null
+                      : message.toolCallInfo.endTimestamp,
                   style: TextStyle(
                     fontSize: 12,
                     color: fromCssColor(woxTheme.queryBoxFontColor),
@@ -619,7 +616,6 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
           _buildDetailItem(tr('ui_ai_chat_tool_detail_id'), info.id),
           _buildDetailItem(tr('ui_ai_chat_tool_detail_name'), info.name),
           _buildDetailItem(tr('ui_ai_chat_tool_detail_params'), info.status == ToolCallStatus.streaming ? info.delta : info.arguments.toString()),
-          _buildDetailItem(tr('ui_ai_chat_tool_detail_duration'), '${info.duration}ms'),
           if (info.response.isNotEmpty) _buildDetailItem(tr('ui_ai_chat_tool_detail_response'), info.response),
         ],
       ),

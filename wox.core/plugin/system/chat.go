@@ -567,6 +567,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 
 		if streamResult.Status == common.ChatStreamStatusFinished {
 			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat stream finished: %s", streamResult.Data))
+			r.appendOrUpdateChatData(aiChatData)
 			r.saveChats(ctx)
 
 			// only summarize the chat title if there is no tool call
