@@ -6,6 +6,9 @@ import (
 	"strings"
 	"wox/plugin"
 	"wox/util/selection"
+
+	"github.com/Masterminds/semver/v3"
+	"github.com/samber/lo"
 )
 
 func init() {
@@ -68,23 +71,55 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 		return results
 	}
 
+	// Check if plugin is already installed
+	installedPlugin, isInstalled := lo.Find(plugin.GetPluginManager().GetPluginInstances(), func(item *plugin.Instance) bool {
+		return item.Metadata.Id == pluginMetadata.Id
+	})
+
+	// Determine action title and button text based on installation status and version comparison
+	actionTitleKey := "plugin_installer_install"
+	actionButtonName := "Install"
+
+	if isInstalled {
+		installedVersion, installedErr := semver.NewVersion(installedPlugin.Metadata.Version)
+		currentVersion, currentErr := semver.NewVersion(pluginMetadata.Version)
+
+		if installedErr == nil && currentErr == nil {
+			if installedVersion.GreaterThan(currentVersion) {
+				actionTitleKey = "plugin_installer_downgrade"
+				actionButtonName = "Downgrade"
+			} else if installedVersion.LessThan(currentVersion) {
+				actionTitleKey = "plugin_installer_upgrade"
+				actionButtonName = "Upgrade"
+			} else {
+				actionTitleKey = "plugin_installer_reinstall"
+				actionButtonName = "Reinstall"
+			}
+		}
+	}
+
+	// Get translated action title
+	actionTitle := i.api.GetTranslation(ctx, actionTitleKey)
+
 	// create result for plugin installation
 	results = append(results, plugin.QueryResult{
-		Title:    fmt.Sprintf("Install plugin: %s", pluginMetadata.Name),
+		Title:    fmt.Sprintf("%s: %s", actionTitle, pluginMetadata.Name),
 		SubTitle: fmt.Sprintf("Version: %s, Author: %s\nDescription: %s", pluginMetadata.Version, pluginMetadata.Author, pluginMetadata.Description),
 		Icon:     plugin.WoxIcon,
 		Actions: []plugin.QueryResultAction{
 			{
-				Name:                   "Install",
+				Name:                   actionButtonName,
 				Icon:                   plugin.WoxIcon,
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					i.api.Notify(ctx, fmt.Sprintf("Installing plugin: %s", pluginMetadata.Name))
+					i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_start"), actionButtonName, pluginMetadata.Name))
 					installErr := plugin.GetStoreManager().InstallFromLocal(ctx, filePath)
 					if installErr != nil {
-						i.api.Notify(ctx, fmt.Sprintf("Failed to install plugin: %s", installErr.Error()))
+						i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_failed"), strings.ToLower(actionButtonName), installErr.Error()))
 					} else {
-						i.api.Notify(ctx, fmt.Sprintf("Plugin installed: %s", pluginMetadata.Name))
+						actionVerbKey := fmt.Sprintf("plugin_installer_verb_%s_past", strings.ToLower(actionButtonName))
+						actionVerb := i.api.GetTranslation(ctx, actionVerbKey)
+						i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_success"), actionVerb, pluginMetadata.Name))
 					}
 				},
 			},
@@ -110,7 +145,13 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 ## Features
 %s`,
 				pluginMetadata.Name,
-				pluginMetadata.Version,
+				func() string {
+					versionText := pluginMetadata.Version
+					if isInstalled {
+						versionText += fmt.Sprintf(" (Installed: %s)", installedPlugin.Metadata.Version)
+					}
+					return versionText
+				}(),
 				pluginMetadata.Author,
 				pluginMetadata.Website,
 				pluginMetadata.Website,
