@@ -66,16 +66,31 @@ class WoxAIChatController extends GetxController {
       onFilterBoxEscPressed: (traceId) => hideChatSelectPanel(),
     );
 
-    reloadAIModels();
-    fetchAvailableTools();
-    fetchAvailableAgents();
+    reloadChatResources(const UuidV4().generate());
+  }
+
+  void reloadChatResources(String traceId, {String resourceName = "all"}) {
+    Logger.instance.debug(traceId, "start reloading AI chat resources");
+    if (resourceName == "models") {
+      reloadAIModels(traceId);
+    } else if (resourceName == "tools") {
+      fetchAvailableTools(traceId);
+    } else if (resourceName == "agents") {
+      fetchAvailableAgents(traceId);
+    } else if (resourceName == "all") {
+      reloadAIModels(traceId);
+      fetchAvailableTools(traceId);
+      fetchAvailableAgents(traceId);
+    }
   }
 
   // Load available AI models
-  void reloadAIModels() {
+  void reloadAIModels(String traceId) {
+    Logger.instance.debug(traceId, "start reloading ai models");
+
     WoxApi.instance.findAIModels().then((models) {
       aiModels.assignAll(models);
-      Logger.instance.debug(const UuidV4().generate(), "reload ai models: ${aiModels.length}");
+      Logger.instance.debug(traceId, "reload ai models: ${aiModels.length}");
     });
   }
 
@@ -363,16 +378,19 @@ class WoxAIChatController extends GetxController {
   }
 
   // Method to fetch available tools based on the current model
-  Future<void> fetchAvailableTools() async {
+  Future<void> fetchAvailableTools(String traceId) async {
+    Logger.instance.info(traceId, "start fetching AI tools");
+
     if (isLoadingTools.value) return;
     isLoadingTools.value = true;
 
     try {
       final tools = await WoxApi.instance.findAIMCPServerToolsAll();
       availableTools.assignAll(tools);
-
       // Default select all tools
       selectedTools.assignAll(tools.map((tool) => tool.name).toSet());
+
+      Logger.instance.debug(const UuidV4().generate(), "AI: loaded ${tools.length} tools");
     } catch (e, s) {
       Logger.instance.error(const UuidV4().generate(), 'Error fetching AI tools: $e $s');
       availableTools.clear();
@@ -383,18 +401,20 @@ class WoxAIChatController extends GetxController {
   }
 
   // Method to fetch available agents
-  Future<void> fetchAvailableAgents() async {
+  Future<void> fetchAvailableAgents(String traceId) async {
+    Logger.instance.info(traceId, "start fetching AI agents");
+
     if (isLoadingAgents.value) return;
     isLoadingAgents.value = true;
 
     try {
       final agents = await WoxApi.instance.findAIAgents();
       availableAgents.assignAll(agents);
-      Logger.instance.debug(const UuidV4().generate(), "AI: loaded ${agents.length} agents");
+      Logger.instance.debug(traceId, "AI: loaded ${agents.length} agents");
 
       // Log each agent for debugging
       for (final agent in agents) {
-        Logger.instance.debug(const UuidV4().generate(), "AI: agent details - Name: ${agent.name}, Model: ${agent.model.name}");
+        Logger.instance.debug(traceId, "AI: agent details - Name: ${agent.name}, Model: ${agent.model.name}");
       }
 
       // If currently displaying agent selection panel, update the list
@@ -508,15 +528,17 @@ class WoxAIChatController extends GetxController {
       aiChatData.value.conversations.assignAll(data.conversations);
       aiChatData.value.updatedAt = data.updatedAt;
 
-      // 更新agent信息
       if (data.agentName != null) {
         aiChatData.value.agentName = data.agentName;
       }
 
-      // Scroll to bottom after a short delay to ensure the new message is rendered
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        scrollToBottomOfAiChat();
-      });
+      // if the scrollbar is already at the bottom, scroll to bottom, otherwise, do nothing
+      if (aiChatScrollController.hasClients && aiChatScrollController.position.pixels == aiChatScrollController.position.maxScrollExtent) {
+        // Scroll to bottom after a short delay to ensure the new message is rendered
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          scrollToBottomOfAiChat();
+        });
+      }
     }
   }
 

@@ -522,6 +522,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   }
                   if (e.type == "table") {
                     return WoxSettingPluginTable(
+                      tableWidth: 970,
                       value: plugin.setting.settings[e.value.key] ?? "",
                       item: e.value as PluginSettingValueTable,
                       onUpdate: (key, value) async {
@@ -556,7 +557,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
 
     return WoxSettingPluginTable(
       value: json.encode(plugin.triggerKeywords.map((e) => {"keyword": e}).toList()),
-      tableWidth: 680,
+      tableWidth: 670,
       item: PluginSettingValueTable.fromJson({
         "Key": "_triggerKeywords",
         "Columns": [

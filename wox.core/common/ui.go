@@ -48,9 +48,12 @@ type UI interface {
 	UninstallTheme(ctx context.Context, theme Theme)
 	RestoreTheme(ctx context.Context)
 	Notify(ctx context.Context, msg NotifyMsg)
+	UpdateResult(ctx context.Context, result UpdateableResult)
+
+	// AI chat plugin related methods
 	FocusToChatInput(ctx context.Context)
 	SendChatResponse(ctx context.Context, chatData AIChatData)
-	UpdateResult(ctx context.Context, result UpdateableResult)
+	ReloadChatResources(ctx context.Context, resouceName string)
 }
 
 type ShowContext struct {

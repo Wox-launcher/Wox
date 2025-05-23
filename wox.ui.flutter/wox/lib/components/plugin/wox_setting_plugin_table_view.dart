@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/gestures.dart';
 import 'package:uuid/v4.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:wox/api/wox_api.dart';
@@ -332,6 +333,8 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       SizedBox(
         width: operationWidth,
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.start, // Align buttons to the start
+          mainAxisSize: MainAxisSize.min, // Use minimum space needed
           children: [
             HyperlinkButton(
               onPressed: () {
@@ -364,9 +367,15 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                       );
                     });
               },
+              style: ButtonStyle(
+                padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 4)),
+              ),
               child: Icon(material.Icons.edit, color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
             ),
             HyperlinkButton(
+              style: ButtonStyle(
+                padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 4)),
+              ),
               onPressed: () {
                 //confirm delete
                 showDialog(
@@ -543,78 +552,67 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     }
 
     return Scrollbar(
-      thumbVisibility: true,
-      controller: horizontalScrollController,
-      child: SingleChildScrollView(
         controller: horizontalScrollController,
-        scrollDirection: Axis.horizontal,
-        child: SizedBox(
-          width: tableWidth, // Explicit width constraint
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                constraints: const BoxConstraints(maxHeight: 300),
-                child: Scrollbar(
-                  thumbVisibility: true,
-                  controller: verticalScrollController,
-                  child: SingleChildScrollView(
-                    controller: verticalScrollController,
-                    child: material.DataTable(
-                      columnSpacing: columnSpacing,
-                      horizontalMargin: 5,
-                      headingRowHeight: 40,
-                      headingRowColor: material.WidgetStateProperty.resolveWith((states) => fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
-                      border: TableBorder.all(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
-                      columns: [
-                        for (var column in item.columns)
-                          if (!column.hideInTable)
-                            material.DataColumn(
-                              label: columnWidth(
-                                column: column,
-                                isHeader: true,
-                                isOperation: false,
-                                child: buildHeaderCell(column),
-                              ),
-                            ),
-                        if (!readonly)
-                          material.DataColumn(
-                            label: columnWidth(
-                              column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
-                                "Key": "Operation",
-                                "Label": tr("ui_operation"),
-                                "Tooltip": "",
-                                "Width": operationWidth.toInt(),
-                                "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText,
-                                "TextMaxLines": 1,
-                              }),
-                              isHeader: true,
-                              isOperation: true,
-                              child: material.Tooltip(
-                                message: tr("ui_operation"),
-                                child: Text(
-                                  tr("ui_operation"),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                  style: TextStyle(
-                                    color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+        child: SingleChildScrollView(
+          controller: horizontalScrollController,
+          scrollDirection: Axis.horizontal,
+          child: Container(
+            constraints: BoxConstraints(maxHeight: 300, maxWidth: tableWidth),
+            child: Scrollbar(
+              controller: verticalScrollController,
+              child: SingleChildScrollView(
+                controller: verticalScrollController,
+                child: material.DataTable(
+                  columnSpacing: columnSpacing,
+                  horizontalMargin: 5,
+                  headingRowHeight: 40,
+                  headingRowColor: material.WidgetStateProperty.resolveWith((states) => fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
+                  border: TableBorder.all(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
+                  columns: [
+                    for (var column in item.columns)
+                      if (!column.hideInTable)
+                        material.DataColumn(
+                          label: columnWidth(
+                            column: column,
+                            isHeader: true,
+                            isOperation: false,
+                            child: buildHeaderCell(column),
+                          ),
+                        ),
+                    if (!readonly)
+                      material.DataColumn(
+                        label: columnWidth(
+                          column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
+                            "Key": "Operation",
+                            "Label": tr("ui_operation"),
+                            "Tooltip": "",
+                            "Width": operationWidth.toInt(),
+                            "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText,
+                            "TextMaxLines": 1,
+                          }),
+                          isHeader: true,
+                          isOperation: true,
+                          child: material.Tooltip(
+                            message: tr("ui_operation"),
+                            child: Text(
+                              tr("ui_operation"),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: TextStyle(
+                                color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ),
-                      ],
-                      rows: dataRows,
-                    ),
-                  ),
+                        ),
+                      ),
+                  ],
+                  rows: dataRows,
                 ),
               ),
-            ],
+            ),
           ),
-        ),
-      ),
-    );
+        ));
   }
 
   @override

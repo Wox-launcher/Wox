@@ -531,6 +531,9 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "SendChatResponse") {
       handleChatResponse(msg.traceId, WoxAIChatData.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "ReloadChatResources") {
+      Get.find<WoxAIChatController>().reloadChatResources(msg.traceId, resourceName: msg.data as String);
+      responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "UpdateResult") {
       updateResult(msg.traceId, UpdateableResult.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);

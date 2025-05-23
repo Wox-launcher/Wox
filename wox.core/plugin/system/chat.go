@@ -269,15 +269,16 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			}
 
 			r.agents = agents
-		}
-	})
 
-	r.reloadMCPServers(ctx)
-	r.api.OnSettingChanged(ctx, func(key string, value string) {
+			plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "agents")
+		}
+
 		if key == "mcp_servers" {
 			r.reloadMCPServers(ctx)
 		}
 	})
+
+	r.reloadMCPServers(ctx)
 }
 
 func (r *AIChatPlugin) IsAutoFocusToChatInputWhenOpenWithQueryHotkey(ctx context.Context) bool {
@@ -376,6 +377,7 @@ func (r *AIChatPlugin) reloadMCPServers(ctx context.Context) {
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Loaded %d mcp servers", len(r.mcpServers)))
 	}
 
+	var mcpTools []common.MCPTool
 	for _, mcpServer := range r.mcpServers {
 		if mcpServer.Disabled {
 			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: MCP server %s is disabled", mcpServer.Name))
@@ -390,9 +392,14 @@ func (r *AIChatPlugin) reloadMCPServers(ctx context.Context) {
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Found %d tools for MCP server %s", len(tools), mcpServer.Name))
 		for _, tool := range tools {
 			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: %s tool %s", mcpServer.Name, tool.Name))
-			r.mcpToolsMap = append(r.mcpToolsMap, tool)
+			mcpTools = append(mcpTools, tool)
 		}
 	}
+
+	r.mcpToolsMap = mcpTools
+
+	plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "tools")
+
 }
 
 func (r *AIChatPlugin) loadMCPServers(ctx context.Context) ([]common.AIChatMCPServerConfig, error) {

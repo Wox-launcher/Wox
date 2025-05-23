@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
-import 'package:markdown_widget/markdown_widget.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_chat_toolcall_duration.dart';
 import 'package:wox/components/wox_image_view.dart';

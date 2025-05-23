@@ -514,6 +514,9 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key, value string) {
 	if key == "EnableAutoUpdate" {
 		updater.CheckForUpdates(ctx)
 	}
+	if key == "AIProviders" {
+		plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "models")
+	}
 }
 
 func (m *Manager) ExitApp(ctx context.Context) {

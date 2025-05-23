@@ -94,6 +94,10 @@ func (u *uiImpl) SendChatResponse(ctx context.Context, aiChatData common.AIChatD
 	u.invokeWebsocketMethod(ctx, "SendChatResponse", aiChatData)
 }
 
+func (u *uiImpl) ReloadChatResources(ctx context.Context, resouceName string) {
+	u.invokeWebsocketMethod(ctx, "ReloadChatResources", resouceName)
+}
+
 func (u *uiImpl) UpdateResult(ctx context.Context, result common.UpdateableResult) {
 	u.invokeWebsocketMethod(ctx, "UpdateResult", result)
 }
