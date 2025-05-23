@@ -111,7 +111,7 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 							Key:     "icon",
 							Label:   "i18n:plugin_ai_chat_agent_icon",
 							Type:    definition.PluginSettingValueTableColumnTypeWoxImage,
-							Width:   60,
+							Width:   45,
 							Tooltip: "i18n:plugin_ai_chat_agent_icon_tooltip",
 						},
 						{
@@ -132,7 +132,7 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 						{
 							Key:     "tools",
 							Label:   "i18n:plugin_ai_chat_agent_tools",
-							Type:    definition.PluginSettingValueTableColumnTypeAIMCPServerTools,
+							Type:    definition.PluginSettingValueTableColumnTypeAISelectMCPServerTools,
 							Width:   100,
 							Tooltip: "i18n:plugin_ai_chat_agent_tools_tooltip",
 						},

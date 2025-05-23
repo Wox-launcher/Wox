@@ -411,6 +411,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
               ],
               onTabControllerUpdated: (tabController) {
                 controller.activePluginTabController = tabController;
+                tabController.index = 0;
               },
               onTabChanged: (index) {},
             ),

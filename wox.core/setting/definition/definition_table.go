@@ -8,15 +8,16 @@ import (
 type PluginSettingValueTableColumnType = string
 
 const (
-	PluginSettingValueTableColumnTypeText             PluginSettingValueTableColumnType = "text"
-	PluginSettingValueTableColumnTypeTextList         PluginSettingValueTableColumnType = "textList"
-	PluginSettingValueTableColumnTypeCheckbox         PluginSettingValueTableColumnType = "checkbox"
-	PluginSettingValueTableColumnTypeDirPath          PluginSettingValueTableColumnType = "dirPath"
-	PluginSettingValueTableColumnTypeSelect           PluginSettingValueTableColumnType = "select"
-	PluginSettingValueTableColumnTypeSelectAIModel    PluginSettingValueTableColumnType = "selectAIModel"
-	PluginSettingValueTableColumnTypeAIModelStatus    PluginSettingValueTableColumnType = "aiModelStatus"
-	PluginSettingValueTableColumnTypeAIMCPServerTools PluginSettingValueTableColumnType = "aiMCPServerTools"
-	PluginSettingValueTableColumnTypeWoxImage         PluginSettingValueTableColumnType = "woxImage"
+	PluginSettingValueTableColumnTypeText                   PluginSettingValueTableColumnType = "text"
+	PluginSettingValueTableColumnTypeTextList               PluginSettingValueTableColumnType = "textList"
+	PluginSettingValueTableColumnTypeCheckbox               PluginSettingValueTableColumnType = "checkbox"
+	PluginSettingValueTableColumnTypeDirPath                PluginSettingValueTableColumnType = "dirPath"
+	PluginSettingValueTableColumnTypeSelect                 PluginSettingValueTableColumnType = "select"
+	PluginSettingValueTableColumnTypeSelectAIModel          PluginSettingValueTableColumnType = "selectAIModel"
+	PluginSettingValueTableColumnTypeAIModelStatus          PluginSettingValueTableColumnType = "aiModelStatus"
+	PluginSettingValueTableColumnTypeAIMCPServerTools       PluginSettingValueTableColumnType = "aiMCPServerTools"
+	PluginSettingValueTableColumnTypeAISelectMCPServerTools PluginSettingValueTableColumnType = "aiSelectMCPServerTools"
+	PluginSettingValueTableColumnTypeWoxImage               PluginSettingValueTableColumnType = "woxImage"
 )
 
 const (

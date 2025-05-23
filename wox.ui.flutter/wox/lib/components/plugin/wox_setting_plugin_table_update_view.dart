@@ -62,7 +62,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
     }
 
     // Check if there are any tool list type columns, if so, preload the tool list
-    if (columns.any((column) => column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAIMCPServerTools)) {
+    if (columns.any((column) => column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAISelectMCPServerTools)) {
       _loadAllTools();
     }
 
@@ -153,7 +153,6 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   }
 
   Widget _buildWoxImageEditor(PluginSettingValueTableColumn column) {
-    // 获取当前图像值
     String imageJson = getValue(column.key);
     WoxImage? currentImage;
 
@@ -162,18 +161,15 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         Map<String, dynamic> imageData = json.decode(imageJson);
         currentImage = WoxImage.fromJson(imageData);
       } catch (e) {
-        // 解析失败，使用默认图像
         currentImage = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖");
       }
     } else {
-      // 默认使用机器人表情
       currentImage = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖");
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 显示当前图像
         Container(
           width: 80,
           height: 80,
@@ -191,15 +187,11 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           ),
         ),
         const SizedBox(height: 8),
-
-        // 图像类型选择
         Row(
           children: [
-            // 表情选择
             Button(
               child: Text(tr('ui_emoji'), style: TextStyle(color: getThemeTextColor())),
               onPressed: () async {
-                // 显示表情选择对话框
                 final emojiResult = await _showEmojiPicker(context);
                 if (emojiResult != null && emojiResult.isNotEmpty) {
                   final newImage = WoxImage(
@@ -212,12 +204,9 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
               },
             ),
             const SizedBox(width: 8),
-
-            // 上传图片
             Button(
               child: Text(tr('ui_upload_image'), style: TextStyle(color: getThemeTextColor())),
               onPressed: () async {
-                // 使用FilePicker直接选择图片
                 final result = await FilePicker.platform.pickFiles(
                   type: FileType.image,
                   allowMultiple: false,
@@ -227,21 +216,16 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                   final filePath = result.files.first.path!;
                   final file = File(filePath);
                   if (await file.exists()) {
-                    try {
-                      // 读取文件并转换为base64
-                      final bytes = await file.readAsBytes();
-                      final base64Image = base64Encode(bytes);
+                    final bytes = await file.readAsBytes();
+                    final base64Image = base64Encode(bytes);
 
-                      final newImage = WoxImage(
-                        imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code,
-                        imageData: "data:image/png;base64,$base64Image",
-                      );
+                    final newImage = WoxImage(
+                      imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_BASE64.code,
+                      imageData: "data:image/png;base64,$base64Image",
+                    );
 
-                      updateValue(column.key, json.encode(newImage.toJson()));
-                      setState(() {});
-                    } catch (e) {
-                      // 处理错误
-                    }
+                    updateValue(column.key, json.encode(newImage.toJson()));
+                    setState(() {});
                   }
                 }
               },
@@ -253,7 +237,6 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   }
 
   Future<String?> _showEmojiPicker(BuildContext context) async {
-    // 常用表情列表
     final commonEmojis = ["🤖", "👨‍💻", "👩‍💻", "🧠", "💡", "🔍", "📊", "📈", "📝", "🛠️", "⚙️", "🧩", "🎮", "🎯", "🏆", "🎨", "🎭", "🎬", "📱", "💻"];
 
     String? selectedEmoji;
@@ -489,7 +472,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             ),
           ),
         );
-      case PluginSettingValueType.pluginSettingValueTableColumnTypeAIMCPServerTools:
+      case PluginSettingValueType.pluginSettingValueTableColumnTypeAISelectMCPServerTools:
         return Expanded(
           child: Builder(
             builder: (context) {
