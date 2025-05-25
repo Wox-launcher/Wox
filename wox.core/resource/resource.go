@@ -28,6 +28,9 @@ var appIconWindows []byte
 //go:embed others
 var OthersFS embed.FS
 
+//go:embed script_plugin_templates
+var ScriptPluginTemplatesFS embed.FS
+
 var embedThemes = []string{}
 
 func Extract(ctx context.Context) error {
@@ -45,6 +48,11 @@ func Extract(ctx context.Context) error {
 	othersErr := extractFiles(ctx, OthersFS, util.GetLocation().GetOthersDirectory(), "others", false)
 	if othersErr != nil {
 		return othersErr
+	}
+
+	scriptPluginTemplatesErr := extractFiles(ctx, ScriptPluginTemplatesFS, util.GetLocation().GetScriptPluginTemplatesDirectory(), "script_plugin_templates", false)
+	if scriptPluginTemplatesErr != nil {
+		return scriptPluginTemplatesErr
 	}
 
 	themeErr := parseThemes(ctx)

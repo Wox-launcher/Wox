@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -24,6 +25,7 @@ import (
 	"wox/util/selection"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"github.com/jinzhu/copier"
 	"github.com/samber/lo"
@@ -47,6 +49,10 @@ type Manager struct {
 	aiProviders        *util.HashMap[common.ProviderName, ai.Provider]
 
 	activeBrowserUrl string //active browser url before wox is activated
+
+	// Script plugin monitoring
+	scriptPluginWatcher *fsnotify.Watcher
+	scriptReloadTimers  *util.HashMap[string, *time.Timer]
 }
 
 func GetPluginManager() *Manager {
@@ -55,6 +61,7 @@ func GetPluginManager() *Manager {
 			resultCache:        util.NewHashMap[string, *QueryResultCache](),
 			debounceQueryTimer: util.NewHashMap[string, *debounceTimer](),
 			aiProviders:        util.NewHashMap[common.ProviderName, ai.Provider](),
+			scriptReloadTimers: util.NewHashMap[string, *time.Timer](),
 		}
 		logger = util.GetLogger()
 	})
@@ -69,6 +76,11 @@ func (m *Manager) Start(ctx context.Context, ui common.UI) error {
 		return fmt.Errorf("failed to load plugins: %w", loadErr)
 	}
 
+	// Start script plugin monitoring
+	util.Go(ctx, "start script plugin monitoring", func() {
+		m.startScriptPluginMonitoring(util.NewTraceContext())
+	})
+
 	util.Go(ctx, "start store manager", func() {
 		GetStoreManager().Start(util.NewTraceContext())
 	})
@@ -77,6 +89,11 @@ func (m *Manager) Start(ctx context.Context, ui common.UI) error {
 }
 
 func (m *Manager) Stop(ctx context.Context) {
+	// Stop script plugin monitoring
+	if m.scriptPluginWatcher != nil {
+		m.scriptPluginWatcher.Close()
+	}
+
 	for _, host := range AllHosts {
 		host.Stop(ctx)
 	}
@@ -141,6 +158,15 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 		}
 		metaDataList = append(metaDataList, MetadataWithDirectory{Metadata: metadata, Directory: pluginDirectory})
 	}
+
+	// Load script plugins
+	scriptMetaDataList, err := m.loadScriptPlugins(ctx)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to load script plugins: %s", err.Error()))
+	} else {
+		metaDataList = append(metaDataList, scriptMetaDataList...)
+	}
+
 	logger.Info(ctx, fmt.Sprintf("start loading user plugins, found %d user plugins", len(metaDataList)))
 
 	for _, host := range AllHosts {
@@ -167,6 +193,44 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// loadScriptPlugins loads script plugins from the user script plugins directory
+func (m *Manager) loadScriptPlugins(ctx context.Context) ([]MetadataWithDirectory, error) {
+	logger.Debug(ctx, "start loading script plugin metadata")
+
+	userScriptPluginDirectory := util.GetLocation().GetUserScriptPluginsDirectory()
+	scriptFiles, readErr := os.ReadDir(userScriptPluginDirectory)
+	if readErr != nil {
+		return nil, fmt.Errorf("failed to read user script plugin directory: %w", readErr)
+	}
+
+	var metaDataList []MetadataWithDirectory
+	for _, entry := range scriptFiles {
+		if entry.Name() == ".DS_Store" || entry.Name() == "README.md" {
+			continue
+		}
+		if entry.IsDir() {
+			continue
+		}
+
+		scriptPath := path.Join(userScriptPluginDirectory, entry.Name())
+		metadata, metadataErr := m.ParseScriptMetadata(ctx, scriptPath)
+		if metadataErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to parse script plugin metadata for %s: %s", entry.Name(), metadataErr.Error()))
+			continue
+		}
+
+		// Create a virtual directory for the script plugin
+		virtualDirectory := path.Join(userScriptPluginDirectory, metadata.Id)
+		metaDataList = append(metaDataList, MetadataWithDirectory{
+			Metadata:  metadata,
+			Directory: virtualDirectory,
+		})
+	}
+
+	logger.Debug(ctx, fmt.Sprintf("found %d script plugins", len(metaDataList)))
+	return metaDataList, nil
 }
 
 func (m *Manager) ReloadPlugin(ctx context.Context, metadata MetadataWithDirectory) error {
@@ -355,6 +419,275 @@ func (m *Manager) ParseMetadata(ctx context.Context, pluginDirectory string) (Me
 	}
 
 	return metadata, nil
+}
+
+// ParseScriptMetadata parses metadata from script plugin file comments
+func (m *Manager) ParseScriptMetadata(ctx context.Context, scriptPath string) (Metadata, error) {
+	content, err := os.ReadFile(scriptPath)
+	if err != nil {
+		return Metadata{}, fmt.Errorf("failed to read script file: %w", err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	metadata := Metadata{
+		Runtime: string(PLUGIN_RUNTIME_SCRIPT),
+		Entry:   filepath.Base(scriptPath),
+		Version: "1.0.0", // Default version
+	}
+
+	// Parse metadata from comments
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Stop parsing when we reach non-comment lines (except shebang)
+		if !strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "//") && !strings.HasPrefix(line, "#!/") {
+			if line != "" {
+				break
+			}
+			continue
+		}
+
+		// Remove comment markers
+		line = strings.TrimPrefix(line, "#")
+		line = strings.TrimPrefix(line, "//")
+		line = strings.TrimPrefix(line, "#!/usr/bin/env")
+		line = strings.TrimPrefix(line, "#!/bin/")
+		line = strings.TrimSpace(line)
+
+		// Parse @wox.xxx metadata
+		if strings.HasPrefix(line, "@wox.") {
+			parts := strings.SplitN(line, " ", 2)
+			if len(parts) != 2 {
+				continue
+			}
+
+			key := strings.TrimPrefix(parts[0], "@wox.")
+			value := strings.TrimSpace(parts[1])
+
+			switch key {
+			case "id":
+				metadata.Id = value
+			case "name":
+				metadata.Name = value
+			case "author":
+				metadata.Author = value
+			case "version":
+				metadata.Version = value
+			case "description":
+				metadata.Description = value
+			case "icon":
+				metadata.Icon = value
+			case "keywords":
+				// Split keywords by comma or space
+				keywords := strings.FieldsFunc(value, func(c rune) bool {
+					return c == ',' || c == ' '
+				})
+				for i, keyword := range keywords {
+					keywords[i] = strings.TrimSpace(keyword)
+				}
+				metadata.TriggerKeywords = keywords
+			case "minWoxVersion":
+				metadata.MinWoxVersion = value
+			}
+		}
+	}
+
+	// Validate required fields
+	if metadata.Id == "" {
+		return Metadata{}, fmt.Errorf("missing required field: @wox.id")
+	}
+	if metadata.Name == "" {
+		return Metadata{}, fmt.Errorf("missing required field: @wox.name")
+	}
+	if len(metadata.TriggerKeywords) == 0 {
+		return Metadata{}, fmt.Errorf("missing required field: @wox.keywords")
+	}
+
+	// Set default values
+	if metadata.Author == "" {
+		metadata.Author = "Unknown"
+	}
+	if metadata.Description == "" {
+		metadata.Description = "A script plugin"
+	}
+	if metadata.Icon == "" {
+		metadata.Icon = "📝"
+	}
+	if metadata.MinWoxVersion == "" {
+		metadata.MinWoxVersion = "2.0.0"
+	}
+
+	// Set supported OS to all platforms by default
+	metadata.SupportedOS = []string{"Windows", "Linux", "Macos"}
+
+	return metadata, nil
+}
+
+// startScriptPluginMonitoring starts monitoring the user script plugins directory for changes
+func (m *Manager) startScriptPluginMonitoring(ctx context.Context) {
+	userScriptPluginDirectory := util.GetLocation().GetUserScriptPluginsDirectory()
+
+	// Create file system watcher
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("Failed to create script plugin watcher: %s", err.Error()))
+		return
+	}
+
+	m.scriptPluginWatcher = watcher
+
+	// Add the script plugins directory to the watcher
+	err = watcher.Add(userScriptPluginDirectory)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("Failed to watch script plugin directory: %s", err.Error()))
+		watcher.Close()
+		return
+	}
+
+	logger.Info(ctx, fmt.Sprintf("Started monitoring script plugins directory: %s", userScriptPluginDirectory))
+
+	// Start watching for events
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				logger.Info(ctx, "Script plugin watcher closed")
+				return
+			}
+			m.handleScriptPluginEvent(ctx, event)
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				logger.Info(ctx, "Script plugin watcher error channel closed")
+				return
+			}
+			logger.Error(ctx, fmt.Sprintf("Script plugin watcher error: %s", err.Error()))
+		case <-ctx.Done():
+			logger.Info(ctx, "Script plugin monitoring stopped due to context cancellation")
+			watcher.Close()
+			return
+		}
+	}
+}
+
+// handleScriptPluginEvent handles file system events for script plugins
+func (m *Manager) handleScriptPluginEvent(ctx context.Context, event fsnotify.Event) {
+	// Skip non-script files and temporary files
+	fileName := filepath.Base(event.Name)
+	if strings.HasPrefix(fileName, ".") || strings.HasSuffix(fileName, "~") || strings.HasSuffix(fileName, ".tmp") {
+		return
+	}
+
+	// Skip directories
+	if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
+		return
+	}
+
+	logger.Info(ctx, fmt.Sprintf("Script plugin file event: %s (%s)", event.Name, event.Op))
+
+	switch event.Op {
+	case fsnotify.Create, fsnotify.Write:
+		// File created or modified - reload the plugin
+		m.debounceScriptPluginReload(ctx, event.Name, "file changed")
+	case fsnotify.Remove, fsnotify.Rename:
+		// File deleted or renamed - unload the plugin
+		m.unloadScriptPluginByPath(ctx, event.Name)
+	case fsnotify.Chmod:
+		// File permissions changed - ignore for now
+		logger.Debug(ctx, fmt.Sprintf("Script plugin file permissions changed: %s", event.Name))
+	}
+}
+
+// debounceScriptPluginReload debounces script plugin reload to avoid multiple reloads in a short time
+func (m *Manager) debounceScriptPluginReload(ctx context.Context, scriptPath, reason string) {
+	fileName := filepath.Base(scriptPath)
+
+	// Cancel existing timer if any
+	if timer, exists := m.scriptReloadTimers.Load(fileName); exists {
+		timer.Stop()
+	}
+
+	// Create new timer
+	timer := time.AfterFunc(2*time.Second, func() {
+		m.reloadScriptPlugin(util.NewTraceContext(), scriptPath, reason)
+		m.scriptReloadTimers.Delete(fileName)
+	})
+
+	m.scriptReloadTimers.Store(fileName, timer)
+}
+
+// reloadScriptPlugin reloads a script plugin
+func (m *Manager) reloadScriptPlugin(ctx context.Context, scriptPath, reason string) {
+	logger.Info(ctx, fmt.Sprintf("Reloading script plugin: %s, reason: %s", scriptPath, reason))
+
+	// Check if file still exists
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		logger.Warn(ctx, fmt.Sprintf("Script plugin file no longer exists: %s", scriptPath))
+		return
+	}
+
+	// Parse metadata from the script file
+	metadata, err := m.ParseScriptMetadata(ctx, scriptPath)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("Failed to parse script plugin metadata: %s", err.Error()))
+		return
+	}
+
+	// Find and unload existing plugin instance if any
+	existingInstance, exists := lo.Find(m.instances, func(instance *Instance) bool {
+		return instance.Metadata.Id == metadata.Id
+	})
+	if exists {
+		logger.Info(ctx, fmt.Sprintf("Unloading existing script plugin instance: %s", metadata.Name))
+		m.UnloadPlugin(ctx, existingInstance)
+	}
+
+	// Create metadata with directory for loading
+	userScriptPluginDirectory := util.GetLocation().GetUserScriptPluginsDirectory()
+	virtualDirectory := path.Join(userScriptPluginDirectory, metadata.Id)
+	metadataWithDirectory := MetadataWithDirectory{
+		Metadata:  metadata,
+		Directory: virtualDirectory,
+	}
+
+	// Find script plugin host
+	scriptHost, hostExists := lo.Find(AllHosts, func(host Host) bool {
+		return host.GetRuntime(ctx) == PLUGIN_RUNTIME_SCRIPT
+	})
+	if !hostExists {
+		logger.Error(ctx, "Script plugin host not found")
+		return
+	}
+
+	// Load the plugin
+	err = m.loadHostPlugin(ctx, scriptHost, metadataWithDirectory)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("Failed to reload script plugin: %s", err.Error()))
+		return
+	}
+
+	logger.Info(ctx, fmt.Sprintf("Successfully reloaded script plugin: %s", metadata.Name))
+}
+
+// unloadScriptPluginByPath unloads a script plugin by its file path
+func (m *Manager) unloadScriptPluginByPath(ctx context.Context, scriptPath string) {
+	fileName := filepath.Base(scriptPath)
+	logger.Info(ctx, fmt.Sprintf("Unloading script plugin: %s", fileName))
+
+	// Find plugin instance by script file name
+	var pluginToUnload *Instance
+	for _, instance := range m.instances {
+		if instance.Metadata.Runtime == string(PLUGIN_RUNTIME_SCRIPT) && instance.Metadata.Entry == fileName {
+			pluginToUnload = instance
+			break
+		}
+	}
+
+	if pluginToUnload != nil {
+		logger.Info(ctx, fmt.Sprintf("Found script plugin to unload: %s", pluginToUnload.Metadata.Name))
+		m.UnloadPlugin(ctx, pluginToUnload)
+	} else {
+		logger.Debug(ctx, fmt.Sprintf("No script plugin found for file: %s", fileName))
+	}
 }
 
 func (m *Manager) GetPluginInstances() []*Instance {

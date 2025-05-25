@@ -31,6 +31,24 @@ var pluginTemplates = []pluginTemplate{
 	},
 }
 
+var scriptPluginTemplates = []pluginTemplate{
+	{
+		Runtime: plugin.PLUGIN_RUNTIME_SCRIPT,
+		Name:    "JavaScript Script Plugin",
+		Url:     "template.js",
+	},
+	{
+		Runtime: plugin.PLUGIN_RUNTIME_SCRIPT,
+		Name:    "Python Script Plugin",
+		Url:     "template.py",
+	},
+	{
+		Runtime: plugin.PLUGIN_RUNTIME_SCRIPT,
+		Name:    "Bash Script Plugin",
+		Url:     "template.sh",
+	},
+}
+
 type LocalPlugin struct {
 	Path string
 }
@@ -297,12 +315,16 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 	}
 
 	var results []plugin.QueryResult
+
+	// Add regular plugin templates with group
 	for _, template := range pluginTemplates {
+		templateCopy := template // Create a copy for the closure
 		results = append(results, plugin.QueryResult{
 			Id:       uuid.NewString(),
 			Title:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_create_plugin"), string(template.Runtime)),
 			SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_plugin_name"), query.Search),
 			Icon:     wpmIcon,
+			Group:    "Regular Plugins",
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_wpm_create",
@@ -310,7 +332,34 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						pluginName := query.Search
 						util.Go(ctx, "create plugin", func() {
-							w.createPlugin(ctx, template, pluginName, query)
+							w.createPlugin(ctx, templateCopy, pluginName, query)
+						})
+						w.api.ChangeQuery(ctx, common.PlainQuery{
+							QueryType: plugin.QueryTypeInput,
+							QueryText: fmt.Sprintf("%s create ", query.TriggerKeyword),
+						})
+					},
+				},
+			}})
+	}
+
+	// Add script plugin templates with group
+	for _, template := range scriptPluginTemplates {
+		templateCopy := template // Create a copy for the closure
+		results = append(results, plugin.QueryResult{
+			Id:       uuid.NewString(),
+			Title:    fmt.Sprintf("Create %s", template.Name),
+			SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_plugin_name"), query.Search),
+			Icon:     wpmIcon,
+			Group:    "Script Plugins",
+			Actions: []plugin.QueryResultAction{
+				{
+					Name:                   "i18n:plugin_wpm_create",
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						pluginName := query.Search
+						util.Go(ctx, "create script plugin", func() {
+							w.createScriptPluginWithTemplate(ctx, templateCopy, pluginName, query)
 						})
 						w.api.ChangeQuery(ctx, common.PlainQuery{
 							QueryType: plugin.QueryTypeInput,
@@ -425,7 +474,7 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 				PreviewType: plugin.WoxPreviewTypeMarkdown,
 				PreviewData: fmt.Sprintf(`
 - **Directory**: %s
-- **Name**: %s  
+- **Name**: %s
 - **Description**: %s
 - **Author**: %s
 - **Website**: %s
@@ -692,4 +741,103 @@ func (w *WPMPlugin) reloadLocalDistPlugin(ctx context.Context, localPlugin plugi
 
 	w.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_reload_success"), localPlugin.Metadata.Name, reason))
 	return nil
+}
+
+// createScriptPluginWithTemplate creates a script plugin from a specific template
+func (w *WPMPlugin) createScriptPluginWithTemplate(ctx context.Context, template pluginTemplate, pluginName string, query plugin.Query) {
+	w.creatingProcess = "Creating script plugin..."
+
+	// Get user script plugins directory
+	userScriptPluginDirectory := util.GetLocation().GetUserScriptPluginsDirectory()
+
+	// Ensure the directory exists
+	if err := util.GetLocation().EnsureDirectoryExist(userScriptPluginDirectory); err != nil {
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create user script plugin directory: %s", err.Error()))
+		w.creatingProcess = fmt.Sprintf("Failed to create script plugin directory: %s", err.Error())
+		return
+	}
+
+	// Use the template file specified in the template
+	templateFile := template.Url // We store the template filename in the Url field
+	var fileExtension string
+
+	switch templateFile {
+	case "template.js":
+		fileExtension = ".js"
+	case "template.py":
+		fileExtension = ".py"
+	case "template.sh":
+		fileExtension = ".sh"
+	default:
+		fileExtension = ".js" // Default fallback
+	}
+
+	w.creatingProcess = "Copying template..."
+
+	// Read template from embedded resources
+	scriptTemplateDirectory := util.GetLocation().GetScriptPluginTemplatesDirectory()
+	templatePath := path.Join(scriptTemplateDirectory, templateFile)
+
+	templateContent, err := os.ReadFile(templatePath)
+	if err != nil {
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read template file: %s", err.Error()))
+		w.creatingProcess = fmt.Sprintf("Failed to read template: %s", err.Error())
+		return
+	}
+
+	// Generate script file name
+	cleanPluginName := strings.TrimSpace(pluginName)
+	if cleanPluginName == "" {
+		cleanPluginName = "my-plugin"
+	}
+
+	scriptFileName := strings.ReplaceAll(strings.ToLower(cleanPluginName), " ", "-") + fileExtension
+	scriptFilePath := path.Join(userScriptPluginDirectory, scriptFileName)
+
+	// Check if file already exists
+	if _, err := os.Stat(scriptFilePath); err == nil {
+		w.api.Notify(ctx, fmt.Sprintf("Script plugin file already exists: %s", scriptFileName))
+		w.creatingProcess = ""
+		return
+	}
+
+	// Replace template variables
+	templateString := string(templateContent)
+	pluginId := strings.ReplaceAll(strings.ToLower(cleanPluginName), " ", "-")
+	triggerKeyword := strings.ToLower(strings.ReplaceAll(cleanPluginName, " ", ""))
+	if len(triggerKeyword) > 10 {
+		triggerKeyword = triggerKeyword[:10]
+	}
+
+	// Replace template placeholders
+	templateString = strings.ReplaceAll(templateString, "script-plugin-template", pluginId)
+	templateString = strings.ReplaceAll(templateString, "python-script-template", pluginId)
+	templateString = strings.ReplaceAll(templateString, "bash-script-template", pluginId)
+	templateString = strings.ReplaceAll(templateString, "Script Plugin Template", cleanPluginName)
+	templateString = strings.ReplaceAll(templateString, "Python Script Template", cleanPluginName)
+	templateString = strings.ReplaceAll(templateString, "Bash Script Template", cleanPluginName)
+	templateString = strings.ReplaceAll(templateString, "spt", triggerKeyword)
+	templateString = strings.ReplaceAll(templateString, "pst", triggerKeyword)
+	templateString = strings.ReplaceAll(templateString, "bst", triggerKeyword)
+	templateString = strings.ReplaceAll(templateString, "A template for Wox script plugins", fmt.Sprintf("A script plugin for %s", cleanPluginName))
+	templateString = strings.ReplaceAll(templateString, "A Python template for Wox script plugins", fmt.Sprintf("A script plugin for %s", cleanPluginName))
+	templateString = strings.ReplaceAll(templateString, "A Bash template for Wox script plugins", fmt.Sprintf("A script plugin for %s", cleanPluginName))
+
+	// Write the script file
+	err = os.WriteFile(scriptFilePath, []byte(templateString), 0755)
+	if err != nil {
+		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to write script file: %s", err.Error()))
+		w.creatingProcess = fmt.Sprintf("Failed to create script file: %s", err.Error())
+		return
+	}
+
+	w.creatingProcess = ""
+	w.api.Notify(ctx, fmt.Sprintf("Script plugin created successfully: %s", scriptFileName))
+	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Created script plugin: %s", scriptFilePath))
+
+	// Change query to show script plugins or open the file
+	w.api.ChangeQuery(ctx, common.PlainQuery{
+		QueryType: plugin.QueryTypeInput,
+		QueryText: fmt.Sprintf("%s ", triggerKeyword),
+	})
 }
