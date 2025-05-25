@@ -65,7 +65,7 @@ func (a *APIImpl) Notify(ctx context.Context, message string) {
 	GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{
 		PluginId:       a.pluginInstance.Metadata.Id,
 		Text:           a.GetTranslation(ctx, message),
-		DisplaySeconds: 3,
+		DisplaySeconds: 8,
 	})
 }
 

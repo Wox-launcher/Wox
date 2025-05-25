@@ -13,15 +13,22 @@
 
 /**
  * Wox Script Plugin Template
- * 
+ *
  * This is a template for creating Wox script plugins.
  * Script plugins are single-file plugins that are executed once per query.
- * 
+ *
  * Communication with Wox is done via JSON-RPC over stdin/stdout.
- * 
+ *
  * Available methods:
  * - query: Process user queries and return results
  * - action: Handle user selection of a result
+ *
+ * Available environment variables:
+ * - WOX_DIRECTORY_USER_SCRIPT_PLUGINS: Directory where script plugins are stored
+ * - WOX_DIRECTORY_USER_DATA: User data directory
+ * - WOX_DIRECTORY_WOX_DATA: Wox application data directory
+ * - WOX_DIRECTORY_PLUGINS: Plugin directory
+ * - WOX_DIRECTORY_THEMES: Theme directory
  */
 
 // Parse input from command line or stdin
@@ -89,30 +96,19 @@ switch (request.method) {
  * @param {Object} request - The JSON-RPC request
  */
 function handleQuery(request) {
-  const query = request.params.search || "";
-  
-  // Generate results based on the query
+  // Generate results
   const results = [
     {
-      title: `You searched for: ${query}`,
-      subtitle: "This is a template result",
+      title: "Open Plugin Directory",
+      subtitle: "Open the script plugins directory in file manager",
       score: 100,
       action: {
-        id: "example-action",
-        data: query
-      }
-    },
-    {
-      title: "Another result",
-      subtitle: "With a different action",
-      score: 90,
-      action: {
-        id: "open-url",
-        data: "https://github.com/Wox-launcher/Wox"
+        id: "open-plugin-directory",
+        data: ""
       }
     }
   ];
-  
+
   // Return results
   console.log(JSON.stringify({
     jsonrpc: "2.0",
@@ -129,28 +125,16 @@ function handleQuery(request) {
  */
 function handleAction(request) {
   const actionId = request.params.id;
-  const actionData = request.params.data;
-  
+
   // Handle different action types
   switch (actionId) {
-    case "example-action":
-      // Example action that returns a message
+    case "open-plugin-directory":
+      // Open plugin directory action
       console.log(JSON.stringify({
         jsonrpc: "2.0",
         result: {
-          action: "notify",
-          message: `You selected: ${actionData}`
-        },
-        id: request.id
-      }));
-      break;
-    case "open-url":
-      // Open URL action
-      console.log(JSON.stringify({
-        jsonrpc: "2.0",
-        result: {
-          action: "open-url",
-          url: actionData
+          action: "open-directory",
+          path: process.env.WOX_DIRECTORY_USER_SCRIPT_PLUGINS
         },
         id: request.id
       }));

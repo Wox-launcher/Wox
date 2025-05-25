@@ -21,6 +21,13 @@
 # Available methods:
 # - query: Process user queries and return results
 # - action: Handle user selection of a result
+#
+# Available environment variables:
+# - WOX_DIRECTORY_USER_SCRIPT_PLUGINS: Directory where script plugins are stored
+# - WOX_DIRECTORY_USER_DATA: User data directory
+# - WOX_DIRECTORY_WOX_DATA: Wox application data directory
+# - WOX_DIRECTORY_PLUGINS: Plugin directory
+# - WOX_DIRECTORY_THEMES: Theme directory
 
 # Read input from command line or stdin
 if [ $# -gt 0 ]; then
@@ -56,27 +63,18 @@ fi
 case "$METHOD" in
   "query")
     # Handle query request
-    # Generate results based on the query
+    # Generate results
     cat << EOF
 {
   "jsonrpc": "2.0",
   "result": {
     "items": [
       {
-        "title": "You searched for: $SEARCH",
-        "subtitle": "This is a template result",
+        "title": "Open Plugin Directory",
+        "subtitle": "Open the script plugins directory in file manager",
         "score": 100,
         "action": {
-          "id": "example-action",
-          "data": "$SEARCH"
-        }
-      },
-      {
-        "title": "System Information",
-        "subtitle": "Show system information",
-        "score": 90,
-        "action": {
-          "id": "system-info",
+          "id": "open-plugin-directory",
           "data": ""
         }
       }
@@ -89,31 +87,14 @@ EOF
   "action")
     # Handle action request
     case "$ACTION_ID" in
-      "example-action")
-        # Example action that returns a message
+      "open-plugin-directory")
+        # Open plugin directory action
         cat << EOF
 {
   "jsonrpc": "2.0",
   "result": {
-    "action": "notify",
-    "message": "You selected: $ACTION_DATA"
-  },
-  "id": $ID
-}
-EOF
-        ;;
-      "system-info")
-        # Get system information
-        OS=$(uname -s)
-        HOSTNAME=$(hostname)
-        UPTIME=$(uptime)
-        
-        cat << EOF
-{
-  "jsonrpc": "2.0",
-  "result": {
-    "action": "notify",
-    "message": "System: $OS\nHostname: $HOSTNAME\nUptime: $UPTIME"
+    "action": "open-directory",
+    "path": "$WOX_DIRECTORY_USER_SCRIPT_PLUGINS"
   },
   "id": $ID
 }

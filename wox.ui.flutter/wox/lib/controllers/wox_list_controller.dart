@@ -119,6 +119,13 @@ class WoxListController<T> extends GetxController {
 
     // Calculate how many items can be displayed in the current viewport
     final viewportHeight = scrollController.position.viewportDimension;
+
+    // If viewport height is 0 or invalid, skip scrolling (this can happen during initialization)
+    if (viewportHeight <= 0) {
+      Logger.instance.debug(traceId, "Invalid viewport height: $viewportHeight, skipping scroll sync");
+      return;
+    }
+
     final visibleItemCount = (viewportHeight / itemHeight).floor();
 
     // If all items can be displayed in the viewport, no need to scroll

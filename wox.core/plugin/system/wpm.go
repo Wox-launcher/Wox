@@ -61,7 +61,6 @@ func init() {
 
 type WPMPlugin struct {
 	api                    plugin.API
-	creatingProcess        string
 	localPluginDirectories []string
 	localPlugins           []localPlugin
 	reloadPluginTimers     *util.HashMap[string, *time.Timer]
@@ -298,18 +297,15 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 }
 
 func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	if w.creatingProcess != "" {
+	// Check if user has entered a plugin name
+	pluginName := strings.TrimSpace(query.Search)
+	if pluginName == "" {
 		return []plugin.QueryResult{
 			{
-				Id:              uuid.NewString(),
-				Title:           w.creatingProcess,
-				SubTitle:        "i18n:plugin_wpm_please_wait",
-				Icon:            wpmIcon,
-				RefreshInterval: 300,
-				OnRefresh: func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
-					current.Title = w.creatingProcess
-					return current
-				},
+				Id:       uuid.NewString(),
+				Title:    "i18n:plugin_wpm_enter_plugin_name",
+				SubTitle: "i18n:plugin_wpm_enter_plugin_name_subtitle",
+				Icon:     wpmIcon,
 			},
 		}
 	}
@@ -346,13 +342,48 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 	// Add script plugin templates with group
 	for _, template := range scriptPluginTemplates {
 		templateCopy := template // Create a copy for the closure
-		results = append(results, plugin.QueryResult{
-			Id:       uuid.NewString(),
-			Title:    fmt.Sprintf("Create %s", template.Name),
-			SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_plugin_name"), query.Search),
-			Icon:     wpmIcon,
-			Group:    "Script Plugins",
-			Actions: []plugin.QueryResultAction{
+
+		// Check if script plugin already exists
+		exists, fileName := w.checkScriptPluginExists(pluginName, template.Url)
+
+		var title, subtitle string
+		var actions []plugin.QueryResultAction
+
+		if exists {
+			title = fmt.Sprintf("⚠️ %s (Already exists)", template.Name)
+			subtitle = fmt.Sprintf("File '%s' already exists. Choose an action below.", fileName)
+			// When file exists, provide actions to open or overwrite the existing file
+			actions = []plugin.QueryResultAction{
+				{
+					Name: "Open existing file",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						userScriptPluginDirectory := util.GetLocation().GetUserScriptPluginsDirectory()
+						scriptFilePath := path.Join(userScriptPluginDirectory, fileName)
+						openErr := shell.Open(scriptFilePath)
+						if openErr != nil {
+							w.api.Notify(ctx, fmt.Sprintf("Failed to open file: %s", openErr.Error()))
+						}
+					},
+				},
+				{
+					Name:                   "Overwrite existing file",
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						pluginName := query.Search
+						util.Go(ctx, "overwrite script plugin", func() {
+							w.createScriptPluginWithTemplate(ctx, templateCopy, pluginName, query)
+						})
+						w.api.ChangeQuery(ctx, common.PlainQuery{
+							QueryType: plugin.QueryTypeInput,
+							QueryText: fmt.Sprintf("%s create ", query.TriggerKeyword),
+						})
+					},
+				},
+			}
+		} else {
+			title = fmt.Sprintf("Create %s", template.Name)
+			subtitle = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_plugin_name"), query.Search)
+			actions = []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_wpm_create",
 					PreventHideAfterAction: true,
@@ -367,7 +398,17 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 						})
 					},
 				},
-			}})
+			}
+		}
+
+		results = append(results, plugin.QueryResult{
+			Id:       uuid.NewString(),
+			Title:    title,
+			SubTitle: subtitle,
+			Icon:     wpmIcon,
+			Group:    "Script Plugins",
+			Actions:  actions,
+		})
 	}
 
 	return results
@@ -602,33 +643,33 @@ func (w *WPMPlugin) removeDevCommand(ctx context.Context, query plugin.Query) []
 }
 
 func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, pluginName string, query plugin.Query) {
-	w.creatingProcess = "i18n:plugin_wpm_downloading_template"
+	w.api.Notify(ctx, "i18n:plugin_wpm_downloading_template")
 
 	tempPluginDirectory := path.Join(os.TempDir(), uuid.NewString())
 	if err := util.GetLocation().EnsureDirectoryExist(tempPluginDirectory); err != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create temp plugin directory: %s", err.Error()))
-		w.creatingProcess = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_create_temp_dir_failed"), err.Error())
+		w.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_create_temp_dir_failed"), err.Error()))
 		return
 	}
 
-	w.creatingProcess = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_downloading_template_to"), template.Runtime, tempPluginDirectory)
+	w.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_downloading_template_to"), template.Runtime, tempPluginDirectory))
 	tempZipPath := path.Join(tempPluginDirectory, "template.zip")
 	err := util.HttpDownload(ctx, template.Url, tempZipPath)
 	if err != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to download template: %s", err.Error()))
-		w.creatingProcess = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_download_template_failed"), err.Error())
+		w.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_download_template_failed"), err.Error()))
 		return
 	}
 
-	w.creatingProcess = "i18n:plugin_wpm_extracting_template"
+	w.api.Notify(ctx, "i18n:plugin_wpm_extracting_template")
 	err = util.Unzip(tempZipPath, tempPluginDirectory)
 	if err != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to extract template: %s", err.Error()))
-		w.creatingProcess = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_extract_template_failed"), err.Error())
+		w.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_extract_template_failed"), err.Error()))
 		return
 	}
 
-	w.creatingProcess = "i18n:plugin_wpm_choose_directory_prompt"
+	w.api.Notify(ctx, "i18n:plugin_wpm_choose_directory_prompt")
 	pluginDirectories := plugin.GetPluginManager().GetUI().PickFiles(ctx, common.PickFilesParams{IsDirectory: true})
 	if len(pluginDirectories) == 0 {
 		w.api.Notify(ctx, "You need to choose a directory to create the plugin")
@@ -640,7 +681,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 	cpErr := cp.Copy(path.Join(tempPluginDirectory, template.Name+"-main"), pluginDirectory)
 	if cpErr != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to copy template: %s", cpErr.Error()))
-		w.creatingProcess = fmt.Sprintf("Failed to copy template: %s", cpErr.Error())
+		w.api.Notify(ctx, fmt.Sprintf("Failed to copy template: %s", cpErr.Error()))
 		return
 	}
 
@@ -649,7 +690,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 	pluginJson, readErr := os.ReadFile(pluginJsonPath)
 	if readErr != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read plugin.json: %s", readErr.Error()))
-		w.creatingProcess = fmt.Sprintf("Failed to read plugin.json: %s", readErr.Error())
+		w.api.Notify(ctx, fmt.Sprintf("Failed to read plugin.json: %s", readErr.Error()))
 		return
 	}
 
@@ -662,7 +703,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 	writeErr := os.WriteFile(pluginJsonPath, []byte(pluginJsonString), 0644)
 	if writeErr != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to write plugin.json: %s", writeErr.Error()))
-		w.creatingProcess = fmt.Sprintf("Failed to write plugin.json: %s", writeErr.Error())
+		w.api.Notify(ctx, fmt.Sprintf("Failed to write plugin.json: %s", writeErr.Error()))
 		return
 	}
 
@@ -672,7 +713,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 		packageJson, readPackageErr := os.ReadFile(packageJsonPath)
 		if readPackageErr != nil {
 			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read package.json: %s", readPackageErr.Error()))
-			w.creatingProcess = fmt.Sprintf("Failed to read package.json: %s", readPackageErr.Error())
+			w.api.Notify(ctx, fmt.Sprintf("Failed to read package.json: %s", readPackageErr.Error()))
 			return
 		}
 
@@ -683,15 +724,15 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 		writePackageErr := os.WriteFile(packageJsonPath, []byte(packageJsonString), 0644)
 		if writePackageErr != nil {
 			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to write package.json: %s", writePackageErr.Error()))
-			w.creatingProcess = fmt.Sprintf("Failed to write package.json: %s", writePackageErr.Error())
+			w.api.Notify(ctx, fmt.Sprintf("Failed to write package.json: %s", writePackageErr.Error()))
 			return
 		}
 	}
 
-	w.creatingProcess = ""
 	w.localPluginDirectories = append(w.localPluginDirectories, pluginDirectory)
 	w.saveLocalPluginDirectories(ctx)
 	w.loadDevPlugin(ctx, pluginDirectory)
+	w.api.Notify(ctx, fmt.Sprintf("Plugin created successfully: %s", pluginName))
 	w.api.ChangeQuery(ctx, common.PlainQuery{
 		QueryType: plugin.QueryTypeInput,
 		QueryText: fmt.Sprintf("%s dev ", query.TriggerKeyword),
@@ -743,9 +784,38 @@ func (w *WPMPlugin) reloadLocalDistPlugin(ctx context.Context, localPlugin plugi
 	return nil
 }
 
+// checkScriptPluginExists checks if a script plugin with the given name already exists
+func (w *WPMPlugin) checkScriptPluginExists(pluginName string, templateFile string) (bool, string) {
+	cleanPluginName := strings.TrimSpace(pluginName)
+	if cleanPluginName == "" {
+		return false, ""
+	}
+
+	var fileExtension string
+	switch templateFile {
+	case "template.js":
+		fileExtension = ".js"
+	case "template.py":
+		fileExtension = ".py"
+	case "template.sh":
+		fileExtension = ".sh"
+	default:
+		fileExtension = ".js" // Default fallback
+	}
+
+	userScriptPluginDirectory := util.GetLocation().GetUserScriptPluginsDirectory()
+	scriptFileName := strings.ReplaceAll(strings.ToLower(cleanPluginName), " ", "-") + fileExtension
+	scriptFilePath := path.Join(userScriptPluginDirectory, scriptFileName)
+
+	if _, err := os.Stat(scriptFilePath); err == nil {
+		return true, scriptFileName
+	}
+	return false, scriptFileName
+}
+
 // createScriptPluginWithTemplate creates a script plugin from a specific template
 func (w *WPMPlugin) createScriptPluginWithTemplate(ctx context.Context, template pluginTemplate, pluginName string, query plugin.Query) {
-	w.creatingProcess = "Creating script plugin..."
+	w.api.Notify(ctx, "i18n:plugin_wpm_creating_script_plugin")
 
 	// Get user script plugins directory
 	userScriptPluginDirectory := util.GetLocation().GetUserScriptPluginsDirectory()
@@ -753,7 +823,7 @@ func (w *WPMPlugin) createScriptPluginWithTemplate(ctx context.Context, template
 	// Ensure the directory exists
 	if err := util.GetLocation().EnsureDirectoryExist(userScriptPluginDirectory); err != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create user script plugin directory: %s", err.Error()))
-		w.creatingProcess = fmt.Sprintf("Failed to create script plugin directory: %s", err.Error())
+		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_create_script_dir_failed: %s", err.Error()))
 		return
 	}
 
@@ -772,7 +842,7 @@ func (w *WPMPlugin) createScriptPluginWithTemplate(ctx context.Context, template
 		fileExtension = ".js" // Default fallback
 	}
 
-	w.creatingProcess = "Copying template..."
+	w.api.Notify(ctx, "i18n:plugin_wpm_copying_template")
 
 	// Read template from embedded resources
 	scriptTemplateDirectory := util.GetLocation().GetScriptPluginTemplatesDirectory()
@@ -781,24 +851,25 @@ func (w *WPMPlugin) createScriptPluginWithTemplate(ctx context.Context, template
 	templateContent, err := os.ReadFile(templatePath)
 	if err != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read template file: %s", err.Error()))
-		w.creatingProcess = fmt.Sprintf("Failed to read template: %s", err.Error())
+		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_read_template_failed: %s", err.Error()))
 		return
 	}
 
 	// Generate script file name
 	cleanPluginName := strings.TrimSpace(pluginName)
+	// Plugin name should not be empty at this point due to validation in createCommand
 	if cleanPluginName == "" {
-		cleanPluginName = "my-plugin"
+		w.api.Log(ctx, plugin.LogLevelError, "Plugin name is empty")
+		w.api.Notify(ctx, "i18n:plugin_wpm_plugin_name_empty")
+		return
 	}
 
 	scriptFileName := strings.ReplaceAll(strings.ToLower(cleanPluginName), " ", "-") + fileExtension
 	scriptFilePath := path.Join(userScriptPluginDirectory, scriptFileName)
 
-	// Check if file already exists
+	// Check if file already exists and notify user
 	if _, err := os.Stat(scriptFilePath); err == nil {
-		w.api.Notify(ctx, fmt.Sprintf("Script plugin file already exists: %s", scriptFileName))
-		w.creatingProcess = ""
-		return
+		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_overwriting_script_plugin: %s", scriptFileName))
 	}
 
 	// Replace template variables
@@ -827,17 +898,48 @@ func (w *WPMPlugin) createScriptPluginWithTemplate(ctx context.Context, template
 	err = os.WriteFile(scriptFilePath, []byte(templateString), 0755)
 	if err != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to write script file: %s", err.Error()))
-		w.creatingProcess = fmt.Sprintf("Failed to create script file: %s", err.Error())
+		w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_create_script_file_failed: %s", err.Error()))
 		return
 	}
 
-	w.creatingProcess = ""
-	w.api.Notify(ctx, fmt.Sprintf("Script plugin created successfully: %s", scriptFileName))
+	// Show success notification
+	w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_script_plugin_created_success: %s", scriptFileName))
 	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Created script plugin: %s", scriptFilePath))
 
-	// Change query to show script plugins or open the file
-	w.api.ChangeQuery(ctx, common.PlainQuery{
-		QueryType: plugin.QueryTypeInput,
-		QueryText: fmt.Sprintf("%s ", triggerKeyword),
+	// Actively trigger script plugin loading instead of waiting
+	util.Go(ctx, "load script plugin immediately", func() {
+		// Trigger immediate reload of script plugins
+		pluginManager := plugin.GetPluginManager()
+
+		// Parse the script metadata to get plugin ID
+		metadata, parseErr := pluginManager.ParseScriptMetadata(ctx, scriptFilePath)
+		if parseErr != nil {
+			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to parse script metadata: %s", parseErr.Error()))
+			w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_script_plugin_manual_try: %s", triggerKeyword))
+			return
+		}
+
+		// Create metadata with directory for loading
+		virtualDirectory := path.Join(userScriptPluginDirectory, metadata.Id)
+		metadataWithDirectory := plugin.MetadataWithDirectory{
+			Metadata:  metadata,
+			Directory: virtualDirectory,
+		}
+
+		// Use ReloadPlugin to load the plugin immediately
+		loadErr := pluginManager.ReloadPlugin(ctx, metadataWithDirectory)
+		if loadErr != nil {
+			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to load script plugin: %s", loadErr.Error()))
+			w.api.Notify(ctx, fmt.Sprintf("i18n:plugin_wpm_script_plugin_manual_try: %s", triggerKeyword))
+			return
+		}
+
+		w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Successfully loaded script plugin: %s", metadata.Name))
+
+		// Change query to the new plugin
+		w.api.ChangeQuery(ctx, common.PlainQuery{
+			QueryType: plugin.QueryTypeInput,
+			QueryText: fmt.Sprintf("%s ", triggerKeyword),
+		})
 	})
 }

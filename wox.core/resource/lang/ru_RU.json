@@ -265,6 +265,8 @@
   "plugin_wpm_command_install": "Установить плагины Wox",
   "plugin_wpm_command_uninstall": "Удалить плагины Wox",
   "plugin_wpm_command_create": "Создать плагин Wox",
+  "plugin_wpm_enter_plugin_name": "Пожалуйста, введите имя плагина",
+  "plugin_wpm_enter_plugin_name_subtitle": "Введите имя плагина, который вы хотите создать",
   "plugin_wpm_command_dev_list": "Список локальных плагинов Wox",
   "plugin_wpm_command_dev_add": "Добавить существующий каталог плагинов Wox",
   "plugin_wpm_command_dev_remove": "Удалить локальный плагин Wox, указав каталог",

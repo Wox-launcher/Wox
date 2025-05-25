@@ -22,47 +22,44 @@ Communication with Wox is done via JSON-RPC over stdin/stdout.
 Available methods:
 - query: Process user queries and return results
 - action: Handle user selection of a result
+
+Available environment variables:
+- WOX_DIRECTORY_USER_SCRIPT_PLUGINS: Directory where script plugins are stored
+- WOX_DIRECTORY_USER_DATA: User data directory
+- WOX_DIRECTORY_WOX_DATA: Wox application data directory
+- WOX_DIRECTORY_PLUGINS: Plugin directory
+- WOX_DIRECTORY_THEMES: Theme directory
 """
 
 import sys
 import json
+import os
 
 
 def handle_query(params, request_id):
     """
     Handle query requests
-    
+
     Args:
-        params: The parameters from the JSON-RPC request
+        params: The parameters from the JSON-RPC request (unused in this template)
         request_id: The ID of the JSON-RPC request
-    
+
     Returns:
         A JSON-RPC response with the query results
     """
-    query = params.get("search", "")
-    
-    # Generate results based on the query
+    # Generate results
     results = [
         {
-            "title": f"You searched for: {query}",
-            "subtitle": "This is a template result",
+            "title": "Open Plugin Directory",
+            "subtitle": "Open the script plugins directory in file manager",
             "score": 100,
             "action": {
-                "id": "example-action",
-                "data": query
-            }
-        },
-        {
-            "title": "Another result",
-            "subtitle": "With a different action",
-            "score": 90,
-            "action": {
-                "id": "open-url",
-                "data": "https://github.com/Wox-launcher/Wox"
+                "id": "open-plugin-directory",
+                "data": ""
             }
         }
     ]
-    
+
     # Return results
     return {
         "jsonrpc": "2.0",
@@ -76,35 +73,24 @@ def handle_query(params, request_id):
 def handle_action(params, request_id):
     """
     Handle action requests
-    
+
     Args:
         params: The parameters from the JSON-RPC request
         request_id: The ID of the JSON-RPC request
-    
+
     Returns:
         A JSON-RPC response with the action result
     """
     action_id = params.get("id", "")
-    action_data = params.get("data", "")
-    
+
     # Handle different action types
-    if action_id == "example-action":
-        # Example action that returns a message
+    if action_id == "open-plugin-directory":
+        # Open plugin directory action
         return {
             "jsonrpc": "2.0",
             "result": {
-                "action": "notify",
-                "message": f"You selected: {action_data}"
-            },
-            "id": request_id
-        }
-    elif action_id == "open-url":
-        # Open URL action
-        return {
-            "jsonrpc": "2.0",
-            "result": {
-                "action": "open-url",
-                "url": action_data
+                "action": "open-directory",
+                "path": os.environ.get("WOX_DIRECTORY_USER_SCRIPT_PLUGINS", "")
             },
             "id": request_id
         }
@@ -143,7 +129,7 @@ def main():
             "id": None
         }))
         return 1
-    
+
     # Validate JSON-RPC request
     if request.get("jsonrpc") != "2.0":
         print(json.dumps({
@@ -156,12 +142,12 @@ def main():
             "id": request.get("id")
         }))
         return 1
-    
+
     # Handle different methods
     method = request.get("method")
     params = request.get("params", {})
     request_id = request.get("id")
-    
+
     if method == "query":
         response = handle_query(params, request_id)
     elif method == "action":
@@ -177,7 +163,7 @@ def main():
             },
             "id": request_id
         }
-    
+
     # Output response
     print(json.dumps(response))
     return 0

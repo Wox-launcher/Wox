@@ -11,6 +11,7 @@ import (
 	"time"
 	"wox/plugin"
 	"wox/util"
+	"wox/util/shell"
 )
 
 func init() {
@@ -110,50 +111,10 @@ func (sp *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.
 
 // executeScript executes the script with the given JSON-RPC request and returns the results
 func (sp *ScriptPlugin) executeScript(ctx context.Context, request map[string]interface{}) ([]plugin.QueryResult, error) {
-	// Convert request to JSON
-	requestJSON, err := json.Marshal(request)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	// Determine the interpreter based on file extension
-	interpreter, err := sp.getInterpreter()
+	// Execute script and get raw response
+	response, err := sp.executeScriptRaw(ctx, request)
 	if err != nil {
 		return nil, err
-	}
-
-	// Prepare command
-	var cmd *exec.Cmd
-	if interpreter != "" {
-		cmd = exec.CommandContext(ctx, interpreter, sp.scriptPath)
-	} else {
-		cmd = exec.CommandContext(ctx, sp.scriptPath)
-	}
-
-	// Set up stdin with the JSON-RPC request
-	cmd.Stdin = strings.NewReader(string(requestJSON))
-
-	// Set timeout for script execution
-	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	cmd = exec.CommandContext(timeoutCtx, cmd.Args[0], cmd.Args[1:]...)
-	cmd.Stdin = strings.NewReader(string(requestJSON))
-
-	// Execute script
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("script execution failed: %w", err)
-	}
-
-	// Parse JSON-RPC response
-	var response map[string]interface{}
-	if err := json.Unmarshal(output, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse script response: %w", err)
-	}
-
-	// Check for JSON-RPC error
-	if errorData, exists := response["error"]; exists {
-		return nil, fmt.Errorf("script returned error: %v", errorData)
 	}
 
 	// Extract results
@@ -231,52 +192,70 @@ func (sp *ScriptPlugin) executeAction(ctx context.Context, actionData map[string
 	}
 }
 
-// executeScriptAction executes the script for action requests
-func (sp *ScriptPlugin) executeScriptAction(ctx context.Context, request map[string]interface{}) error {
+// executeScriptRaw executes the script with the given JSON-RPC request and returns the raw response
+func (sp *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string]interface{}) (map[string]interface{}, error) {
 	// Convert request to JSON
 	requestJSON, err := json.Marshal(request)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	// Determine the interpreter based on file extension
 	interpreter, err := sp.getInterpreter()
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	// Prepare command
-	var cmd *exec.Cmd
-	if interpreter != "" {
-		cmd = exec.CommandContext(ctx, interpreter, sp.scriptPath)
-	} else {
-		cmd = exec.CommandContext(ctx, sp.scriptPath)
-	}
-
-	// Set up stdin with the JSON-RPC request
-	cmd.Stdin = strings.NewReader(string(requestJSON))
 
 	// Set timeout for script execution
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	cmd = exec.CommandContext(timeoutCtx, cmd.Args[0], cmd.Args[1:]...)
+
+	// Prepare command
+	var cmd *exec.Cmd
+	if interpreter != "" {
+		cmd = exec.CommandContext(timeoutCtx, interpreter, sp.scriptPath)
+	} else {
+		cmd = exec.CommandContext(timeoutCtx, sp.scriptPath)
+	}
+
+	// Set up environment variables for script plugins
+	cmd.Env = append(os.Environ(),
+		"WOX_DIRECTORY_USER_SCRIPT_PLUGINS="+util.GetLocation().GetUserScriptPluginsDirectory(),
+		"WOX_DIRECTORY_USER_DATA="+util.GetLocation().GetUserDataDirectory(),
+		"WOX_DIRECTORY_WOX_DATA="+util.GetLocation().GetWoxDataDirectory(),
+		"WOX_DIRECTORY_PLUGINS="+util.GetLocation().GetPluginDirectory(),
+		"WOX_DIRECTORY_THEMES="+util.GetLocation().GetThemeDirectory(),
+	)
+
+	// Set up stdin with the JSON-RPC request
 	cmd.Stdin = strings.NewReader(string(requestJSON))
 
 	// Execute script
 	output, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("script execution failed: %w", err)
+		return nil, fmt.Errorf("script execution failed: %w", err)
 	}
 
 	// Parse JSON-RPC response
 	var response map[string]interface{}
 	if err := json.Unmarshal(output, &response); err != nil {
-		return fmt.Errorf("failed to parse script response: %w", err)
+		return nil, fmt.Errorf("failed to parse script response: %w", err)
 	}
 
 	// Check for JSON-RPC error
 	if errorData, exists := response["error"]; exists {
-		return fmt.Errorf("script returned error: %v", errorData)
+		return nil, fmt.Errorf("script returned error: %v", errorData)
+	}
+
+	return response, nil
+}
+
+// executeScriptAction executes the script for action requests
+func (sp *ScriptPlugin) executeScriptAction(ctx context.Context, request map[string]interface{}) error {
+	// Execute script and get raw response
+	response, err := sp.executeScriptRaw(ctx, request)
+	if err != nil {
+		return err
 	}
 
 	// Handle action result if present
@@ -299,6 +278,16 @@ func (sp *ScriptPlugin) handleActionResult(ctx context.Context, result map[strin
 		if url != "" {
 			// TODO: Implement URL opening functionality
 			util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s requested to open URL: %s", sp.metadata.Name, url))
+		}
+	case "open-directory":
+		path := getStringFromMap(result, "path")
+		if path != "" {
+			// Open directory using shell.Open
+			if err := shell.Open(path); err != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s failed to open directory %s: %s", sp.metadata.Name, path, err.Error()))
+			} else {
+				util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s opened directory: %s", sp.metadata.Name, path))
+			}
 		}
 	case "notify":
 		message := getStringFromMap(result, "message")

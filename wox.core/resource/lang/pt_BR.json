@@ -265,6 +265,8 @@
   "plugin_wpm_command_install": "Instalar plugins do Wox",
   "plugin_wpm_command_uninstall": "Desinstalar plugins do Wox",
   "plugin_wpm_command_create": "Criar plugin do Wox",
+  "plugin_wpm_enter_plugin_name": "Por favor, digite o nome do plugin",
+  "plugin_wpm_enter_plugin_name_subtitle": "Digite o nome do plugin que você deseja criar",
   "plugin_wpm_command_dev_list": "Listar plugins locais do Wox",
   "plugin_wpm_command_dev_add": "Adicionar diretório de plugin existente do Wox",
   "plugin_wpm_command_dev_remove": "Remover plugin local do Wox, seguido de um diretório",

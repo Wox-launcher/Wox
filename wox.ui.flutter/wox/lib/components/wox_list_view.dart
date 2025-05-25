@@ -48,57 +48,64 @@ class WoxListView<T> extends StatelessWidget {
                 }
               },
               child: Obx(
-                () => ListView.builder(
-                  shrinkWrap: true,
-                  controller: controller.scrollController,
-                  physics: const ClampingScrollPhysics(),
-                  itemCount: controller.items.length,
-                  itemExtent: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
-                  itemBuilder: (context, index) {
-                    var item = controller.items[index];
-                    return MouseRegion(
-                      onEnter: (_) {
-                        if (controller.isMouseMoved && !item.value.isGroup) {
-                          Logger.instance.info(const UuidV4().generate(), "MOUSE: onenter, is mouse moved: ${controller.isMouseMoved}, is group: ${item.value.isGroup}");
-                          controller.updateHoveredIndex(index);
-                        }
-                      },
-                      onHover: (_) {
-                        if (!controller.isMouseMoved && !item.value.isGroup) {
-                          Logger.instance.info(const UuidV4().generate(), "MOUSE: onHover, is mouse moved: ${controller.isMouseMoved}, is group: ${item.value.isGroup}");
-                          controller.isMouseMoved = true;
-                          controller.updateHoveredIndex(index);
-                        }
-                      },
-                      onExit: (_) {
-                        if (!item.value.isGroup && controller.hoveredIndex.value == index) {
-                          controller.clearHoveredResult();
-                        }
-                      },
-                      child: GestureDetector(
-                        onTap: () {
-                          if (!item.value.isGroup) {
-                            controller.updateActiveIndex(const UuidV4().generate(), index);
-                            controller.onItemActive?.call(const UuidV4().generate(), item.value);
+                () => AnimatedSwitcher(
+                  duration: Duration.zero,
+                  child: ListView.builder(
+                    key: ValueKey(controller.items.length),
+                    shrinkWrap: true,
+                    controller: controller.scrollController,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: controller.items.length,
+                    itemExtent: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
+                    addAutomaticKeepAlives: false,
+                    addRepaintBoundaries: false,
+                    addSemanticIndexes: false,
+                    itemBuilder: (context, index) {
+                      var item = controller.items[index];
+                      return MouseRegion(
+                        onEnter: (_) {
+                          if (controller.isMouseMoved && !item.value.isGroup) {
+                            Logger.instance.info(const UuidV4().generate(), "MOUSE: onenter, is mouse moved: ${controller.isMouseMoved}, is group: ${item.value.isGroup}");
+                            controller.updateHoveredIndex(index);
                           }
                         },
-                        onDoubleTap: () {
-                          if (!item.value.isGroup) {
-                            controller.onItemExecuted?.call(const UuidV4().generate(), item.value);
+                        onHover: (_) {
+                          if (!controller.isMouseMoved && !item.value.isGroup) {
+                            Logger.instance.info(const UuidV4().generate(), "MOUSE: onHover, is mouse moved: ${controller.isMouseMoved}, is group: ${item.value.isGroup}");
+                            controller.isMouseMoved = true;
+                            controller.updateHoveredIndex(index);
                           }
                         },
-                        child: Obx(
-                          () => WoxListItemView(
-                            item: item.value,
-                            woxTheme: WoxThemeUtil.instance.currentTheme.value,
-                            isActive: controller.activeIndex.value == index,
-                            isHovered: controller.hoveredIndex.value == index,
-                            listViewType: listViewType,
+                        onExit: (_) {
+                          if (!item.value.isGroup && controller.hoveredIndex.value == index) {
+                            controller.clearHoveredResult();
+                          }
+                        },
+                        child: GestureDetector(
+                          onTap: () {
+                            if (!item.value.isGroup) {
+                              controller.updateActiveIndex(const UuidV4().generate(), index);
+                              controller.onItemActive?.call(const UuidV4().generate(), item.value);
+                            }
+                          },
+                          onDoubleTap: () {
+                            if (!item.value.isGroup) {
+                              controller.onItemExecuted?.call(const UuidV4().generate(), item.value);
+                            }
+                          },
+                          child: Obx(
+                            () => WoxListItemView(
+                              item: item.value,
+                              woxTheme: WoxThemeUtil.instance.currentTheme.value,
+                              isActive: controller.activeIndex.value == index,
+                              isHovered: controller.hoveredIndex.value == index,
+                              listViewType: listViewType,
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
               ),
             ),

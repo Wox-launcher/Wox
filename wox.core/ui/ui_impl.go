@@ -150,6 +150,8 @@ func (u *uiImpl) isNotifyInToolbar(ctx context.Context, pluginId string) bool {
 	}
 
 	return false
+
+	return true
 }
 
 func (u *uiImpl) PickFiles(ctx context.Context, params common.PickFilesParams) []string {
