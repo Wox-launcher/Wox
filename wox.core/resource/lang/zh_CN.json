@@ -269,6 +269,8 @@
   "plugin_wpm_command_create": "创建 Wox 插件",
   "plugin_wpm_enter_plugin_name": "请输入插件名称",
   "plugin_wpm_enter_plugin_name_subtitle": "输入您要创建的插件名称",
+  "plugin_wpm_group_regular_plugins": "常规插件 (全功能插件)",
+  "plugin_wpm_group_script_plugins": "脚本插件 (轻量单文件插件)",
   "plugin_wpm_command_dev_list": "列出本地 Wox 插件",
   "plugin_wpm_command_dev_add": "添加现有的 Wox 插件目录",
   "plugin_wpm_command_dev_remove": "移除本地 Wox 插件，后跟目录",

@@ -320,7 +320,7 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 			Title:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_create_plugin"), string(template.Runtime)),
 			SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_plugin_name"), query.Search),
 			Icon:     wpmIcon,
-			Group:    "Regular Plugins",
+			Group:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_group_regular_plugins"),
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_wpm_create",
@@ -406,7 +406,7 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 			Title:    title,
 			SubTitle: subtitle,
 			Icon:     wpmIcon,
-			Group:    "Script Plugins",
+			Group:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_group_script_plugins"),
 			Actions:  actions,
 		})
 	}
