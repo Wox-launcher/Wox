@@ -50,10 +50,11 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/setting/userdata/location/update": handleUserDataLocationUpdate,
 
 	// events
-	"/on/focus/lost": handleOnFocusLost,
-	"/on/ready":      handleOnUIReady,
-	"/on/show":       handleOnShow,
-	"/on/hide":       handleOnHide,
+	"/on/focus/lost":     handleOnFocusLost,
+	"/on/ready":          handleOnUIReady,
+	"/on/show":           handleOnShow,
+	"/on/querybox/focus": handleOnQueryBoxFocus,
+	"/on/hide":           handleOnHide,
 
 	// lang
 	"/lang/available": handleLangAvailable,
@@ -696,6 +697,12 @@ func handleLangJson(w http.ResponseWriter, r *http.Request) {
 func handleOnShow(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
 	GetUIManager().PostOnShow(ctx)
+	writeSuccessResponse(w, "")
+}
+
+func handleOnQueryBoxFocus(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+	GetUIManager().PostOnQueryBoxFocus(ctx)
 	writeSuccessResponse(w, "")
 }
 

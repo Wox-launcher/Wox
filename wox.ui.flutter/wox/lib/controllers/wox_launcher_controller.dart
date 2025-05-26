@@ -124,6 +124,14 @@ class WoxLauncherController extends GetxController {
       tag: 'action',
     );
 
+    // Add focus listener to query box
+    queryBoxFocusNode.addListener(() {
+      if (queryBoxFocusNode.hasFocus) {
+        // Call API when query box gains focus
+        WoxApi.instance.onQueryBoxFocus();
+      }
+    });
+
     // Initialize doctor check info
     doctorCheckInfo.value = DoctorCheckInfo.empty();
   }
@@ -726,7 +734,6 @@ class WoxLauncherController extends GetxController {
                 resizeHeight();
               }
 
-              // update actions list
               var actions = result.value.data.actions.map((e) => WoxListItem.fromResultAction(e)).toList();
               var oldActionIndex = actionListViewController.activeIndex.value;
               var oldActionCount = actionListViewController.items.length;

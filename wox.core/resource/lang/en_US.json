@@ -23,7 +23,7 @@
   "ui_show_position_active_screen": "Active screen",
   "ui_show_position_last_location": "Last location",
   "ui_switch_input_method_abc": "Switch to ABC",
-  "ui_switch_input_method_abc_tips": "When selected, the input method will be switched to english",
+  "ui_switch_input_method_abc_tips": "When selected, the input method will be switched to english when the query box gains focus",
   "ui_lang": "Language",
   "ui_query_hotkeys": "Query Hotkeys",
   "ui_query_shortcuts": "Query Shortcuts",

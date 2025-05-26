@@ -21,7 +21,7 @@
   "ui_show_position_active_screen": "Tela ativa",
   "ui_show_position_last_location": "Última posição",
   "ui_switch_input_method_abc": "Alternar para ABC",
-  "ui_switch_input_method_abc_tips": "Quando selecionado, o método de entrada será alterado para o inglês",
+  "ui_switch_input_method_abc_tips": "Quando selecionado, o método de entrada será alterado para o inglês quando a caixa de consulta receber o foco",
   "ui_lang": "Idioma",
   "ui_query_hotkeys": "Teclas de atalho para consulta",
   "ui_query_shortcuts": "Atalhos de consulta",

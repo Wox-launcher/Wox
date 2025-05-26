@@ -21,7 +21,7 @@
   "ui_show_position_active_screen": "Активный экран",
   "ui_show_position_last_location": "Последнее положение",
   "ui_switch_input_method_abc": "Переключить на ABC",
-  "ui_switch_input_method_abc_tips": "При выборе метод ввода будет переключен на английский",
+  "ui_switch_input_method_abc_tips": "При выборе метод ввода будет переключен на английский при получении фокуса полем запроса",
   "ui_lang": "Язык",
   "ui_query_hotkeys": "Горячие клавиши запроса",
   "ui_query_shortcuts": "Ярлыки запросов",

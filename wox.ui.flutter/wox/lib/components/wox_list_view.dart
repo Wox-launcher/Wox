@@ -57,9 +57,6 @@ class WoxListView<T> extends StatelessWidget {
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: controller.items.length,
                     itemExtent: WoxThemeUtil.instance.getResultListViewHeightByCount(1),
-                    addAutomaticKeepAlives: false,
-                    addRepaintBoundaries: false,
-                    addSemanticIndexes: false,
                     itemBuilder: (context, index) {
                       var item = controller.items[index];
                       return MouseRegion(

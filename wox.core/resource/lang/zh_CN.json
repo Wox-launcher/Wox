@@ -23,7 +23,7 @@
   "ui_show_position_active_screen": "活动屏幕",
   "ui_show_position_last_location": "上次位置",
   "ui_switch_input_method_abc": "切换输入法",
-  "ui_switch_input_method_abc_tips": "选中后，输入法将切换到英文",
+  "ui_switch_input_method_abc_tips": "选中后，查询框获得焦点时输入法将切换到英文",
   "ui_lang": "语言",
   "ui_query_hotkeys": "查询快捷",
   "ui_query_shortcuts": "查询缩写",

@@ -419,9 +419,13 @@ func (m *Manager) PostUIReady(ctx context.Context) {
 }
 
 func (m *Manager) PostOnShow(ctx context.Context) {
+	//no-op
+}
+
+func (m *Manager) PostOnQueryBoxFocus(ctx context.Context) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if woxSetting.SwitchInputMethodABC {
-		util.GetLogger().Info(ctx, "switch input method to ABC")
+		util.GetLogger().Info(ctx, "switch input method to ABC on query box focus")
 		switchErr := ime.SwitchInputMethodABC()
 		if switchErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to switch input method to ABC: %s", switchErr.Error()))

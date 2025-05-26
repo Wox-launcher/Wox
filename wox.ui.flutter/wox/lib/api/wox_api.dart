@@ -99,6 +99,10 @@ class WoxApi {
     await WoxHttpUtil.instance.postData("/on/show", {});
   }
 
+  Future<void> onQueryBoxFocus() async {
+    await WoxHttpUtil.instance.postData("/on/querybox/focus", {});
+  }
+
   Future<void> onHide(PlainQuery query) async {
     await WoxHttpUtil.instance.postData("/on/hide", {
       "query": query.toJson(),
