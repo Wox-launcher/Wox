@@ -197,20 +197,23 @@ class WoxListController<T> extends GetxController {
       _originalItems[originalIndex] = item;
     }
 
-    // update items
-    final index = _items.indexWhere((element) => element.value.id == item.id);
-    if (index != -1) {
-      _items[index] = item.obs;
+    // Check if there's an active filter
+    bool hasActiveFilter = filterBoxController.text.isNotEmpty;
+    if (hasActiveFilter) {
+      // If there's an active filter, reapply it to ensure the updated item is properly filtered
+      filterItems(traceId, filterBoxController.text);
+    } else {
+      // No filter active, update items directly
+      final index = _items.indexWhere((element) => element.value.id == item.id);
+      if (index != -1) {
+        _items[index] = item.obs;
+      }
     }
   }
 
   void updateItems(String traceId, List<WoxListItem<T>> newItems) {
-    _items.assignAll(newItems.map((item) => item.obs));
     _originalItems.assignAll(newItems);
-
-    if (_activeIndex.value >= _items.length && _items.isNotEmpty) {
-      updateActiveIndex(traceId, 0);
-    }
+    filterItems(traceId, filterBoxController.text);
   }
 
   void updateHoveredIndex(int index) {
