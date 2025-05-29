@@ -24,6 +24,30 @@ class ToolbarInfo {
     );
   }
 
+  ToolbarInfo copyWith({
+    WoxImage? icon,
+    String? text,
+    String? actionName,
+    String? hotkey,
+    Function()? action,
+  }) {
+    return ToolbarInfo(
+      icon: icon ?? this.icon,
+      text: text ?? this.text,
+      actionName: actionName ?? this.actionName,
+      hotkey: hotkey ?? this.hotkey,
+      action: action ?? this.action,
+    );
+  }
+
+  ToolbarInfo emptyRightSide() {
+    return ToolbarInfo(icon: icon, text: text, actionName: null, hotkey: null, action: null);
+  }
+
+  ToolbarInfo emptyLeftSide() {
+    return ToolbarInfo(icon: null, text: null, actionName: actionName, hotkey: hotkey, action: action);
+  }
+
   // text and hotkey are both empty
   bool isEmpty() {
     return (text == null || text!.isEmpty) && (hotkey == null || hotkey!.isEmpty);

@@ -112,45 +112,6 @@ func (u *uiImpl) isNotifyInToolbar(ctx context.Context, pluginId string) bool {
 		return false
 	}
 
-	respData, err := u.invokeWebsocketMethod(ctx, "GetCurrentQuery", nil)
-	if err != nil {
-		logger.Error(ctx, fmt.Sprintf("isNotifyInToolbar error: %s", err.Error()))
-		return false
-	}
-	//first marshal to json , then unmarshal to entity.PlainQuery
-	jsonData, marshalErr := json.Marshal(respData)
-	if marshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("isNotifyInToolbar marshal error: %s", marshalErr.Error()))
-		return false
-	}
-	var currentQuery common.PlainQuery
-	unmarshalErr := json.Unmarshal(jsonData, &currentQuery)
-	if unmarshalErr != nil {
-		logger.Error(ctx, fmt.Sprintf("isNotifyInToolbar unmarshal error: %s", unmarshalErr.Error()))
-		return false
-	}
-
-	// if current query is plugin specific query, we show notify in toolbar
-	if currentQuery.QueryType == plugin.QueryTypeSelection {
-		return true
-	}
-
-	queryPlugin, pluginInstance, queryErr := plugin.GetPluginManager().NewQuery(ctx, currentQuery)
-	if queryErr != nil {
-		logger.Error(ctx, fmt.Sprintf("isNotifyInToolbar new query error: %s", queryErr.Error()))
-		return false
-	}
-	if pluginInstance == nil {
-		logger.Error(ctx, "isNotifyInToolbar plugin instance not found")
-		return false
-	}
-
-	if !queryPlugin.IsGlobalQuery() && pluginInstance.Metadata.Id == pluginId {
-		return true
-	}
-
-	return false
-
 	return true
 }
 

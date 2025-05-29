@@ -592,7 +592,7 @@ class WoxLauncherController extends GetxController {
       );
     } else {
       Logger.instance.debug(traceId, "update toolbar to empty because of query changed and is empty");
-      toolbar.value = ToolbarInfo.empty();
+      toolbar.value = toolbar.value.emptyRightSide();
     }
 
     await resizeHeight();
@@ -873,13 +873,7 @@ class WoxLauncherController extends GetxController {
       Future.delayed(Duration(seconds: msg.displaySeconds), () {
         // only hide toolbar msg when the text is the same as the one we are showing
         if (toolbar.value.text == msg.text) {
-          toolbar.value = ToolbarInfo(
-            text: "",
-            icon: WoxImage.empty(),
-            action: toolbar.value.action,
-            actionName: toolbar.value.actionName,
-            hotkey: toolbar.value.hotkey,
-          );
+          toolbar.value = toolbar.value.emptyLeftSide();
         }
       });
     }
@@ -975,7 +969,7 @@ class WoxLauncherController extends GetxController {
 
     // only update action and hotkey if it's different from the current one
     if (toolbar.value.actionName != action.name || toolbar.value.hotkey != action.hotkey) {
-      toolbar.value = ToolbarInfo(
+      toolbar.value = toolbar.value.copyWith(
         hotkey: "enter",
         actionName: action.name,
         action: () {
@@ -1066,7 +1060,7 @@ class WoxLauncherController extends GetxController {
     // if query is not empty, update the toolbar after 100ms to avoid flickering
     cleanToolbarTimer = Timer(Duration(milliseconds: cleanToolbarDelay), () {
       Logger.instance.debug(traceId, "update toolbar to empty because of query changed");
-      toolbar.value = ToolbarInfo.empty();
+      toolbar.value = toolbar.value.emptyRightSide();
     });
   }
 

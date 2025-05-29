@@ -344,10 +344,10 @@ func (s *Store) InstallFromLocal(ctx context.Context, filePath string) error {
 		logger.Error(ctx, fmt.Sprintf("failed to load plugin %s(%s): %s", pluginMetadata.Name, pluginMetadata.Version, loadErr.Error()))
 
 		// remove plugin directory
-		removeErr := os.RemoveAll(pluginDirectory)
-		if removeErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to remove plugin directory %s: %s", pluginDirectory, removeErr.Error()))
-		}
+		// removeErr := os.RemoveAll(pluginDirectory)
+		// if removeErr != nil {
+		// 	logger.Error(ctx, fmt.Sprintf("failed to remove plugin directory %s: %s", pluginDirectory, removeErr.Error()))
+		// }
 
 		return fmt.Errorf("failed to load plugin %s(%s): %s", pluginMetadata.Name, pluginMetadata.Version, loadErr.Error())
 	}
