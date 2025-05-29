@@ -19,7 +19,7 @@ host_id = f"python-{uuid.uuid4()}"
 logger.update_log_directory(log_directory)
 
 
-def check_wox_process():
+def check_wox_process() -> bool:
     """Check if Wox process is still alive"""
     try:
         os.kill(wox_pid, 0)
@@ -28,7 +28,7 @@ def check_wox_process():
         return False
 
 
-async def monitor_wox_process():
+async def monitor_wox_process() -> None:
     """Monitor Wox process and exit if it's not alive"""
     await logger.info(trace_id, "start monitor wox process")
     while True:
@@ -38,7 +38,7 @@ async def monitor_wox_process():
         await asyncio.sleep(1)
 
 
-async def main():
+async def main() -> None:
     """Main function"""
     # Log startup information
 
@@ -53,5 +53,5 @@ async def main():
     await asyncio.gather(monitor_task, websocket_task)
 
 
-def run():
+def run() -> None:
     asyncio.run(main())

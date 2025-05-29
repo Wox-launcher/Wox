@@ -62,28 +62,19 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
 
         # Add plugin directory to Python path
         if plugin_directory not in sys.path:
+            await logger.info(ctx.get_trace_id(), f"add: {plugin_directory} to sys.path")
             sys.path.append(plugin_directory)
 
         deps_dir = path.join(plugin_directory, "dependencies")
         if path.exists(deps_dir) and deps_dir not in sys.path:
+            await logger.info(ctx.get_trace_id(), f"add: {deps_dir} to sys.path")
             sys.path.append(deps_dir)
 
         try:
-            # Add the parent directory to Python path
-            parent_dir = path.dirname(plugin_directory)
-            if parent_dir not in sys.path:
-                sys.path.append(parent_dir)
-
             # Convert entry path to module path
-            # e.g., "killprocess/main.py" -> "dist.killprocess.main"
-            plugin_dir_name = path.basename(plugin_directory)
-            entry_without_ext = entry.replace(".py", "").replace("/", ".")
-            module_path = f"{plugin_dir_name}.{entry_without_ext}"
-
-            await logger.info(
-                ctx.get_trace_id(),
-                f"module_path: {module_path}, plugin_dir_name: {plugin_dir_name}, entry_without_ext: {entry_without_ext}",
-            )
+            # e.g., "replaceme_with_projectname/main.py" -> "replaceme_with_projectname.main"
+            module_path = entry.replace(".py", "").replace("/", ".")
+            await logger.info(ctx.get_trace_id(), f"module_path: {module_path}")
 
             # Import the module
             module = importlib.import_module(module_path)

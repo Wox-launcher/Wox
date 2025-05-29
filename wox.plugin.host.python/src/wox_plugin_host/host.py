@@ -2,6 +2,7 @@ import asyncio
 import json
 import uuid
 import traceback
+from typing import Any
 from wox_plugin import Context
 import websockets
 
@@ -11,7 +12,7 @@ from .plugin_manager import waiting_for_response
 from .jsonrpc import handle_request_from_wox
 
 
-def _clean_for_serialization(obj):
+def _clean_for_serialization(obj: Any) -> Any:
     """Remove non-serializable properties from any object recursively"""
     if obj is None:
         return obj
@@ -43,7 +44,7 @@ def _clean_for_serialization(obj):
     return None
 
 
-async def handle_message(ws: websockets.asyncio.server.ServerConnection, message: str):
+async def handle_message(ws: websockets.asyncio.server.ServerConnection, message: str) -> None:
     """Handle incoming WebSocket message"""
 
     trace_id = str(uuid.uuid4())
@@ -99,7 +100,7 @@ async def handle_message(ws: websockets.asyncio.server.ServerConnection, message
         )
 
 
-async def handler(websocket: websockets.asyncio.server.ServerConnection):
+async def handler(websocket: websockets.asyncio.server.ServerConnection) -> None:
     """WebSocket connection handler"""
     logger.update_websocket(websocket)
 
@@ -118,7 +119,7 @@ async def handler(websocket: websockets.asyncio.server.ServerConnection):
         logger.update_websocket(None)
 
 
-async def start_websocket(websocket_port: int):
+async def start_websocket(websocket_port: int) -> None:
     """Start WebSocket server"""
     await logger.info(str(uuid.uuid4()), "start websocket server")
     async with websockets.serve(handler, "", websocket_port):
