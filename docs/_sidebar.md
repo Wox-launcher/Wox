@@ -17,6 +17,8 @@
 - Plugin
 
     - [Plugin summary](plugin_summary.md)
+    - [Script Plugin Guide](script_plugin_guide.md)
+    - [Full-featured Plugin Guide](full_featured_plugin_guide.md)
     - [Plugin store](plugin_store.md)
     - [Write plugin](vue.md)
     - [Submit plugin](helpers.md)

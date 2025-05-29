@@ -1,0 +1,378 @@
+# Script Plugin Development Guide
+
+Script plugins are lightweight, single-file plugins that provide a simple way to extend Wox functionality. They are perfect for quick automation tasks, personal utilities, and learning plugin development.
+
+## Overview
+
+Script plugins communicate with Wox using JSON-RPC over stdin/stdout. Each script is executed on-demand when a query is made, making them ideal for simple, stateless operations.
+
+## Getting Started
+
+### Creating a Script Plugin
+
+Use the `wpm` plugin to create a new script plugin:
+
+```
+wpm create script <template> <name>
+```
+
+Available templates:
+- `python` - Python script template
+- `javascript` - JavaScript/Node.js script template
+- `bash` - Bash script template
+
+Example:
+```
+wpm create script python my-calculator
+```
+
+### Script Plugin Structure
+
+A script plugin consists of a single executable file with metadata defined in comments:
+
+```python
+#!/usr/bin/env python3
+# Required parameters:
+# @wox.id my-calculator
+# @wox.name My Calculator
+# @wox.keywords calc
+
+# Optional parameters:
+# @wox.icon 🧮
+# @wox.version 1.0.0
+# @wox.author Your Name
+# @wox.description A simple calculator plugin
+# @wox.minWoxVersion 2.0.0
+
+# Your plugin code here...
+```
+
+## Metadata Parameters
+
+### Required Parameters
+- `@wox.id` - Unique plugin identifier
+- `@wox.name` - Display name of the plugin
+- `@wox.keywords` - Trigger keywords (space-separated)
+
+### Optional Parameters
+- `@wox.icon` - Plugin icon (emoji or file path)
+- `@wox.version` - Plugin version
+- `@wox.author` - Plugin author
+- `@wox.description` - Plugin description
+- `@wox.minWoxVersion` - Minimum required Wox version
+
+## JSON-RPC Communication
+
+Script plugins communicate with Wox using JSON-RPC 2.0 protocol.
+
+### Request Format
+
+Wox sends requests to your script via stdin:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "query",
+  "params": {
+    "search": "user search term",
+    "trigger_keyword": "calc",
+    "command": "",
+    "raw_query": "calc 2+2"
+  },
+  "id": "request-id"
+}
+```
+
+### Response Format
+
+Your script should respond via stdout:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "items": [
+      {
+        "title": "Result: 4",
+        "subtitle": "2 + 2 = 4",
+        "score": 100,
+        "action": {
+          "id": "copy-result",
+          "data": "4"
+        }
+      }
+    ]
+  },
+  "id": "request-id"
+}
+```
+
+## Available Methods
+
+### query Method
+
+Handles user queries and returns search results.
+
+**Parameters:**
+- `search` - The search term entered by user
+- `trigger_keyword` - The keyword that triggered this plugin
+- `command` - Command if using plugin commands
+- `raw_query` - The complete raw query string
+
+### action Method
+
+Handles user selection of a result item.
+
+**Parameters:**
+- `id` - The action ID from the result item
+- `data` - The action data from the result item
+
+## Environment Variables
+
+Script plugins have access to these environment variables:
+
+- `WOX_DIRECTORY_USER_SCRIPT_PLUGINS` - Script plugins directory
+- `WOX_DIRECTORY_USER_DATA` - User data directory
+- `WOX_DIRECTORY_WOX_DATA` - Wox application data directory
+- `WOX_DIRECTORY_PLUGINS` - Plugin directory
+- `WOX_DIRECTORY_THEMES` - Theme directory
+
+## Action Types
+
+Script plugins can return actions that Wox will handle:
+
+### open-url
+Opens a URL in the default browser:
+```json
+{
+  "action": "open-url",
+  "url": "https://example.com"
+}
+```
+
+### open-directory
+Opens a directory in the file manager:
+```json
+{
+  "action": "open-directory",
+  "path": "/path/to/directory"
+}
+```
+
+## Example: Simple Calculator
+
+```python
+#!/usr/bin/env python3
+# @wox.id simple-calculator
+# @wox.name Simple Calculator
+# @wox.keywords calc
+
+import json
+import sys
+import re
+
+def handle_query(params, request_id):
+    search = params.get('search', '').strip()
+
+    if not search:
+        return {
+            "jsonrpc": "2.0",
+            "result": {"items": []},
+            "id": request_id
+        }
+
+    try:
+        # Simple math evaluation (be careful with eval in real plugins!)
+        if re.match(r'^[0-9+\-*/().\s]+$', search):
+            result = eval(search)
+            return {
+                "jsonrpc": "2.0",
+                "result": {
+                    "items": [{
+                        "title": f"Result: {result}",
+                        "subtitle": f"{search} = {result}",
+                        "score": 100,
+                        "action": {
+                            "id": "copy-result",
+                            "data": str(result)
+                        }
+                    }]
+                },
+                "id": request_id
+            }
+    except:
+        pass
+
+    return {
+        "jsonrpc": "2.0",
+        "result": {"items": []},
+        "id": request_id
+    }
+
+def handle_action(params, request_id):
+    # Handle copy action
+    return {
+        "jsonrpc": "2.0",
+        "result": {},
+        "id": request_id
+    }
+
+if __name__ == "__main__":
+    request = json.loads(sys.stdin.read())
+    method = request.get("method")
+    params = request.get("params", {})
+    request_id = request.get("id")
+
+    if method == "query":
+        response = handle_query(params, request_id)
+    elif method == "action":
+        response = handle_action(params, request_id)
+    else:
+        response = {
+            "jsonrpc": "2.0",
+            "error": {"code": -32601, "message": "Method not found"},
+            "id": request_id
+        }
+
+    print(json.dumps(response))
+```
+
+## More Examples
+
+### File Search Plugin
+
+```bash
+#!/bin/bash
+# @wox.id file-search
+# @wox.name File Search
+# @wox.keywords fs
+
+# Read JSON-RPC request
+read -r request
+
+# Parse request
+search=$(echo "$request" | jq -r '.params.search // ""')
+id=$(echo "$request" | jq -r '.id')
+
+if [ -z "$search" ]; then
+    echo '{"jsonrpc":"2.0","result":{"items":[]},"id":"'$id'"}'
+    exit 0
+fi
+
+# Search files
+results=()
+while IFS= read -r -d '' file; do
+    basename=$(basename "$file")
+    results+=("{\"title\":\"$basename\",\"subtitle\":\"$file\",\"score\":90,\"action\":{\"id\":\"open-file\",\"data\":\"$file\"}}")
+done < <(find "$HOME" -name "*$search*" -type f -print0 2>/dev/null | head -z -10)
+
+# Build JSON response
+items=$(IFS=,; echo "${results[*]}")
+echo '{"jsonrpc":"2.0","result":{"items":['$items']},"id":"'$id'"}'
+```
+
+### Weather Plugin (JavaScript)
+
+```javascript
+#!/usr/bin/env node
+// @wox.id weather-plugin
+// @wox.name Weather
+// @wox.keywords weather
+
+const https = require('https');
+
+function handleQuery(params, requestId) {
+    const search = params.search || '';
+
+    if (!search) {
+        return {
+            jsonrpc: "2.0",
+            result: { items: [] },
+            id: requestId
+        };
+    }
+
+    // Mock weather data (replace with real API)
+    const weatherData = {
+        temperature: "22°C",
+        condition: "Sunny",
+        location: search
+    };
+
+    return {
+        jsonrpc: "2.0",
+        result: {
+            items: [{
+                title: `${weatherData.temperature} - ${weatherData.condition}`,
+                subtitle: `Weather in ${weatherData.location}`,
+                score: 100,
+                action: {
+                    id: "show-details",
+                    data: JSON.stringify(weatherData)
+                }
+            }]
+        },
+        id: requestId
+    };
+}
+
+// Main execution
+const input = process.stdin.read();
+if (input) {
+    const request = JSON.parse(input.toString());
+    const response = handleQuery(request.params || {}, request.id);
+    console.log(JSON.stringify(response));
+}
+```
+
+## Best Practices
+
+1. **Keep it Simple**: Script plugins are best for simple, stateless operations
+2. **Handle Errors**: Always handle exceptions and return proper JSON-RPC responses
+3. **Performance**: Remember that scripts are executed for each query
+4. **Security**: Be careful with user input, especially when using `eval()` or executing commands
+5. **Testing**: Test your script manually with JSON input before using in Wox
+6. **Use Environment Variables**: Leverage the provided WOX_DIRECTORY_* variables
+7. **Validate Input**: Always validate and sanitize user input
+8. **Provide Meaningful Results**: Use descriptive titles and subtitles
+
+## Debugging Tips
+
+### Manual Testing
+
+Test your script manually:
+
+```bash
+# Create test input
+echo '{"jsonrpc":"2.0","method":"query","params":{"search":"test"},"id":"1"}' | ./your-script.py
+
+# Expected output format
+{"jsonrpc":"2.0","result":{"items":[...]},"id":"1"}
+```
+
+### Common Issues
+
+1. **Script not executable**: Run `chmod +x your-script.py`
+2. **JSON parsing errors**: Validate your JSON output
+3. **Timeout issues**: Optimize your script for speed
+4. **Missing shebang**: Always include `#!/usr/bin/env python3` or similar
+
+## Limitations
+
+- **Execution Timeout**: Scripts must complete within 10 seconds
+- **No Persistent State**: Scripts are executed fresh for each query
+- **Limited API**: No access to advanced Wox APIs like AI integration or settings UI
+- **Performance**: Not suitable for high-frequency queries or complex operations
+- **No Settings UI**: Cannot provide custom settings interface
+
+## Migration to Full-featured Plugin
+
+If your script plugin grows complex, consider migrating to a full-featured plugin:
+
+- Use Python SDK: `wox-plugin`
+- Use Node.js SDK: `@wox-launcher/wox-plugin`
+- Access to full Wox API
+- Persistent state and better performance
+- Support for settings UI and advanced features
+- AI integration capabilities
+- Custom preview support
