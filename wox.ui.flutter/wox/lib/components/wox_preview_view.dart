@@ -280,7 +280,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
 
       // If hasPendingAutoFocusToChatInput is true, focus to chat input after the UI has been built
       if (launcherController.hasPendingAutoFocusToChatInput) {
-        chatController.focusToChatInput(const UuidV4().toString());
+        chatController.focusToChatInput(const UuidV4().generate());
         launcherController.hasPendingAutoFocusToChatInput = false;
       }
 

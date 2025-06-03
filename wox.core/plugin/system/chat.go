@@ -399,7 +399,6 @@ func (r *AIChatPlugin) reloadMCPServers(ctx context.Context) {
 	r.mcpToolsMap = mcpTools
 
 	plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "tools")
-
 }
 
 func (r *AIChatPlugin) loadMCPServers(ctx context.Context) ([]common.AIChatMCPServerConfig, error) {

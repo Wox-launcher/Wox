@@ -1400,6 +1400,7 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 		return RefreshableResultWithResultId{}, fmt.Errorf("failed to copy refreshable result: %w", copyErr)
 	}
 
+	// maybe user has changed the query, which may flush the result cache
 	resultCache, found := m.resultCache.Load(refreshableResultWithId.ResultId)
 	if !found {
 		return refreshableResultWithId, fmt.Errorf("result cache not found for result id (execute refresh): %s", refreshableResultWithId.ResultId)

@@ -66,7 +66,7 @@ func getMCPClient(ctx context.Context, config common.AIChatMCPServerConfig) (c c
 	return mcpClient, nil
 }
 
-// MCPListTools lists the tools for a given MCP server config
+// MCPListTools lists the tools for a given MCP server config with timeout protection
 func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) ([]common.MCPTool, error) {
 	if tools, ok := mcpTools.Load(config.Name); ok {
 		util.GetLogger().Debug(ctx, fmt.Sprintf("Listing tools for MCP server from cache: %s", config.Name))
@@ -74,17 +74,68 @@ func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) ([]c
 	}
 
 	util.GetLogger().Debug(ctx, fmt.Sprintf("Listing tools for MCP server: %s", config.Name))
-	client, err := getMCPClient(ctx, config)
-	if err != nil {
-		return nil, err
+
+	// Use channel and goroutine to implement timeout protection
+	type listToolsResult struct {
+		tools []common.MCPTool
+		err   error
 	}
 
-	// List Tools
-	tools, err := client.ListTools(ctx, mcp.ListToolsRequest{})
-	if err != nil {
-		return nil, err
-	}
+	resultChan := make(chan listToolsResult, 1)
 
+	// Start the actual tool listing in a separate goroutine
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("Panic in MCPListTools for server %s: %v", config.Name, r))
+				resultChan <- listToolsResult{
+					tools: nil,
+					err:   fmt.Errorf("panic occurred while listing tools: %v", r),
+				}
+			}
+		}()
+
+		// Create timeout context for this operation (30 seconds)
+		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+
+		client, err := getMCPClient(timeoutCtx, config)
+		if err != nil {
+			resultChan <- listToolsResult{tools: nil, err: err}
+			return
+		}
+
+		// List Tools
+		tools, err := client.ListTools(timeoutCtx, mcp.ListToolsRequest{})
+		if err != nil {
+			resultChan <- listToolsResult{tools: nil, err: err}
+			return
+		}
+
+		// Process tools and send result
+		processedTools, processErr := processToolsResponse(timeoutCtx, tools, config, client)
+		resultChan <- listToolsResult{tools: processedTools, err: processErr}
+	}()
+
+	// Wait for result or timeout
+	select {
+	case result := <-resultChan:
+		if result.err != nil {
+			return nil, result.err
+		}
+
+		util.GetLogger().Debug(ctx, fmt.Sprintf("Found %d tools", len(result.tools)))
+		mcpTools.Store(config.Name, result.tools)
+		return result.tools, nil
+
+	case <-time.After(35 * time.Second): // Slightly longer than the context timeout
+		util.GetLogger().Error(ctx, fmt.Sprintf("Timeout listing tools for MCP server: %s", config.Name))
+		return nil, fmt.Errorf("timeout after 35 seconds listing tools for server: %s", config.Name)
+	}
+}
+
+// processToolsResponse processes the tools response and converts to MCPTool format
+func processToolsResponse(ctx context.Context, tools *mcp.ListToolsResult, config common.AIChatMCPServerConfig, client client.MCPClient) ([]common.MCPTool, error) {
 	var toolsList []common.MCPTool
 	for _, tool := range tools.Tools {
 
