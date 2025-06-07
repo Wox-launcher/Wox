@@ -1,4 +1,4 @@
-.PHONY: build clean _bundle_mac_app plugins help dev test check_deps
+.PHONY: build clean _bundle_mac_app plugins help dev test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps
 
 # Determine the current platform
 ifeq ($(OS),Windows_NT)
@@ -71,10 +71,23 @@ dev: _check_deps
 	$(MAKE) -C wox.ui.flutter/wox build
 
 test: dev
-	$(MAKE) only_test
+	$(MAKE) test-isolated
 
-only_test:
-	cd wox.core && go test ./... -v -skip "TestFetchCryptoPrices|TestCalculatorCrypto|TestCalculatorCurrency|TestCalculatorTime"
+# Test with custom environment
+test-isolated:
+	cd wox.core && WOX_TEST_DATA_DIR=/tmp/wox-test-isolated WOX_TEST_CLEANUP=true go test ./test -v
+
+# Test without network dependencies
+test-offline:
+	cd wox.core && WOX_TEST_ENABLE_NETWORK=false go test ./test -v
+
+# Test with verbose logging
+test-verbose:
+	cd wox.core && WOX_TEST_VERBOSE=true go test ./test -v
+
+# Test with custom directories and no cleanup (for debugging)
+test-debug:
+	cd wox.core && WOX_TEST_DATA_DIR=/tmp/wox-test-debug WOX_TEST_CLEANUP=false WOX_TEST_VERBOSE=true go test ./test -v
 
 build: clean dev
 	$(MAKE) -C wox.core build
