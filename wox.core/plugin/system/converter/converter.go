@@ -8,6 +8,7 @@ import (
 	"wox/plugin/system/converter/core"
 	"wox/plugin/system/converter/modules"
 	"wox/util/clipboard"
+	"wox/util/locale"
 
 	"github.com/samber/lo"
 )
@@ -32,7 +33,7 @@ func (c *Converter) GetMetadata() plugin.Metadata {
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
 		Description:   "Calculator for Wox",
-		Icon:          plugin.PluginCalculatorIcon.String(),
+		Icon:          plugin.PluginConverterIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
 			"*",
@@ -51,6 +52,10 @@ func (c *Converter) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api = initParams.API
 
 	registry := core.NewModuleRegistry()
+
+	// Register math module first (highest priority for complex expressions)
+	registry.Register(modules.NewMathModule(ctx, c.api))
+
 	registry.Register(modules.NewTimeModule(ctx, c.api))
 
 	currencyModule := modules.NewCurrencyModule(ctx, c.api)
@@ -126,11 +131,18 @@ func (c *Converter) parseExpression(ctx context.Context, tokens []core.Token) (r
 	if targetUnit.Name != "" {
 		for i := range results {
 			if results[i].Unit.Type == targetUnit.Type {
-				convertedValue, err := results[i].Module.Convert(ctx, results[i], targetUnit)
-				if err != nil {
-					return nil, nil, core.Unit{}, err
+				// Try all modules for conversion, not just the original module
+				var converted bool
+				for _, module := range c.registry.Modules() {
+					if convertedValue, err := module.Convert(ctx, results[i], targetUnit); err == nil {
+						results[i] = convertedValue
+						converted = true
+						break
+					}
 				}
-				results[i] = convertedValue
+				if !converted {
+					return nil, nil, core.Unit{}, fmt.Errorf("no module can convert %s to %s", results[i].Unit.Name, targetUnit.Name)
+				}
 			}
 		}
 	}
@@ -146,14 +158,50 @@ func (c *Converter) calculateExpression(ctx context.Context, results []core.Resu
 		return core.Result{}, fmt.Errorf("invalid expression: operators count (%d) does not match results count (%d) - 1", len(operators), len(results))
 	}
 
-	// If there are no operators and only one value, just return it as is
+	// If there are no operators and only one value, E.g. "100usd", "1btc"
 	if len(operators) == 0 && len(results) == 1 {
 		if targetUnit.Name == "" {
-			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("No operators, No target unit, returning the only result: %s", results[0].DisplayValue))
-			return results[0], nil
-		} else {
+			if results[0].Unit.Type == core.UnitTypeCrypto || results[0].Unit.Type == core.UnitTypeCurrency {
+				defaultCurrency := GetUserDefaultCurrency()
+				targetUnit = core.Unit{Name: defaultCurrency, Type: core.UnitTypeCurrency}
+				c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Single crypto/currency value, using user's default currency: %s", defaultCurrency))
+			} else {
+				c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("No operators, No target unit, returning the only result: %s", results[0].DisplayValue))
+				return results[0], nil
+			}
+		}
+
+		if targetUnit.Name != "" {
 			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("No operators, target unit is set, converting the only result: %s to %s", results[0].DisplayValue, targetUnit.Name))
-			return results[0].Module.Convert(ctx, results[0], targetUnit)
+
+			// For crypto to currency conversion, handle it specially, E.g. "1btc to cny"
+			if results[0].Unit.Type == core.UnitTypeCrypto && targetUnit.Type == core.UnitTypeCurrency {
+				// First convert to USD
+				usdResult, err := results[0].Module.Convert(ctx, results[0], core.UnitUSD)
+				if err != nil {
+					return core.Result{}, err
+				}
+
+				// If target is USD, return USD result directly
+				if targetUnit.Name == "USD" {
+					return usdResult, nil
+				}
+
+				// For other currencies, convert USD to target currency
+				for _, module := range c.registry.Modules() {
+					if convertedResult, err := module.Convert(ctx, usdResult, targetUnit); err == nil {
+						return convertedResult, nil
+					}
+				}
+			}
+
+			// Try all modules for conversion, not just the original module
+			for _, module := range c.registry.Modules() {
+				if convertedResult, err := module.Convert(ctx, results[0], targetUnit); err == nil {
+					return convertedResult, nil
+				}
+			}
+			return core.Result{}, fmt.Errorf("no module can convert %s to %s", results[0].Unit.Name, targetUnit.Name)
 		}
 	}
 
@@ -175,7 +223,8 @@ func (c *Converter) calculateExpression(ctx context.Context, results []core.Resu
 
 			targetUnit = core.Unit{Name: results[len(results)-1].Unit.Name, Type: core.UnitTypeTime}
 		} else if allResultsAreCurrencyOrCrypto {
-			targetUnit = core.UnitUSD
+			defaultCurrency := GetUserDefaultCurrency()
+			targetUnit = core.Unit{Name: defaultCurrency, Type: core.UnitTypeCurrency}
 		} else {
 			c.api.Log(ctx, plugin.LogLevelDebug, "No target unit, using USD as default")
 			targetUnit = core.UnitUSD
@@ -186,6 +235,7 @@ func (c *Converter) calculateExpression(ctx context.Context, results []core.Resu
 	for i := range results {
 		if results[i].Unit.Type == core.UnitTypeCurrency || results[i].Unit.Type == core.UnitTypeCrypto {
 			var err error
+			// First convert to USD
 			results[i], err = results[i].Module.Convert(ctx, results[i], core.UnitUSD)
 			if err != nil {
 				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to convert %s to USD: %v", results[i].DisplayValue, err))
@@ -216,15 +266,42 @@ func (c *Converter) calculateExpression(ctx context.Context, results []core.Resu
 	result.DisplayValue = fmt.Sprintf("%s %s", result.RawValue.String(), targetUnit.Name)
 
 	// Convert the result to the target unit
-	for _, module := range c.registry.Modules() {
-		if convertedResult, err := module.Convert(ctx, result, targetUnit); err == nil {
-			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Converted result with module %s => displayValue=%s, rawValue=%s, unit=%s", module.Name(), convertedResult.DisplayValue, convertedResult.RawValue.String(), convertedResult.Unit.Name))
-			result = convertedResult
-			break
+	if targetUnit.Name != result.Unit.Name {
+		for _, module := range c.registry.Modules() {
+			if convertedResult, err := module.Convert(ctx, result, targetUnit); err == nil {
+				c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Converted result with module %s => displayValue=%s, rawValue=%s, unit=%s", module.Name(), convertedResult.DisplayValue, convertedResult.RawValue.String(), convertedResult.Unit.Name))
+				result = convertedResult
+				break
+			}
 		}
 	}
 
 	return result, nil
+}
+
+// GetUserDefaultCurrency returns the user's default currency based on their locale
+func GetUserDefaultCurrency() string {
+	var regionToCurrency = map[string]string{
+		"CN": "CNY", // China -> Chinese Yuan
+		"US": "USD", // United States -> US Dollar
+		"GB": "GBP", // United Kingdom -> British Pound
+		"JP": "JPY", // Japan -> Japanese Yen
+		"EU": "EUR", // European Union -> Euro
+		"DE": "EUR", // Germany -> Euro
+		"FR": "EUR", // France -> Euro
+		"IT": "EUR", // Italy -> Euro
+		"ES": "EUR", // Spain -> Euro
+		"AU": "AUD", // Australia -> Australian Dollar
+		"CA": "CAD", // Canada -> Canadian Dollar
+		"BR": "BRL", // Brazil -> Brazilian Real
+		"RU": "RUB", // Russia -> Russian Ruble
+	}
+
+	_, region := locale.GetLocale()
+	if currency, ok := regionToCurrency[strings.ToUpper(region)]; ok {
+		return currency
+	}
+	return "USD" // fallback to USD
 }
 
 func (c *Converter) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -267,7 +344,7 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 	return []plugin.QueryResult{
 		{
 			Title: result.DisplayValue,
-			Icon:  plugin.PluginCalculatorIcon,
+			Icon:  plugin.PluginConverterIcon,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_calculator_copy_result",

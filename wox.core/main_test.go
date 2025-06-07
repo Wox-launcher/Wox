@@ -16,8 +16,17 @@ import (
 	"wox/util/selection"
 )
 
-func TestCalculatorCrypto(t *testing.T) {
+func TestConverterCrypto(t *testing.T) {
 	tests := []queryTest{
+		{
+			name:           "BTC shows equivalent value",
+			query:          "1BTC",
+			expectedTitle:  "",
+			expectedAction: "Copy result",
+			titleCheck: func(title string) bool {
+				return len(title) > 1 && (strings.Contains(title, "$") || strings.Contains(title, "¥") || strings.Contains(title, "€") || strings.Contains(title, "£"))
+			},
+		},
 		{
 			name:           "BTC to USD",
 			query:          "1BTC in USD",
@@ -30,10 +39,11 @@ func TestCalculatorCrypto(t *testing.T) {
 		{
 			name:           "BTC plus USD",
 			query:          "1BTC + 1 USD",
-			expectedTitle:  "$",
+			expectedTitle:  "",
 			expectedAction: "Copy result",
 			titleCheck: func(title string) bool {
-				return len(title) > 1 && strings.HasPrefix(title, "$") && title[1] >= '0' && title[1] <= '9'
+				// Should convert to user's default currency when crypto is involved
+				return len(title) > 1 && (strings.Contains(title, "$") || strings.Contains(title, "¥") || strings.Contains(title, "€"))
 			},
 		},
 		{
@@ -46,17 +56,18 @@ func TestCalculatorCrypto(t *testing.T) {
 			},
 		},
 		{
-			name:           "BTC + ETH",
+			name:           "BTC + ETH uses default currency",
 			query:          "1BTC + 1ETH",
-			expectedTitle:  "$",
+			expectedTitle:  "",
 			expectedAction: "Copy result",
 			titleCheck: func(title string) bool {
-				return len(title) > 1 && strings.HasPrefix(title, "$")
+				// Should convert to user's default currency when crypto is involved
+				return len(title) > 1 && (strings.Contains(title, "$") || strings.Contains(title, "¥") || strings.Contains(title, "€"))
 			},
 		},
 		{
 			name:           "invalid crypto query",
-			query:          "1btc dsfsdf",
+			query:          "1btc dsfsdf1btc dsfsdf",
 			expectedTitle:  "Search for 1btc dsfsdf",
 			expectedAction: "Search",
 		},
@@ -70,8 +81,17 @@ func TestCalculatorCrypto(t *testing.T) {
 	runQueryTests(t, tests)
 }
 
-func TestCalculatorCurrency(t *testing.T) {
+func TestConverterCurrency(t *testing.T) {
 	tests := []queryTest{
+		{
+			name:           "Single Currency",
+			query:          "100USD",
+			expectedTitle:  "",
+			expectedAction: "Copy result",
+			titleCheck: func(title string) bool {
+				return len(title) > 1 && (strings.Contains(title, "$") || strings.Contains(title, "¥") || strings.Contains(title, "€") || strings.Contains(title, "£"))
+			},
+		},
 		{
 			name:           "USD to EUR",
 			query:          "100 USD in EUR",
@@ -97,6 +117,24 @@ func TestCalculatorCurrency(t *testing.T) {
 			expectedAction: "Copy result",
 			titleCheck: func(title string) bool {
 				return len(title) > 1 && strings.HasPrefix(title, "¥") && title[len("¥")] >= '0' && title[len("¥")] <= '9'
+			},
+		},
+		{
+			name:           "complex convert",
+			query:          "12% of $321 in jpy",
+			expectedTitle:  "",
+			expectedAction: "Copy result",
+			titleCheck: func(title string) bool {
+				return len(title) > 1 && (strings.Contains(title, "$") || strings.Contains(title, "¥") || strings.Contains(title, "€") || strings.Contains(title, "£"))
+			},
+		},
+		{
+			name:           "complex crypto convert",
+			query:          "12% of 1btc in jpy",
+			expectedTitle:  "",
+			expectedAction: "Copy result",
+			titleCheck: func(title string) bool {
+				return len(title) > 1 && strings.Contains(title, "¥")
 			},
 		},
 	}

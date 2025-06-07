@@ -2,13 +2,11 @@ package setting
 
 import (
 	"context"
-	"os"
 	"regexp"
-	"runtime"
 	"strings"
 	"wox/common"
 	"wox/i18n"
-	"wox/util/shell"
+	"wox/util/locale"
 )
 
 type WoxSetting struct {
@@ -87,7 +85,7 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 	usePinYin := false
 	langCode := i18n.LangCodeEnUs
 	switchInputMethodABC := false
-	if isZhCN() {
+	if locale.IsZhCN() {
 		usePinYin = true
 		switchInputMethodABC = true
 		langCode = i18n.LangCodeZhCn
@@ -132,48 +130,4 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 		EnableAutoBackup: true,
 		EnableAutoUpdate: true,
 	}
-}
-
-func isZhCN() bool {
-	lang, locale := getLocale()
-	return strings.ToLower(lang) == "zh" && strings.ToLower(locale) == "cn"
-}
-
-func getLocale() (string, string) {
-	osHost := runtime.GOOS
-	defaultLang := "en"
-	defaultLoc := "US"
-	switch osHost {
-	case "windows":
-		// Exec powershell Get-Culture on Windows.
-		output, err := shell.RunOutput("powershell", "Get-Culture | select -exp Name")
-		if err == nil {
-			langLocRaw := strings.TrimSpace(string(output))
-			langLoc := strings.Split(langLocRaw, "-")
-			lang := langLoc[0]
-			loc := langLoc[1]
-			return lang, loc
-		}
-	case "darwin":
-		// Exec shell Get-Culture on MacOS.
-		output, err := shell.RunOutput("osascript", "-e", "user locale of (get system info)")
-		if err == nil {
-			langLocRaw := strings.TrimSpace(string(output))
-			langLoc := strings.Split(langLocRaw, "_")
-			lang := langLoc[0]
-			loc := langLoc[1]
-			return lang, loc
-		}
-	case "linux":
-		envlang, ok := os.LookupEnv("LANG")
-		if ok {
-			langLocRaw := strings.TrimSpace(envlang)
-			langLocRaw = strings.Split(envlang, ".")[0]
-			langLoc := strings.Split(langLocRaw, "_")
-			lang := langLoc[0]
-			loc := langLoc[1]
-			return lang, loc
-		}
-	}
-	return defaultLang, defaultLoc
 }
