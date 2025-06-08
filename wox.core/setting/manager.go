@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"wox/common"
 	"wox/i18n"
@@ -79,6 +81,7 @@ func (m *Manager) loadWoxSetting(ctx context.Context) error {
 
 	woxSettingPath := util.GetLocation().GetWoxSettingPath()
 	if _, statErr := os.Stat(woxSettingPath); os.IsNotExist(statErr) {
+		// Create default setting file if not exists
 		defaultWoxSettingJson, marshalErr := json.Marshal(defaultWoxSetting)
 		if marshalErr != nil {
 			return marshalErr
@@ -88,44 +91,20 @@ func (m *Manager) loadWoxSetting(ctx context.Context) error {
 		if writeErr != nil {
 			return writeErr
 		}
+		m.woxSetting = &defaultWoxSetting
+		return nil
 	}
 
-	woxSettingFile, openErr := os.Open(woxSettingPath)
-	if openErr != nil {
-		return openErr
-	}
-	defer woxSettingFile.Close()
-
-	woxSetting := &WoxSetting{}
-	decodeErr := json.NewDecoder(woxSettingFile).Decode(woxSetting)
-	if decodeErr != nil {
-		return decodeErr
-	}
-	// some settings were added later, json file may not have them, so we need to set them to default value
-	if woxSetting.MainHotkey.Get() == "" {
-		woxSetting.MainHotkey.Set(defaultWoxSetting.MainHotkey.Get())
-	}
-	if woxSetting.SelectionHotkey.Get() == "" {
-		woxSetting.SelectionHotkey.Set(defaultWoxSetting.SelectionHotkey.Get())
-	}
-	if woxSetting.LangCode == "" {
-		woxSetting.LangCode = defaultWoxSetting.LangCode
-	}
-	if woxSetting.LastQueryMode == "" {
-		woxSetting.LastQueryMode = defaultWoxSetting.LastQueryMode
-	}
-	if woxSetting.AppWidth == 0 {
-		woxSetting.AppWidth = defaultWoxSetting.AppWidth
-	}
-	if woxSetting.MaxResultCount == 0 {
-		woxSetting.MaxResultCount = defaultWoxSetting.MaxResultCount
-	}
-	if woxSetting.ThemeId == "" {
-		woxSetting.ThemeId = defaultWoxSetting.ThemeId
+	// Try to load setting with maximum tolerance for errors
+	woxSetting, err := m.loadWoxSettingWithFallback(ctx, woxSettingPath, defaultWoxSetting)
+	if err != nil {
+		// If all attempts fail, log error and use defaults
+		logger.Error(ctx, fmt.Sprintf("Failed to load setting file, using defaults: %v", err))
+		m.woxSetting = &defaultWoxSetting
+		return nil // Don't return error, just use defaults
 	}
 
 	m.woxSetting = woxSetting
-
 	return nil
 }
 
@@ -364,6 +343,272 @@ func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, plugin
 
 	pluginSetting.Name = pluginName
 	return pluginSetting, nil
+}
+
+// loadWoxSettingWithFallback attempts to load setting with multiple fallback strategies
+func (m *Manager) loadWoxSettingWithFallback(ctx context.Context, settingPath string, defaultSetting WoxSetting) (*WoxSetting, error) {
+	// Strategy 1: Try normal JSON decoding
+	if setting, err := m.tryLoadWoxSetting(settingPath, defaultSetting); err == nil {
+		logger.Info(ctx, "Successfully loaded setting with normal JSON decoding")
+		return setting, nil
+	} else {
+		logger.Warn(ctx, fmt.Sprintf("Normal JSON decoding failed: %v", err))
+	}
+
+	// Strategy 2: Try to fix common JSON issues and reload
+	if setting, err := m.tryLoadWithJSONRepair(settingPath, defaultSetting); err == nil {
+		logger.Info(ctx, "Successfully loaded setting after JSON repair")
+		return setting, nil
+	} else {
+		logger.Warn(ctx, fmt.Sprintf("JSON repair failed: %v", err))
+	}
+
+	// Strategy 3: Try field-by-field parsing to salvage what we can
+	if setting, err := m.tryPartialLoad(settingPath, defaultSetting); err == nil {
+		logger.Info(ctx, "Successfully loaded setting with partial parsing")
+		return setting, nil
+	} else {
+		logger.Warn(ctx, fmt.Sprintf("Partial parsing failed: %v", err))
+	}
+
+	return nil, fmt.Errorf("all loading strategies failed")
+}
+
+// tryLoadWoxSetting attempts normal JSON decoding
+func (m *Manager) tryLoadWoxSetting(settingPath string, defaultSetting WoxSetting) (*WoxSetting, error) {
+	fileContent, err := os.ReadFile(settingPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Check for empty file
+	if len(fileContent) == 0 {
+		return nil, fmt.Errorf("file is empty")
+	}
+
+	woxSetting := &WoxSetting{}
+	if err := json.Unmarshal(fileContent, woxSetting); err != nil {
+		return nil, fmt.Errorf("JSON decode error: %w", err)
+	}
+
+	// Apply defaults and sanitize values
+	m.applyDefaultsToWoxSetting(woxSetting, defaultSetting)
+	m.sanitizeWoxSetting(woxSetting, defaultSetting)
+
+	return woxSetting, nil
+}
+
+// tryLoadWithJSONRepair attempts to fix common JSON syntax issues
+func (m *Manager) tryLoadWithJSONRepair(settingPath string, defaultSetting WoxSetting) (*WoxSetting, error) {
+	fileContent, err := os.ReadFile(settingPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Try to repair common JSON issues
+	repairedContent := m.repairJSONContent(fileContent)
+
+	woxSetting := &WoxSetting{}
+	if err := json.Unmarshal(repairedContent, woxSetting); err != nil {
+		return nil, fmt.Errorf("JSON decode error after repair: %w", err)
+	}
+
+	// Apply defaults and sanitize values
+	m.applyDefaultsToWoxSetting(woxSetting, defaultSetting)
+	m.sanitizeWoxSetting(woxSetting, defaultSetting)
+
+	return woxSetting, nil
+}
+
+// repairJSONContent attempts to fix common JSON syntax issues
+func (m *Manager) repairJSONContent(content []byte) []byte {
+	contentStr := string(content)
+
+	// If completely empty, return empty object
+	if len(contentStr) == 0 {
+		return []byte("{}")
+	}
+
+	// Remove trailing commas before } or ]
+	contentStr = regexp.MustCompile(`,(\s*[}\]])`).ReplaceAllString(contentStr, "$1")
+
+	// Try to fix missing closing braces/brackets by counting
+	openBraces := strings.Count(contentStr, "{")
+	closeBraces := strings.Count(contentStr, "}")
+	if openBraces > closeBraces {
+		for i := 0; i < openBraces-closeBraces; i++ {
+			contentStr += "}"
+		}
+	}
+
+	openBrackets := strings.Count(contentStr, "[")
+	closeBrackets := strings.Count(contentStr, "]")
+	if openBrackets > closeBrackets {
+		for i := 0; i < openBrackets-closeBrackets; i++ {
+			contentStr += "]"
+		}
+	}
+
+	return []byte(contentStr)
+}
+
+// tryPartialLoad attempts to parse individual fields to salvage what we can
+func (m *Manager) tryPartialLoad(settingPath string, defaultSetting WoxSetting) (*WoxSetting, error) {
+	fileContent, err := os.ReadFile(settingPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Start with default setting
+	woxSetting := defaultSetting
+
+	// Try to parse as a generic map to extract individual fields
+	var rawData map[string]interface{}
+	if err := json.Unmarshal(fileContent, &rawData); err != nil {
+		return nil, fmt.Errorf("failed to parse as map: %w", err)
+	}
+
+	// Extract fields one by one with error tolerance
+	m.extractFieldSafely(rawData, "UsePinYin", &woxSetting.UsePinYin)
+	m.extractFieldSafely(rawData, "SwitchInputMethodABC", &woxSetting.SwitchInputMethodABC)
+	m.extractFieldSafely(rawData, "HideOnStart", &woxSetting.HideOnStart)
+	m.extractFieldSafely(rawData, "HideOnLostFocus", &woxSetting.HideOnLostFocus)
+	m.extractFieldSafely(rawData, "ShowTray", &woxSetting.ShowTray)
+	m.extractFieldSafely(rawData, "EnableAutoBackup", &woxSetting.EnableAutoBackup)
+	m.extractFieldSafely(rawData, "EnableAutoUpdate", &woxSetting.EnableAutoUpdate)
+
+	// Extract numeric fields
+	m.extractIntFieldSafely(rawData, "AppWidth", &woxSetting.AppWidth)
+	m.extractIntFieldSafely(rawData, "MaxResultCount", &woxSetting.MaxResultCount)
+
+	// Extract string fields
+	m.extractStringFieldSafely(rawData, "LangCode", (*string)(&woxSetting.LangCode))
+	m.extractStringFieldSafely(rawData, "LastQueryMode", &woxSetting.LastQueryMode)
+	m.extractStringFieldSafely(rawData, "ThemeId", &woxSetting.ThemeId)
+
+	// Sanitize the loaded values
+	m.sanitizeWoxSetting(&woxSetting, defaultSetting)
+
+	return &woxSetting, nil
+}
+
+// extractFieldSafely safely extracts a boolean field from raw JSON data
+func (m *Manager) extractFieldSafely(rawData map[string]interface{}, fieldName string, target *bool) {
+	if value, exists := rawData[fieldName]; exists {
+		if boolVal, ok := value.(bool); ok {
+			*target = boolVal
+		}
+	}
+}
+
+// extractIntFieldSafely safely extracts an integer field from raw JSON data
+func (m *Manager) extractIntFieldSafely(rawData map[string]interface{}, fieldName string, target *int) {
+	if value, exists := rawData[fieldName]; exists {
+		switch v := value.(type) {
+		case float64:
+			*target = int(v)
+		case int:
+			*target = v
+		case int64:
+			*target = int(v)
+		}
+	}
+}
+
+// extractStringFieldSafely safely extracts a string field from raw JSON data
+func (m *Manager) extractStringFieldSafely(rawData map[string]interface{}, fieldName string, target *string) {
+	if value, exists := rawData[fieldName]; exists {
+		if strVal, ok := value.(string); ok {
+			*target = strVal
+		}
+	}
+}
+
+// sanitizeWoxSetting ensures all values are within acceptable ranges
+func (m *Manager) sanitizeWoxSetting(setting *WoxSetting, defaultSetting WoxSetting) {
+	// Sanitize AppWidth
+	if setting.AppWidth <= 0 || setting.AppWidth > 10000 {
+		setting.AppWidth = defaultSetting.AppWidth
+	}
+
+	// Sanitize MaxResultCount
+	if setting.MaxResultCount <= 0 || setting.MaxResultCount > 1000 {
+		setting.MaxResultCount = defaultSetting.MaxResultCount
+	}
+
+	// Sanitize LangCode
+	validLangCodes := []string{"en_US", "zh_CN", "zh_TW", "ja_JP", "ko_KR", "fr_FR", "de_DE", "es_ES", "pt_BR", "ru_RU"}
+	isValidLang := false
+	for _, code := range validLangCodes {
+		if string(setting.LangCode) == code {
+			isValidLang = true
+			break
+		}
+	}
+	if !isValidLang {
+		setting.LangCode = defaultSetting.LangCode
+	}
+
+	// Sanitize LastQueryMode
+	if setting.LastQueryMode != LastQueryModePreserve && setting.LastQueryMode != LastQueryModeEmpty {
+		setting.LastQueryMode = defaultSetting.LastQueryMode
+	}
+
+	// Sanitize ShowPosition
+	validPositions := []PositionType{PositionTypeMouseScreen, PositionTypeActiveScreen, PositionTypeLastLocation}
+	isValidPosition := false
+	for _, pos := range validPositions {
+		if setting.ShowPosition == pos {
+			isValidPosition = true
+			break
+		}
+	}
+	if !isValidPosition {
+		setting.ShowPosition = defaultSetting.ShowPosition
+	}
+}
+
+// applyDefaultsToWoxSetting applies default values for missing or zero-value fields
+func (m *Manager) applyDefaultsToWoxSetting(setting *WoxSetting, defaultSetting WoxSetting) {
+	// Apply defaults for hotkeys
+	if setting.MainHotkey.Get() == "" {
+		setting.MainHotkey.Set(defaultSetting.MainHotkey.Get())
+	}
+	if setting.SelectionHotkey.Get() == "" {
+		setting.SelectionHotkey.Set(defaultSetting.SelectionHotkey.Get())
+	}
+
+	// Apply defaults for string fields
+	if setting.LangCode == "" {
+		setting.LangCode = defaultSetting.LangCode
+	}
+	if setting.LastQueryMode == "" {
+		setting.LastQueryMode = defaultSetting.LastQueryMode
+	}
+	if setting.ThemeId == "" {
+		setting.ThemeId = defaultSetting.ThemeId
+	}
+
+	// Apply defaults for numeric fields (only if zero)
+	if setting.AppWidth == 0 {
+		setting.AppWidth = defaultSetting.AppWidth
+	}
+	if setting.MaxResultCount == 0 {
+		setting.MaxResultCount = defaultSetting.MaxResultCount
+	}
+
+	// Apply defaults for position if empty
+	if setting.ShowPosition == "" {
+		setting.ShowPosition = defaultSetting.ShowPosition
+	}
+
+	// Apply defaults for slices if nil
+	if setting.QueryShortcuts == nil {
+		setting.QueryShortcuts = defaultSetting.QueryShortcuts
+	}
+	if setting.AIProviders == nil {
+		setting.AIProviders = defaultSetting.AIProviders
+	}
 }
 
 func (m *Manager) SavePluginSetting(ctx context.Context, pluginId string, pluginSetting *PluginSetting) error {
