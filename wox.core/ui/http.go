@@ -127,6 +127,12 @@ func serveAndWait(ctx context.Context, port int) {
 }
 
 func requestUI(ctx context.Context, request WebsocketMsg) error {
+	// Check if melody websocket server is initialized
+	if m == nil {
+		logger.Warn(ctx, fmt.Sprintf("websocket server not ready, skipping UI request: %s", request.Method))
+		return fmt.Errorf("websocket server not initialized")
+	}
+
 	request.Type = WebsocketMsgTypeRequest
 	request.Success = true
 	marshalData, marshalErr := json.Marshal(request)
@@ -141,6 +147,12 @@ func requestUI(ctx context.Context, request WebsocketMsg) error {
 }
 
 func responseUI(ctx context.Context, response WebsocketMsg) {
+	// Check if melody websocket server is initialized
+	if m == nil {
+		logger.Warn(ctx, fmt.Sprintf("websocket server not ready, skipping UI response: %s", response.Method))
+		return
+	}
+
 	response.Type = WebsocketMsgTypeResponse
 	marshalData, marshalErr := json.Marshal(response)
 	if marshalErr != nil {

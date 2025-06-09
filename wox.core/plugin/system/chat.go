@@ -278,7 +278,11 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		}
 	})
 
-	r.reloadMCPServers(ctx)
+	// Delay MCP servers reload to avoid websocket server initialization race condition
+	util.Go(ctx, "reload MCP servers", func() {
+		time.Sleep(time.Millisecond * 1000) // Wait for websocket server to be ready
+		r.reloadMCPServers(util.NewTraceContext())
+	})
 }
 
 func (r *AIChatPlugin) IsAutoFocusToChatInputWhenOpenWithQueryHotkey(ctx context.Context) bool {
