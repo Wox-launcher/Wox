@@ -224,6 +224,7 @@
   "plugin_doctor_version_update_notes": "更新说明",
   "plugin_doctor_version_update_error": "更新检查失败",
   "plugin_doctor_version_no_release_notes": "此更新没有提供更新说明。",
+  "plugin_doctor_version_auto_update_disabled": "自动更新已禁用",
   "plugin_doctor_accessibility": "辅助功能",
   "plugin_doctor_accessibility_required": "您需要授予 Wox 辅助功能权限才能使用此插件",
   "plugin_doctor_accessibility_open_settings": "打开辅助功能设置",

@@ -225,6 +225,7 @@
   "plugin_doctor_version_update_notes": "Notas da Atualização",
   "plugin_doctor_version_update_error": "Falha na verificação de atualização",
   "plugin_doctor_version_no_release_notes": "Não há notas de lançamento disponíveis para esta atualização.",
+  "plugin_doctor_version_auto_update_disabled": "Atualização automática desativada",
   "plugin_doctor_accessibility": "Acessibilidade",
   "plugin_doctor_accessibility_required": "Você precisa conceder permissão de Acessibilidade ao Wox para usar este plugin",
   "plugin_doctor_accessibility_open_settings": "Abrir configurações de acessibilidade",

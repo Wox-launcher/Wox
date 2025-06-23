@@ -48,7 +48,7 @@ func RunDoctorChecks(ctx context.Context) []DoctorCheckResult {
 
 func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 	updateInfo := updater.GetUpdateInfo()
-	if updateInfo.Status == updater.UpdateStatusError {
+	if updateInfo.Status == updater.UpdateStatusError || updateInfo.UpdateError != nil {
 		return DoctorCheckResult{
 			Name:        "i18n:plugin_doctor_version",
 			Type:        DoctorCheckUpdate,
@@ -103,7 +103,7 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 			Name:        "i18n:plugin_doctor_version",
 			Type:        DoctorCheckUpdate,
 			Passed:      true,
-			Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_latest"), updateInfo.LatestVersion),
+			Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_latest"), updateInfo.CurrentVersion),
 			ActionName:  "",
 			Action: func(ctx context.Context) {
 			},
@@ -157,7 +157,7 @@ func checkWoxVersion(ctx context.Context) DoctorCheckResult {
 					</body>
 					</html>
 				`, i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version"),
-					fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_latest"), updateInfo.LatestVersion)),
+					fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_latest"), updateInfo.CurrentVersion)),
 				PreviewProperties: map[string]string{},
 				ScrollPosition:    WoxPreviewScrollPositionBottom,
 			},

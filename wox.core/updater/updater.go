@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"wox/i18n"
 	"wox/setting"
 	"wox/util"
 
@@ -87,7 +88,7 @@ func CheckForUpdates(ctx context.Context) {
 		currentUpdateInfo.Status = UpdateStatusNone
 		currentUpdateInfo.HasUpdate = false
 		currentUpdateInfo.DownloadedPath = ""
-		currentUpdateInfo.UpdateError = nil
+		currentUpdateInfo.UpdateError = errors.New(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_version_auto_update_disabled"))
 		return
 	}
 
