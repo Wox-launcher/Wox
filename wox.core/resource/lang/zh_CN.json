@@ -203,6 +203,7 @@
   "plugin_sys_open_wox_settings": "打开Wox设置",
   "plugin_sys_open_system_settings": "打开系统设置",
   "plugin_sys_performance_cpu_profiling": "性能 CPU 分析",
+  "plugin_sys_performance_memory_profiling": "性能 内存 分析",
   "plugin_sys_delete_image_cache": "删除所有图片缓存",
   "plugin_sys_open_plugin_settings": "打开 %s 设置",
   "plugin_websearch_trigger_keyword": "关键字",

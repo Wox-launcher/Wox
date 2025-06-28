@@ -203,6 +203,7 @@
   "plugin_sys_open_wox_settings": "Open Wox Settings",
   "plugin_sys_open_system_settings": "Open System Settings",
   "plugin_sys_performance_cpu_profiling": "Performance CPU profiling",
+  "plugin_sys_performance_memory_profiling": "Performance Memory profiling",
   "plugin_sys_delete_image_cache": "Delete all image cache",
   "plugin_sys_open_plugin_settings": "Open %s settings",
   "plugin_websearch_trigger_keyword": "keyword",

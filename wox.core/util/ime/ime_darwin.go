@@ -29,7 +29,14 @@ func SwitchInputMethodABC() error {
 			errorChan <- err
 		})
 
-		inputMethod := C.GoString(C.getCurrentInputMethod())
+		// Fix memory leak: properly free the C-allocated string
+		cInputMethod := C.getCurrentInputMethod()
+		if cInputMethod == nil {
+			errorChan <- errors.New("failed to get current input method")
+			return
+		}
+		inputMethod := C.GoString(cInputMethod)
+		C.free(unsafe.Pointer(cInputMethod))
 		if inputMethod == "" {
 			errorChan <- errors.New("failed to get current input method")
 			return

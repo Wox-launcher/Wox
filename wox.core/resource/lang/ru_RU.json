@@ -201,6 +201,7 @@
   "plugin_sys_open_wox_settings": "Открыть настройки Wox",
   "plugin_sys_open_system_settings": "Открыть системные настройки",
   "plugin_sys_performance_cpu_profiling": "Профилирование производительности ЦП",
+  "plugin_sys_performance_memory_profiling": "Профилирование производительности памяти",
   "plugin_sys_delete_image_cache": "Удалить весь кэш изображений",
   "plugin_sys_open_plugin_settings": "Открыть настройки %s",
   "plugin_websearch_trigger_keyword": "ключевое слово",

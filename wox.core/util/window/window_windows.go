@@ -51,11 +51,13 @@ func GetActiveWindowIcon() (image.Image, error) {
 
 func GetActiveWindowName() string {
 	cStr := C.getActiveWindowName()
+	if cStr == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(cStr))
 	length := C.int(C.strlen(cStr))
 	bytes := C.GoBytes(unsafe.Pointer(cStr), length)
-	str := string(bytes)
-	C.free(unsafe.Pointer(cStr))
-	return str
+	return string(bytes)
 }
 
 func GetActiveWindowPid() int {

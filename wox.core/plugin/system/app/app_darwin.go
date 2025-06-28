@@ -437,7 +437,12 @@ func (a *MacRetriever) getRunningProcesses() (infos []processInfo) {
 			//only show user process
 			continue
 		}
-		appPath := C.GoString(C.get_process_path(pid))
+		cPath := C.get_process_path(pid)
+		if cPath == nil {
+			continue
+		}
+		appPath := C.GoString(cPath)
+		C.free(unsafe.Pointer(cPath))
 		if appPath == "" {
 			continue
 		}
