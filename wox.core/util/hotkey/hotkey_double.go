@@ -44,6 +44,8 @@ func registerDoubleHotKey(ctx context.Context, modifier hotkey.Modifier, callbac
 						}
 
 						lastKeyUpTimestamp.Store(ev.Keycode, util.GetSystemTimestamp())
+					} else {
+						lastKeyUpTimestamp.Clear()
 					}
 				}
 			default:
