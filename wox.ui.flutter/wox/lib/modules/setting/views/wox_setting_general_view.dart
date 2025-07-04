@@ -9,6 +9,7 @@ import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_lang.dart';
+import 'package:wox/enums/wox_last_query_mode_enum.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
 
 class WoxSettingGeneralView extends WoxSettingBaseView {
@@ -109,6 +110,30 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                 Future.delayed(const Duration(seconds: 2), () {
                   Get.find<WoxLauncherController>().doctorCheck();
                 });
+              },
+            );
+          }),
+        ),
+        formField(
+          label: controller.tr("ui_last_query_mode"),
+          tips: controller.tr("ui_last_query_mode_tips"),
+          child: Obx(() {
+            return ComboBox<String>(
+              items: [
+                ComboBoxItem(
+                  value: WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_PRESERVE.code,
+                  child: Text(controller.tr("ui_last_query_mode_preserve")),
+                ),
+                ComboBoxItem(
+                  value: WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_EMPTY.code,
+                  child: Text(controller.tr("ui_last_query_mode_empty")),
+                ),
+              ],
+              value: controller.woxSetting.value.lastQueryMode,
+              onChanged: (v) {
+                if (v != null) {
+                  controller.updateConfig("LastQueryMode", v);
+                }
               },
             );
           }),
