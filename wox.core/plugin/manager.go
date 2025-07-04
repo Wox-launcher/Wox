@@ -925,8 +925,10 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	}
 
 	// store preview for ui invoke later
-	// because preview may contain some heavy data (E.g. image or large text), we will store preview in cache and only send preview to ui when user select the result
-	if !result.Preview.IsEmpty() && result.Preview.PreviewType != WoxPreviewTypeRemote {
+	// because preview may contain some heavy data (E.g. image or large text),
+	// we will store preview in cache and only send preview to ui when user select the result
+	var maximumPreviewSize = 1024
+	if !result.Preview.IsEmpty() && result.Preview.PreviewType != WoxPreviewTypeRemote && len(result.Preview.PreviewData) > maximumPreviewSize {
 		resultCache.Preview = result.Preview
 		result.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,

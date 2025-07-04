@@ -188,6 +188,7 @@
   "plugin_clipboard_copy_characters": "复制字符",
   "plugin_clipboard_image_width": "图片宽度",
   "plugin_clipboard_image_height": "图片高度",
+  "plugin_clipboard_image_size": "图片大小",
   "plugin_clipboard_keep_text_history": "保留文本历史记录",
   "plugin_clipboard_days": "天",
   "plugin_clipboard_keep_image_history": "保留图片历史记录",

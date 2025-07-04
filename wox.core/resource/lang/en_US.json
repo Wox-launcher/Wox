@@ -188,6 +188,7 @@
   "plugin_clipboard_copy_characters": "Copy characters",
   "plugin_clipboard_image_width": "Image width",
   "plugin_clipboard_image_height": "Image height",
+  "plugin_clipboard_image_size": "Image size",
   "plugin_clipboard_keep_text_history": "Keep text history for",
   "plugin_clipboard_days": "days",
   "plugin_clipboard_keep_image_history": "Keep image history for",

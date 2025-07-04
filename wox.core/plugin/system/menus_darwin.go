@@ -53,7 +53,7 @@ func (i *MenusPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 
 func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	icon := menusIcon
-	if iconImage, iconErr := getActiveWindowIcon(ctx); iconErr == nil {
+	if iconImage, iconErr := GetActiveWindowIcon(ctx); iconErr == nil {
 		icon = iconImage
 	}
 

@@ -171,7 +171,7 @@ func createLLMOnRefreshHandler(ctx context.Context,
 	}
 }
 
-func getActiveWindowIcon(ctx context.Context) (common.WoxImage, error) {
+func GetActiveWindowIcon(ctx context.Context) (common.WoxImage, error) {
 	cacheKey := fmt.Sprintf("%s-%d", window.GetActiveWindowName(), window.GetActiveWindowPid())
 	if icon, ok := windowIconCache.Load(cacheKey); ok {
 		return icon, nil
@@ -194,7 +194,7 @@ func getActiveWindowIcon(ctx context.Context) (common.WoxImage, error) {
 	return woxIcon, nil
 }
 
-func refreshQuery(ctx context.Context, api plugin.API, query plugin.Query) {
+func RefreshQuery(ctx context.Context, api plugin.API, query plugin.Query) {
 	if query.Type == plugin.QueryTypeSelection {
 		return
 	}
@@ -205,7 +205,7 @@ func refreshQuery(ctx context.Context, api plugin.API, query plugin.Query) {
 	})
 }
 
-func getPasteToActiveWindowAction(ctx context.Context, api plugin.API, actionCallback func()) (plugin.QueryResultAction, error) {
+func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, actionCallback func()) (plugin.QueryResultAction, error) {
 	windowName := window.GetActiveWindowName()
 	windowIcon, windowIconErr := window.GetActiveWindowIcon()
 	if windowIconErr == nil && windowName != "" {

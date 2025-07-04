@@ -214,7 +214,7 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 				}
 
 				// paste to active window
-				pasteToActiveWindowAction, pasteToActiveWindowErr := getPasteToActiveWindowAction(ctx, c.api, func() {
+				pasteToActiveWindowAction, pasteToActiveWindowErr := GetPasteToActiveWindowAction(ctx, c.api, func() {
 					clipboard.WriteText(content)
 				})
 				if pasteToActiveWindowErr == nil {
@@ -436,7 +436,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	}
 
 	// paste to active window
-	pasteToActiveWindowAction, pasteToActiveWindowErr := getPasteToActiveWindowAction(ctx, c.api, func() {
+	pasteToActiveWindowAction, pasteToActiveWindowErr := GetPasteToActiveWindowAction(ctx, c.api, func() {
 		_, content := processAIThinking(result.ContextData)
 		clipboard.WriteText(content)
 	})
