@@ -15,6 +15,7 @@ import 'package:wox/utils/wox_theme_util.dart';
 import 'wox_setting_plugin_view.dart';
 import 'wox_setting_general_view.dart';
 import 'wox_setting_network_view.dart';
+import 'wox_setting_runtime_view.dart';
 
 class WoxSettingView extends GetView<WoxSettingController> {
   const WoxSettingView({super.key});
@@ -117,6 +118,11 @@ class WoxSettingView extends GetView<WoxSettingController> {
                             onTap: () async {
                               await controller.switchToPluginList(false);
                             },
+                          ),
+                          PaneItem(
+                            icon: const Icon(FluentIcons.code),
+                            title: Text(controller.tr('ui_runtime_settings')),
+                            body: WoxSettingRuntimeView(),
                           ),
                         ],
                       ),

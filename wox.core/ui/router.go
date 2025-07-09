@@ -500,6 +500,8 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.QueryHotkeys = woxSetting.QueryHotkeys.Get()
 	settingDto.HttpProxyEnabled = woxSetting.HttpProxyEnabled.Get()
 	settingDto.HttpProxyUrl = woxSetting.HttpProxyUrl.Get()
+	settingDto.CustomPythonPath = woxSetting.CustomPythonPath.Get()
+	settingDto.CustomNodejsPath = woxSetting.CustomNodejsPath.Get()
 
 	writeSuccessResponse(w, settingDto)
 }

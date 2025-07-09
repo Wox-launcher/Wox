@@ -24,8 +24,10 @@ type WoxSetting struct {
 	LastQueryMode        LastQueryMode
 	ShowPosition         PositionType
 	AIProviders          []AIProvider
-	EnableAutoBackup     bool // Enable automatic data backup
-	EnableAutoUpdate     bool // Enable automatic update check and download
+	EnableAutoBackup     bool                         // Enable automatic data backup
+	EnableAutoUpdate     bool                         // Enable automatic update check and download
+	CustomPythonPath     PlatformSettingValue[string] // Custom Python executable path
+	CustomNodejsPath     PlatformSettingValue[string] // Custom Node.js executable path
 
 	// HTTP proxy settings
 	HttpProxyEnabled PlatformSettingValue[bool]
@@ -123,6 +125,16 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 			LinuxValue: false,
 		},
 		HttpProxyUrl: PlatformSettingValue[string]{
+			WinValue:   "",
+			MacValue:   "",
+			LinuxValue: "",
+		},
+		CustomPythonPath: PlatformSettingValue[string]{
+			WinValue:   "",
+			MacValue:   "",
+			LinuxValue: "",
+		},
+		CustomNodejsPath: PlatformSettingValue[string]{
 			WinValue:   "",
 			MacValue:   "",
 			LinuxValue: "",

@@ -22,6 +22,8 @@ class WoxSetting {
   late String httpProxyUrl;
   late bool enableAutoBackup;
   late bool enableAutoUpdate;
+  late String customPythonPath;
+  late String customNodejsPath;
 
   WoxSetting({
     required this.enableAutostart,
@@ -45,6 +47,8 @@ class WoxSetting {
     required this.httpProxyUrl,
     required this.enableAutoBackup,
     required this.enableAutoUpdate,
+    required this.customPythonPath,
+    required this.customNodejsPath,
   });
 
   WoxSetting.fromJson(Map<String, dynamic> json) {
@@ -95,6 +99,8 @@ class WoxSetting {
     httpProxyUrl = json['HttpProxyUrl'] ?? '';
     enableAutoBackup = json['EnableAutoBackup'] ?? false;
     enableAutoUpdate = json['EnableAutoUpdate'] ?? true;
+    customPythonPath = json['CustomPythonPath'] ?? '';
+    customNodejsPath = json['CustomNodejsPath'] ?? '';
   }
 
   Map<String, dynamic> toJson() {
@@ -120,6 +126,8 @@ class WoxSetting {
     data['HttpProxyUrl'] = httpProxyUrl;
     data['EnableAutoBackup'] = enableAutoBackup;
     data['EnableAutoUpdate'] = enableAutoUpdate;
+    data['CustomPythonPath'] = customPythonPath;
+    data['CustomNodejsPath'] = customNodejsPath;
     return data;
   }
 }

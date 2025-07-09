@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 	"wox/plugin"
+	"wox/setting"
 	"wox/util"
 	"wox/util/shell"
 
@@ -36,6 +37,17 @@ func (n *PythonHost) Start(ctx context.Context) error {
 
 func (n *PythonHost) findPythonPath(ctx context.Context) string {
 	util.GetLogger().Debug(ctx, "start finding python path")
+
+	// Check if user has configured a custom Python path
+	customPath := setting.GetSettingManager().GetWoxSetting(ctx).CustomPythonPath.Get()
+	if customPath != "" {
+		if util.IsFileExists(customPath) {
+			util.GetLogger().Info(ctx, fmt.Sprintf("using custom python path: %s", customPath))
+			return customPath
+		} else {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("custom python path not found, falling back to auto-detection: %s", customPath))
+		}
+	}
 
 	var possiblePythonPaths = []string{
 		"/opt/homebrew/bin/python3",

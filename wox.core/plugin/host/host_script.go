@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 	"wox/plugin"
+	"wox/setting"
 	"wox/util"
 	"wox/util/shell"
 )
@@ -201,7 +202,7 @@ func (sp *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string
 	}
 
 	// Determine the interpreter based on file extension
-	interpreter, err := sp.getInterpreter()
+	interpreter, err := sp.getInterpreter(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -307,13 +308,23 @@ func (sp *ScriptPlugin) handleActionResult(ctx context.Context, result map[strin
 }
 
 // getInterpreter determines the appropriate interpreter for the script based on file extension
-func (sp *ScriptPlugin) getInterpreter() (string, error) {
+func (sp *ScriptPlugin) getInterpreter(ctx context.Context) (string, error) {
 	ext := strings.ToLower(filepath.Ext(sp.scriptPath))
 
 	switch ext {
 	case ".py":
+		// Check if user has configured a custom Python path
+		customPath := setting.GetSettingManager().GetWoxSetting(ctx).CustomPythonPath.Get()
+		if customPath != "" && util.IsFileExists(customPath) {
+			return customPath, nil
+		}
 		return "python3", nil
 	case ".js":
+		// Check if user has configured a custom Node.js path
+		customPath := setting.GetSettingManager().GetWoxSetting(ctx).CustomNodejsPath.Get()
+		if customPath != "" && util.IsFileExists(customPath) {
+			return customPath, nil
+		}
 		return "node", nil
 	case ".sh":
 		return "bash", nil

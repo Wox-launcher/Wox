@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 	"wox/plugin"
+	"wox/setting"
 	"wox/util"
 	"wox/util/shell"
 
@@ -36,6 +37,17 @@ func (n *NodejsHost) Start(ctx context.Context) error {
 
 func (n *NodejsHost) findNodejsPath(ctx context.Context) string {
 	util.GetLogger().Debug(ctx, "start finding nodejs path")
+
+	// Check if user has configured a custom Node.js path
+	customPath := setting.GetSettingManager().GetWoxSetting(ctx).CustomNodejsPath.Get()
+	if customPath != "" {
+		if util.IsFileExists(customPath) {
+			util.GetLogger().Info(ctx, fmt.Sprintf("using custom nodejs path: %s", customPath))
+			return customPath
+		} else {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("custom nodejs path not found, falling back to auto-detection: %s", customPath))
+		}
+	}
 
 	var possibleNodejsPaths = []string{
 		"/opt/homebrew/bin/node",

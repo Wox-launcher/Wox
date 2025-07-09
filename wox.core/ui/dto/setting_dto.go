@@ -24,6 +24,8 @@ type WoxSettingDto struct {
 	ShowPosition         setting.PositionType
 	EnableAutoBackup     bool
 	EnableAutoUpdate     bool
+	CustomPythonPath     string
+	CustomNodejsPath     string
 
 	// UI related
 	AppWidth       int

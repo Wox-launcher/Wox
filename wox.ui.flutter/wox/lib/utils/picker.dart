@@ -19,6 +19,15 @@ class FileSelector {
       }
     }
 
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      allowMultiple: false,
+    );
+
+    if (result != null && result.files.isNotEmpty) {
+      return result.files.map((e) => e.path ?? "").toList();
+    }
+
     return [];
   }
 }

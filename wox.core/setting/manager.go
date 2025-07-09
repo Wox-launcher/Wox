@@ -252,6 +252,10 @@ func (m *Manager) UpdateWoxSetting(ctx context.Context, key, value string) error
 			return parseErr
 		}
 		m.woxSetting.MaxResultCount = maxResultCount
+	} else if key == "CustomPythonPath" {
+		m.woxSetting.CustomPythonPath.Set(value)
+	} else if key == "CustomNodejsPath" {
+		m.woxSetting.CustomNodejsPath.Set(value)
 	} else {
 		return fmt.Errorf("unknown key: %s", key)
 	}
@@ -486,6 +490,10 @@ func (m *Manager) tryPartialLoad(settingPath string, defaultSetting WoxSetting) 
 	m.extractStringFieldSafely(rawData, "LastQueryMode", &woxSetting.LastQueryMode)
 	m.extractStringFieldSafely(rawData, "ThemeId", &woxSetting.ThemeId)
 
+	// Extract platform-specific string fields
+	m.extractPlatformStringFieldSafely(rawData, "CustomPythonPath", &woxSetting.CustomPythonPath)
+	m.extractPlatformStringFieldSafely(rawData, "CustomNodejsPath", &woxSetting.CustomNodejsPath)
+
 	// Sanitize the loaded values
 	m.sanitizeWoxSetting(&woxSetting, defaultSetting)
 
@@ -520,6 +528,29 @@ func (m *Manager) extractStringFieldSafely(rawData map[string]interface{}, field
 	if value, exists := rawData[fieldName]; exists {
 		if strVal, ok := value.(string); ok {
 			*target = strVal
+		}
+	}
+}
+
+// extractPlatformStringFieldSafely safely extracts a platform-specific string field from raw JSON data
+func (m *Manager) extractPlatformStringFieldSafely(rawData map[string]interface{}, fieldName string, target *PlatformSettingValue[string]) {
+	if value, exists := rawData[fieldName]; exists {
+		if platformValue, ok := value.(map[string]interface{}); ok {
+			if winVal, exists := platformValue["WinValue"]; exists {
+				if strVal, ok := winVal.(string); ok {
+					target.WinValue = strVal
+				}
+			}
+			if macVal, exists := platformValue["MacValue"]; exists {
+				if strVal, ok := macVal.(string); ok {
+					target.MacValue = strVal
+				}
+			}
+			if linuxVal, exists := platformValue["LinuxValue"]; exists {
+				if strVal, ok := linuxVal.(string); ok {
+					target.LinuxValue = strVal
+				}
+			}
 		}
 	}
 }
