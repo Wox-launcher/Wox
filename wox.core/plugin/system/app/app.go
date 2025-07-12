@@ -328,6 +328,9 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 		}
 	}
 
+	// Remove duplicates with same Name and Path
+	appInfos = a.removeDuplicateApps(ctx, appInfos)
+
 	a.apps = appInfos
 	a.saveAppToCache(ctx)
 
@@ -501,4 +504,24 @@ func (a *ApplicationPlugin) loadAppCache(ctx context.Context) ([]appInfo, error)
 
 	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("loaded %d apps from cache, cost %d ms", len(apps), util.GetSystemTimestamp()-startTimestamp))
 	return apps, nil
+}
+
+// removeDuplicateApps removes duplicate apps with same Name and Path, keeping only one
+func (a *ApplicationPlugin) removeDuplicateApps(ctx context.Context, apps []appInfo) []appInfo {
+	seen := make(map[string]bool)
+	var result []appInfo
+
+	for _, app := range apps {
+		// Create a unique key combining Name and Path
+		key := app.Name + "|" + app.Path
+		if !seen[key] {
+			seen[key] = true
+			result = append(result, app)
+		} else {
+			a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("removed duplicate app: %s (%s)", app.Name, app.Path))
+		}
+	}
+
+	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("removed %d duplicate apps, %d apps remaining", len(apps)-len(result), len(result)))
+	return result
 }
