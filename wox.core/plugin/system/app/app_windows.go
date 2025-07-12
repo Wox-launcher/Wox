@@ -41,6 +41,7 @@ var (
 // Windows constants for icon extraction
 const (
 	SHGFI_ICON          = 0x000000100
+	SHGFI_DISPLAYNAME   = 0x000000200
 	SHGFI_LARGEICON     = 0x000000000
 	SHGFI_SMALLICON     = 0x000000001
 	SHGFI_SYSICONINDEX  = 0x000004000
@@ -480,8 +481,17 @@ func (a *WindowsRetriever) queryVersionString(ctx context.Context, buffer []byte
 	}
 
 	// Convert UTF16 string to Go string
-	utf16Slice := (*[256]uint16)(unsafe.Pointer(lpBuffer))[:puLen/2]
-	return syscall.UTF16ToString(utf16Slice)
+	// puLen is already the number of UTF16 characters (not bytes)
+	utf16Length := puLen
+	if utf16Length == 0 {
+		return ""
+	}
+
+	// Create a slice with the exact length needed
+	utf16Slice := (*[1024]uint16)(unsafe.Pointer(lpBuffer))[:utf16Length]
+	result := syscall.UTF16ToString(utf16Slice)
+
+	return result
 }
 
 func (a *WindowsRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
