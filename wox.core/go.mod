@@ -27,7 +27,7 @@ require (
 	github.com/olahol/melody v1.2.1
 	github.com/openai/openai-go v0.1.0-beta.6
 	github.com/otiai10/copy v1.14.0
-	github.com/parsiya/golnk v0.0.0-20221103095132-740a4c27c4ff
+
 	github.com/petermattis/goid v0.0.0-20241025130422-66cb2e6d7274
 	github.com/robotn/gohook v0.41.0
 	github.com/rs/cors v1.11.1

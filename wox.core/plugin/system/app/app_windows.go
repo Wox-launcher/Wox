@@ -20,7 +20,6 @@ import (
 	"wox/util/shell"
 
 	win "github.com/lxn/win"
-	lnk "github.com/parsiya/golnk"
 )
 
 var (
@@ -94,20 +93,16 @@ func (a *WindowsRetriever) ParseAppInfo(ctx context.Context, path string) (appIn
 }
 
 func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (appInfo, error) {
-	f, lnkErr := lnk.File(appPath)
-	if lnkErr != nil {
-		return appInfo{}, lnkErr
+	// Use PowerShell + COM to resolve shortcut with proper Unicode support
+	targetPath, resolveErr := a.resolveShortcutWithAPI(ctx, appPath)
+	if resolveErr != nil {
+		return appInfo{}, fmt.Errorf("failed to resolve shortcut %s: %v", appPath, resolveErr)
 	}
 
-	var targetPath = ""
-	if f.LinkInfo.LocalBasePath != "" {
-		targetPath = f.LinkInfo.LocalBasePath
-	}
-	if f.LinkInfo.LocalBasePathUnicode != "" {
-		targetPath = f.LinkInfo.LocalBasePathUnicode
-	}
+	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Resolved shortcut %s -> %s", appPath, targetPath))
+
 	if targetPath == "" || !strings.HasSuffix(targetPath, ".exe") {
-		return appInfo{}, errors.New("no target path found")
+		return appInfo{}, errors.New("no target path found or not an exe file")
 	}
 
 	// use default icon if no icon is found
@@ -224,6 +219,29 @@ func (a *WindowsRetriever) GetAppIcon(ctx context.Context, path string) (image.I
 	}
 
 	return img, nil
+}
+
+// resolveShortcutWithAPI uses Windows API to resolve shortcut target path with proper Unicode support
+func (a *WindowsRetriever) resolveShortcutWithAPI(ctx context.Context, shortcutPath string) (string, error) {
+	// Use PowerShell to resolve the shortcut with proper Unicode handling
+	powershellCmd := fmt.Sprintf(`
+		[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+		$shell = New-Object -ComObject WScript.Shell
+		$shortcut = $shell.CreateShortcut('%s')
+		Write-Output $shortcut.TargetPath
+	`, shortcutPath)
+
+	output, err := shell.RunOutput("powershell", "-Command", powershellCmd)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve shortcut: %v", err)
+	}
+
+	targetPath := strings.TrimSpace(string(output))
+	if targetPath == "" {
+		return "", fmt.Errorf("empty target path")
+	}
+
+	return targetPath, nil
 }
 
 func (a *WindowsRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
