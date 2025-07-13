@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"wox/common"
@@ -143,7 +143,7 @@ func (m *Manager) Start(ctx context.Context) error {
 		util.Go(ctx, "watch embed themes", func() {
 			workingDirectory, wdErr := os.Getwd()
 			if wdErr == nil {
-				util.WatchDirectoryChanges(ctx, path.Join(workingDirectory, "resource", "ui", "themes"), onThemeChange)
+				util.WatchDirectoryChanges(ctx, filepath.Join(workingDirectory, "resource", "ui", "themes"), onThemeChange)
 			}
 		})
 
@@ -640,16 +640,16 @@ func (m *Manager) ChangeUserDataDirectory(ctx context.Context, newDirectory stri
 			dstPath string
 		}{
 			{
-				srcPath: path.Join(oldDirectory, "plugins"),
-				dstPath: path.Join(newDirectory, "plugins"),
+				srcPath: filepath.Join(oldDirectory, "plugins"),
+				dstPath: filepath.Join(newDirectory, "plugins"),
 			},
 			{
-				srcPath: path.Join(oldDirectory, "settings"),
-				dstPath: path.Join(newDirectory, "settings"),
+				srcPath: filepath.Join(oldDirectory, "settings"),
+				dstPath: filepath.Join(newDirectory, "settings"),
 			},
 			{
-				srcPath: path.Join(oldDirectory, "themes"),
-				dstPath: path.Join(newDirectory, "themes"),
+				srcPath: filepath.Join(oldDirectory, "themes"),
+				dstPath: filepath.Join(newDirectory, "themes"),
 			},
 		}
 
