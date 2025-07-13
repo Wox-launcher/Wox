@@ -145,7 +145,9 @@ class WoxSettingDataView extends WoxSettingBaseView {
                 return material.DataTable(
                   columnSpacing: 10,
                   horizontalMargin: 5,
-                  headingRowHeight: 48,
+                  headingRowHeight: 36,
+                  dataRowMinHeight: 36,
+                  dataRowMaxHeight: 36,
                   headingRowColor: material.WidgetStateProperty.resolveWith((states) => fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
                   border: TableBorder.all(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
                   columns: [

@@ -444,7 +444,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                   columnSpacing: columnSpacing,
                   horizontalMargin: 5,
                   clipBehavior: Clip.hardEdge,
-                  headingRowHeight: 48,
+                  headingRowHeight: 36,
+                  dataRowMinHeight: 36,
+                  dataRowMaxHeight: 36,
                   headingRowColor: material.WidgetStateProperty.resolveWith((states) => fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
                   border: TableBorder.all(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
                   columns: [
@@ -472,7 +474,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                       label: columnWidth(
                         column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
                           "Key": "Operation",
-                          "Label": tr("operation"),
+                          "Label": tr("ui_operation"),
                           "Tooltip": "",
                           "Width": operationWidth.toInt(),
                           "Type": PluginSettingValueType.pluginSettingValueTableColumnTypeText,
@@ -481,9 +483,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                         isHeader: false,
                         isOperation: true,
                         child: material.Tooltip(
-                          message: tr("operation"),
+                          message: tr("ui_operation"),
                           child: Text(
-                            tr("operation"),
+                            tr("ui_operation"),
                             overflow: TextOverflow.ellipsis,
                             maxLines: 1,
                             style: TextStyle(
@@ -565,7 +567,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 child: material.DataTable(
                   columnSpacing: columnSpacing,
                   horizontalMargin: 5,
-                  headingRowHeight: 40,
+                  headingRowHeight: 36,
+                  dataRowMinHeight: 36,
+                  dataRowMaxHeight: 36,
                   headingRowColor: material.WidgetStateProperty.resolveWith((states) => fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
                   border: TableBorder.all(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
                   columns: [
