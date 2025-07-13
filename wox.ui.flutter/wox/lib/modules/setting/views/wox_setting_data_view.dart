@@ -7,9 +7,44 @@ import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:flutter/material.dart' as material;
+import 'package:wox/api/wox_api.dart';
 
 class WoxSettingDataView extends WoxSettingBaseView {
   const WoxSettingDataView({super.key});
+
+  Widget _buildAutoBackupTips() {
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(
+          controller.tr("ui_data_backup_auto_tips_prefix"),
+          style: TextStyle(color: getThemeSubTextColor(), fontSize: 13),
+        ),
+        HyperlinkButton(
+          onPressed: () async {
+            try {
+              final backupPath = await WoxApi.instance.getBackupFolder();
+              await controller.openFolder(backupPath);
+            } catch (e) {
+              // Handle error silently or show a notification
+            }
+          },
+          child: Text(
+            controller.tr("ui_data_backup_folder_link"),
+            style: TextStyle(
+              color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor),
+              fontSize: 13,
+              decoration: TextDecoration.underline,
+            ),
+          ),
+        ),
+        Text(
+          controller.tr("ui_data_backup_auto_tips_suffix"),
+          style: TextStyle(color: getThemeSubTextColor(), fontSize: 13),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,7 +112,8 @@ class WoxSettingDataView extends WoxSettingBaseView {
             },
           );
         }),
-        tips: controller.tr("ui_data_backup_auto_tips"),
+        tips: null,
+        customTips: _buildAutoBackupTips(),
       ),
       formField(
         label: controller.tr("ui_data_backup_list_title"),

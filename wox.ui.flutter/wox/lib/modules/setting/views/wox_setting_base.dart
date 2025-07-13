@@ -22,7 +22,7 @@ abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
     );
   }
 
-  Widget formField({required String label, required Widget child, String? tips, double labelWidth = 160}) {
+  Widget formField({required String label, required Widget child, String? tips, Widget? customTips, double labelWidth = 160}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: Column(
@@ -41,7 +41,7 @@ abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
               ),
             ],
           ),
-          if (tips != null)
+          if (tips != null || customTips != null)
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Row(
@@ -52,8 +52,8 @@ abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
                     child: SizedBox(width: labelWidth, child: const Text("")),
                   ),
                   Flexible(
-                    child: Text(
-                      tips,
+                    child: customTips ?? Text(
+                      tips!,
                       style: TextStyle(color: getThemeSubTextColor(), fontSize: 13),
                     ),
                   ),

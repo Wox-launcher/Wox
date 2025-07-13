@@ -203,6 +203,10 @@ class WoxApi {
     await WoxHttpUtil.instance.postData("/backup/restore", {"id": id});
   }
 
+  Future<String> getBackupFolder() async {
+    return await WoxHttpUtil.instance.postData("/backup/folder", null);
+  }
+
   Future<void> open(String path) async {
     await WoxHttpUtil.instance.postData("/open", {"path": path});
   }

@@ -83,6 +83,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/backup/now":       handleBackupNow,
 	"/backup/restore":   handleBackupRestore,
 	"/backup/all":       handleBackupAll,
+	"/backup/folder":    handleBackupFolder,
 	"/hotkey/available": handleHotkeyAvailable,
 	"/query/icon":       handleQueryIcon,
 	"/query/ratio":      handleQueryRatio,
@@ -628,6 +629,18 @@ func handleBackupAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeSuccessResponse(w, backups)
+}
+
+func handleBackupFolder(w http.ResponseWriter, r *http.Request) {
+	backupDir := util.GetLocation().GetBackupDirectory()
+
+	// Ensure backup directory exists
+	if err := util.GetLocation().EnsureDirectoryExist(backupDir); err != nil {
+		writeErrorResponse(w, fmt.Sprintf("Failed to create backup directory: %s", err.Error()))
+		return
+	}
+
+	writeSuccessResponse(w, backupDir)
 }
 
 func handleHotkeyAvailable(w http.ResponseWriter, r *http.Request) {
