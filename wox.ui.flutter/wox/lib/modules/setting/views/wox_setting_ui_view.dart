@@ -13,27 +13,30 @@ class WoxSettingUIView extends WoxSettingBaseView {
           label: controller.tr("ui_show_position"),
           tips: controller.tr("ui_show_position_tips"),
           child: Obx(() {
-            return ComboBox<String>(
-              items: [
-                ComboBoxItem(
-                  value: "mouse_screen",
-                  child: Text(controller.tr("ui_show_position_mouse_screen")),
-                ),
-                ComboBoxItem(
-                  value: "active_screen",
-                  child: Text(controller.tr("ui_show_position_active_screen")),
-                ),
-                ComboBoxItem(
-                  value: "last_location",
-                  child: Text(controller.tr("ui_show_position_last_location")),
-                ),
-              ],
-              value: controller.woxSetting.value.showPosition,
-              onChanged: (v) {
-                if (v != null) {
-                  controller.updateConfig("ShowPosition", v);
-                }
-              },
+            return SizedBox(
+              width: 200,
+              child: ComboBox<String>(
+                items: [
+                  ComboBoxItem(
+                    value: "mouse_screen",
+                    child: Text(controller.tr("ui_show_position_mouse_screen")),
+                  ),
+                  ComboBoxItem(
+                    value: "active_screen",
+                    child: Text(controller.tr("ui_show_position_active_screen")),
+                  ),
+                  ComboBoxItem(
+                    value: "last_location",
+                    child: Text(controller.tr("ui_show_position_last_location")),
+                  ),
+                ],
+                value: controller.woxSetting.value.showPosition,
+                onChanged: (v) {
+                  if (v != null) {
+                    controller.updateConfig("ShowPosition", v);
+                  }
+                },
+              ),
             );
           }),
         ),

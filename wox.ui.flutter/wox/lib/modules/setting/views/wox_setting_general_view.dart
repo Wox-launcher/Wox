@@ -118,23 +118,26 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
           label: controller.tr("ui_last_query_mode"),
           tips: controller.tr("ui_last_query_mode_tips"),
           child: Obx(() {
-            return ComboBox<String>(
-              items: [
-                ComboBoxItem(
-                  value: WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_PRESERVE.code,
-                  child: Text(controller.tr("ui_last_query_mode_preserve")),
-                ),
-                ComboBoxItem(
-                  value: WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_EMPTY.code,
-                  child: Text(controller.tr("ui_last_query_mode_empty")),
-                ),
-              ],
-              value: controller.woxSetting.value.lastQueryMode,
-              onChanged: (v) {
-                if (v != null) {
-                  controller.updateConfig("LastQueryMode", v);
-                }
-              },
+            return SizedBox(
+              width: 250,
+              child: ComboBox<String>(
+                items: [
+                  ComboBoxItem(
+                    value: WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_PRESERVE.code,
+                    child: Text(controller.tr("ui_last_query_mode_preserve")),
+                  ),
+                  ComboBoxItem(
+                    value: WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_EMPTY.code,
+                    child: Text(controller.tr("ui_last_query_mode_empty")),
+                  ),
+                ],
+                value: controller.woxSetting.value.lastQueryMode,
+                onChanged: (v) {
+                  if (v != null) {
+                    controller.updateConfig("LastQueryMode", v);
+                  }
+                },
+              ),
             );
           }),
         ),
