@@ -599,6 +599,9 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 			if err == nil {
 				app.Icon = icon
 				a.uwpIconCache[appID] = icon.ImageData
+			} else {
+				util.GetLogger().Error(ctx, fmt.Sprintf("Error getting UWP icon for %s (%s), using default icon: %s", name, appID, err.Error()))
+				// Keep using default appIcon when UWP icon fails
 			}
 
 			apps = append(apps, app)
@@ -626,15 +629,25 @@ func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {
 
 func (a *WindowsRetriever) GetUWPAppIcon(ctx context.Context, appID string) (common.WoxImage, error) {
 	if iconPath, ok := a.uwpIconCache[appID]; ok {
-		return common.NewWoxImageAbsolutePath(iconPath), nil
+		// Verify cached path still exists
+		if _, err := os.Stat(iconPath); err == nil {
+			return common.NewWoxImageAbsolutePath(iconPath), nil
+		} else {
+			// Remove invalid cache entry
+			delete(a.uwpIconCache, appID)
+		}
 	}
 
 	powershellCmd := fmt.Sprintf(`
 		[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-		$packageFamilyName = ($('%s' -split '!')[0])
-		$package = Get-AppxPackage | Where-Object { $_.PackageFamilyName -eq $packageFamilyName }
-		if ($package) {
+		try {
+			$packageFamilyName = ($('%s' -split '!')[0])
+			$package = Get-AppxPackage | Where-Object { $_.PackageFamilyName -eq $packageFamilyName }
+			if (!$package) { exit 1 }
+
 			$manifest = Get-AppxPackageManifest $package
+			if (!$manifest) { exit 1 }
+
 			$logo = $manifest.Package.Properties.Logo
 			if (!$logo) {
 				$visual = $manifest.Package.Applications.Application.VisualElements
@@ -646,78 +659,139 @@ func (a *WindowsRetriever) GetUWPAppIcon(ctx context.Context, appID string) (com
 					$logo = $visual.Logo
 				}
 			}
-			if ($logo) {
-				$logoPath = Join-Path $package.InstallLocation $logo
-				$directory = Split-Path $logoPath
-				$filename = Split-Path $logoPath -Leaf
-				$baseFilename = [System.IO.Path]::GetFileNameWithoutExtension($filename)
-				$extension = [System.IO.Path]::GetExtension($filename)
-				
-				# Add more scaling versions and target sizes
-				$scales = @('scale-200', 'scale-100', 'scale-150', 'scale-125', 'scale-400', '')
-				$targetSizes = @('44', '48', '24', '32', '64', '256', '16')
-				
-				# First try filenames with sizes
-				foreach ($size in $targetSizes) {
-					foreach ($scale in $scales) {
-						$targetPath = if ($scale) {
-							Join-Path $directory "$baseFilename.targetsize-$size.$scale$extension"
-						} else {
-							Join-Path $directory "$baseFilename.targetsize-$size$extension"
-						}
-						if (Test-Path $targetPath) {
-							Write-Output "Found icon: $targetPath"
-							Write-Output $targetPath
-							exit
-						}
-					}
-				}
-				
-				# Then try scaled versions
+
+			if (!$logo) { exit 1 }
+
+			$logoPath = Join-Path $package.InstallLocation $logo
+			if (!(Test-Path $package.InstallLocation)) { exit 1 }
+
+			$directory = Split-Path $logoPath
+			$filename = Split-Path $logoPath -Leaf
+			$baseFilename = [System.IO.Path]::GetFileNameWithoutExtension($filename)
+			$extension = [System.IO.Path]::GetExtension($filename)
+
+			# Try different scaling versions and target sizes (prioritize larger sizes)
+			$scales = @('scale-200', 'scale-400', 'scale-150', 'scale-125', 'scale-100', '')
+			$targetSizes = @('256', '64', '48', '44', '32', '24', '16')
+
+			# First try filenames with sizes
+			foreach ($size in $targetSizes) {
 				foreach ($scale in $scales) {
-					$scaledPath = if ($scale) {
-						Join-Path $directory "$baseFilename.$scale$extension"
+					$targetPath = if ($scale) {
+						Join-Path $directory "$baseFilename.targetsize-$size.$scale$extension"
 					} else {
-						$logoPath
+						Join-Path $directory "$baseFilename.targetsize-$size$extension"
 					}
-					if (Test-Path $scaledPath) {
-						Write-Output "Found icon: $scaledPath"
-						Write-Output $scaledPath
-						exit
+					if (Test-Path $targetPath) {
+						Write-Output $targetPath
+						exit 0
 					}
-				}
-				
-				# If nothing found, return original path
-				if (Test-Path $logoPath) {
-					Write-Output "Using original path: $logoPath"
-					Write-Output $logoPath
 				}
 			}
-			Write-Output "Package info: $($package.PackageFullName)"
-			Write-Output "Install location: $($package.InstallLocation)"
+
+			# Then try scaled versions
+			foreach ($scale in $scales) {
+				$scaledPath = if ($scale) {
+					Join-Path $directory "$baseFilename.$scale$extension"
+				} else {
+					$logoPath
+				}
+				if (Test-Path $scaledPath) {
+					Write-Output $scaledPath
+					exit 0
+				}
+			}
+
+			# If nothing found, return original path if it exists
+			if (Test-Path $logoPath) {
+				Write-Output $logoPath
+				exit 0
+			}
+			exit 1
+		} catch {
+			exit 1
 		}
 	`, appID)
 
 	output, err := shell.RunOutput("powershell", "-Command", powershellCmd)
 	if err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("Error running powershell command: %v", err))
+		util.GetLogger().Error(ctx, fmt.Sprintf("Error running powershell command for UWP app %s: %v", appID, err))
 		return common.WoxImage{}, err
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	if len(lines) == 0 {
-		util.GetLogger().Error(ctx, "No icon path found")
-		return common.WoxImage{}, fmt.Errorf("No icon path found")
+	outputStr := strings.TrimSpace(string(output))
+	if outputStr == "" {
+		util.GetLogger().Error(ctx, fmt.Sprintf("No output from PowerShell for UWP app %s", appID))
+		return common.WoxImage{}, fmt.Errorf("no output from PowerShell")
 	}
 
-	// Last line is the icon path
-	iconPath := strings.TrimSpace(lines[len(lines)-1])
+	// The output should be the icon path
+	iconPath := outputStr
 	if iconPath == "" {
-		util.GetLogger().Error(ctx, "Icon path is empty")
-		return common.WoxImage{}, fmt.Errorf("Icon path is empty")
+		util.GetLogger().Error(ctx, fmt.Sprintf("No valid icon path found for UWP app %s", appID))
+		return common.WoxImage{}, fmt.Errorf("no valid icon path found")
+	}
+
+	// Verify the path exists
+	if _, err := os.Stat(iconPath); os.IsNotExist(err) {
+		util.GetLogger().Error(ctx, fmt.Sprintf("Icon path does not exist for UWP app %s: %s", appID, iconPath))
+
+		// Try to find any icon file in the app directory as fallback
+		packageFamilyName := strings.Split(appID, "!")[0]
+		fallbackIcon, fallbackErr := a.findFallbackUWPIcon(ctx, packageFamilyName)
+		if fallbackErr == nil {
+			return common.NewWoxImageAbsolutePath(fallbackIcon), nil
+		}
+
+		return common.WoxImage{}, fmt.Errorf("icon path does not exist: %s", iconPath)
 	}
 
 	return common.NewWoxImageAbsolutePath(iconPath), nil
+}
+
+func (a *WindowsRetriever) findFallbackUWPIcon(ctx context.Context, packageFamilyName string) (string, error) {
+	// Use PowerShell to find any icon file in the UWP app directory
+	powershellCmd := fmt.Sprintf(`
+		[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+		try {
+			$package = Get-AppxPackage | Where-Object { $_.PackageFamilyName -eq '%s' }
+			if (!$package) { exit 1 }
+			if (!(Test-Path $package.InstallLocation)) { exit 1 }
+
+			# Look for any icon files in common locations
+			$iconExtensions = @('*.png', '*.jpg', '*.ico')
+			$iconDirs = @('Assets', 'Images', '')
+
+			foreach ($dir in $iconDirs) {
+				$searchPath = if ($dir) { Join-Path $package.InstallLocation $dir } else { $package.InstallLocation }
+				if (Test-Path $searchPath) {
+					foreach ($ext in $iconExtensions) {
+						$icons = Get-ChildItem -Path $searchPath -Filter $ext -ErrorAction SilentlyContinue | Sort-Object Length -Descending
+						if ($icons) {
+							# Prefer larger files (likely higher resolution)
+							Write-Output $icons[0].FullName
+							exit 0
+						}
+					}
+				}
+			}
+			exit 1
+		} catch {
+			exit 1
+		}
+	`, packageFamilyName)
+
+	output, err := shell.RunOutput("powershell", "-Command", powershellCmd)
+	if err != nil {
+		return "", fmt.Errorf("PowerShell execution failed: %v", err)
+	}
+
+	iconPath := strings.TrimSpace(string(output))
+	if iconPath == "" {
+		return "", fmt.Errorf("no fallback icon found")
+	}
+
+	return iconPath, nil
 }
 
 func (a *WindowsRetriever) getWindowsDefaultIcon(ctx context.Context) (image.Image, error) {
