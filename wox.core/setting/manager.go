@@ -677,6 +677,12 @@ func (m *Manager) SavePluginSetting(ctx context.Context, pluginId string, plugin
 	return nil
 }
 
+func (m *Manager) SaveWindowPosition(ctx context.Context, x, y int) error {
+	m.woxSetting.LastWindowX = x
+	m.woxSetting.LastWindowY = y
+	return m.SaveWoxSetting(ctx)
+}
+
 func (m *Manager) AddQueryHistory(ctx context.Context, query common.PlainQuery) {
 	if query.IsEmpty() {
 		return

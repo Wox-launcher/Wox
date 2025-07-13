@@ -37,6 +37,10 @@ type WoxSetting struct {
 	AppWidth       int
 	MaxResultCount int
 	ThemeId        string
+
+	// Window position for last location mode
+	LastWindowX int
+	LastWindowY int
 }
 
 type LastQueryMode = string
@@ -141,5 +145,7 @@ func GetDefaultWoxSetting(ctx context.Context) WoxSetting {
 		},
 		EnableAutoBackup: true,
 		EnableAutoUpdate: true,
+		LastWindowX:      -1, // -1 indicates no saved position
+		LastWindowY:      -1,
 	}
 }

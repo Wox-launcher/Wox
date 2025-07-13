@@ -48,6 +48,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/setting/plugin/update":            handleSettingPluginUpdate,
 	"/setting/userdata/location":        handleUserDataLocation,
 	"/setting/userdata/location/update": handleUserDataLocationUpdate,
+	"/setting/position":                 handleSaveWindowPosition,
 
 	// events
 	"/on/focus/lost":     handleOnFocusLost,
@@ -590,6 +591,34 @@ func handleOpen(w http.ResponseWriter, r *http.Request) {
 
 	shell.Open(pathResult.String())
 
+	writeSuccessResponse(w, "")
+}
+
+func handleSaveWindowPosition(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+
+	type positionData struct {
+		X int `json:"x"`
+		Y int `json:"y"`
+	}
+
+	var pos positionData
+	err := json.NewDecoder(r.Body).Decode(&pos)
+	if err != nil {
+		writeErrorResponse(w, err.Error())
+		return
+	}
+
+	logger.Info(ctx, fmt.Sprintf("Received window position save request: x=%d, y=%d", pos.X, pos.Y))
+
+	saveErr := setting.GetSettingManager().SaveWindowPosition(ctx, pos.X, pos.Y)
+	if saveErr != nil {
+		logger.Error(ctx, fmt.Sprintf("Failed to save window position: %s", saveErr.Error()))
+		writeErrorResponse(w, saveErr.Error())
+		return
+	}
+
+	logger.Info(ctx, fmt.Sprintf("Window position saved successfully: x=%d, y=%d", pos.X, pos.Y))
 	writeSuccessResponse(w, "")
 }
 

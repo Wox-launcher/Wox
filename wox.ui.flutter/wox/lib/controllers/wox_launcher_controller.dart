@@ -232,16 +232,8 @@ class WoxLauncherController extends GetxController {
     if (Platform.isLinux) {
       await windowManager.show();
     }
-    if (params.position.type == WoxPositionTypeEnum.POSITION_TYPE_MOUSE_SCREEN.code || params.position.type == WoxPositionTypeEnum.POSITION_TYPE_ACTIVE_SCREEN.code) {
-      await windowManager.setPosition(Offset(params.position.x.toDouble(), params.position.y.toDouble()));
-    } else if (params.position.type == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
-      // For last location, we don't need to set position as it will remain where it was last positioned
-      // but if it's the first time to show, we need to set the position to the center of the screen
-      var position = await windowManager.getPosition();
-      if (position.dx == 0 && position.dy == 0) {
-        await windowManager.center(WoxSettingUtil.instance.currentSetting.appWidth.toDouble(), 600);
-      }
-    }
+    // Use the position calculated by backend
+    await windowManager.setPosition(Offset(params.position.x.toDouble(), params.position.y.toDouble()));
 
     await windowManager.show();
     await windowManager.focus();
@@ -272,6 +264,21 @@ class WoxLauncherController extends GetxController {
     await windowManager.hide();
 
     await WoxApi.instance.onHide(currentQuery.value);
+  }
+
+  void saveWindowPositionIfNeeded() {
+    final setting = WoxSettingUtil.instance.currentSetting;
+    if (setting.showPosition == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
+      // Run in async task with delay to ensure window position is fully updated
+      Future.delayed(const Duration(milliseconds: 500), () async {
+        try {
+          final position = await windowManager.getPosition();
+          await WoxApi.instance.saveWindowPosition(position.dx.toInt(), position.dy.toInt());
+        } catch (e) {
+          Logger.instance.error(const UuidV4().generate(), "Failed to save window position: $e");
+        }
+      });
+    }
   }
 
   Future<void> toggleActionPanel(String traceId) async {

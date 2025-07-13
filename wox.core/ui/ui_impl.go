@@ -186,7 +186,15 @@ func getShowAppParams(ctx context.Context, showContext common.ShowContext) map[s
 	case setting.PositionTypeActiveScreen:
 		position = NewActiveScreenPosition(woxSetting.AppWidth)
 	case setting.PositionTypeLastLocation:
-		position = NewLastLocationPosition(0, 0) // Initial values, will be updated by UI
+		// Use saved window position if available, otherwise use mouse screen position as fallback
+		if woxSetting.LastWindowX != -1 && woxSetting.LastWindowY != -1 {
+			logger.Info(ctx, fmt.Sprintf("Using saved window position: x=%d, y=%d", woxSetting.LastWindowX, woxSetting.LastWindowY))
+			position = NewLastLocationPosition(woxSetting.LastWindowX, woxSetting.LastWindowY)
+		} else {
+			logger.Info(ctx, "No saved window position, using mouse screen position as fallback")
+			// No saved position, fallback to mouse screen position
+			position = NewMouseScreenPosition(woxSetting.AppWidth)
+		}
 	default: // Default to mouse screen
 		position = NewMouseScreenPosition(woxSetting.AppWidth)
 	}

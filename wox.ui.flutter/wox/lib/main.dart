@@ -200,6 +200,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
         }
 
         launcherController.focusQueryBox();
+        launcherController.saveWindowPositionIfNeeded();
       },
       child: launcherController.isInSettingView.value ? const WoxSettingView() : const WoxLauncherView(),
     );

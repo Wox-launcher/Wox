@@ -214,4 +214,8 @@ class WoxApi {
   Future<String> getWoxVersion() async {
     return await WoxHttpUtil.instance.postData("/version", null);
   }
+
+  Future<void> saveWindowPosition(int x, int y) async {
+    await WoxHttpUtil.instance.postData("/setting/position", {"x": x, "y": y});
+  }
 }
