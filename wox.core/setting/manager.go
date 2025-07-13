@@ -64,8 +64,25 @@ func (m *Manager) Init(ctx context.Context) error {
 	} else {
 		configAutostart := m.woxSetting.EnableAutostart.Get()
 		if actualAutostart != configAutostart {
-			util.GetLogger().Warn(ctx, fmt.Sprintf("Autostart setting mismatch: config %v, actual %v. Updating config.", configAutostart, actualAutostart))
-			m.woxSetting.EnableAutostart.Set(actualAutostart)
+			util.GetLogger().Warn(ctx, fmt.Sprintf("Autostart setting mismatch: config %v, actual %v", configAutostart, actualAutostart))
+
+			// If config says autostart should be enabled but actual is false,
+			// try to re-enable autostart (this will fix broken autostart entries)
+			if configAutostart && !actualAutostart {
+				util.GetLogger().Info(ctx, "Attempting to fix autostart configuration...")
+				fixErr := autostart.SetAutostart(ctx, true)
+				if fixErr != nil {
+					util.GetLogger().Error(ctx, fmt.Sprintf("Failed to fix autostart: %s", fixErr.Error()))
+					// Update config to match actual state
+					m.woxSetting.EnableAutostart.Set(false)
+				} else {
+					util.GetLogger().Info(ctx, "Autostart configuration fixed successfully")
+				}
+			} else {
+				// Update config to match actual state
+				m.woxSetting.EnableAutostart.Set(actualAutostart)
+			}
+
 			err := m.SaveWoxSetting(ctx)
 			if err != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("Failed to save updated autostart setting: %s", err.Error()))
