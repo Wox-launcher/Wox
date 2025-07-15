@@ -27,7 +27,6 @@ require (
 	github.com/olahol/melody v1.2.1
 	github.com/openai/openai-go v0.1.0-beta.6
 	github.com/otiai10/copy v1.14.0
-
 	github.com/petermattis/goid v0.0.0-20241025130422-66cb2e6d7274
 	github.com/robotn/gohook v0.41.0
 	github.com/rs/cors v1.11.1
@@ -65,6 +64,7 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/invopop/jsonschema v0.12.0 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
@@ -93,4 +93,6 @@ require (
 	google.golang.org/protobuf v1.35.1 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gorm.io/driver/sqlite v1.6.0 // indirect
+	gorm.io/gorm v1.30.0 // indirect
 )
