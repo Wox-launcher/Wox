@@ -4,10 +4,10 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
-import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/entity/wox_backup.dart';
 import 'package:wox/entity/wox_plugin.dart';
 import 'package:wox/entity/wox_theme.dart';
+import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 
@@ -61,6 +61,17 @@ class WoxSettingController extends GetxController {
     await WoxApi.instance.updateSetting(key, value);
     await reloadSetting();
     Logger.instance.info(const UuidV4().generate(), 'Setting updated: $key=$value');
+
+    // If user switches to last_location, save current window position immediately
+    if (key == "ShowPosition" && value == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
+      try {
+        final launcherController = Get.find<WoxLauncherController>();
+        launcherController.saveWindowPositionIfNeeded();
+        Logger.instance.info(const UuidV4().generate(), 'Saved current window position when switching to last_location');
+      } catch (e) {
+        Logger.instance.error(const UuidV4().generate(), 'Failed to save window position when switching to last_location: $e');
+      }
+    }
   }
 
   Future<void> updateLang(String langCode) async {
