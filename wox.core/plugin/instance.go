@@ -1,7 +1,6 @@
 package plugin
 
 import (
-	"context"
 	"wox/setting"
 )
 
@@ -30,16 +29,18 @@ type Instance struct {
 
 // trigger keywords to trigger this plugin. Maybe user defined or pre-defined in plugin.json
 func (i *Instance) GetTriggerKeywords() []string {
-	if i.Setting.TriggerKeywords != nil {
-		return i.Setting.TriggerKeywords
+	var userDefinedKeywords = i.Setting.TriggerKeywords.Get()
+	if len(userDefinedKeywords) > 0 {
+		return userDefinedKeywords
 	}
+
 	return i.Metadata.TriggerKeywords
 }
 
 // query commands to query this plugin. Maybe plugin author dynamical registered or pre-defined in plugin.json
 func (i *Instance) GetQueryCommands() []MetadataCommand {
 	commands := i.Metadata.Commands
-	for _, command := range i.Setting.QueryCommands {
+	for _, command := range i.Setting.QueryCommands.Get() {
 		commands = append(commands, MetadataCommand{
 			Command:     command.Command,
 			Description: command.Description,
@@ -50,8 +51,4 @@ func (i *Instance) GetQueryCommands() []MetadataCommand {
 
 func (i *Instance) String() string {
 	return i.Metadata.Name
-}
-
-func (i *Instance) SaveSetting(ctx context.Context) error {
-	return setting.GetSettingManager().SavePluginSetting(ctx, i.Metadata.Id, i.Setting)
 }

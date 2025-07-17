@@ -192,7 +192,9 @@ func convertPluginInstanceToDto(ctx context.Context, pluginInstance *plugin.Inst
 	installedPlugin.IsSystem = pluginInstance.IsSystemPlugin
 	installedPlugin.IsDev = pluginInstance.IsDevPlugin
 	installedPlugin.IsInstalled = true
-	installedPlugin.IsDisable = pluginInstance.Setting.Disabled
+	installedPlugin.IsDisable = pluginInstance.Setting.Disabled.Get()
+	installedPlugin.TriggerKeywords = pluginInstance.GetTriggerKeywords()
+	installedPlugin.Commands = pluginInstance.GetQueryCommands()
 
 	//load screenshot urls from store if exist
 	storePlugin, foundErr := plugin.GetStoreManager().GetStorePluginManifestById(ctx, pluginInstance.Metadata.Id)
@@ -230,10 +232,7 @@ func handlePluginInstall(w http.ResponseWriter, r *http.Request) {
 
 	plugins := plugin.GetStoreManager().GetStorePluginManifests(ctx)
 	findPlugin, exist := lo.Find(plugins, func(item plugin.StorePluginManifest) bool {
-		if item.Id == pluginId {
-			return true
-		}
-		return false
+		return item.Id == pluginId
 	})
 	if !exist {
 		writeErrorResponse(w, fmt.Sprintf("Plugin '%s' not found in the store", pluginId))
@@ -287,8 +286,6 @@ func handlePluginUninstall(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePluginDisable(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
-
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
 	if !idResult.Exists() {
@@ -310,19 +307,11 @@ func handlePluginDisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	findPlugin.Setting.Disabled = true
-	err := findPlugin.SaveSetting(ctx)
-	if err != nil {
-		writeErrorResponse(w, "can't disable plugin: "+err.Error())
-		return
-	}
-
+	findPlugin.Setting.Disabled.Set(true)
 	writeSuccessResponse(w, "")
 }
 
 func handlePluginEnable(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
-
 	body, _ := io.ReadAll(r.Body)
 	idResult := gjson.GetBytes(body, "id")
 	if !idResult.Exists() {
@@ -341,13 +330,7 @@ func handlePluginEnable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	findPlugin.Setting.Disabled = false
-	err := findPlugin.SaveSetting(ctx)
-	if err != nil {
-		writeErrorResponse(w, "can't enable plugin: "+err.Error())
-		return
-	}
-
+	findPlugin.Setting.Disabled.Set(false)
 	writeSuccessResponse(w, "")
 }
 
@@ -587,8 +570,6 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSettingPluginUpdate(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
-
 	type keyValuePair struct {
 		PluginId string
 		Key      string
@@ -615,11 +596,9 @@ func handleSettingPluginUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if kv.Key == "Disabled" {
-		pluginInstance.Setting.Disabled = kv.Value == "true"
-		pluginInstance.SaveSetting(ctx)
+		pluginInstance.Setting.Disabled.Set(kv.Value == "true")
 	} else if kv.Key == "TriggerKeywords" {
-		pluginInstance.Setting.TriggerKeywords = strings.Split(kv.Value, ",")
-		pluginInstance.SaveSetting(ctx)
+		pluginInstance.Setting.TriggerKeywords.Set(strings.Split(kv.Value, ","))
 	} else {
 		var isPlatformSpecific = false
 		for _, settingDefinition := range pluginInstance.Metadata.SettingDefinitions {

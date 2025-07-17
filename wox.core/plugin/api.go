@@ -107,12 +107,12 @@ func (a *APIImpl) GetTranslation(ctx context.Context, key string) string {
 func (a *APIImpl) GetSetting(ctx context.Context, key string) string {
 	// try to get platform specific setting first
 	platformSpecificKey := key + "@" + util.GetCurrentPlatform()
-	v, exist := a.pluginInstance.Setting.GetSetting(platformSpecificKey)
+	v, exist := a.pluginInstance.Setting.Get(platformSpecificKey)
 	if exist {
 		return v
 	}
 
-	v, exist = a.pluginInstance.Setting.GetSetting(key)
+	v, exist = a.pluginInstance.Setting.Get(key)
 	if exist {
 		return v
 	}
@@ -125,17 +125,11 @@ func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string, isP
 		finalKey = key + "@" + util.GetCurrentPlatform()
 	} else {
 		// if not platform specific, remove platform specific setting, otherwise it will be loaded first
-		a.pluginInstance.Setting.Settings.Delete(key + "@" + util.GetCurrentPlatform())
+		a.pluginInstance.Setting.Delete(key + "@" + util.GetCurrentPlatform())
 	}
 
-	existValue, exist := a.pluginInstance.Setting.Settings.Load(finalKey)
-	a.pluginInstance.Setting.Settings.Store(finalKey, value)
-	saveErr := a.pluginInstance.SaveSetting(ctx)
-	if saveErr != nil {
-		a.logger.Error(ctx, fmt.Sprintf("failed to save setting: %s", saveErr.Error()))
-		return
-	}
-
+	existValue, exist := a.pluginInstance.Setting.Get(finalKey)
+	a.pluginInstance.Setting.Set(finalKey, value)
 	if !exist || (existValue != value) {
 		for _, callback := range a.pluginInstance.SettingChangeCallbacks {
 			callback(key, value)
@@ -165,13 +159,12 @@ func (a *APIImpl) OnUnload(ctx context.Context, callback func()) {
 }
 
 func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []MetadataCommand) {
-	a.pluginInstance.Setting.QueryCommands = lo.Map(commands, func(command MetadataCommand, _ int) setting.PluginQueryCommand {
+	a.pluginInstance.Setting.QueryCommands.Set(lo.Map(commands, func(command MetadataCommand, _ int) setting.PluginQueryCommand {
 		return setting.PluginQueryCommand{
 			Command:     command.Command,
 			Description: command.Description,
 		}
-	})
-	a.pluginInstance.SaveSetting(ctx)
+	}))
 }
 
 func (a *APIImpl) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {

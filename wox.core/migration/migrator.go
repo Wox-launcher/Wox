@@ -206,7 +206,7 @@ func Run(ctx context.Context) error {
 		}
 	}()
 
-	store := setting.NewStore(tx)
+	woxSettingStore := setting.NewWoxSettingStore(tx)
 
 	// Migrate simple settings
 	settingsToMigrate := map[string]interface{}{
@@ -241,7 +241,7 @@ func Run(ctx context.Context) error {
 	util.GetLogger().Info(ctx, fmt.Sprintf("migrating %d core settings", len(settingsToMigrate)))
 	for key, value := range settingsToMigrate {
 		util.GetLogger().Info(ctx, fmt.Sprintf("migrating setting %s", key))
-		if err := store.Set(key, value); err != nil {
+		if err := woxSettingStore.Set(key, value); err != nil {
 			return fmt.Errorf("failed to migrate setting %s: %w", key, err)
 		}
 	}
@@ -262,6 +262,8 @@ func Run(ctx context.Context) error {
 			}
 
 			pluginId := strings.TrimSuffix(file.Name(), ".json")
+			pluginSettingStore := setting.NewPluginSettingStore(tx, pluginId)
+
 			pluginJsonPath := path.Join(pluginDir, file.Name())
 			if _, err := os.Stat(pluginJsonPath); err != nil {
 				continue
@@ -285,7 +287,7 @@ func Run(ctx context.Context) error {
 				if value == "" {
 					continue
 				}
-				if err := store.SetPluginSetting(pluginId, key, value); err != nil {
+				if err := pluginSettingStore.Set(key, value); err != nil {
 					util.GetLogger().Warn(ctx, fmt.Sprintf("failed to migrate plugin setting %s for %s: %v", key, pluginId, err))
 					continue
 				}
@@ -302,7 +304,7 @@ func Run(ctx context.Context) error {
 	// Migrate query history
 	if len(oldAppData.QueryHistories) > 0 {
 		util.GetLogger().Info(ctx, fmt.Sprintf("migrating %d query histories", len(oldAppData.QueryHistories)))
-		if err := store.Set("QueryHistories", oldAppData.QueryHistories); err != nil {
+		if err := woxSettingStore.Set("QueryHistories", oldAppData.QueryHistories); err != nil {
 			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to migrate query histories: %v", err))
 		}
 	}
@@ -310,7 +312,7 @@ func Run(ctx context.Context) error {
 	// Migrate favorite results
 	if oldAppData.FavoriteResults != nil {
 		util.GetLogger().Info(ctx, fmt.Sprintf("migrating %d favorite results", oldAppData.FavoriteResults.Len()))
-		if err := store.Set("FavoriteResults", oldAppData.FavoriteResults); err != nil {
+		if err := woxSettingStore.Set("FavoriteResults", oldAppData.FavoriteResults); err != nil {
 			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to migrate favorite results: %v", err))
 		}
 	}

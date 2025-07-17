@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"wox/plugin"
+	"wox/setting"
 	"wox/setting/definition"
 	"wox/ui/dto"
 	"wox/util"
@@ -240,16 +241,25 @@ func convertPluginDto(ctx context.Context, pluginDto dto.PluginDto, pluginInstan
 			}
 		}
 
-		var definitionSettings = util.NewHashMap[string, string]()
+		var nonDynamicSettings = make(map[string]string)
 		for _, item := range pluginDto.SettingDefinitions {
 			if item.Value != nil {
 				settingValue := pluginInstance.API.GetSetting(ctx, item.Value.GetKey())
-				definitionSettings.Store(item.Value.GetKey(), settingValue)
+				nonDynamicSettings[item.Value.GetKey()] = settingValue
 			}
 		}
-		pluginDto.Setting = *pluginInstance.Setting
-		//only return user pre-defined settings
-		pluginDto.Setting.Settings = definitionSettings
+		pluginDto.Setting = dto.PluginSettingDto{
+			Disabled:        pluginInstance.Setting.Disabled.Get(),
+			TriggerKeywords: pluginInstance.Setting.TriggerKeywords.Get(),
+			QueryCommands: lo.Map(pluginInstance.Setting.QueryCommands.Get(), func(item setting.PluginQueryCommand, _ int) dto.PluginQueryCommandDto {
+				return dto.PluginQueryCommandDto{
+					Command:     item.Command,
+					Description: item.Description,
+				}
+			}),
+			//only return user pre-defined settings
+			Settings: nonDynamicSettings,
+		}
 		pluginDto.Features = pluginInstance.Metadata.Features
 		pluginDto.TriggerKeywords = pluginInstance.GetTriggerKeywords()
 	}

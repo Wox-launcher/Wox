@@ -16,7 +16,6 @@ var logger *util.Log
 
 type Manager struct {
 	woxSetting *WoxSetting
-	store      *Store
 }
 
 func GetSettingManager() *Manager {
@@ -28,18 +27,14 @@ func GetSettingManager() *Manager {
 			panic("database not initialized")
 		}
 
-		store := NewStore(db)
-		managerInstance = &Manager{
-			store: store,
-		}
+		store := NewWoxSettingStore(db)
+		managerInstance = &Manager{}
 		managerInstance.woxSetting = NewWoxSetting(store)
 	})
 	return managerInstance
 }
 
 func (m *Manager) Init(ctx context.Context) error {
-	// Initialization is now handled by GetSettingManager and lazy-loading in Value[T].
-	// We just need to kick off any background processes.
 	m.StartAutoBackup(ctx)
 
 	if err := m.checkAutostart(ctx); err != nil {
@@ -96,39 +91,10 @@ func (m *Manager) GetLatestQueryHistory(ctx context.Context, limit int) []common
 	return result
 }
 
-func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, pluginName string, defaultSettings map[string]string) (*PluginSetting, error) {
-	pluginSetting := &PluginSetting{
-		Name:     pluginName,
-		Settings: util.NewHashMap[string, string](),
-	}
-
-	// Load default settings first
-	for key, value := range defaultSettings {
-		pluginSetting.Settings.Store(key, value)
-	}
-
-	actualSettings, err := m.store.GetAllPluginSettings(pluginId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load plugin settings: %w", err)
-	}
-
-	// Override defaults with actual settings
-	for key, value := range actualSettings {
-		pluginSetting.Settings.Store(key, value)
-	}
-
+func (m *Manager) LoadPluginSetting(ctx context.Context, pluginId string, defaultSettings map[string]string) (*PluginSetting, error) {
+	pluginSettingStore := NewPluginSettingStore(database.GetDB(), pluginId)
+	pluginSetting := NewPluginSetting(pluginSettingStore, defaultSettings)
 	return pluginSetting, nil
-}
-
-func (m *Manager) SavePluginSetting(ctx context.Context, pluginId string, pluginSetting *PluginSetting) error {
-	settings := make(map[string]string)
-
-	pluginSetting.Settings.Range(func(key string, value string) bool {
-		settings[key] = value
-		return true
-	})
-
-	return m.store.SetAllPluginSettings(pluginId, settings)
 }
 
 func (m *Manager) AddActionedResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string, query string) {

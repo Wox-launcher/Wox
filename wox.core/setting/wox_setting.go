@@ -14,19 +14,19 @@ type WoxSetting struct {
 	EnableAutostart      *PlatformValue[bool]
 	MainHotkey           *PlatformValue[string]
 	SelectionHotkey      *PlatformValue[string]
-	UsePinYin            *Value[bool]
-	SwitchInputMethodABC *Value[bool]
-	HideOnStart          *Value[bool]
-	HideOnLostFocus      *Value[bool]
-	ShowTray             *Value[bool]
-	LangCode             *Value[i18n.LangCode]
+	UsePinYin            *WoxSettingValue[bool]
+	SwitchInputMethodABC *WoxSettingValue[bool]
+	HideOnStart          *WoxSettingValue[bool]
+	HideOnLostFocus      *WoxSettingValue[bool]
+	ShowTray             *WoxSettingValue[bool]
+	LangCode             *WoxSettingValue[i18n.LangCode]
 	QueryHotkeys         *PlatformValue[[]QueryHotkey]
-	QueryShortcuts       *Value[[]QueryShortcut]
-	LastQueryMode        *Value[LastQueryMode]
-	ShowPosition         *Value[PositionType]
-	AIProviders          *Value[[]AIProvider]
-	EnableAutoBackup     *Value[bool]
-	EnableAutoUpdate     *Value[bool]
+	QueryShortcuts       *WoxSettingValue[[]QueryShortcut]
+	LastQueryMode        *WoxSettingValue[LastQueryMode]
+	ShowPosition         *WoxSettingValue[PositionType]
+	AIProviders          *WoxSettingValue[[]AIProvider]
+	EnableAutoBackup     *WoxSettingValue[bool]
+	EnableAutoUpdate     *WoxSettingValue[bool]
 	CustomPythonPath     *PlatformValue[string]
 	CustomNodejsPath     *PlatformValue[string]
 
@@ -35,18 +35,18 @@ type WoxSetting struct {
 	HttpProxyUrl     *PlatformValue[string]
 
 	// UI related
-	AppWidth       *Value[int]
-	MaxResultCount *Value[int]
-	ThemeId        *Value[string]
+	AppWidth       *WoxSettingValue[int]
+	MaxResultCount *WoxSettingValue[int]
+	ThemeId        *WoxSettingValue[string]
 
 	// Window position for last location mode
-	LastWindowX *Value[int]
-	LastWindowY *Value[int]
+	LastWindowX *WoxSettingValue[int]
+	LastWindowY *WoxSettingValue[int]
 
 	// Data that was previously in WoxAppData
-	QueryHistories  *Value[[]QueryHistory]
-	FavoriteResults *Value[*util.HashMap[ResultHash, bool]]
-	ActionedResults *Value[*util.HashMap[ResultHash, []ActionedResult]]
+	QueryHistories  *WoxSettingValue[[]QueryHistory]
+	FavoriteResults *WoxSettingValue[*util.HashMap[ResultHash, bool]]
+	ActionedResults *WoxSettingValue[*util.HashMap[ResultHash, []ActionedResult]]
 }
 
 type LastQueryMode = string
@@ -113,7 +113,7 @@ type QueryHistory struct {
 	Timestamp int64
 }
 
-func NewWoxSetting(store WoxSettingStore) *WoxSetting {
+func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 	usePinYin := false
 	defaultLangCode := i18n.LangCodeEnUs
 	switchInputMethodABC := false
@@ -126,33 +126,33 @@ func NewWoxSetting(store WoxSettingStore) *WoxSetting {
 	return &WoxSetting{
 		MainHotkey:           NewPlatformValue(store, "MainHotkey", "alt+space", "option+space", "ctrl+space"),
 		SelectionHotkey:      NewPlatformValue(store, "SelectionHotkey", "ctrl+alt+space", "command+option+space", "ctrl+shift+j"),
-		UsePinYin:            NewValue(store, "UsePinYin", usePinYin),
-		SwitchInputMethodABC: NewValue(store, "SwitchInputMethodABC", switchInputMethodABC),
-		ShowTray:             NewValue(store, "ShowTray", true),
-		HideOnLostFocus:      NewValue(store, "HideOnLostFocus", true),
-		HideOnStart:          NewValue(store, "HideOnStart", false),
-		LangCode: NewValueWithValidator(store, "LangCode", defaultLangCode, func(code i18n.LangCode) bool {
+		UsePinYin:            NewWoxSettingValue(store, "UsePinYin", usePinYin),
+		SwitchInputMethodABC: NewWoxSettingValue(store, "SwitchInputMethodABC", switchInputMethodABC),
+		ShowTray:             NewWoxSettingValue(store, "ShowTray", true),
+		HideOnLostFocus:      NewWoxSettingValue(store, "HideOnLostFocus", true),
+		HideOnStart:          NewWoxSettingValue(store, "HideOnStart", false),
+		LangCode: NewWoxSettingValueWithValidator(store, "LangCode", defaultLangCode, func(code i18n.LangCode) bool {
 			return i18n.IsSupportedLangCode(string(code))
 		}),
-		LastQueryMode:    NewValue(store, "LastQueryMode", LastQueryModeEmpty),
-		ShowPosition:     NewValue(store, "ShowPosition", PositionTypeMouseScreen),
-		AppWidth:         NewValue(store, "AppWidth", 800),
-		MaxResultCount:   NewValue(store, "MaxResultCount", 10),
-		ThemeId:          NewValue(store, "ThemeId", DefaultThemeId),
+		LastQueryMode:    NewWoxSettingValue(store, "LastQueryMode", LastQueryModeEmpty),
+		ShowPosition:     NewWoxSettingValue(store, "ShowPosition", PositionTypeMouseScreen),
+		AppWidth:         NewWoxSettingValue(store, "AppWidth", 800),
+		MaxResultCount:   NewWoxSettingValue(store, "MaxResultCount", 10),
+		ThemeId:          NewWoxSettingValue(store, "ThemeId", DefaultThemeId),
 		EnableAutostart:  NewPlatformValue(store, "EnableAutostart", false, false, false),
 		HttpProxyEnabled: NewPlatformValue(store, "HttpProxyEnabled", false, false, false),
 		HttpProxyUrl:     NewPlatformValue(store, "HttpProxyUrl", "", "", ""),
 		CustomPythonPath: NewPlatformValue(store, "CustomPythonPath", "", "", ""),
 		CustomNodejsPath: NewPlatformValue(store, "CustomNodejsPath", "", "", ""),
-		EnableAutoBackup: NewValue(store, "EnableAutoBackup", true),
-		EnableAutoUpdate: NewValue(store, "EnableAutoUpdate", true),
-		LastWindowX:      NewValue(store, "LastWindowX", -1),
-		LastWindowY:      NewValue(store, "LastWindowY", -1),
+		EnableAutoBackup: NewWoxSettingValue(store, "EnableAutoBackup", true),
+		EnableAutoUpdate: NewWoxSettingValue(store, "EnableAutoUpdate", true),
+		LastWindowX:      NewWoxSettingValue(store, "LastWindowX", -1),
+		LastWindowY:      NewWoxSettingValue(store, "LastWindowY", -1),
 		QueryHotkeys:     NewPlatformValue(store, "QueryHotkeys", []QueryHotkey{}, []QueryHotkey{}, []QueryHotkey{}),
-		QueryShortcuts:   NewValue(store, "QueryShortcuts", []QueryShortcut{}),
-		AIProviders:      NewValue(store, "AIProviders", []AIProvider{}),
-		QueryHistories:   NewValue(store, "QueryHistories", []QueryHistory{}),
-		FavoriteResults:  NewValue(store, "FavoriteResults", util.NewHashMap[ResultHash, bool]()),
-		ActionedResults:  NewValue(store, "ActionedResults", util.NewHashMap[ResultHash, []ActionedResult]()),
+		QueryShortcuts:   NewWoxSettingValue(store, "QueryShortcuts", []QueryShortcut{}),
+		AIProviders:      NewWoxSettingValue(store, "AIProviders", []AIProvider{}),
+		QueryHistories:   NewWoxSettingValue(store, "QueryHistories", []QueryHistory{}),
+		FavoriteResults:  NewWoxSettingValue(store, "FavoriteResults", util.NewHashMap[ResultHash, bool]()),
+		ActionedResults:  NewWoxSettingValue(store, "ActionedResults", util.NewHashMap[ResultHash, []ActionedResult]()),
 	}
 }

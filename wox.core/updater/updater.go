@@ -13,6 +13,7 @@ import (
 	"time"
 	"wox/i18n"
 	"wox/setting"
+
 	"wox/util"
 
 	"github.com/Masterminds/semver/v3"

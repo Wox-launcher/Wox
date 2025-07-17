@@ -281,7 +281,7 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 		DevPluginDirectory:    metadata.DevPluginDirectory,
 	}
 	instance.API = NewAPI(instance)
-	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Metadata.Id, metadata.Metadata.Name, metadata.Metadata.SettingDefinitions.ToMap())
+	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Metadata.Id, metadata.Metadata.SettingDefinitions.ToMap())
 	if settingErr != nil {
 		instance.API.Log(ctx, LogLevelError, fmt.Errorf("[SYS] failed to load plugin[%s] setting: %w", metadata.Metadata.Name, settingErr).Error())
 		return settingErr
@@ -290,7 +290,7 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 
 	m.instances = append(m.instances, instance)
 
-	if pluginSetting.Disabled {
+	if pluginSetting.Disabled.Get() {
 		logger.Info(ctx, fmt.Errorf("[%s HOST] plugin is disabled by user, skip init: %s", host.GetRuntime(ctx), metadata.Metadata.Name).Error())
 		instance.API.Log(ctx, LogLevelWarning, fmt.Sprintf("[SYS] plugin is disabled by user, skip init: %s", metadata.Metadata.Name))
 		return nil
@@ -357,15 +357,12 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 			instance.API = NewAPI(instance)
 
 			startTimestamp := util.GetSystemTimestamp()
-			pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.Name, metadata.SettingDefinitions.ToMap())
+			pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.SettingDefinitions.ToMap())
 			if settingErr != nil {
-				errMsg := fmt.Sprintf("failed to load system plugin[%s] setting, use default plugin setting. err: %s", metadata.Name, settingErr.Error())
-				logger.Error(ctx, errMsg)
-				instance.API.Log(ctx, LogLevelError, fmt.Sprintf("[SYS] %s", errMsg))
-				pluginSetting = &setting.PluginSetting{
-					Settings: util.NewHashMap[string, string](),
-				}
+				logger.Error(ctx, fmt.Sprintf("failed to load system plugin[%s] setting, use default plugin setting. err: %s", metadata.Name, settingErr.Error()))
+				return
 			}
+
 			instance.Setting = pluginSetting
 			if util.GetSystemTimestamp()-startTimestamp > 100 {
 				logger.Warn(ctx, fmt.Sprintf("load system plugin[%s] setting too slow, cost %d ms", metadata.Name, util.GetSystemTimestamp()-startTimestamp))
@@ -695,7 +692,7 @@ func (m *Manager) GetPluginInstances() []*Instance {
 }
 
 func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance, query Query) bool {
-	if pluginInstance.Setting.Disabled {
+	if pluginInstance.Setting.Disabled.Get() {
 		return false
 	}
 

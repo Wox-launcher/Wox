@@ -3,7 +3,6 @@ package dto
 import (
 	"wox/common"
 	"wox/plugin"
-	"wox/setting"
 	"wox/setting/definition"
 )
 
@@ -23,10 +22,22 @@ type PluginDto struct {
 	Commands           []plugin.MetadataCommand
 	SupportedOS        []string
 	SettingDefinitions definition.PluginSettingDefinitions // only available when plugin is installed
-	Setting            setting.PluginSetting               // only available when plugin is installed
+	Setting            PluginSettingDto                    // only available when plugin is installed
 	Features           []plugin.MetadataFeature            // only available when plugin is installed
 	IsSystem           bool
 	IsDev              bool
 	IsInstalled        bool
 	IsDisable          bool // only available when plugin is installed
+}
+
+type PluginSettingDto struct {
+	Disabled        bool
+	TriggerKeywords []string
+	QueryCommands   []PluginQueryCommandDto
+	Settings        map[string]string
+}
+
+type PluginQueryCommandDto struct {
+	Command     string
+	Description string
 }
