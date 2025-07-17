@@ -41,7 +41,7 @@ func (m *Manager) StartAutoBackup(ctx context.Context) {
 				continue
 			}
 
-			if !settings.EnableAutoBackup {
+			if !settings.EnableAutoBackup.Get() {
 				logger.Info(ctx, "auto backup is disabled, skipping")
 				continue
 			}

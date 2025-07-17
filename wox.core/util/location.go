@@ -14,8 +14,13 @@ var locationInstance *Location
 var locationOnce sync.Once
 
 type Location struct {
-	woxDataDirectory              string
-	userDataDirectory             string
+	// wox data directory is the directory that contains all wox data, including logs, hosts, etc.
+	woxDataDirectory string
+
+	// user data directory is the directory that contains all user data, including plugins, settings, etc.
+	// user may change the user data directory to another location, E.g. icloud, google drive, etc.
+	userDataDirectory string
+
 	userDataDirectoryShortcutPath string // A file named .wox.location that contains the user data directory path
 }
 

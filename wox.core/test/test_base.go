@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 	"wox/common"
+	"wox/database"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/resource"
@@ -226,6 +227,12 @@ func ensureServicesInitialized(t *testing.T) {
 		err = resource.Extract(ctx)
 		if err != nil {
 			t.Fatalf("Failed to extract resources: %v", err)
+		}
+
+		// Initialize database
+		err = database.Init(ctx)
+		if err != nil {
+			t.Fatalf("Failed to initialize database: %v", err)
 		}
 
 		// Initialize settings

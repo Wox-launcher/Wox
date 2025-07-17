@@ -490,20 +490,30 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(util.NewTraceContext())
 
 	var settingDto dto.WoxSettingDto
-	copyErr := copier.Copy(&settingDto, &woxSetting)
-	if copyErr != nil {
-		writeErrorResponse(w, copyErr.Error())
-		return
-	}
-
 	settingDto.EnableAutostart = woxSetting.EnableAutostart.Get()
 	settingDto.MainHotkey = woxSetting.MainHotkey.Get()
 	settingDto.SelectionHotkey = woxSetting.SelectionHotkey.Get()
+	settingDto.UsePinYin = woxSetting.UsePinYin.Get()
+	settingDto.SwitchInputMethodABC = woxSetting.SwitchInputMethodABC.Get()
+	settingDto.HideOnStart = woxSetting.HideOnStart.Get()
+	settingDto.HideOnLostFocus = woxSetting.HideOnLostFocus.Get()
+	settingDto.ShowTray = woxSetting.ShowTray.Get()
+	settingDto.LangCode = woxSetting.LangCode.Get()
 	settingDto.QueryHotkeys = woxSetting.QueryHotkeys.Get()
+	settingDto.QueryShortcuts = woxSetting.QueryShortcuts.Get()
+	settingDto.LastQueryMode = woxSetting.LastQueryMode.Get()
+	settingDto.AIProviders = woxSetting.AIProviders.Get()
 	settingDto.HttpProxyEnabled = woxSetting.HttpProxyEnabled.Get()
 	settingDto.HttpProxyUrl = woxSetting.HttpProxyUrl.Get()
+	settingDto.ShowPosition = woxSetting.ShowPosition.Get()
+	settingDto.EnableAutoBackup = woxSetting.EnableAutoBackup.Get()
+	settingDto.EnableAutoUpdate = woxSetting.EnableAutoUpdate.Get()
 	settingDto.CustomPythonPath = woxSetting.CustomPythonPath.Get()
 	settingDto.CustomNodejsPath = woxSetting.CustomNodejsPath.Get()
+
+	settingDto.AppWidth = woxSetting.AppWidth.Get()
+	settingDto.MaxResultCount = woxSetting.MaxResultCount.Get()
+	settingDto.ThemeId = woxSetting.ThemeId.Get()
 
 	writeSuccessResponse(w, settingDto)
 }
@@ -511,7 +521,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 	type keyValuePair struct {
 		Key   string
-		Value string
+		Value any
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -522,9 +532,52 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updateErr := setting.GetSettingManager().UpdateWoxSetting(util.NewTraceContext(), kv.Key, kv.Value)
-	if updateErr != nil {
-		writeErrorResponse(w, updateErr.Error())
+	ctx := util.NewTraceContext()
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+
+	switch kv.Key {
+	case "EnableAutostart":
+		woxSetting.EnableAutostart.Set(kv.Value.(bool))
+	case "MainHotkey":
+		woxSetting.MainHotkey.Set(kv.Value.(string))
+	case "SelectionHotkey":
+		woxSetting.SelectionHotkey.Set(kv.Value.(string))
+	case "UsePinYin":
+		woxSetting.UsePinYin.Set(kv.Value.(bool))
+	case "SwitchInputMethodABC":
+		woxSetting.SwitchInputMethodABC.Set(kv.Value.(bool))
+	case "HideOnStart":
+		woxSetting.HideOnStart.Set(kv.Value.(bool))
+	case "HideOnLostFocus":
+		woxSetting.HideOnLostFocus.Set(kv.Value.(bool))
+	case "ShowTray":
+		woxSetting.ShowTray.Set(kv.Value.(bool))
+	case "LangCode":
+		woxSetting.LangCode.Set(i18n.LangCode(kv.Value.(string)))
+	case "LastQueryMode":
+		woxSetting.LastQueryMode.Set(setting.LastQueryMode(kv.Value.(string)))
+	case "ShowPosition":
+		woxSetting.ShowPosition.Set(setting.PositionType(kv.Value.(string)))
+	case "EnableAutoBackup":
+		woxSetting.EnableAutoBackup.Set(kv.Value.(bool))
+	case "EnableAutoUpdate":
+		woxSetting.EnableAutoUpdate.Set(kv.Value.(bool))
+	case "CustomPythonPath":
+		woxSetting.CustomPythonPath.Set(kv.Value.(string))
+	case "CustomNodejsPath":
+		woxSetting.CustomNodejsPath.Set(kv.Value.(string))
+	case "HttpProxyEnabled":
+		woxSetting.HttpProxyEnabled.Set(kv.Value.(bool))
+	case "HttpProxyUrl":
+		woxSetting.HttpProxyUrl.Set(kv.Value.(string))
+	case "AppWidth":
+		woxSetting.AppWidth.Set(int(kv.Value.(float64)))
+	case "MaxResultCount":
+		woxSetting.MaxResultCount.Set(int(kv.Value.(float64)))
+	case "ThemeId":
+		woxSetting.ThemeId.Set(kv.Value.(string))
+	default:
+		writeErrorResponse(w, "unknown setting key: "+kv.Key)
 		return
 	}
 
@@ -611,12 +664,9 @@ func handleSaveWindowPosition(w http.ResponseWriter, r *http.Request) {
 
 	logger.Info(ctx, fmt.Sprintf("Received window position save request: x=%d, y=%d", pos.X, pos.Y))
 
-	saveErr := setting.GetSettingManager().SaveWindowPosition(ctx, pos.X, pos.Y)
-	if saveErr != nil {
-		logger.Error(ctx, fmt.Sprintf("Failed to save window position: %s", saveErr.Error()))
-		writeErrorResponse(w, saveErr.Error())
-		return
-	}
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	woxSetting.LastWindowX.Set(pos.X)
+	woxSetting.LastWindowY.Set(pos.Y)
 
 	logger.Info(ctx, fmt.Sprintf("Window position saved successfully: x=%d, y=%d", pos.X, pos.Y))
 	writeSuccessResponse(w, "")
@@ -701,7 +751,7 @@ func handleOnUIReady(w http.ResponseWriter, r *http.Request) {
 func handleOnFocusLost(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if woxSetting.HideOnLostFocus {
+	if woxSetting.HideOnLostFocus.Get() {
 		GetUIManager().GetUI(ctx).HideApp(ctx)
 	}
 	writeSuccessResponse(w, "")
@@ -883,7 +933,7 @@ func handleAIModels(w http.ResponseWriter, r *http.Request) {
 
 	var results = []common.Model{}
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	for _, providerSetting := range woxSetting.AIProviders {
+	for _, providerSetting := range woxSetting.AIProviders.Get() {
 		provider, err := ai.NewProvider(ctx, providerSetting)
 		if err != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to new ai provider: %s", err.Error()))

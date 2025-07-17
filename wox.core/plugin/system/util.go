@@ -36,15 +36,15 @@ var windowIconCache = util.NewHashMap[string, common.WoxImage]()
 
 func IsStringMatchScore(ctx context.Context, term string, subTerm string) (bool, int64) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if woxSetting.UsePinYin {
+	if woxSetting.UsePinYin.Get() {
 		key := term + subTerm
 		if result, ok := pinyinMatchCache.Load(key); ok {
 			return result.match, result.score
 		}
 	}
 
-	match, score := util.IsStringMatchScore(term, subTerm, woxSetting.UsePinYin)
-	if woxSetting.UsePinYin {
+	match, score := util.IsStringMatchScore(term, subTerm, woxSetting.UsePinYin.Get())
+	if woxSetting.UsePinYin.Get() {
 		key := term + subTerm
 		pinyinMatchCache.Store(key, cacheResult{match, score})
 	}

@@ -83,7 +83,7 @@ func CheckForUpdates(ctx context.Context) {
 	util.GetLogger().Info(ctx, "start checking for updates")
 
 	setting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if setting != nil && !setting.EnableAutoUpdate {
+	if setting != nil && !setting.EnableAutoUpdate.Get() {
 		util.GetLogger().Info(ctx, "auto update is disabled, skipping")
 		currentUpdateInfo.Status = UpdateStatusNone
 		currentUpdateInfo.HasUpdate = false

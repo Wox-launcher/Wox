@@ -51,7 +51,7 @@ func (i *QueryHistoryPlugin) Init(ctx context.Context, initParams plugin.InitPar
 }
 
 func (i *QueryHistoryPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
-	queryHistories := setting.GetSettingManager().GetWoxAppData(ctx).QueryHistories
+	queryHistories := setting.GetSettingManager().GetWoxSetting(ctx).QueryHistories.Get()
 
 	maxResultCount := 0
 	for k := len(queryHistories) - 1; k >= 0; k-- {

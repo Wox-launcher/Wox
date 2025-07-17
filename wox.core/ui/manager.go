@@ -327,7 +327,7 @@ func (m *Manager) StartUIApp(ctx context.Context) error {
 
 func (m *Manager) GetCurrentTheme(ctx context.Context) common.Theme {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if v, ok := m.themes.Load(woxSetting.ThemeId); ok {
+	if v, ok := m.themes.Load(woxSetting.ThemeId.Get()); ok {
 		return v
 	}
 
@@ -413,7 +413,7 @@ func (m *Manager) PostUIReady(ctx context.Context) {
 	m.isUIReadyHandled = true
 
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if !woxSetting.HideOnStart {
+	if !woxSetting.HideOnStart.Get() {
 		m.ui.ShowApp(ctx, common.ShowContext{SelectAll: false})
 	}
 }
@@ -424,7 +424,7 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 
 func (m *Manager) PostOnQueryBoxFocus(ctx context.Context) {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if woxSetting.SwitchInputMethodABC {
+	if woxSetting.SwitchInputMethodABC.Get() {
 		util.GetLogger().Info(ctx, "switch input method to ABC on query box focus")
 		switchErr := ime.SwitchInputMethodABC()
 		if switchErr != nil {
@@ -434,7 +434,7 @@ func (m *Manager) PostOnQueryBoxFocus(ctx context.Context) {
 }
 
 func (m *Manager) PostOnHide(ctx context.Context, query common.PlainQuery) {
-	setting.GetSettingManager().AddQueryHistory(ctx, query)
+	// no-op
 }
 
 func (m *Manager) IsSystemTheme(id string) bool {
@@ -481,21 +481,19 @@ func (m *Manager) HideTray() {
 	tray.RemoveTray()
 }
 
-func (m *Manager) PostSettingUpdate(ctx context.Context, key, value string) {
-	if key == "ShowTray" {
-		if value == "true" {
+func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value any) {
+	switch key {
+	case "ShowTray":
+		if value.(bool) {
 			m.ShowTray()
 		} else {
 			m.HideTray()
 		}
-	}
-	if key == "MainHotkey" {
-		m.RegisterMainHotkey(ctx, value)
-	}
-	if key == "SelectionHotkey" {
-		m.RegisterSelectionHotkey(ctx, value)
-	}
-	if key == "QueryHotkeys" {
+	case "MainHotkey":
+		m.RegisterMainHotkey(ctx, value.(string))
+	case "SelectionHotkey":
+		m.RegisterSelectionHotkey(ctx, value.(string))
+	case "QueryHotkeys":
 		// unregister previous hotkeys
 		logger.Info(ctx, "post update query hotkeys, unregister previous query hotkeys")
 		for _, hk := range m.queryHotkeys {
@@ -507,18 +505,15 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key, value string) {
 		for _, queryHotkey := range queryHotkeys {
 			m.RegisterQueryHotkey(ctx, queryHotkey)
 		}
-	}
-	if key == "EnableAutostart" {
-		enabled := value == "true"
+	case "EnableAutostart":
+		enabled := value.(bool)
 		err := autostart.SetAutostart(ctx, enabled)
 		if err != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to set autostart: %s", err.Error()))
 		}
-	}
-	if key == "EnableAutoUpdate" {
+	case "EnableAutoUpdate":
 		updater.CheckForUpdates(ctx)
-	}
-	if key == "AIProviders" {
+	case "AIProviders":
 		plugin.GetPluginManager().GetUI().ReloadChatResources(ctx, "models")
 	}
 }

@@ -179,7 +179,7 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 			}
 
 			for _, metadata := range metaDataList {
-				if strings.ToUpper(metadata.Metadata.Runtime) != strings.ToUpper(string(host.GetRuntime(newCtx))) {
+				if !strings.EqualFold(metadata.Metadata.Runtime, string(host.GetRuntime(newCtx))) {
 					continue
 				}
 
@@ -281,7 +281,7 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 		DevPluginDirectory:    metadata.DevPluginDirectory,
 	}
 	instance.API = NewAPI(instance)
-	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Metadata.Id, metadata.Metadata.Name, metadata.Metadata.SettingDefinitions)
+	pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Metadata.Id, metadata.Metadata.Name, metadata.Metadata.SettingDefinitions.ToMap())
 	if settingErr != nil {
 		instance.API.Log(ctx, LogLevelError, fmt.Errorf("[SYS] failed to load plugin[%s] setting: %w", metadata.Metadata.Name, settingErr).Error())
 		return settingErr
@@ -357,7 +357,7 @@ func (m *Manager) loadSystemPlugins(ctx context.Context) {
 			instance.API = NewAPI(instance)
 
 			startTimestamp := util.GetSystemTimestamp()
-			pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.Name, metadata.SettingDefinitions)
+			pluginSetting, settingErr := setting.GetSettingManager().LoadPluginSetting(ctx, metadata.Id, metadata.Name, metadata.SettingDefinitions.ToMap())
 			if settingErr != nil {
 				errMsg := fmt.Sprintf("failed to load system plugin[%s] setting, use default plugin setting. err: %s", metadata.Name, settingErr.Error())
 				logger.Error(ctx, errMsg)
@@ -760,7 +760,7 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 	if query.Type == QueryTypeSelection && query.Search != "" {
 		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 		results = lo.Filter(results, func(item QueryResult, _ int) bool {
-			match, _ := util.IsStringMatchScore(item.Title, query.Search, woxSetting.UsePinYin)
+			match, _ := util.IsStringMatchScore(item.Title, query.Search, woxSetting.UsePinYin.Get())
 			return match
 		})
 	}
@@ -995,8 +995,8 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, sub
 	var score int64 = 0
 
 	resultHash := setting.NewResultHash(pluginId, title, subTitle)
-	woxAppData := setting.GetSettingManager().GetWoxAppData(ctx)
-	actionResults, ok := woxAppData.ActionedResults.Load(resultHash)
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	actionResults, ok := woxSetting.ActionedResults.Get().Load(resultHash)
 	if !ok {
 		return score
 	}
@@ -1294,9 +1294,9 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 	if plainQuery.QueryType == QueryTypeInput {
 		newQuery := plainQuery.QueryText
 		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-		if len(woxSetting.QueryShortcuts) > 0 {
+		if len(woxSetting.QueryShortcuts.Get()) > 0 {
 			originQuery := plainQuery.QueryText
-			expandedQuery := m.expandQueryShortcut(ctx, plainQuery.QueryText, woxSetting.QueryShortcuts)
+			expandedQuery := m.expandQueryShortcut(ctx, plainQuery.QueryText, woxSetting.QueryShortcuts.Get())
 			if originQuery != expandedQuery {
 				logger.Info(ctx, fmt.Sprintf("expand query shortcut: %s -> %s", originQuery, expandedQuery))
 				newQuery = expandedQuery
@@ -1578,7 +1578,7 @@ func (m *Manager) GetAIProvider(ctx context.Context, provider common.ProviderNam
 	}
 
 	//check if provider has setting
-	aiProviderSettings := setting.GetSettingManager().GetWoxSetting(ctx).AIProviders
+	aiProviderSettings := setting.GetSettingManager().GetWoxSetting(ctx).AIProviders.Get()
 	providerSetting, providerSettingExist := lo.Find(aiProviderSettings, func(item setting.AIProvider) bool {
 		return item.Name == provider
 	})

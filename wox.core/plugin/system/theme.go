@@ -120,7 +120,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 					},
 				})
 			}
-			currentThemeId := setting.GetSettingManager().GetWoxSetting(ctx).ThemeId
+			currentThemeId := setting.GetSettingManager().GetWoxSetting(ctx).ThemeId.Get()
 			if currentThemeId == theme.ThemeId {
 				result.Group = "Current"
 				result.GroupScore = 100

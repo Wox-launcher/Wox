@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"wox/database"
+	"wox/migration"
+
 	"runtime"
 	"strconv"
 	"strings"
@@ -51,10 +54,20 @@ func main() {
 
 	ctx := util.NewTraceContext()
 	util.GetLogger().Info(ctx, "------------------------------")
-	util.GetLogger().Info(ctx, "Wox starting")
+	util.GetLogger().Info(ctx, fmt.Sprintf("Wox starting: %s", updater.CURRENT_VERSION))
 	util.GetLogger().Info(ctx, fmt.Sprintf("golang version: %s", strings.ReplaceAll(runtime.Version(), "go", "")))
 	util.GetLogger().Info(ctx, fmt.Sprintf("wox data location: %s", util.GetLocation().GetWoxDataDirectory()))
 	util.GetLogger().Info(ctx, fmt.Sprintf("user data location: %s", util.GetLocation().GetUserDataDirectory()))
+
+	if err := database.Init(ctx); err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize database: %s", err.Error()))
+		return
+	}
+
+	if err := migration.Run(ctx); err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to run migration: %s", err.Error()))
+		// In some cases, we might want to exit if migration fails, but for now we just log it.
+	}
 
 	serverPort := 34987
 	if util.IsProd() {
@@ -120,11 +133,15 @@ func main() {
 		return
 	}
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	util.UpdateHTTPProxy(ctx, woxSetting.HttpProxyUrl.Get())
 
-	langErr := i18n.GetI18nManager().UpdateLang(ctx, woxSetting.LangCode)
+	// update proxy
+	if woxSetting.HttpProxyEnabled.Get() {
+		util.UpdateHTTPProxy(ctx, woxSetting.HttpProxyUrl.Get())
+	}
+
+	langErr := i18n.GetI18nManager().UpdateLang(ctx, woxSetting.LangCode.Get())
 	if langErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize lang(%s): %s", woxSetting.LangCode, langErr.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize lang(%s): %s", woxSetting.LangCode.Get(), langErr.Error()))
 		return
 	}
 
@@ -134,7 +151,7 @@ func main() {
 		return
 	}
 
-	if woxSetting.ShowTray {
+	if woxSetting.ShowTray.Get() {
 		ui.GetUIManager().ShowTray()
 	}
 

@@ -50,8 +50,7 @@ func (u *uiImpl) GetServerPort(ctx context.Context) int {
 func (u *uiImpl) ChangeTheme(ctx context.Context, theme common.Theme) {
 	logger.Info(ctx, fmt.Sprintf("change theme: %s", theme.ThemeName))
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	woxSetting.ThemeId = theme.ThemeId
-	setting.GetSettingManager().SaveWoxSetting(ctx)
+	woxSetting.ThemeId.Set(theme.ThemeId)
 	u.invokeWebsocketMethod(ctx, "ChangeTheme", theme)
 }
 
@@ -182,21 +181,21 @@ func getShowAppParams(ctx context.Context, showContext common.ShowContext) map[s
 	var position Position
 
 	// Now we can directly use the ShowPosition as a PositionType
-	switch woxSetting.ShowPosition {
+	switch woxSetting.ShowPosition.Get() {
 	case setting.PositionTypeActiveScreen:
-		position = NewActiveScreenPosition(woxSetting.AppWidth)
+		position = NewActiveScreenPosition(woxSetting.AppWidth.Get())
 	case setting.PositionTypeLastLocation:
 		// Use saved window position if available, otherwise use mouse screen position as fallback
-		if woxSetting.LastWindowX != -1 && woxSetting.LastWindowY != -1 {
-			logger.Info(ctx, fmt.Sprintf("Using saved window position: x=%d, y=%d", woxSetting.LastWindowX, woxSetting.LastWindowY))
-			position = NewLastLocationPosition(woxSetting.LastWindowX, woxSetting.LastWindowY)
+		if woxSetting.LastWindowX.Get() != -1 && woxSetting.LastWindowY.Get() != -1 {
+			logger.Info(ctx, fmt.Sprintf("Using saved window position: x=%d, y=%d", woxSetting.LastWindowX.Get(), woxSetting.LastWindowY.Get()))
+			position = NewLastLocationPosition(woxSetting.LastWindowX.Get(), woxSetting.LastWindowY.Get())
 		} else {
 			logger.Info(ctx, "No saved window position, using mouse screen position as fallback")
 			// No saved position, fallback to mouse screen position
-			position = NewMouseScreenPosition(woxSetting.AppWidth)
+			position = NewMouseScreenPosition(woxSetting.AppWidth.Get())
 		}
 	default: // Default to mouse screen
-		position = NewMouseScreenPosition(woxSetting.AppWidth)
+		position = NewMouseScreenPosition(woxSetting.AppWidth.Get())
 	}
 
 	return map[string]any{
@@ -204,7 +203,7 @@ func getShowAppParams(ctx context.Context, showContext common.ShowContext) map[s
 		"AutoFocusToChatInput": showContext.AutoFocusToChatInput,
 		"Position":             position,
 		"QueryHistories":       setting.GetSettingManager().GetLatestQueryHistory(ctx, 10),
-		"LastQueryMode":        woxSetting.LastQueryMode,
+		"LastQueryMode":        woxSetting.LastQueryMode.Get(),
 	}
 }
 

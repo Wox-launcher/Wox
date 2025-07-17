@@ -2,6 +2,7 @@ package definition
 
 import (
 	"context"
+
 	"github.com/google/uuid"
 )
 
@@ -24,5 +25,4 @@ func (p *PluginSettingValueHead) GetDefaultValue() string {
 }
 
 func (p *PluginSettingValueHead) Translate(translator func(ctx context.Context, key string) string) {
-	return
 }

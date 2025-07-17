@@ -132,6 +132,16 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 
 type PluginSettingDefinitions []PluginSettingDefinitionItem
 
+func (c PluginSettingDefinitions) ToMap() map[string]string {
+	m := make(map[string]string)
+	for _, item := range c {
+		if item.Value != nil {
+			m[item.Value.GetKey()] = item.Value.GetDefaultValue()
+		}
+	}
+	return m
+}
+
 func (c PluginSettingDefinitions) GetDefaultValue(key string) (string, bool) {
 	for _, item := range c {
 		if item.Value.GetKey() == key {

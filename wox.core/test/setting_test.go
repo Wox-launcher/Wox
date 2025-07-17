@@ -343,21 +343,19 @@ func (suite *ConfigBlackboxTestSuite) validateLoadedWoxSetting(t *testing.T, wox
 		return
 	}
 
-	defaultSetting := setting.GetDefaultWoxSetting(context.Background())
-
 	// Check critical fields have reasonable values
 	if expectDefaults {
 		// When expecting defaults, missing fields should be filled with default values
-		if woxSetting.AppWidth == 0 {
+		if woxSetting.AppWidth.Get() == 0 {
 			t.Errorf("AppWidth should have default value, got 0 in test %s", testName)
 		}
-		if woxSetting.MaxResultCount == 0 {
+		if woxSetting.MaxResultCount.Get() == 0 {
 			t.Errorf("MaxResultCount should have default value, got 0 in test %s", testName)
 		}
-		if woxSetting.ThemeId == "" {
+		if woxSetting.ThemeId.Get() == "" {
 			t.Errorf("ThemeId should have default value, got empty string in test %s", testName)
 		}
-		if woxSetting.LangCode == "" {
+		if woxSetting.LangCode.Get() == "" {
 			t.Errorf("LangCode should have default value, got empty string in test %s", testName)
 		}
 		if woxSetting.MainHotkey.Get() == "" {
@@ -367,13 +365,13 @@ func (suite *ConfigBlackboxTestSuite) validateLoadedWoxSetting(t *testing.T, wox
 
 	// Log the loaded values for debugging
 	t.Logf("Loaded setting values for %s:", testName)
-	t.Logf("  AppWidth: %d (default: %d)", woxSetting.AppWidth, defaultSetting.AppWidth)
-	t.Logf("  MaxResultCount: %d (default: %d)", woxSetting.MaxResultCount, defaultSetting.MaxResultCount)
-	t.Logf("  UsePinYin: %t (default: %t)", woxSetting.UsePinYin, defaultSetting.UsePinYin)
-	t.Logf("  ShowTray: %t (default: %t)", woxSetting.ShowTray, defaultSetting.ShowTray)
-	t.Logf("  LangCode: %s (default: %s)", woxSetting.LangCode, defaultSetting.LangCode)
-	t.Logf("  ThemeId: %s (default: %s)", woxSetting.ThemeId, defaultSetting.ThemeId)
-	t.Logf("  MainHotkey: %s (default: %s)", woxSetting.MainHotkey.Get(), defaultSetting.MainHotkey.Get())
+	t.Logf("  AppWidth: %d", woxSetting.AppWidth.Get())
+	t.Logf("  MaxResultCount: %d", woxSetting.MaxResultCount.Get())
+	t.Logf("  UsePinYin: %t", woxSetting.UsePinYin.Get())
+	t.Logf("  ShowTray: %t", woxSetting.ShowTray.Get())
+	t.Logf("  LangCode: %s", woxSetting.LangCode.Get())
+	t.Logf("  ThemeId: %s", woxSetting.ThemeId.Get())
+	t.Logf("  MainHotkey: %s", woxSetting.MainHotkey.Get())
 }
 
 // cleanup cleans up test resources
