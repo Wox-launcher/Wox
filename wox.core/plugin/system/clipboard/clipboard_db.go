@@ -4,14 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 	"path"
 	"strings"
 	"time"
 	"wox/util"
 	"wox/util/clipboard"
 
-	"github.com/disintegration/imaging"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -38,9 +36,39 @@ type ClipboardRecord struct {
 // NewClipboardDB creates a new clipboard database instance
 func NewClipboardDB(ctx context.Context, pluginId string) (*ClipboardDB, error) {
 	dbPath := path.Join(util.GetLocation().GetPluginSettingDirectory(), pluginId+"_clipboard.db")
-	db, err := sql.Open("sqlite3", dbPath)
+
+	// Configure SQLite with proper concurrency settings
+	dsn := dbPath + "?" +
+		"_journal_mode=WAL&" + // Enable WAL mode for better concurrency
+		"_synchronous=NORMAL&" + // Balance between safety and performance
+		"_cache_size=1000&" + // Set cache size
+		"_foreign_keys=true&" + // Enable foreign key constraints
+		"_busy_timeout=5000" // Set busy timeout to 5 seconds
+
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	// Set connection pool settings for better concurrency
+	db.SetMaxOpenConns(10)           // Maximum number of open connections
+	db.SetMaxIdleConns(5)            // Maximum number of idle connections
+	db.SetConnMaxLifetime(time.Hour) // Maximum lifetime of a connection
+
+	// Execute additional PRAGMA statements for optimal concurrency
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",    // Ensure WAL mode is enabled
+		"PRAGMA synchronous=NORMAL",  // Balance safety and performance
+		"PRAGMA cache_size=1000",     // Set cache size
+		"PRAGMA foreign_keys=ON",     // Enable foreign key constraints
+		"PRAGMA temp_store=memory",   // Store temporary tables in memory
+		"PRAGMA mmap_size=268435456", // Set memory-mapped I/O size (256MB)
+	}
+
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma); err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to execute pragma %s: %v", pragma, err))
+		}
 	}
 
 	clipboardDB := &ClipboardDB{db: db}
@@ -49,6 +77,7 @@ func NewClipboardDB(ctx context.Context, pluginId string) (*ClipboardDB, error) 
 		return nil, fmt.Errorf("failed to initialize tables: %w", err)
 	}
 
+	util.GetLogger().Info(ctx, fmt.Sprintf("clipboard database initialized at %s with WAL mode enabled", dbPath))
 	return clipboardDB, nil
 }
 
@@ -131,17 +160,17 @@ func (c *ClipboardDB) Update(ctx context.Context, record ClipboardRecord) error 
 	return err
 }
 
-// SetFavorite updates the favorite status of a record
-func (c *ClipboardDB) SetFavorite(ctx context.Context, id string, isFavorite bool) error {
-	updateSQL := `UPDATE clipboard_history SET is_favorite = ? WHERE id = ?`
-	_, err := c.db.ExecContext(ctx, updateSQL, isFavorite, id)
-	return err
-}
-
 // UpdateTimestamp updates the timestamp of a record (for moving to top)
 func (c *ClipboardDB) UpdateTimestamp(ctx context.Context, id string, timestamp int64) error {
 	updateSQL := `UPDATE clipboard_history SET timestamp = ? WHERE id = ?`
 	_, err := c.db.ExecContext(ctx, updateSQL, timestamp, id)
+	return err
+}
+
+// Delete removes a record by ID
+func (c *ClipboardDB) Delete(ctx context.Context, id string) error {
+	deleteSQL := `DELETE FROM clipboard_history WHERE id = ?`
+	_, err := c.db.ExecContext(ctx, deleteSQL, id)
 	return err
 }
 
@@ -155,24 +184,6 @@ func (c *ClipboardDB) GetRecent(ctx context.Context, limit, offset int) ([]Clipb
 	`
 
 	rows, err := c.db.QueryContext(ctx, querySQL, limit, offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	return c.scanRecords(rows)
-}
-
-// GetFavorites retrieves all favorite records
-func (c *ClipboardDB) GetFavorites(ctx context.Context) ([]ClipboardRecord, error) {
-	querySQL := `
-	SELECT id, type, content, file_path, icon_data, width, height, file_size, timestamp, is_favorite, created_at
-	FROM clipboard_history
-	WHERE is_favorite = TRUE
-	ORDER BY timestamp DESC
-	`
-
-	rows, err := c.db.QueryContext(ctx, querySQL)
 	if err != nil {
 		return nil, err
 	}
@@ -338,99 +349,6 @@ type ClipboardHistory struct {
 	Timestamp  int64  `json:"timestamp"`
 	ImagePath  string `json:"imagePath,omitempty"`
 	IsFavorite bool   `json:"isFavorite,omitempty"`
-}
-
-// migrateLegacyItem migrates a single legacy clipboard item to the database
-func (db *ClipboardDB) migrateLegacyItem(ctx context.Context, item ClipboardHistory) error {
-	// Check if item already exists
-	exists, err := db.itemExists(ctx, item.ID)
-	if err != nil {
-		return fmt.Errorf("failed to check if item exists: %w", err)
-	}
-	if exists {
-		util.GetLogger().Debug(ctx, fmt.Sprintf("Item %s already exists, skipping", item.ID))
-		return nil
-	}
-
-	// Convert legacy type to new type
-	var itemType clipboard.Type
-	switch item.Type {
-	case "text":
-		itemType = clipboard.ClipboardTypeText
-	case "image":
-		itemType = clipboard.ClipboardTypeImage
-	default:
-		itemType = clipboard.ClipboardTypeText
-	}
-
-	// Handle image migration
-	var imagePath string
-	if itemType == clipboard.ClipboardTypeImage && item.ImagePath != "" {
-		// Check if old image file exists
-		if _, err := os.Stat(item.ImagePath); err == nil {
-			// Copy image to new location
-			newImagePath, err := db.copyImageToNewLocation(ctx, item.ImagePath, item.ID)
-			if err != nil {
-				util.GetLogger().Warn(ctx, fmt.Sprintf("Failed to copy image for item %s: %v", item.ID, err))
-				// Continue with text content if image copy fails
-				itemType = clipboard.ClipboardTypeText
-			} else {
-				imagePath = newImagePath
-			}
-		} else {
-			util.GetLogger().Warn(ctx, fmt.Sprintf("Legacy image file not found: %s", item.ImagePath))
-			// Continue with text content if image file is missing
-			itemType = clipboard.ClipboardTypeText
-		}
-	}
-
-	// Insert into database with is_favorite set to true (since we only migrate favorites)
-	query := `INSERT INTO clipboard_history (id, content, type, file_path, timestamp, is_favorite) VALUES (?, ?, ?, ?, ?, ?)`
-	_, err = db.db.ExecContext(ctx, query, item.ID, item.Text, string(itemType), imagePath, item.Timestamp, true)
-	if err != nil {
-		return fmt.Errorf("failed to insert migrated item: %w", err)
-	}
-
-	util.GetLogger().Debug(ctx, fmt.Sprintf("Successfully migrated item %s", item.ID))
-	return nil
-}
-
-// itemExists checks if an item with the given ID already exists in the database
-func (db *ClipboardDB) itemExists(ctx context.Context, id string) (bool, error) {
-	query := `SELECT COUNT(*) FROM clipboard_history WHERE id = ?`
-	var count int
-	err := db.db.QueryRowContext(ctx, query, id).Scan(&count)
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
-}
-
-// copyImageToNewLocation copies an image from the old location to the new temp directory structure
-func (db *ClipboardDB) copyImageToNewLocation(ctx context.Context, oldPath, itemID string) (string, error) {
-	// Create temp directory if it doesn't exist
-	tempDir := path.Join(os.TempDir(), "wox_clipboard")
-	if err := os.MkdirAll(tempDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create temp directory: %w", err)
-	}
-
-	// Generate new filename
-	newFilename := fmt.Sprintf("%s.png", itemID)
-	newPath := path.Join(tempDir, newFilename)
-
-	// Open source image
-	srcImg, err := imaging.Open(oldPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to open source image: %w", err)
-	}
-
-	// Save to new location
-	if err := imaging.Save(srcImg, newPath); err != nil {
-		return "", fmt.Errorf("failed to save image to new location: %w", err)
-	}
-
-	util.GetLogger().Debug(ctx, fmt.Sprintf("Copied image from %s to %s", oldPath, newPath))
-	return newPath, nil
 }
 
 // scanRecords is a helper function to scan multiple records from query results

@@ -2,17 +2,22 @@ package migration
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path"
 	"strings"
+	"time"
 	"wox/common"
 	"wox/database"
 	"wox/i18n"
 	"wox/setting"
 	"wox/util"
 	"wox/util/locale"
+
+	_ "github.com/mattn/go-sqlite3"
+	"gorm.io/gorm"
 )
 
 // This file contains the logic for a one-time migration from the old JSON-based settings
@@ -332,6 +337,235 @@ func Run(ctx context.Context) error {
 		}
 	}
 
+	// Migrate clipboard data
+	if err := migrateClipboardData(ctx, tx); err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to migrate clipboard data: %v", err))
+	}
+
 	util.GetLogger().Info(ctx, "Successfully migrated old configuration to the new database.")
 	return nil
+}
+
+// Clipboard migration structures
+type oldClipboardHistory struct {
+	ID         string `json:"id"`
+	Text       string `json:"text"`
+	Type       string `json:"type"`
+	Timestamp  int64  `json:"timestamp"`
+	ImagePath  string `json:"imagePath,omitempty"`
+	IsFavorite bool   `json:"isFavorite,omitempty"`
+}
+
+type favoriteClipboardItem struct {
+	ID        string  `json:"id"`
+	Type      string  `json:"type"`
+	Content   string  `json:"content"`
+	FilePath  string  `json:"filePath,omitempty"`
+	IconData  *string `json:"iconData,omitempty"`
+	Width     *int    `json:"width,omitempty"`
+	Height    *int    `json:"height,omitempty"`
+	FileSize  *int64  `json:"fileSize,omitempty"`
+	Timestamp int64   `json:"timestamp"`
+	CreatedAt int64   `json:"createdAt"`
+}
+
+type clipboardRecord struct {
+	ID         string
+	Type       string
+	Content    string
+	FilePath   string
+	IconData   *string
+	Width      *int
+	Height     *int
+	FileSize   *int64
+	Timestamp  int64
+	IsFavorite bool
+	CreatedAt  time.Time
+}
+
+// migrateClipboardData migrates clipboard data from old JSON settings and database to new settings storage
+func migrateClipboardData(ctx context.Context, tx *gorm.DB) error {
+	clipboardPluginId := "5f815d98-27f5-488d-a756-c317ea39935b"
+	pluginSettingStore := setting.NewPluginSettingStore(tx, clipboardPluginId)
+
+	var allFavoritesToMigrate []favoriteClipboardItem
+
+	// 1. Migrate from legacy JSON settings
+	var historyJson string
+	err := pluginSettingStore.Get("history", &historyJson)
+	if err == nil && historyJson != "" {
+		var history []oldClipboardHistory
+		unmarshalErr := json.Unmarshal([]byte(historyJson), &history)
+		if unmarshalErr != nil {
+			// Log warning if logger is available
+			if logger := util.GetLogger(); logger != nil {
+				logger.Warn(ctx, fmt.Sprintf("failed to unmarshal legacy clipboard history: %v", unmarshalErr))
+			}
+		} else {
+			// Migrate legacy data from JSON settings
+			for _, item := range history {
+				if item.IsFavorite {
+					// Convert to new favorite format
+					favoriteItem := favoriteClipboardItem{
+						ID:        item.ID,
+						Type:      item.Type,
+						Content:   item.Text,
+						FilePath:  item.ImagePath,
+						Timestamp: item.Timestamp,
+						CreatedAt: item.Timestamp / 1000, // Convert to seconds
+					}
+					allFavoritesToMigrate = append(allFavoritesToMigrate, favoriteItem)
+				}
+			}
+			if logger := util.GetLogger(); logger != nil {
+				logger.Info(ctx, fmt.Sprintf("found %d favorite items in legacy JSON settings", len(allFavoritesToMigrate)))
+			}
+		}
+		// Clear the old history setting
+		pluginSettingStore.Set("history", "")
+	}
+
+	// 2. Migrate existing favorite items from database
+	dbFavorites, err := getFavoritesFromDatabase(ctx, clipboardPluginId)
+	if err != nil {
+		if logger := util.GetLogger(); logger != nil {
+			logger.Warn(ctx, fmt.Sprintf("failed to get database favorites for migration: %v", err))
+		}
+	} else {
+		for _, record := range dbFavorites {
+			// Convert database record to favorite format
+			favoriteItem := favoriteClipboardItem{
+				ID:        record.ID,
+				Type:      record.Type,
+				Content:   record.Content,
+				FilePath:  record.FilePath,
+				IconData:  record.IconData,
+				Width:     record.Width,
+				Height:    record.Height,
+				FileSize:  record.FileSize,
+				Timestamp: record.Timestamp,
+				CreatedAt: record.CreatedAt.Unix(),
+			}
+			allFavoritesToMigrate = append(allFavoritesToMigrate, favoriteItem)
+		}
+
+		if logger := util.GetLogger(); logger != nil {
+			logger.Info(ctx, fmt.Sprintf("found %d favorite items in database", len(dbFavorites)))
+		}
+
+		// Remove favorite items from database after migration
+		if len(dbFavorites) > 0 {
+			deletedCount, deleteErr := deleteFavoritesFromDatabase(ctx, clipboardPluginId)
+			if deleteErr != nil {
+				if logger := util.GetLogger(); logger != nil {
+					logger.Warn(ctx, fmt.Sprintf("failed to delete favorites from database: %v", deleteErr))
+				}
+			} else {
+				if logger := util.GetLogger(); logger != nil {
+					logger.Info(ctx, fmt.Sprintf("deleted %d favorite items from database after migration", deletedCount))
+				}
+			}
+		}
+	}
+
+	// Save all favorites to new settings storage
+	if len(allFavoritesToMigrate) > 0 {
+		favoritesJson, err := json.Marshal(allFavoritesToMigrate)
+		if err != nil {
+			return fmt.Errorf("failed to marshal favorites: %w", err)
+		}
+
+		if err := pluginSettingStore.Set("favorites", string(favoritesJson)); err != nil {
+			return fmt.Errorf("failed to save migrated favorites: %w", err)
+		}
+
+		if logger := util.GetLogger(); logger != nil {
+			logger.Info(ctx, fmt.Sprintf("migrated %d favorite clipboard items to new storage", len(allFavoritesToMigrate)))
+		}
+	}
+
+	return nil
+}
+
+// getFavoritesFromDatabase retrieves favorite clipboard items from the clipboard database
+func getFavoritesFromDatabase(ctx context.Context, pluginId string) ([]clipboardRecord, error) {
+	dbPath := path.Join(util.GetLocation().GetPluginSettingDirectory(), pluginId+"_clipboard.db")
+
+	// Check if database file exists
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		return []clipboardRecord{}, nil // No database file, no favorites to migrate
+	}
+
+	// Configure SQLite connection
+	dsn := dbPath + "?" +
+		"_journal_mode=WAL&" +
+		"_synchronous=NORMAL&" +
+		"_cache_size=1000&" +
+		"_foreign_keys=true&" +
+		"_busy_timeout=5000"
+
+	db, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open clipboard database: %w", err)
+	}
+	defer db.Close()
+
+	querySQL := `
+	SELECT id, type, content, file_path, icon_data, width, height, file_size, timestamp, is_favorite, created_at
+	FROM clipboard_history
+	WHERE is_favorite = TRUE
+	ORDER BY timestamp DESC
+	`
+
+	rows, err := db.QueryContext(ctx, querySQL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query favorites: %w", err)
+	}
+	defer rows.Close()
+
+	var records []clipboardRecord
+	for rows.Next() {
+		var record clipboardRecord
+		err := rows.Scan(&record.ID, &record.Type, &record.Content,
+			&record.FilePath, &record.IconData, &record.Width, &record.Height, &record.FileSize,
+			&record.Timestamp, &record.IsFavorite, &record.CreatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan record: %w", err)
+		}
+		records = append(records, record)
+	}
+
+	return records, rows.Err()
+}
+
+// deleteFavoritesFromDatabase removes all favorite items from the clipboard database
+func deleteFavoritesFromDatabase(ctx context.Context, pluginId string) (int64, error) {
+	dbPath := path.Join(util.GetLocation().GetPluginSettingDirectory(), pluginId+"_clipboard.db")
+
+	// Check if database file exists
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		return 0, nil // No database file, nothing to delete
+	}
+
+	// Configure SQLite connection
+	dsn := dbPath + "?" +
+		"_journal_mode=WAL&" +
+		"_synchronous=NORMAL&" +
+		"_cache_size=1000&" +
+		"_foreign_keys=true&" +
+		"_busy_timeout=5000"
+
+	db, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		return 0, fmt.Errorf("failed to open clipboard database: %w", err)
+	}
+	defer db.Close()
+
+	deleteSQL := `DELETE FROM clipboard_history WHERE is_favorite = TRUE`
+	result, err := db.ExecContext(ctx, deleteSQL)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete favorites: %w", err)
+	}
+
+	return result.RowsAffected()
 }

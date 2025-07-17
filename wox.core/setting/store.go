@@ -37,7 +37,7 @@ func NewWoxSettingStore(db *gorm.DB) *WoxSettingStore {
 func (s *WoxSettingStore) Get(key string, target interface{}) error {
 	var setting database.WoxSetting
 	if err := s.db.Where("key = ?", key).First(&setting).Error; err != nil {
-		logger.Error(context.Background(), fmt.Sprintf("Failed to read wox setting %s: %v", key, err))
+		util.GetLogger().Error(context.Background(), fmt.Sprintf("Failed to read wox setting %s: %v", key, err))
 		return err
 	}
 
@@ -90,7 +90,7 @@ func NewPluginSettingStore(db *gorm.DB, pluginId string) *PluginSettingStore {
 func (s *PluginSettingStore) Get(key string, target interface{}) error {
 	var setting database.PluginSetting
 	if err := s.db.Where("plugin_id = ? AND key = ?", s.pluginId, key).First(&setting).Error; err != nil {
-		logger.Error(context.Background(), fmt.Sprintf("Failed to read plugin setting %s.%s: %v", s.pluginId, key, err))
+		util.GetLogger().Error(context.Background(), fmt.Sprintf("Failed to read plugin setting %s.%s: %v", s.pluginId, key, err))
 		return err
 	}
 
