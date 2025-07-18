@@ -17,7 +17,6 @@ type SettingValue[T any] struct {
 
 	defaultValue T
 	settingStore SettingStore
-	syncStore    SynableStore
 	validator    ValidatorFunc[T]
 	syncable     bool
 	isLoaded     bool
@@ -170,10 +169,5 @@ func (v *SettingValue[T]) Set(newValue T) error {
 
 	v.value = newValue
 	v.isLoaded = true
-
-	if v.syncable {
-		return v.syncStore.LogOplog(v.key, newValue)
-	}
-
 	return nil
 }

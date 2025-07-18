@@ -20,10 +20,6 @@ type SettingStore interface {
 	Delete(key string) error
 }
 
-type SynableStore interface {
-	LogOplog(key string, value interface{}) error
-}
-
 type WoxSettingStore struct {
 	db *gorm.DB
 }
