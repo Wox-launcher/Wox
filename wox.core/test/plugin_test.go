@@ -77,7 +77,7 @@ func TestWebSearchPlugin(t *testing.T) {
 		{
 			Name:           "Google search",
 			Query:          "g wox launcher",
-			ExpectedTitle:  "Search for wox launcher",
+			ExpectedTitle:  "Search Google for wox launcher",
 			ExpectedAction: "Search",
 		},
 	}

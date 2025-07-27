@@ -1,15 +1,18 @@
 package test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+	"wox/database"
 	"wox/setting"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-// ConfigBlackboxTestSuite tests configuration loading with various corrupted JSON files
+// ConfigBlackboxTestSuite tests configuration loading with various corrupted database scenarios
 type ConfigBlackboxTestSuite struct {
 	*TestSuite
 	testDir string
@@ -32,308 +35,328 @@ func NewConfigBlackboxTestSuite(t *testing.T) *ConfigBlackboxTestSuite {
 	return suite
 }
 
+// createTestDatabase creates an isolated test database
+func (suite *ConfigBlackboxTestSuite) createTestDatabase(dbPath string) (*gorm.DB, error) {
+	// Import required packages for database setup
+	dsn := dbPath + "?" +
+		"_journal_mode=WAL&" +
+		"_synchronous=NORMAL&" +
+		"_cache_size=1000&" +
+		"_foreign_keys=true&" +
+		"_busy_timeout=5000"
+
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Auto-migrate the schema
+	err = db.AutoMigrate(&database.WoxSetting{})
+	if err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
 // TestConfigBlackbox runs all configuration blackbox tests
 func TestConfigBlackbox(t *testing.T) {
 	suite := NewConfigBlackboxTestSuite(t)
 	defer suite.cleanup()
 
-	// Test loadWoxSetting with various corrupted JSON files
+	// Test WoxSetting with various database scenarios
 	t.Run("LoadWoxSetting", func(t *testing.T) {
 		suite.testLoadWoxSettingBlackbox(t)
 	})
 
-	// TODO: Add loadWoxAppData tests later
-	// t.Run("LoadWoxAppData", func(t *testing.T) {
-	//	suite.testLoadWoxAppDataBlackbox(t)
-	// })
+	// Test database corruption scenarios
+	t.Run("DatabaseCorruption", func(t *testing.T) {
+		suite.testDatabaseCorruptionScenarios(t)
+	})
 }
 
-// testLoadWoxSettingBlackbox tests loadWoxSetting method with various corrupted JSON scenarios
+// testLoadWoxSettingBlackbox tests WoxSetting with various database scenarios
 func (suite *ConfigBlackboxTestSuite) testLoadWoxSettingBlackbox(t *testing.T) {
 	testCases := []struct {
 		name           string
-		jsonContent    string
+		setupDB        func(*gorm.DB) error
 		expectError    bool
 		expectDefaults bool
 		description    string
 	}{
 		{
-			name:           "EmptyFile",
-			jsonContent:    "",
+			name: "EmptyDatabase",
+			setupDB: func(db *gorm.DB) error {
+				// Empty database - no settings stored
+				return nil
+			},
 			expectError:    false,
 			expectDefaults: true,
-			description:    "Empty configuration file should load with defaults",
+			description:    "Empty database should load with defaults",
 		},
 		{
-			name:           "InvalidJSON_MissingBrace",
-			jsonContent:    `{"MainHotkey": {"WinValue": "alt+space"`,
+			name: "CorruptedValue",
+			setupDB: func(db *gorm.DB) error {
+				// Insert corrupted JSON value
+				return db.Create(&database.WoxSetting{
+					Key:   "AppWidth",
+					Value: "invalid_json_data",
+				}).Error
+			},
 			expectError:    false,
 			expectDefaults: true,
-			description:    "Missing closing brace should be repaired and load with defaults",
+			description:    "Corrupted value should fallback to defaults",
 		},
 		{
-			name:           "InvalidJSON_ExtraComma",
-			jsonContent:    `{"MainHotkey": {"WinValue": "alt+space",}, "UsePinYin": true,}`,
+			name: "InvalidBooleanValue",
+			setupDB: func(db *gorm.DB) error {
+				// Insert invalid boolean value
+				return db.Create(&database.WoxSetting{
+					Key:   "UsePinYin",
+					Value: "not_a_boolean",
+				}).Error
+			},
 			expectError:    false,
 			expectDefaults: true,
-			description:    "Extra trailing commas should be repaired and load successfully",
+			description:    "Invalid boolean value should fallback to default",
 		},
 		{
-			name:           "ValidJSON_MissingFields",
-			jsonContent:    `{"UsePinYin": true}`,
+			name: "InvalidIntegerValue",
+			setupDB: func(db *gorm.DB) error {
+				// Insert invalid integer value
+				return db.Create(&database.WoxSetting{
+					Key:   "AppWidth",
+					Value: "not_a_number",
+				}).Error
+			},
 			expectError:    false,
 			expectDefaults: true,
-			description:    "Valid JSON with missing fields should load with defaults",
+			description:    "Invalid integer value should fallback to default",
 		},
 		{
-			name:           "ValidJSON_NullValues",
-			jsonContent:    `{"MainHotkey": null, "UsePinYin": null, "QueryShortcuts": null}`,
+			name: "ValidPartialSettings",
+			setupDB: func(db *gorm.DB) error {
+				// Insert some valid settings
+				settings := []database.WoxSetting{
+					{Key: "UsePinYin", Value: "true"},
+					{Key: "ShowTray", Value: "false"},
+					{Key: "AppWidth", Value: "1200"},
+				}
+				for _, s := range settings {
+					if err := db.Create(&s).Error; err != nil {
+						return err
+					}
+				}
+				return nil
+			},
 			expectError:    false,
 			expectDefaults: true,
-			description:    "Null values should load with defaults",
+			description:    "Partial settings should load successfully with defaults for missing fields",
 		},
 		{
-			name:           "ValidJSON_ExtraFields",
-			jsonContent:    `{"UsePinYin": true, "UnknownField": "value", "AnotherUnknown": 123}`,
+			name: "ComplexObjectSerialization",
+			setupDB: func(db *gorm.DB) error {
+				// Insert complex object (platform value)
+				platformValue := `{"MacValue":"cmd+space","WinValue":"alt+space","LinuxValue":"ctrl+space"}`
+				return db.Create(&database.WoxSetting{
+					Key:   "MainHotkey",
+					Value: platformValue,
+				}).Error
+			},
 			expectError:    false,
-			expectDefaults: true,
-			description:    "Extra unknown fields should be ignored",
+			expectDefaults: false,
+			description:    "Complex objects should serialize/deserialize correctly",
 		},
 		{
-			name:           "ValidJSON_PartialData",
-			jsonContent:    `{"UsePinYin": true, "ShowTray": false, "AppWidth": 1200}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Partial data should load with defaults for missing fields",
-		},
-		{
-			name:           "InvalidJSON_WrongDataTypes",
-			jsonContent:    `{"UsePinYin": "not_a_boolean", "AppWidth": "not_a_number"}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Wrong data types should be ignored and load with defaults",
-		},
-		{
-			name:           "InvalidJSON_CorruptedNestedObject",
-			jsonContent:    `{"MainHotkey": {"WinValue": "alt+space", "MacValue": }, "UsePinYin": true}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Corrupted nested object should be repaired and load with defaults",
-		},
-		{
-			name:           "InvalidJSON_CorruptedArray",
-			jsonContent:    `{"QueryShortcuts": [{"Shortcut": "test", "Query": "test"}, {"Shortcut": "test2",}], "UsePinYin": true}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Corrupted array element should be repaired and load with defaults",
-		},
-		{
-			name:           "ValidJSON_EmptyArrays",
-			jsonContent:    `{"QueryShortcuts": [], "AIProviders": [], "UsePinYin": true}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Empty arrays should load successfully",
-		},
-		{
-			name:           "InvalidJSON_VeryLargeNumbers",
-			jsonContent:    `{"AppWidth": 999999999999999999999999999999, "MaxResultCount": -999999999999999999999999999999}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Numbers too large for int type should be sanitized to defaults",
-		},
-		{
-			name:           "ValidJSON_ComplexNestedStructures",
-			jsonContent:    `{"MainHotkey": {"WinValue": "ctrl+space", "MacValue": "cmd+space"}, "QueryShortcuts": [{"Shortcut": "g", "Query": "google {0}"}], "AIProviders": [{"Name": "openai", "ApiKey": "test", "Host": "api.openai.com"}]}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Complex nested structures should load successfully",
-		},
-		{
-			name:           "InvalidJSON_CorruptedPlatformSettings",
-			jsonContent:    `{"MainHotkey": {"WinValue": "ctrl+space", "MacValue": }, "EnableAutostart": {"WinValue": "not_a_bool"}}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Corrupted platform-specific settings should be repaired",
-		},
-		{
-			name:           "ValidJSON_InvalidLangCode",
-			jsonContent:    `{"LangCode": "invalid_lang", "UsePinYin": true}`,
+			name: "InvalidLangCode",
+			setupDB: func(db *gorm.DB) error {
+				// Insert invalid language code
+				return db.Create(&database.WoxSetting{
+					Key:   "LangCode",
+					Value: `"invalid_lang"`,
+				}).Error
+			},
 			expectError:    false,
 			expectDefaults: true,
 			description:    "Invalid language code should be sanitized to default",
 		},
 		{
-			name:           "ValidJSON_InvalidShowPosition",
-			jsonContent:    `{"ShowPosition": "invalid_position", "AppWidth": 1000}`,
+			name: "ValidComplexArrays",
+			setupDB: func(db *gorm.DB) error {
+				// Insert valid array data
+				queryShortcuts := `[{"Shortcut":"g","Query":"google {0}"},{"Shortcut":"gh","Query":"github {0}"}]`
+				return db.Create(&database.WoxSetting{
+					Key:   "QueryShortcuts",
+					Value: queryShortcuts,
+				}).Error
+			},
 			expectError:    false,
-			expectDefaults: true,
-			description:    "Invalid show position should be sanitized to default",
+			expectDefaults: false,
+			description:    "Valid complex arrays should load correctly",
 		},
 		{
-			name:           "ValidJSON_InvalidLastQueryMode",
-			jsonContent:    `{"LastQueryMode": "invalid_mode", "MaxResultCount": 15}`,
+			name: "BoundaryValues",
+			setupDB: func(db *gorm.DB) error {
+				// Insert boundary values
+				settings := []database.WoxSetting{
+					{Key: "AppWidth", Value: "1"},
+					{Key: "MaxResultCount", Value: "999"},
+				}
+				for _, s := range settings {
+					if err := db.Create(&s).Error; err != nil {
+						return err
+					}
+				}
+				return nil
+			},
 			expectError:    false,
-			expectDefaults: true,
-			description:    "Invalid last query mode should be sanitized to default",
-		},
-		{
-			name:           "InvalidJSON_MalformedArrayElements",
-			jsonContent:    `{"QueryShortcuts": [{"Shortcut": "g"}, {"Query": "test"}], "AIProviders": [{"Name": "openai"}, {"ApiKey": "test"}]}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Malformed array elements should be handled gracefully",
-		},
-		{
-			name:           "ValidJSON_BoundaryValues",
-			jsonContent:    `{"AppWidth": 1, "MaxResultCount": 999, "UsePinYin": false}`,
-			expectError:    false,
-			expectDefaults: true,
+			expectDefaults: false,
 			description:    "Boundary values should be accepted",
 		},
 		{
-			name:           "ValidJSON_NegativeNumbers",
-			jsonContent:    `{"AppWidth": -100, "MaxResultCount": -5}`,
+			name: "NegativeNumbers",
+			setupDB: func(db *gorm.DB) error {
+				// Insert negative numbers
+				settings := []database.WoxSetting{
+					{Key: "AppWidth", Value: "-100"},
+					{Key: "MaxResultCount", Value: "-5"},
+				}
+				for _, s := range settings {
+					if err := db.Create(&s).Error; err != nil {
+						return err
+					}
+				}
+				return nil
+			},
 			expectError:    false,
 			expectDefaults: true,
 			description:    "Negative numbers should be sanitized to defaults",
 		},
 		{
-			name:           "InvalidJSON_UnterminatedString",
-			jsonContent:    `{"ThemeId": "some-theme-id, "UsePinYin": true}`,
+			name: "UnicodeContent",
+			setupDB: func(db *gorm.DB) error {
+				// Insert unicode content
+				queryShortcuts := `[{"Shortcut":"测试","Query":"test 中文"}]`
+				return db.Create(&database.WoxSetting{
+					Key:   "QueryShortcuts",
+					Value: queryShortcuts,
+				}).Error
+			},
 			expectError:    false,
-			expectDefaults: true,
-			description:    "Unterminated string should be repaired",
-		},
-		{
-			name:           "InvalidJSON_MissingQuotes",
-			jsonContent:    `{ThemeId: some-theme-id, UsePinYin: true}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Missing quotes should be handled gracefully",
-		},
-		{
-			name:           "ValidJSON_UnicodeContent",
-			jsonContent:    `{"LangCode": "zh_CN", "QueryShortcuts": [{"Shortcut": "测试", "Query": "test 中文"}]}`,
-			expectError:    false,
-			expectDefaults: true,
+			expectDefaults: false,
 			description:    "Unicode content should be handled correctly",
-		},
-		{
-			name:           "InvalidJSON_OnlyBraces",
-			jsonContent:    `{}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Empty JSON object should load with all defaults",
-		},
-		{
-			name:           "InvalidJSON_OnlyWhitespace",
-			jsonContent:    "   \n\t  \r\n  ",
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Whitespace-only content should be treated as empty",
-		},
-		{
-			name:           "InvalidJSON_BinaryData",
-			jsonContent:    string([]byte{0x00, 0x01, 0x02, 0xFF, 0xFE}),
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Binary data should be handled gracefully",
-		},
-		{
-			name:           "ValidJSON_ExtremelyLongString",
-			jsonContent:    `{"ThemeId": "` + strings.Repeat("a", 10000) + `", "UsePinYin": true}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Extremely long strings should be handled",
-		},
-		{
-			name:           "InvalidJSON_NestedBracesOverflow",
-			jsonContent:    `{"MainHotkey": ` + strings.Repeat("{", 100) + `"test"` + strings.Repeat("}", 100) + `}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Deeply nested structures should be handled",
-		},
-		{
-			name:           "ValidJSON_ZeroValues",
-			jsonContent:    `{"AppWidth": 0, "MaxResultCount": 0, "UsePinYin": false, "ShowTray": false}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Zero values should be replaced with defaults",
-		},
-		{
-			name:           "InvalidJSON_SpecialCharacters",
-			jsonContent:    `{"ThemeId": "theme\n\t\r\"\\\/\b\f", "UsePinYin": true}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Special characters should be handled correctly",
-		},
-		{
-			name:           "ValidJSON_FloatAsInt",
-			jsonContent:    `{"AppWidth": 800.5, "MaxResultCount": 10.9}`,
-			expectError:    false,
-			expectDefaults: true,
-			description:    "Float values for int fields should be converted",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			suite.runLoadWoxSettingTest(t, tc.name, tc.jsonContent, tc.expectError, tc.expectDefaults, tc.description)
+			suite.runLoadWoxSettingTest(t, tc.name, tc.setupDB, tc.expectError, tc.expectDefaults, tc.description)
 		})
 	}
 }
 
-// runLoadWoxSettingTest runs a single loadWoxSetting blackbox test
-func (suite *ConfigBlackboxTestSuite) runLoadWoxSettingTest(t *testing.T, name, jsonContent string, expectError, expectDefaults bool, description string) {
-	// Create a temporary setting file in the test location
-	testLocation := GetTestLocation()
-	if testLocation == nil {
-		t.Fatalf("Test location not available")
+// testDatabaseCorruptionScenarios tests various database corruption scenarios
+func (suite *ConfigBlackboxTestSuite) testDatabaseCorruptionScenarios(t *testing.T) {
+	testCases := []struct {
+		name        string
+		setupDB     func(*gorm.DB) error
+		description string
+	}{
+		{
+			name: "CorruptedDatabaseFile",
+			setupDB: func(db *gorm.DB) error {
+				// Simulate database corruption by writing invalid data directly
+				sqlDB, err := db.DB()
+				if err != nil {
+					return err
+				}
+				// This will cause issues when trying to read
+				_, err = sqlDB.Exec("INSERT INTO wox_settings (key, value) VALUES ('test', x'deadbeef')")
+				return err
+			},
+			description: "Corrupted database file should be handled gracefully",
+		},
+		{
+			name: "MissingTable",
+			setupDB: func(db *gorm.DB) error {
+				// Drop the table to simulate missing schema
+				return db.Migrator().DropTable(&database.WoxSetting{})
+			},
+			description: "Missing table should trigger auto-migration",
+		},
 	}
 
-	settingPath := testLocation.GetWoxSettingPath()
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create isolated test database
+			testDBPath := filepath.Join(suite.testDir, "corruption_"+tc.name+".db")
+			defer os.Remove(testDBPath)
 
-	// Ensure the settings directory exists
-	settingsDir := testLocation.GetPluginSettingDirectory()
-	err := os.MkdirAll(settingsDir, 0755)
+			testDB, err := suite.createTestDatabase(testDBPath)
+			if err != nil {
+				t.Fatalf("Failed to create test database: %v", err)
+			}
+
+			// Setup corruption scenario
+			if tc.setupDB != nil {
+				err = tc.setupDB(testDB)
+				// We expect some of these to fail, that's the point
+				t.Logf("Setup result for %s: %v", tc.name, err)
+			}
+
+			t.Logf("Testing corruption scenario: %s - %s", tc.name, tc.description)
+
+			// Try to create setting store and verify it handles corruption gracefully
+			store := setting.NewWoxSettingStore(testDB)
+			woxSetting := setting.NewWoxSetting(store)
+
+			// Test basic operations don't panic
+			_ = woxSetting.AppWidth.Get()
+			_ = woxSetting.UsePinYin.Get()
+			_ = woxSetting.MainHotkey.Get()
+
+			t.Logf("Corruption scenario %s handled gracefully", tc.name)
+		})
+	}
+}
+
+// runLoadWoxSettingTest runs a single WoxSetting blackbox test
+func (suite *ConfigBlackboxTestSuite) runLoadWoxSettingTest(t *testing.T, name string, setupDB func(*gorm.DB) error, expectError, expectDefaults bool, description string) {
+	// Create isolated test database
+	testDBPath := filepath.Join(suite.testDir, name+".db")
+	defer os.Remove(testDBPath)
+
+	// Initialize test database
+	testDB, err := suite.createTestDatabase(testDBPath)
 	if err != nil {
-		t.Fatalf("Failed to create settings directory: %v", err)
+		t.Fatalf("Failed to create test database: %v", err)
 	}
 
-	// Write the test JSON content
-	err = os.WriteFile(settingPath, []byte(jsonContent), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write test setting file: %v", err)
+	// Setup test data
+	if setupDB != nil {
+		err = setupDB(testDB)
+		if err != nil {
+			t.Fatalf("Failed to setup test database: %v", err)
+		}
 	}
-	defer os.Remove(settingPath)
 
 	t.Logf("Testing: %s - %s", name, description)
-	t.Logf("JSON content: %s", jsonContent)
-	t.Logf("Setting path: %s", settingPath)
 
-	// Create a new manager and try to initialize it (which calls loadWoxSetting internally)
-	manager := &setting.Manager{}
-	ctx := context.Background()
+	// Create setting store and WoxSetting
+	store := setting.NewWoxSettingStore(testDB)
+	woxSetting := setting.NewWoxSetting(store)
 
-	err = manager.Init(ctx)
-
+	// Test loading settings - this should not error even with corrupted data
 	if expectError {
-		if err == nil {
-			t.Errorf("Expected error but got none for test case: %s", name)
-		} else {
-			t.Logf("Got expected error: %v", err)
-		}
-	} else {
-		if err != nil {
-			t.Errorf("Unexpected error for test case %s: %v", name, err)
-		} else {
-			t.Logf("Successfully loaded setting")
-
-			// Verify the loaded setting
-			loadedSetting := manager.GetWoxSetting(ctx)
-			suite.validateLoadedWoxSetting(t, loadedSetting, expectDefaults, name)
-		}
+		// For database tests, we don't expect errors during loading
+		// The system should handle corrupted data gracefully
+		t.Logf("Note: Database-based settings should handle errors gracefully")
 	}
+
+	// Verify the loaded setting
+	suite.validateLoadedWoxSetting(t, woxSetting, expectDefaults, name)
 }
 
 // validateLoadedWoxSetting validates that a loaded WoxSetting has reasonable values
