@@ -79,13 +79,13 @@ func TestConverterCrypto(t *testing.T) {
 			ExpectedAction: "Search",
 			TitleCheck: func(title string) bool {
 				// More flexible check - should contain "Search for" and part of the query
-				return strings.Contains(title, "Search for") && strings.Contains(title, "1btc dsfsdf")
+				return strings.Contains(title, "Search Google for") && strings.Contains(title, "1btc dsfsdf")
 			},
 		},
 		{
 			Name:           "BTC plus number",
 			Query:          "1btc + 1",
-			ExpectedTitle:  "Search for 1btc + 1",
+			ExpectedTitle:  "Search Google for 1btc + 1",
 			ExpectedAction: "Search",
 		},
 	}
