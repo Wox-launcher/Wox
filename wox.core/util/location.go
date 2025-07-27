@@ -216,13 +216,13 @@ func (l *Location) GetBackupDirectory() string {
 
 func (l *Location) GetUIAppPath() string {
 	if IsWindows() {
-		return path.Join(l.GetUIDirectory(), "flutter", "wox", "wox.exe")
+		return path.Join(l.GetUIDirectory(), "flutter", "wox", "wox-ui.exe")
 	}
 	if IsLinux() {
-		return path.Join(l.GetUIDirectory(), "flutter", "wox", "wox")
+		return path.Join(l.GetUIDirectory(), "flutter", "wox", "wox-ui")
 	}
 	if IsMacOS() {
-		return path.Join(l.GetUIDirectory(), "flutter", "wox.app", "Contents", "MacOS", "wox")
+		return path.Join(l.GetUIDirectory(), "flutter", "wox-ui.app", "Contents", "MacOS", "wox-ui")
 	}
 	return ""
 }

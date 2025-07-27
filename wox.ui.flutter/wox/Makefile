@@ -34,6 +34,6 @@ ifeq ($(FLUTTER_TARGET),linux)
 	cp -r build/$(FLUTTER_TARGET)/x64/release/bundle $(UI_FLUTTER_DIR)/wox
 endif
 ifeq ($(FLUTTER_TARGET),macos)
-	cp -r build/$(FLUTTER_TARGET)/Build/Products/Release/wox.app $(UI_FLUTTER_DIR)
-	chmod +x $(UI_FLUTTER_DIR)/wox.app/Contents/MacOS/wox
-endif 
+	cp -r build/$(FLUTTER_TARGET)/Build/Products/Release/wox-ui.app $(UI_FLUTTER_DIR)
+	chmod +x $(UI_FLUTTER_DIR)/wox-ui.app/Contents/MacOS/wox-ui
+endif
