@@ -295,7 +295,7 @@ func (m *Manager) UpdateServerPort(port int) {
 func (m *Manager) StartUIApp(ctx context.Context) error {
 	var appPath = util.GetLocation().GetUIAppPath()
 	if fileInfo, statErr := os.Stat(appPath); os.IsNotExist(statErr) {
-		logger.Info(ctx, "UI app not exist")
+		logger.Info(ctx, "UI app not exist: "+appPath)
 		return errors.New("UI app not exist")
 	} else {
 		if !util.IsFileExecAny(fileInfo.Mode()) {

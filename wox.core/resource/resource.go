@@ -35,26 +35,60 @@ var embedThemes = []string{}
 
 func Extract(ctx context.Context) error {
 	start := util.GetSystemTimestamp()
-	extractHostErr := extractFiles(ctx, HostFS, util.GetLocation().GetHostDirectory(), "hosts", false)
+
+	// hosts
+	hostDirectory := util.GetLocation().GetHostDirectory()
+	if util.IsDirExists(hostDirectory) {
+		rmErr := os.RemoveAll(hostDirectory)
+		if rmErr != nil {
+			return rmErr
+		}
+	}
+	extractHostErr := extractFiles(ctx, HostFS, hostDirectory, "hosts", false)
 	if extractHostErr != nil {
 		return extractHostErr
 	}
 
-	flutterErr := extractFiles(ctx, UIFS, util.GetLocation().GetUIDirectory(), "ui/flutter", true)
+	// ui
+	uiDiretory := util.GetLocation().GetUIDirectory()
+	if util.IsDirExists(uiDiretory) {
+		rmErr := os.RemoveAll(uiDiretory)
+		if rmErr != nil {
+			return rmErr
+		}
+	}
+	flutterErr := extractFiles(ctx, UIFS, uiDiretory, "ui/flutter", true)
 	if flutterErr != nil {
 		return flutterErr
 	}
 
-	othersErr := extractFiles(ctx, OthersFS, util.GetLocation().GetOthersDirectory(), "others", false)
+	// others
+	othersDirectory := util.GetLocation().GetOthersDirectory()
+	if util.IsDirExists(othersDirectory) {
+		rmErr := os.RemoveAll(othersDirectory)
+		if rmErr != nil {
+			return rmErr
+		}
+	}
+	othersErr := extractFiles(ctx, OthersFS, othersDirectory, "others", false)
 	if othersErr != nil {
 		return othersErr
 	}
 
-	scriptPluginTemplatesErr := extractFiles(ctx, ScriptPluginTemplatesFS, util.GetLocation().GetScriptPluginTemplatesDirectory(), "script_plugin_templates", false)
+	// script_plugin_templates
+	scriptPluginTemplatesDirectory := util.GetLocation().GetScriptPluginTemplatesDirectory()
+	if util.IsDirExists(scriptPluginTemplatesDirectory) {
+		rmErr := os.RemoveAll(scriptPluginTemplatesDirectory)
+		if rmErr != nil {
+			return rmErr
+		}
+	}
+	scriptPluginTemplatesErr := extractFiles(ctx, ScriptPluginTemplatesFS, scriptPluginTemplatesDirectory, "script_plugin_templates", false)
 	if scriptPluginTemplatesErr != nil {
 		return scriptPluginTemplatesErr
 	}
 
+	// themes
 	themeErr := parseThemes(ctx)
 	if themeErr != nil {
 		return themeErr
