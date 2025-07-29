@@ -113,10 +113,11 @@ func (a *WindowsRetriever) GetAppExtensions(ctx context.Context) []string {
 }
 
 func (a *WindowsRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, error) {
-	if strings.HasSuffix(path, ".lnk") {
+	lowerPath := strings.ToLower(path)
+	if strings.HasSuffix(lowerPath, ".lnk") {
 		return a.parseShortcut(ctx, path)
 	}
-	if strings.HasSuffix(path, ".exe") {
+	if strings.HasSuffix(lowerPath, ".exe") {
 		return a.parseExe(ctx, path)
 	}
 
@@ -132,7 +133,7 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 
 	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Resolved shortcut %s -> %s", appPath, targetPath))
 
-	if targetPath == "" || !strings.HasSuffix(targetPath, ".exe") {
+	if targetPath == "" || !strings.HasSuffix(strings.ToLower(targetPath), ".exe") {
 		return appInfo{}, errors.New("no target path found or not an exe file")
 	}
 

@@ -434,7 +434,7 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []ap
 
 		for _, entry := range appPath {
 			isExtensionMatch := lo.ContainsBy(appExtensions, func(ext string) bool {
-				return strings.HasSuffix(entry.Name(), fmt.Sprintf(".%s", ext))
+				return strings.HasSuffix(strings.ToLower(entry.Name()), fmt.Sprintf(".%s", ext))
 			})
 			if isExtensionMatch {
 				appPaths = append(appPaths, path.Join(dir.Path, entry.Name()))
