@@ -383,6 +383,22 @@ func (a *WindowsRetriever) convertIconToImage(ctx context.Context, hIcon win.HIC
 		}
 	}
 
+	// Validate that the image has actual content (not just transparent pixels)
+	hasContent := false
+	bounds := img.Bounds()
+	for y := bounds.Min.Y; y < bounds.Max.Y && !hasContent; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X && !hasContent; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			if a > 0 && (r > 0 || g > 0 || b > 0) {
+				hasContent = true
+			}
+		}
+	}
+
+	if !hasContent {
+		return nil, fmt.Errorf("extracted icon is empty or fully transparent")
+	}
+
 	return img, nil
 }
 
