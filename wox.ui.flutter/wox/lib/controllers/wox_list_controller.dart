@@ -243,7 +243,7 @@ class WoxListController<T> extends GetxController {
 
     var score = weightedRatio(queryText, filterText.toLowerCase());
     // Logger.instance.debug(traceId, "calculate fuzzy match score, queryText: $queryText, filterText: $filterText, score: $score");
-    return score > 50;
+    return score > 60;
   }
 
   String transferChineseToPinYin(String str) {

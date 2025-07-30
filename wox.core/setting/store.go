@@ -111,6 +111,12 @@ func serializeValue(value interface{}) (string, error) {
 		return "", nil
 	}
 
+	// Use reflection to check if it's a string-based type
+	rv := reflect.ValueOf(value)
+	if rv.Kind() == reflect.String {
+		return rv.String(), nil
+	}
+
 	switch v := value.(type) {
 	case string:
 		return v, nil

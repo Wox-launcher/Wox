@@ -505,6 +505,12 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value any) 
 		for _, queryHotkey := range queryHotkeys {
 			m.RegisterQueryHotkey(ctx, queryHotkey)
 		}
+	case "LangCode":
+		langCode := value.(string)
+		langErr := i18n.GetI18nManager().UpdateLang(ctx, i18n.LangCode(langCode))
+		if langErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to update lang: %s", langErr.Error()))
+		}
 	case "EnableAutostart":
 		enabled := value.(bool)
 		err := autostart.SetAutostart(ctx, enabled)

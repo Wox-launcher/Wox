@@ -28,6 +28,7 @@ type SysPlugin struct {
 }
 
 type SysCommand struct {
+	ID                     string
 	Title                  string
 	SubTitle               string
 	Icon                   common.WoxImage
@@ -36,7 +37,7 @@ type SysCommand struct {
 }
 
 type sysContextData struct {
-	CommandTitle string `json:"commandTitle"`
+	CommandID string `json:"commandId"`
 }
 
 func (r *SysPlugin) GetMetadata() plugin.Metadata {
@@ -72,6 +73,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.api = initParams.API
 	r.commands = []SysCommand{
 		{
+			ID:    "lock_computer",
 			Title: "i18n:plugin_sys_lock_computer",
 			Icon:  plugin.LockIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -84,6 +86,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			},
 		},
 		{
+			ID:    "empty_trash",
 			Title: "i18n:plugin_sys_empty_trash",
 			Icon:  plugin.TrashIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -96,6 +99,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			},
 		},
 		{
+			ID:    "quit_wox",
 			Title: "i18n:plugin_sys_quit_wox",
 			Icon:  plugin.ExitIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -103,6 +107,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			},
 		},
 		{
+			ID:                     "open_wox_settings",
 			Title:                  "i18n:plugin_sys_open_wox_settings",
 			PreventHideAfterAction: true,
 			Icon:                   plugin.WoxIcon,
@@ -111,6 +116,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			},
 		},
 		{
+			ID:    "open_system_settings",
 			Title: "i18n:plugin_sys_open_system_settings",
 			Icon:  plugin.SettingIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -126,6 +132,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 
 	if util.IsDev() {
 		r.commands = append(r.commands, SysCommand{
+			ID:    "cpu_profiling",
 			Title: "i18n:plugin_sys_performance_cpu_profiling",
 			Icon:  plugin.CPUProfileIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -151,6 +158,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		})
 
 		r.commands = append(r.commands, SysCommand{
+			ID:    "memory_profiling",
 			Title: "i18n:plugin_sys_performance_memory_profiling",
 			Icon:  plugin.CPUProfileIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -173,6 +181,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		})
 
 		r.commands = append(r.commands, SysCommand{
+			ID:    "delete_image_cache",
 			Title: "i18n:plugin_sys_delete_image_cache",
 			Icon:  common.NewWoxImageEmoji("🗑️"),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -197,7 +206,7 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 
 		if isTitleMatch {
 			contextData := sysContextData{
-				CommandTitle: command.Title,
+				CommandID: command.ID,
 			}
 			contextDataJson, _ := json.Marshal(contextData)
 
@@ -261,17 +270,17 @@ func (r *SysPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResul
 		return nil, fmt.Errorf("failed to parse context data: %w", err)
 	}
 
-	// Find the command by title
+	// Find the command by ID
 	var foundCommand *SysCommand
 	for _, command := range r.commands {
-		if command.Title == contextData.CommandTitle {
+		if command.ID == contextData.CommandID {
 			foundCommand = &command
 			break
 		}
 	}
 
 	if foundCommand == nil {
-		return nil, fmt.Errorf("system command no longer exists: %s", contextData.CommandTitle)
+		return nil, fmt.Errorf("system command no longer exists: %s", contextData.CommandID)
 	}
 
 	result := &plugin.QueryResult{
