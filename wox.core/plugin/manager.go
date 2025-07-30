@@ -1656,6 +1656,25 @@ func (m *Manager) QueryMRU(ctx context.Context) []QueryResultUI {
 		}
 
 		if restored := m.restoreFromMRU(ctx, pluginInstance, item); restored != nil {
+			// Add "Remove from MRU" action to each MRU result
+			removeMRUAction := QueryResultAction{
+				Id:     uuid.NewString(),
+				Name:   i18n.GetI18nManager().TranslateWox(ctx, "mru_remove_action"),
+				Icon:   common.NewWoxImageEmoji("🗑️"),
+				Hotkey: "ctrl+d",
+				Action: func(ctx context.Context, actionContext ActionContext) {
+					err := setting.GetSettingManager().RemoveMRUItem(ctx, item.PluginID, item.Title, item.SubTitle)
+					if err != nil {
+						util.GetLogger().Error(ctx, fmt.Sprintf("failed to remove MRU item: %s", err.Error()))
+					} else {
+						util.GetLogger().Info(ctx, fmt.Sprintf("removed MRU item: %s - %s", item.Title, item.SubTitle))
+					}
+				},
+			}
+
+			// Add the remove action to the result
+			restored.Actions = append(restored.Actions, removeMRUAction)
+
 			polishedResult := m.PolishResult(ctx, pluginInstance, Query{}, *restored)
 			results = append(results, polishedResult.ToUI())
 		}

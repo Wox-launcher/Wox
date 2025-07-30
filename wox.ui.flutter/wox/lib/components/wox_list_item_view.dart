@@ -37,6 +37,34 @@ class WoxListItemView extends StatelessWidget {
     }
   }
 
+  Widget buildQuickSelectNumber() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 10.0, right: 5.0),
+      child: Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+          color: fromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: fromCssColor(isActive ? woxTheme.resultItemActiveTailTextColor : woxTheme.resultItemTailTextColor).withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            item.quickSelectNumber,
+            style: TextStyle(
+              color: fromCssColor(isActive ? woxTheme.resultItemActiveBackgroundColor : woxTheme.appBackgroundColor),
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget buildTails() {
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: WoxSettingUtil.instance.currentSetting.appWidth / 2),
@@ -103,13 +131,13 @@ class WoxListItemView extends StatelessWidget {
     } else if (isHovered) {
       // Use a lighter version of the active background color for hover state
       if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code) {
-        return fromCssColor(woxTheme.actionItemActiveBackgroundColor).withOpacity(0.3);
+        return fromCssColor(woxTheme.actionItemActiveBackgroundColor).withValues(alpha: 0.3);
       }
       if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_CHAT.code) {
-        return fromCssColor(woxTheme.resultItemActiveBackgroundColor).withOpacity(0.3);
+        return fromCssColor(woxTheme.resultItemActiveBackgroundColor).withValues(alpha: 0.3);
       }
       if (listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code) {
-        return fromCssColor(woxTheme.resultItemActiveBackgroundColor).withOpacity(0.3);
+        return fromCssColor(woxTheme.resultItemActiveBackgroundColor).withValues(alpha: 0.3);
       }
     }
 
@@ -189,6 +217,8 @@ class WoxListItemView extends StatelessWidget {
           ),
           // Tails
           if (item.tails.isNotEmpty) buildTails() else const SizedBox(),
+          // Quick select number
+          if (item.isShowQuickSelect && item.quickSelectNumber.isNotEmpty) buildQuickSelectNumber(),
         ],
       ),
     );

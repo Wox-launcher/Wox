@@ -356,6 +356,7 @@
   "plugin_manager_remove_from_favorite": "Remove from favorite",
   "plugin_manager_add_to_favorite": "Add to favorite",
   "plugin_manager_invalid_query_type": "Invalid query type",
+  "mru_remove_action": "Remove from MRU",
   "plugin_ai_chat_agents": "Agents",
   "plugin_ai_chat_agents_tooltip": "Configure AI agents with custom prompts and tools",
   "plugin_ai_chat_agent_name": "Name",

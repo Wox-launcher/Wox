@@ -64,7 +64,10 @@ class WoxImageView extends StatelessWidget {
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code) {
       imageWidget = SvgPicture.string(woxImage.imageData, width: width, height: height);
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
-      imageWidget = Text(woxImage.imageData, style: TextStyle(fontSize: width));
+      imageWidget = Padding(
+        padding: const EdgeInsets.only(left: 2, right: 2),
+        child: Text(woxImage.imageData, style: const TextStyle(fontSize: 25)),
+      );
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_LOTTIE.code) {
       final bytes = utf8.encode(woxImage.imageData);
       imageWidget = Lottie.memory(bytes, width: width, height: height);

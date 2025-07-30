@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:uuid/v4.dart';
@@ -98,6 +99,12 @@ class WoxLauncherController extends GetxController {
   // If there is no this delay mechanism, the toolbar will flicker for fast typing
   Timer cleanToolbarTimer = Timer(const Duration(), () => {});
   final cleanToolbarDelay = 1000;
+
+  // quick select related variables
+  final isQuickSelectMode = false.obs;
+  Timer? quickSelectTimer;
+  final quickSelectDelay = 300; // delay to show number labels
+  bool isQuickSelectKeyPressed = false;
 
   @override
   void onInit() {
@@ -271,6 +278,14 @@ class WoxLauncherController extends GetxController {
     }
 
     hideActionPanel(traceId);
+
+    // Clean up quick select state
+    if (isQuickSelectMode.value) {
+      deactivateQuickSelectMode(traceId);
+    }
+    quickSelectTimer?.cancel();
+    isQuickSelectKeyPressed = false;
+
     await windowManager.hide();
 
     await WoxApi.instance.onHide(currentQuery.value);
@@ -774,22 +789,16 @@ class WoxLauncherController extends GetxController {
                 resizeHeight();
               }
 
+              // Save user's current selection before updateItems (which calls filterItems and resets index)
+              var oldActionName = getCurrentActionName();
+
               var actions = result.value.data.actions.map((e) => WoxListItem.fromResultAction(e)).toList();
-              var oldActionIndex = actionListViewController.activeIndex.value;
-              var oldActionCount = actionListViewController.items.length;
               actionListViewController.updateItems(traceId, actions);
-              // update active index to default action
-              // if action panel is visible, prefer to keep the active index
-              if (!isShowActionPanel.value || oldActionIndex >= actions.length || oldActionCount != actions.length) {
-                var defaultActionIndex = actions.indexWhere((element) => element.data.isDefault);
-                if (defaultActionIndex != -1) {
-                  actionListViewController.updateActiveIndex(traceId, defaultActionIndex);
-                } else {
-                  actionListViewController.updateActiveIndex(traceId, 0);
-                }
-              } else {
-                // keep the active index, we need to this to trigger the onItemActive callback, so the toolbar info can be updated
-                actionListViewController.updateActiveIndex(traceId, actionListViewController.activeIndex.value);
+
+              // Restore user's selected action after refresh
+              var newActiveIndex = calculatePreservedActionIndex(oldActionName);
+              if (actionListViewController.activeIndex.value != newActiveIndex) {
+                actionListViewController.updateActiveIndex(traceId, newActiveIndex);
               }
             }
 
@@ -804,6 +813,8 @@ class WoxLauncherController extends GetxController {
                   subTitle: result.value.data.subTitle,
                   isGroup: result.value.data.isGroup,
                   data: result.value.data,
+                  isShowQuickSelect: result.value.isShowQuickSelect,
+                  quickSelectNumber: result.value.quickSelectNumber,
                 ));
 
             isRequesting.remove(result.value.data.id);
@@ -1112,5 +1123,126 @@ class WoxLauncherController extends GetxController {
       actionName: "Select models",
       action: () {},
     );
+  }
+
+  // Quick select related methods
+
+  /// Check if the quick select modifier key is pressed (Cmd on macOS, Alt on Windows/Linux)
+  bool isQuickSelectModifierPressed() {
+    if (Platform.isMacOS) {
+      return HardwareKeyboard.instance.isMetaPressed;
+    } else {
+      return HardwareKeyboard.instance.isAltPressed;
+    }
+  }
+
+  /// Start the quick select timer when modifier key is pressed
+  void startQuickSelectTimer(String traceId) {
+    if (isQuickSelectMode.value || resultListViewController.items.isEmpty) {
+      return;
+    }
+
+    Logger.instance.debug(traceId, "Quick select: starting timer");
+    isQuickSelectKeyPressed = true;
+
+    quickSelectTimer?.cancel();
+    quickSelectTimer = Timer(Duration(milliseconds: quickSelectDelay), () {
+      if (isQuickSelectKeyPressed && isQuickSelectModifierPressed()) {
+        Logger.instance.debug(traceId, "Quick select: activating mode");
+        activateQuickSelectMode(traceId);
+      }
+    });
+  }
+
+  /// Stop the quick select timer when modifier key is released
+  void stopQuickSelectTimer(String traceId) {
+    Logger.instance.debug(traceId, "Quick select: stopping timer");
+    isQuickSelectKeyPressed = false;
+    quickSelectTimer?.cancel();
+
+    if (isQuickSelectMode.value) {
+      deactivateQuickSelectMode(traceId);
+    }
+  }
+
+  /// Activate quick select mode and add number labels to results
+  void activateQuickSelectMode(String traceId) {
+    Logger.instance.debug(traceId, "Quick select: activating mode");
+    isQuickSelectMode.value = true;
+    updateQuickSelectNumbers(traceId);
+  }
+
+  /// Deactivate quick select mode and remove number labels
+  void deactivateQuickSelectMode(String traceId) {
+    Logger.instance.debug(traceId, "Quick select: deactivating mode");
+    isQuickSelectMode.value = false;
+    updateQuickSelectNumbers(traceId);
+  }
+
+  /// Update quick select numbers for all result items
+  void updateQuickSelectNumbers(String traceId) {
+    var items = resultListViewController.items;
+
+    for (int i = 0; i < items.length; i++) {
+      var item = items[i].value;
+
+      // Update quick select properties
+      var updatedItem = item.copyWith(
+        isShowQuickSelect: isQuickSelectMode.value && !item.isGroup && i < 9,
+        quickSelectNumber: (isQuickSelectMode.value && !item.isGroup && i < 9) ? (i + 1).toString() : '',
+      );
+
+      // Directly update the reactive item to trigger UI refresh
+      items[i].value = updatedItem;
+    }
+  }
+
+  /// Handle number key press in quick select mode
+  bool handleQuickSelectNumberKey(String traceId, int number) {
+    if (!isQuickSelectMode.value || number < 1 || number > 9) {
+      return false;
+    }
+
+    var items = resultListViewController.items;
+    var targetIndex = number - 1;
+
+    if (targetIndex < items.length && !items[targetIndex].value.isGroup) {
+      Logger.instance.debug(traceId, "Quick select: selecting item $number");
+      resultListViewController.updateActiveIndex(traceId, targetIndex);
+      executeToolbarAction(traceId);
+      return true;
+    }
+
+    return false;
+  }
+
+  int calculatePreservedActionIndex(String? oldActionName) {
+    var items = actionListViewController.items;
+
+    // If action panel is not visible, use default action
+    if (!isShowActionPanel.value) {
+      var defaultIndex = items.indexWhere((element) => element.value.data.isDefault);
+      return defaultIndex != -1 ? defaultIndex : 0;
+    }
+
+    // Try to find the same action by name
+    if (oldActionName != null) {
+      var sameActionIndex = items.indexWhere((element) => element.value.data.name == oldActionName);
+      if (sameActionIndex != -1) {
+        return sameActionIndex;
+      }
+    }
+
+    // Fallback to default action
+    var defaultIndex = items.indexWhere((element) => element.value.data.isDefault);
+    return defaultIndex != -1 ? defaultIndex : 0;
+  }
+
+  String? getCurrentActionName() {
+    var oldActionIndex = actionListViewController.activeIndex.value;
+    if (actionListViewController.items.isNotEmpty && oldActionIndex < actionListViewController.items.length) {
+      return actionListViewController.items[oldActionIndex].value.data.name;
+    }
+    return null;
   }
 }

@@ -356,6 +356,7 @@
   "plugin_manager_remove_from_favorite": "从收藏夹移除",
   "plugin_manager_add_to_favorite": "添加到收藏夹",
   "plugin_manager_invalid_query_type": "无效的查询类型",
+  "mru_remove_action": "从最近使用中移除",
   "plugin_ai_chat_agents": "智能体",
   "plugin_ai_chat_agents_tooltip": "配置具有自定义提示词和工具的AI智能体",
   "plugin_ai_chat_agent_name": "名称",

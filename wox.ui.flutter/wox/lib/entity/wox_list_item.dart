@@ -12,6 +12,8 @@ class WoxListItem<T> {
   final bool isGroup;
   final String? hotkey;
   final T data; // extra data associated with the item
+  final bool isShowQuickSelect;
+  final String quickSelectNumber;
 
   WoxListItem({
     required this.id,
@@ -22,6 +24,8 @@ class WoxListItem<T> {
     required this.isGroup,
     this.hotkey,
     required this.data,
+    this.isShowQuickSelect = false,
+    this.quickSelectNumber = '',
   });
 
   WoxListItem<T> copyWith({
@@ -33,6 +37,8 @@ class WoxListItem<T> {
     bool? isGroup,
     String? hotkey,
     T? data,
+    bool? isShowQuickSelect,
+    String? quickSelectNumber,
   }) {
     return WoxListItem<T>(
       id: id ?? this.id,
@@ -43,6 +49,8 @@ class WoxListItem<T> {
       isGroup: isGroup ?? this.isGroup,
       hotkey: hotkey ?? this.hotkey,
       data: data ?? this.data,
+      isShowQuickSelect: isShowQuickSelect ?? this.isShowQuickSelect,
+      quickSelectNumber: quickSelectNumber ?? this.quickSelectNumber,
     );
   }
 

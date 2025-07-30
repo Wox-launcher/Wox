@@ -33,6 +33,43 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
     callback();
   }
 
+  // Helper method to convert LogicalKeyboardKey to number for quick select
+  int? getNumberFromKey(LogicalKeyboardKey key) {
+    switch (key) {
+      case LogicalKeyboardKey.digit1:
+        return 1;
+      case LogicalKeyboardKey.digit2:
+        return 2;
+      case LogicalKeyboardKey.digit3:
+        return 3;
+      case LogicalKeyboardKey.digit4:
+        return 4;
+      case LogicalKeyboardKey.digit5:
+        return 5;
+      case LogicalKeyboardKey.digit6:
+        return 6;
+      case LogicalKeyboardKey.digit7:
+        return 7;
+      case LogicalKeyboardKey.digit8:
+        return 8;
+      case LogicalKeyboardKey.digit9:
+        return 9;
+      default:
+        return null;
+    }
+  }
+
+  // Check if only the quick select modifier key is pressed (no other keys)
+  bool isQuickSelectModifierKeyOnly(KeyEvent event) {
+    if (Platform.isMacOS) {
+      // On macOS, check if only Cmd key is pressed
+      return event.logicalKey == LogicalKeyboardKey.metaLeft || event.logicalKey == LogicalKeyboardKey.metaRight;
+    } else {
+      // On Windows/Linux, check if only Alt key is pressed
+      return event.logicalKey == LogicalKeyboardKey.altLeft || event.logicalKey == LogicalKeyboardKey.altRight;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: query box view");
@@ -42,6 +79,25 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
         Positioned(
             child: Focus(
                 onKeyEvent: (FocusNode node, KeyEvent event) {
+                  var traceId = const UuidV4().generate();
+
+                  // Handle number keys in quick select mode first (higher priority)
+                  if (controller.isQuickSelectMode.value && event is KeyDownEvent) {
+                    var numberKey = getNumberFromKey(event.logicalKey);
+                    if (numberKey != null) {
+                      if (controller.handleQuickSelectNumberKey(traceId, numberKey)) {
+                        return KeyEventResult.handled;
+                      }
+                    }
+                  }
+
+                  // Handle quick select modifier key press/release
+                  if (event is KeyDownEvent && isQuickSelectModifierKeyOnly(event)) {
+                    controller.startQuickSelectTimer(traceId);
+                  } else {
+                    controller.stopQuickSelectTimer(traceId);
+                  }
+
                   var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();
                   if (!isAnyModifierPressed) {
                     if (event is KeyDownEvent) {
