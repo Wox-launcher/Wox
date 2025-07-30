@@ -1,5 +1,5 @@
 import json
-import importlib.util
+import importlib
 from os import path
 import sys
 from typing import Any, Dict
@@ -12,6 +12,7 @@ from wox_plugin import (
     RefreshableResult,
     PluginInitParams,
     ActionContext,
+    MRUData,
 )
 from .plugin_manager import plugin_instances, PluginInstance
 from .plugin_api import PluginAPI
@@ -38,6 +39,8 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: web
         return await refresh(ctx, request)
     elif method == "unloadPlugin":
         return await unload_plugin(ctx, request)
+    elif method == "onMRURestore":
+        return await on_mru_restore(ctx, request)
     else:
         await logger.info(ctx.get_trace_id(), f"unknown method handler: {method}")
         raise Exception(f"unknown method handler: {method}")
@@ -324,4 +327,50 @@ async def unload_plugin(ctx: Context, request: Dict[str, Any]) -> None:
             ctx.get_trace_id(),
             f"<{plugin_name}> unload plugin failed: {str(e)}\nStack trace:\n{error_stack}",
         )
+        raise e
+
+
+async def on_mru_restore(ctx: Context, request: Dict[str, Any]) -> Any:
+    """Handle MRU restore callback"""
+    plugin_id = request.get("PluginId")
+    if not plugin_id:
+        raise Exception("PluginId is required")
+
+    params = request.get("Params", {})
+    callback_id = params.get("callbackId")
+    mru_data_dict = json.loads(params.get("mruData", "{}"))
+
+    plugin_instance = plugin_instances.get(plugin_id)
+    if not plugin_instance:
+        raise Exception(f"plugin instance not found: {plugin_id}")
+
+    if not plugin_instance.api:
+        raise Exception(f"plugin API not found: {plugin_id}")
+
+    # Type cast to access implementation-specific attributes
+    from .plugin_api import PluginAPI
+
+    api = plugin_instance.api
+    if not isinstance(api, PluginAPI):
+        raise Exception(f"Invalid API type for plugin: {plugin_id}")
+
+    callback = api.mru_restore_callbacks.get(callback_id)
+    if not callback:
+        raise Exception(f"MRU restore callback not found: {callback_id}")
+
+    try:
+        # Convert dict to MRUData object for type safety
+        mru_data = MRUData.from_dict(mru_data_dict)
+
+        # Call the callback (may or may not be async)
+        result = callback(mru_data)
+        if hasattr(result, "__await__"):
+            result = await result  # type: ignore
+
+        # Convert Result object back to dict for JSON serialization
+        if result is not None:
+            return result.__dict__
+        return None
+    except Exception as e:
+        await logger.error(ctx.get_trace_id(), f"MRU restore callback error: {str(e)}")
         raise e

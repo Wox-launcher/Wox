@@ -1,4 +1,4 @@
-import { ChangeQueryParam, Context, MapString, PublicAPI } from "@wox-launcher/wox-plugin"
+import { ChangeQueryParam, Context, MapString, PublicAPI, Result } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { waitingForResponse } from "./index"
@@ -6,6 +6,7 @@ import Deferred from "promise-deferred"
 import { logger } from "./logger"
 import { MetadataCommand, PluginSettingDefinitionItem } from "@wox-launcher/wox-plugin/types/setting"
 import { AI } from "@wox-launcher/wox-plugin/types/ai"
+import { MRUData } from "@wox-launcher/wox-plugin"
 import { PluginJsonRpcTypeRequest } from "./jsonrpc"
 import { PluginJsonRpcRequest } from "./types"
 
@@ -18,6 +19,7 @@ export class PluginAPI implements PublicAPI {
   deepLinkCallbacks: Map<string, (params: MapString) => void>
   unloadCallbacks: Map<string, () => Promise<void>>
   llmStreamCallbacks: Map<string, AI.ChatStreamFunc>
+  mruRestoreCallbacks: Map<string, (mruData: MRUData) => Promise<Result | null>>
 
   constructor(ws: WebSocket, pluginId: string, pluginName: string) {
     this.ws = ws
@@ -28,6 +30,7 @@ export class PluginAPI implements PublicAPI {
     this.deepLinkCallbacks = new Map<string, (params: MapString) => void>()
     this.unloadCallbacks = new Map<string, () => Promise<void>>()
     this.llmStreamCallbacks = new Map<string, AI.ChatStreamFunc>()
+    this.mruRestoreCallbacks = new Map<string, (mruData: MRUData) => Promise<Result | null>>()
   }
 
   async invokeMethod(ctx: Context, method: string, params: { [key: string]: string }): Promise<unknown> {
@@ -123,5 +126,11 @@ export class PluginAPI implements PublicAPI {
     const callbackId = crypto.randomUUID()
     this.llmStreamCallbacks.set(callbackId, callback)
     await this.invokeMethod(ctx, "LLMStream", { callbackId, conversations: JSON.stringify(conversations) })
+  }
+
+  async OnMRURestore(ctx: Context, callback: (mruData: MRUData) => Promise<Result | null>): Promise<void> {
+    const callbackId = crypto.randomUUID()
+    this.mruRestoreCallbacks.set(callbackId, callback)
+    await this.invokeMethod(ctx, "OnMRURestore", { callbackId })
   }
 }

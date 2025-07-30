@@ -1,7 +1,7 @@
 import asyncio
 import json
 import uuid
-from typing import Any, Dict, Callable
+from typing import Any, Dict, Callable, Optional
 import websockets
 from . import logger
 from wox_plugin import (
@@ -12,6 +12,9 @@ from wox_plugin import (
     Conversation,
     AIModel,
     ChatStreamCallback,
+    MRUData,
+    Result,
+    PluginSettingDefinitionItem,
 )
 from .constants import PLUGIN_JSONRPC_TYPE_REQUEST
 from .plugin_manager import waiting_for_response
@@ -23,10 +26,11 @@ class PluginAPI(PublicAPI):
         self.plugin_id = plugin_id
         self.plugin_name = plugin_name
         self.setting_change_callbacks: Dict[str, Callable[[str, str], None]] = {}
-        self.get_dynamic_setting_callbacks: Dict[str, Callable[[str], str]] = {}
+        self.get_dynamic_setting_callbacks: Dict[str, Callable[[str], PluginSettingDefinitionItem]] = {}
         self.deep_link_callbacks: Dict[str, Callable[[Dict[str, str]], None]] = {}
         self.unload_callbacks: Dict[str, Callable[[], None]] = {}
         self.llm_stream_callbacks: Dict[str, ChatStreamCallback] = {}
+        self.mru_restore_callbacks: Dict[str, Callable[[MRUData], Optional[Result]]] = {}
 
     async def invoke_method(self, ctx: Context, method: str, params: Dict[str, Any]) -> Any:
         """Invoke a method on Wox"""
@@ -110,7 +114,7 @@ class PluginAPI(PublicAPI):
         self.setting_change_callbacks[callback_id] = callback
         await self.invoke_method(ctx, "OnSettingChanged", {"callbackId": callback_id})
 
-    async def on_get_dynamic_setting(self, ctx: Context, callback: Callable[[str], str]) -> None:
+    async def on_get_dynamic_setting(self, ctx: Context, callback: Callable[[str], PluginSettingDefinitionItem]) -> None:
         """Register dynamic setting callback"""
         callback_id = str(uuid.uuid4())
         self.get_dynamic_setting_callbacks[callback_id] = callback
@@ -154,3 +158,9 @@ class PluginAPI(PublicAPI):
                 "conversations": json.dumps([conv.__dict__ for conv in conversations]),
             },
         )
+
+    async def on_mru_restore(self, ctx: Context, callback: Callable[[MRUData], Optional[Result]]) -> None:
+        """Register MRU restore callback"""
+        callback_id = str(uuid.uuid4())
+        self.mru_restore_callbacks[callback_id] = callback
+        await self.invoke_method(ctx, "OnMRURestore", {"callbackId": callback_id})

@@ -344,24 +344,19 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 		}
 
 		metadata := pluginInstance.Metadata
-		pluginInstance.API.OnGetDynamicSetting(ctx, func(key string) string {
+		pluginInstance.API.OnGetDynamicSetting(ctx, func(key string) definition.PluginSettingDefinitionItem {
 			result, err := w.invokeMethod(ctx, metadata, "onGetDynamicSetting", map[string]string{
 				"CallbackId": callbackId,
 				"Key":        key,
 			})
 			if err != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to get dynamic setting: %s", request.PluginName, err))
-				settingJson, marshalErr := json.Marshal(definition.PluginSettingDefinitionItem{
+				return definition.PluginSettingDefinitionItem{
 					Type: definition.PluginSettingDefinitionTypeLabel,
 					Value: &definition.PluginSettingValueLabel{
 						Content: fmt.Sprintf("failed to get dynamic setting: %s", err),
 					},
-				})
-				if marshalErr != nil {
-					util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal dynamic setting: %s", request.PluginName, marshalErr))
-					return ""
 				}
-				return string(settingJson)
 			}
 
 			// validate the result is a valid definition.PluginSettingDefinitionItem json string
@@ -369,20 +364,15 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			unmarshalErr := json.Unmarshal([]byte(result.(string)), &setting)
 			if unmarshalErr != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal dynamic setting: %s", request.PluginName, unmarshalErr))
-				settingJson, marshalErr := json.Marshal(definition.PluginSettingDefinitionItem{
+				return definition.PluginSettingDefinitionItem{
 					Type: definition.PluginSettingDefinitionTypeLabel,
 					Value: &definition.PluginSettingValueLabel{
 						Content: fmt.Sprintf("failed to unmarshal dynamic setting: %s", unmarshalErr),
 					},
-				})
-				if marshalErr != nil {
-					util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal dynamic setting: %s", request.PluginName, marshalErr))
-					return ""
 				}
-				return string(settingJson)
 			}
 
-			return result.(string)
+			return setting
 		})
 		w.sendResponseToHost(ctx, request, "")
 	case "OnDeepLink":

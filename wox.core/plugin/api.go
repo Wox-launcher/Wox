@@ -10,6 +10,7 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/setting"
+	"wox/setting/definition"
 	"wox/util"
 
 	"github.com/samber/lo"
@@ -34,7 +35,7 @@ type API interface {
 	GetSetting(ctx context.Context, key string) string
 	SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool)
 	OnSettingChanged(ctx context.Context, callback func(key string, value string))
-	OnGetDynamicSetting(ctx context.Context, callback func(key string) string)
+	OnGetDynamicSetting(ctx context.Context, callback func(key string) definition.PluginSettingDefinitionItem)
 	OnDeepLink(ctx context.Context, callback func(arguments map[string]string))
 	OnUnload(ctx context.Context, callback func())
 	OnMRURestore(ctx context.Context, callback func(mruData MRUData) (*QueryResult, error))
@@ -142,7 +143,7 @@ func (a *APIImpl) OnSettingChanged(ctx context.Context, callback func(key string
 	a.pluginInstance.SettingChangeCallbacks = append(a.pluginInstance.SettingChangeCallbacks, callback)
 }
 
-func (a *APIImpl) OnGetDynamicSetting(ctx context.Context, callback func(key string) string) {
+func (a *APIImpl) OnGetDynamicSetting(ctx context.Context, callback func(key string) definition.PluginSettingDefinitionItem) {
 	a.pluginInstance.DynamicSettingCallbacks = append(a.pluginInstance.DynamicSettingCallbacks, callback)
 }
 

@@ -36,6 +36,11 @@ class WoxImage:
     def from_json(cls, json_str: str) -> "WoxImage":
         """Create from JSON string with camelCase naming"""
         data = json.loads(json_str)
+        return cls.from_dict(data)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "WoxImage":
+        """Create from dictionary with camelCase naming"""
         if not data.get("ImageType"):
             data["ImageType"] = WoxImageType.ABSOLUTE
 
@@ -43,6 +48,13 @@ class WoxImage:
             image_type=WoxImageType(data.get("ImageType")),
             image_data=data.get("ImageData", ""),
         )
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary with camelCase naming"""
+        return {
+            "ImageData": self.image_data,
+            "ImageType": self.image_type,
+        }
 
     @classmethod
     def new_base64(cls, data: str) -> "WoxImage":

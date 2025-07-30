@@ -1,9 +1,12 @@
-from typing import Protocol, Callable, Dict, List
+from typing import Protocol, Callable, Dict, List, Optional
 
 from .models.query import MetadataCommand
 from .models.context import Context
 from .models.query import ChangeQueryParam
 from .models.ai import AIModel, Conversation, ChatStreamCallback
+from .models.mru import MRUData
+from .models.result import Result
+from .models.setting import PluginSettingDefinitionItem
 
 
 class PublicAPI(Protocol):
@@ -45,7 +48,7 @@ class PublicAPI(Protocol):
         """Register setting change callback"""
         ...
 
-    async def on_get_dynamic_setting(self, ctx: Context, callback: Callable[[str], str]) -> None:
+    async def on_get_dynamic_setting(self, ctx: Context, callback: Callable[[str], PluginSettingDefinitionItem]) -> None:
         """Register dynamic setting callback"""
         ...
 
@@ -79,5 +82,15 @@ class PublicAPI(Protocol):
                      The callback takes two parameters:
                      - stream_type: ChatStreamDataType, indicates the stream status
                      - data: str, the stream content
+        """
+        ...
+
+    async def on_mru_restore(self, ctx: Context, callback: Callable[[MRUData], Optional[Result]]) -> None:
+        """Register MRU restore callback
+
+        Args:
+            ctx: Context
+            callback: Callback function that takes MRUData and returns Result or None
+                     Return None if the MRU data is no longer valid
         """
         ...

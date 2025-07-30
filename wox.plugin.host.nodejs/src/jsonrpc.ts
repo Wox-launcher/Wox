@@ -1,7 +1,7 @@
 import { logger } from "./logger"
 import path from "path"
 import { PluginAPI } from "./pluginAPI"
-import { Context, MapString, Plugin, PluginInitParams, Query, QueryEnv, RefreshableResult, Result, ResultAction, Selection } from "@wox-launcher/wox-plugin"
+import { Context, MapString, Plugin, PluginInitParams, Query, QueryEnv, RefreshableResult, Result, ResultAction, Selection, MRUData } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { AI } from "@wox-launcher/wox-plugin/types/ai"
@@ -41,6 +41,8 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
       return onUnload(ctx, request)
     case "onLLMStream":
       return onLLMStream(ctx, request)
+    case "onMRURestore":
+      return onMRURestore(ctx, request)
     default:
       logger.info(ctx, `unknown method handler: ${request.Method}`)
       throw new Error(`unknown method handler: ${request.Method}`)
@@ -107,7 +109,8 @@ async function initPlugin(ctx: Context, request: PluginJsonRpcRequest, ws: WebSo
   const init = getMethod(ctx, request, "init")
   const pluginApi = new PluginAPI(ws, request.PluginId, request.PluginName)
   plugin.API = pluginApi
-  return init(ctx, { API: pluginApi, PluginDirectory: request.Params.PluginDirectory } as PluginInitParams)
+  const initParams: PluginInitParams = { API: pluginApi, PluginDirectory: request.Params.PluginDirectory }
+  return init(ctx, initParams)
 }
 
 async function onPluginSettingChange(ctx: Context, request: PluginJsonRpcRequest) {
@@ -253,7 +256,7 @@ async function action(ctx: Context, request: PluginJsonRpcRequest) {
   pluginAction({
     ContextData: request.Params.ContextData
   })
-  
+
   return
 }
 
@@ -298,13 +301,48 @@ async function refresh(ctx: Context, request: PluginJsonRpcRequest) {
     Tails: refreshedResult.Tails,
     ContextData: refreshedResult.ContextData,
     RefreshInterval: refreshedResult.RefreshInterval,
-    Actions: refreshedResult.Actions.map(action => ({
-      Id: action.Id,
-      Name: action.Name,
-      Icon: action.Icon,
-      IsDefault: action.IsDefault,
-      PreventHideAfterAction: action.PreventHideAfterAction,
-      Hotkey: action.Hotkey,
-    } as ResultActionUI))
+    Actions: refreshedResult.Actions.map(
+      action =>
+        ({
+          Id: action.Id,
+          Name: action.Name,
+          Icon: action.Icon,
+          IsDefault: action.IsDefault,
+          PreventHideAfterAction: action.PreventHideAfterAction,
+          Hotkey: action.Hotkey
+        }) as ResultActionUI
+    )
   } as RefreshableResultWithResultId
+}
+
+async function onMRURestore(ctx: Context, request: PluginJsonRpcRequest): Promise<Result | null> {
+  const pluginInstance = pluginInstances.get(request.PluginId)
+  if (!pluginInstance) {
+    throw new Error(`plugin instance not found: ${request.PluginId}`)
+  }
+
+  const callbackId = request.Params.callbackId
+  const mruDataRaw = JSON.parse(request.Params.mruData)
+
+  // Convert raw data to MRUData type
+  const mruData: MRUData = {
+    PluginID: mruDataRaw.PluginID || "",
+    Title: mruDataRaw.Title || "",
+    SubTitle: mruDataRaw.SubTitle || "",
+    Icon: mruDataRaw.Icon || { ImageType: "absolute", ImageData: "" },
+    ContextData: mruDataRaw.ContextData || ""
+  }
+
+  const callback = pluginInstance.API.mruRestoreCallbacks.get(callbackId)
+  if (!callback) {
+    throw new Error(`MRU restore callback not found: ${callbackId}`)
+  }
+
+  try {
+    const result = await callback(mruData)
+    return result
+  } catch (error) {
+    logger.error(ctx, `MRU restore callback error: ${error}`)
+    throw error
+  }
 }

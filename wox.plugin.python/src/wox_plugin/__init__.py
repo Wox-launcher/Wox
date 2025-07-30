@@ -35,6 +35,19 @@ from .models.ai import (
 )
 from .models.image import WoxImage, WoxImageType
 from .models.preview import WoxPreview, WoxPreviewType, WoxPreviewScrollPosition
+from .models.mru import MRUData, MRURestoreCallback
+from .models.setting import (
+    PluginSettingDefinitionItem,
+    PluginSettingDefinitionType,
+    PluginSettingDefinitionValue,
+    PluginSettingValueStyle,
+    PluginSettingValueTextBox,
+    PluginSettingValueCheckBox,
+    PluginSettingValueLabel,
+    create_textbox_setting,
+    create_checkbox_setting,
+    create_label_setting,
+)
 
 __all__: List[str] = [
     # Plugin
@@ -84,4 +97,18 @@ __all__: List[str] = [
     "WoxPreviewScrollPosition",
     # Result
     "ResultTailType",
+    # MRU
+    "MRUData",
+    "MRURestoreCallback",
+    # Settings
+    "PluginSettingDefinitionItem",
+    "PluginSettingDefinitionType",
+    "PluginSettingDefinitionValue",
+    "PluginSettingValueStyle",
+    "PluginSettingValueTextBox",
+    "PluginSettingValueCheckBox",
+    "PluginSettingValueLabel",
+    "create_textbox_setting",
+    "create_checkbox_setting",
+    "create_label_setting",
 ]

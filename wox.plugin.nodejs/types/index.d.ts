@@ -152,6 +152,14 @@ export interface ActionContext {
   ContextData: string
 }
 
+export interface MRUData {
+  PluginID: string
+  Title: string
+  SubTitle: string
+  Icon: WoxImage
+  ContextData: string
+}
+
 export interface PluginInitParams {
   API: PublicAPI
   PluginDirectory: string
@@ -216,7 +224,7 @@ export interface PublicAPI {
   /**
    * Get dynamic setting definition
    */
-  OnGetDynamicSetting: (ctx: Context, callback: (key: string) => string) => Promise<void>
+  OnGetDynamicSetting: (ctx: Context, callback: (key: string) => PluginSettingDefinitionItem) => Promise<void>
 
   /**
    * Register deep link callback
@@ -237,6 +245,14 @@ export interface PublicAPI {
    * Chat using LLM
    */
   LLMStream: (ctx: Context, conversations: AI.Conversation[], callback: AI.ChatStreamFunc) => Promise<void>
+
+  /**
+   * Register MRU restore callback
+   * @param ctx Context
+   * @param callback Callback function that takes MRUData and returns Result or null
+   *                 Return null if the MRU data is no longer valid
+   */
+  OnMRURestore: (ctx: Context, callback: (mruData: MRUData) => Promise<Result | null>) => Promise<void>
 }
 
 export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url" | "emoji" | "lottie"
