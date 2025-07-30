@@ -5,6 +5,7 @@ import (
 	"testing"
 	"wox/common"
 	"wox/plugin"
+	"wox/setting/definition"
 	"wox/util"
 
 	"github.com/stretchr/testify/require"
@@ -13,7 +14,7 @@ import (
 type emptyAPIImpl struct {
 }
 
-func (e emptyAPIImpl) OnGetDynamicSetting(ctx context.Context, callback func(key string) string) {
+func (e emptyAPIImpl) OnGetDynamicSetting(context.Context, func(string) definition.PluginSettingDefinitionItem) {
 }
 
 func (e emptyAPIImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {

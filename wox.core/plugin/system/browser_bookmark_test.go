@@ -7,6 +7,7 @@ import (
 	"testing"
 	"wox/common"
 	"wox/plugin"
+	"wox/setting/definition"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -263,10 +264,11 @@ func (m *mockAPI) RestartApp(ctx context.Context)                               
 func (m *mockAPI) ReloadPlugin(ctx context.Context, pluginId string)                             {}
 func (m *mockAPI) RemovePlugin(ctx context.Context, pluginId string)                             {}
 func (m *mockAPI) OnSettingChanged(ctx context.Context, callback func(key string, value string)) {}
-func (m *mockAPI) OnGetDynamicSetting(ctx context.Context, callback func(key string) string)     {}
-func (m *mockAPI) OnDeepLink(ctx context.Context, callback func(arguments map[string]string))    {}
-func (m *mockAPI) OnUnload(ctx context.Context, callback func())                                 {}
-func (m *mockAPI) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand)  {}
+func (m *mockAPI) OnGetDynamicSetting(context.Context, func(string) definition.PluginSettingDefinitionItem) {
+}
+func (m *mockAPI) OnDeepLink(ctx context.Context, callback func(arguments map[string]string))   {}
+func (m *mockAPI) OnUnload(ctx context.Context, callback func())                                {}
+func (m *mockAPI) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {}
 func (m *mockAPI) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {
 	return nil
 }
