@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -21,6 +22,11 @@ func init() {
 type Bookmark struct {
 	Name string
 	Url  string
+}
+
+type bookmarkContextData struct {
+	Name string `json:"name"`
+	Url  string `json:"url"`
 }
 
 type BrowserBookmarkPlugin struct {
@@ -48,6 +54,11 @@ func (c *BrowserBookmarkPlugin) GetMetadata() plugin.Metadata {
 			"Windows",
 			"Macos",
 			"Linux",
+		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureMRU,
+			},
 		},
 	}
 }
@@ -97,6 +108,8 @@ func (c *BrowserBookmarkPlugin) Init(ctx context.Context, initParams plugin.Init
 
 	// Remove duplicate bookmarks (same name and url)
 	c.bookmarks = c.removeDuplicateBookmarks(c.bookmarks)
+
+	c.api.OnMRURestore(ctx, c.handleMRURestore)
 }
 
 func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
@@ -122,11 +135,18 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 		}
 
 		if isMatch {
+			contextData := bookmarkContextData{
+				Name: bookmark.Name,
+				Url:  bookmark.Url,
+			}
+			contextDataJson, _ := json.Marshal(contextData)
+
 			results = append(results, plugin.QueryResult{
-				Title:    bookmark.Name,
-				SubTitle: bookmark.Url,
-				Score:    matchScore,
-				Icon:     browserBookmarkIcon,
+				Title:       bookmark.Name,
+				SubTitle:    bookmark.Url,
+				Score:       matchScore,
+				Icon:        browserBookmarkIcon,
+				ContextData: string(contextDataJson),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_browser_bookmark_open_in_browser",
@@ -234,4 +254,41 @@ func (c *BrowserBookmarkPlugin) removeDuplicateBookmarks(bookmarks []Bookmark) [
 	}
 
 	return result
+}
+
+func (c *BrowserBookmarkPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	var contextData bookmarkContextData
+	if err := json.Unmarshal([]byte(mruData.ContextData), &contextData); err != nil {
+		return nil, fmt.Errorf("failed to parse context data: %w", err)
+	}
+
+	// Check if bookmark still exists in current bookmarks
+	found := false
+	for _, bookmark := range c.bookmarks {
+		if bookmark.Name == contextData.Name && bookmark.Url == contextData.Url {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil, fmt.Errorf("bookmark no longer exists: %s", contextData.Name)
+	}
+
+	result := &plugin.QueryResult{
+		Title:       contextData.Name,
+		SubTitle:    contextData.Url,
+		Icon:        mruData.Icon,
+		ContextData: mruData.ContextData,
+		Actions: []plugin.QueryResultAction{
+			{
+				Name: "i18n:plugin_browser_bookmark_open_in_browser",
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					shell.Open(contextData.Url)
+				},
+			},
+		},
+	}
+
+	return result, nil
 }

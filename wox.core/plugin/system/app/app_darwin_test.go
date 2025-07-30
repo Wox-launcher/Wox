@@ -58,6 +58,9 @@ func (e emptyAPIImpl) AIChatStream(ctx context.Context, model common.Model, conv
 	return nil
 }
 
+func (e emptyAPIImpl) OnMRURestore(ctx context.Context, callback func(mruData plugin.MRUData) (*plugin.QueryResult, error)) {
+}
+
 func TestMacRetriever_ParseAppInfo(t *testing.T) {
 	if util.IsMacOS() {
 		util.GetLocation().Init()

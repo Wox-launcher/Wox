@@ -43,6 +43,12 @@ type appInfo struct {
 	Pid int `json:"-"`
 }
 
+type appContextData struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+	Type string `json:"type"`
+}
+
 func (a *appInfo) GetDisplayPath() string {
 	if a.Type == AppTypeUWP {
 		return ""
@@ -92,6 +98,11 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureMRU,
+			},
+		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
 			{
 				Type: definition.PluginSettingDefinitionTypeTable,
@@ -140,6 +151,8 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 			a.indexApps(ctx)
 		}
 	})
+
+	a.api.OnMRURestore(ctx, a.handleMRURestore)
 }
 
 func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -149,12 +162,21 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 		isPathNameMatch, pathNameScore := system.IsStringMatchScore(ctx, filepath.Base(info.Path), query.Search)
 		if isNameMatch || isPathNameMatch {
 			displayPath := info.GetDisplayPath()
+
+			contextData := appContextData{
+				Name: info.Name,
+				Path: info.Path,
+				Type: info.Type,
+			}
+			contextDataJson, _ := json.Marshal(contextData)
+
 			result := plugin.QueryResult{
-				Id:       uuid.NewString(),
-				Title:    info.Name,
-				SubTitle: displayPath,
-				Icon:     info.Icon,
-				Score:    util.MaxInt64(nameScore, pathNameScore),
+				Id:          uuid.NewString(),
+				Title:       info.Name,
+				SubTitle:    displayPath,
+				Icon:        info.Icon,
+				Score:       util.MaxInt64(nameScore, pathNameScore),
+				ContextData: string(contextDataJson),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_app_open",
@@ -524,4 +546,88 @@ func (a *ApplicationPlugin) removeDuplicateApps(ctx context.Context, apps []appI
 
 	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("removed %d duplicate apps, %d apps remaining", len(apps)-len(result), len(result)))
 	return result
+}
+
+func (a *ApplicationPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	var contextData appContextData
+	if err := json.Unmarshal([]byte(mruData.ContextData), &contextData); err != nil {
+		return nil, fmt.Errorf("failed to parse context data: %w", err)
+	}
+
+	var appInfo *appInfo
+	for _, info := range a.apps {
+		if info.Name == contextData.Name && info.Path == contextData.Path {
+			appInfo = &info
+			break
+		}
+	}
+
+	if appInfo == nil {
+		return nil, fmt.Errorf("app not found: %s", contextData.Name)
+	}
+
+	displayPath := appInfo.GetDisplayPath()
+	result := &plugin.QueryResult{
+		Id:          uuid.NewString(),
+		Title:       appInfo.Name,
+		SubTitle:    displayPath,
+		Icon:        mruData.Icon,
+		ContextData: mruData.ContextData,
+		Actions: []plugin.QueryResultAction{
+			{
+				Name: "i18n:plugin_app_open",
+				Icon: plugin.OpenIcon,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					runErr := shell.Open(appInfo.Path)
+					if runErr != nil {
+						a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", appInfo.Path, runErr.Error()))
+						a.api.Notify(ctx, fmt.Sprintf("i18n:plugin_app_open_failed_description: %s", runErr.Error()))
+					}
+				},
+			},
+			{
+				Name: "i18n:plugin_app_open_containing_folder",
+				Icon: plugin.OpenContainingFolderIcon,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					if err := a.retriever.OpenAppFolder(ctx, *appInfo); err != nil {
+						a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening folder: %s", err.Error()))
+					}
+				},
+			},
+			{
+				Name: "i18n:plugin_app_copy_path",
+				Icon: plugin.CopyIcon,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					clipboard.WriteText(appInfo.Path)
+				},
+			},
+		},
+	}
+
+	if appInfo.IsRunning() {
+		result.Actions = append(result.Actions, plugin.QueryResultAction{
+			Name: "i18n:plugin_app_terminate",
+			Icon: plugin.TerminateAppIcon,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				p, getErr := os.FindProcess(appInfo.Pid)
+				if getErr != nil {
+					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error finding process %d: %s", appInfo.Pid, getErr.Error()))
+					return
+				}
+
+				killErr := p.Kill()
+				if killErr != nil {
+					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error killing process %d: %s", appInfo.Pid, killErr.Error()))
+				}
+			},
+		})
+
+		result.RefreshInterval = 1000
+		result.OnRefresh = func(ctx context.Context, result plugin.RefreshableResult) plugin.RefreshableResult {
+			result.Tails = a.getRunningProcessResult(appInfo.Pid)
+			return result
+		}
+	}
+
+	return result, nil
 }

@@ -19,6 +19,7 @@ type Instance struct {
 	SettingChangeCallbacks  []func(key string, value string)
 	DeepLinkCallbacks       []func(arguments map[string]string)
 	UnloadCallbacks         []func()
+	MRURestoreCallbacks     []func(mruData MRUData) (*QueryResult, error) // MRU restore callbacks
 
 	// for measure performance
 	LoadStartTimestamp    int64

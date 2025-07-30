@@ -88,6 +88,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/hotkey/available": handleHotkeyAvailable,
 	"/query/icon":       handleQueryIcon,
 	"/query/ratio":      handleQueryRatio,
+	"/query/mru":        handleQueryMRU,
 	"/deeplink":         handleDeeplink,
 	"/version":          handleVersion,
 }
@@ -484,7 +485,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.LangCode = woxSetting.LangCode.Get()
 	settingDto.QueryHotkeys = woxSetting.QueryHotkeys.Get()
 	settingDto.QueryShortcuts = woxSetting.QueryShortcuts.Get()
-	settingDto.LastQueryMode = woxSetting.LastQueryMode.Get()
+	settingDto.QueryMode = woxSetting.QueryMode.Get()
 	settingDto.AIProviders = woxSetting.AIProviders.Get()
 	settingDto.HttpProxyEnabled = woxSetting.HttpProxyEnabled.Get()
 	settingDto.HttpProxyUrl = woxSetting.HttpProxyUrl.Get()
@@ -537,8 +538,8 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		woxSetting.ShowTray.Set(kv.Value.(bool))
 	case "LangCode":
 		woxSetting.LangCode.Set(i18n.LangCode(kv.Value.(string)))
-	case "LastQueryMode":
-		woxSetting.LastQueryMode.Set(setting.LastQueryMode(kv.Value.(string)))
+	case "QueryMode":
+		woxSetting.QueryMode.Set(setting.QueryMode(kv.Value.(string)))
 	case "ShowPosition":
 		woxSetting.ShowPosition.Set(setting.PositionType(kv.Value.(string)))
 	case "EnableAutoBackup":
@@ -1154,4 +1155,24 @@ func handlePluginDetail(w http.ResponseWriter, r *http.Request) {
 
 func handleVersion(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, updater.CURRENT_VERSION)
+}
+
+func handleQueryMRU(w http.ResponseWriter, r *http.Request) {
+	body, readErr := io.ReadAll(r.Body)
+	if readErr != nil {
+		writeErrorResponse(w, fmt.Sprintf("failed to read request body: %s", readErr.Error()))
+		return
+	}
+
+	var ctx context.Context
+	traceIdResult := gjson.GetBytes(body, "traceId")
+	if traceIdResult.Exists() && traceIdResult.String() != "" {
+		ctx = util.NewTraceContextWith(traceIdResult.String())
+	} else {
+		ctx = util.NewTraceContext()
+	}
+
+	mruResults := plugin.GetPluginManager().QueryMRU(ctx)
+	logger.Info(ctx, fmt.Sprintf("found %d MRU results", len(mruResults)))
+	writeSuccessResponse(w, mruResults)
 }

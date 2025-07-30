@@ -17,7 +17,7 @@ type WoxSettingDto struct {
 	LangCode             i18n.LangCode
 	QueryHotkeys         []setting.QueryHotkey
 	QueryShortcuts       []setting.QueryShortcut
-	LastQueryMode        setting.LastQueryMode
+	QueryMode            setting.QueryMode
 	AIProviders          []setting.AIProvider
 	HttpProxyEnabled     bool
 	HttpProxyUrl         string

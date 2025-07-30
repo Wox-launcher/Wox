@@ -224,7 +224,7 @@ func Run(ctx context.Context) error {
 		"HideOnLostFocus":      oldSettings.HideOnLostFocus,
 		"ShowTray":             oldSettings.ShowTray,
 		"LangCode":             oldSettings.LangCode,
-		"LastQueryMode":        oldSettings.LastQueryMode,
+		"QueryMode":            oldSettings.LastQueryMode, // Migrate LastQueryMode to QueryMode
 		"ShowPosition":         oldSettings.ShowPosition,
 		"EnableAutoBackup":     oldSettings.EnableAutoBackup,
 		"EnableAutoUpdate":     oldSettings.EnableAutoUpdate,

@@ -1,7 +1,7 @@
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/entity/wox_preview.dart';
-import 'package:wox/enums/wox_last_query_mode_enum.dart';
+import 'package:wox/enums/wox_query_mode_enum.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
@@ -262,10 +262,10 @@ class ShowAppParams {
   late bool selectAll;
   late Position position;
   late List<QueryHistory> queryHistories;
-  late WoxLastQueryMode lastQueryMode;
+  late WoxQueryMode queryMode;
   late bool autoFocusToChatInput;
 
-  ShowAppParams({required this.selectAll, required this.position, required this.queryHistories, required this.lastQueryMode, this.autoFocusToChatInput = false});
+  ShowAppParams({required this.selectAll, required this.position, required this.queryHistories, required this.queryMode, this.autoFocusToChatInput = false});
 
   ShowAppParams.fromJson(Map<String, dynamic> json) {
     selectAll = json['SelectAll'];
@@ -274,13 +274,10 @@ class ShowAppParams {
     }
     queryHistories = <QueryHistory>[];
     if (json['QueryHistories'] != null) {
-      json['QueryHistories'].forEach((v) {
-        queryHistories.add(QueryHistory.fromJson(v));
-      });
-    } else {
-      queryHistories = <QueryHistory>[];
+      final List<dynamic> histories = json['QueryHistories'];
+      queryHistories = histories.map((v) => QueryHistory.fromJson(v)).toList();
     }
-    lastQueryMode = json['LastQueryMode'];
+    queryMode = json['QueryMode'] ?? 'empty';
     autoFocusToChatInput = json['AutoFocusToChatInput'] ?? false;
   }
 }

@@ -163,6 +163,9 @@ func main() {
 	// Start auto backup if enabled
 	setting.GetSettingManager().StartAutoBackup(ctx)
 
+	// Start MRU cleanup
+	setting.GetSettingManager().StartMRUCleanup(ctx)
+
 	// Start auto update checker if enabled
 	updater.StartAutoUpdateChecker(ctx)
 

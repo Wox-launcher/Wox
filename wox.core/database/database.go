@@ -36,6 +36,19 @@ type Oplog struct {
 	SyncedToCloud bool `gorm:"default:false"`
 }
 
+type MRURecord struct {
+	Hash        string `gorm:"primaryKey"` // MD5 hash of pluginId+title+subTitle
+	PluginID    string `gorm:"not null"`
+	Title       string `gorm:"not null"`
+	SubTitle    string
+	Icon        string // JSON serialized WoxImage
+	ContextData string // Plugin context data for restoration
+	LastUsed    int64  `gorm:"not null"`
+	UseCount    int    `gorm:"default:1"`
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 func Init(ctx context.Context) error {
 	dbPath := filepath.Join(util.GetLocation().GetUserDataDirectory(), "wox.db")
 
@@ -86,6 +99,7 @@ func Init(ctx context.Context) error {
 		&WoxSetting{},
 		&PluginSetting{},
 		&Oplog{},
+		&MRURecord{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate database schema: %w", err)

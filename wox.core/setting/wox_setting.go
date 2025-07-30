@@ -22,7 +22,7 @@ type WoxSetting struct {
 	LangCode             *WoxSettingValue[i18n.LangCode]
 	QueryHotkeys         *PlatformValue[[]QueryHotkey]
 	QueryShortcuts       *WoxSettingValue[[]QueryShortcut]
-	LastQueryMode        *WoxSettingValue[LastQueryMode]
+	QueryMode            *WoxSettingValue[QueryMode]
 	ShowPosition         *WoxSettingValue[PositionType]
 	AIProviders          *WoxSettingValue[[]AIProvider]
 	EnableAutoBackup     *WoxSettingValue[bool]
@@ -49,7 +49,7 @@ type WoxSetting struct {
 	ActionedResults *WoxSettingValue[*util.HashMap[ResultHash, []ActionedResult]]
 }
 
-type LastQueryMode = string
+type QueryMode = string
 
 type PositionType string
 
@@ -60,8 +60,9 @@ const (
 )
 
 const (
-	LastQueryModePreserve LastQueryMode = "preserve" // preserve last query and select all for quick modify
-	LastQueryModeEmpty    LastQueryMode = "empty"    // empty last query
+	QueryModePreserve QueryMode = "preserve" // preserve last query and select all for quick modify
+	QueryModeEmpty    QueryMode = "empty"    // empty last query
+	QueryModeMRU      QueryMode = "mru"      // show MRU (Most Recently Used) list
 )
 
 const (
@@ -134,7 +135,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		LangCode: NewWoxSettingValueWithValidator(store, "LangCode", defaultLangCode, func(code i18n.LangCode) bool {
 			return i18n.IsSupportedLangCode(string(code))
 		}),
-		LastQueryMode:    NewWoxSettingValue(store, "LastQueryMode", LastQueryModeEmpty),
+		QueryMode:        NewWoxSettingValue(store, "QueryMode", QueryModeEmpty),
 		ShowPosition:     NewWoxSettingValue(store, "ShowPosition", PositionTypeMouseScreen),
 		AppWidth:         NewWoxSettingValue(store, "AppWidth", 800),
 		MaxResultCount:   NewWoxSettingValue(store, "MaxResultCount", 10),

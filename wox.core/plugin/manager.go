@@ -820,6 +820,8 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		}
 	}
 
+	originalIcon := result.Icon
+
 	// convert icon
 	result.Icon = common.ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
 	for i := range result.Tails {
@@ -883,6 +885,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		ResultTitle:    result.Title,
 		ResultSubTitle: result.SubTitle,
 		ContextData:    result.ContextData,
+		Icon:           originalIcon,
 		PluginInstance: pluginInstance,
 		Query:          query,
 		Actions:        util.NewHashMap[string, func(ctx context.Context, actionContext ActionContext)](),
@@ -1385,11 +1388,39 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 		ContextData: resultCache.ContextData,
 	})
 
-	util.Go(ctx, fmt.Sprintf("[%s] add actioned result", resultCache.PluginInstance.Metadata.Name), func() {
-		setting.GetSettingManager().AddActionedResult(ctx, resultCache.PluginInstance.Metadata.Id, resultCache.ResultTitle, resultCache.ResultSubTitle, resultCache.Query.RawQuery)
+	util.Go(ctx, fmt.Sprintf("[%s] post execute action", resultCache.PluginInstance.Metadata.Name), func() {
+		m.postExecuteAction(ctx, resultCache)
 	})
 
 	return nil
+}
+
+func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResultCache) {
+	// Add actioned result for statistics
+	setting.GetSettingManager().AddActionedResult(ctx, resultCache.PluginInstance.Metadata.Id, resultCache.ResultTitle, resultCache.ResultSubTitle, resultCache.Query.RawQuery)
+
+	// Add to MRU if plugin supports it
+	if resultCache.PluginInstance.Metadata.IsSupportFeature(MetadataFeatureMRU) {
+		mruItem := setting.MRUItem{
+			PluginID:    resultCache.PluginInstance.Metadata.Id,
+			Title:       resultCache.ResultTitle,
+			SubTitle:    resultCache.ResultSubTitle,
+			Icon:        resultCache.Icon,
+			ContextData: resultCache.ContextData,
+		}
+		if err := setting.GetSettingManager().AddMRUItem(ctx, mruItem); err != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to add MRU item: %s", err.Error()))
+		}
+	}
+
+	// Add to query history only if query is not empty (skip empty queries like MRU)
+	if resultCache.Query.RawQuery != "" {
+		plainQuery := common.PlainQuery{
+			QueryType: resultCache.Query.Type,
+			QueryText: resultCache.Query.RawQuery,
+		}
+		setting.GetSettingManager().AddQueryHistory(ctx, plainQuery)
+	}
 }
 
 func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId RefreshableResultWithResultId) (RefreshableResultWithResultId, error) {
@@ -1605,4 +1636,72 @@ func (m *Manager) ExecutePluginDeeplink(ctx context.Context, pluginId string, ar
 			callback(arguments)
 		})
 	}
+}
+
+func (m *Manager) QueryMRU(ctx context.Context) []QueryResultUI {
+	mruItems, err := setting.GetSettingManager().GetMRUItems(ctx, 10)
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to get MRU items: %s", err.Error()))
+		return []QueryResultUI{}
+	}
+
+	var results []QueryResultUI
+	for _, item := range mruItems {
+		pluginInstance := m.getPluginInstance(item.PluginID)
+		if pluginInstance == nil {
+			continue
+		}
+		if !pluginInstance.Metadata.IsSupportFeature(MetadataFeatureMRU) {
+			continue
+		}
+
+		if restored := m.restoreFromMRU(ctx, pluginInstance, item); restored != nil {
+			polishedResult := m.PolishResult(ctx, pluginInstance, Query{}, *restored)
+			results = append(results, polishedResult.ToUI())
+		}
+	}
+
+	return results
+}
+
+// getPluginInstance finds a plugin instance by ID
+func (m *Manager) getPluginInstance(pluginID string) *Instance {
+	pluginInstance, found := lo.Find(m.instances, func(item *Instance) bool {
+		return item.Metadata.Id == pluginID
+	})
+	if found {
+		return pluginInstance
+	}
+	return nil
+}
+
+// restoreFromMRU attempts to restore a QueryResult from MRU data
+func (m *Manager) restoreFromMRU(ctx context.Context, pluginInstance *Instance, item setting.MRUItem) *QueryResult {
+	// For Go plugins, call MRU restore callbacks directly
+	if len(pluginInstance.MRURestoreCallbacks) > 0 {
+		mruData := MRUData{
+			PluginID:    item.PluginID,
+			Title:       item.Title,
+			SubTitle:    item.SubTitle,
+			Icon:        item.Icon,
+			ContextData: item.ContextData,
+			LastUsed:    item.LastUsed,
+			UseCount:    item.UseCount,
+		}
+
+		// Call the first (and typically only) MRU restore callback
+		if restored, err := pluginInstance.MRURestoreCallbacks[0](mruData); err == nil {
+			return restored
+		} else {
+			util.GetLogger().Debug(ctx, fmt.Sprintf("MRU restore failed for plugin %s: %s", pluginInstance.Metadata.Name, err.Error()))
+		}
+	}
+
+	// For external plugins (Python/Node.js), MRU support will be implemented later
+	// Currently only Go plugins support MRU functionality
+	if pluginInstance.Host != nil {
+		util.GetLogger().Debug(ctx, fmt.Sprintf("External plugin MRU restore not yet implemented for plugin %s", pluginInstance.Metadata.Name))
+	}
+
+	return nil
 }

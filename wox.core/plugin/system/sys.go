@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path"
@@ -34,6 +35,10 @@ type SysCommand struct {
 	Action                 func(ctx context.Context, actionContext plugin.ActionContext)
 }
 
+type sysContextData struct {
+	CommandTitle string `json:"commandTitle"`
+}
+
 func (r *SysPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id:            "227f7d64-df08-4e35-ad05-98a26d540d06",
@@ -54,6 +59,11 @@ func (r *SysPlugin) GetMetadata() plugin.Metadata {
 			"Windows",
 			"Macos",
 			"Linux",
+		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureMRU,
+			},
 		},
 	}
 }
@@ -186,11 +196,17 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 		}
 
 		if isTitleMatch {
+			contextData := sysContextData{
+				CommandTitle: command.Title,
+			}
+			contextDataJson, _ := json.Marshal(contextData)
+
 			results = append(results, plugin.QueryResult{
-				Title:    command.Title,
-				SubTitle: command.SubTitle,
-				Score:    titleScore,
-				Icon:     command.Icon,
+				Title:       command.Title,
+				SubTitle:    command.SubTitle,
+				Score:       titleScore,
+				Icon:        command.Icon,
+				ContextData: string(contextDataJson),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   "i18n:plugin_sys_execute",
@@ -200,6 +216,8 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 				},
 			})
 		}
+
+		r.api.OnMRURestore(ctx, r.handleMRURestore)
 	}
 
 	for _, instance := range plugin.GetPluginManager().GetPluginInstances() {
@@ -235,4 +253,40 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 	}
 
 	return
+}
+
+func (r *SysPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	var contextData sysContextData
+	if err := json.Unmarshal([]byte(mruData.ContextData), &contextData); err != nil {
+		return nil, fmt.Errorf("failed to parse context data: %w", err)
+	}
+
+	// Find the command by title
+	var foundCommand *SysCommand
+	for _, command := range r.commands {
+		if command.Title == contextData.CommandTitle {
+			foundCommand = &command
+			break
+		}
+	}
+
+	if foundCommand == nil {
+		return nil, fmt.Errorf("system command no longer exists: %s", contextData.CommandTitle)
+	}
+
+	result := &plugin.QueryResult{
+		Title:       foundCommand.Title,
+		SubTitle:    foundCommand.SubTitle,
+		Icon:        mruData.Icon,
+		ContextData: mruData.ContextData,
+		Actions: []plugin.QueryResultAction{
+			{
+				Name:                   "i18n:plugin_sys_execute",
+				Action:                 foundCommand.Action,
+				PreventHideAfterAction: foundCommand.PreventHideAfterAction,
+			},
+		},
+	}
+
+	return result, nil
 }

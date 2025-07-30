@@ -210,6 +210,7 @@ type QueryResultCache struct {
 	ResultTitle    string
 	ResultSubTitle string
 	ContextData    string
+	Icon           common.WoxImage
 	Refresh        func(context.Context, RefreshableResult) RefreshableResult
 	PluginInstance *Instance
 	Query          Query

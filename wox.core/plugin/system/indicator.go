@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"wox/common"
 	"wox/i18n"
@@ -19,6 +20,12 @@ func init() {
 
 type IndicatorPlugin struct {
 	api plugin.API
+}
+
+type indicatorContextData struct {
+	TriggerKeyword string `json:"triggerKeyword"`
+	PluginID       string `json:"pluginId"`
+	Command        string `json:"command,omitempty"`
 }
 
 func (i *IndicatorPlugin) GetMetadata() plugin.Metadata {
@@ -41,11 +48,17 @@ func (i *IndicatorPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureMRU,
+			},
+		},
 	}
 }
 
 func (i *IndicatorPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	i.api = initParams.API
+	i.api.OnMRURestore(ctx, i.handleMRURestore)
 }
 
 func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -55,12 +68,19 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			return triggerKeyword != "*" && IsStringMatchNoPinYin(ctx, triggerKeyword, query.Search)
 		})
 		if found {
+			contextData := indicatorContextData{
+				TriggerKeyword: triggerKeyword,
+				PluginID:       pluginInstance.Metadata.Id,
+			}
+			contextDataJson, _ := json.Marshal(contextData)
+
 			results = append(results, plugin.QueryResult{
-				Id:       uuid.NewString(),
-				Title:    triggerKeyword,
-				SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), pluginInstance.Metadata.Name),
-				Score:    10,
-				Icon:     pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
+				Id:          uuid.NewString(),
+				Title:       triggerKeyword,
+				SubTitle:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), pluginInstance.Metadata.Name),
+				Score:       10,
+				Icon:        pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
+				ContextData: string(contextDataJson),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   "i18n:plugin_indicator_activate",
@@ -100,4 +120,60 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 		}
 	}
 	return results
+}
+
+func (i *IndicatorPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	var contextData indicatorContextData
+	if err := json.Unmarshal([]byte(mruData.ContextData), &contextData); err != nil {
+		return nil, fmt.Errorf("failed to parse context data: %w", err)
+	}
+
+	// Find the plugin instance by ID
+	var pluginInstance *plugin.Instance
+	for _, instance := range plugin.GetPluginManager().GetPluginInstances() {
+		if instance.Metadata.Id == contextData.PluginID {
+			pluginInstance = instance
+			break
+		}
+	}
+
+	if pluginInstance == nil {
+		return nil, fmt.Errorf("plugin no longer exists: %s", contextData.PluginID)
+	}
+
+	// Check if trigger keyword still exists
+	triggerKeywords := pluginInstance.GetTriggerKeywords()
+	found := false
+	for _, keyword := range triggerKeywords {
+		if keyword == contextData.TriggerKeyword {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil, fmt.Errorf("trigger keyword no longer exists: %s", contextData.TriggerKeyword)
+	}
+
+	result := &plugin.QueryResult{
+		Id:          uuid.NewString(),
+		Title:       contextData.TriggerKeyword,
+		SubTitle:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(context.Background(), "plugin_indicator_activate_plugin"), pluginInstance.Metadata.Name),
+		Icon:        mruData.Icon,
+		ContextData: mruData.ContextData,
+		Actions: []plugin.QueryResultAction{
+			{
+				Name:                   "i18n:plugin_indicator_activate",
+				PreventHideAfterAction: true,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					i.api.ChangeQuery(ctx, common.PlainQuery{
+						QueryType: plugin.QueryTypeInput,
+						QueryText: fmt.Sprintf("%s ", contextData.TriggerKeyword),
+					})
+				},
+			},
+		},
+	}
+
+	return result, nil
 }

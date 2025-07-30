@@ -37,6 +37,7 @@ type API interface {
 	OnGetDynamicSetting(ctx context.Context, callback func(key string) string)
 	OnDeepLink(ctx context.Context, callback func(arguments map[string]string))
 	OnUnload(ctx context.Context, callback func())
+	OnMRURestore(ctx context.Context, callback func(mruData MRUData) (*QueryResult, error))
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
 	AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error
 }
@@ -303,6 +304,15 @@ func (a *APIImpl) applyStartTimeIfAbsent(streamResult *common.ChatStreamData) {
 		}
 		streamResult.ToolCalls[toolCallIndex].StartTimestamp = startTime
 	}
+}
+
+func (a *APIImpl) OnMRURestore(ctx context.Context, callback func(mruData MRUData) (*QueryResult, error)) {
+	if !a.pluginInstance.Metadata.IsSupportFeature(MetadataFeatureMRU) {
+		a.Log(ctx, LogLevelError, "plugin has no access to MRU feature")
+		return
+	}
+
+	a.pluginInstance.MRURestoreCallbacks = append(a.pluginInstance.MRURestoreCallbacks, callback)
 }
 
 func NewAPI(instance *Instance) API {

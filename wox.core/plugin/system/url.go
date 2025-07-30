@@ -26,6 +26,12 @@ type UrlHistory struct {
 	Title string
 }
 
+type urlContextData struct {
+	Url   string `json:"url"`
+	Title string `json:"title"`
+	Type  string `json:"type"` // "history" or "direct"
+}
+
 type UrlPlugin struct {
 	api        plugin.API
 	reg        *regexp.Regexp
@@ -53,6 +59,11 @@ func (r *UrlPlugin) GetMetadata() plugin.Metadata {
 			"Macos",
 			"Linux",
 		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureMRU,
+			},
+		},
 	}
 }
 
@@ -60,6 +71,8 @@ func (r *UrlPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.api = initParams.API
 	r.reg = r.getReg()
 	r.recentUrls = r.loadRecentUrls(ctx)
+
+	r.api.OnMRURestore(ctx, r.handleMRURestore)
 }
 
 func (r *UrlPlugin) loadRecentUrls(ctx context.Context) []UrlHistory {
@@ -90,11 +103,19 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 		})
 
 		for _, history := range existingUrlHistory {
+			contextData := urlContextData{
+				Url:   history.Url,
+				Title: history.Title,
+				Type:  "history",
+			}
+			contextDataJson, _ := json.Marshal(contextData)
+
 			results = append(results, plugin.QueryResult{
-				Title:    history.Url,
-				SubTitle: history.Title,
-				Score:    100,
-				Icon:     history.Icon.Overlay(urlIcon, 0.4, 0.6, 0.6),
+				Title:       history.Url,
+				SubTitle:    history.Title,
+				Score:       100,
+				Icon:        history.Icon.Overlay(urlIcon, 0.4, 0.6, 0.6),
+				ContextData: string(contextDataJson),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_url_open",
@@ -119,11 +140,19 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 	}
 
 	if len(r.reg.FindStringIndex(query.Search)) > 0 {
+		contextData := urlContextData{
+			Url:   query.Search,
+			Title: "",
+			Type:  "direct",
+		}
+		contextDataJson, _ := json.Marshal(contextData)
+
 		results = append(results, plugin.QueryResult{
-			Title:    query.Search,
-			SubTitle: "i18n:plugin_url_open_in_browser",
-			Score:    100,
-			Icon:     urlIcon,
+			Title:       query.Search,
+			SubTitle:    "i18n:plugin_url_open_in_browser",
+			Score:       100,
+			Icon:        urlIcon,
+			ContextData: string(contextDataJson),
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_url_open",
@@ -201,4 +230,78 @@ func (r *UrlPlugin) removeRecentUrl(ctx context.Context, url string) {
 	}
 
 	r.api.SaveSetting(ctx, "recentUrls", string(urlsJson), false)
+}
+
+func (r *UrlPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	var contextData urlContextData
+	if err := json.Unmarshal([]byte(mruData.ContextData), &contextData); err != nil {
+		return nil, fmt.Errorf("failed to parse context data: %w", err)
+	}
+
+	url := contextData.Url
+	if !strings.HasPrefix(url, "http") {
+		url = "https://" + url
+	}
+
+	result := &plugin.QueryResult{
+		Title:       contextData.Url,
+		SubTitle:    contextData.Title,
+		Icon:        mruData.Icon,
+		ContextData: mruData.ContextData,
+	}
+
+	if contextData.Type == "history" {
+		found := false
+		for _, history := range r.recentUrls {
+			if history.Url == contextData.Url {
+				found = true
+				result.SubTitle = history.Title
+				break
+			}
+		}
+
+		if !found {
+			return nil, fmt.Errorf("URL no longer in history: %s", contextData.Url)
+		}
+
+		result.Actions = []plugin.QueryResultAction{
+			{
+				Name: "i18n:plugin_url_open",
+				Icon: plugin.OpenIcon,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					openErr := shell.Open(url)
+					if openErr != nil {
+						r.api.Log(ctx, "Error opening URL", openErr.Error())
+					}
+				},
+			},
+			{
+				Name: "i18n:plugin_url_remove",
+				Icon: plugin.TrashIcon,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					r.removeRecentUrl(ctx, contextData.Url)
+				},
+			},
+		}
+	} else {
+		result.SubTitle = "i18n:plugin_url_open_in_browser"
+		result.Actions = []plugin.QueryResultAction{
+			{
+				Name: "i18n:plugin_url_open",
+				Icon: urlIcon,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					openErr := shell.Open(url)
+					if openErr != nil {
+						r.api.Log(ctx, "Error opening URL", openErr.Error())
+					} else {
+						util.Go(ctx, "saveRecentUrl", func() {
+							r.saveRecentUrl(ctx, url)
+						})
+					}
+				},
+			},
+		}
+	}
+
+	return result, nil
 }

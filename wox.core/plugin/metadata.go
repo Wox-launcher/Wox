@@ -37,6 +37,10 @@ const (
 	// by default, the width ratio is 0.5, which means the result list and preview panel have the same width
 	// if the width ratio is 0.3, which means the result list takes 30% of the width and the preview panel takes 70% of the width
 	MetadataFeatureResultPreviewWidthRatio MetadataFeatureName = "resultPreviewWidthRatio"
+
+	// enable this feature to support MRU (Most Recently Used) functionality
+	// plugin must implement OnMRURestore callback to restore results from MRU data
+	MetadataFeatureMRU MetadataFeatureName = "mru"
 )
 
 // Metadata parsed from plugin.json, see `Plugin.json.md` for more detail

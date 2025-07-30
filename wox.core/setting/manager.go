@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 	"wox/common"
 	"wox/database"
 	"wox/util"
 	"wox/util/autostart"
+
+	"github.com/samber/lo"
 )
 
 var managerInstance *Manager
@@ -16,6 +19,7 @@ var logger *util.Log
 
 type Manager struct {
 	woxSetting *WoxSetting
+	mruManager *MRUManager
 }
 
 func GetSettingManager() *Manager {
@@ -30,6 +34,7 @@ func GetSettingManager() *Manager {
 		store := NewWoxSettingStore(db)
 		managerInstance = &Manager{}
 		managerInstance.woxSetting = NewWoxSetting(store)
+		managerInstance.mruManager = NewMRUManager(db)
 	})
 	return managerInstance
 }
@@ -77,14 +82,14 @@ func (m *Manager) GetWoxSetting(ctx context.Context) *WoxSetting {
 	return m.woxSetting
 }
 
-func (m *Manager) GetLatestQueryHistory(ctx context.Context, limit int) []common.PlainQuery {
+func (m *Manager) GetLatestQueryHistory(ctx context.Context, limit int) []QueryHistory {
 	histories := m.woxSetting.QueryHistories.Get()
 
 	// Sort by timestamp descending and limit results
-	var result []common.PlainQuery
+	var result []QueryHistory
 	count := 0
 	for i := len(histories) - 1; i >= 0 && count < limit; i-- {
-		result = append(result, histories[i].Query)
+		result = append(result, histories[i])
 		count++
 	}
 
@@ -136,4 +141,65 @@ func (m *Manager) RemoveFavoriteResult(ctx context.Context, pluginId string, res
 	favoriteResults := m.woxSetting.FavoriteResults.Get()
 	favoriteResults.Delete(resultHash)
 	m.woxSetting.FavoriteResults.Set(favoriteResults)
+}
+
+func (m *Manager) AddQueryHistory(ctx context.Context, query common.PlainQuery) {
+	histories := m.woxSetting.QueryHistories.Get()
+	newHistory := QueryHistory{
+		Query:     query,
+		Timestamp: util.GetSystemTimestamp(),
+	}
+
+	// Remove duplicate if exists (same query text)
+	histories = lo.Filter(histories, func(item QueryHistory, index int) bool {
+		return !item.Query.IsEmpty() && item.Query.QueryText != query.QueryText
+	})
+
+	// Add new history at the end
+	histories = append(histories, newHistory)
+
+	// Keep only the most recent 1000 entries
+	if len(histories) > 1000 {
+		histories = histories[len(histories)-1000:]
+	}
+
+	m.woxSetting.QueryHistories.Set(histories)
+}
+
+// MRU related methods
+
+func (m *Manager) AddMRUItem(ctx context.Context, item MRUItem) error {
+	return m.mruManager.AddMRUItem(ctx, item)
+}
+
+func (m *Manager) GetMRUItems(ctx context.Context, limit int) ([]MRUItem, error) {
+	return m.mruManager.GetMRUItems(ctx, limit)
+}
+
+func (m *Manager) RemoveMRUItem(ctx context.Context, pluginID, title, subTitle string) error {
+	return m.mruManager.RemoveMRUItem(ctx, pluginID, title, subTitle)
+}
+
+func (m *Manager) CleanupOldMRUItems(ctx context.Context, keepCount int) error {
+	return m.mruManager.CleanupOldMRUItems(ctx, keepCount)
+}
+
+// StartMRUCleanup starts a background goroutine to periodically clean up old MRU items
+func (m *Manager) StartMRUCleanup(ctx context.Context) {
+	util.Go(ctx, "MRU cleanup", func() {
+		ticker := time.NewTicker(24 * time.Hour) // Clean up once per day
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				// Keep only the most recent 100 MRU items
+				if err := m.CleanupOldMRUItems(ctx, 100); err != nil {
+					util.GetLogger().Error(ctx, fmt.Sprintf("failed to cleanup old MRU items: %s", err.Error()))
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
 }

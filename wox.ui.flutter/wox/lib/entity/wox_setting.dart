@@ -12,7 +12,7 @@ class WoxSetting {
   late String langCode;
   late List<QueryHotkey> queryHotkeys;
   late List<QueryShortcut> queryShortcuts;
-  late String lastQueryMode;
+  late String queryMode;
   late String showPosition;
   late List<AIProvider> aiProviders;
   late int appWidth;
@@ -37,7 +37,7 @@ class WoxSetting {
     required this.langCode,
     required this.queryHotkeys,
     required this.queryShortcuts,
-    required this.lastQueryMode,
+    required this.queryMode,
     required this.showPosition,
     required this.aiProviders,
     required this.appWidth,
@@ -81,7 +81,7 @@ class WoxSetting {
       queryShortcuts = <QueryShortcut>[];
     }
 
-    lastQueryMode = json['LastQueryMode'];
+    queryMode = json['QueryMode'] ?? 'empty';
 
     if (json['AIProviders'] != null) {
       aiProviders = <AIProvider>[];
@@ -116,7 +116,7 @@ class WoxSetting {
     data['LangCode'] = langCode;
     data['QueryHotkeys'] = queryHotkeys;
     data['QueryShortcuts'] = queryShortcuts;
-    data['LastQueryMode'] = lastQueryMode;
+    data['QueryMode'] = queryMode;
     data['ShowPosition'] = showPosition;
     data['AIProviders'] = aiProviders;
     data['AppWidth'] = appWidth;

@@ -19,13 +19,14 @@ import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_query.dart';
+import 'package:wox/enums/wox_query_mode_enum.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_toolbar.dart';
 import 'package:wox/entity/wox_websocket_msg.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
-import 'package:wox/enums/wox_last_query_mode_enum.dart';
+
 import 'package:wox/enums/wox_msg_method_enum.dart';
 import 'package:wox/enums/wox_msg_type_enum.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
@@ -78,7 +79,7 @@ class WoxLauncherController extends GetxController {
   var currentQueryHistoryIndex = 0; //  query history index, used to navigate query history
 
   var refreshCounter = 0;
-  var lastQueryMode = WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_PRESERVE.code;
+  var lastQueryMode = WoxQueryModeEnum.WOX_QUERY_MODE_PRESERVE.code;
   final isInSettingView = false.obs;
   var positionBeforeOpenSetting = const Offset(0, 0);
 
@@ -148,7 +149,6 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
-    //ignore the results if the query id is not matched
     if (currentQuery.value.queryId != receivedResults.first.queryId) {
       Logger.instance.error(traceId, "query id is not matched, ignore the results");
       return;
@@ -215,7 +215,7 @@ class WoxLauncherController extends GetxController {
   Future<void> showApp(String traceId, ShowAppParams params) async {
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
       canArrowUpHistory = true;
-      if (lastQueryMode == WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_PRESERVE.code) {
+      if (lastQueryMode == WoxQueryModeEnum.WOX_QUERY_MODE_PRESERVE.code) {
         //skip the first one, because it's the current query
         currentQueryHistoryIndex = 0;
       } else {
@@ -225,7 +225,15 @@ class WoxLauncherController extends GetxController {
 
     // update some properties to latest for later use
     latestQueryHistories.assignAll(params.queryHistories);
-    lastQueryMode = params.lastQueryMode;
+    lastQueryMode = params.queryMode;
+
+    // Handle MRU mode
+    if (lastQueryMode == WoxQueryModeEnum.WOX_QUERY_MODE_MRU.code) {
+      // Clear current query and show MRU results
+      currentQuery.value = PlainQuery.emptyInput();
+      queryBoxTextFieldController.clear();
+      queryMRU(traceId);
+    }
 
     // Handle different position types
     // on linux, we need to show first and then set position or center it
@@ -247,8 +255,10 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> hideApp(String traceId) async {
-    //clear query box text if query type is selection or last query mode is empty
-    if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code || lastQueryMode == WoxLastQueryModeEnum.WOX_LAST_QUERY_MODE_EMPTY.code) {
+    //clear query box text if query type is selection or last query mode is empty or MRU
+    if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code ||
+        lastQueryMode == WoxQueryModeEnum.WOX_QUERY_MODE_EMPTY.code ||
+        lastQueryMode == WoxQueryModeEnum.WOX_QUERY_MODE_MRU.code) {
       currentQuery.value = PlainQuery.emptyInput();
       queryBoxTextFieldController.clear();
       hideActionPanel(traceId);
@@ -439,6 +449,24 @@ class WoxLauncherController extends GetxController {
     }
   }
 
+  Future<void> queryMRU(String traceId) async {
+    clearQueryResults(traceId);
+
+    var queryId = const UuidV4().generate();
+    currentQuery.value = PlainQuery.emptyInput();
+    currentQuery.value.queryId = queryId;
+
+    try {
+      final results = await WoxApi.instance.queryMRU(traceId);
+      for (var result in results) {
+        result.queryId = queryId;
+      }
+      onReceivedQueryResults(traceId, results);
+    } catch (e) {
+      Logger.instance.error(traceId, "Failed to query MRU: $e");
+    }
+  }
+
   void onQueryChanged(String traceId, PlainQuery query, String changeReason, {bool moveCursorToEnd = false}) {
     Logger.instance.debug(traceId, "query changed: ${query.queryText}, reason: $changeReason");
 
@@ -469,7 +497,12 @@ class WoxLauncherController extends GetxController {
     updateResultPreviewWidthRatioOnQueryChanged(traceId, query);
     updateToolbarOnQueryChanged(traceId, query);
     if (query.isEmpty) {
-      clearQueryResults(traceId);
+      // Check if we should show MRU results when query is empty
+      if (lastQueryMode == WoxQueryModeEnum.WOX_QUERY_MODE_MRU.code) {
+        queryMRU(traceId);
+      } else {
+        clearQueryResults(traceId);
+      }
       return;
     }
 
@@ -854,7 +887,7 @@ class WoxLauncherController extends GetxController {
           traceId,
           ShowAppParams(
             queryHistories: latestQueryHistories,
-            lastQueryMode: lastQueryMode,
+            queryMode: lastQueryMode,
             selectAll: true,
             position: Position(
               type: WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code,
