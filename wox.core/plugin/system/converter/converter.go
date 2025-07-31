@@ -37,7 +37,7 @@ func (c *Converter) GetMetadata() plugin.Metadata {
 		Entry:         "",
 		TriggerKeywords: []string{
 			"*",
-			"calculator",
+			"converter",
 		},
 		Commands: []plugin.MetadataCommand{},
 		SupportedOS: []string{
