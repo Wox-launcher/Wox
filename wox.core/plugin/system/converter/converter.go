@@ -32,7 +32,7 @@ func (c *Converter) GetMetadata() plugin.Metadata {
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
-		Description:   "Calculator for Wox",
+		Description:   "Multi-unit calculator and converter for Wox",
 		Icon:          plugin.PluginConverterIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
