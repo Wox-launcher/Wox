@@ -234,12 +234,18 @@ class WoxLauncherController extends GetxController {
     latestQueryHistories.assignAll(params.queryHistories);
     lastQueryMode = params.queryMode;
 
-    // Handle MRU mode
+    // Handle MRU mode only when there is no current input
     if (lastQueryMode == WoxQueryModeEnum.WOX_QUERY_MODE_MRU.code) {
-      // Clear current query and show MRU results
-      currentQuery.value = PlainQuery.emptyInput();
-      queryBoxTextFieldController.clear();
-      queryMRU(traceId);
+      // If we are opening via a query hotkey, ChangeQuery has already set a non-empty query.
+      // In that case, do NOT override it with MRU.
+      final isInputWithText = currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code && currentQuery.value.queryText.isNotEmpty;
+      final isSelectionQuery = currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code;
+      if (!isInputWithText && !isSelectionQuery) {
+        // Show MRU only when opening with empty input
+        currentQuery.value = PlainQuery.emptyInput();
+        queryBoxTextFieldController.clear();
+        queryMRU(traceId);
+      }
     }
 
     // Handle different position types
