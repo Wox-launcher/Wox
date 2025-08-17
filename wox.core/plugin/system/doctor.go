@@ -63,9 +63,6 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) (results [
 			},
 		}
 
-		// Add preview
-		result.Preview = check.Preview
-
 		results = append(results, result)
 	}
 

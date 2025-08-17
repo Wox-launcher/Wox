@@ -1,6 +1,5 @@
 import Cocoa
 import FlutterMacOS
-import flutter_inappwebview_macos
 
 @main
 class AppDelegate: FlutterAppDelegate {
@@ -245,20 +244,5 @@ class AppDelegate: FlutterAppDelegate {
     }
 
     super.applicationDidFinishLaunching(notification)
-  }
-}
-
-// flutter_inappwebview has bugs to enable transparent background
-// this is the workaround https://github.com/pichillilorenzo/flutter_inappwebview/issues/2475#issuecomment-2699794479
-extension InAppWebView {
-  @objc public override func viewDidMoveToWindow() {
-    super.viewDidMoveToWindow()
-
-    if window != nil {
-      print("InAppWebView moved to window, enforcing transparency")
-      self.setValue(false, forKey: "opaque")
-      self.setValue(false, forKey: "drawsBackground")
-      self.layer?.backgroundColor = NSColor.clear.cgColor
-    }
   }
 }
