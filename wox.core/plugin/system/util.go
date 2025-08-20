@@ -77,6 +77,14 @@ func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (common.Wox
 		}, nil
 	}
 
+	// 1) Try Google favicon service first (usually returns PNG)
+	domain := parseUrl.Hostname()
+	googleFaviconUrl := fmt.Sprintf("https://www.google.com/s2/favicons?sz=96&domain_url=%s", url.QueryEscape(domain))
+	if downloadErr := util.HttpDownload(ctx, googleFaviconUrl, iconCachePath); downloadErr == nil {
+		return common.NewWoxImageAbsolutePath(iconCachePath), nil
+	}
+
+	// 2) Fallback to besticon crawler
 	option := besticon.WithLogger(besticon.NewDefaultLogger(io.Discard))
 	iconFinder := besticon.New(option).NewIconFinder()
 	icons, fetchErr := iconFinder.FetchIcons(hostUrl)
@@ -105,6 +113,83 @@ func getWebsiteIconWithCache(ctx context.Context, websiteUrl string) (common.Wox
 	}
 
 	return woxImage, nil
+}
+
+// getWebsiteIconFromCacheOnly checks if favicon exists in local cache without any network.
+// return (icon, true) if exists; otherwise (zero, false)
+func getWebsiteIconFromCacheOnly(ctx context.Context, websiteUrl string) (common.WoxImage, bool) {
+	parseUrl, err := url.Parse(websiteUrl)
+	if err != nil {
+		return common.WoxImage{}, false
+	}
+	hostUrl := parseUrl.Scheme + "://" + parseUrl.Host
+	iconPathMd5 := fmt.Sprintf("%x", md5.Sum([]byte(hostUrl)))
+	iconCachePath := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("website_icon_%s.png", iconPathMd5))
+	if _, statErr := os.Stat(iconCachePath); statErr == nil {
+		return common.NewWoxImageAbsolutePath(iconCachePath), true
+	}
+	return common.WoxImage{}, false
+}
+
+// PrefetchWebsiteIcons downloads favicons for given URLs in background using Google's service.
+// - Deduplicates by hostname
+// - Skips if cache already exists
+// - Uses short timeout per request
+func PrefetchWebsiteIcons(ctx context.Context, urls []string) {
+	// build unique hostnames
+	domainSet := map[string]struct{}{}
+	for _, raw := range urls {
+		if u, err := url.Parse(raw); err == nil {
+			if u.Hostname() != "" {
+				domainSet[u.Hostname()] = struct{}{}
+			}
+		}
+	}
+
+	jobs := make(chan string, len(domainSet))
+	workerCount := 8
+	for i := 0; i < workerCount; i++ {
+		util.Go(ctx, "prefetch favicon worker", func() {
+			for domain := range jobs {
+				// compute both http/https cache paths to keep key consistent with getWebsiteIcon*()
+				httpKey := "http://" + domain
+				httpsKey := "https://" + domain
+				httpCache := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("website_icon_%s.png", fmt.Sprintf("%x", md5.Sum([]byte(httpKey)))))
+				httpsCache := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("website_icon_%s.png", fmt.Sprintf("%x", md5.Sum([]byte(httpsKey)))))
+
+				// if both exist, skip
+				if _, err1 := os.Stat(httpCache); err1 == nil {
+					if _, err2 := os.Stat(httpsCache); err2 == nil {
+						continue
+					}
+				}
+
+				googleFaviconUrl := fmt.Sprintf("https://www.google.com/s2/favicons?sz=96&domain_url=%s", url.QueryEscape(domain))
+				// ensure https cache
+				if _, err := os.Stat(httpsCache); os.IsNotExist(err) {
+					gctx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+					_ = util.HttpDownload(gctx, googleFaviconUrl, httpsCache)
+					cancel()
+				}
+				// ensure http cache (copy from https if available; otherwise download again)
+				if _, err := os.Stat(httpCache); os.IsNotExist(err) {
+					if _, ok := os.Stat(httpsCache); ok == nil {
+						if data, rErr := os.ReadFile(httpsCache); rErr == nil {
+							_ = os.WriteFile(httpCache, data, os.ModePerm)
+						}
+					} else {
+						gctx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+						_ = util.HttpDownload(gctx, googleFaviconUrl, httpCache)
+						cancel()
+					}
+				}
+			}
+		})
+	}
+	for d := range domainSet {
+		jobs <- d
+	}
+	close(jobs)
 }
 
 func createLLMOnRefreshHandler(ctx context.Context,

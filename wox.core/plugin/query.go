@@ -80,8 +80,9 @@ func (q *Query) String() string {
 }
 
 type QueryEnv struct {
-	ActiveWindowTitle string // active window title when user query, empty if not available
-	ActiveWindowPid   int    // active window pid when user query, 0 if not available
+	ActiveWindowTitle string          // active window title when user query, empty if not available
+	ActiveWindowPid   int             // active window pid when user query, 0 if not available
+	ActiveWindowIcon  common.WoxImage // active window icon when user query, empty if not available
 
 	// active browser url when user query
 	// Only available when active window is browser and https://github.com/Wox-launcher/Wox.Chrome.Extension is installed

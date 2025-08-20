@@ -97,6 +97,9 @@ class QueryEnv:
     active_window_pid: int = field(default=0)
     """Active window pid when user query, 0 if not available"""
 
+    active_window_icon: dict = field(default_factory=dict)
+    """Active window icon when user query (WoxImage dict), may be empty"""
+
     active_browser_url: str = field(default="")
     """
     Active browser url when user query
@@ -109,6 +112,7 @@ class QueryEnv:
             {
                 "ActiveWindowTitle": self.active_window_title,
                 "ActiveWindowPid": self.active_window_pid,
+                "ActiveWindowIcon": self.active_window_icon,
                 "ActiveBrowserUrl": self.active_browser_url,
             }
         )
@@ -120,6 +124,7 @@ class QueryEnv:
         return cls(
             active_window_title=data.get("ActiveWindowTitle", ""),
             active_window_pid=data.get("ActiveWindowPid", 0),
+            active_window_icon=data.get("ActiveWindowIcon", {}),
             active_browser_url=data.get("ActiveBrowserUrl", ""),
         )
 

@@ -34,12 +34,22 @@ func (u *uiImpl) HideApp(ctx context.Context) {
 func (u *uiImpl) ShowApp(ctx context.Context, showContext common.ShowContext) {
 	GetUIManager().SetActiveWindowName(window.GetActiveWindowName())
 	GetUIManager().SetActiveWindowPid(window.GetActiveWindowPid())
+	if icon, err := window.GetActiveWindowIcon(); err == nil {
+		if woxIcon, convErr := common.NewWoxImage(icon); convErr == nil {
+			GetUIManager().SetActiveWindowIcon(woxIcon)
+		}
+	}
 	u.invokeWebsocketMethod(ctx, "ShowApp", getShowAppParams(ctx, showContext))
 }
 
 func (u *uiImpl) ToggleApp(ctx context.Context) {
 	GetUIManager().SetActiveWindowName(window.GetActiveWindowName())
 	GetUIManager().SetActiveWindowPid(window.GetActiveWindowPid())
+	if icon, err := window.GetActiveWindowIcon(); err == nil {
+		if woxIcon, convErr := common.NewWoxImage(icon); convErr == nil {
+			GetUIManager().SetActiveWindowIcon(woxIcon)
+		}
+	}
 	u.invokeWebsocketMethod(ctx, "ToggleApp", getShowAppParams(ctx, common.ShowContext{SelectAll: true}))
 }
 
@@ -137,6 +147,10 @@ func (u *uiImpl) GetActiveWindowName() string {
 
 func (u *uiImpl) GetActiveWindowPid() int {
 	return GetUIManager().GetActiveWindowPid()
+}
+
+func (u *uiImpl) GetActiveWindowIcon() common.WoxImage {
+	return GetUIManager().GetActiveWindowIcon()
 }
 
 func (u *uiImpl) invokeWebsocketMethod(ctx context.Context, method string, data any) (responseData any, responseErr error) {

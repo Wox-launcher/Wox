@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"wox/common"
 	"wox/plugin"
 	"wox/util"
 	"wox/util/shell"
@@ -22,11 +23,7 @@ func init() {
 type Bookmark struct {
 	Name string
 	Url  string
-}
-
-type bookmarkContextData struct {
-	Name string `json:"name"`
-	Url  string `json:"url"`
+	Icon common.WoxImage
 }
 
 type BrowserBookmarkPlugin struct {
@@ -109,6 +106,15 @@ func (c *BrowserBookmarkPlugin) Init(ctx context.Context, initParams plugin.Init
 	// Remove duplicate bookmarks (same name and url)
 	c.bookmarks = c.removeDuplicateBookmarks(c.bookmarks)
 
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("loaded %d bookmarks", len(c.bookmarks)))
+
+	// Prefetch all bookmark favicons in background without blocking
+	urls := make([]string, 0, len(c.bookmarks))
+	for _, b := range c.bookmarks {
+		urls = append(urls, b.Url)
+	}
+	util.Go(ctx, "prefetch bookmark favicons", func() { PrefetchWebsiteIcons(ctx, urls) })
+
 	c.api.OnMRURestore(ctx, c.handleMRURestore)
 }
 
@@ -135,17 +141,18 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) (
 		}
 
 		if isMatch {
-			contextData := bookmarkContextData{
-				Name: bookmark.Name,
-				Url:  bookmark.Url,
+			contextDataJson, _ := json.Marshal(bookmark)
+			// default icon, overlay cached favicon if exists (no network)
+			icon := browserBookmarkIcon
+			if cachedIcon, ok := getWebsiteIconFromCacheOnly(ctx, bookmark.Url); ok {
+				icon = cachedIcon.Overlay(browserBookmarkIcon, 0.4, 0.6, 0.6)
 			}
-			contextDataJson, _ := json.Marshal(contextData)
 
 			results = append(results, plugin.QueryResult{
 				Title:       bookmark.Name,
 				SubTitle:    bookmark.Url,
 				Score:       matchScore,
-				Icon:        browserBookmarkIcon,
+				Icon:        icon,
 				ContextData: string(contextDataJson),
 				Actions: []plugin.QueryResultAction{
 					{
@@ -227,9 +234,16 @@ func (c *BrowserBookmarkPlugin) loadBookmarkFromFile(ctx context.Context, bookma
 	for _, group := range groups {
 		if name, nameOk := group["name"]; nameOk {
 			if url, urlOk := group["url"]; urlOk {
+				// Do not block on network here; show default icon and overlay only if cache already exists
+				icon := browserBookmarkIcon
+				if cachedIcon, ok := getWebsiteIconFromCacheOnly(ctx, url); ok {
+					icon = cachedIcon.Overlay(browserBookmarkIcon, 0.4, 0.6, 0.6)
+				}
+
 				results = append(results, Bookmark{
 					Name: name,
 					Url:  url,
+					Icon: icon,
 				})
 			}
 		}
@@ -257,7 +271,7 @@ func (c *BrowserBookmarkPlugin) removeDuplicateBookmarks(bookmarks []Bookmark) [
 }
 
 func (c *BrowserBookmarkPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResult, error) {
-	var contextData bookmarkContextData
+	var contextData Bookmark
 	if err := json.Unmarshal([]byte(mruData.ContextData), &contextData); err != nil {
 		return nil, fmt.Errorf("failed to parse context data: %w", err)
 	}

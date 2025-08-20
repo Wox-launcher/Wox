@@ -29,6 +29,11 @@ export interface QueryEnv {
    */
   ActiveWindowPid: number
 
+  /**
+   * Active window icon when user query, may be empty
+   */
+  ActiveWindowIcon: WoxImage
+
   // active browser url when user query
   // Only available when active window is browser and https://github.com/Wox-launcher/Wox.Chrome.Extension is installed
   ActiveBrowserUrl: string

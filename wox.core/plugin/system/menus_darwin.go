@@ -40,7 +40,8 @@ func (i *MenusPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureQueryEnv,
 				Params: map[string]string{
-					"requireActiveWindowPid": "true",
+					"requireActiveWindowPid":  "true",
+					"requireActiveWindowIcon": "true",
 				},
 			},
 		},
@@ -53,8 +54,8 @@ func (i *MenusPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 
 func (i *MenusPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	icon := menusIcon
-	if iconImage, iconErr := GetActiveWindowIcon(ctx); iconErr == nil {
-		icon = iconImage
+	if !query.Env.ActiveWindowIcon.IsEmpty() {
+		icon = query.Env.ActiveWindowIcon
 	}
 
 	if query.Env.ActiveWindowPid == 0 {

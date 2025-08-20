@@ -41,6 +41,7 @@ type UI interface {
 	PickFiles(ctx context.Context, params PickFilesParams) []string
 	GetActiveWindowName() string
 	GetActiveWindowPid() int
+	GetActiveWindowIcon() WoxImage
 	GetServerPort(ctx context.Context) int
 	GetAllThemes(ctx context.Context) []Theme
 	ChangeTheme(ctx context.Context, theme Theme)

@@ -47,8 +47,9 @@ type Manager struct {
 	systemThemeIds   []string
 	isUIReadyHandled bool
 
-	activeWindowName string //active window name before wox is activated
-	activeWindowPid  int    //active window pid before wox is activated
+	activeWindowName string          // active window name before wox is activated
+	activeWindowPid  int             // active window pid before wox is activated
+	activeWindowIcon common.WoxImage // active window icon before wox is activated
 }
 
 func GetUIManager() *Manager {
@@ -546,6 +547,14 @@ func (m *Manager) SetActiveWindowPid(pid int) {
 
 func (m *Manager) GetActiveWindowPid() int {
 	return m.activeWindowPid
+}
+
+func (m *Manager) SetActiveWindowIcon(icon common.WoxImage) {
+	m.activeWindowIcon = icon
+}
+
+func (m *Manager) GetActiveWindowIcon() common.WoxImage {
+	return m.activeWindowIcon
 }
 
 func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
