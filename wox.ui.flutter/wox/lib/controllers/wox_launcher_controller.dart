@@ -140,6 +140,13 @@ class WoxLauncherController extends GetxController {
       }
     });
 
+    // Add scroll listener to update quick select numbers when scrolling
+    resultListViewController.scrollController.addListener(() {
+      if (isQuickSelectMode.value) {
+        updateQuickSelectNumbers(const UuidV4().generate());
+      }
+    });
+
     // Initialize doctor check info
     doctorCheckInfo.value = DoctorCheckInfo.empty();
   }
@@ -1189,18 +1196,55 @@ class WoxLauncherController extends GetxController {
   void updateQuickSelectNumbers(String traceId) {
     var items = resultListViewController.items;
 
+    // Get visible range
+    var visibleRange = _getVisibleItemRange();
+    var visibleStartIndex = visibleRange['start'] ?? 0;
+    var visibleEndIndex = visibleRange['end'] ?? items.length - 1;
+
+    // Count non-group items in visible range for numbering
+    var quickSelectNumber = 1;
+
     for (int i = 0; i < items.length; i++) {
       var item = items[i].value;
 
+      bool isInVisibleRange = i >= visibleStartIndex && i <= visibleEndIndex;
+      bool shouldShowQuickSelect = isQuickSelectMode.value && !item.isGroup && isInVisibleRange && quickSelectNumber <= 9;
+
       // Update quick select properties
       var updatedItem = item.copyWith(
-        isShowQuickSelect: isQuickSelectMode.value && !item.isGroup && i < 9,
-        quickSelectNumber: (isQuickSelectMode.value && !item.isGroup && i < 9) ? (i + 1).toString() : '',
+        isShowQuickSelect: shouldShowQuickSelect,
+        quickSelectNumber: shouldShowQuickSelect ? quickSelectNumber.toString() : '',
       );
+
+      // Increment number only for non-group items in visible range that get a number
+      if (shouldShowQuickSelect) {
+        quickSelectNumber++;
+      }
 
       // Directly update the reactive item to trigger UI refresh
       items[i].value = updatedItem;
     }
+  }
+
+  /// Get the range of visible items in the result list
+  Map<String, int> _getVisibleItemRange() {
+    if (!resultListViewController.scrollController.hasClients || resultListViewController.items.isEmpty) {
+      return {'start': 0, 'end': resultListViewController.items.length - 1};
+    }
+
+    final itemHeight = WoxThemeUtil.instance.getResultItemHeight();
+    final currentOffset = resultListViewController.scrollController.offset;
+    final viewportHeight = resultListViewController.scrollController.position.viewportDimension;
+
+    if (viewportHeight <= 0) {
+      return {'start': 0, 'end': resultListViewController.items.length - 1};
+    }
+
+    final firstVisibleItemIndex = (currentOffset / itemHeight).floor();
+    final visibleItemCount = (viewportHeight / itemHeight).ceil();
+    final lastVisibleItemIndex = (firstVisibleItemIndex + visibleItemCount - 1).clamp(0, resultListViewController.items.length - 1);
+
+    return {'start': firstVisibleItemIndex.clamp(0, resultListViewController.items.length - 1), 'end': lastVisibleItemIndex};
   }
 
   /// Handle number key press in quick select mode
@@ -1210,13 +1254,31 @@ class WoxLauncherController extends GetxController {
     }
 
     var items = resultListViewController.items;
-    var targetIndex = number - 1;
 
-    if (targetIndex < items.length && !items[targetIndex].value.isGroup) {
-      Logger.instance.debug(traceId, "Quick select: selecting item $number");
-      resultListViewController.updateActiveIndex(traceId, targetIndex);
-      executeToolbarAction(traceId);
-      return true;
+    // Get visible range
+    var visibleRange = _getVisibleItemRange();
+    var visibleStartIndex = visibleRange['start'] ?? 0;
+    var visibleEndIndex = visibleRange['end'] ?? items.length - 1;
+
+    // Find the item with the matching quick select number in visible range
+    var quickSelectNumber = 1;
+    for (int i = visibleStartIndex; i <= visibleEndIndex && i < items.length; i++) {
+      var item = items[i].value;
+
+      if (!item.isGroup) {
+        if (quickSelectNumber == number) {
+          Logger.instance.debug(traceId, "Quick select: selecting item $number at index $i");
+          resultListViewController.updateActiveIndex(traceId, i);
+          executeToolbarAction(traceId);
+          return true;
+        }
+        quickSelectNumber++;
+
+        // Stop if we've exceeded the number we're looking for
+        if (quickSelectNumber > 9) {
+          break;
+        }
+      }
     }
 
     return false;

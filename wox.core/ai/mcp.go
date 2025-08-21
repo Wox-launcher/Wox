@@ -32,7 +32,7 @@ func getMCPClient(ctx context.Context, config common.AIChatMCPServerConfig) (c c
 		mcpClient = stdioClient
 	}
 	if config.Type == common.AIChatMCPServerTypeSSE {
-		sseClient, newErr := client.NewSSEMCPClient(config.Url, client.WithSSEReadTimeout(time.Second*30))
+		sseClient, newErr := client.NewSSEMCPClient(config.Url)
 		if newErr != nil {
 			return nil, newErr
 		}
