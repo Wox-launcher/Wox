@@ -197,13 +197,46 @@ func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (commo
 			}
 			return common.WoxImage{}, errors.New(msg)
 		}
+	} else if strings.HasSuffix(strings.ToLower(rawImagePath), ".png") {
+		// Check if it's a CgBI PNG (Apple's optimized PNG format)
+		// CgBI PNGs can't be displayed properly in browsers/Flutter
+		isCgbi, detectErr := isCgbiPNG(rawImagePath)
+		if detectErr == nil && isCgbi {
+			// Convert CgBI PNG to standard PNG using sips
+			out, convErr := shell.RunOutput("sips", "-s", "format", "png", rawImagePath, "--out", iconCachePath)
+			if convErr != nil {
+				msg := fmt.Sprintf("failed to convert CgBI PNG to standard PNG: %s", convErr.Error())
+				if out != nil {
+					msg = fmt.Sprintf("%s, output: %s", msg, string(out))
+				}
+				return common.WoxImage{}, errors.New(msg)
+			}
+		} else {
+			// Regular PNG, just copy
+			originF, originErr := os.Open(rawImagePath)
+			if originErr != nil {
+				return common.WoxImage{}, fmt.Errorf("can't open origin image file: %s", originErr.Error())
+			}
+			defer originF.Close()
+
+			destF, destErr := os.Create(iconCachePath)
+			if destErr != nil {
+				return common.WoxImage{}, fmt.Errorf("can't create cache file: %s", destErr.Error())
+			}
+			defer destF.Close()
+
+			if _, err := io.Copy(destF, originF); err != nil {
+				return common.WoxImage{}, fmt.Errorf("can't copy image to cache: %s", err.Error())
+			}
+		}
 	} else {
+		// Other image formats, just copy
 		originF, originErr := os.Open(rawImagePath)
 		if originErr != nil {
 			return common.WoxImage{}, fmt.Errorf("can't open origin image file: %s", originErr.Error())
 		}
+		defer originF.Close()
 
-		//copy image to cache
 		destF, destErr := os.Create(iconCachePath)
 		if destErr != nil {
 			return common.WoxImage{}, fmt.Errorf("can't create cache file: %s", destErr.Error())
@@ -402,6 +435,33 @@ func (a *MacRetriever) parseMacAppIconFromCgo(ctx context.Context, appPath strin
 	}
 
 	return "", errors.New("no icon found with system api")
+}
+
+// isCgbiPNG checks if a PNG file is in Apple's CgBI format
+// CgBI PNGs have a "CgBI" chunk in their header and can't be displayed properly in standard browsers
+func isCgbiPNG(filePath string) (bool, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return false, err
+	}
+	defer file.Close()
+
+	// Read first 512 bytes to check for CgBI chunk
+	buffer := make([]byte, 512)
+	n, err := file.Read(buffer)
+	if err != nil && err != io.EOF {
+		return false, err
+	}
+
+	// Look for "CgBI" signature in the buffer
+	cgbiSignature := []byte("CgBI")
+	for i := 0; i <= n-4; i++ {
+		if bytes.Equal(buffer[i:i+4], cgbiSignature) {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func (a *MacRetriever) GetPid(ctx context.Context, app appInfo) int {

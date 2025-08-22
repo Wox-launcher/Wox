@@ -4,10 +4,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:lottie/lottie.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_theme_icon_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
+import 'package:wox/utils/log.dart';
 
 // Image cache to prevent flickering during refreshes
 class _ImageCache {
@@ -51,6 +53,7 @@ class WoxImageView extends StatelessWidget {
         height: height,
         fit: BoxFit.contain,
         errorBuilder: (context, error, stackTrace) {
+          Logger.instance.error(const UuidV4().generate(), "Failed to load wox url image: $error");
           return SizedBox(width: width, height: height);
         },
       );

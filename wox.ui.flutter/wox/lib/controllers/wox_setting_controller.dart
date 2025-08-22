@@ -362,7 +362,7 @@ class WoxSettingController extends GetxController {
   }
 
   Future<void> switchToThemeList(bool isStoreTheme) async {
-    activePaneIndex.value = isStoreTheme ? 9 : 10;
+    activePaneIndex.value = isStoreTheme ? 10 : 11;
     isStoreThemeList.value = isStoreTheme;
     activeTheme.value = WoxTheme.empty();
     await refreshThemeList();
