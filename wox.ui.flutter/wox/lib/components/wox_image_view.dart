@@ -52,9 +52,26 @@ class WoxImageView extends StatelessWidget {
         width: width,
         height: height,
         fit: BoxFit.contain,
+        cacheWidth: width?.toInt(),
+        cacheHeight: height?.toInt(),
         errorBuilder: (context, error, stackTrace) {
-          Logger.instance.error(const UuidV4().generate(), "Failed to load wox url image: $error");
+          var traceId = const UuidV4().generate();
+          Logger.instance.error(traceId, "Failed to load wox url image: $error");
+          Logger.instance.error(traceId, "Image URL: ${woxImage.imageData}");
+          Logger.instance.error(traceId, "Stack trace: $stackTrace");
           return SizedBox(width: width, height: height);
+        },
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return SizedBox(
+            width: width,
+            height: height,
+            child: Center(
+              child: CircularProgressIndicator(
+                value: loadingProgress.expectedTotalBytes != null ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes! : null,
+              ),
+            ),
+          );
         },
       );
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_ABSOLUTE_PATH.code) {
