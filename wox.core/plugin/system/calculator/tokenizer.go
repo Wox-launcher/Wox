@@ -43,7 +43,7 @@ func (e *invalidTokenError) Error() string {
 	return ""
 }
 
-const operators = "+-*/(),"
+const operators = "+-*/^(),"
 
 func isOperator(char rune) bool {
 	for _, op := range operators {

@@ -15,6 +15,7 @@ const (
 	subNode  nodeKind = "-"
 	mulNode  nodeKind = "*"
 	divNode  nodeKind = "/"
+	powNode  nodeKind = "^"
 	funcNode nodeKind = "func"
 	numNode  nodeKind = "num"
 )
@@ -140,7 +141,6 @@ func (p *parser) consume(s string) bool {
 
 func (p *parser) parse() (*node, error) {
 	return p.add()
-
 }
 
 func (p *parser) insert(n *node, f func() (*node, error), kind nodeKind) (*node, error) {
@@ -176,19 +176,19 @@ func (p *parser) add() (*node, error) {
 }
 
 func (p *parser) mul() (*node, error) {
-	n, err := p.unary()
+	n, err := p.pow()
 	if err != nil {
 		return nil, err
 	}
 
 	for {
 		if p.consume("*") {
-			n, err = p.insert(n, p.unary, mulNode)
+			n, err = p.insert(n, p.pow, mulNode)
 			if err != nil {
 				return nil, err
 			}
 		} else if p.consume("/") {
-			n, err = p.insert(n, p.unary, divNode)
+			n, err = p.insert(n, p.pow, divNode)
 			if err != nil {
 				return nil, err
 			}
@@ -196,6 +196,23 @@ func (p *parser) mul() (*node, error) {
 			return n, nil
 		}
 	}
+}
+
+func (p *parser) pow() (*node, error) {
+	n, err := p.unary()
+	if err != nil {
+		return nil, err
+	}
+
+	// Right associative: 2^3^2 = 2^(3^2) = 2^9 = 512
+	if p.consume("^") {
+		right, err := p.pow()
+		if err != nil {
+			return nil, err
+		}
+		return &node{kind: powNode, left: n, right: right}, nil
+	}
+	return n, nil
 }
 
 func (p *parser) unary() (*node, error) {

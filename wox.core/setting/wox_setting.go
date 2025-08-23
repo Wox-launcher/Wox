@@ -43,7 +43,6 @@ type WoxSetting struct {
 	LastWindowX *WoxSettingValue[int]
 	LastWindowY *WoxSettingValue[int]
 
-	// Data that was previously in WoxAppData
 	QueryHistories  *WoxSettingValue[[]QueryHistory]
 	FavoriteResults *WoxSettingValue[*util.HashMap[ResultHash, bool]]
 	ActionedResults *WoxSettingValue[*util.HashMap[ResultHash, []ActionedResult]]

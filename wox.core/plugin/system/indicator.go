@@ -67,6 +67,18 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 		triggerKeyword, found := lo.Find(pluginInstance.GetTriggerKeywords(), func(triggerKeyword string) bool {
 			return triggerKeyword != "*" && IsStringMatchNoPinYin(ctx, triggerKeyword, query.Search)
 		})
+
+		if !found {
+			// search the plugin name and description
+			if IsStringMatchNoPinYin(ctx, pluginInstance.Metadata.Description, query.Search) || IsStringMatchNoPinYin(ctx, pluginInstance.Metadata.Name, query.Search) {
+				triggerKeywords := pluginInstance.GetTriggerKeywords()
+				if len(triggerKeywords) > 0 {
+					found = true
+					triggerKeyword = triggerKeywords[0]
+				}
+			}
+		}
+
 		if found {
 			contextData := indicatorContextData{
 				TriggerKeyword: triggerKeyword,

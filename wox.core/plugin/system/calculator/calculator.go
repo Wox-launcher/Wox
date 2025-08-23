@@ -121,6 +121,18 @@ func calculate(n *node) (decimal.Decimal, error) {
 			return decimal.Zero, err
 		}
 		return left.Div(right), nil
+	case powNode:
+		left, err := calculate(n.left)
+		if err != nil {
+			return decimal.Zero, err
+		}
+		right, err := calculate(n.right)
+		if err != nil {
+			return decimal.Zero, err
+		}
+		// Use math.Pow for power calculation
+		result := math.Pow(left.InexactFloat64(), right.InexactFloat64())
+		return decimal.NewFromFloat(result), nil
 	case numNode:
 		return n.val, nil
 	case funcNode:

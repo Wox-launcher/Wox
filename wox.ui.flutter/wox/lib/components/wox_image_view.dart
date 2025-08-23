@@ -52,8 +52,6 @@ class WoxImageView extends StatelessWidget {
         width: width,
         height: height,
         fit: BoxFit.contain,
-        cacheWidth: width?.toInt(),
-        cacheHeight: height?.toInt(),
         errorBuilder: (context, error, stackTrace) {
           var traceId = const UuidV4().generate();
           Logger.instance.error(traceId, "Failed to load wox url image: $error");

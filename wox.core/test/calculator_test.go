@@ -134,6 +134,66 @@ func TestCalculatorAdvanced(t *testing.T) {
 			ExpectedTitle:  "1",
 			ExpectedAction: "Copy result",
 		},
+		{
+			Name:           "Power operator basic",
+			Query:          "2^3",
+			ExpectedTitle:  "8",
+			ExpectedAction: "Copy result",
+		},
+		{
+			Name:           "Power operator with parentheses",
+			Query:          "(2+1)^2",
+			ExpectedTitle:  "9",
+			ExpectedAction: "Copy result",
+		},
+		{
+			Name:           "Power operator right associative",
+			Query:          "2^3^2",
+			ExpectedTitle:  "512",
+			ExpectedAction: "Copy result",
+		},
+		{
+			Name:           "Power operator with decimal",
+			Query:          "4^0.5",
+			ExpectedTitle:  "2",
+			ExpectedAction: "Copy result",
+		},
+		{
+			Name:           "Power operator negative base",
+			Query:          "(-2)^3",
+			ExpectedTitle:  "-8",
+			ExpectedAction: "Copy result",
+		},
+		{
+			Name:           "Power operator zero exponent",
+			Query:          "5^0",
+			ExpectedTitle:  "1",
+			ExpectedAction: "Copy result",
+		},
+		{
+			Name:           "Power operator complex expression",
+			Query:          "2^3 + 3^2",
+			ExpectedTitle:  "17",
+			ExpectedAction: "Copy result",
+		},
+		{
+			Name:           "Power operator with multiplication",
+			Query:          "2 * 3^2",
+			ExpectedTitle:  "18",
+			ExpectedAction: "Copy result",
+		},
+		{
+			Name:           "Power operator with division",
+			Query:          "16 / 2^2",
+			ExpectedTitle:  "4",
+			ExpectedAction: "Copy result",
+		},
+		{
+			Name:           "Power operator precedence",
+			Query:          "2 + 3^2 * 4",
+			ExpectedTitle:  "38",
+			ExpectedAction: "Copy result",
+		},
 	}
 
 	suite.RunQueryTests(tests)
