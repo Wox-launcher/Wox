@@ -70,7 +70,8 @@ func Extract(ctx context.Context) error {
 			return rmErr
 		}
 	}
-	othersErr := extractFiles(ctx, OthersFS, othersDirectory, "others", false)
+	// Enable recursive extraction for 'others' to support nested directories like 'others/woxmr'
+	othersErr := extractFiles(ctx, OthersFS, othersDirectory, "others", true)
 	if othersErr != nil {
 		return othersErr
 	}

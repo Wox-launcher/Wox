@@ -401,5 +401,8 @@
   "ui_about_version": "版本",
   "ui_about_docs": "文档",
   "ui_about_github": "GitHub",
-  "ui_about_description": "Wox 是一个适用于 Windows、macOS 和 Linux 的启动器，简单易用。"
+  "ui_about_description": "Wox 是一个适用于 Windows、macOS 和 Linux 的启动器，简单易用。",
+  "plugin_mediaplayer_toggle": "播放/暂停",
+  "plugin_mediaplayer_copy_info": "复制信息",
+  "plugin_mediaplayer_no_media": "没有正在播放的媒体"
 }

@@ -397,5 +397,8 @@
   "ui_about_version": "Version",
   "ui_about_docs": "Docs",
   "ui_about_github": "GitHub",
-  "ui_about_description": "Wox is a launcher for Windows, macOS and Linux that simply works."
+  "ui_about_description": "Wox is a launcher for Windows, macOS and Linux that simply works.",
+  "plugin_mediaplayer_toggle": "Play/Pause",
+  "plugin_mediaplayer_copy_info": "Copy info",
+  "plugin_mediaplayer_no_media": "No media"
 }

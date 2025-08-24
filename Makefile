@@ -66,6 +66,7 @@ dev: _check_deps
 	lefthook install -f
 
 	# Build hosts and flutter
+	$(MAKE) -C wox.core woxmr-build
 	$(MAKE) -C wox.plugin.host.nodejs build
 	$(MAKE) -C wox.plugin.host.python build
 	$(MAKE) -C wox.ui.flutter/wox build
