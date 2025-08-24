@@ -73,8 +73,11 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 			if IsStringMatchNoPinYin(ctx, pluginInstance.Metadata.Description, query.Search) || IsStringMatchNoPinYin(ctx, pluginInstance.Metadata.Name, query.Search) {
 				triggerKeywords := pluginInstance.GetTriggerKeywords()
 				if len(triggerKeywords) > 0 {
-					found = true
-					triggerKeyword = triggerKeywords[0]
+					// use the first trigger keyword if it's not global keyword
+					if triggerKeywords[0] != "*" {
+						found = true
+						triggerKeyword = triggerKeywords[0]
+					}
 				}
 			}
 		}
