@@ -2,17 +2,12 @@ package mediaplayer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 	"wox/common"
 	"wox/plugin"
-	"wox/plugin/system"
-
-	"github.com/google/uuid"
 )
 
-var mediaIcon = plugin.PluginMusicIcon
+var mediaIcon = plugin.PluginMediaPlayerIcon
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &MediaPlayerPlugin{})
@@ -59,7 +54,7 @@ func (m *MediaPlayerPlugin) GetMetadata() plugin.Metadata {
 func (m *MediaPlayerPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	m.api = initParams.API
 	m.pluginDirectory = initParams.PluginDirectory
-	m.retriever = m.getRetriever(ctx)
+	m.retriever = mediaRetriever
 	m.retriever.UpdateAPI(m.api)
 }
 
@@ -73,141 +68,93 @@ func (m *MediaPlayerPlugin) Query(ctx context.Context, query plugin.Query) []plu
 		return results
 	}
 
+	// No media playing
 	if mediaInfo == nil {
-		// No media playing
 		result := plugin.QueryResult{
-			Id:       uuid.NewString(),
-			Title:    "No media playing",
-			SubTitle: "No media application is currently playing",
-			Icon:     mediaIcon,
-			Score:    100,
-			Actions: []plugin.QueryResultAction{
-				{
-					Name: "i18n:plugin_mediaplayer_no_media",
-					Icon: plugin.SearchIcon,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						m.api.Notify(ctx, "No media is currently playing")
-					},
-				},
-			},
+			Title: "i18n:plugin_mediaplayer_no_media",
+			Icon:  mediaIcon,
 		}
 		results = append(results, result)
 		return results
 	}
 
-	// Check if query matches media information
-	searchTerm := strings.ToLower(query.Search)
-	titleMatch, titleScore := system.IsStringMatchScore(ctx, mediaInfo.Title, query.Search)
-	artistMatch, artistScore := system.IsStringMatchScore(ctx, mediaInfo.Artist, query.Search)
-	albumMatch, albumScore := system.IsStringMatchScore(ctx, mediaInfo.Album, query.Search)
-	appMatch, appScore := system.IsStringMatchScore(ctx, mediaInfo.AppName, query.Search)
-
-	if titleMatch || artistMatch || albumMatch || appMatch || searchTerm == "" {
-		contextData := mediaContextData{
-			Title:       mediaInfo.Title,
-			Artist:      mediaInfo.Artist,
-			Album:       mediaInfo.Album,
-			AppName:     mediaInfo.AppName,
-			AppBundleID: mediaInfo.AppBundleID,
-		}
-		contextDataJson, _ := json.Marshal(contextData)
-
-		// Format duration and position
-		durationStr := m.formatDuration(mediaInfo.Duration)
-		positionStr := m.formatDuration(mediaInfo.Position)
-		progressStr := fmt.Sprintf("%s / %s", positionStr, durationStr)
-
-		// Create subtitle with artist and album info
-		subtitle := ""
-		if mediaInfo.Artist != "" && mediaInfo.Album != "" {
-			subtitle = fmt.Sprintf("%s - %s", mediaInfo.Artist, mediaInfo.Album)
-		} else if mediaInfo.Artist != "" {
-			subtitle = mediaInfo.Artist
-		} else if mediaInfo.Album != "" {
-			subtitle = mediaInfo.Album
-		}
-
-		if subtitle != "" {
-			subtitle += fmt.Sprintf(" (%s) [%s]", progressStr, mediaInfo.State.String())
-		} else {
-			subtitle = fmt.Sprintf("%s [%s]", progressStr, mediaInfo.State.String())
-		}
-
-		// Calculate best match score
-		maxScore := titleScore
-		if artistScore > maxScore {
-			maxScore = artistScore
-		}
-		if albumScore > maxScore {
-			maxScore = albumScore
-		}
-		if appScore > maxScore {
-			maxScore = appScore
-		}
-
-		result := plugin.QueryResult{
-			Id:          uuid.NewString(),
-			Title:       mediaInfo.Title,
-			SubTitle:    subtitle,
-			Icon:        m.getMediaIcon(mediaInfo),
-			Score:       maxScore,
-			ContextData: string(contextDataJson),
-			Actions: []plugin.QueryResultAction{
-				{
-					Name:                   "i18n:plugin_mediaplayer_toggle",
-					IsDefault:              true,
-					PreventHideAfterAction: true,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						_ = m.retriever.TogglePlayPause(ctx)
-					},
-				},
-				{
-					Name: "i18n:plugin_mediaplayer_copy_info",
-					Icon: plugin.CopyIcon,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						info := fmt.Sprintf("%s - %s", mediaInfo.Title, mediaInfo.Artist)
-						m.api.ChangeQuery(ctx, common.PlainQuery{QueryText: info})
-					},
+	result := plugin.QueryResult{
+		Title:    mediaInfo.Title,
+		SubTitle: m.formatSubTitle(mediaInfo),
+		Icon:     m.formatIcon(mediaInfo),
+		Preview:  m.formatPreview(mediaInfo),
+		Tails:    plugin.NewQueryResultTailTexts(m.formatProgress(mediaInfo)),
+		Actions: []plugin.QueryResultAction{
+			{
+				Name:                   "i18n:plugin_mediaplayer_toggle",
+				IsDefault:              true,
+				PreventHideAfterAction: true,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					_ = m.retriever.TogglePlayPause(ctx)
 				},
 			},
-			RefreshInterval: 1000,
-			OnRefresh: func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
-				updated, err := m.retriever.GetCurrentMedia(ctx)
-				if err != nil || updated == nil {
-					return current
-				}
-				durationStr := m.formatDuration(updated.Duration)
-				positionStr := m.formatDuration(updated.Position)
-				progressStr := fmt.Sprintf("%s / %s", positionStr, durationStr)
-				newSubtitle := ""
-				if updated.Artist != "" && updated.Album != "" {
-					newSubtitle = fmt.Sprintf("%s - %s", updated.Artist, updated.Album)
-				} else if updated.Artist != "" {
-					newSubtitle = updated.Artist
-				} else if updated.Album != "" {
-					newSubtitle = updated.Album
-				}
-				if newSubtitle != "" {
-					newSubtitle += fmt.Sprintf(" (%s) [%s]", progressStr, updated.State.String())
-				} else {
-					newSubtitle = fmt.Sprintf("%s [%s]", progressStr, updated.State.String())
-				}
-
-				current.Title = updated.Title
-				current.SubTitle = newSubtitle
-				current.Icon = m.getMediaIcon(updated)
+		},
+		RefreshInterval: 1000,
+		OnRefresh: func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
+			updated, err := m.retriever.GetCurrentMedia(ctx)
+			if err != nil || updated == nil {
 				return current
-			},
-		}
+			}
 
-		results = append(results, result)
+			current.Title = updated.Title
+			current.SubTitle = m.formatSubTitle(updated)
+			current.Icon = m.formatIcon(updated)
+			current.Preview = m.formatPreview(updated)
+			current.Tails = plugin.NewQueryResultTailTexts(m.formatProgress(updated))
+			return current
+		},
 	}
+
+	results = append(results, result)
 
 	return results
 }
 
-func (m *MediaPlayerPlugin) getRetriever(ctx context.Context) MediaRetriever {
-	return mediaRetriever
+func (m *MediaPlayerPlugin) formatProgress(mediaInfo *MediaInfo) string {
+	durationStr := m.formatDuration(mediaInfo.Duration)
+	positionStr := m.formatDuration(mediaInfo.Position)
+	progressStr := fmt.Sprintf("%s / %s", positionStr, durationStr)
+
+	return progressStr
+}
+
+func (m *MediaPlayerPlugin) formatSubTitle(mediaInfo *MediaInfo) string {
+	newSubtitle := ""
+	if mediaInfo.Artist != "" && mediaInfo.Album != "" {
+		newSubtitle = fmt.Sprintf("%s - %s", mediaInfo.Artist, mediaInfo.Album)
+	} else if mediaInfo.Artist != "" {
+		newSubtitle = mediaInfo.Artist
+	} else if mediaInfo.Album != "" {
+		newSubtitle = mediaInfo.Album
+	}
+
+	return newSubtitle
+}
+
+func (m *MediaPlayerPlugin) formatIcon(mediaInfo *MediaInfo) common.WoxImage {
+	if mediaInfo.State == PlaybackStatePlaying {
+		return plugin.MediaPlayingIcon
+	} else {
+		return plugin.MediaPausedIcon
+	}
+}
+
+func (m *MediaPlayerPlugin) formatPreview(mediaInfo *MediaInfo) plugin.WoxPreview {
+	coverImg := m.getMediaIcon(mediaInfo)
+	return plugin.WoxPreview{
+		PreviewType: plugin.WoxPreviewTypeImage,
+		PreviewData: coverImg.String(),
+		PreviewProperties: map[string]string{
+			"i18n:plugin_mediaplayer_artist":   mediaInfo.Artist,
+			"i18n:plugin_mediaplayer_album":    mediaInfo.Album,
+			"i18n:plugin_mediaplayer_duration": m.formatDuration(mediaInfo.Duration),
+		},
+	}
 }
 
 func (m *MediaPlayerPlugin) formatDuration(seconds int64) string {

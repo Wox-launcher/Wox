@@ -199,6 +199,11 @@
   "ui_ai_chat_message_copied": "Message copied to clipboard",
   "ui_ai_chat_message_not_found": "Message not found",
   "ui_ai_chat_no_user_message_to_regenerate": "No user message found to regenerate response",
+  "ui_about": "About",
+  "ui_about_version": "Version",
+  "ui_about_docs": "Docs",
+  "ui_about_github": "GitHub",
+  "ui_about_description": "Wox is a launcher for Windows, macOS and Linux that simply works.",
   "plugin_app_open": "Open",
   "plugin_app_open_containing_folder": "Open Containing Folder",
   "plugin_app_copy_path": "Copy Path",
@@ -393,12 +398,10 @@
   "plugin_ai_chat_start_chat": "Start Chat",
   "plugin_ai_chat_enable_auto_focus_to_chat_input": "Auto focus to chat input when open with query hotkey",
   "plugin_ai_chat_enable_auto_focus_to_chat_input_tooltip": "When enabled, Wox will automatically focus to chat input when open with query hotkey, this will enable you to type your query immediately",
-  "ui_about": "About",
-  "ui_about_version": "Version",
-  "ui_about_docs": "Docs",
-  "ui_about_github": "GitHub",
-  "ui_about_description": "Wox is a launcher for Windows, macOS and Linux that simply works.",
   "plugin_mediaplayer_toggle": "Play/Pause",
   "plugin_mediaplayer_copy_info": "Copy info",
-  "plugin_mediaplayer_no_media": "No media"
+  "plugin_mediaplayer_no_media": "No media",
+  "plugin_mediaplayer_artist": "Artist",
+  "plugin_mediaplayer_album": "Album",
+  "plugin_mediaplayer_duration": "Duration"
 }

@@ -187,6 +187,11 @@
   "ui_ai_chat_message_copied": "Сообщение скопировано в буфер обмена",
   "ui_ai_chat_message_not_found": "Сообщение не найдено",
   "ui_ai_chat_no_user_message_to_regenerate": "Не найдено сообщение пользователя для регенерации ответа",
+  "ui_about": "О программе",
+  "ui_about_version": "Версия",
+  "ui_about_docs": "Документация",
+  "ui_about_github": "GitHub",
+  "ui_about_description": "Wox - это лаунчер для Windows, macOS и Linux, который просто работает.",
   "plugin_app_open": "Открыть",
   "plugin_app_open_containing_folder": "Открыть содержащую папку",
   "plugin_app_copy_path": "Копировать путь",
@@ -378,9 +383,10 @@
   "plugin_ai_chat_start_chat": "Начать чат",
   "plugin_ai_chat_enable_auto_focus_to_chat_input": "Автоматически фокусировать на вводе чата при открытии с горячей клавишей запроса",
   "plugin_ai_chat_enable_auto_focus_to_chat_input_tooltip": "Если включено, Wox автоматически фокусируется на вводе чата при открытии с горячей клавишей запроса, что позволяет вам ввести свой запрос немедленно",
-  "ui_about": "О программе",
-  "ui_about_version": "Версия",
-  "ui_about_docs": "Документация",
-  "ui_about_github": "GitHub",
-  "ui_about_description": "Wox - это лаунчер для Windows, macOS и Linux, который просто работает."
+  "plugin_mediaplayer_toggle": "Воспроизвести/Пауза",
+  "plugin_mediaplayer_copy_info": "Копировать информацию",
+  "plugin_mediaplayer_no_media": "Нет медиа",
+  "plugin_mediaplayer_artist": "Исполнитель",
+  "plugin_mediaplayer_album": "Альбом",
+  "plugin_mediaplayer_duration": "Длительность"
 }

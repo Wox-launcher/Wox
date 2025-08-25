@@ -124,6 +124,19 @@ type QueryResultTail struct {
 	Image common.WoxImage // only available when type is QueryResultTailTypeImage
 }
 
+func NewQueryResultTailText(text string) QueryResultTail {
+	return QueryResultTail{
+		Type: QueryResultTailTypeText,
+		Text: text,
+	}
+}
+
+func NewQueryResultTailTexts(texts ...string) []QueryResultTail {
+	return lo.Map(texts, func(text string, index int) QueryResultTail {
+		return NewQueryResultTailText(text)
+	})
+}
+
 type QueryResultAction struct {
 	// Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
 	Id string
