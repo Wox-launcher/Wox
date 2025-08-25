@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"time"
 	"wox/util"
@@ -182,13 +184,25 @@ func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error
 			}
 		}
 
-		uninstallErr := s.Uninstall(ctx, installedPlugin)
-		if uninstallErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version, uninstallErr.Error()))
-			return fmt.Errorf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version, uninstallErr.Error())
+		// only uninstall for non-script plugins; script plugins will be hot-swapped with rollback
+		if manifest.Runtime != PLUGIN_RUNTIME_SCRIPT {
+			uninstallErr := s.Uninstall(ctx, installedPlugin)
+			if uninstallErr != nil {
+				logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version, uninstallErr.Error()))
+				return fmt.Errorf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.Name, installedPlugin.Metadata.Version, uninstallErr.Error())
+			}
 		}
 	}
 
+	// handle script plugins differently
+	if manifest.Runtime == PLUGIN_RUNTIME_SCRIPT {
+		return s.installScriptPlugin(ctx, manifest)
+	} else {
+		return s.installNormalPlugin(ctx, manifest)
+	}
+}
+
+func (s *Store) installNormalPlugin(ctx context.Context, manifest StorePluginManifest) error {
 	// download plugin
 	logger.Info(ctx, fmt.Sprintf("start to download plugin: %s", manifest.DownloadUrl))
 	pluginDirectory := path.Join(util.GetLocation().GetPluginDirectory(), fmt.Sprintf("%s_%s@%s", manifest.Id, manifest.Name, manifest.Version))
@@ -246,6 +260,166 @@ func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error
 		return fmt.Errorf("failed to remove plugin zip %s: %s", pluginZipPath, removeErr.Error())
 	}
 
+	return nil
+}
+
+func (s *Store) installScriptPlugin(ctx context.Context, manifest StorePluginManifest) error {
+	logger.Info(ctx, fmt.Sprintf("detected script plugin, use script install flow: %s", manifest.Name))
+
+	userScriptDir := util.GetLocation().GetUserScriptPluginsDirectory()
+	if err := util.GetLocation().EnsureDirectoryExist(userScriptDir); err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to ensure user script plugin directory %s: %s", userScriptDir, err.Error()))
+		return fmt.Errorf("failed to ensure user script plugin directory %s: %s", userScriptDir, err.Error())
+	}
+
+	// 1) find existing script by plugin id
+	existingScriptPath := ""
+	entries, readErr := os.ReadDir(userScriptDir)
+	if readErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to read user script plugin directory: %s", readErr.Error()))
+		return fmt.Errorf("failed to read user script plugin directory: %s", readErr.Error())
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if name == ".DS_Store" || name == "README.md" {
+			continue
+		}
+		scriptPath := path.Join(userScriptDir, name)
+		metadata, metaErr := GetPluginManager().ParseScriptMetadata(ctx, scriptPath)
+		if metaErr != nil {
+			continue
+		}
+		if strings.EqualFold(metadata.Id, manifest.Id) {
+			existingScriptPath = scriptPath
+			break
+		}
+	}
+
+	// 2) move existing script to a temp directory for rollback
+	backupDir := ""
+	backupPath := ""
+	hasBackup := false
+	if existingScriptPath != "" {
+		var mkErr error
+		backupDir, mkErr = os.MkdirTemp("", "wox_script_backup_*")
+		if mkErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to create temp directory for backup: %s", mkErr.Error()))
+			return fmt.Errorf("failed to create temp directory for backup: %s", mkErr.Error())
+		}
+		backupPath = path.Join(backupDir, path.Base(existingScriptPath))
+
+		// try rename; if cross-device, fallback to copy+remove
+		if err := os.Rename(existingScriptPath, backupPath); err != nil {
+			// fallback to copy
+			srcF, cErr := os.Open(existingScriptPath)
+			if cErr != nil {
+				logger.Error(ctx, fmt.Sprintf("failed to open existing script for backup: %s", cErr.Error()))
+				_ = os.RemoveAll(backupDir)
+				return fmt.Errorf("failed to open existing script for backup: %s", cErr.Error())
+			}
+			defer srcF.Close()
+
+			dstF, cErr := os.Create(backupPath)
+			if cErr != nil {
+				logger.Error(ctx, fmt.Sprintf("failed to create backup file: %s", cErr.Error()))
+				_ = os.RemoveAll(backupDir)
+				return fmt.Errorf("failed to create backup file: %s", cErr.Error())
+			}
+			_, cErr = io.Copy(dstF, srcF)
+			closeErr := dstF.Close()
+			if cErr != nil {
+				logger.Error(ctx, fmt.Sprintf("failed to copy to backup file: %s", cErr.Error()))
+				_ = os.Remove(backupPath)
+				_ = os.RemoveAll(backupDir)
+				return fmt.Errorf("failed to copy to backup file: %s", cErr.Error())
+			}
+			if closeErr != nil {
+				logger.Warn(ctx, fmt.Sprintf("failed to close backup file: %s", closeErr.Error()))
+			}
+			if info, statErr := os.Stat(existingScriptPath); statErr == nil {
+				_ = os.Chmod(backupPath, info.Mode())
+			}
+			// remove original after copying to complete the move
+			if cErr = os.Remove(existingScriptPath); cErr != nil {
+				logger.Error(ctx, fmt.Sprintf("failed to remove original script after backup: %s", cErr.Error()))
+				_ = os.Remove(backupPath)
+				_ = os.RemoveAll(backupDir)
+				return fmt.Errorf("failed to remove original script after backup: %s", cErr.Error())
+			}
+		}
+		hasBackup = true
+	}
+
+	// 3) derive new file name from url, fallback
+	fileName := ""
+	if u, err := url.Parse(manifest.DownloadUrl); err == nil {
+		base := path.Base(u.Path)
+		if base != "" && base != "." && base != "/" {
+			fileName = base
+		}
+	}
+	if fileName == "" {
+		if existingScriptPath != "" {
+			fileName = path.Base(existingScriptPath)
+		} else {
+			fileName = strings.ReplaceAll(strings.ToLower(fmt.Sprintf("%s_%s", manifest.Id, manifest.Name)), " ", "-") + ".sh"
+		}
+	}
+	newScriptPath := path.Join(userScriptDir, fileName)
+
+	// 4) download new script
+	logger.Info(ctx, fmt.Sprintf("start to download script plugin: %s", manifest.DownloadUrl))
+	if err := util.HttpDownload(ctx, manifest.DownloadUrl, newScriptPath); err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to download script plugin %s(%s): %s", manifest.Name, manifest.Version, err.Error()))
+		// rollback
+		if hasBackup {
+			_ = os.Remove(newScriptPath)
+			_ = os.Rename(backupPath, existingScriptPath)
+			_ = os.RemoveAll(backupDir)
+		}
+		return fmt.Errorf("failed to download script plugin %s(%s): %s", manifest.Name, manifest.Version, err.Error())
+	}
+	_ = os.Chmod(newScriptPath, 0755)
+
+	// 5) parse metadata from the new script
+	metadata, metaErr := GetPluginManager().ParseScriptMetadata(ctx, newScriptPath)
+	if metaErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to parse script plugin metadata: %s", metaErr.Error()))
+		// rollback
+		if hasBackup {
+			_ = os.Remove(newScriptPath)
+			_ = os.Rename(backupPath, existingScriptPath)
+			_ = os.RemoveAll(backupDir)
+		}
+		return fmt.Errorf("failed to parse script plugin metadata: %s", metaErr.Error())
+	}
+	if manifest.Id != "" && metadata.Id != "" && !strings.EqualFold(manifest.Id, metadata.Id) {
+		logger.Warn(ctx, fmt.Sprintf("script metadata id(%s) not equal to store manifest id(%s), proceed with metadata id", metadata.Id, manifest.Id))
+	}
+
+	// 6) load (reload) the script plugin
+	virtualDirectory := path.Join(userScriptDir, metadata.Id)
+	loadErr := GetPluginManager().ReloadPlugin(ctx, MetadataWithDirectory{Metadata: metadata, Directory: virtualDirectory})
+	if loadErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to load script plugin %s(%s): %s", metadata.Name, metadata.Version, loadErr.Error()))
+		// rollback
+		if hasBackup {
+			_ = os.Remove(newScriptPath)
+			_ = os.Rename(backupPath, existingScriptPath)
+			_ = os.RemoveAll(backupDir)
+		}
+		return fmt.Errorf("failed to load script plugin %s(%s): %s", metadata.Name, metadata.Version, loadErr.Error())
+	}
+
+	// 7) success - cleanup backup
+	if hasBackup {
+		_ = os.RemoveAll(backupDir)
+	}
+
+	logger.Info(ctx, fmt.Sprintf("script plugin %s(%s) installed", metadata.Name, metadata.Version))
 	return nil
 }
 
@@ -371,10 +545,22 @@ func (s *Store) Uninstall(ctx context.Context, plugin *Instance) error {
 			wpmPlugin.Plugin.Query(ctx, query)
 		}
 	} else {
-		removeErr := os.RemoveAll(plugin.PluginDirectory)
-		if removeErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to remove plugin directory %s: %s", plugin.PluginDirectory, removeErr.Error()))
-			return removeErr
+		// uninstall for non-dev plugins
+		if strings.EqualFold(plugin.Metadata.Runtime, string(PLUGIN_RUNTIME_SCRIPT)) {
+			// script plugin: delete the actual script file under user scripts directory
+			scriptPath := path.Join(util.GetLocation().GetUserScriptPluginsDirectory(), plugin.Metadata.Entry)
+			if util.IsFileExists(scriptPath) {
+				if removeErr := os.Remove(scriptPath); removeErr != nil {
+					logger.Error(ctx, fmt.Sprintf("failed to remove script file %s: %s", scriptPath, removeErr.Error()))
+					return removeErr
+				}
+			}
+		} else {
+			removeErr := os.RemoveAll(plugin.PluginDirectory)
+			if removeErr != nil {
+				logger.Error(ctx, fmt.Sprintf("failed to remove plugin directory %s: %s", plugin.PluginDirectory, removeErr.Error()))
+				return removeErr
+			}
 		}
 	}
 

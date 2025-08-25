@@ -177,7 +177,7 @@
     "MinWoxVersion": "2.0.0",
     "Runtime": "script",
     "Description": "基于 https://60s.viki.moe/v2/60s 的每日新闻展示",
-    "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.60s/refs/heads/main/icon.png",
+    "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.60s/refs/heads/main/icon.jpeg",
     "Website": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.60s",
     "DownloadUrl": "https://github.com/qianlifeng/Wox.Plugin.60s/releases/download/v1.0.0/60s.py",
     "ScreenshotUrls": [

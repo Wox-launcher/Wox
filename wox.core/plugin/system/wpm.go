@@ -487,11 +487,25 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 			},
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "i18n:plugin_wpm_install",
+					Name:                   "i18n:plugin_wpm_install",
+					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
 						if installErr != nil {
 							w.api.Notify(ctx, "i18n:plugin_wpm_install_failed")
+							return
+						}
+
+						// on success: change query to the plugin's first trigger keyword if exists
+						time.Sleep(500 * time.Millisecond)
+						instances := plugin.GetPluginManager().GetPluginInstances()
+						if len(instances) > 0 {
+							if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
+								if len(inst.Metadata.TriggerKeywords) > 0 {
+									kw := inst.Metadata.TriggerKeywords[0]
+									w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
+								}
+							}
 						}
 					},
 				},
