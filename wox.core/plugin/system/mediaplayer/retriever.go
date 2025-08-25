@@ -46,14 +46,8 @@ type MediaRetriever interface {
 	// UpdateAPI updates the plugin API reference
 	UpdateAPI(api plugin.API)
 
-	// GetPlatform returns the platform name
-	GetPlatform() string
-
 	// GetCurrentMedia retrieves current media information
 	GetCurrentMedia(ctx context.Context) (*MediaInfo, error)
-
-	// IsMediaPlaying checks if any media is currently playing
-	IsMediaPlaying(ctx context.Context) bool
 
 	// TogglePlayPause toggles playback state if supported on the platform/app
 	TogglePlayPause(ctx context.Context) error
