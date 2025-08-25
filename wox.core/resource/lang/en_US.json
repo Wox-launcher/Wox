@@ -136,6 +136,7 @@
   "ui_plugin_command_name_column": "Name",
   "ui_plugin_command_desc_column": "Description",
   "ui_setting_plugin_system_tag": "System",
+  "ui_setting_plugin_script_tag": "Script",
   "ui_setting_plugin_empty_data": "Plugin data is empty",
   "ui_delete_row_confirm": "Are you sure you want to delete this row?",
   "ui_cancel": "Cancel",

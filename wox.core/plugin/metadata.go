@@ -53,7 +53,7 @@ type Metadata struct {
 	MinWoxVersion      string
 	Runtime            string
 	Description        string
-	Icon               string
+	Icon               string // should be WoxImage.String()
 	Website            string
 	Entry              string
 	TriggerKeywords    []string //User can add/update/delete trigger keywords

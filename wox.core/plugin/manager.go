@@ -508,7 +508,7 @@ func (m *Manager) ParseScriptMetadata(ctx context.Context, scriptPath string) (M
 		metadata.Description = "A script plugin"
 	}
 	if metadata.Icon == "" {
-		metadata.Icon = "📝"
+		metadata.Icon = "emoji:📝"
 	}
 	if metadata.MinWoxVersion == "" {
 		metadata.MinWoxVersion = "2.0.0"

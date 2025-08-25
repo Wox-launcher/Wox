@@ -10,6 +10,7 @@ class PluginDetail {
   late WoxImage icon;
   late String website;
   late String entry;
+  late String runtime; // plugin runtime, e.g., GO/PYTHON/NODEJS/SCRIPT
   late List<String> triggerKeywords;
   late List<MetadataCommand> commands;
   late List<String> supportedOS;
@@ -31,6 +32,7 @@ class PluginDetail {
     icon = WoxImage.empty();
     website = '';
     entry = '';
+    runtime = '';
     triggerKeywords = <String>[];
     commands = <MetadataCommand>[];
     supportedOS = <String>[];
@@ -53,6 +55,7 @@ class PluginDetail {
     icon = WoxImage.fromJson(json['Icon']);
     website = json['Website'];
     entry = json['Entry'];
+    runtime = json['Runtime'] ?? '';
     isSystem = json['IsSystem'] ?? false;
     isDev = json['IsDev'] ?? false;
     isInstalled = json['IsInstalled'] ?? false;

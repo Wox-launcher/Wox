@@ -136,6 +136,7 @@
   "ui_plugin_command_name_column": "名称",
   "ui_plugin_command_desc_column": "描述",
   "ui_setting_plugin_system_tag": "系统",
+  "ui_setting_plugin_script_tag": "脚本",
   "ui_setting_plugin_empty_data": "插件数据为空",
   "ui_delete_row_confirm": "确定要删除此行吗？",
   "ui_cancel": "取消",

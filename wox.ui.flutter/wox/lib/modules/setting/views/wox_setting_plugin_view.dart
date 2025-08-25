@@ -27,6 +27,7 @@ import 'package:wox/components/plugin/wox_setting_plugin_checkbox_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_textbox_view.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/strings.dart';
+import 'package:wox/enums/wox_plugin_runtime_enum.dart';
 
 class WoxSettingPluginView extends GetView<WoxSettingController> {
   const WoxSettingPluginView({super.key});
@@ -136,27 +137,6 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                                     ),
                                   ),
                                 ),
-                                if (plugin.isSystem) ...[
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(3),
-                                      border: Border.all(
-                                        color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
-                                        width: 0.5,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      controller.tr('ui_setting_plugin_system_tag'),
-                                      style: TextStyle(
-                                        color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
-                                        fontSize: 11,
-                                        height: 1.1,
-                                      ),
-                                    ),
-                                  ),
-                                ],
                               ],
                             ),
                             trailing: pluginTrailIcon(plugin, isActive),
@@ -175,12 +155,55 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   }
 
   Widget pluginTrailIcon(PluginDetail plugin, bool isActive) {
-    if (controller.isStorePluginList.value) {
-      if (plugin.isInstalled) {
-        return Icon(FluentIcons.skype_circle_check, color: isActive ? getThemeActionItemActiveColor() : Colors.green);
-      }
+    // align tags/icons to the right of the tile
+    final Color borderColor = isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor();
+
+    List<Widget> rightItems = [];
+
+    // Script tag (non-system script plugins)
+    if (!plugin.isSystem && WoxPluginRuntimeEnum.equals(plugin.runtime, WoxPluginRuntimeEnum.SCRIPT)) {
+      rightItems.add(Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(3),
+          border: Border.all(color: borderColor, width: 0.5),
+        ),
+        child: Text(
+          controller.tr('ui_setting_plugin_script_tag'),
+          style: TextStyle(color: borderColor, fontSize: 11, height: 1.1),
+        ),
+      ));
     }
-    return const SizedBox();
+
+    // System tag
+    if (plugin.isSystem) {
+      rightItems.add(Container(
+        margin: const EdgeInsets.only(left: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(3),
+          border: Border.all(color: borderColor, width: 0.5),
+        ),
+        child: Text(
+          controller.tr('ui_setting_plugin_system_tag'),
+          style: TextStyle(color: borderColor, fontSize: 11, height: 1.1),
+        ),
+      ));
+    }
+
+    // Store list: show installed check icon
+    if (controller.isStorePluginList.value && plugin.isInstalled) {
+      rightItems.add(Padding(
+        padding: const EdgeInsets.only(left: 8.0),
+        child: Icon(FluentIcons.skype_circle_check, color: isActive ? getThemeActionItemActiveColor() : Colors.green),
+      ));
+    }
+
+    if (rightItems.isEmpty) {
+      return const SizedBox();
+    }
+
+    return Row(mainAxisSize: MainAxisSize.min, children: rightItems);
   }
 
   Widget pluginDetail() {

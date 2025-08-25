@@ -5,7 +5,7 @@
 // @wox.keywords spt
 
 // Optional parameters:
-// @wox.icon 📝
+// @wox.icon emoji:📝
 // @wox.version 1.0.0
 // @wox.author Wox Team
 // @wox.description A template for Wox script plugins
@@ -39,33 +39,37 @@ try {
     request = JSON.parse(process.argv[2]);
   } else {
     // From stdin
-    const data = require('fs').readFileSync(0, 'utf-8');
+    const data = require("fs").readFileSync(0, "utf-8");
     request = JSON.parse(data);
   }
 } catch (e) {
-  console.log(JSON.stringify({
-    jsonrpc: "2.0",
-    error: {
-      code: -32700,
-      message: "Parse error",
-      data: e.message
-    },
-    id: null
-  }));
+  console.log(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      error: {
+        code: -32700,
+        message: "Parse error",
+        data: e.message,
+      },
+      id: null,
+    })
+  );
   process.exit(1);
 }
 
 // Validate JSON-RPC request
 if (request.jsonrpc !== "2.0") {
-  console.log(JSON.stringify({
-    jsonrpc: "2.0",
-    error: {
-      code: -32600,
-      message: "Invalid Request",
-      data: "Expected JSON-RPC 2.0"
-    },
-    id: request.id || null
-  }));
+  console.log(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      error: {
+        code: -32600,
+        message: "Invalid Request",
+        data: "Expected JSON-RPC 2.0",
+      },
+      id: request.id || null,
+    })
+  );
   process.exit(1);
 }
 
@@ -79,15 +83,17 @@ switch (request.method) {
     break;
   default:
     // Method not found
-    console.log(JSON.stringify({
-      jsonrpc: "2.0",
-      error: {
-        code: -32601,
-        message: "Method not found",
-        data: `Method '${request.method}' not supported`
-      },
-      id: request.id
-    }));
+    console.log(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        error: {
+          code: -32601,
+          message: "Method not found",
+          data: `Method '${request.method}' not supported`,
+        },
+        id: request.id,
+      })
+    );
     break;
 }
 
@@ -104,19 +110,21 @@ function handleQuery(request) {
       score: 100,
       action: {
         id: "open-plugin-directory",
-        data: ""
-      }
-    }
+        data: "",
+      },
+    },
   ];
 
   // Return results
-  console.log(JSON.stringify({
-    jsonrpc: "2.0",
-    result: {
-      items: results
-    },
-    id: request.id
-  }));
+  console.log(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      result: {
+        items: results,
+      },
+      id: request.id,
+    })
+  );
 }
 
 /**
@@ -130,26 +138,30 @@ function handleAction(request) {
   switch (actionId) {
     case "open-plugin-directory":
       // Open plugin directory action
-      console.log(JSON.stringify({
-        jsonrpc: "2.0",
-        result: {
-          action: "open-directory",
-          path: process.env.WOX_DIRECTORY_USER_SCRIPT_PLUGINS
-        },
-        id: request.id
-      }));
+      console.log(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          result: {
+            action: "open-directory",
+            path: process.env.WOX_DIRECTORY_USER_SCRIPT_PLUGINS,
+          },
+          id: request.id,
+        })
+      );
       break;
     default:
       // Unknown action
-      console.log(JSON.stringify({
-        jsonrpc: "2.0",
-        error: {
-          code: -32000,
-          message: "Unknown action",
-          data: `Action '${actionId}' not supported`
-        },
-        id: request.id
-      }));
+      console.log(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          error: {
+            code: -32000,
+            message: "Unknown action",
+            data: `Action '${actionId}' not supported`,
+          },
+          id: request.id,
+        })
+      );
       break;
   }
 }

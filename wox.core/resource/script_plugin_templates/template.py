@@ -5,7 +5,7 @@
 # @wox.keywords pst
 
 # Optional parameters:
-# @wox.icon 🐍
+# @wox.icon emoji:🐍
 # @wox.version 1.0.0
 # @wox.author Wox Team
 # @wox.description A Python template for Wox script plugins

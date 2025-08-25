@@ -124,6 +124,7 @@
   "ui_plugin_command_name_column": "Name",
   "ui_plugin_command_desc_column": "Description",
   "ui_setting_plugin_system_tag": "Sistema",
+  "ui_setting_plugin_script_tag": "Script",
   "ui_setting_plugin_empty_data": "Dados do plugin vazios",
   "ui_delete_row_confirm": "Tem certeza que deseja excluir esta linha?",
   "ui_cancel": "Cancelar",

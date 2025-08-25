@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"wox/common"
 	"wox/plugin"
 	"wox/setting"
 	"wox/util"
@@ -103,8 +104,11 @@ func (sp *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.
 	// Execute script and get results
 	results, err := sp.executeScript(ctx, request)
 	if err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s query failed: %s", sp.metadata.Name, err.Error()))
-		return []plugin.QueryResult{}
+		requestJSON, _ := json.Marshal(request)
+		util.GetLogger().Error(ctx, fmt.Sprintf("script plugin query failed for %s: %s, raw request: %s", sp.metadata.Name, err.Error(), requestJSON))
+		return []plugin.QueryResult{
+			plugin.GetPluginManager().GetResultForFailedQuery(ctx, sp.metadata, query, err),
+		}
 	}
 
 	return results
@@ -151,6 +155,19 @@ func (sp *ScriptPlugin) executeScript(ctx context.Context, request map[string]in
 			Title:    getStringFromMap(itemMap, "title"),
 			SubTitle: getStringFromMap(itemMap, "subtitle"),
 			Score:    int64(getFloatFromMap(itemMap, "score")),
+		}
+
+		// Icon: WoxImage.String() format, e.g. "base64:data:image/png;base64,xxx" or "emoji:🧮"
+		if iconStr := getStringFromMap(itemMap, "icon"); iconStr != "" {
+			if img, err := common.ParseWoxImage(iconStr); err != nil {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("script plugin %s returned invalid icon: %s, err: %s", sp.metadata.Name, iconStr, err.Error()))
+			} else {
+				// Normalize base64 without data URI header to png
+				if img.ImageType == common.WoxImageTypeBase64 && !strings.Contains(img.ImageData, ",") {
+					img.ImageData = fmt.Sprintf("data:image/png;base64,%s", img.ImageData)
+				}
+				queryResult.Icon = img
+			}
 		}
 
 		// Handle action if present
@@ -234,6 +251,10 @@ func (sp *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string
 	// Execute script
 	output, err := cmd.Output()
 	if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("script execution failed: %s, stderr: %s", exitError.Error(), string(exitError.Stderr))
+		}
+
 		return nil, fmt.Errorf("script execution failed: %w", err)
 	}
 

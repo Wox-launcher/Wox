@@ -124,6 +124,7 @@
   "ui_plugin_command_name_column": "Название",
   "ui_plugin_command_desc_column": "Описание",
   "ui_setting_plugin_system_tag": "Система",
+  "ui_setting_plugin_script_tag": "Скрипт",
   "ui_setting_plugin_empty_data": "Данные плагина пусты",
   "ui_delete_row_confirm": "Вы уверены, что хотите удалить эту строку?",
   "ui_cancel": "Отмена",
