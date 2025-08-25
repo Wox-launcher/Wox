@@ -168,5 +168,22 @@
     ],
     "DateCreated": "2025-04-17 11:00:00",
     "DateUpdated": "2025-04-17 23:02:38"
+  },
+  {
+    "Id": "9425e183-c7ab-4c61-86eb-98174c6388db",
+    "Name": "每日60秒新闻",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "script",
+    "Description": "基于 https://60s.viki.moe/v2/60s 的每日新闻展示",
+    "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.60s/refs/heads/main/icon.png",
+    "Website": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.60s",
+    "DownloadUrl": "https://github.com/qianlifeng/Wox.Plugin.60s/releases/download/v1.0.0/60s.py",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.60s/refs/heads/main/screenshot.png"
+    ],
+    "DateCreated": "2025-08-25 21:15:00",
+    "DateUpdated": "2025-08-25 21:15:00"
   }
 ]
