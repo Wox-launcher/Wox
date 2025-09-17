@@ -7,7 +7,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+
 	"wox/ai"
 	"wox/common"
 	"wox/i18n"
@@ -519,47 +521,67 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 
+	var vb bool
+	var vf float64
+	var vs string
+	switch v := kv.Value.(type) {
+	case bool:
+		vb = v
+	case float64:
+		vf = v
+	case string:
+		vs = v
+		vb1, err := strconv.ParseBool(vs)
+		if err == nil {
+			vb = vb1
+		}
+		vf1, err := strconv.ParseFloat(vs, 64)
+		if err == nil {
+			vf = vf1
+		}
+	}
+
 	switch kv.Key {
 	case "EnableAutostart":
-		woxSetting.EnableAutostart.Set(kv.Value.(bool))
+		woxSetting.EnableAutostart.Set(vb)
 	case "MainHotkey":
-		woxSetting.MainHotkey.Set(kv.Value.(string))
+		woxSetting.MainHotkey.Set(vs)
 	case "SelectionHotkey":
-		woxSetting.SelectionHotkey.Set(kv.Value.(string))
+		woxSetting.SelectionHotkey.Set(vs)
 	case "UsePinYin":
-		woxSetting.UsePinYin.Set(kv.Value.(bool))
+		woxSetting.UsePinYin.Set(vb)
 	case "SwitchInputMethodABC":
-		woxSetting.SwitchInputMethodABC.Set(kv.Value.(bool))
+		woxSetting.SwitchInputMethodABC.Set(vb)
 	case "HideOnStart":
-		woxSetting.HideOnStart.Set(kv.Value.(bool))
+		woxSetting.HideOnStart.Set(vb)
 	case "HideOnLostFocus":
-		woxSetting.HideOnLostFocus.Set(kv.Value.(bool))
+		woxSetting.HideOnLostFocus.Set(vb)
 	case "ShowTray":
-		woxSetting.ShowTray.Set(kv.Value.(bool))
+		woxSetting.ShowTray.Set(vb)
 	case "LangCode":
-		woxSetting.LangCode.Set(i18n.LangCode(kv.Value.(string)))
+		woxSetting.LangCode.Set(i18n.LangCode(vs))
 	case "QueryMode":
-		woxSetting.QueryMode.Set(setting.QueryMode(kv.Value.(string)))
+		woxSetting.QueryMode.Set(vs)
 	case "ShowPosition":
-		woxSetting.ShowPosition.Set(setting.PositionType(kv.Value.(string)))
+		woxSetting.ShowPosition.Set(setting.PositionType(vs))
 	case "EnableAutoBackup":
-		woxSetting.EnableAutoBackup.Set(kv.Value.(bool))
+		woxSetting.EnableAutoBackup.Set(vb)
 	case "EnableAutoUpdate":
-		woxSetting.EnableAutoUpdate.Set(kv.Value.(bool))
+		woxSetting.EnableAutoUpdate.Set(vb)
 	case "CustomPythonPath":
-		woxSetting.CustomPythonPath.Set(kv.Value.(string))
+		woxSetting.CustomPythonPath.Set(vs)
 	case "CustomNodejsPath":
-		woxSetting.CustomNodejsPath.Set(kv.Value.(string))
+		woxSetting.CustomNodejsPath.Set(vs)
 	case "HttpProxyEnabled":
-		woxSetting.HttpProxyEnabled.Set(kv.Value.(bool))
+		woxSetting.HttpProxyEnabled.Set(vb)
 	case "HttpProxyUrl":
-		woxSetting.HttpProxyUrl.Set(kv.Value.(string))
+		woxSetting.HttpProxyUrl.Set(vs)
 	case "AppWidth":
-		woxSetting.AppWidth.Set(int(kv.Value.(float64)))
+		woxSetting.AppWidth.Set(int(vf))
 	case "MaxResultCount":
-		woxSetting.MaxResultCount.Set(int(kv.Value.(float64)))
+		woxSetting.MaxResultCount.Set(int(vf))
 	case "ThemeId":
-		woxSetting.ThemeId.Set(kv.Value.(string))
+		woxSetting.ThemeId.Set(vs)
 	default:
 		writeErrorResponse(w, "unknown setting key: "+kv.Key)
 		return
