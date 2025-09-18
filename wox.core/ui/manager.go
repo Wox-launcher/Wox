@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"wox/common"
@@ -482,18 +483,24 @@ func (m *Manager) HideTray() {
 	tray.RemoveTray()
 }
 
-func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value any) {
+func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value string) {
+	var vb bool
+	var vs = value
+	if vb1, err := strconv.ParseBool(vs); err == nil {
+		vb = vb1
+	}
+
 	switch key {
 	case "ShowTray":
-		if value.(bool) {
+		if vb {
 			m.ShowTray()
 		} else {
 			m.HideTray()
 		}
 	case "MainHotkey":
-		m.RegisterMainHotkey(ctx, value.(string))
+		m.RegisterMainHotkey(ctx, vs)
 	case "SelectionHotkey":
-		m.RegisterSelectionHotkey(ctx, value.(string))
+		m.RegisterSelectionHotkey(ctx, vs)
 	case "QueryHotkeys":
 		// unregister previous hotkeys
 		logger.Info(ctx, "post update query hotkeys, unregister previous query hotkeys")
@@ -507,13 +514,13 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value any) 
 			m.RegisterQueryHotkey(ctx, queryHotkey)
 		}
 	case "LangCode":
-		langCode := value.(string)
+		langCode := vs
 		langErr := i18n.GetI18nManager().UpdateLang(ctx, i18n.LangCode(langCode))
 		if langErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to update lang: %s", langErr.Error()))
 		}
 	case "EnableAutostart":
-		enabled := value.(bool)
+		enabled := vb
 		err := autostart.SetAutostart(ctx, enabled)
 		if err != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to set autostart: %s", err.Error()))

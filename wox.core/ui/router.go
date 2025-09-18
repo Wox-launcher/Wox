@@ -507,7 +507,7 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 	type keyValuePair struct {
 		Key   string
-		Value any
+		Value string
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -523,22 +523,12 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 
 	var vb bool
 	var vf float64
-	var vs string
-	switch v := kv.Value.(type) {
-	case bool:
-		vb = v
-	case float64:
-		vf = v
-	case string:
-		vs = v
-		vb1, err := strconv.ParseBool(vs)
-		if err == nil {
-			vb = vb1
-		}
-		vf1, err := strconv.ParseFloat(vs, 64)
-		if err == nil {
-			vf = vf1
-		}
+	var vs = kv.Value
+	if vb1, err := strconv.ParseBool(vs); err == nil {
+		vb = vb1
+	}
+	if vf1, err := strconv.ParseFloat(vs, 64); err == nil {
+		vf = vf1
 	}
 
 	switch kv.Key {
@@ -560,10 +550,31 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		woxSetting.ShowTray.Set(vb)
 	case "LangCode":
 		woxSetting.LangCode.Set(i18n.LangCode(vs))
+	case "QueryHotkeys":
+		var queryHotkeys []setting.QueryHotkey
+		if err := json.Unmarshal([]byte(vs), &queryHotkeys); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+		woxSetting.QueryHotkeys.Set(queryHotkeys)
+	case "QueryShortcuts":
+		var queryShortcuts []setting.QueryShortcut
+		if err := json.Unmarshal([]byte(vs), &queryShortcuts); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+		woxSetting.QueryShortcuts.Set(queryShortcuts)
 	case "QueryMode":
 		woxSetting.QueryMode.Set(vs)
 	case "ShowPosition":
 		woxSetting.ShowPosition.Set(setting.PositionType(vs))
+	case "AIProviders":
+		var aiProviders []setting.AIProvider
+		if err := json.Unmarshal([]byte(vs), &aiProviders); err != nil {
+			writeErrorResponse(w, err.Error())
+			return
+		}
+		woxSetting.AIProviders.Set(aiProviders)
 	case "EnableAutoBackup":
 		woxSetting.EnableAutoBackup.Set(vb)
 	case "EnableAutoUpdate":
@@ -572,10 +583,12 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		woxSetting.CustomPythonPath.Set(vs)
 	case "CustomNodejsPath":
 		woxSetting.CustomNodejsPath.Set(vs)
+
 	case "HttpProxyEnabled":
 		woxSetting.HttpProxyEnabled.Set(vb)
 	case "HttpProxyUrl":
 		woxSetting.HttpProxyUrl.Set(vs)
+
 	case "AppWidth":
 		woxSetting.AppWidth.Set(int(vf))
 	case "MaxResultCount":
