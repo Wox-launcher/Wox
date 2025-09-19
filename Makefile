@@ -43,8 +43,6 @@ _check_deps:
 	@command -v uv >/dev/null 2>&1 || { echo "uv is required but not installed. Visit https://github.com/astral-sh/uv" >&2; exit 1; }
 ifeq ($(PLATFORM),macos)
 	@command -v create-dmg >/dev/null 2>&1 || { echo "create-dmg is required but not installed. Visit https://github.com/create-dmg/create-dmg" >&2; exit 1; }
-else
-	@command -v upx >/dev/null 2>&1 || { echo "upx is required but not installed. Visit https://upx.github.io/" >&2; exit 1; }
 endif
 
 ifeq ($(PLATFORM),windows)
@@ -90,16 +88,13 @@ test-verbose:
 test-debug:
 	cd wox.core && WOX_TEST_DATA_DIR=/tmp/wox-test-debug WOX_TEST_CLEANUP=false WOX_TEST_VERBOSE=true go test ./test -v
 
+
 build: clean dev
-	$(MAKE) -C wox.core build
-	
-ifeq ($(PLATFORM),windows)
-	upx $(RELEASE_DIR)/wox-windows-amd64.exe
-else ifeq ($(PLATFORM),linux)
-	upx $(RELEASE_DIR)/wox-linux-amd64
-else ifeq ($(PLATFORM),macos)
-	# to make sure the working directory is the release directory
-	cd $(RELEASE_DIR) && $(MAKE) -f ../Makefile _bundle_mac_app APP_NAME=wox-mac-$(ARCH)
+		$(MAKE) -C wox.core build
+		
+ifeq ($(PLATFORM),macos)
+		# to make sure the working directory is the release directory
+		cd $(RELEASE_DIR) && $(MAKE) -f ../Makefile _bundle_mac_app APP_NAME=wox-mac-$(ARCH)
 endif
 
 _bundle_mac_app:

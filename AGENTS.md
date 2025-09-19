@@ -8,7 +8,7 @@
 - Other: `assets/`, `docs/`, `ci/`, `release/`, repo‑level `Makefile`.
 
 ## Build, Test, and Development Commands
-- `make dev`: Verify deps (go, flutter, node, pnpm, uv, upx/create-dmg) and build hosts + UI.
+- `make dev`: Verify deps (go, flutter, node, pnpm, uv; plus create-dmg on macOS).
 - `make test`: Run Go tests in isolation. Variants: `make test-offline`, `make test-verbose`, `make test-debug`.
 - `make build`: Build core binary and package per platform (bundles app on macOS).
 - `make plugins`: Regenerate the plugin store metadata.
@@ -33,4 +33,3 @@
 ## Security & Configuration Tips
 - Never commit credentials. Configure AI/MCP keys via the app Settings at runtime.
 - macOS signing/notarization is required for release (`create-dmg`, codesign). Local development does not require signing.
-

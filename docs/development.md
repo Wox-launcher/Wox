@@ -12,8 +12,6 @@ Required dependencies:
 Platform specific dependencies:
 - For MacOS:
   - Install [create-dmg](https://github.com/create-dmg/create-dmg)
-- For Windows/Linux:
-  - Install [upx](https://upx.github.io/)
 
 Getting Started:
 - Run `make dev` to setup development environment
