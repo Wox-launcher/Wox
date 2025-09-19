@@ -64,6 +64,9 @@ dependencies:
   fuzzywuzzy: ^1.2.0
   extended_text_field: ^16.0.2
 
+dependency_overrides:
+  math_expressions: ^2.7.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
