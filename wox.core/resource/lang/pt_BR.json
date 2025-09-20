@@ -193,6 +193,8 @@
   "ui_about_docs": "Docs",
   "ui_about_github": "GitHub",
   "ui_about_description": "Wox é um launcher para Windows, macOS e Linux que simplesmente funciona.",
+  "ui_image_editor_emoji": "Emoji",
+  "ui_image_editor_upload_image": "Carregar imagem",
   "plugin_app_open": "Abrir",
   "plugin_app_open_containing_folder": "Abrir pasta contendo",
   "plugin_app_copy_path": "Copiar caminho",

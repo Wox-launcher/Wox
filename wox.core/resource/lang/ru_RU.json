@@ -193,6 +193,8 @@
   "ui_about_docs": "Документация",
   "ui_about_github": "GitHub",
   "ui_about_description": "Wox - это лаунчер для Windows, macOS и Linux, который просто работает.",
+  "ui_image_editor_emoji": "Эмодзи",
+  "ui_image_editor_upload_image": "Загрузить изображение",
   "plugin_app_open": "Открыть",
   "plugin_app_open_containing_folder": "Открыть содержащую папку",
   "plugin_app_copy_path": "Копировать путь",

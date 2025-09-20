@@ -95,6 +95,13 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 					Tooltip: "i18n:plugin_ai_chat_agents_tooltip",
 					Columns: []definition.PluginSettingValueTableColumn{
 						{
+							Key:     "icon",
+							Label:   "i18n:plugin_ai_chat_agent_icon",
+							Type:    definition.PluginSettingValueTableColumnTypeWoxImage,
+							Width:   45,
+							Tooltip: "i18n:plugin_ai_chat_agent_icon_tooltip",
+						},
+						{
 							Key:     "name",
 							Label:   "i18n:plugin_ai_chat_agent_name",
 							Type:    definition.PluginSettingValueTableColumnTypeText,
@@ -108,18 +115,10 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 							},
 						},
 						{
-							Key:     "icon",
-							Label:   "i18n:plugin_ai_chat_agent_icon",
-							Type:    definition.PluginSettingValueTableColumnTypeWoxImage,
-							Width:   45,
-							Tooltip: "i18n:plugin_ai_chat_agent_icon_tooltip",
-						},
-						{
 							Key:          "prompt",
 							Label:        "i18n:plugin_ai_chat_agent_prompt",
 							Type:         definition.PluginSettingValueTableColumnTypeText,
 							TextMaxLines: 10,
-							Width:        200,
 							Tooltip:      "i18n:plugin_ai_chat_agent_prompt_tooltip",
 						},
 						{
@@ -164,14 +163,14 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 							Label:        "i18n:plugin_ai_chat_mcp_server_tools",
 							Tooltip:      "i18n:plugin_ai_chat_mcp_server_tools_tooltip",
 							Type:         definition.PluginSettingValueTableColumnTypeAIMCPServerTools,
-							Width:        60,
+							Width:        50,
 							HideInUpdate: true,
 						},
 						{
 							Key:   "disabled",
 							Label: "i18n:plugin_ai_chat_mcp_server_disabled",
 							Type:  definition.PluginSettingValueTableColumnTypeCheckbox,
-							Width: 60,
+							Width: 80,
 						},
 						{
 							Key:     "type",
@@ -207,7 +206,7 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 							Key:     "environmentVariables",
 							Label:   "i18n:plugin_ai_chat_mcp_server_environment_variables",
 							Type:    definition.PluginSettingValueTableColumnTypeTextList,
-							Width:   100,
+							Width:   160,
 							Tooltip: "i18n:plugin_ai_chat_mcp_server_environment_variables_tooltip",
 						},
 						{

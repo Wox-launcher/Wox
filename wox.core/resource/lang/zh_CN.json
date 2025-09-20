@@ -205,6 +205,8 @@
   "ui_about_docs": "文档",
   "ui_about_github": "GitHub",
   "ui_about_description": "Wox 是一个适用于 Windows、macOS 和 Linux 的启动器，简单易用。",
+  "ui_image_editor_emoji": "表情符号",
+  "ui_image_editor_upload_image": "上传图片",
   "plugin_app_open": "打开",
   "plugin_app_open_containing_folder": "打开所在文件夹",
   "plugin_app_copy_path": "复制路径",

@@ -98,7 +98,6 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 							Label:        "i18n:plugin_ai_command_prompt",
 							Type:         definition.PluginSettingValueTableColumnTypeText,
 							TextMaxLines: 10,
-							Width:        80,
 							Tooltip:      "i18n:plugin_ai_command_prompt_tooltip",
 						},
 						{

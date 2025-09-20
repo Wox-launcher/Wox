@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/gestures.dart';
 import 'package:uuid/v4.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:wox/api/wox_api.dart';
@@ -42,7 +41,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
 
   double calculateColumnWidthForZeroWidth(PluginSettingValueTableColumn column) {
     // if there are multiple columns which have width set to 0, we will set the max width to 100 for each column
-    // if there is only one column which has width set to 0, we will set the max width to 600 - (other columns width)
+    // if there is only one column which has width set to 0, we will set the max width to tableWidth - (other columns width)
     // if all columns have width set to 0, we will set the max width to 100 for each column
     var zeroWidthColumnCount = 0;
     var totalWidth = 0.0;
@@ -558,8 +557,13 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
         child: SingleChildScrollView(
           controller: horizontalScrollController,
           scrollDirection: Axis.horizontal,
-          child: Container(
-            constraints: BoxConstraints(maxHeight: 300, maxWidth: tableWidth),
+          child: ConstrainedBox(
+            // Keep a fixed viewport height for vertical scrolling, but allow width to grow
+            // beyond tableWidth when columns sum exceeds it so that horizontal scroll works.
+            constraints: BoxConstraints(
+              maxHeight: 300,
+              minWidth: tableWidth,
+            ),
             child: Scrollbar(
               controller: verticalScrollController,
               child: SingleChildScrollView(
@@ -623,12 +627,12 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: 6),
-      child: SizedBox(
-        width: tableWidth,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: tableWidth,
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
@@ -641,6 +645,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 ),
                 if (!readonly)
                   HyperlinkButton(
+                      style: ButtonStyle(
+                        padding: WidgetStateProperty.all(EdgeInsets.zero),
+                      ),
                       onPressed: () {
                         showDialog(
                             context: context,
@@ -673,9 +680,10 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                       )),
               ],
             ),
-            buildTable(context),
-          ],
-        ),
+          ),
+          const SizedBox(height: 6),
+          buildTable(context),
+        ],
       ),
     );
   }

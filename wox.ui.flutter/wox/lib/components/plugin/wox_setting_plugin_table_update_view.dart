@@ -145,7 +145,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
       }
     }
 
-    return max > 0 ? max : 100;
+    return max > 0 ? max + 22 /* for tooltip width*/ : 100;
   }
 
   String tr(String key) {
@@ -153,22 +153,24 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   }
 
   Widget _buildWoxImageEditor(PluginSettingValueTableColumn column) {
-    String imageJson = getValue(column.key);
     WoxImage? currentImage;
+    dynamic imgJson = getValue(column.key);
 
-    if (imageJson.isNotEmpty) {
+    if (imgJson is String && imgJson == "") {
+      currentImage = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖");
+    } else if (imgJson is WoxImage) {
+      currentImage = imgJson;
+    } else {
+      //image sholuld be WoxImage map
       try {
-        Map<String, dynamic> imageData = json.decode(imageJson);
-        currentImage = WoxImage.fromJson(imageData);
+        currentImage = WoxImage.fromJson(imgJson);
       } catch (e) {
         currentImage = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖");
       }
-    } else {
-      currentImage = WoxImage(imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code, imageData: "🤖");
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Container(
           width: 80,
@@ -179,18 +181,35 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: WoxImageView(
-              woxImage: currentImage,
-              width: 80,
-              height: 80,
+            child: Center(
+              // Center the preview content (especially emoji) in the 80x80 box
+              child: WoxImageView(
+                woxImage: currentImage,
+                width: 80,
+                height: 80,
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 8),
-        Row(
+        const SizedBox(width: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
             Button(
-              child: Text(tr('ui_emoji'), style: TextStyle(color: getThemeTextColor())),
+              style: ButtonStyle(
+                padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                backgroundColor: WidgetStateProperty.all(getThemeActiveBackgroundColor().withAlpha(20)),
+                foregroundColor: WidgetStateProperty.all(getThemeTextColor()),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(material.Icons.emoji_emotions_outlined, size: 14, color: getThemeTextColor()),
+                  const SizedBox(width: 6),
+                  Text(tr('ui_image_editor_emoji'), style: TextStyle(color: getThemeTextColor())),
+                ],
+              ),
               onPressed: () async {
                 final emojiResult = await _showEmojiPicker(context);
                 if (emojiResult != null && emojiResult.isNotEmpty) {
@@ -198,14 +217,25 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                     imageType: WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code,
                     imageData: emojiResult,
                   );
-                  updateValue(column.key, json.encode(newImage.toJson()));
+                  updateValue(column.key, newImage);
                   setState(() {});
                 }
               },
             ),
-            const SizedBox(width: 8),
             Button(
-              child: Text(tr('ui_upload_image'), style: TextStyle(color: getThemeTextColor())),
+              style: ButtonStyle(
+                padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                backgroundColor: WidgetStateProperty.all(getThemeActiveBackgroundColor().withAlpha(20)),
+                foregroundColor: WidgetStateProperty.all(getThemeTextColor()),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(material.Icons.file_upload_outlined, size: 14, color: getThemeTextColor()),
+                  const SizedBox(width: 6),
+                  Text(tr('ui_image_editor_upload_image'), style: TextStyle(color: getThemeTextColor())),
+                ],
+              ),
               onPressed: () async {
                 final result = await FilePicker.platform.pickFiles(
                   type: FileType.image,
@@ -224,7 +254,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                       imageData: "data:image/png;base64,$base64Image",
                     );
 
-                    updateValue(column.key, json.encode(newImage.toJson()));
+                    updateValue(column.key, newImage);
                     setState(() {});
                   }
                 }

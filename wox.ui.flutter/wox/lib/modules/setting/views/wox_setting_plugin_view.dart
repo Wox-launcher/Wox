@@ -545,7 +545,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                   }
                   if (e.type == "table") {
                     return WoxSettingPluginTable(
-                      tableWidth: 970,
+                      tableWidth: 640,
                       value: plugin.setting.settings[e.value.key] ?? "",
                       item: e.value as PluginSettingValueTable,
                       onUpdate: (key, value) async {
@@ -578,33 +578,36 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
       );
     }
 
-    return WoxSettingPluginTable(
-      value: json.encode(plugin.triggerKeywords.map((e) => {"keyword": e}).toList()),
-      tableWidth: 670,
-      item: PluginSettingValueTable.fromJson({
-        "Key": "_triggerKeywords",
-        "Columns": [
-          {
-            "Key": "keyword",
-            "Label": controller.tr('ui_plugin_trigger_keyword_column'),
-            "Tooltip": controller.tr('ui_plugin_trigger_keyword_tooltip'),
-            "Type": "text",
-            "TextMaxLines": 1,
-            "Validators": [
-              {"Type": "not_empty"}
-            ],
-          },
-        ],
-        "SortColumnKey": "keyword"
-      }),
-      onUpdate: (key, value) async {
-        final List<String> triggerKeywords = [];
-        for (var item in json.decode(value)) {
-          triggerKeywords.add(item["keyword"]);
-        }
-        plugin.triggerKeywords = triggerKeywords;
-        await controller.updatePluginSetting(plugin.id, "TriggerKeywords", triggerKeywords.join(","));
-      },
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: WoxSettingPluginTable(
+        value: json.encode(plugin.triggerKeywords.map((e) => {"keyword": e}).toList()),
+        tableWidth: 640,
+        item: PluginSettingValueTable.fromJson({
+          "Key": "_triggerKeywords",
+          "Columns": [
+            {
+              "Key": "keyword",
+              "Label": controller.tr('ui_plugin_trigger_keyword_column'),
+              "Tooltip": controller.tr('ui_plugin_trigger_keyword_tooltip'),
+              "Type": "text",
+              "TextMaxLines": 1,
+              "Validators": [
+                {"Type": "not_empty"}
+              ],
+            },
+          ],
+          "SortColumnKey": "keyword"
+        }),
+        onUpdate: (key, value) async {
+          final List<String> triggerKeywords = [];
+          for (var item in json.decode(value)) {
+            triggerKeywords.add(item["keyword"]);
+          }
+          plugin.triggerKeywords = triggerKeywords;
+          await controller.updatePluginSetting(plugin.id, "TriggerKeywords", triggerKeywords.join(","));
+        },
+      ),
     );
   }
 

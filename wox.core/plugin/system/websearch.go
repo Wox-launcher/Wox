@@ -77,11 +77,10 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 					SortOrder:     definition.PluginSettingValueTableSortOrderAsc,
 					Columns: []definition.PluginSettingValueTableColumn{
 						{
-							Key:          "Icon",
-							Label:        "i18n:plugin_websearch_icon",
-							Type:         definition.PluginSettingValueTableColumnTypeWoxImage,
-							HideInUpdate: true,
-							Width:        40,
+							Key:   "Icon",
+							Label: "i18n:plugin_websearch_icon",
+							Type:  definition.PluginSettingValueTableColumnTypeWoxImage,
+							Width: 40,
 						},
 						{
 							Key:     "Keyword",
