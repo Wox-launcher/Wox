@@ -1650,17 +1650,33 @@ func (m *Manager) QueryMRU(ctx context.Context) []QueryResultUI {
 		return []QueryResultUI{}
 	}
 
+	// Deduplicate restored MRU results by (pluginId, title, subTitle, contextData)
+	seen := make(map[string]bool)
+
 	var results []QueryResultUI
 	for _, item := range mruItems {
+		util.GetLogger().Debug(ctx, fmt.Sprintf("start to restore mru item: %s", item.Title))
 		pluginInstance := m.getPluginInstance(item.PluginID)
 		if pluginInstance == nil {
+			util.GetLogger().Debug(ctx, fmt.Sprintf("plugin not found, skip restore mru item: %s", item.Title))
 			continue
 		}
 		if !pluginInstance.Metadata.IsSupportFeature(MetadataFeatureMRU) {
+			util.GetLogger().Debug(ctx, fmt.Sprintf("plugin does not support mru, skip restore mru item: %s", item.Title))
 			continue
 		}
 
 		if restored := m.restoreFromMRU(ctx, pluginInstance, item); restored != nil {
+			util.GetLogger().Debug(ctx, fmt.Sprintf("mru item restored: %s", item.Title))
+
+			// Build a stable dedupe key using restored values, which are language-independent for Go plugins
+			key := fmt.Sprintf("%s|%s|%s|%s", item.PluginID, restored.Title, restored.SubTitle, restored.ContextData)
+			if seen[key] {
+				util.GetLogger().Debug(ctx, fmt.Sprintf("duplicate mru item, skip restore mru item: %s", item.Title))
+				continue
+			}
+			seen[key] = true
+
 			// Add "Remove from MRU" action to each MRU result
 			removeMRUAction := QueryResultAction{
 				Id:     uuid.NewString(),

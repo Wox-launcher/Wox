@@ -193,6 +193,8 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			},
 		})
 	}
+
+	r.api.OnMRURestore(ctx, r.handleMRURestore)
 }
 
 func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []plugin.QueryResult) {
@@ -226,7 +228,6 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 			})
 		}
 
-		r.api.OnMRURestore(ctx, r.handleMRURestore)
 	}
 
 	for _, instance := range plugin.GetPluginManager().GetPluginInstances() {
