@@ -646,6 +646,7 @@ class WoxLauncherController extends GetxController {
     actionListViewController.clearItems();
     isShowPreviewPanel.value = false;
     isShowActionPanel.value = false;
+    queryIcon.value = QueryIconInfo.empty();
 
     if (isShowDoctorCheckInfo) {
       Logger.instance.debug(traceId, "update toolbar to doctor warning, query is empty and doctor check not passed");

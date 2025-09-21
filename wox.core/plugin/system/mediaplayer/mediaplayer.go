@@ -140,7 +140,7 @@ func (m *MediaPlayerPlugin) formatIcon(mediaInfo *MediaInfo) common.WoxImage {
 	if mediaInfo.State == PlaybackStatePlaying {
 		return plugin.MediaPlayingIcon
 	} else {
-		return plugin.MediaPausedIcon
+		return mediaIcon
 	}
 }
 
