@@ -35,7 +35,8 @@
 			{
 				"file": ".github/instructions/commit-message-instructions.md"
 			}
-		]
+		],
+		"dart.lineLength": 180
 	},
 	"extensions": {
 		"recommendations": [
