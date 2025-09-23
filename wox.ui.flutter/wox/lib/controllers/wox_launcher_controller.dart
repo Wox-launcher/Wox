@@ -42,6 +42,7 @@ import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
 import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
+import 'package:wox/utils/window_flicker_detector.dart';
 
 class WoxLauncherController extends GetxController {
   //query related variables
@@ -69,7 +70,8 @@ class WoxLauncherController extends GetxController {
   /// On every query changed, it will reset the timer and will clear the query results after N ms.
   /// If there is no this delay mechanism, the window will flicker for fast typing.
   Timer clearQueryResultsTimer = Timer(const Duration(), () => {});
-  final clearQueryResultDelay = 100;
+  int clearQueryResultDelay = 100; // adaptive between 100-200ms based on flicker detection
+  final windowFlickerDetector = WindowFlickerDetector(minDelay: 100, maxDelay: 200);
 
   // ai chat related variables
   bool hasPendingAutoFocusToChatInput = false;
@@ -537,6 +539,15 @@ class WoxLauncherController extends GetxController {
     // delay clear results, otherwise windows height will shrink immediately,
     // and then the query result is received which will expand the windows height. so it will causes window flicker
     clearQueryResultsTimer.cancel();
+
+    // Adaptive: adjust clearQueryResultDelay based on recent resize flicker
+    final adjust = windowFlickerDetector.adjustClearDelay(clearQueryResultDelay);
+    clearQueryResultDelay = adjust.newDelay;
+    Logger.instance.debug(
+      const UuidV4().generate(),
+      "Adaptive clear delay: $clearQueryResultDelay ms (flicker=${adjust.status.flicker}, reason=${adjust.status.reason}, events=${adjust.status.events})",
+    );
+
     clearQueryResultsTimer = Timer(
       Duration(milliseconds: clearQueryResultDelay),
       () {
@@ -706,6 +717,7 @@ class WoxLauncherController extends GetxController {
 
     if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.debug(const UuidV4().generate(), "Resize: window height to $totalHeight");
     await windowManager.setSize(Size(WoxSettingUtil.instance.currentSetting.appWidth.toDouble(), totalHeight.toDouble()));
+    windowFlickerDetector.recordResize(totalHeight.toInt());
   }
 
   void clearHoveredResult() {

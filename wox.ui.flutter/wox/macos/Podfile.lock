@@ -64,10 +64,10 @@ SPEC CHECKSUMS:
   desktop_drop: 69eeff437544aa619c8db7f4481b3a65f7696898
   device_info_plus: 1b14eed9bf95428983aed283a8d51cce3d8c4215
   file_picker: e716a70a9fe5fd9e09ebc922d7541464289443af
-  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
   HotKey: e96d8a2ddbf4591131e2bb3f54e69554d90cdca6
   hotkey_manager_macos: 1e2edb0c7ae4fe67108af44a9d3445de41404160
-  macos_window_utils: 933f91f64805e2eb91a5bd057cf97cd097276663
+  macos_window_utils: 721df4da91cb4bde7b2b7b6ae93cdead4851118f
   path_provider_foundation: 2b6b4c569c0fb62ec74538f866245ac84301af46
   protocol_handler_macos: d10a6c01d6373389ffd2278013ab4c47ed6d6daa
   syncfusion_pdfviewer_macos: caeb5113e428fcad0cddcb054f5745b565c08fd7
