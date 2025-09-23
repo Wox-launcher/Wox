@@ -6,6 +6,7 @@ import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 import 'package:flutter_image_slideshow/flutter_image_slideshow.dart';
 import 'package:get/get.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_head_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_label_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_newline_view.dart';
@@ -31,6 +32,8 @@ import 'package:wox/enums/wox_plugin_runtime_enum.dart';
 
 class WoxSettingPluginView extends GetView<WoxSettingController> {
   const WoxSettingPluginView({super.key});
+  // Local refreshing state for showing loading spinner on refresh button
+  static final RxBool _refreshing = false.obs;
 
   Widget pluginList() {
     return Column(
@@ -56,9 +59,55 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 controller: controller.filterPluginKeywordController,
                 placeholder: Strings.format(controller.tr('ui_search_plugins'), [controller.filteredPluginList.length]),
                 padding: const EdgeInsets.all(10),
-                suffix: Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: Icon(FluentIcons.search, color: getThemeSubTextColor()),
+                suffix: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Obx(() {
+                      if (_refreshing.value) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 4.0),
+                          child: SizedBox(width: 16, height: 16, child: ProgressRing()),
+                        );
+                      }
+                      return GestureDetector(
+                        onTap: () async {
+                          _refreshing.value = true;
+                          try {
+                            final traceId = const UuidV4().generate();
+                            final preserveKeyword = controller.filterPluginKeywordController.text;
+                            final preserveActiveId = controller.activePlugin.value.id;
+                            final isStore = controller.isStorePluginList.value;
+
+                            if (isStore) {
+                              await controller.loadStorePlugins(traceId);
+                              await controller.switchToPluginList(traceId, true);
+                            } else {
+                              await controller.loadInstalledPlugins(traceId);
+                              await controller.switchToPluginList(traceId, false);
+                            }
+
+                            // restore filter keyword and re-filter
+                            controller.filterPluginKeywordController.text = preserveKeyword;
+                            controller.filterPlugins();
+
+                            // try restore previous active selection if still present
+                            final idx = controller.filteredPluginList.indexWhere((p) => p.id == preserveActiveId);
+                            if (idx >= 0) {
+                              controller.activePlugin.value = controller.filteredPluginList[idx];
+                            } else {
+                              controller.setFirstFilteredPluginDetailActive();
+                            }
+                          } finally {
+                            _refreshing.value = false;
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                          child: Icon(FluentIcons.refresh, color: getThemeSubTextColor()),
+                        ),
+                      );
+                    }),
+                  ],
                 ),
                 onChanged: (value) {
                   controller.filterPlugins();

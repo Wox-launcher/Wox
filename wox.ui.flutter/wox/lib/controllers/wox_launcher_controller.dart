@@ -185,10 +185,12 @@ class WoxLauncherController extends GetxController {
       final groupResults = finalResults.where((element) => element.group == group).toList();
       final groupResultsSorted = groupResults..sort((a, b) => b.score.compareTo(a.score));
       if (group != "") {
-        finalResultsSorted.add(WoxQueryResult.empty()
-          ..title = group
-          ..isGroup = true
-          ..score = groupResultsSorted.first.groupScore);
+        finalResultsSorted.add(
+          WoxQueryResult.empty()
+            ..title = group
+            ..isGroup = true
+            ..score = groupResultsSorted.first.groupScore,
+        );
       }
       finalResultsSorted.addAll(groupResultsSorted);
     }
@@ -417,16 +419,15 @@ class WoxLauncherController extends GetxController {
     var preventHideAfterAction = action.preventHideAfterAction;
     Logger.instance.debug(traceId, "execute action: ${action.name}, prevent hide after action: $preventHideAfterAction");
 
-    await WoxWebsocketMsgUtil.instance.sendMessage(WoxWebsocketMsg(
-      requestId: const UuidV4().generate(),
-      traceId: traceId,
-      type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
-      method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
-      data: {
-        "resultId": result.id,
-        "actionId": action.id,
-      },
-    ));
+    await WoxWebsocketMsgUtil.instance.sendMessage(
+      WoxWebsocketMsg(
+        requestId: const UuidV4().generate(),
+        traceId: traceId,
+        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+        method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
+        data: {"resultId": result.id, "actionId": action.id},
+      ),
+    );
 
     // clear the search text after action is executed
     actionListViewController.clearFilter(traceId);
@@ -447,12 +448,7 @@ class WoxLauncherController extends GetxController {
 
     onQueryChanged(
       traceId,
-      PlainQuery(
-        queryId: const UuidV4().generate(),
-        queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
-        queryText: activeResult.title,
-        querySelection: Selection.empty(),
-      ),
+      PlainQuery(queryId: const UuidV4().generate(), queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code, queryText: activeResult.title, querySelection: Selection.empty()),
       "auto complete query",
       moveCursorToEnd: true,
     );
@@ -468,12 +464,7 @@ class WoxLauncherController extends GetxController {
     } else {
       onQueryChanged(
         const UuidV4().generate(),
-        PlainQuery(
-          queryId: const UuidV4().generate(),
-          queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code,
-          queryText: value,
-          querySelection: Selection.empty(),
-        ),
+        PlainQuery(queryId: const UuidV4().generate(), queryType: WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code, queryText: value, querySelection: Selection.empty()),
         "user input changed",
       );
     }
@@ -546,24 +537,18 @@ class WoxLauncherController extends GetxController {
       "Adaptive clear delay: $clearQueryResultDelay ms (flicker=${adjust.status.flicker}, reason=${adjust.status.reason}, events=${adjust.status.events})",
     );
 
-    clearQueryResultsTimer = Timer(
-      Duration(milliseconds: clearQueryResultDelay),
-      () {
-        clearQueryResults(traceId);
-      },
+    clearQueryResultsTimer = Timer(Duration(milliseconds: clearQueryResultDelay), () {
+      clearQueryResults(traceId);
+    });
+    WoxWebsocketMsgUtil.instance.sendMessage(
+      WoxWebsocketMsg(
+        requestId: const UuidV4().generate(),
+        traceId: traceId,
+        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+        method: WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code,
+        data: {"queryId": query.queryId, "queryType": query.queryType, "queryText": query.queryText, "querySelection": query.querySelection.toJson()},
+      ),
     );
-    WoxWebsocketMsgUtil.instance.sendMessage(WoxWebsocketMsg(
-      requestId: const UuidV4().generate(),
-      traceId: traceId,
-      type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
-      method: WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code,
-      data: {
-        "queryId": query.queryId,
-        "queryType": query.queryType,
-        "queryText": query.queryText,
-        "querySelection": query.querySelection.toJson(),
-      },
-    ));
   }
 
   Future<void> handleWebSocketMessage(WoxWebsocketMsg msg) async {
@@ -695,8 +680,9 @@ class WoxLauncherController extends GetxController {
 
   Future<void> resizeHeight() async {
     final maxResultCount = WoxSettingUtil.instance.currentSetting.maxResultCount;
-    double resultHeight =
-        WoxThemeUtil.instance.getResultListViewHeightByCount(resultListViewController.items.length > maxResultCount ? maxResultCount : resultListViewController.items.length);
+    double resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(
+      resultListViewController.items.length > maxResultCount ? maxResultCount : resultListViewController.items.length,
+    );
     if (isShowActionPanel.value || isShowPreviewPanel.value) {
       resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(maxResultCount);
     }
@@ -733,10 +719,7 @@ class WoxLauncherController extends GetxController {
     }
 
     if (needUpdate) {
-      resultListViewController.updateItem(
-        traceId,
-        updatedResult,
-      );
+      resultListViewController.updateItem(traceId, updatedResult);
     }
   }
 
@@ -789,7 +772,9 @@ class WoxLauncherController extends GetxController {
             if (!resultListViewController.items.any((element) => element.value.data.id == result.value.data.id)) {
               isRequesting.remove(result.value.data.id);
               Logger.instance.info(
-                  traceId, "result <${result.value.data.title}> (resultId: ${result.value.data.id}) is removed (maybe caused by new query) during refresh, skip update result");
+                traceId,
+                "result <${result.value.data.title}> (resultId: ${result.value.data.id}) is removed (maybe caused by new query) during refresh, skip update result",
+              );
               return;
             }
 
@@ -828,18 +813,19 @@ class WoxLauncherController extends GetxController {
 
             // update result list view item
             resultListViewController.updateItem(
-                traceId,
-                WoxListItem(
-                  id: result.value.data.id,
-                  icon: result.value.data.icon,
-                  title: result.value.data.title,
-                  tails: result.value.data.tails,
-                  subTitle: result.value.data.subTitle,
-                  isGroup: result.value.data.isGroup,
-                  data: result.value.data,
-                  isShowQuickSelect: result.value.isShowQuickSelect,
-                  quickSelectNumber: result.value.quickSelectNumber,
-                ));
+              traceId,
+              WoxListItem(
+                id: result.value.data.id,
+                icon: result.value.data.icon,
+                title: result.value.data.title,
+                tails: result.value.data.tails,
+                subTitle: result.value.data.subTitle,
+                isGroup: result.value.data.isGroup,
+                data: result.value.data,
+                isShowQuickSelect: result.value.isShowQuickSelect,
+                quickSelectNumber: result.value.quickSelectNumber,
+              ),
+            );
 
             isRequesting.remove(result.value.data.id);
           });
@@ -877,12 +863,7 @@ class WoxLauncherController extends GetxController {
       }
     }
 
-    return DoctorCheckInfo(
-      results: results,
-      allPassed: allPassed,
-      icon: icon,
-      message: message,
-    );
+    return DoctorCheckInfo(results: results, allPassed: allPassed, icon: icon, message: message);
   }
 
   void doctorCheck() async {
@@ -907,7 +888,7 @@ class WoxLauncherController extends GetxController {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await Future.delayed(const Duration(milliseconds: 100));
         var settingController = Get.find<WoxSettingController>();
-        settingController.switchToPluginList(false);
+        await settingController.switchToPluginList(traceId, false);
         settingController.filterPluginKeywordController.text = context.param;
         settingController.filterPlugins();
         settingController.setFirstFilteredPluginDetailActive();
@@ -919,17 +900,14 @@ class WoxLauncherController extends GetxController {
     var isVisible = await windowManager.isVisible();
     if (!isVisible) {
       await showApp(
-          traceId,
-          ShowAppParams(
-            queryHistories: latestQueryHistories,
-            queryMode: lastQueryMode,
-            selectAll: true,
-            position: Position(
-              type: WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code,
-              x: 0,
-              y: 0,
-            ),
-          ));
+        traceId,
+        ShowAppParams(
+          queryHistories: latestQueryHistories,
+          queryMode: lastQueryMode,
+          selectAll: true,
+          position: Position(type: WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code, x: 0, y: 0),
+        ),
+      );
     }
   }
 
@@ -937,13 +915,7 @@ class WoxLauncherController extends GetxController {
     // cancel the timer if it is running
     cleanToolbarTimer.cancel();
 
-    toolbar.value = ToolbarInfo(
-      text: msg.text,
-      icon: msg.icon,
-      action: toolbar.value.action,
-      actionName: toolbar.value.actionName,
-      hotkey: toolbar.value.hotkey,
-    );
+    toolbar.value = ToolbarInfo(text: msg.text, icon: msg.icon, action: toolbar.value.action, actionName: toolbar.value.actionName, hotkey: toolbar.value.hotkey);
     if (msg.displaySeconds > 0) {
       Future.delayed(Duration(seconds: msg.displaySeconds), () {
         // only hide toolbar msg when the text is the same as the one we are showing
@@ -1142,11 +1114,7 @@ class WoxLauncherController extends GetxController {
   /// Update the toolbar to chat view
   void updateToolbarByChat(String traceId) {
     Logger.instance.debug(traceId, "update toolbar to chat");
-    toolbar.value = ToolbarInfo(
-      hotkey: "cmd+j",
-      actionName: "Select models",
-      action: () {},
-    );
+    toolbar.value = ToolbarInfo(hotkey: "cmd+j", actionName: "Select models", action: () {});
   }
 
   // Quick select related methods
@@ -1222,10 +1190,7 @@ class WoxLauncherController extends GetxController {
       bool shouldShowQuickSelect = isQuickSelectMode.value && !item.isGroup && isInVisibleRange && quickSelectNumber <= 9;
 
       // Update quick select properties
-      var updatedItem = item.copyWith(
-        isShowQuickSelect: shouldShowQuickSelect,
-        quickSelectNumber: shouldShowQuickSelect ? quickSelectNumber.toString() : '',
-      );
+      var updatedItem = item.copyWith(isShowQuickSelect: shouldShowQuickSelect, quickSelectNumber: shouldShowQuickSelect ? quickSelectNumber.toString() : '');
 
       // Increment number only for non-group items in visible range that get a number
       if (shouldShowQuickSelect) {

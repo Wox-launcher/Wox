@@ -3,6 +3,7 @@ import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
+import 'package:uuid/v4.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/modules/setting/views/wox_setting_ui_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_ai_view.dart';
@@ -108,7 +109,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                             title: Text(controller.tr('ui_store_plugins')),
                             body: const WoxSettingPluginView(),
                             onTap: () async {
-                              await controller.switchToPluginList(true);
+                              await controller.switchToPluginList(const UuidV4().generate(), true);
                             },
                           ),
                           PaneItem(
@@ -116,7 +117,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
                             title: Text(controller.tr('ui_installed_plugins')),
                             body: const WoxSettingPluginView(),
                             onTap: () async {
-                              await controller.switchToPluginList(false);
+                              await controller.switchToPluginList(const UuidV4().generate(), false);
                             },
                           ),
                           PaneItem(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -27,6 +29,9 @@ class WoxSettingController extends GetxController {
   final activePlugin = PluginDetail.empty().obs;
   final isStorePluginList = true.obs;
   late TabController activePluginTabController;
+
+  // UI state: show loading spinner when refreshing visible plugin list
+  final isRefreshingPluginList = false.obs;
 
   //themes
   final themeList = <WoxTheme>[];
@@ -90,18 +95,32 @@ class WoxSettingController extends GetxController {
 
   // ---------- Plugins ----------
 
-  Future<void> loadStorePlugins() async {
-    final storePluginsFromAPI = await WoxApi.instance.findStorePlugins();
-    storePluginsFromAPI.sort((a, b) => a.name.compareTo(b.name));
-    storePlugins.clear();
-    storePlugins.addAll(storePluginsFromAPI);
+  Future<void> loadStorePlugins(String traceId) async {
+    try {
+      var start = DateTime.now();
+      final storePluginsFromAPI = await WoxApi.instance.findStorePlugins();
+      storePluginsFromAPI.sort((a, b) => a.name.compareTo(b.name));
+      storePlugins.clear();
+      storePlugins.addAll(storePluginsFromAPI);
+      Logger.instance.info(traceId, 'Store plugins loaded, cost ${DateTime.now().difference(start).inMilliseconds} ms');
+    } finally {}
   }
 
-  Future<void> loadInstalledPlugins() async {
-    final installedPluginsFromAPI = await WoxApi.instance.findInstalledPlugins();
-    installedPluginsFromAPI.sort((a, b) => a.name.compareTo(b.name));
-    installedPlugins.clear();
-    installedPlugins.addAll(installedPluginsFromAPI);
+  Future<void> loadInstalledPlugins(String traceId) async {
+    try {
+      var start = DateTime.now();
+      final installedPluginsFromAPI = await WoxApi.instance.findInstalledPlugins();
+      installedPluginsFromAPI.sort((a, b) => a.name.compareTo(b.name));
+      installedPlugins.clear();
+      installedPlugins.addAll(installedPluginsFromAPI);
+      Logger.instance.info(traceId, 'Installed plugins loaded, cost ${DateTime.now().difference(start).inMilliseconds} ms');
+    } finally {}
+  }
+
+  /// Preload both plugin lists at startup without awaiting to avoid blocking UI.
+  void preloadPlugins(String traceId) {
+    unawaited(loadInstalledPlugins(traceId));
+    unawaited(loadStorePlugins(traceId));
   }
 
   Future<void> refreshPlugin(String pluginId, String refreshType /* update / add / remove */) async {
@@ -180,7 +199,8 @@ class WoxSettingController extends GetxController {
     }
   }
 
-  Future<void> switchToPluginList(bool isStorePlugin) async {
+  Future<void> switchToPluginList(String traceId, bool isStorePlugin) async {
+    Logger.instance.info(traceId, 'Switching to plugin list: $isStorePlugin');
     if (isStorePlugin) {
       pluginList.clear();
       pluginList.addAll(storePlugins);

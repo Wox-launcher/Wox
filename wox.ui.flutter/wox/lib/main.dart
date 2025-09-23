@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
@@ -115,17 +114,18 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
   @override
   void initState() {
     super.initState();
+    // Preload plugins at app startup so settings view has data ready
+    final startupTraceId = const UuidV4().generate();
+    settingController.preloadPlugins(startupTraceId);
 
     protocolHandler.addListener(this);
 
     launcherController.isInSettingView.listen((isShowSetting) async {
+      String traceId = const UuidV4().generate();
       if (isShowSetting) {
         await windowManager.setAlwaysOnTop(false);
         await WoxThemeUtil.instance.loadTheme();
         await WoxSettingUtil.instance.loadSetting();
-        // load plugins from store and installed in the background, don't use await to avoid blocking the main thread
-        settingController.loadInstalledPlugins();
-        settingController.loadStorePlugins();
         settingController.activePaneIndex.value = 0;
 
         launcherController.positionBeforeOpenSetting = await windowManager.getPosition();
@@ -134,7 +134,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
         // so we need to wait the resize to complete and then resize the window to the setting view size
         WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
           await windowManager.setSize(const Size(1200, 800));
-          if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.debug(const UuidV4().generate(), "Resize: window to 1200x800 for setting view");
+          if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.debug(traceId, "Resize: window to 1200x800 for setting view");
           await windowManager.center(1200, 800);
         });
       } else {
