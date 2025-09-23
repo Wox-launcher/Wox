@@ -55,7 +55,8 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) (results [
 			Icon:     icon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: check.ActionName,
+					Name:                   check.ActionName,
+					PreventHideAfterAction: check.PreventHideAfterAction,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						check.Action(ctx)
 					},

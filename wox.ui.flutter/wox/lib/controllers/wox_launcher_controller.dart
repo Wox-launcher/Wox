@@ -895,6 +895,13 @@ class WoxLauncherController extends GetxController {
         settingController.switchToPluginSettingTab();
       });
     }
+    if (context.path == "/data") {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await Future.delayed(const Duration(milliseconds: 100));
+        var settingController = Get.find<WoxSettingController>();
+        await settingController.switchToDataView(traceId);
+      });
+    }
 
     // if user open setting window from silent query, the windows may not visible yet
     var isVisible = await windowManager.isVisible();

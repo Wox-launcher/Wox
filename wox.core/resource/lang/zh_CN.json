@@ -262,6 +262,15 @@
   "plugin_doctor_accessibility_granted": "您已授予 Wox 辅助功能权限",
   "plugin_doctor_accessibility_explanation": "# 为什么 Wox 需要辅助功能权限\n\nWox 需要辅助功能权限来执行以下功能：\n\n- **全局快捷键**：允许您通过键盘快捷键从任何地方激活 Wox\n- **窗口管理**：获取活动窗口的信息，以提供上下文相关的结果\n- **键盘模拟**：启用直接将结果粘贴到应用程序等功能\n\n如果没有此权限，Wox 的某些功能将受到限制或不可用。",
   "plugin_doctor_check": "检查",
+  "plugin_doctor_database": "数据库完整性",
+  "plugin_doctor_database_not_run": "未运行完整性检查",
+  "plugin_doctor_database_ok": "数据库完整性：正常",
+  "plugin_doctor_database_desc_quickcheck": "quick_check 问题数：%d",
+  "plugin_doctor_database_desc_fk": "外键违规：%d",
+  "plugin_doctor_database_desc_tables": "受影响的表：%s",
+  "plugin_doctor_database_action": "查看修复建议",
+  "plugin_doctor_database_fix_guidance": "数据库可能已损坏。如果数据目录位于 iCloud/Dropbox，请将其迁移到本地路径。随后重建数据库或仅重置受影响的表（例如 MRU）。",
+  "plugin_mediaplayer_duration": "时长",
   "plugin_query_history_use": "使用",
   "plugin_url_open": "打开",
   "plugin_url_remove": "从历史记录中移除",
@@ -405,6 +414,5 @@
   "plugin_mediaplayer_copy_info": "复制信息",
   "plugin_mediaplayer_no_media": "没有正在播放的媒体",
   "plugin_mediaplayer_artist": "艺术家",
-  "plugin_mediaplayer_album": "专辑",
-  "plugin_mediaplayer_duration": "时长"
+  "plugin_mediaplayer_album": "专辑"
 }

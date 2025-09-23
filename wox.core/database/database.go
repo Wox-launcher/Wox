@@ -2,8 +2,10 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 	"wox/util"
 
@@ -11,6 +13,22 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+// IntegrityReport holds results of startup integrity checks
+type IntegrityReport struct {
+	Ran              bool
+	QuickCheckOK     bool
+	QuickCheckIssues []string
+	FKViolationCount int
+	AffectedTables   []string
+}
+
+var integrityReport IntegrityReport
+
+// GetIntegrityReport returns the last integrity check report
+func GetIntegrityReport() IntegrityReport {
+	return integrityReport
+}
 
 var db *gorm.DB
 
@@ -50,6 +68,8 @@ type MRURecord struct {
 }
 
 func Init(ctx context.Context) error {
+	util.GetLogger().Info(ctx, "initializing database")
+
 	dbPath := filepath.Join(util.GetLocation().GetUserDataDirectory(), "wox.db")
 
 	// Configure SQLite with proper concurrency settings
@@ -95,6 +115,8 @@ func Init(ctx context.Context) error {
 		}
 	}
 
+	runIntegrityChecks(ctx, sqlDB)
+
 	err = db.AutoMigrate(
 		&WoxSetting{},
 		&PluginSetting{},
@@ -111,4 +133,102 @@ func Init(ctx context.Context) error {
 
 func GetDB() *gorm.DB {
 	return db
+}
+
+// runIntegrityChecks runs PRAGMA quick_check and basic per-table probes
+// to surface potential corruption and affected tables without failing startup.
+func runIntegrityChecks(ctx context.Context, sqlDB *sql.DB) {
+	logger := util.GetLogger()
+
+	// 1) quick_check: fast, may not report all issues
+	rows, err := sqlDB.Query("PRAGMA quick_check")
+	if err != nil {
+		logger.Warn(ctx, fmt.Sprintf("sqlite quick_check failed: %v", err))
+		return
+	}
+	defer rows.Close()
+
+	report := IntegrityReport{Ran: true}
+
+	issues := make([]string, 0)
+	for rows.Next() {
+		var msg string
+		if scanErr := rows.Scan(&msg); scanErr == nil {
+			if msg != "ok" {
+				issues = append(issues, msg)
+			}
+		}
+	}
+	if len(issues) == 0 {
+		report.QuickCheckOK = true
+		logger.Info(ctx, "sqlite quick_check: ok")
+	} else {
+		report.QuickCheckOK = false
+		report.QuickCheckIssues = issues
+		maxShow := 5
+		if len(issues) < maxShow {
+			maxShow = len(issues)
+		}
+		logger.Error(ctx, fmt.Sprintf("sqlite quick_check found %d issue(s). sample: %s", len(issues), strings.Join(issues[:maxShow], "; ")))
+	}
+
+	// 2) foreign key check (not corruption, but data issues)
+	if fkRows, fkErr := sqlDB.Query("PRAGMA foreign_key_check"); fkErr == nil {
+		defer fkRows.Close()
+		fkCount := 0
+		for fkRows.Next() {
+			fkCount++
+		}
+		report.FKViolationCount = fkCount
+		if fkCount > 0 {
+			logger.Warn(ctx, fmt.Sprintf("sqlite foreign_key_check found %d violation(s)", fkCount))
+		}
+	}
+
+	// 3) Probe each user table with a simple COUNT and a last row read
+	tables := make([]string, 0)
+	if tRows, tErr := sqlDB.Query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"); tErr == nil {
+		defer tRows.Close()
+		for tRows.Next() {
+			var name string
+			if scanErr := tRows.Scan(&name); scanErr == nil {
+				if isSafeSQLiteIdentifier(name) {
+					tables = append(tables, name)
+				}
+			}
+		}
+	}
+	affected := make([]string, 0)
+	for _, tbl := range tables {
+		// COUNT(*) probe
+		var cnt int64
+		if err := sqlDB.QueryRow("SELECT COUNT(*) FROM " + tbl).Scan(&cnt); err != nil {
+			logger.Error(ctx, fmt.Sprintf("table %s COUNT probe failed: %v", tbl, err))
+			affected = append(affected, tbl)
+			continue
+		}
+		// last rowid probe (may touch btree pages)
+		var last int64
+		err := sqlDB.QueryRow("SELECT rowid FROM " + tbl + " ORDER BY rowid DESC LIMIT 1").Scan(&last)
+		if err != nil && err != sql.ErrNoRows {
+			logger.Error(ctx, fmt.Sprintf("table %s last-row probe failed: %v", tbl, err))
+			affected = append(affected, tbl)
+		}
+	}
+	report.AffectedTables = affected
+	integrityReport = report
+}
+
+// isSafeSQLiteIdentifier does a conservative whitelist check for identifiers
+func isSafeSQLiteIdentifier(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }

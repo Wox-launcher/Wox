@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"wox/common"
+	"wox/database"
 	"wox/i18n"
 	"wox/updater"
 	"wox/util"
@@ -16,21 +18,24 @@ type DoctorCheckType string
 const (
 	DoctorCheckUpdate        DoctorCheckType = "update"
 	DoctorCheckAccessibility DoctorCheckType = "accessibility"
+	DoctorCheckDatabase      DoctorCheckType = "database"
 )
 
 type DoctorCheckResult struct {
-	Name        string
-	Type        DoctorCheckType
-	Passed      bool
-	Description string
-	ActionName  string
-	Action      func(ctx context.Context) `json:"-"`
+	Name                   string
+	Type                   DoctorCheckType
+	Passed                 bool
+	Description            string
+	ActionName             string
+	Action                 func(ctx context.Context) `json:"-"`
+	PreventHideAfterAction bool
 }
 
 // RunDoctorChecks runs all doctor checks
 func RunDoctorChecks(ctx context.Context) []DoctorCheckResult {
 	results := []DoctorCheckResult{
 		checkWoxVersion(ctx),
+		checkDatabaseHealth(ctx),
 	}
 
 	if util.IsMacOS() {
@@ -119,6 +124,58 @@ func checkAccessibilityPermission(ctx context.Context) DoctorCheckResult {
 		Description: "i18n:plugin_doctor_accessibility_granted",
 		ActionName:  "",
 		Action: func(ctx context.Context) {
+		},
+	}
+}
+
+func checkDatabaseHealth(ctx context.Context) DoctorCheckResult {
+	report := database.GetIntegrityReport()
+	if !report.Ran {
+		return DoctorCheckResult{
+			Name:        "i18n:plugin_doctor_database",
+			Type:        DoctorCheckDatabase,
+			Passed:      true,
+			Description: "i18n:plugin_doctor_database_not_run",
+			ActionName:  "",
+			Action:      func(ctx context.Context) {},
+		}
+	}
+
+	passed := report.QuickCheckOK && len(report.AffectedTables) == 0 && report.FKViolationCount == 0
+	desc := ""
+	if passed {
+		desc = i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_ok")
+	} else {
+		parts := make([]string, 0)
+		if !report.QuickCheckOK {
+			parts = append(parts, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_desc_quickcheck"), len(report.QuickCheckIssues)))
+		}
+		if report.FKViolationCount > 0 {
+			parts = append(parts, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_desc_fk"), report.FKViolationCount))
+		}
+		if len(report.AffectedTables) > 0 {
+			maxShow := 5
+			show := report.AffectedTables
+			if len(show) > maxShow {
+				show = show[:maxShow]
+			}
+			parts = append(parts, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_desc_tables"), strings.Join(show, ", ")))
+		}
+		desc = strings.Join(parts, "; ")
+	}
+
+	return DoctorCheckResult{
+		Name:                   "i18n:plugin_doctor_database",
+		Type:                   DoctorCheckDatabase,
+		Passed:                 passed,
+		Description:            desc,
+		ActionName:             "i18n:plugin_doctor_database_action",
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context) {
+			// Show guidance: move data dir off iCloud, restore from backup, or reset affected tables (e.g., MRU)
+			msg := i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_fix_guidance")
+			GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, DisplaySeconds: 6})
+			GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{Path: "/data"})
 		},
 	}
 }

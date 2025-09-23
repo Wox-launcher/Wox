@@ -225,6 +225,10 @@ class WoxSettingController extends GetxController {
     }
   }
 
+  Future<void> switchToDataView(String traceId) async {
+    activePaneIndex.value = 4;
+  }
+
   void setFirstFilteredPluginDetailActive() {
     if (filteredPluginList.isNotEmpty) {
       activePlugin.value = filteredPluginList[0];
