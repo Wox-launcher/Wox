@@ -480,8 +480,6 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> queryMRU(String traceId) async {
-    clearQueryResults(traceId);
-
     var queryId = const UuidV4().generate();
     currentQuery.value = PlainQuery.emptyInput();
     currentQuery.value.queryId = queryId;

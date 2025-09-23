@@ -1,3 +1,5 @@
+import 'package:wox/utils/consts.dart';
+
 class FlickerStatus {
   final bool flicker;
   final String reason; // direction_change | not_enough_events | below_threshold
@@ -28,7 +30,7 @@ class WindowFlickerDetector {
   int step;
 
   WindowFlickerDetector({
-    this.flickerWindowMs = 400,
+    this.flickerWindowMs = 200,
     this.flickerMinEvents = 2,
     this.flickerMinDirectionChanges = 1,
     this.stableDecreaseRequired = 5,
@@ -56,22 +58,23 @@ class WindowFlickerDetector {
   ///   rapid typing. Typical causes are: clearing results (shrink) followed quickly
   ///   by new results (expand), or many micro-resizes that add up to a noticeable move.
   ///
-  /// We apply a single heuristic:
+  /// We apply a single heuristic with a magnitude guard:
   /// 1) Direction-change oscillation (reason = "direction_change"):
   ///    - For each resize, we compute the sign of the height delta:
   ///      +1 = expand, -1 = shrink, 0 = unchanged.
   ///    - We count direction reversals between consecutive non-zero signs.
-  ///    - If the number of reversals within the time window is >= [flickerMinDirectionChanges]
-  ///      we consider this true flicker.
-  ///      Rationale: a single reversal is often benign (a one-off correction), whereas
-  ///      multiple reversals in a short time indicate oscillation that users perceive as
-  ///      flicker.
-  ///
+  ///    - We also measure the height swing within the window (max(height)-min(height)).
+  ///    - Only when BOTH are true we consider it flicker:
+  ///        a) reversals >= [flickerMinDirectionChanges]
+  ///        b) swingPx >= RESULT_ITEM_BASE_HEIGHT * 3
+  ///      Rationale: single or tiny reversals are benign; a large peak-to-peak swing
+  ///      happening with reversals is what users perceive as visual flicker.
   ///
   /// Other reasons:
   /// - "not_enough_events": Fewer than [flickerMinEvents] resizes in the window; insufficient
   ///   signal to classify flicker.
-  /// - "below_threshold": Enough events exist, but neither heuristic exceeded its threshold.
+  /// - "below_threshold": Enough events exist, but the oscillation magnitude or reversals are
+  ///   below threshold.
   FlickerStatus isWindowFlickering() {
     final now = DateTime.now().millisecondsSinceEpoch;
     final windowStart = now - flickerWindowMs;
@@ -83,6 +86,11 @@ class WindowFlickerDetector {
 
     int directionReversals = 0;
     int? lastNonZeroSign;
+
+    // Track swing (peak-to-peak height range) to filter out tiny movements
+    int minH = recent.first.height;
+    int maxH = recent.first.height;
+
     for (final r in recent) {
       final sign = r.delta == 0 ? 0 : (r.delta > 0 ? 1 : -1);
       if (sign != 0) {
@@ -91,9 +99,14 @@ class WindowFlickerDetector {
         }
         lastNonZeroSign = sign;
       }
+      if (r.height < minH) minH = r.height;
+      if (r.height > maxH) maxH = r.height;
     }
 
-    if (directionReversals >= flickerMinDirectionChanges) {
+    final int swingPx = maxH - minH;
+    final int magnitudeThreshold = (RESULT_ITEM_BASE_HEIGHT * 3).toInt();
+
+    if (directionReversals >= flickerMinDirectionChanges && swingPx >= magnitudeThreshold) {
       return FlickerStatus(true, "direction_change", recent.length);
     }
 
