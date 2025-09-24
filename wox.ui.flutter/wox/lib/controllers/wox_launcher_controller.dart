@@ -477,12 +477,19 @@ class WoxLauncherController extends GetxController {
 
     try {
       final results = await WoxApi.instance.queryMRU(traceId);
+      if (results.isEmpty) {
+        Logger.instance.debug(traceId, "no MRU results");
+        clearQueryResults(traceId);
+        return;
+      }
+
       for (var result in results) {
         result.queryId = queryId;
       }
       onReceivedQueryResults(traceId, results);
     } catch (e) {
       Logger.instance.error(traceId, "Failed to query MRU: $e");
+      clearQueryResults(traceId);
     }
   }
 

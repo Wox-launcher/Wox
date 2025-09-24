@@ -271,7 +271,7 @@
   "plugin_doctor_database_desc_fk": "foreign key violations: %d",
   "plugin_doctor_database_desc_tables": "affected tables: %s",
   "plugin_doctor_database_action": "Show fix guidance",
-  "plugin_doctor_database_fix_guidance": "Your database may be corrupted. If your data directory is on iCloud/Dropbox, move it to a local path. Then rebuild the database or reset affected tables (e.g., MRU).",
+  "plugin_doctor_database_fix_guidance": "Possible database inconsistency detected (often occurs when the database is stored in a cloud sync drive). We recommend restoring the database from a backup and avoiding placing the data directory under iCloud/Dropbox or similar sync paths. Detailed errors have been logged.",
   "plugin_mediaplayer_duration": "Duration",
   "plugin_query_history_use": "Use",
   "plugin_browser_open_tab": "Open",

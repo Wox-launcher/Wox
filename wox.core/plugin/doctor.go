@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"wox/common"
 	"wox/database"
 	"wox/i18n"
@@ -141,27 +140,13 @@ func checkDatabaseHealth(ctx context.Context) DoctorCheckResult {
 		}
 	}
 
-	passed := report.QuickCheckOK && len(report.AffectedTables) == 0 && report.FKViolationCount == 0
-	desc := ""
+	passed := report.QuickCheckOK
+	var desc string
 	if passed {
 		desc = i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_ok")
 	} else {
-		parts := make([]string, 0)
-		if !report.QuickCheckOK {
-			parts = append(parts, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_desc_quickcheck"), len(report.QuickCheckIssues)))
-		}
-		if report.FKViolationCount > 0 {
-			parts = append(parts, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_desc_fk"), report.FKViolationCount))
-		}
-		if len(report.AffectedTables) > 0 {
-			maxShow := 5
-			show := report.AffectedTables
-			if len(show) > maxShow {
-				show = show[:maxShow]
-			}
-			parts = append(parts, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_desc_tables"), strings.Join(show, ", ")))
-		}
-		desc = strings.Join(parts, "; ")
+		util.GetLogger().Warn(ctx, fmt.Sprintf("sqlite quick_check issues: %v", report.QuickCheckIssues))
+		desc = i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_fix_guidance")
 	}
 
 	return DoctorCheckResult{

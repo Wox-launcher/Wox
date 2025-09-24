@@ -269,7 +269,7 @@
   "plugin_doctor_database_desc_fk": "外键违规：%d",
   "plugin_doctor_database_desc_tables": "受影响的表：%s",
   "plugin_doctor_database_action": "查看修复建议",
-  "plugin_doctor_database_fix_guidance": "数据库可能已损坏。如果数据目录位于 iCloud/Dropbox，请将其迁移到本地路径。随后重建数据库或仅重置受影响的表（例如 MRU）。",
+  "plugin_doctor_database_fix_guidance": "检测到数据库可能不完整（常见于将数据库放在云同步网盘时）。建议从备份恢复数据库，并避免将数据目录放在 iCloud/Dropbox 等同步路径。详细错误已记录到日志。",
   "plugin_mediaplayer_duration": "时长",
   "plugin_query_history_use": "使用",
   "plugin_url_open": "打开",

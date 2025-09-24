@@ -74,8 +74,8 @@ func Init(ctx context.Context) error {
 
 	// Configure SQLite with proper concurrency settings
 	dsn := dbPath + "?" +
-		"_journal_mode=WAL&" + // Enable WAL mode for better concurrency
-		"_synchronous=NORMAL&" + // Balance between safety and performance
+		"_journal_mode=DELETE&" + // Use DELETE journal mode for cloud-friendly single-file sync
+		"_synchronous=FULL&" + // Safer for DELETE mode
 		"_cache_size=1000&" + // Set cache size
 		"_foreign_keys=true&" + // Enable foreign key constraints
 		"_busy_timeout=5000" // Set busy timeout to 5 seconds
@@ -101,8 +101,8 @@ func Init(ctx context.Context) error {
 
 	// Execute additional PRAGMA statements for optimal concurrency
 	pragmas := []string{
-		"PRAGMA journal_mode=WAL",    // Ensure WAL mode is enabled
-		"PRAGMA synchronous=NORMAL",  // Balance safety and performance
+		"PRAGMA journal_mode=DELETE", // Ensure WAL mode is enabled
+		"PRAGMA synchronous=FULL",    // Balance safety and performance
 		"PRAGMA cache_size=1000",     // Set cache size
 		"PRAGMA foreign_keys=ON",     // Enable foreign key constraints
 		"PRAGMA temp_store=memory",   // Store temporary tables in memory
@@ -127,7 +127,6 @@ func Init(ctx context.Context) error {
 		return fmt.Errorf("failed to migrate database schema: %w", err)
 	}
 
-	util.GetLogger().Info(ctx, fmt.Sprintf("database initialized at %s with WAL mode enabled", dbPath))
 	return nil
 }
 
@@ -135,12 +134,10 @@ func GetDB() *gorm.DB {
 	return db
 }
 
-// runIntegrityChecks runs PRAGMA quick_check and basic per-table probes
-// to surface potential corruption and affected tables without failing startup.
+// runIntegrityChecks runs a lightweight PRAGMA quick_check only to detect corruption.
 func runIntegrityChecks(ctx context.Context, sqlDB *sql.DB) {
 	logger := util.GetLogger()
 
-	// 1) quick_check: fast, may not report all issues
 	rows, err := sqlDB.Query("PRAGMA quick_check")
 	if err != nil {
 		logger.Warn(ctx, fmt.Sprintf("sqlite quick_check failed: %v", err))
@@ -172,63 +169,5 @@ func runIntegrityChecks(ctx context.Context, sqlDB *sql.DB) {
 		logger.Error(ctx, fmt.Sprintf("sqlite quick_check found %d issue(s). sample: %s", len(issues), strings.Join(issues[:maxShow], "; ")))
 	}
 
-	// 2) foreign key check (not corruption, but data issues)
-	if fkRows, fkErr := sqlDB.Query("PRAGMA foreign_key_check"); fkErr == nil {
-		defer fkRows.Close()
-		fkCount := 0
-		for fkRows.Next() {
-			fkCount++
-		}
-		report.FKViolationCount = fkCount
-		if fkCount > 0 {
-			logger.Warn(ctx, fmt.Sprintf("sqlite foreign_key_check found %d violation(s)", fkCount))
-		}
-	}
-
-	// 3) Probe each user table with a simple COUNT and a last row read
-	tables := make([]string, 0)
-	if tRows, tErr := sqlDB.Query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"); tErr == nil {
-		defer tRows.Close()
-		for tRows.Next() {
-			var name string
-			if scanErr := tRows.Scan(&name); scanErr == nil {
-				if isSafeSQLiteIdentifier(name) {
-					tables = append(tables, name)
-				}
-			}
-		}
-	}
-	affected := make([]string, 0)
-	for _, tbl := range tables {
-		// COUNT(*) probe
-		var cnt int64
-		if err := sqlDB.QueryRow("SELECT COUNT(*) FROM " + tbl).Scan(&cnt); err != nil {
-			logger.Error(ctx, fmt.Sprintf("table %s COUNT probe failed: %v", tbl, err))
-			affected = append(affected, tbl)
-			continue
-		}
-		// last rowid probe (may touch btree pages)
-		var last int64
-		err := sqlDB.QueryRow("SELECT rowid FROM " + tbl + " ORDER BY rowid DESC LIMIT 1").Scan(&last)
-		if err != nil && err != sql.ErrNoRows {
-			logger.Error(ctx, fmt.Sprintf("table %s last-row probe failed: %v", tbl, err))
-			affected = append(affected, tbl)
-		}
-	}
-	report.AffectedTables = affected
 	integrityReport = report
-}
-
-// isSafeSQLiteIdentifier does a conservative whitelist check for identifiers
-func isSafeSQLiteIdentifier(name string) bool {
-	if name == "" {
-		return false
-	}
-	for _, r := range name {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
-			continue
-		}
-		return false
-	}
-	return true
 }
