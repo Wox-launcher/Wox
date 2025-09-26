@@ -272,6 +272,7 @@
   "plugin_wpm_create": "Criar",
   "plugin_wpm_uninstall": "Desinstalar",
   "plugin_wpm_install": "Instalar",
+  "plugin_wpm_upgrade": "Atualizar",
   "plugin_wpm_install_failed": "Falha ao instalar o plugin",
   "plugin_wpm_reload": "Recarregar",
   "plugin_wpm_open_directory": "Abrir diretório do plugin",

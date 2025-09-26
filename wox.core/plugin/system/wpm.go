@@ -15,6 +15,7 @@ import (
 	"wox/util"
 	"wox/util/shell"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	cp "github.com/otiai10/copy"
@@ -454,16 +455,111 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	pluginManifests := plugin.GetStoreManager().Search(ctx, query.Search)
+	// get installed plugins once for status checks
+	installed := plugin.GetPluginManager().GetPluginInstances()
+
 	for _, pluginManifest := range pluginManifests {
+		// build tails to indicate installation/upgrade status
+		var tails []plugin.QueryResultTail
+		if inst, ok := lo.Find(installed, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
+			// plugin is installed, check if upgrade is available
+			// best-effort semver comparison; fall back to show installed if parse fails
+			upgrade := false
+			if vInstalled, err1 := semver.NewVersion(inst.Metadata.Version); err1 == nil {
+				if vStore, err2 := semver.NewVersion(pluginManifest.Version); err2 == nil {
+					upgrade = vStore.GreaterThan(vInstalled)
+				}
+			}
+			if upgrade {
+				// show an upgrade icon
+				tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: common.NewWoxImageEmoji("\u2b06\ufe0f")})
+			} else {
+				// show an installed icon
+				tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: common.NewWoxImageEmoji("\u2705")})
+			}
+		}
+
 		screenShotsMarkdown := lo.Map(pluginManifest.ScreenshotUrls, func(screenshot string, _ int) string {
 			return fmt.Sprintf("![screenshot](%s)", screenshot)
 		})
+
+		// decide actions based on install/upgrade status
+		var actions []plugin.QueryResultAction
+		installedFlag := lo.ContainsBy(installed, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id })
+		if installedFlag {
+			upgradeFlag := false
+			if inst, ok := lo.Find(installed, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
+				if vInstalled, err1 := semver.NewVersion(inst.Metadata.Version); err1 == nil {
+					if vStore, err2 := semver.NewVersion(pluginManifest.Version); err2 == nil {
+						upgradeFlag = vStore.GreaterThan(vInstalled)
+					}
+				}
+			}
+			if upgradeFlag {
+				// show Upgrade action (reuse install flow)
+				actions = []plugin.QueryResultAction{
+					{
+						Name:                   "i18n:plugin_wpm_upgrade",
+						PreventHideAfterAction: true,
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+							installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
+							if installErr != nil {
+								w.api.Notify(ctx, "i18n:plugin_wpm_install_failed")
+								return
+							}
+							// on success: change query to the plugin's first trigger keyword if exists
+							time.Sleep(500 * time.Millisecond)
+							instances := plugin.GetPluginManager().GetPluginInstances()
+							if len(instances) > 0 {
+								if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
+									if len(inst.Metadata.TriggerKeywords) > 0 {
+										kw := inst.Metadata.TriggerKeywords[0]
+										w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
+									}
+								}
+							}
+						},
+					},
+				}
+			} else {
+				// installed and up-to-date: no action
+				actions = []plugin.QueryResultAction{}
+			}
+		} else {
+			// not installed: show Install
+			actions = []plugin.QueryResultAction{
+				{
+					Name:                   "i18n:plugin_wpm_install",
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
+						if installErr != nil {
+							w.api.Notify(ctx, "i18n:plugin_wpm_install_failed")
+							return
+						}
+						// on success: change query to the plugin's first trigger keyword if exists
+						time.Sleep(500 * time.Millisecond)
+						instances := plugin.GetPluginManager().GetPluginInstances()
+						if len(instances) > 0 {
+							if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
+								if len(inst.Metadata.TriggerKeywords) > 0 {
+									kw := inst.Metadata.TriggerKeywords[0]
+									w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
+								}
+							}
+						}
+					},
+				},
+			}
+		}
 
 		results = append(results, plugin.QueryResult{
 			Id:       uuid.NewString(),
 			Title:    pluginManifest.Name,
 			SubTitle: pluginManifest.Description,
 			Icon:     common.NewWoxImageUrl(pluginManifest.IconUrl),
+			Tails:    tails,
+
 			Preview: plugin.WoxPreview{
 				PreviewType: plugin.WoxPreviewTypeMarkdown,
 				PreviewData: fmt.Sprintf(`
@@ -485,31 +581,8 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 					"Website": pluginManifest.Website,
 				},
 			},
-			Actions: []plugin.QueryResultAction{
-				{
-					Name:                   "i18n:plugin_wpm_install",
-					PreventHideAfterAction: true,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
-						if installErr != nil {
-							w.api.Notify(ctx, "i18n:plugin_wpm_install_failed")
-							return
-						}
-
-						// on success: change query to the plugin's first trigger keyword if exists
-						time.Sleep(500 * time.Millisecond)
-						instances := plugin.GetPluginManager().GetPluginInstances()
-						if len(instances) > 0 {
-							if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
-								if len(inst.Metadata.TriggerKeywords) > 0 {
-									kw := inst.Metadata.TriggerKeywords[0]
-									w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
-								}
-							}
-						}
-					},
-				},
-			}})
+			Actions: actions,
+		})
 	}
 	return results
 }

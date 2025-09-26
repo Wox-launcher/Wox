@@ -286,6 +286,7 @@
   "plugin_wpm_create": "创建",
   "plugin_wpm_uninstall": "卸载",
   "plugin_wpm_install": "安装",
+  "plugin_wpm_upgrade": "升级",
   "plugin_wpm_install_failed": "安装插件失败",
   "plugin_wpm_reload": "重新加载",
   "plugin_wpm_open_directory": "打开插件目录",

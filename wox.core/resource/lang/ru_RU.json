@@ -272,6 +272,7 @@
   "plugin_wpm_create": "Создать",
   "plugin_wpm_uninstall": "Удалить",
   "plugin_wpm_install": "Установить",
+  "plugin_wpm_upgrade": "Обновить",
   "plugin_wpm_install_failed": "Не удалось установить плагин",
   "plugin_wpm_reload": "Перезагрузить",
   "plugin_wpm_open_directory": "Открыть каталог плагинов",
