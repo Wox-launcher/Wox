@@ -9,6 +9,8 @@ import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
+import 'package:wox/api/wox_api.dart';
+import 'package:wox/controllers/wox_setting_controller.dart';
 
 class WoxQueryToolbarView extends GetView<WoxLauncherController> {
   const WoxQueryToolbarView({super.key});
@@ -46,6 +48,7 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
 
                   return Row(
                     children: [
+                      const SizedBox(width: 0),
                       Expanded(
                         child: Text(
                           toolbarInfo.text ?? '',
@@ -60,24 +63,74 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
                           child: GestureDetector(
                             onTap: () {
                               Clipboard.setData(ClipboardData(text: toolbarInfo.text ?? ''));
-                              controller.toolbarCopyText.value = 'Copied';
+                              // i18n: store key, render via tr
+                              controller.toolbarCopyText.value = 'toolbar_copied';
                               Future.delayed(const Duration(seconds: 3), () {
-                                controller.toolbarCopyText.value = 'Copy';
+                                controller.toolbarCopyText.value = 'toolbar_copy';
                               });
                             },
                             child: Padding(
                               padding: const EdgeInsets.only(left: 8.0),
-                              child: Obx(() => Text(
-                                    controller.toolbarCopyText.value,
-                                    style: TextStyle(
-                                      color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
-                                      fontSize: 12,
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                  )),
+                              child: Obx(() {
+                                final settingController = Get.find<WoxSettingController>();
+                                return Text(
+                                  settingController.tr(controller.toolbarCopyText.value),
+                                  style: TextStyle(
+                                    color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+                                    fontSize: 12,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                );
+                              }),
                             ),
                           ),
                         ),
+                      if (isTextOverflow) ...[
+                        const SizedBox(width: 8),
+                        Theme(
+                          data: Theme.of(context).copyWith(
+                            popupMenuTheme: PopupMenuThemeData(
+                              color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor),
+                              textStyle: TextStyle(
+                                color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          child: PopupMenuButton<String>(
+                            padding: EdgeInsets.zero,
+                            tooltip: '',
+                            onSelected: (value) async {
+                              final text = toolbarInfo.text ?? '';
+                              await WoxApi.instance.toolbarSnooze(text, value);
+                              // Hide current toolbar message immediately
+                              controller.toolbar.value = controller.toolbar.value.emptyLeftSide();
+                            },
+                            itemBuilder: (context) {
+                              final settingController = Get.find<WoxSettingController>();
+                              return [
+                                PopupMenuItem(value: '3d', child: Text(settingController.tr('toolbar_snooze_3d'))),
+                                PopupMenuItem(value: '7d', child: Text(settingController.tr('toolbar_snooze_7d'))),
+                                PopupMenuItem(value: '1m', child: Text(settingController.tr('toolbar_snooze_1m'))),
+                                PopupMenuItem(value: 'forever', child: Text(settingController.tr('toolbar_snooze_forever'))),
+                              ];
+                            },
+                            child: Builder(
+                              builder: (context) {
+                                final settingController = Get.find<WoxSettingController>();
+                                return Text(
+                                  settingController.tr('toolbar_snooze'),
+                                  style: TextStyle(
+                                    color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+                                    fontSize: 12,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   );
                 },

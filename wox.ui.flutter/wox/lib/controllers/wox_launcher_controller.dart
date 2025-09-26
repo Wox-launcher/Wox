@@ -38,6 +38,7 @@ import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/wox_setting_util.dart';
+
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/wox_websocket_msg_util.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
@@ -95,7 +96,8 @@ class WoxLauncherController extends GetxController {
 
   // toolbar related variables
   final toolbar = ToolbarInfo.empty().obs;
-  final toolbarCopyText = 'Copy'.obs;
+  // store i18n key instead of literal text
+  final toolbarCopyText = 'toolbar_copy'.obs;
   // The timer to clean the toolbar when query changed
   // on every query changed, it will reset the timer and will clear the toolbar after N ms
   // If there is no this delay mechanism, the toolbar will flicker for fast typing
@@ -928,6 +930,8 @@ class WoxLauncherController extends GetxController {
   void showToolbarMsg(String traceId, ToolbarMsg msg) {
     // cancel the timer if it is running
     cleanToolbarTimer.cancel();
+
+    // Snooze/mute enforcement is handled by backend before pushing to UI.
 
     toolbar.value = ToolbarInfo(text: msg.text, icon: msg.icon, action: toolbar.value.action, actionName: toolbar.value.actionName, hotkey: toolbar.value.hotkey);
     if (msg.displaySeconds > 0) {

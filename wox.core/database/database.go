@@ -122,6 +122,7 @@ func Init(ctx context.Context) error {
 		&PluginSetting{},
 		&Oplog{},
 		&MRURecord{},
+		&ToolbarMute{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate database schema: %w", err)

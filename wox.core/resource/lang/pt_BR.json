@@ -401,5 +401,12 @@
   "plugin_mediaplayer_no_media": "Nenhum mídia",
   "plugin_mediaplayer_artist": "Artista",
   "plugin_mediaplayer_album": "Álbum",
-  "plugin_mediaplayer_duration": "Duração"
+  "plugin_mediaplayer_duration": "Duração",
+  "toolbar_copy": "Copiar",
+  "toolbar_copied": "Copiado",
+  "toolbar_snooze": "Adiar",
+  "toolbar_snooze_3d": "Não me lembrar por 3 dias",
+  "toolbar_snooze_7d": "Não me lembrar por 7 dias",
+  "toolbar_snooze_1m": "Não me lembrar por 1 mês",
+  "toolbar_snooze_forever": "Nunca mostrar novamente"
 }

@@ -415,5 +415,12 @@
   "plugin_mediaplayer_copy_info": "Copy info",
   "plugin_mediaplayer_no_media": "No media",
   "plugin_mediaplayer_artist": "Artist",
-  "plugin_mediaplayer_album": "Album"
+  "plugin_mediaplayer_album": "Album",
+  "toolbar_copy": "Copy",
+  "toolbar_copied": "Copied",
+  "toolbar_snooze": "Snooze",
+  "toolbar_snooze_3d": "Don't remind me for 3 days",
+  "toolbar_snooze_7d": "Don't remind me for 7 days",
+  "toolbar_snooze_1m": "Don't remind me for 1 month",
+  "toolbar_snooze_forever": "Never show again"
 }

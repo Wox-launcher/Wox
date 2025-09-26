@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 	"wox/common"
+	"wox/database"
 	"wox/plugin"
 	"wox/setting"
 	"wox/util"
@@ -88,6 +89,11 @@ func (u *uiImpl) RestoreTheme(ctx context.Context) {
 }
 
 func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
+	// Respect snooze/mute regardless of where we display (toolbar or system notification)
+	if database.IsToolbarTextMuted(ctx, msg.Text) {
+		logger.Info(ctx, "toolbar/system message muted by backend")
+		return
+	}
 	if u.isNotifyInToolbar(ctx, msg.PluginId) {
 		u.invokeWebsocketMethod(ctx, "ShowToolbarMsg", msg)
 	} else {
