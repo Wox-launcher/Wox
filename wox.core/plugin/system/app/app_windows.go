@@ -105,6 +105,11 @@ func (a *WindowsRetriever) GetAppDirectories(ctx context.Context) []appDirectory
 			Recursive:      true,
 			RecursiveDepth: 2,
 		},
+		{
+			Path:           usr.HomeDir + "\\Desktop",
+			Recursive:      false,
+			RecursiveDepth: 0,
+		},
 	}
 }
 
