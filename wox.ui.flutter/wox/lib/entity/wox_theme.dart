@@ -26,11 +26,11 @@ class WoxTheme {
   late String resultItemTitleColor;
   late String resultItemSubTitleColor;
   late String resultItemTailTextColor;
-  late String resultItemBorderLeft;
+  late int resultItemBorderLeftWidth;
   late String resultItemActiveBackgroundColor;
   late String resultItemActiveTitleColor;
   late String resultItemActiveSubTitleColor;
-  late String resultItemActiveBorderLeft;
+  late int resultItemActiveBorderLeftWidth;
   late String resultItemActiveTailTextColor;
   late String queryBoxFontColor;
   late String queryBoxBackgroundColor;
@@ -86,11 +86,11 @@ class WoxTheme {
     resultItemPaddingBottom,
     resultItemTitleColor,
     resultItemSubTitleColor,
-    resultItemBorderLeft,
+    resultItemBorderLeftWidth,
     resultItemActiveBackgroundColor,
     resultItemActiveTitleColor,
     resultItemActiveSubTitleColor,
-    resultItemActiveBorderLeft,
+    resultItemActiveBorderLeftWidth,
     queryBoxFontColor,
     queryBoxBackgroundColor,
     queryBoxBorderRadius,
@@ -147,19 +147,25 @@ class WoxTheme {
     resultItemTitleColor = json['ResultItemTitleColor'];
     resultItemSubTitleColor = json['ResultItemSubTitleColor'];
     resultItemTailTextColor = json['ResultItemTailTextColor'];
-    resultItemBorderLeft = json['ResultItemBorderLeft'];
+    resultItemBorderLeftWidth = _parseInt(
+        json['ResultItemBorderLeftWidth'] ?? json['ResultItemBorderLeft']);
     resultItemActiveBackgroundColor = json['ResultItemActiveBackgroundColor'];
     resultItemActiveTitleColor = json['ResultItemActiveTitleColor'];
     resultItemActiveSubTitleColor = json['ResultItemActiveSubTitleColor'];
-    resultItemActiveBorderLeft = json['ResultItemActiveBorderLeft'];
+    resultItemActiveBorderLeftWidth = _parseInt(
+        json['ResultItemActiveBorderLeftWidth'] ??
+            json['ResultItemActiveBorderLeft']);
     resultItemActiveTailTextColor = json['ResultItemActiveTailTextColor'];
     queryBoxFontColor = json['QueryBoxFontColor'];
     queryBoxBackgroundColor = json['QueryBoxBackgroundColor'];
     queryBoxBorderRadius = json['QueryBoxBorderRadius'];
     queryBoxCursorColor = json['QueryBoxCursorColor'];
-    final selectionBackground = json['QueryBoxTextSelectionBackgroundColor'] ?? json['QueryBoxTextSelectionColor'];
+    final selectionBackground = json['QueryBoxTextSelectionBackgroundColor'] ??
+        json['QueryBoxTextSelectionColor'];
     queryBoxTextSelectionBackgroundColor = selectionBackground ?? '';
-    queryBoxTextSelectionColor = json['QueryBoxTextSelectionColor'] ?? json['ResultItemActiveTitleColor'] ?? '';
+    queryBoxTextSelectionColor = json['QueryBoxTextSelectionColor'] ??
+        json['ResultItemActiveTitleColor'] ??
+        '';
     actionContainerBackgroundColor = json['ActionContainerBackgroundColor'];
     actionContainerHeaderFontColor = json['ActionContainerHeaderFontColor'];
     actionContainerPaddingLeft = json['ActionContainerPaddingLeft'];
@@ -211,17 +217,18 @@ class WoxTheme {
     data['ResultItemTitleColor'] = resultItemTitleColor;
     data['ResultItemSubTitleColor'] = resultItemSubTitleColor;
     data['ResultItemTailTextColor'] = resultItemTailTextColor;
-    data['ResultItemBorderLeft'] = resultItemBorderLeft;
+    data['ResultItemBorderLeftWidth'] = resultItemBorderLeftWidth;
     data['ResultItemActiveBackgroundColor'] = resultItemActiveBackgroundColor;
     data['ResultItemActiveTitleColor'] = resultItemActiveTitleColor;
     data['ResultItemActiveSubTitleColor'] = resultItemActiveSubTitleColor;
-    data['ResultItemActiveBorderLeft'] = resultItemActiveBorderLeft;
+    data['ResultItemActiveBorderLeftWidth'] = resultItemActiveBorderLeftWidth;
     data['ResultItemActiveTailTextColor'] = resultItemActiveTailTextColor;
     data['QueryBoxFontColor'] = queryBoxFontColor;
     data['QueryBoxBackgroundColor'] = queryBoxBackgroundColor;
     data['QueryBoxBorderRadius'] = queryBoxBorderRadius;
     data['QueryBoxCursorColor'] = queryBoxCursorColor;
-    data['QueryBoxTextSelectionBackgroundColor'] = queryBoxTextSelectionBackgroundColor;
+    data['QueryBoxTextSelectionBackgroundColor'] =
+        queryBoxTextSelectionBackgroundColor;
     data['QueryBoxTextSelectionColor'] = queryBoxTextSelectionColor;
     data['ActionContainerBackgroundColor'] = actionContainerBackgroundColor;
     data['ActionContainerHeaderFontColor'] = actionContainerHeaderFontColor;
@@ -258,4 +265,17 @@ class WoxTheme {
     isInstalled = false;
     isUpgradable = false;
   }
+}
+
+int _parseInt(dynamic value, {int defaultValue = 0}) {
+  if (value == null) {
+    return defaultValue;
+  }
+  if (value is int) {
+    return value;
+  }
+  if (value is double) {
+    return value.toInt();
+  }
+  return int.tryParse(value.toString()) ?? defaultValue;
 }

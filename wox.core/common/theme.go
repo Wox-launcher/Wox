@@ -1,5 +1,10 @@
 package common
 
+import (
+	"encoding/json"
+	"strconv"
+)
+
 type Theme struct {
 	ThemeId     string
 	ThemeName   string
@@ -27,11 +32,11 @@ type Theme struct {
 	ResultItemTitleColor                 string
 	ResultItemSubTitleColor              string
 	ResultItemTailTextColor              string
-	ResultItemBorderLeft                 string
+	ResultItemBorderLeftWidth            int
 	ResultItemActiveBackgroundColor      string
 	ResultItemActiveTitleColor           string
 	ResultItemActiveSubTitleColor        string
-	ResultItemActiveBorderLeft           string
+	ResultItemActiveBorderLeftWidth      int
 	ResultItemActiveTailTextColor        string
 	QueryBoxFontColor                    string
 	QueryBoxBackgroundColor              string
@@ -60,4 +65,58 @@ type Theme struct {
 	ToolbarBackgroundColor               string
 	ToolbarPaddingLeft                   int
 	ToolbarPaddingRight                  int
+}
+
+func (t *Theme) UnmarshalJSON(data []byte) error {
+	type themeAlias Theme
+	aux := &struct {
+		*themeAlias
+	}{
+		themeAlias: (*themeAlias)(t),
+	}
+
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	t.ResultItemBorderLeftWidth = parseJSONInt(raw, "ResultItemBorderLeftWidth", "ResultItemBorderLeft")
+	t.ResultItemActiveBorderLeftWidth = parseJSONInt(raw, "ResultItemActiveBorderLeftWidth", "ResultItemActiveBorderLeft")
+
+	return nil
+}
+
+func parseJSONInt(raw map[string]json.RawMessage, keys ...string) int {
+	for _, key := range keys {
+		value, ok := raw[key]
+		if !ok || len(value) == 0 {
+			continue
+		}
+		if string(value) == "null" {
+			continue
+		}
+
+		var intValue int
+		if err := json.Unmarshal(value, &intValue); err == nil {
+			return intValue
+		}
+
+		var floatValue float64
+		if err := json.Unmarshal(value, &floatValue); err == nil {
+			return int(floatValue)
+		}
+
+		var strValue string
+		if err := json.Unmarshal(value, &strValue); err == nil {
+			if parsed, parseErr := strconv.Atoi(strValue); parseErr == nil {
+				return parsed
+			}
+		}
+	}
+
+	return 0
 }

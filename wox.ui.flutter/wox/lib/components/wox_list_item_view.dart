@@ -148,19 +148,21 @@ class WoxListItemView extends StatelessWidget {
   Widget build(BuildContext context) {
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: list item view ${item.title} - container");
 
-    return Container(
+    final bool isResultList = listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code;
+    final BorderRadius borderRadius = isResultList && woxTheme.resultItemBorderRadius > 0 ? BorderRadius.circular(woxTheme.resultItemBorderRadius.toDouble()) : BorderRadius.zero;
+
+    Widget content = Container(
       decoration: BoxDecoration(
         color: getBackgroundColor(),
-        borderRadius: BorderRadius.circular(listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code ? woxTheme.resultItemBorderRadius.toDouble() : 0.0),
         border: Border(
             left: listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
                 ? BorderSide.none
                 : BorderSide(
                     color: isActive ? safeFromCssColor(woxTheme.resultItemActiveBackgroundColor) : Colors.transparent,
-                    width: isActive ? double.parse(woxTheme.resultItemActiveBorderLeft) : double.parse(woxTheme.resultItemBorderLeft),
+                    width: isActive ? woxTheme.resultItemActiveBorderLeftWidth.toDouble() : woxTheme.resultItemBorderLeftWidth.toDouble(),
                   )),
       ),
-      padding: listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code
+      padding: isResultList
           ? EdgeInsets.only(
               top: woxTheme.resultItemPaddingTop.toDouble(),
               right: woxTheme.resultItemPaddingRight.toDouble(),
@@ -222,5 +224,14 @@ class WoxListItemView extends StatelessWidget {
         ],
       ),
     );
+
+    if (borderRadius != BorderRadius.zero) {
+      content = ClipRRect(
+        borderRadius: borderRadius,
+        child: content,
+      );
+    }
+
+    return content;
   }
 }

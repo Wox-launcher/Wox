@@ -28,11 +28,11 @@ type ThemeDto struct {
 	ResultItemTitleColor                 string
 	ResultItemSubTitleColor              string
 	ResultItemTailTextColor              string
-	ResultItemBorderLeft                 string
+	ResultItemBorderLeftWidth            int
 	ResultItemActiveBackgroundColor      string
 	ResultItemActiveTitleColor           string
 	ResultItemActiveSubTitleColor        string
-	ResultItemActiveBorderLeft           string
+	ResultItemActiveBorderLeftWidth      int
 	ResultItemActiveTailTextColor        string
 	QueryBoxFontColor                    string
 	QueryBoxBackgroundColor              string

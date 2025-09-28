@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"wox/common"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/resource"
 	"wox/setting"
@@ -195,26 +196,35 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 	var conversations []common.Conversation
 	conversations = append(conversations, common.Conversation{
 		Role: common.ConversationRoleUser,
-		Text: `
-					我正在编写Wox的主题, 该主题是由一段json组成, 例如：` + exampleThemeJson + `
+		Text: fmt.Sprintf(`
+I am developing theme configuration functionality for the Wox application. Theme configurations are defined in JSON format and contain visual elements such as colors, fonts, spacing, and so on.
 
-					现在我想让你根据上面的格式生成一个新的主题，主题的要求是：` + query.Search + `。
+Refer to the example format:
+%s
 
-					有一些注意点需要你遵守：
-					1. 你的回答结果必须是JSON格式, 以{开头, 以}结尾. 忽略解释，注释等信息
-					2. 主题名称你自己决定, 但是必须有意义
-					3. 背景颜色跟字体颜色需要有区分度，不要让这两者的颜色太接近(这里包括正常未选中的结果与被高亮选中的结果)
-					`,
-	})
+Please generate a new theme configuration based on the above JSON structure, theme requirements: %s
+
+Generation rules:
+1. **Output format**: must return a valid JSON object, starting with { and ending with }, without any explanatory text, comments, or block tags.
+2. **Theme naming**: choose a meaningful and descriptive name for the theme that reflects the visual character or style of the theme
+3. **Color contrast**: ensure good visual readability
+   - There must be sufficient contrast between the background color and the foreground text color.
+   - The colors of the selected and unselected states should be clearly differentiated.
+   - Avoid using similar color values to ensure that users can clearly distinguish between different UI states.
+4. **Completeness**: Include all required fields and attributes in the example.
+5. **Consistency**: the color scheme should be coordinated and consistent with the overall design style.
+
+Please directly output the JSON configuration, do not add any other content.
+	`, exampleThemeJson, query.Search)})
 
 	onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
-		current.SubTitle = "Generating..."
+		current.SubTitle = "i18n:plugin_theme_ai_generating"
 		current.Preview.PreviewData = deltaAnswer
 		current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
 
 		if isFinished {
 			current.RefreshInterval = 0 // stop refreshing
-			current.SubTitle = "Theme generated"
+			current.SubTitle = "i18n:plugin_theme_ai_generated"
 
 			var themeJson = current.Preview.PreviewData
 			util.Go(ctx, "theme generated", func() {
@@ -244,6 +254,11 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 
 		return current
 	}
+	onPreparing := func(current plugin.RefreshableResult) plugin.RefreshableResult {
+		current.SubTitle = "i18n:plugin_theme_ai_contacting"
+		current.Preview.PreviewData = i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_waiting")
+		return current
+	}
 	onAnswerErr := func(current plugin.RefreshableResult, err error) plugin.RefreshableResult {
 		current.Preview.PreviewData += fmt.Sprintf("\n\nError: %s", err.Error())
 		current.RefreshInterval = 0 // stop refreshing
@@ -260,7 +275,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 			RefreshInterval: 100,
 			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, aiModel, conversations, common.EmptyChatOptions, func() bool {
 				return startGenerate
-			}, nil, onAnswering, onAnswerErr),
+			}, onPreparing, onAnswering, onAnswerErr),
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "Apply",
