@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:uuid/v4.dart';
-import 'package:from_css_color/from_css_color.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
@@ -12,6 +11,7 @@ import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/wox_theme_util.dart';
+import 'package:wox/utils/color_util.dart';
 import 'package:flutter/material.dart' as material;
 
 import 'wox_setting_plugin_item_view.dart';
@@ -100,7 +100,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
               style: TextStyle(
-                color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
+                color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -110,7 +110,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           WoxTooltipView(
             tooltip: tr(column.tooltip),
             paddingRight: 0,
-            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
+            color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
           ),
       ],
     );
@@ -128,7 +128,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           value,
           style: TextStyle(
             overflow: TextOverflow.ellipsis,
-            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
+            color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
           ),
         ),
       );
@@ -142,7 +142,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           value,
           style: TextStyle(
             overflow: TextOverflow.ellipsis,
-            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
+            color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
           ),
         ),
       );
@@ -156,7 +156,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           value,
           style: TextStyle(
             overflow: TextOverflow.ellipsis,
-            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
+            color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
           ),
         ),
       );
@@ -192,7 +192,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
+                  color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
                 ),
               ),
             ),
@@ -229,7 +229,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           selectOption.label,
           style: TextStyle(
             overflow: TextOverflow.ellipsis,
-            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
+            color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
           ),
         ),
       );
@@ -244,7 +244,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           "${model.provider} - ${model.name}",
           style: TextStyle(
             overflow: TextOverflow.ellipsis,
-            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
+            color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
           ),
         ),
       );
@@ -298,7 +298,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                         child: Text(
                           "${snapshot.data?.length ?? 0} tools",
                           style: TextStyle(
-                            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
+                            color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
                           ),
                         ),
                       ),
@@ -317,7 +317,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           child: Text(
             "${toolNames.length} tools",
             style: TextStyle(
-              color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
+              color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
             ),
           ),
         ),
@@ -369,7 +369,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
               style: ButtonStyle(
                 padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 4)),
               ),
-              child: Icon(material.Icons.edit, color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+              child: Icon(material.Icons.edit, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
             ),
             HyperlinkButton(
               style: ButtonStyle(
@@ -415,7 +415,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                       );
                     });
               },
-              child: Icon(material.Icons.delete, color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+              child: Icon(material.Icons.delete, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
             ),
           ],
         ),
@@ -446,8 +446,8 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                   headingRowHeight: 36,
                   dataRowMinHeight: 36,
                   dataRowMaxHeight: 36,
-                  headingRowColor: material.WidgetStateProperty.resolveWith((states) => fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
-                  border: TableBorder.all(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
+                  headingRowColor: material.WidgetStateProperty.resolveWith((states) => safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
+                  border: TableBorder.all(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
                   columns: [
                     for (var column in item.columns)
                       material.DataColumn(
@@ -462,7 +462,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                               style: TextStyle(
-                                color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
+                                color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -488,7 +488,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                             overflow: TextOverflow.ellipsis,
                             maxLines: 1,
                             style: TextStyle(
-                              color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
+                              color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -574,8 +574,8 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                   headingRowHeight: 36,
                   dataRowMinHeight: 36,
                   dataRowMaxHeight: 36,
-                  headingRowColor: material.WidgetStateProperty.resolveWith((states) => fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
-                  border: TableBorder.all(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
+                  headingRowColor: material.WidgetStateProperty.resolveWith((states) => safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
+                  border: TableBorder.all(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
                   columns: [
                     for (var column in item.columns)
                       if (!column.hideInTable)
@@ -607,7 +607,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                               style: TextStyle(
-                                color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
+                                color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -674,8 +674,8 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                       },
                       child: Row(
                         children: [
-                          Icon(material.Icons.add, color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
-                          Text(tr("ui_add"), style: TextStyle(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor))),
+                          Icon(material.Icons.add, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+                          Text(tr("ui_add"), style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor))),
                         ],
                       )),
               ],

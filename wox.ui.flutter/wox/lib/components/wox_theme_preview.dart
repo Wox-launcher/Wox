@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:from_css_color/from_css_color.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_hotkey_view.dart';
 import 'package:wox/entity/wox_image.dart';
@@ -8,6 +7,7 @@ import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/wox_theme_util.dart';
+import 'package:wox/utils/color_util.dart';
 
 class WoxThemePreview extends StatelessWidget {
   final WoxTheme theme;
@@ -16,10 +16,10 @@ class WoxThemePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color backgroundColor = fromCssColor(theme.appBackgroundColor);
-    Color queryBoxColor = fromCssColor(theme.queryBoxBackgroundColor);
-    Color resultItemActiveColor = fromCssColor(theme.resultItemActiveBackgroundColor);
-    Color resultItemColor = fromCssColor(theme.appBackgroundColor);
+    Color backgroundColor = safeFromCssColor(theme.appBackgroundColor);
+    Color queryBoxColor = safeFromCssColor(theme.queryBoxBackgroundColor);
+    Color resultItemActiveColor = safeFromCssColor(theme.resultItemActiveBackgroundColor);
+    Color resultItemColor = safeFromCssColor(theme.appBackgroundColor);
 
     final List<String> previewTexts = [
       "Search for applications, folders, files and more",
@@ -52,7 +52,7 @@ class WoxThemePreview extends StatelessWidget {
                     padding: const EdgeInsets.only(left: 10),
                     child: Text(
                       "Wox Theme Preview",
-                      style: TextStyle(color: fromCssColor(theme.queryBoxFontColor)),
+                      style: TextStyle(color: safeFromCssColor(theme.queryBoxFontColor)),
                     ),
                   ),
                 ),
@@ -77,13 +77,13 @@ class WoxThemePreview extends StatelessWidget {
                       title: Text(
                         previewTexts[index],
                         style: TextStyle(
-                          color: fromCssColor(isActive ? theme.resultItemActiveTitleColor : theme.resultItemTitleColor),
+                          color: safeFromCssColor(isActive ? theme.resultItemActiveTitleColor : theme.resultItemTitleColor),
                         ),
                       ),
                       subtitle: Text(
                         "Wox Feature ${index + 1}",
                         style: TextStyle(
-                          color: fromCssColor(isActive ? theme.resultItemActiveSubTitleColor : theme.resultItemSubTitleColor),
+                          color: safeFromCssColor(isActive ? theme.resultItemActiveSubTitleColor : theme.resultItemSubTitleColor),
                         ),
                       ),
                     ),
@@ -94,10 +94,10 @@ class WoxThemePreview extends StatelessWidget {
             Container(
               height: WoxThemeUtil.instance.getToolbarHeight(),
               decoration: BoxDecoration(
-                color: fromCssColor(theme.toolbarBackgroundColor.isEmpty ? theme.appBackgroundColor : theme.toolbarBackgroundColor),
+                color: safeFromCssColor(theme.toolbarBackgroundColor.isEmpty ? theme.appBackgroundColor : theme.toolbarBackgroundColor),
                 border: Border(
                   top: BorderSide(
-                    color: fromCssColor(theme.toolbarFontColor).withOpacity(0.1),
+                    color: safeFromCssColor(theme.toolbarFontColor).withOpacity(0.1),
                     width: 1,
                   ),
                 ),
@@ -117,14 +117,14 @@ class WoxThemePreview extends StatelessWidget {
                       children: [
                         Text(
                           "Open",
-                          style: TextStyle(color: fromCssColor(theme.toolbarFontColor)),
+                          style: TextStyle(color: safeFromCssColor(theme.toolbarFontColor)),
                         ),
                         const SizedBox(width: 8),
                         WoxHotkeyView(
                           hotkey: WoxHotkey.parseHotkeyFromString("Enter")!,
-                          backgroundColor: fromCssColor(theme.toolbarBackgroundColor),
-                          borderColor: fromCssColor(theme.toolbarFontColor),
-                          textColor: fromCssColor(theme.toolbarFontColor),
+                          backgroundColor: safeFromCssColor(theme.toolbarBackgroundColor),
+                          borderColor: safeFromCssColor(theme.toolbarFontColor),
+                          textColor: safeFromCssColor(theme.toolbarFontColor),
                         ),
                       ],
                     ),

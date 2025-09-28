@@ -89,6 +89,7 @@ class WindowsWindowManager extends BaseWindowManager {
       rethrow;
     }
   }
+
   @override
   Future<void> hide() async {
     try {

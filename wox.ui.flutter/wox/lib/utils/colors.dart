@@ -1,30 +1,30 @@
 import 'dart:ui';
 import 'package:flutter/material.dart' show HSLColor;
-import 'package:from_css_color/from_css_color.dart';
 import 'package:wox/utils/wox_theme_util.dart';
+import 'package:wox/utils/color_util.dart';
 
 Color getThemeActiveBackgroundColor() {
-  return fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor);
+  return safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor);
 }
 
 Color getThemeTextColor() {
-  return fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor);
+  return safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor);
 }
 
 Color getThemeSubTextColor() {
-  return fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor);
+  return safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor);
 }
 
 Color getThemeBackgroundColor() {
-  return fromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor);
+  return safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor);
 }
 
 Color getThemeDividerColor() {
-  return fromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor);
+  return safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor);
 }
 
 Color getThemeActionItemActiveColor() {
-  return fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor);
+  return safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor);
 }
 
 Color getThemeCardBackgroundColor() {

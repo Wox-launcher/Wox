@@ -36,6 +36,7 @@ class WoxTheme {
   late String queryBoxBackgroundColor;
   late int queryBoxBorderRadius;
   late String queryBoxCursorColor;
+  late String queryBoxTextSelectionBackgroundColor;
   late String queryBoxTextSelectionColor;
   late String actionContainerBackgroundColor;
   late String actionContainerHeaderFontColor;
@@ -68,7 +69,7 @@ class WoxTheme {
     description,
     isSystem,
     isInstalled,
-    isUpgradable, 
+    isUpgradable,
     appBackgroundColor,
     appPaddingLeft,
     appPaddingTop,
@@ -94,6 +95,7 @@ class WoxTheme {
     queryBoxBackgroundColor,
     queryBoxBorderRadius,
     queryBoxCursorColor,
+    queryBoxTextSelectionBackgroundColor,
     queryBoxTextSelectionColor,
     actionContainerBackgroundColor,
     actionContainerHeaderFontColor,
@@ -155,7 +157,9 @@ class WoxTheme {
     queryBoxBackgroundColor = json['QueryBoxBackgroundColor'];
     queryBoxBorderRadius = json['QueryBoxBorderRadius'];
     queryBoxCursorColor = json['QueryBoxCursorColor'];
-    queryBoxTextSelectionColor = json['QueryBoxTextSelectionColor'];
+    final selectionBackground = json['QueryBoxTextSelectionBackgroundColor'] ?? json['QueryBoxTextSelectionColor'];
+    queryBoxTextSelectionBackgroundColor = selectionBackground ?? '';
+    queryBoxTextSelectionColor = json['QueryBoxTextSelectionColor'] ?? json['ResultItemActiveTitleColor'] ?? '';
     actionContainerBackgroundColor = json['ActionContainerBackgroundColor'];
     actionContainerHeaderFontColor = json['ActionContainerHeaderFontColor'];
     actionContainerPaddingLeft = json['ActionContainerPaddingLeft'];
@@ -217,6 +221,7 @@ class WoxTheme {
     data['QueryBoxBackgroundColor'] = queryBoxBackgroundColor;
     data['QueryBoxBorderRadius'] = queryBoxBorderRadius;
     data['QueryBoxCursorColor'] = queryBoxCursorColor;
+    data['QueryBoxTextSelectionBackgroundColor'] = queryBoxTextSelectionBackgroundColor;
     data['QueryBoxTextSelectionColor'] = queryBoxTextSelectionColor;
     data['ActionContainerBackgroundColor'] = actionContainerBackgroundColor;
     data['ActionContainerHeaderFontColor'] = actionContainerHeaderFontColor;
@@ -242,7 +247,7 @@ class WoxTheme {
     return data;
   }
 
-  WoxTheme.empty() { 
+  WoxTheme.empty() {
     themeId = '';
     themeName = '';
     themeAuthor = '';

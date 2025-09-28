@@ -10,6 +10,7 @@ import 'package:get/get.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/controllers/wox_list_controller.dart';
+import 'package:wox/controllers/query_box_text_editing_controller.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_list_item.dart';
@@ -44,12 +45,19 @@ import 'package:wox/utils/wox_websocket_msg_util.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
 import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
 import 'package:wox/utils/window_flicker_detector.dart';
+import 'package:wox/utils/color_util.dart';
 
 class WoxLauncherController extends GetxController {
   //query related variables
   final currentQuery = PlainQuery.empty().obs;
   final queryBoxFocusNode = FocusNode();
-  final queryBoxTextFieldController = TextEditingController();
+  final queryBoxTextFieldController = QueryBoxTextEditingController(
+    selectedTextStyle: TextStyle(
+      color: safeFromCssColor(
+        WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionColor,
+      ),
+    ),
+  );
   final queryBoxScrollController = ScrollController(initialScrollOffset: 0.0);
 
   //preview related variables

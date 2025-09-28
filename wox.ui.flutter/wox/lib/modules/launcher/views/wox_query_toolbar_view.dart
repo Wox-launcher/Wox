@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_hotkey_view.dart';
@@ -11,6 +10,7 @@ import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
+import 'package:wox/utils/color_util.dart';
 
 class WoxQueryToolbarView extends GetView<WoxLauncherController> {
   const WoxQueryToolbarView({super.key});
@@ -36,7 +36,7 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
                 builder: (context, constraints) {
                   final textSpan = TextSpan(
                     text: toolbarInfo.text ?? '',
-                    style: TextStyle(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
+                    style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
                   );
                   final textPainter = TextPainter(
                     text: textSpan,
@@ -52,7 +52,7 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
                       Expanded(
                         child: Text(
                           toolbarInfo.text ?? '',
-                          style: TextStyle(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
+                          style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),
@@ -76,7 +76,7 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
                                 return Text(
                                   settingController.tr(controller.toolbarCopyText.value),
                                   style: TextStyle(
-                                    color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+                                    color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
                                     fontSize: 12,
                                     decoration: TextDecoration.underline,
                                   ),
@@ -90,9 +90,9 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
                         Theme(
                           data: Theme.of(context).copyWith(
                             popupMenuTheme: PopupMenuThemeData(
-                              color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor),
+                              color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor),
                               textStyle: TextStyle(
-                                color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+                                color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
                                 fontSize: 12,
                               ),
                             ),
@@ -121,7 +121,7 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
                                 return Text(
                                   settingController.tr('toolbar_snooze'),
                                   style: TextStyle(
-                                    color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+                                    color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
                                     fontSize: 12,
                                     decoration: TextDecoration.underline,
                                   ),
@@ -157,17 +157,17 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
         children: [
           Text(
             toolbarInfo.actionName ?? '',
-            style: TextStyle(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
+            style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(width: 8),
           WoxHotkeyView(
             hotkey: hotkey!,
             backgroundColor: hasResultItems
-                ? fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor)
-                : fromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor).withValues(alpha: 0.1),
-            borderColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
-            textColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+                ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor)
+                : safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor).withValues(alpha: 0.1),
+            borderColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+            textColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
           )
         ],
       );
@@ -183,10 +183,10 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
         height: WoxThemeUtil.instance.getToolbarHeight(),
         child: Container(
           decoration: BoxDecoration(
-            color: hasResultItems ? fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor) : Colors.transparent,
+            color: hasResultItems ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor) : Colors.transparent,
             border: Border(
               top: BorderSide(
-                color: hasResultItems ? fromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor).withValues(alpha: 0.1) : Colors.transparent,
+                color: hasResultItems ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor).withValues(alpha: 0.1) : Colors.transparent,
                 width: 1,
               ),
             ),

@@ -1,7 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_list_item_view.dart';
@@ -12,6 +11,7 @@ import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
+import 'package:wox/utils/color_util.dart';
 
 class WoxListView<T> extends StatelessWidget {
   final WoxListController<T> controller;
@@ -188,7 +188,7 @@ class WoxListView<T> extends StatelessWidget {
                 child: TextField(
                   style: TextStyle(
                     fontSize: 14.0,
-                    color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionQueryBoxFontColor),
+                    color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionQueryBoxFontColor),
                   ),
                   decoration: InputDecoration(
                     isCollapsed: true,
@@ -203,10 +203,10 @@ class WoxListView<T> extends StatelessWidget {
                       borderSide: BorderSide.none,
                     ),
                     filled: true,
-                    fillColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionQueryBoxBackgroundColor),
+                    fillColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionQueryBoxBackgroundColor),
                     hoverColor: Colors.transparent,
                   ),
-                  cursorColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxCursorColor),
+                  cursorColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxCursorColor),
                   focusNode: controller.filterBoxFocusNode,
                   controller: controller.filterBoxController,
                   onChanged: (value) {

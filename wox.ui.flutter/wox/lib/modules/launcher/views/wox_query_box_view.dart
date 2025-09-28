@@ -3,13 +3,13 @@ import 'dart:io';
 import 'package:extended_text_field/extended_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_drag_move_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
+import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 
@@ -75,6 +75,13 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
     if (LoggerSwitch.enablePaintLog) Logger.instance.debug(const UuidV4().generate(), "repaint: query box view");
 
     return Obx(() {
+      final currentTheme = WoxThemeUtil.instance.currentTheme.value;
+      controller.queryBoxTextFieldController.updateSelectedTextStyle(
+        TextStyle(
+          color: safeFromCssColor(currentTheme.queryBoxTextSelectionColor),
+        ),
+      );
+
       return Stack(children: [
         Positioned(
             child: Focus(
@@ -168,13 +175,15 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   child: Theme(
                     data: ThemeData(
                       textSelectionTheme: TextSelectionThemeData(
-                        selectionColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionColor),
+                        selectionColor: safeFromCssColor(
+                          currentTheme.queryBoxTextSelectionBackgroundColor,
+                        ),
                       ),
                     ),
                     child: ExtendedTextField(
                       style: TextStyle(
                         fontSize: 28.0,
-                        color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxFontColor),
+                        color: safeFromCssColor(currentTheme.queryBoxFontColor),
                       ),
                       decoration: InputDecoration(
                         contentPadding: const EdgeInsets.only(
@@ -184,14 +193,14 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                           bottom: 17,
                         ),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(WoxThemeUtil.instance.currentTheme.value.queryBoxBorderRadius.toDouble()),
+                          borderRadius: BorderRadius.circular(currentTheme.queryBoxBorderRadius.toDouble()),
                           borderSide: BorderSide.none,
                         ),
                         filled: true,
-                        fillColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxBackgroundColor),
+                        fillColor: safeFromCssColor(currentTheme.queryBoxBackgroundColor),
                         hoverColor: Colors.transparent,
                       ),
-                      cursorColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxCursorColor),
+                      cursorColor: safeFromCssColor(currentTheme.queryBoxCursorColor),
                       focusNode: controller.queryBoxFocusNode,
                       controller: controller.queryBoxTextFieldController,
                       scrollController: controller.queryBoxScrollController,

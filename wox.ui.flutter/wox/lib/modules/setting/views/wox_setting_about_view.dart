@@ -1,5 +1,4 @@
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:from_css_color/from_css_color.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
@@ -7,6 +6,7 @@ import 'package:wox/modules/setting/views/wox_setting_base.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/consts.dart';
 import 'package:wox/utils/wox_theme_util.dart';
+import 'package:wox/utils/color_util.dart';
 
 class WoxSettingAboutView extends WoxSettingBaseView {
   const WoxSettingAboutView({super.key});
@@ -39,7 +39,7 @@ class WoxSettingAboutView extends WoxSettingBaseView {
                   child: Text(
                     controller.woxVersion.value,
                     style: TextStyle(
-                      color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
+                      color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
                       fontWeight: FontWeight.w500,
                     ),
                   ),

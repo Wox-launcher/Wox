@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:from_css_color/from_css_color.dart';
 import 'package:wox/entity/wox_theme.dart';
+import 'package:wox/utils/color_util.dart';
 
 class WoxThemeIconView extends StatelessWidget {
   final WoxTheme theme;
@@ -11,9 +11,9 @@ class WoxThemeIconView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color backgroundColor = fromCssColor(theme.appBackgroundColor);
-    Color queryBoxColor = fromCssColor(theme.queryBoxBackgroundColor);
-    Color resultItemActiveColor = fromCssColor(theme.resultItemActiveBackgroundColor);
+    Color backgroundColor = safeFromCssColor(theme.appBackgroundColor);
+    Color queryBoxColor = safeFromCssColor(theme.queryBoxBackgroundColor);
+    Color resultItemActiveColor = safeFromCssColor(theme.resultItemActiveBackgroundColor);
 
     return Container(
       width: width,

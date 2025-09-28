@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.0.0-beta.6 — 2025-??-??
+
+- Improve
+  - UI now uses safe color parsing (`safeFromCssColor`) to fall back gracefully when theme colors are invalid, preventing crashes and highlighting misconfigured themes.
+
+---
+
+## v2.0.0-beta.5 — 2025-09-24
+
+- Fix
+  - Fix a regression issue that some settings can't be changed on beta.4 @yougg
+
+---
+
 ## v2.0.0-beta.4 — 2025-08-24
 
 - Add

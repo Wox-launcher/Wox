@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:flutter_svg/svg.dart';
-import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:highlight/highlight.dart';
 import 'package:highlight/languages/all.dart';
@@ -27,6 +26,7 @@ import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/enums/wox_preview_scroll_position_enum.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
 import 'package:wox/utils/log.dart';
+import 'package:wox/utils/color_util.dart';
 import 'package:flutter_highlight/themes/monokai.dart';
 
 class WoxPreviewView extends StatefulWidget {
@@ -65,7 +65,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
     return scrollableContent(
       child: WoxMarkdownView(
         data: markdownData,
-        fontColor: fromCssColor(widget.woxTheme.previewFontColor),
+        fontColor: safeFromCssColor(widget.woxTheme.previewFontColor),
       ),
     );
   }
@@ -74,7 +74,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
     return scrollableContent(
       child: SelectableText(
         txtData,
-        style: TextStyle(color: fromCssColor(widget.woxTheme.previewFontColor)),
+        style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewFontColor)),
       ),
     );
   }
@@ -225,7 +225,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
             child: Theme(
               data: ThemeData(
                 textSelectionTheme: TextSelectionThemeData(
-                  selectionColor: fromCssColor(widget.woxTheme.previewTextSelectionColor),
+                  selectionColor: safeFromCssColor(widget.woxTheme.previewTextSelectionColor),
                 ),
               ),
               child: contentWidget,
@@ -239,17 +239,17 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
                 children: [
                   ...widget.woxPreview.previewProperties.entries.map((e) => Column(
                         children: [
-                          Divider(color: fromCssColor(widget.woxTheme.previewSplitLineColor)),
+                          Divider(color: safeFromCssColor(widget.woxTheme.previewSplitLineColor)),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               ConstrainedBox(
                                 constraints: const BoxConstraints(maxWidth: 80),
-                                child: Text(e.key, overflow: TextOverflow.ellipsis, style: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyTitleColor))),
+                                child: Text(e.key, overflow: TextOverflow.ellipsis, style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewPropertyTitleColor))),
                               ),
                               ConstrainedBox(
                                 constraints: const BoxConstraints(maxWidth: 260),
-                                child: Text(e.value, overflow: TextOverflow.ellipsis, style: TextStyle(color: fromCssColor(widget.woxTheme.previewPropertyContentColor))),
+                                child: Text(e.value, overflow: TextOverflow.ellipsis, style: TextStyle(color: safeFromCssColor(widget.woxTheme.previewPropertyContentColor))),
                               ),
                             ],
                           ),

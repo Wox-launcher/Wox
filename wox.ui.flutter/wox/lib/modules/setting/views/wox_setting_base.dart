@@ -52,10 +52,11 @@ abstract class WoxSettingBaseView extends GetView<WoxSettingController> {
                     child: SizedBox(width: labelWidth, child: const Text("")),
                   ),
                   Flexible(
-                    child: customTips ?? Text(
-                      tips!,
-                      style: TextStyle(color: getThemeSubTextColor(), fontSize: 13),
-                    ),
+                    child: customTips ??
+                        Text(
+                          tips!,
+                          style: TextStyle(color: getThemeSubTextColor(), fontSize: 13),
+                        ),
                   ),
                 ],
               ),

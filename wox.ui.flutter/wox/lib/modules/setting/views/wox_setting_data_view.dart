@@ -1,13 +1,13 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
-import 'package:from_css_color/from_css_color.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:flutter/material.dart' as material;
 import 'package:wox/api/wox_api.dart';
+import 'package:wox/utils/color_util.dart';
 
 class WoxSettingDataView extends WoxSettingBaseView {
   const WoxSettingDataView({super.key});
@@ -32,7 +32,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
           child: Text(
             controller.tr("ui_data_backup_folder_link"),
             style: TextStyle(
-              color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor),
+              color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor),
               fontSize: 13,
               decoration: TextDecoration.underline,
             ),
@@ -148,8 +148,8 @@ class WoxSettingDataView extends WoxSettingBaseView {
                   headingRowHeight: 36,
                   dataRowMinHeight: 36,
                   dataRowMaxHeight: 36,
-                  headingRowColor: material.WidgetStateProperty.resolveWith((states) => fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
-                  border: TableBorder.all(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
+                  headingRowColor: material.WidgetStateProperty.resolveWith((states) => safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
+                  border: TableBorder.all(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
                   columns: [
                     material.DataColumn(
                       label: Expanded(
@@ -157,7 +157,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
                           controller.tr("ui_data_backup_date"),
                           style: TextStyle(
                             overflow: TextOverflow.ellipsis,
-                            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
+                            color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -169,7 +169,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
                           controller.tr("ui_data_backup_type"),
                           style: TextStyle(
                             overflow: TextOverflow.ellipsis,
-                            color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
+                            color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -180,7 +180,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
                         controller.tr("ui_operation"),
                         style: TextStyle(
                           overflow: TextOverflow.ellipsis,
-                          color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
+                          color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -198,7 +198,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
                             dateStr,
                             style: TextStyle(
                               overflow: TextOverflow.ellipsis,
-                              color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
+                              color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
                             ),
                           ),
                         ),
@@ -207,7 +207,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
                             backup.type == "auto" ? controller.tr("ui_data_backup_type_auto") : controller.tr("ui_data_backup_type_manual"),
                             style: TextStyle(
                               overflow: TextOverflow.ellipsis,
-                              color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
+                              color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
                             ),
                           ),
                         ),
@@ -216,7 +216,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
                             children: [
                               HyperlinkButton(
                                 style: ButtonStyle(
-                                  foregroundColor: ButtonState.all(fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
+                                  foregroundColor: ButtonState.all(safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
                                 ),
                                 child: Text(controller.tr("ui_data_backup_restore")),
                                 onPressed: () {
@@ -248,7 +248,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
                               ),
                               HyperlinkButton(
                                 style: ButtonStyle(
-                                  foregroundColor: ButtonState.all(fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
+                                  foregroundColor: ButtonState.all(safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
                                 ),
                                 child: Text(controller.tr("plugin_file_open")),
                                 onPressed: () {

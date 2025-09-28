@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_list_view.dart';
@@ -12,6 +11,7 @@ import 'package:wox/enums/wox_list_view_type_enum.dart';
 import 'package:wox/enums/wox_preview_type_enum.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
+import 'package:wox/utils/color_util.dart';
 
 class WoxQueryResultView extends GetView<WoxLauncherController> {
   const WoxQueryResultView({super.key});
@@ -43,7 +43,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                   right: WoxThemeUtil.instance.currentTheme.value.actionContainerPaddingRight.toDouble(),
                 ),
                 decoration: BoxDecoration(
-                  color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionContainerBackgroundColor),
+                  color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionContainerBackgroundColor),
                   borderRadius: BorderRadius.circular(WoxThemeUtil.instance.currentTheme.value.actionQueryBoxBorderRadius.toDouble()),
                   boxShadow: [
                     BoxShadow(
@@ -60,7 +60,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                     mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Actions", style: TextStyle(color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
+                      Text("Actions", style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
                       const Divider(),
                       WoxListView<WoxResultAction>(
                         controller: controller.actionListViewController,

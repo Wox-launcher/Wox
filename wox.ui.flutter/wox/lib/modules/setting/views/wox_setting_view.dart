@@ -1,7 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
-import 'package:from_css_color/from_css_color.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
@@ -12,6 +11,7 @@ import 'package:wox/modules/setting/views/wox_setting_theme_view.dart';
 import 'package:wox/modules/setting/views/wox_setting_about_view.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/wox_theme_util.dart';
+import 'package:wox/utils/color_util.dart';
 
 import 'wox_setting_plugin_view.dart';
 import 'wox_setting_general_view.dart';
@@ -37,7 +37,7 @@ class WoxSettingView extends GetView<WoxSettingController> {
             return KeyEventResult.ignored;
           },
           child: material.Scaffold(
-              backgroundColor: fromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor),
+              backgroundColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor),
               body: FluentApp(
                 debugShowCheckedModeBanner: false,
                 theme: FluentThemeData(

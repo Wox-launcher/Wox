@@ -1,8 +1,8 @@
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:from_css_color/from_css_color.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_textbox.dart';
 import 'package:wox/utils/wox_theme_util.dart';
+import 'package:wox/utils/color_util.dart';
 
 import 'wox_setting_plugin_item_view.dart';
 
@@ -22,7 +22,7 @@ class WoxSettingPluginTextBox extends WoxSettingPluginItem {
     return layout(
       children: [
         label(item.label, item.style),
-        if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip, paddingLeft: 0, color: fromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor)),
+        if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip, paddingLeft: 0, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor)),
         SizedBox(
           width: item.style.width > 0 ? item.style.width.toDouble() : 100,
           child: Focus(
