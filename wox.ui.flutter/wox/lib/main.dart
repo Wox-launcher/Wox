@@ -119,33 +119,6 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
     settingController.preloadPlugins(startupTraceId);
 
     protocolHandler.addListener(this);
-
-    launcherController.isInSettingView.listen((isShowSetting) async {
-      String traceId = const UuidV4().generate();
-      if (isShowSetting) {
-        await windowManager.setAlwaysOnTop(false);
-        await WoxThemeUtil.instance.loadTheme();
-        await WoxSettingUtil.instance.loadSetting();
-        settingController.activePaneIndex.value = 0;
-
-        launcherController.positionBeforeOpenSetting = await windowManager.getPosition();
-
-        // when switching to setting view by executing the query action, which will trigger the hiding action panel, which will causing the window size will be changed first
-        // so we need to wait the resize to complete and then resize the window to the setting view size
-        WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
-          await windowManager.setSize(const Size(1200, 800));
-          if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.debug(traceId, "Resize: window to 1200x800 for setting view");
-          await windowManager.center(1200, 800);
-        });
-      } else {
-        await windowManager.setAlwaysOnTop(true);
-        launcherController.resizeHeight();
-        await windowManager.setPosition(launcherController.positionBeforeOpenSetting);
-        await windowManager.focus();
-        launcherController.focusQueryBox(selectAll: true);
-      }
-      setState(() {});
-    });
     windowManager.addListener(this);
 
     // notify server that ui is ready
@@ -202,7 +175,7 @@ class _WoxAppState extends State<WoxApp> with WindowListener, ProtocolListener {
         launcherController.focusQueryBox();
         launcherController.saveWindowPositionIfNeeded();
       },
-      child: launcherController.isInSettingView.value ? const WoxSettingView() : const WoxLauncherView(),
+      child: Obx(() => launcherController.isInSettingView.value ? const WoxSettingView() : const WoxLauncherView()),
     );
   }
 }

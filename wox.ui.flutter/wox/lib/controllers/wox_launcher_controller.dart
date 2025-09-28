@@ -86,6 +86,8 @@ class WoxLauncherController extends GetxController {
   var lastQueryMode = WoxQueryModeEnum.WOX_QUERY_MODE_PRESERVE.code;
   final isInSettingView = false.obs;
   var positionBeforeOpenSetting = const Offset(0, 0);
+  // Whether settings was opened when window was hidden (e.g., from tray)
+  bool isSettingOpenedFromHidden = false;
 
   /// The icon at end of query box.
   final queryIcon = QueryIconInfo.empty().obs;
@@ -222,8 +224,7 @@ class WoxLauncherController extends GetxController {
     var isVisible = await windowManager.isVisible();
     if (isVisible) {
       if (isInSettingView.value) {
-        isInSettingView.value = false;
-        showApp(traceId, params);
+        exitSetting(traceId);
       } else {
         hideApp(traceId);
       }
@@ -291,11 +292,6 @@ class WoxLauncherController extends GetxController {
       await clearQueryResults(traceId);
     }
 
-    // switch to the launcher view if in setting view
-    if (isInSettingView.value) {
-      isInSettingView.value = false;
-    }
-
     hideActionPanel(traceId);
 
     // Clean up quick select state
@@ -304,6 +300,8 @@ class WoxLauncherController extends GetxController {
     }
     quickSelectTimer?.cancel();
     isQuickSelectKeyPressed = false;
+    isSettingOpenedFromHidden = false;
+    isInSettingView.value = false;
 
     await windowManager.hide();
 
@@ -594,7 +592,7 @@ class WoxLauncherController extends GetxController {
       final files = await FileSelector.pick(msg.traceId, pickFilesParams);
       responseWoxWebsocketRequest(msg, true, files);
     } else if (msg.method == "OpenSettingWindow") {
-      openSettingWindow(msg.traceId, SettingWindowContext.fromJson(msg.data));
+      openSetting(msg.traceId, SettingWindowContext.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ShowToolbarMsg") {
       showToolbarMsg(msg.traceId, ToolbarMsg.fromJson(msg.data));
@@ -891,8 +889,22 @@ class WoxLauncherController extends GetxController {
     super.dispose();
   }
 
-  Future<void> openSettingWindow(String traceId, SettingWindowContext context) async {
+  Future<void> openSetting(String traceId, SettingWindowContext context) async {
+    // Save current position before switching (used if we return to launcher)
+    try {
+      positionBeforeOpenSetting = await windowManager.getPosition();
+    } catch (_) {}
+
+    // Mark whether settings opened while window is hidden (e.g., from tray)
+    var isVisible = await windowManager.isVisible();
+    isSettingOpenedFromHidden = !isVisible;
     isInSettingView.value = true;
+
+    // Preload theme/settings for settings view
+    await WoxThemeUtil.instance.loadTheme();
+    await WoxSettingUtil.instance.loadSetting();
+    Get.find<WoxSettingController>().activePaneIndex.value = 0;
+
     if (context.path == "/plugin/setting") {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await Future.delayed(const Duration(milliseconds: 100));
@@ -912,19 +924,33 @@ class WoxLauncherController extends GetxController {
       });
     }
 
-    // if user open setting window from silent query, the windows may not visible yet
-    var isVisible = await windowManager.isVisible();
-    if (!isVisible) {
-      await showApp(
-        traceId,
-        ShowAppParams(
-          queryHistories: latestQueryHistories,
-          queryMode: lastQueryMode,
-          selectAll: true,
-          position: Position(type: WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code, x: 0, y: 0),
-        ),
-      );
+    await windowManager.setAlwaysOnTop(false);
+    await windowManager.setSize(const Size(1200, 800));
+    if (Platform.isLinux) {
+      // On Linux we need to show first before positioning works reliably
+      await windowManager.show();
+      await windowManager.center(1200, 800);
+    } else {
+      await windowManager.center(1200, 800);
+      await windowManager.show();
     }
+    await windowManager.focus();
+  }
+
+  Future<void> exitSetting(String traceId) async {
+    if (isSettingOpenedFromHidden) {
+      // For hidden-opened settings, exit means hide the window directly
+      await hideApp(traceId);
+      return;
+    }
+
+    // Switch back to launcher
+    isInSettingView.value = false;
+    await windowManager.setAlwaysOnTop(true);
+    await resizeHeight();
+    await windowManager.setPosition(positionBeforeOpenSetting);
+    await windowManager.focus();
+    focusQueryBox(selectAll: true);
   }
 
   void showToolbarMsg(String traceId, ToolbarMsg msg) {
