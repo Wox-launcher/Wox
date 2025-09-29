@@ -59,10 +59,6 @@ plugins:
 	cd ci && go run plugin.go
 
 dev: _check_deps
-	# Install lefthook
-	go install github.com/evilmartians/lefthook@latest
-	lefthook install -f
-
 	# Build hosts and flutter
 	$(MAKE) -C wox.core woxmr-build
 	$(MAKE) -C wox.plugin.host.nodejs build

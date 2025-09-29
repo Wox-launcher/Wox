@@ -1,5 +1,0 @@
-pre-commit:
-  commands:
-    go-vet:
-      root: "Wox/"
-      run: go vet
