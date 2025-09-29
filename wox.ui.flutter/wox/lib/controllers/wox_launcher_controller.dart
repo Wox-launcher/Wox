@@ -483,6 +483,8 @@ class WoxLauncherController extends GetxController {
     currentQuery.value = PlainQuery.emptyInput();
     currentQuery.value.queryId = queryId;
 
+    updateQueryIconOnQueryChanged(traceId, currentQuery.value);
+
     try {
       final results = await WoxApi.instance.queryMRU(traceId);
       if (results.isEmpty) {
@@ -655,7 +657,6 @@ class WoxLauncherController extends GetxController {
     actionListViewController.clearItems();
     isShowPreviewPanel.value = false;
     isShowActionPanel.value = false;
-    queryIcon.value = QueryIconInfo.empty();
 
     if (isShowDoctorCheckInfo) {
       Logger.instance.debug(traceId, "update toolbar to doctor warning, query is empty and doctor check not passed");
