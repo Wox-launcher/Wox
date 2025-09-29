@@ -36,7 +36,23 @@
 				"file": ".github/instructions/commit-message-instructions.md"
 			}
 		],
-		"dart.lineLength": 180
+		"dart.lineLength": 180,
+		"files.exclude": {
+			"wox.plugin.host.nodejs": true,
+			"wox.plugin.host.python": true,
+			"wox.plugin.nodejs": true,
+			"wox.plugin.python": true,
+			"wox.ui.flutter": true,
+			"wox.core": true
+		},
+		"[python]": {
+			"editor.formatOnSave": true,
+			"editor.codeActionsOnSave": {
+				"source.fixAll": "explicit",
+				"source.organizeImports": "explicit"
+			},
+			"editor.defaultFormatter": "charliermarsh.ruff"
+		}
 	},
 	"extensions": {
 		"recommendations": [
@@ -53,6 +69,38 @@
 			"esbenp.prettier-vscode",
 			// others
 			"ms-vscode.makefile-tools"
+		]
+	},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"name": "Run Go",
+				"type": "go",
+				"request": "launch",
+				"mode": "auto",
+				"program": "${workspaceFolder:wox.core}",
+				"env": {
+					"CGO_ENABLED": "1"
+				}
+			},
+			{
+				"name": "Run Flutter",
+				"cwd": "${workspaceFolder:wox.ui.flutter}",
+				"request": "launch",
+				"type": "dart",
+				// "flutterMode": "release"
+			}
+		],
+		"compounds": [
+			{
+				"name": "Run Wox",
+				"configurations": [
+					"Run Go",
+					"Run Flutter"
+				],
+				"stopAll": true
+			}
 		]
 	}
 }
