@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"wox/common"
 	"wox/plugin"
@@ -39,6 +40,8 @@ type appInfo struct {
 	Path string
 	Icon common.WoxImage
 	Type AppType
+
+	LastModifiedUnix int64 `json:"last_modified_unix,omitempty"`
 
 	Pid int `json:"-"`
 }
@@ -153,6 +156,56 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 	})
 
 	a.api.OnMRURestore(ctx, a.handleMRURestore)
+}
+
+func (a *ApplicationPlugin) pathCacheKey(appPath string) string {
+	if a.retriever.GetPlatform() == util.PlatformWindows {
+		// Windows paths are case-insensitive; normalize to avoid duplicate cache entries.
+		return strings.ToLower(appPath)
+	}
+	return appPath
+}
+
+func (a *ApplicationPlugin) populateAppMetadata(appPath string, info *appInfo, fileInfo os.FileInfo) {
+	if fileInfo == nil {
+		stat, err := os.Stat(appPath)
+		if err == nil {
+			fileInfo = stat
+		} else {
+			info.LastModifiedUnix = 0
+			info.Pid = 0
+			return
+		}
+	}
+
+	info.LastModifiedUnix = fileInfo.ModTime().UnixNano()
+	info.Pid = 0
+}
+
+func (a *ApplicationPlugin) reuseAppFromCache(ctx context.Context, appPath string, fileInfo os.FileInfo, cache map[string]appInfo) (appInfo, bool) {
+	key := a.pathCacheKey(appPath)
+	cached, ok := cache[key]
+	if !ok {
+		return appInfo{}, false
+	}
+
+	if cached.LastModifiedUnix == 0 || fileInfo == nil {
+		return appInfo{}, false
+	}
+
+	if cached.LastModifiedUnix != fileInfo.ModTime().UnixNano() {
+		return appInfo{}, false
+	}
+
+	if cached.Icon.ImageType == common.WoxImageTypeAbsolutePath && cached.Icon.ImageData != "" {
+		if _, err := os.Stat(cached.Icon.ImageData); err != nil {
+			a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("cached icon missing for %s, reindexing", appPath))
+			return appInfo{}, false
+		}
+	}
+
+	cached.Pid = 0
+	return cached, true
 }
 
 func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -321,6 +374,9 @@ func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
 					return
 				}
 
+				a.populateAppMetadata(appPath, &info, nil)
+				info.Icon = common.ConvertIcon(ctx, info.Icon, a.pluginDirectory)
+
 				a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("app %s added", e.Name))
 				a.apps = append(a.apps, info)
 				a.saveAppToCache(ctx)
@@ -384,6 +440,11 @@ func (a *ApplicationPlugin) getAppDirectories(ctx context.Context) []appDirector
 }
 
 func (a *ApplicationPlugin) indexAppsByDirectory(ctx context.Context) []appInfo {
+	cacheByPath := make(map[string]appInfo, len(a.apps))
+	for _, cached := range a.apps {
+		cacheByPath[a.pathCacheKey(cached.Path)] = cached
+	}
+
 	appDirectories := a.getAppDirectories(ctx)
 	appPaths := a.getAppPaths(ctx, appDirectories)
 
@@ -402,19 +463,38 @@ func (a *ApplicationPlugin) indexAppsByDirectory(ctx context.Context) []appInfo 
 	var appInfos []appInfo
 	var waitGroup sync.WaitGroup
 	var lock sync.Mutex
+	var cacheHits int64
+	var parsedCount int64
 	waitGroup.Add(len(appPathGroups))
 	for groupIndex := range appPathGroups {
 		var appPathGroup = appPathGroups[groupIndex]
 		util.Go(ctx, fmt.Sprintf("index app group: %d", groupIndex), func() {
 			for _, appPath := range appPathGroup {
+				fileInfo, statErr := os.Stat(appPath)
+				if statErr != nil {
+					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error stating %s: %s", appPath, statErr.Error()))
+					continue
+				}
+
+				if cachedInfo, ok := a.reuseAppFromCache(ctx, appPath, fileInfo, cacheByPath); ok {
+					atomic.AddInt64(&cacheHits, 1)
+					lock.Lock()
+					appInfos = append(appInfos, cachedInfo)
+					lock.Unlock()
+					continue
+				}
+
 				info, getErr := a.retriever.ParseAppInfo(ctx, appPath)
 				if getErr != nil {
 					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error getting app info for %s: %s", appPath, getErr.Error()))
 					continue
 				}
 
-				//preprocess icon
+				a.populateAppMetadata(appPath, &info, fileInfo)
+
+				// preprocess icon
 				info.Icon = common.ConvertIcon(ctx, info.Icon, a.pluginDirectory)
+				atomic.AddInt64(&parsedCount, 1)
 
 				lock.Lock()
 				appInfos = append(appInfos, info)
@@ -427,6 +507,19 @@ func (a *ApplicationPlugin) indexAppsByDirectory(ctx context.Context) []appInfo 
 	}
 
 	waitGroup.Wait()
+
+	totalProcessed := cacheHits + parsedCount
+	var cacheRatio float64
+	if totalProcessed > 0 {
+		cacheRatio = float64(cacheHits) / float64(totalProcessed) * 100
+	}
+	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf(
+		"app indexing stats: total=%d cache_hits=%d parsed=%d cache_ratio=%.2f%%",
+		totalProcessed,
+		cacheHits,
+		parsedCount,
+		cacheRatio,
+	))
 
 	return appInfos
 }
