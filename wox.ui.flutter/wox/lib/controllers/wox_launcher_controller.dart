@@ -209,6 +209,10 @@ class WoxLauncherController extends GetxController {
 
     // move default action to the first for every result
     for (var element in finalResultsSorted) {
+      Logger.instance.debug(traceId, "-result(${element.id}): ${element.title}}");
+      for (var action in element.actions) {
+        Logger.instance.debug(traceId, "  -action(${action.resultId}): ${action.name}");
+      }
       final defaultActionIndex = element.actions.indexWhere((element) => element.isDefault);
       if (defaultActionIndex != -1) {
         final defaultAction = element.actions[defaultActionIndex];
@@ -1062,26 +1066,26 @@ class WoxLauncherController extends GetxController {
 
     // update toolbar to active action
     var action = item.data;
-    Logger.instance.debug(traceId, "update toolbar to active result: ${item.data.name}, default action: ${action.name}");
+    var actionResultId = action.resultId;
+    Logger.instance.debug(traceId, "update toolbar to active result: $actionResultId, default action: ${action.name}");
 
     // cancel the timer if it is running
     cleanToolbarTimer.cancel();
 
-    // only update action and hotkey if it's different from the current one
-    if (toolbar.value.actionName != action.name || toolbar.value.hotkey != action.hotkey) {
-      toolbar.value = toolbar.value.copyWith(
-        hotkey: "enter",
-        actionName: action.name,
-        action: () {
-          var result = resultListViewController.items.firstWhereOrNull((element) => element.value.data.id == action.resultId);
-          if (result != null) {
-            executeAction(traceId, result.value.data, action);
-          } else {
-            Logger.instance.error(traceId, "associated result not found, cannot execute action: ${action.name}");
-          }
-        },
-      );
-    }
+    toolbar.value = toolbar.value.copyWith(
+      hotkey: "enter",
+      actionName: action.name,
+      action: () {
+        var result = resultListViewController.items.firstWhereOrNull((element) {
+          return element.value.data.id == actionResultId;
+        });
+        if (result != null) {
+          executeAction(traceId, result.value.data, action);
+        } else {
+          Logger.instance.error(traceId, "associated result ($actionResultId) not found, cannot execute action: ${action.name}");
+        }
+      },
+    );
   }
 
   Future<void> handleDropFiles(DropDoneDetails details) async {
