@@ -903,17 +903,8 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			result.Actions[actionIndex].Hotkey = "Enter"
 		}
 
-		// replace hotkey modifiers for platform specific, E.g. replace win to cmd on macos, replace cmd to win on windows
-		if util.IsMacOS() {
-			result.Actions[actionIndex].Hotkey = strings.ReplaceAll(result.Actions[actionIndex].Hotkey, "win", "cmd")
-			result.Actions[actionIndex].Hotkey = strings.ReplaceAll(result.Actions[actionIndex].Hotkey, "windows", "cmd")
-			result.Actions[actionIndex].Hotkey = strings.ReplaceAll(result.Actions[actionIndex].Hotkey, "alt", "option")
-		}
-		if util.IsWindows() || util.IsLinux() {
-			result.Actions[actionIndex].Hotkey = strings.ReplaceAll(result.Actions[actionIndex].Hotkey, "cmd", "win")
-			result.Actions[actionIndex].Hotkey = strings.ReplaceAll(result.Actions[actionIndex].Hotkey, "command", "win")
-			result.Actions[actionIndex].Hotkey = strings.ReplaceAll(result.Actions[actionIndex].Hotkey, "option", "alt")
-		}
+		// normalize hotkey for platform specific modifiers
+		result.Actions[actionIndex].Hotkey = normalizeHotkeyForPlatform(result.Actions[actionIndex].Hotkey)
 
 		if action.Action != nil {
 			resultCache.Actions.Store(action.Id, action.Action)
@@ -1744,4 +1735,52 @@ func (m *Manager) restoreFromMRU(ctx context.Context, pluginInstance *Instance, 
 	}
 
 	return nil
+}
+
+// normalizeHotkeyForPlatform converts hotkey strings to platform-specific format
+// This function provides better cross-platform hotkey support by handling various
+// modifier key aliases and converting them to the appropriate platform format
+func normalizeHotkeyForPlatform(hotkey string) string {
+	if hotkey == "" {
+		return hotkey
+	}
+
+	// Convert to lowercase for case-insensitive matching
+	normalized := strings.ToLower(strings.TrimSpace(hotkey))
+
+	// Define platform-specific modifier mappings
+	var modifierMappings map[string]string
+
+	if util.IsMacOS() {
+		// On macOS: convert Windows/Linux style to macOS style
+		modifierMappings = map[string]string{
+			"win":     "cmd",
+			"windows": "cmd",
+			"ctrl":    "control", // Keep ctrl as control on macOS
+			"control": "control", // Keep explicit control as-is
+			"alt":     "option",
+		}
+	} else {
+		// On Windows/Linux: convert macOS style to Windows/Linux style
+		modifierMappings = map[string]string{
+			"cmd":     "win", // Map cmd to win key on Windows/Linux
+			"command": "win",
+			"option":  "alt",
+			"control": "ctrl", // Keep control as ctrl
+			"ctrl":    "ctrl", // Keep ctrl as-is
+		}
+	}
+
+	// Split hotkey into parts and process each modifier
+	parts := strings.Split(normalized, "+")
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+		if replacement, exists := modifierMappings[part]; exists {
+			parts[i] = replacement
+		} else {
+			parts[i] = part
+		}
+	}
+
+	return strings.Join(parts, "+")
 }

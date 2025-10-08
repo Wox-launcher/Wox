@@ -152,6 +152,7 @@ type QueryResultAction struct {
 	// Hotkey to trigger this action. E.g. "ctrl+Shift+Space", "Ctrl+1", "Command+K"
 	// Case insensitive, space insensitive
 	// If IsDefault is true, Hotkey will be set to enter key by default
+	// Wox will normalize the hotkey to platform specific format. E.g. "ctrl" will be converted to "control" on macOS
 	Hotkey string
 
 	// internal use
