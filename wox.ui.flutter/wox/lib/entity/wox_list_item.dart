@@ -67,12 +67,21 @@ class WoxListItem<T> {
   }
 
   static WoxListItem<WoxResultAction> fromResultAction(WoxResultAction action) {
+    // Create hotkey tail if action has hotkey
+    List<WoxListItemTail> tails = [];
+    if (action.hotkey.isNotEmpty) {
+      var hotkey = WoxHotkey.parseHotkeyFromString(action.hotkey);
+      if (hotkey != null) {
+        tails.add(WoxListItemTail.hotkey(hotkey));
+      }
+    }
+
     return WoxListItem<WoxResultAction>(
       id: action.id,
       icon: action.icon,
       title: action.name,
       subTitle: "",
-      tails: [],
+      tails: tails,
       isGroup: false,
       hotkey: action.hotkey,
       data: action,

@@ -111,6 +111,7 @@ func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryRe
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						shell.OpenFileInFolder(item.Path)
 					},
+					Hotkey: "cmd+enter",
 				},
 			},
 		}
