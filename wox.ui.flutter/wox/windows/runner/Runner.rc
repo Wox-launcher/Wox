@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "wox" "\0"
+            VALUE "CompanyName", "Wox" "\0"
+            VALUE "FileDescription", "wox-ui" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "wox" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2023 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "wox.exe" "\0"
-            VALUE "ProductName", "wox" "\0"
+            VALUE "InternalName", "wox-ui" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2023-2025 Wox. All rights reserved." "\0"
+            VALUE "OriginalFilename", "wox-ui.exe" "\0"
+            VALUE "ProductName", "wox-ui" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
