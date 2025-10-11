@@ -463,7 +463,6 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                               maxLines: 1,
                               style: TextStyle(
                                 color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
-                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ),

@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
+import 'package:wox/utils/colors.dart';
 
 class WoxAIModelSelectorView extends StatefulWidget {
   /// Initial selected model in JSON string format
@@ -106,6 +107,56 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Center(child: ProgressRing(strokeWidth: 2));
+    }
+
+    // When there are no models/providers available, guide user to AI settings
+    if (_providers.isEmpty || _allModels.isEmpty) {
+      final bg = getThemeActiveBackgroundColor().withAlpha(70);
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: getThemeActiveBackgroundColor().withAlpha(90)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 2.0),
+              child: Icon(FluentIcons.info_solid, size: 14),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr('ui_ai_model_selector_no_models_title'),
+                    style: TextStyle(color: getThemeTextColor(), fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    tr('ui_ai_model_selector_no_models_desc'),
+                    style: TextStyle(color: getThemeTextColor()),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            HyperlinkButton(
+              child: Text(
+                tr('ui_ai_model_selector_open_ai_settings'),
+                style: TextStyle(color: getThemeTextColor(), fontWeight: FontWeight.w600),
+              ),
+              onPressed: () {
+                // Switch to the AI settings page within the settings view
+                Get.find<WoxSettingController>().activePaneIndex.value = 2; // AI tab index
+              },
+            )
+          ],
+        ),
+      );
     }
 
     List<AIModel> getProviderModels() {
