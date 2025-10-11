@@ -409,24 +409,14 @@ func (a *WindowsRetriever) convertIconToImage(ctx context.Context, hIcon win.HIC
 
 // resolveShortcutWithAPI uses Windows API to resolve shortcut target path with proper Unicode support
 func (a *WindowsRetriever) resolveShortcutWithAPI(ctx context.Context, shortcutPath string) (string, error) {
-	// Use PowerShell to resolve the shortcut with proper Unicode handling
-	powershellCmd := fmt.Sprintf(`
-		[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-		$shell = New-Object -ComObject WScript.Shell
-		$shortcut = $shell.CreateShortcut('%s')
-		Write-Output $shortcut.TargetPath
-	`, shortcutPath)
-
-	output, err := shell.RunOutput("powershell", "-Command", powershellCmd)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve shortcut: %v", err)
+	// Resolve via in-process COM only. No PowerShell fallback to avoid extra processes.
+	targetPath, nativeErr := resolveShortcutTarget(ctx, shortcutPath)
+	if nativeErr != nil {
+		return "", fmt.Errorf("failed to resolve shortcut: %w", nativeErr)
 	}
-
-	targetPath := strings.TrimSpace(string(output))
-	if targetPath == "" {
-		return "", fmt.Errorf("empty target path")
+	if strings.TrimSpace(targetPath) == "" {
+		return "", fmt.Errorf("failed to resolve shortcut: empty target path")
 	}
-
 	return targetPath, nil
 }
 

@@ -86,7 +86,6 @@ func NewPluginSettingStore(db *gorm.DB, pluginId string) *PluginSettingStore {
 func (s *PluginSettingStore) Get(key string, target interface{}) error {
 	var setting database.PluginSetting
 	if err := s.db.Where("plugin_id = ? AND key = ?", s.pluginId, key).First(&setting).Error; err != nil {
-		util.GetLogger().Error(util.NewTraceContext(), fmt.Sprintf("Failed to read plugin setting %s.%s: %v", s.pluginId, key, err))
 		return err
 	}
 
