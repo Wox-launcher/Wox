@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -53,7 +54,93 @@ class WoxSettingView extends GetView<WoxSettingController> {
                   shadowColor: getThemeTextColor().withAlpha(50),
                   inactiveBackgroundColor: getThemeBackgroundColor(),
                   inactiveColor: getThemeSubTextColor(),
-                  // typography: Typography.raw(caption: TextStyle(color: getThemeSubTextColor())),
+                  // Unify fonts on Windows to avoid mixed Segoe/YaHei rendering
+                  // that makes Chinese text look inconsistent in settings.
+                  fontFamily: Platform.isWindows ? 'Microsoft YaHei UI' : null,
+                  typography: Platform.isWindows
+                      ? Typography.raw(
+                          display: TextStyle(
+                            color: getThemeTextColor(),
+                            fontFamily: 'Microsoft YaHei UI',
+                            fontFamilyFallback: const [
+                              'Microsoft YaHei',
+                              'Segoe UI',
+                              'Noto Sans CJK SC',
+                              'PingFang SC',
+                            ],
+                          ),
+                          titleLarge: TextStyle(
+                            color: getThemeTextColor(),
+                            fontFamily: 'Microsoft YaHei UI',
+                            fontFamilyFallback: const [
+                              'Microsoft YaHei',
+                              'Segoe UI',
+                              'Noto Sans CJK SC',
+                              'PingFang SC',
+                            ],
+                          ),
+                          title: TextStyle(
+                            color: getThemeTextColor(),
+                            fontFamily: 'Microsoft YaHei UI',
+                            fontFamilyFallback: const [
+                              'Microsoft YaHei',
+                              'Segoe UI',
+                              'Noto Sans CJK SC',
+                              'PingFang SC',
+                            ],
+                          ),
+                          subtitle: TextStyle(
+                            color: getThemeTextColor(),
+                            fontFamily: 'Microsoft YaHei UI',
+                            fontFamilyFallback: const [
+                              'Microsoft YaHei',
+                              'Segoe UI',
+                              'Noto Sans CJK SC',
+                              'PingFang SC',
+                            ],
+                          ),
+                          bodyLarge: TextStyle(
+                            color: getThemeTextColor(),
+                            fontFamily: 'Microsoft YaHei UI',
+                            fontFamilyFallback: const [
+                              'Microsoft YaHei',
+                              'Segoe UI',
+                              'Noto Sans CJK SC',
+                              'PingFang SC',
+                            ],
+                          ),
+                          bodyStrong: TextStyle(
+                            color: getThemeTextColor(),
+                            fontFamily: 'Microsoft YaHei UI',
+                            fontFamilyFallback: const [
+                              'Microsoft YaHei',
+                              'Segoe UI',
+                              'Noto Sans CJK SC',
+                              'PingFang SC',
+                            ],
+                          ),
+                          body: TextStyle(
+                            color: getThemeTextColor(),
+                            fontFamily: 'Microsoft YaHei UI',
+                            fontFamilyFallback: const [
+                              'Microsoft YaHei',
+                              'Segoe UI',
+                              'Noto Sans CJK SC',
+                              'PingFang SC',
+                            ],
+                          ),
+                          caption: TextStyle(
+                            color: getThemeSubTextColor(),
+                            fontFamily: 'Microsoft YaHei UI',
+                            fontFamilyFallback: const [
+                              'Microsoft YaHei',
+                              'Segoe UI',
+                              'Noto Sans CJK SC',
+                              'PingFang SC',
+                            ],
+                          ),
+                        )
+                      : null,
                   focusTheme: FocusThemeData(
                     glowColor: getThemeActiveBackgroundColor().withAlpha(25),
                     primaryBorder: BorderSide(color: getThemeActiveBackgroundColor(), width: 2),
