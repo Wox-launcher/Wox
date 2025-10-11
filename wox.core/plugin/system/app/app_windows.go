@@ -40,15 +40,23 @@ var (
 
 // Windows constants for icon extraction
 const (
-	SHGFI_ICON          = 0x000000100
-	SHGFI_DISPLAYNAME   = 0x000000200
-	SHGFI_LARGEICON     = 0x000000000
-	SHGFI_SMALLICON     = 0x000000001
-	SHGFI_SYSICONINDEX  = 0x000004000
-	SHGFI_SHELLICONSIZE = 0x000000004
-	IMAGE_ICON          = 1
-	LR_DEFAULTSIZE      = 0x00000040
-	LR_LOADFROMFILE     = 0x00000010
+    SHGFI_ICON          = 0x000000100
+    SHGFI_DISPLAYNAME   = 0x000000200
+    SHGFI_LARGEICON     = 0x000000000
+    SHGFI_SMALLICON     = 0x000000001
+    SHGFI_SYSICONINDEX  = 0x000004000
+    SHGFI_SHELLICONSIZE = 0x000000004
+    SHGFI_USEFILEATTRIBUTES = 0x000000010
+
+    FILE_ATTRIBUTE_READONLY  = 0x00000001
+    FILE_ATTRIBUTE_HIDDEN    = 0x00000002
+    FILE_ATTRIBUTE_SYSTEM    = 0x00000004
+    FILE_ATTRIBUTE_DIRECTORY = 0x00000010
+    FILE_ATTRIBUTE_ARCHIVE   = 0x00000020
+    FILE_ATTRIBUTE_NORMAL    = 0x00000080
+    IMAGE_ICON          = 1
+    LR_DEFAULTSIZE      = 0x00000040
+    LR_LOADFROMFILE     = 0x00000010
 )
 
 // SHFILEINFO structure for SHGetFileInfo
@@ -204,47 +212,73 @@ func (a *WindowsRetriever) parseExe(ctx context.Context, appPath string) (appInf
 }
 
 func (a *WindowsRetriever) GetAppIcon(ctx context.Context, path string) (image.Image, error) {
-	// Priority 1: Try to get high resolution icon using PrivateExtractIconsW (best quality)
-	if icon, err := a.getHighResIcon(ctx, path); err == nil {
-		return icon, nil
-	}
+    // Priority 1: Try to get high resolution icon using PrivateExtractIconsW (best quality)
+    if icon, err := a.getHighResIcon(ctx, path); err == nil {
+        return icon, nil
+    }
 
-	// Priority 2: Try to get large icon using SHGetFileInfo (public API fallback)
-	if icon, err := a.getIconUsingSHGetFileInfo(ctx, path); err == nil {
-		return icon, nil
-	}
+    // Priority 2: Try ExtractIconEx (avoid SHGetFileInfo due to occasional instability)
+    if icon, err := a.getIconUsingExtractIconEx(ctx, path); err == nil {
+        return icon, nil
+    }
 
-	// Priority 3: Try ExtractIconEx
-	if icon, err := a.getIconUsingExtractIconEx(ctx, path); err == nil {
-		return icon, nil
-	}
-
-	// Priority 4: Final fallback to Windows default executable icon
-	return a.getWindowsDefaultIcon(ctx)
+    // Priority 3: Final fallback to Windows default executable icon
+    return a.getWindowsDefaultIcon(ctx)
 }
 
 func (a *WindowsRetriever) getIconUsingSHGetFileInfo(ctx context.Context, path string) (image.Image, error) {
-	// Convert file path to UTF16
-	lpIconPath, err := syscall.UTF16PtrFromString(path)
-	if err != nil {
-		return nil, err
-	}
+    // Defensive coding: normalize separators and handle non-existing paths via SHGFI_USEFILEATTRIBUTES
+    safePath := filepath.Clean(filepath.FromSlash(path))
 
-	var shfi SHFILEINFO
-	ret, _, _ := shGetFileInfo.Call(
-		uintptr(unsafe.Pointer(lpIconPath)),
-		0,
-		uintptr(unsafe.Pointer(&shfi)),
-		uintptr(unsafe.Sizeof(shfi)),
-		SHGFI_ICON|SHGFI_LARGEICON,
-	)
+    // Convert file path to UTF16
+    lpPath, err := syscall.UTF16PtrFromString(safePath)
+    if err != nil {
+        return nil, err
+    }
 
-	if ret == 0 || shfi.HIcon == 0 {
-		return nil, fmt.Errorf("failed to get icon using SHGetFileInfo")
-	}
-	defer win.DestroyIcon(shfi.HIcon)
+    // If the file does not exist, ask shell to infer icon from attributes to avoid crashes in shell32
+    var attrs uint32 = 0
+    var flags uint32 = SHGFI_ICON | SHGFI_LARGEICON
+    if fi, statErr := os.Stat(safePath); statErr != nil {
+        // File not found: infer by extension as normal file
+        attrs = FILE_ATTRIBUTE_NORMAL
+        flags |= SHGFI_USEFILEATTRIBUTES
+    } else if fi.IsDir() {
+        attrs = FILE_ATTRIBUTE_DIRECTORY
+        flags |= SHGFI_USEFILEATTRIBUTES
+    }
 
-	return a.convertIconToImage(ctx, shfi.HIcon)
+    // Call SHGetFileInfo with recovery to protect from external crashes
+    var (
+        shfi SHFILEINFO
+        ret  uintptr
+    )
+    var callErr error
+    func() {
+        defer func() {
+            if r := recover(); r != nil {
+                callErr = fmt.Errorf("SHGetFileInfo panic: %v", r)
+            }
+        }()
+        r, _, _ := shGetFileInfo.Call(
+            uintptr(unsafe.Pointer(lpPath)),
+            uintptr(attrs),
+            uintptr(unsafe.Pointer(&shfi)),
+            uintptr(unsafe.Sizeof(shfi)),
+            uintptr(flags),
+        )
+        ret = r
+    }()
+    if callErr != nil {
+        return nil, callErr
+    }
+
+    if ret == 0 || shfi.HIcon == 0 {
+        return nil, fmt.Errorf("failed to get icon using SHGetFileInfo")
+    }
+    defer win.DestroyIcon(shfi.HIcon)
+
+    return a.convertIconToImage(ctx, shfi.HIcon)
 }
 
 func (a *WindowsRetriever) getIconUsingExtractIconEx(ctx context.Context, path string) (image.Image, error) {
