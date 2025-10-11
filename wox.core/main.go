@@ -1,11 +1,11 @@
 package main
 
 import (
-	"context"
-	"fmt"
-	"os"
-	"wox/database"
-	"wox/migration"
+    "context"
+    "fmt"
+    "os"
+    "wox/database"
+    "wox/migration"
 
 	"runtime"
 	"strconv"
@@ -19,7 +19,7 @@ import (
 	"wox/ui"
 	"wox/updater"
 	"wox/util"
-	"wox/util/selection"
+    "wox/util/selection"
 
 	"golang.design/x/hotkey/mainthread"
 
@@ -44,11 +44,17 @@ import (
 )
 
 func main() {
-	// logger depends on location, so location must be initialized first
-	locationErr := util.GetLocation().Init()
-	if locationErr != nil {
-		panic(locationErr)
-	}
+    // logger depends on location, so location must be initialized first
+    locationErr := util.GetLocation().Init()
+    if locationErr != nil {
+        panic(locationErr)
+    }
+
+    // Share a stable AppUserModelID on Windows so Task Manager can group
+    // core and UI under one app. This does not affect taskbar visibility.
+    if runtime.GOOS == "windows" {
+        _ = util.SetAppUserModelID("org.wox.app")
+    }
 
 	defer util.GoRecover(context.Background(), "main panic", func(err error) {
 		util.GetLogger().Error(context.Background(), fmt.Sprintf("main panic: %s", err.Error()))

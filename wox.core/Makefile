@@ -25,6 +25,10 @@ endif
 
 RELEASE_DIR := ../release
 
+# Extract version string from updater/version.go
+# Expected format: const CURRENT_VERSION = "x.y.z[-prerelease]"
+VERSION := $(shell sed -n 's/^const CURRENT_VERSION = "\(.*\)"/\1/p' updater/version.go)
+
 help:
 	@echo "Available commands:"
 	@echo "  make clean         - Clean build artifacts"
@@ -33,10 +37,17 @@ help:
 
 clean:
 	rm -rf $(RELEASE_DIR)
+	rm -f resource_windows.syso rsrc_windows.syso
 
 build: clean
 	$(MAKE) woxmr-build
 ifeq ($(PLATFORM),windows)
+	# Generate Windows VERSIONINFO using the version from updater.CURRENT_VERSION
+	cd . && go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo \
+		-o resource_windows.syso -64 -icon resource/app.ico \
+		-product-name "Wox" -description "Wox" -internal-name "Wox" -original-name "wox-windows-$(GOARCH).exe" \
+		-product-version "$(VERSION)" -file-version "$(VERSION)" \
+		-propagate-ver-strings
 	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -ldflags "-H windowsgui -s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
 endif
 ifeq ($(PLATFORM),linux)

@@ -1,0 +1,23 @@
+{
+  "FixedFileInfo": {
+    "FileVersion": { "Major": 0, "Minor": 0, "Patch": 0, "Build": 0 },
+    "ProductVersion": { "Major": 0, "Minor": 0, "Patch": 0, "Build": 0 },
+    "FileFlagsMask": "63",
+    "FileFlags": "0",
+    "FileOS": "262148",
+    "FileType": "1",
+    "FileSubType": "0"
+  },
+  "StringFileInfo": {
+    "CompanyName": "Wox",
+    "FileDescription": "Wox",
+    "ProductName": "Wox",
+    "OriginalFilename": "wox-windows-amd64.exe",
+    "InternalName": "Wox",
+    "Comments": "",
+    "LegalCopyright": ""
+  },
+  "VarFileInfo": {
+    "Translation": { "LangID": "0409", "CharsetID": "04B0" }
+  }
+}

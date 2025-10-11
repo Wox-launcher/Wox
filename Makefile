@@ -46,10 +46,10 @@ ifeq ($(PLATFORM),macos)
 endif
 
 ifeq ($(PLATFORM),windows)
-	@if not "$(shell echo $(shell uname -s) | grep -q '^MINGW64_NT' && echo yes || echo no)" == "yes" ; then \
+	@uname -s | grep -q '^MINGW64_NT' || { \
 		echo "Please run this command in MINGW64 environment. If you have not installed MINGW64, please install it first. refer to https://www.mingw-w64.org/downloads/ or scoop install mingw" >&2; \
 		exit 1; \
-	fi
+	}
 endif
 
 clean:
