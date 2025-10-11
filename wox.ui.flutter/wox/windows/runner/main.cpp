@@ -1,7 +1,5 @@
 #include <flutter/dart_project.h>
-#include <flutter/flutter_view_controller.h>
 #include <windows.h>
-#include <shobjidl.h>
 
 #include "flutter_window.h"
 #include "utils.h"
@@ -31,10 +29,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-  // Share a stable AppUserModelID across Wox processes so the Windows shell
-  // (including Task Manager grouping) treats them as one app. This does not
-  // force a taskbar icon since the window uses TOOLWINDOW styles.
-  ::SetCurrentProcessExplicitAppUserModelID(L"org.wox.app");
 
   flutter::DartProject project(L"data");
 
