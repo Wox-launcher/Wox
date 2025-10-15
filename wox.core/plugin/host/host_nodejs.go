@@ -3,7 +3,10 @@ package host
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"wox/plugin"
 	"wox/setting"
@@ -49,20 +52,7 @@ func (n *NodejsHost) findNodejsPath(ctx context.Context) string {
 		}
 	}
 
-	var possibleNodejsPaths = []string{
-		"/opt/homebrew/bin/node",
-		"/usr/local/bin/node",
-		"/usr/bin/node",
-		"/usr/local/node",
-	}
-
-	nvmNodePaths, _ := homedir.Expand("~/.nvm/versions/node")
-	if util.IsDirExists(nvmNodePaths) {
-		versions, _ := util.ListDir(nvmNodePaths)
-		for _, v := range versions {
-			possibleNodejsPaths = append(possibleNodejsPaths, path.Join(nvmNodePaths, v, "bin", "node"))
-		}
-	}
+	possibleNodejsPaths := collectNodejsPaths()
 
 	foundVersion, _ := semver.NewVersion("v0.0.1")
 	foundPath := ""
@@ -107,4 +97,122 @@ func (n *NodejsHost) LoadPlugin(ctx context.Context, metadata plugin.Metadata, p
 
 func (n *NodejsHost) UnloadPlugin(ctx context.Context, metadata plugin.Metadata) {
 	n.websocketHost.UnloadPlugin(ctx, metadata)
+}
+
+func collectNodejsPaths() []string {
+	switch runtime.GOOS {
+	case "windows":
+		return collectNodejsPathsForWindows()
+	case "darwin":
+		return collectNodejsPathsForDarwin()
+	default:
+		return collectNodejsPathsForLinux()
+	}
+}
+
+func collectNodejsPathsForDarwin() []string {
+	paths := []string{
+		"/opt/homebrew/bin/node",
+		"/usr/local/bin/node",
+		"/usr/bin/node",
+		"/usr/local/node",
+	}
+	paths = append(paths, collectNodejsPathsFromNvmUnix()...)
+	paths = append(paths, collectVoltaNodePaths()...)
+	return util.UniqueStrings(paths)
+}
+
+func collectNodejsPathsForLinux() []string {
+	paths := []string{
+		"/usr/local/bin/node",
+		"/usr/bin/node",
+		"/usr/local/node",
+	}
+	paths = append(paths, collectNodejsPathsFromNvmUnix()...)
+	paths = append(paths, collectVoltaNodePaths()...)
+	return util.UniqueStrings(paths)
+}
+
+func collectNodejsPathsForWindows() []string {
+	var candidates []string
+	binaries := []string{"node.exe"}
+
+	if nvmHome := os.Getenv("NVM_HOME"); nvmHome != "" {
+		candidates = append(candidates, util.CollectExecutables(nvmHome, binaries, func(name string) bool {
+			return strings.HasPrefix(strings.ToLower(name), "v")
+		})...)
+	}
+
+	if nvmSymlink := os.Getenv("NVM_SYMLINK"); nvmSymlink != "" {
+		for _, binary := range binaries {
+			candidates = append(candidates, filepath.Join(nvmSymlink, binary))
+		}
+	}
+
+	if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+		candidates = append(candidates, util.CollectExecutables(filepath.Join(localAppData, "Programs", "nodejs"), binaries, nil)...)
+	}
+
+	for _, envVar := range []string{"PROGRAMFILES", "PROGRAMFILES(X86)"} {
+		if base := os.Getenv(envVar); base != "" {
+			candidates = append(candidates, filepath.Join(base, "nodejs", "node.exe"))
+		}
+	}
+
+	if homeDir, err := homedir.Dir(); err == nil {
+		for _, scoopPackage := range []string{"nodejs", "nodejs-lts"} {
+			candidates = append(candidates, util.CollectExecutables(filepath.Join(homeDir, "scoop", "apps", scoopPackage), binaries, nil)...)
+		}
+	}
+
+	candidates = append(candidates, collectVoltaNodePaths()...)
+	return util.UniqueStrings(candidates)
+}
+
+func collectNodejsPathsFromNvmUnix() []string {
+	nvmDir := os.Getenv("NVM_DIR")
+	if nvmDir == "" {
+		var err error
+		nvmDir, err = homedir.Expand("~/.nvm")
+		if err != nil {
+			return nil
+		}
+	}
+
+	nodeVersions := filepath.Join(nvmDir, "versions", "node")
+	if !util.IsDirExists(nodeVersions) {
+		return nil
+	}
+
+	versions, err := util.ListDir(nodeVersions)
+	if err != nil {
+		return nil
+	}
+
+	var paths []string
+	for _, v := range versions {
+		paths = append(paths, filepath.Join(nodeVersions, v, "bin", "node"))
+	}
+
+	return paths
+}
+
+func collectVoltaNodePaths() []string {
+	voltaHome := os.Getenv("VOLTA_HOME")
+	if voltaHome == "" {
+		if homeDir, err := homedir.Dir(); err == nil {
+			voltaHome = filepath.Join(homeDir, ".volta")
+		}
+	}
+
+	if voltaHome == "" {
+		return nil
+	}
+
+	binaryName := "node"
+	if runtime.GOOS == "windows" {
+		binaryName = "node.exe"
+	}
+
+	return []string{filepath.Join(voltaHome, "bin", binaryName)}
 }

@@ -113,7 +113,8 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 	basePluginDirectory := util.GetLocation().GetPluginDirectory()
 	pluginDirectories, readErr := os.ReadDir(basePluginDirectory)
 	if readErr != nil {
-		return fmt.Errorf("failed to read plugin directory: %w", readErr)
+		logger.Warn(ctx, fmt.Sprintf("failed to read plugin directory (%s), continue without user plugins: %s", basePluginDirectory, readErr.Error()))
+		pluginDirectories = []os.DirEntry{}
 	}
 
 	var metaDataList []MetadataWithDirectory
@@ -314,6 +315,13 @@ func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error 
 	})
 	if !exist {
 		return fmt.Errorf("unsupported runtime: %s", metadata.Runtime)
+	}
+
+	// Ensure host is started before loading the plugin
+	if !pluginHost.IsStarted(ctx) {
+		if err := pluginHost.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start host for runtime %s: %w", metadata.Runtime, err)
+		}
 	}
 
 	loadErr := m.loadHostPlugin(ctx, pluginHost, MetadataWithDirectory{Metadata: metadata, Directory: pluginDirectory})

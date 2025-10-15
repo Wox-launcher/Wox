@@ -41,6 +41,7 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> host entry: %s", w.getHostName(ctx), entry))
 	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> host args: %s", w.getHostName(ctx), strings.Join(executableArgs, " ")))
 	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> host log directory: %s", w.getHostName(ctx), util.GetLocation().GetLogHostsDirectory()))
+	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> wox pid: %d", w.getHostName(ctx), os.Getpid()))
 
 	var args []string
 	args = append(args, executableArgs...)

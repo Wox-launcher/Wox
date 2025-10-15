@@ -1,11 +1,12 @@
 package util
 
 import (
-	"github.com/samber/lo"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/samber/lo"
 )
 
 // IsFileExecAny returns true if the file mode indicates that the file is executable by any user.
@@ -82,4 +83,36 @@ func GetFileSize(path string) string {
 	}
 
 	return "-"
+}
+
+// CollectExecutables returns candidate executable paths under base for the provided binary names.
+func CollectExecutables(base string, binaries []string, filter func(string) bool) []string {
+	if base == "" {
+		return nil
+	}
+
+	var results []string
+	for _, binary := range binaries {
+		results = append(results, filepath.Join(base, binary))
+	}
+
+	if !IsDirExists(base) {
+		return results
+	}
+
+	entries, err := ListDir(base)
+	if err != nil {
+		return results
+	}
+
+	for _, entry := range entries {
+		if filter != nil && !filter(entry) {
+			continue
+		}
+		for _, binary := range binaries {
+			results = append(results, filepath.Join(base, entry, binary))
+		}
+	}
+
+	return results
 }

@@ -1,8 +1,9 @@
 package util
 
 import (
-	"github.com/sahilm/fuzzy"
 	"strings"
+
+	"github.com/sahilm/fuzzy"
 )
 
 // PadChar left-pads s with the rune r, to length n.
@@ -91,4 +92,21 @@ func isStringMatchScoreFuzzy(term string, subTerm string, usePinYin bool) (isMat
 		}
 		return int64(matches[0].Score) >= minMatchScore, int64(matches[0].Score)
 	}
+}
+
+// UniqueStrings removes empty entries and de-duplicates while preserving order.
+func UniqueStrings(inputs []string) []string {
+	seen := make(map[string]struct{}, len(inputs))
+	var result []string
+	for _, v := range inputs {
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		result = append(result, v)
+	}
+	return result
 }

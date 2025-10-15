@@ -3,7 +3,10 @@ package host
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"wox/plugin"
 	"wox/setting"
@@ -49,20 +52,7 @@ func (n *PythonHost) findPythonPath(ctx context.Context) string {
 		}
 	}
 
-	var possiblePythonPaths = []string{
-		"/opt/homebrew/bin/python3",
-		"/usr/local/bin/python3",
-		"/usr/bin/python3",
-		"/usr/local/python3",
-	}
-
-	pyenvPaths, _ := homedir.Expand("~/.pyenv/versions")
-	if util.IsDirExists(pyenvPaths) {
-		versions, _ := util.ListDir(pyenvPaths)
-		for _, v := range versions {
-			possiblePythonPaths = append(possiblePythonPaths, path.Join(pyenvPaths, v, "bin", "python3"))
-		}
-	}
+	possiblePythonPaths := collectPythonPaths()
 
 	foundVersion, _ := semver.NewVersion("v0.0.1")
 	foundPath := ""
@@ -96,8 +86,12 @@ func (n *PythonHost) findPythonPath(ctx context.Context) string {
 		return foundPath
 	}
 
-	util.GetLogger().Info(ctx, "finally use default python3 from env path")
-	return "python3"
+	defaultPython := "python3"
+	if runtime.GOOS == "windows" {
+		defaultPython = "python"
+	}
+	util.GetLogger().Info(ctx, fmt.Sprintf("finally use default %s from env path", defaultPython))
+	return defaultPython
 }
 
 func (n *PythonHost) IsStarted(ctx context.Context) bool {
@@ -114,4 +108,105 @@ func (n *PythonHost) LoadPlugin(ctx context.Context, metadata plugin.Metadata, p
 
 func (n *PythonHost) UnloadPlugin(ctx context.Context, metadata plugin.Metadata) {
 	n.websocketHost.UnloadPlugin(ctx, metadata)
+}
+
+func collectPythonPaths() []string {
+	switch runtime.GOOS {
+	case "windows":
+		return collectPythonPathsForWindows()
+	case "darwin":
+		return collectPythonPathsForDarwin()
+	default:
+		return collectPythonPathsForLinux()
+	}
+}
+
+func collectPythonPathsForDarwin() []string {
+	paths := []string{
+		"/opt/homebrew/bin/python3",
+		"/usr/local/bin/python3",
+		"/usr/bin/python3",
+		"/usr/local/python3",
+	}
+	paths = append(paths, collectPythonPathsFromPyenvUnix()...)
+	return util.UniqueStrings(paths)
+}
+
+func collectPythonPathsForLinux() []string {
+	paths := []string{
+		"/usr/local/bin/python3",
+		"/usr/bin/python3",
+		"/usr/local/python3",
+	}
+	paths = append(paths, collectPythonPathsFromPyenvUnix()...)
+	return util.UniqueStrings(paths)
+}
+
+func collectPythonPathsForWindows() []string {
+	var candidates []string
+	binaries := []string{"python.exe", "python3.exe"}
+
+	if pythonHome := os.Getenv("PYTHONHOME"); pythonHome != "" {
+		for _, binary := range binaries {
+			candidates = append(candidates, filepath.Join(pythonHome, binary))
+		}
+	}
+
+	if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+		candidates = append(candidates, util.CollectExecutables(filepath.Join(localAppData, "Programs", "Python"), binaries, nil)...)
+	}
+
+	for _, envVar := range []string{"PROGRAMFILES", "PROGRAMFILES(X86)"} {
+		if base := os.Getenv(envVar); base != "" {
+			candidates = append(candidates, util.CollectExecutables(base, binaries, func(name string) bool {
+				return strings.HasPrefix(strings.ToLower(name), "python")
+			})...)
+		}
+	}
+
+	if homeDir, err := homedir.Dir(); err == nil {
+		candidates = append(candidates, util.CollectExecutables(filepath.Join(homeDir, "scoop", "apps", "python"), binaries, nil)...)
+	}
+
+	candidates = append(candidates, collectPythonPathsFromPyenvWin()...)
+	return util.UniqueStrings(candidates)
+}
+
+func collectPythonPathsFromPyenvUnix() []string {
+	pyenvPaths, _ := homedir.Expand("~/.pyenv/versions")
+	if !util.IsDirExists(pyenvPaths) {
+		return nil
+	}
+
+	versions, err := util.ListDir(pyenvPaths)
+	if err != nil {
+		return nil
+	}
+
+	var paths []string
+	for _, v := range versions {
+		paths = append(paths, filepath.Join(pyenvPaths, v, "bin", "python3"))
+	}
+
+	return paths
+}
+
+func collectPythonPathsFromPyenvWin() []string {
+	pyenvWinPaths, _ := homedir.Expand("~/.pyenv/pyenv-win/versions")
+	if !util.IsDirExists(pyenvWinPaths) {
+		return nil
+	}
+
+	versions, err := util.ListDir(pyenvWinPaths)
+	if err != nil {
+		return nil
+	}
+
+	var paths []string
+	for _, v := range versions {
+		paths = append(paths, filepath.Join(pyenvWinPaths, v, "python.exe"))
+		paths = append(paths, filepath.Join(pyenvWinPaths, v, "python3.exe"))
+	}
+
+	return paths
 }
