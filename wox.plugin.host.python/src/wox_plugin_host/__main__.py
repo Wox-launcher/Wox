@@ -3,8 +3,6 @@ import sys
 import uuid
 import os
 import platform
-import ctypes
-import ctypes.wintypes
 
 from . import logger
 from .host import start_websocket
@@ -31,15 +29,19 @@ def check_wox_process() -> bool:
         except OSError:
             return False
 
+    # Windows-specific process checking since os.kill(wox_pid, 0) doesn't work on Windows
+    import ctypes  # type: ignore[import-not-found]
+    import ctypes.wintypes  # type: ignore[import-not-found]
+
     PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
     ERROR_ACCESS_DENIED = 5
 
-    handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, ctypes.wintypes.DWORD(wox_pid))
+    handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, ctypes.wintypes.DWORD(wox_pid))  # type: ignore[attr-defined]
     if handle:
-        ctypes.windll.kernel32.CloseHandle(handle)
+        ctypes.windll.kernel32.CloseHandle(handle)  # type: ignore[attr-defined]
         return True
 
-    error = ctypes.windll.kernel32.GetLastError()
+    error = ctypes.windll.kernel32.GetLastError()  # type: ignore[attr-defined]
     if error == ERROR_ACCESS_DENIED:
         return True
 
