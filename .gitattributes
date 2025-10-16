@@ -64,4 +64,11 @@
 
 PythonHome/* linguist-vendored
 
+# Flutter generated files - normalize line endings
+**/generated_plugin_registrant.cc text eol=lf
+**/generated_plugin_registrant.h text eol=lf
+**/generated_plugins.cmake text eol=lf
+**/GeneratedPluginRegistrant.swift text eol=lf
+**/GeneratedPluginRegistrant.m text eol=lf
+
 text eol=crlf
