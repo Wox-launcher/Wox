@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -53,6 +54,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/setting/userdata/location":        handleUserDataLocation,
 	"/setting/userdata/location/update": handleUserDataLocationUpdate,
 	"/setting/position":                 handleSaveWindowPosition,
+	"/runtime/status":                   handleRuntimeStatus,
 
 	// events
 	"/on/focus/lost":     handleOnFocusLost,
@@ -608,6 +610,41 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 	GetUIManager().PostSettingUpdate(util.NewTraceContext(), kv.Key, kv.Value)
 
 	writeSuccessResponse(w, "")
+}
+
+func handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := util.NewTraceContext()
+	instances := plugin.GetPluginManager().GetPluginInstances()
+
+	statuses := make([]dto.RuntimeStatusDto, 0, len(plugin.AllHosts))
+	for _, host := range plugin.AllHosts {
+		runtime := string(host.GetRuntime(ctx))
+
+		if strings.EqualFold(runtime, string(plugin.PLUGIN_RUNTIME_SCRIPT)) {
+			continue
+		}
+
+		var pluginNames []string
+		for _, instance := range instances {
+			if strings.EqualFold(instance.Metadata.Runtime, runtime) {
+				pluginNames = append(pluginNames, instance.Metadata.Name)
+			}
+		}
+		sort.Strings(pluginNames)
+
+		statuses = append(statuses, dto.RuntimeStatusDto{
+			Runtime:           runtime,
+			IsStarted:         host.IsStarted(ctx),
+			LoadedPluginCount: len(pluginNames),
+			LoadedPluginNames: pluginNames,
+		})
+	}
+
+	sort.SliceStable(statuses, func(i, j int) bool {
+		return statuses[i].Runtime < statuses[j].Runtime
+	})
+
+	writeSuccessResponse(w, statuses)
 }
 
 func handleSettingPluginUpdate(w http.ResponseWriter, r *http.Request) {

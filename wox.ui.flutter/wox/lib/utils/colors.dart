@@ -4,27 +4,44 @@ import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
 
 Color getThemeActiveBackgroundColor() {
-  return safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor);
+  return safeFromCssColor(
+      WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor);
 }
 
 Color getThemeTextColor() {
-  return safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor);
+  return safeFromCssColor(
+      WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor);
 }
 
 Color getThemeSubTextColor() {
-  return safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor);
+  return safeFromCssColor(
+      WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor);
 }
 
 Color getThemeBackgroundColor() {
-  return safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor);
+  return safeFromCssColor(
+    WoxThemeUtil.instance.currentTheme.value.appBackgroundColor,
+    defaultColor: const Color(0xFF1F1F1F),
+  );
 }
 
 Color getThemeDividerColor() {
-  return safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor);
+  return safeFromCssColor(
+      WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor);
 }
 
 Color getThemeActionItemActiveColor() {
-  return safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor);
+  return safeFromCssColor(
+      WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor);
+}
+
+Color getThemePanelBackgroundColor() {
+  final panelColor =
+      WoxThemeUtil.instance.currentTheme.value.actionContainerBackgroundColor;
+  return safeFromCssColor(
+    panelColor,
+    defaultColor: getThemeCardBackgroundColor(),
+  );
 }
 
 Color getThemeCardBackgroundColor() {
@@ -55,7 +72,8 @@ extension ColorsExtension on Color {
   Color darker([int weight = 10]) {
     weight = weight.clamp(0, 100);
     final hslColor = HSLColor.fromColor(this);
-    final newLightness = (hslColor.lightness * (100 - weight) / 100).clamp(0.0, 1.0);
+    final newLightness =
+        (hslColor.lightness * (100 - weight) / 100).clamp(0.0, 1.0);
     return hslColor.withLightness(newLightness).toColor();
   }
 
@@ -66,7 +84,9 @@ extension ColorsExtension on Color {
   Color lighter([int weight = 10]) {
     weight = weight.clamp(0, 100);
     final hslColor = HSLColor.fromColor(this);
-    final newLightness = (hslColor.lightness + (1 - hslColor.lightness) * weight / 100).clamp(0.0, 1.0);
+    final newLightness =
+        (hslColor.lightness + (1 - hslColor.lightness) * weight / 100)
+            .clamp(0.0, 1.0);
     return hslColor.withLightness(newLightness).toColor();
   }
 }

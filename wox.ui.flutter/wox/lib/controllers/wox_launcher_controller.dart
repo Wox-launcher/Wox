@@ -209,10 +209,6 @@ class WoxLauncherController extends GetxController {
 
     // move default action to the first for every result
     for (var element in finalResultsSorted) {
-      Logger.instance.debug(traceId, "-result(${element.id}): ${element.title}}");
-      for (var action in element.actions) {
-        Logger.instance.debug(traceId, "  -action(${action.resultId}): ${action.name}");
-      }
       final defaultActionIndex = element.actions.indexWhere((element) => element.isDefault);
       if (defaultActionIndex != -1) {
         final defaultAction = element.actions[defaultActionIndex];
