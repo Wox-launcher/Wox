@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:ui';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
@@ -709,6 +710,14 @@ class WoxLauncherController extends GetxController {
       resultHeight += WoxThemeUtil.instance.getToolbarHeight();
     }
     var totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight;
+
+    // on windows, if the resolution is scaled in high DPI, the height need to add addtional 1 pixel to avoid cut off
+    // otherwise, "Bottom overflowed by 0.x pixels" will happen
+    if (Platform.isWindows) {
+      if (PlatformDispatcher.instance.views.first.devicePixelRatio > 1) {
+        totalHeight = totalHeight + 1;
+      }
+    }
 
     // if toolbar is showed without results, remove the bottom padding, This way, the toolbar can blend seamlessly with the query box.
     if (isToolbarShowedWithoutResults) {
