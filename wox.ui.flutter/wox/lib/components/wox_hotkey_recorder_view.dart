@@ -157,7 +157,7 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
               ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
-                child: _hotKey == null || _hotKey!.normalHotkey == null
+                child: _hotKey == null
                     ? SizedBox(
                         width: 80,
                         height: 18,
