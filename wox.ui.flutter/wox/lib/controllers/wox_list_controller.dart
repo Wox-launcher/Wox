@@ -89,7 +89,7 @@ class WoxListController<T> extends GetxController {
     updateActiveIndex(traceId, newIndex);
   }
 
-  void updateActiveIndex(String traceId, int index) {
+  void updateActiveIndex(String traceId, int index, {bool silent = false}) {
     if (index < 0 || index >= _items.length) {
       return;
     }
@@ -99,7 +99,9 @@ class WoxListController<T> extends GetxController {
     _activeIndex.value = index;
     _syncScrollPositionWithActiveIndex(traceId);
 
-    onItemActive?.call(traceId, _items[index].value);
+    if (!silent) {
+      onItemActive?.call(traceId, _items[index].value);
+    }
   }
 
   void _syncScrollPositionWithActiveIndex(String traceId) {
@@ -211,9 +213,9 @@ class WoxListController<T> extends GetxController {
     }
   }
 
-  void updateItems(String traceId, List<WoxListItem<T>> newItems) {
+  void updateItems(String traceId, List<WoxListItem<T>> newItems, {bool silent = false}) {
     _originalItems.assignAll(newItems);
-    filterItems(traceId, filterBoxController.text);
+    filterItems(traceId, filterBoxController.text, silent: silent);
   }
 
   void updateHoveredIndex(int index) {
@@ -254,7 +256,7 @@ class WoxListController<T> extends GetxController {
     return str;
   }
 
-  void filterItems(String traceId, String filterText) {
+  void filterItems(String traceId, String filterText, {bool silent = false}) {
     if (filterText.isEmpty) {
       _items.assignAll(_originalItems.map((item) => item.obs));
     } else {
@@ -266,7 +268,7 @@ class WoxListController<T> extends GetxController {
 
       _items.assignAll(filteredItems.map((item) => item.obs));
     }
-    updateActiveIndex(traceId, 0);
+    updateActiveIndex(traceId, 0, silent: silent);
   }
 
   /// Find all items to include in the filtered list (matched items and their parent groups)

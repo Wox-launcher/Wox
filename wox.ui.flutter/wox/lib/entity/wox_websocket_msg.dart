@@ -11,8 +11,9 @@ class WoxWebsocketMsg {
   late WoxMsgType type;
   late dynamic data;
   late bool? success;
+  late int sendTimestamp; // timestamp when message is sent (milliseconds since epoch)
 
-  WoxWebsocketMsg({required this.requestId, required this.traceId, required this.method, required this.type, this.success = true, this.data});
+  WoxWebsocketMsg({required this.requestId, required this.traceId, required this.method, required this.type, this.success = true, this.data, this.sendTimestamp = 0});
 
   WoxWebsocketMsg.fromJson(Map<String, dynamic> json) {
     requestId = json['RequestId'];
@@ -21,6 +22,7 @@ class WoxWebsocketMsg {
     type = json['Type'];
     data = json['Data'];
     success = json['Success'];
+    sendTimestamp = json['SendTimestamp'] ?? 0;
   }
 
   Map<String, dynamic> toJson() {
@@ -31,6 +33,7 @@ class WoxWebsocketMsg {
     finalData['Type'] = type;
     finalData['Success'] = success;
     finalData['Data'] = data;
+    finalData['SendTimestamp'] = sendTimestamp;
     return finalData;
   }
 }

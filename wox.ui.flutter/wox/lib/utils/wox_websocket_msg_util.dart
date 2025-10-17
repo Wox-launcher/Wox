@@ -1,14 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:wox/controllers/wox_launcher_controller.dart';
-import 'package:wox/entity/wox_image.dart';
-import 'package:wox/entity/wox_toolbar.dart';
 import 'package:wox/entity/wox_websocket_msg.dart';
-import 'package:wox/enums/wox_image_type_enum.dart';
 import 'package:wox/enums/wox_msg_method_enum.dart';
 import 'package:wox/utils/log.dart';
 
@@ -84,6 +79,7 @@ class WoxWebsocketMsgUtil {
     // if query message, send it directly, no need to wait for response
     // because query result may return multiple times
     if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code) {
+      msg.sendTimestamp = DateTime.now().millisecondsSinceEpoch;
       _channel?.sink.add(jsonEncode(msg));
       return;
     }

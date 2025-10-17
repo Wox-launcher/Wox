@@ -27,12 +27,18 @@ const (
 )
 
 type WebsocketMsg struct {
-	RequestId string // unique id for each request
-	TraceId   string // trace id between ui and wox, used for logging
-	Type      websocketMsgType
-	Method    string
-	Success   bool
-	Data      any
+	RequestId     string // unique id for each request
+	TraceId       string // trace id between ui and wox, used for logging
+	Type          websocketMsgType
+	Method        string
+	Success       bool
+	Data          any
+	SendTimestamp int64 // timestamp when message is sent (milliseconds since epoch)
+}
+
+type QueryResponse struct {
+	Results []plugin.QueryResultUI `json:"Results"`
+	IsFinal bool                   `json:"IsFinal"` // indicates if this is the final batch of results
 }
 
 type RestResponse struct {
@@ -171,6 +177,21 @@ func responseUISuccessWithData(ctx context.Context, request WebsocketMsg, data a
 		Method:    request.Method,
 		Success:   true,
 		Data:      data,
+	})
+}
+
+func responseUIQueryResults(ctx context.Context, request WebsocketMsg, results []plugin.QueryResultUI, isFinal bool) {
+	responseUI(ctx, WebsocketMsg{
+		RequestId:     request.RequestId,
+		TraceId:       util.GetContextTraceId(ctx),
+		Type:          WebsocketMsgTypeResponse,
+		Method:        request.Method,
+		Success:       true,
+		SendTimestamp: util.GetSystemTimestamp(), // Only set timestamp for Query responses
+		Data: QueryResponse{
+			Results: results,
+			IsFinal: isFinal,
+		},
 	})
 }
 

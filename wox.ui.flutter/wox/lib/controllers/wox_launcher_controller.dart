@@ -98,6 +98,9 @@ class WoxLauncherController extends GetxController {
   // Whether settings was opened when window was hidden (e.g., from tray)
   bool isSettingOpenedFromHidden = false;
 
+  // Performance metrics: Map<traceId, startTime>
+  final Map<String, int> queryStartTimeMap = {};
+
   /// The icon at end of query box.
   final queryIcon = QueryIconInfo.empty().obs;
 
@@ -192,8 +195,17 @@ class WoxLauncherController extends GetxController {
 
     //group results
     var finalResultsSorted = <WoxQueryResult>[];
+    // Build group to score mapping to avoid repeated list traversal
+    final groupScoreMap = <String, int>{};
+    for (var result in finalResults) {
+      if (!groupScoreMap.containsKey(result.group)) {
+        groupScoreMap[result.group] = result.groupScore;
+      }
+    }
+
     final groups = finalResults.map((e) => e.group).toSet().toList();
-    groups.sort((a, b) => finalResults.where((element) => element.group == b).first.groupScore.compareTo(finalResults.where((element) => element.group == a).first.groupScore));
+    groups.sort((a, b) => groupScoreMap[b]!.compareTo(groupScoreMap[a]!));
+
     for (var group in groups) {
       final groupResults = finalResults.where((element) => element.group == group).toList();
       final groupResultsSorted = groupResults..sort((a, b) => b.score.compareTo(a.score));
@@ -218,7 +230,9 @@ class WoxLauncherController extends GetxController {
       }
     }
 
-    resultListViewController.updateItems(traceId, finalResultsSorted.map((e) => WoxListItem.fromQueryResult(e)).toList());
+    // Use silent mode to avoid triggering onItemActive callback during updateItems (which may cause a little performance issue)
+    // Following resetActiveResult will trigger the callback
+    resultListViewController.updateItems(traceId, finalResultsSorted.map((e) => WoxListItem.fromQueryResult(e)).toList(), silent: true);
 
     // if current query already has results and active result is not the first one, then do not reset active result and action
     // this will prevent the active result from being reset to the first one when the query results are received
@@ -558,6 +572,10 @@ class WoxLauncherController extends GetxController {
     clearQueryResultsTimer = Timer(Duration(milliseconds: clearQueryResultDelay), () {
       clearQueryResults(traceId);
     });
+
+    // Record query start time for performance metrics
+    queryStartTimeMap[traceId] = DateTime.now().millisecondsSinceEpoch;
+
     WoxWebsocketMsgUtil.instance.sendMessage(
       WoxWebsocketMsg(
         requestId: const UuidV4().generate(),
@@ -630,13 +648,55 @@ class WoxLauncherController extends GetxController {
 
   Future<void> handleWebSocketResponseMessage(WoxWebsocketMsg msg) async {
     if (msg.method == WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code) {
+      // Log WebSocket latency (Wox -> UI) only for Query method
+      if (msg.sendTimestamp > 0) {
+        final receiveTimestamp = DateTime.now().millisecondsSinceEpoch;
+        final latency = receiveTimestamp - msg.sendTimestamp;
+        Logger.instance.info(msg.traceId, "📨 WebSocket latency (Wox→UI): ${latency}ms");
+      }
+
+      // Parse QueryResponse object
+      final queryResponse = msg.data as Map<String, dynamic>;
+      final resultsData = queryResponse['Results'] as List<dynamic>;
+      final isFinal = queryResponse['IsFinal'] as bool? ?? false;
+
       var results = <WoxQueryResult>[];
-      for (var item in msg.data) {
+      for (var item in resultsData) {
         results.add(WoxQueryResult.fromJson(item));
       }
-      Logger.instance.info(msg.traceId, "Received websocket message: ${msg.method}, results count: ${results.length}");
 
+      Logger.instance.info(msg.traceId, "Received websocket message: ${msg.method}, results count: ${results.length}, isFinal: $isFinal");
+
+      // Process results first
       onReceivedQueryResults(msg.traceId, results);
+
+      // Record First Paint after results are rendered (use post-frame callback)
+      final queryStartTime = queryStartTimeMap[msg.traceId];
+      if (results.isNotEmpty && queryStartTime != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          // Check if this traceId still exists (not removed by Complete Paint)
+          if (queryStartTimeMap.containsKey(msg.traceId)) {
+            final firstPaintTime = DateTime.now().millisecondsSinceEpoch - queryStartTime;
+            Logger.instance.info(msg.traceId, "⚡ FIRST PAINT: ${firstPaintTime}ms (${results.length} results rendered)");
+            // Remove after recording First Paint to avoid recording it again
+            queryStartTimeMap.remove(msg.traceId);
+          }
+        });
+      }
+
+      // Record Complete Paint when backend signals final batch
+      if (isFinal && queryStartTime != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          // Check if this traceId still exists (might be removed by First Paint)
+          final startTime = queryStartTimeMap[msg.traceId];
+          if (startTime != null) {
+            final completePaintTime = DateTime.now().millisecondsSinceEpoch - startTime;
+            Logger.instance.info(msg.traceId, "🎨 COMPLETE PAINT: ${completePaintTime}ms (total ${resultListViewController.items.length} results rendered)");
+            // Clean up to avoid memory leak
+            queryStartTimeMap.remove(msg.traceId);
+          }
+        });
+      }
     }
   }
 
