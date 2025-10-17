@@ -84,7 +84,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   }
 
                   // Handle quick select modifier key press/release
-                  if (event is KeyDownEvent && isQuickSelectModifierKeyOnly(event)) {
+                  if ((event is KeyDownEvent || event is KeyRepeatEvent) && isQuickSelectModifierKeyOnly(event)) {
                     controller.startQuickSelectTimer(traceId);
                   } else {
                     controller.stopQuickSelectTimer(traceId);
