@@ -357,7 +357,10 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     }
     else if (method_name == "hide")
     {
-      ShowWindow(hwnd, SW_HIDE);
+      // Instead of hiding the window (which causes keyboard state issues),
+      // move it far off-screen to make it invisible
+      // This keeps the window technically visible so keyboard state is preserved
+      SetWindowPos(hwnd, nullptr, -10000, -10000, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
       result->Success();
     }
     else if (method_name == "focus")
@@ -380,7 +383,11 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     }
     else if (method_name == "isVisible")
     {
-      bool is_visible = IsWindowVisible(hwnd);
+      // Check if window is on-screen (not hidden off-screen)
+      RECT rect;
+      GetWindowRect(hwnd, &rect);
+      // If window is at the off-screen position (-10000, -10000), it's considered hidden
+      bool is_visible = (rect.left != -10000 || rect.top != -10000);
       result->Success(flutter::EncodableValue(is_visible));
     }
     else if (method_name == "setAlwaysOnTop")

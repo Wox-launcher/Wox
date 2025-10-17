@@ -16,23 +16,6 @@ import 'package:wox/utils/wox_theme_util.dart';
 class WoxQueryBoxView extends GetView<WoxLauncherController> {
   const WoxQueryBoxView({super.key});
 
-  // On Windows, if the callback might hide the window and is called from onKeyEvent,
-  // it may cause Flutter to miss handling the keyboard state after hiding (it seems the key state is not dispatched to Flutter after hiding).
-  // This will cause the user needing to press ESC or Enter twice to execute the corresponding action.
-  // Therefore, we need to delay by 100ms to give Flutter a chance to handle the keyboard state.
-  // This is a workaround for the issue (100ms here). We may need to find a better solution in the future.
-  asyncExecuteOnWindows(VoidCallback callback) {
-    if (Platform.isWindows) {
-      Future.delayed(const Duration(milliseconds: 100), () {
-        callback();
-      });
-
-      return;
-    }
-
-    callback();
-  }
-
   // Helper method to convert LogicalKeyboardKey to number for quick select
   int? getNumberFromKey(LogicalKeyboardKey key) {
     switch (key) {
@@ -88,6 +71,8 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                 onKeyEvent: (FocusNode node, KeyEvent event) {
                   var traceId = const UuidV4().generate();
 
+                  Logger.instance.debug(traceId,
+                      "onKeyEvent: ${event.logicalKey.keyLabel}, iskeyDown: ${event is KeyDownEvent}, isKeyUp: ${event is KeyUpEvent}, isKeyRepeat: ${event is KeyRepeatEvent}");
                   // Handle number keys in quick select mode first (higher priority)
                   if (controller.isQuickSelectMode.value && event is KeyDownEvent) {
                     var numberKey = getNumberFromKey(event.logicalKey);
@@ -110,14 +95,10 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                     if (event is KeyDownEvent) {
                       switch (event.logicalKey) {
                         case LogicalKeyboardKey.escape:
-                          asyncExecuteOnWindows(() {
-                            controller.hideApp(const UuidV4().generate());
-                          });
+                          controller.hideApp(const UuidV4().generate());
                           return KeyEventResult.handled;
                         case LogicalKeyboardKey.enter:
-                          asyncExecuteOnWindows(() {
-                            controller.executeToolbarAction(const UuidV4().generate());
-                          });
+                          controller.executeToolbarAction(const UuidV4().generate());
                           return KeyEventResult.handled;
                         case LogicalKeyboardKey.arrowDown:
                           controller.handleQueryBoxArrowDown();
