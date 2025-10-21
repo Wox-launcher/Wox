@@ -1,7 +1,6 @@
 package setting
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -33,7 +32,6 @@ func NewWoxSettingStore(db *gorm.DB) *WoxSettingStore {
 func (s *WoxSettingStore) Get(key string, target interface{}) error {
 	var setting database.WoxSetting
 	if err := s.db.Where("key = ?", key).First(&setting).Error; err != nil {
-		util.GetLogger().Error(context.Background(), fmt.Sprintf("Failed to read wox setting %s: %v", key, err))
 		return err
 	}
 

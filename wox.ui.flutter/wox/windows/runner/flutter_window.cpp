@@ -365,20 +365,54 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     }
     else if (method_name == "focus")
     {
-      // see https://gist.github.com/Aetopia/1581b40f00cc0cadc93a0e8ccb65dc8c
+      // 1. Use AttachThreadInput to try to set foreground window
+      HWND fg = GetForegroundWindow();
+      DWORD curTid = GetCurrentThreadId();
+      DWORD fgTid = 0;
+      if (fg)
+      {
+        GetWindowThreadProcessId(fg, &fgTid);
+      }
+
+      bool attached = false;
+      if (fg && fgTid != curTid)
+      {
+        attached = AttachThreadInput(fgTid, curTid, TRUE);
+      }
+
+      SetForegroundWindow(hwnd);
+      SetFocus(hwnd);
+      BringWindowToTop(hwnd);
+
+      if (attached)
+      {
+        AttachThreadInput(fgTid, curTid, FALSE);
+      }
+      if (GetForegroundWindow() == hwnd)
+      {
+        Log("Focus: use attach thread input");
+        result->Success();
+        return;
+      }
+
+      // 2. Fallback: legacy Alt key injection trick
+      // alt has a side effect of showing the system start menu if user remapped keys using AutoHotkey or PowerToys (E.g. alt <-> win)
+      // so we only use it in the last try
       INPUT pInputs[2];
-      ZeroMemory(pInputs, sizeof(pInputs));
+      ZeroMemory(pInputs, sizeof(INPUT));
 
       pInputs[0].type = INPUT_KEYBOARD;
-      pInputs[0].ki.wVk = VK_MENU;
+      pInputs[0].ki.wVk = VK_MENU;         // Alt down
       pInputs[0].ki.dwFlags = 0;
 
       pInputs[1].type = INPUT_KEYBOARD;
-      pInputs[1].ki.wVk = VK_MENU;
+      pInputs[1].ki.wVk = VK_MENU;         // Alt up
       pInputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+
       SendInput(2, pInputs, sizeof(INPUT));
       SetForegroundWindow(hwnd);
 
+      Log("Focus: use Alt key injection");
       result->Success();
     }
     else if (method_name == "isVisible")
