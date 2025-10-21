@@ -294,6 +294,9 @@ class WoxLauncherController extends GetxController {
     await windowManager.setPosition(Offset(params.position.x.toDouble(), params.position.y.toDouble()));
 
     await windowManager.show();
+    if (!isInSettingView.value) {
+      await windowManager.setAlwaysOnTop(true);
+    }
     await windowManager.focus();
     focusQueryBox(selectAll: params.selectAll);
 
