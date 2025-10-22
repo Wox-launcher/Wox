@@ -19,3 +19,4 @@ wox.plugin.python/wox_plugin.egg-info/
 .ruff_cache/
 .mypy_cache/
 wox.core/resource/others/woxmr
+wox.exe
