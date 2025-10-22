@@ -286,10 +286,93 @@ void FlutterWindow::HandleWindowManagerMethodCall(
           double x = std::get<double>(x_it->second);
           double y = std::get<double>(y_it->second);
 
-          // Get DPI scale factor
-          float dpiScale = GetDpiScale(hwnd);
+          // COORDINATE SYSTEM EXPLANATION:
+          //
+          // Backend (Go) provides LOGICAL coordinates (DPI-adjusted):
+          //   - These are platform-independent coordinates
+          //   - Example: (5680, 1234) on a 1920x1080 monitor at 100% DPI
+          //
+          // Frontend (Flutter/Windows) needs PHYSICAL coordinates (device pixels):
+          //   - SetWindowPos API requires physical pixel coordinates
+          //   - Example: Same position on 100% DPI = (5680, 1234) physical
+          //   - Example: Same position on 225% DPI = (12780, 2776) physical
+          //
+          // The challenge in multi-monitor setups:
+          //   - Different monitors can have different DPI settings
+          //   - We must find which monitor contains the logical point
+          //   - Then use THAT monitor's DPI to convert logical → physical
+          //
+          // Example scenario:
+          //   Monitor 1: 5120x2880 @ 225% DPI → 2275x1280 logical, offset (0,0)
+          //   Monitor 2: 1920x1080 @ 100% DPI → 1920x1080 logical, offset (5120,1080) physical
+          //
+          //   Logical point (5680, 1234) is on Monitor 2:
+          //   - Physical bounds of Monitor 2: [5120,1080] to [7040,2160]
+          //   - Logical bounds of Monitor 2: [5120,1080] to [7040,2160] (100% DPI, no scaling)
+          //   - Convert: (5680, 1234) * 1.0 = (5680, 1234) physical ✓
+          //
+          //   If we mistakenly used Monitor 1's DPI (225%):
+          //   - Convert: (5680, 1234) * 2.25 = (12780, 2776) physical ✗
+          //   - This would place the window far outside Monitor 2!
 
-          // Apply DPI scaling to get physical pixels
+          struct MonitorFindData
+          {
+            LONG targetX, targetY;
+            HMONITOR foundMonitor;
+            UINT foundDpi;
+          } findData = {static_cast<LONG>(x), static_cast<LONG>(y), nullptr, 96};
+
+          // Enumerate all monitors to find which one contains our logical point
+          EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR hMon, HDC, LPRECT, LPARAM lParam) -> BOOL
+                              {
+                                auto *data = reinterpret_cast<MonitorFindData *>(lParam);
+                                MONITORINFO mi = {sizeof(mi)};
+                                if (GetMonitorInfo(hMon, &mi))
+                                {
+                                  // GetMonitorInfo returns PHYSICAL coordinates
+                                  // Example: Monitor 2 at physical [5120,1080] to [7040,2160]
+
+                                  UINT dpi = FlutterDesktopGetDpiForMonitor(hMon);
+                                  float scale = dpi / 96.0f;
+
+                                  // Convert this monitor's physical bounds to logical coordinates
+                                  // Example: Monitor 2 @ 100% DPI (scale=1.0)
+                                  //   Physical [5120,1080,7040,2160] → Logical [5120,1080,7040,2160]
+                                  // Example: Monitor 1 @ 225% DPI (scale=2.25)
+                                  //   Physical [0,0,5120,2880] → Logical [0,0,2275,1280]
+                                  LONG logLeft = static_cast<LONG>(mi.rcMonitor.left / scale);
+                                  LONG logTop = static_cast<LONG>(mi.rcMonitor.top / scale);
+                                  LONG logRight = static_cast<LONG>(mi.rcMonitor.right / scale);
+                                  LONG logBottom = static_cast<LONG>(mi.rcMonitor.bottom / scale);
+
+                                  // Check if our target logical point is within this monitor's logical bounds
+                                  // Example: Point (5680,1234) is in Monitor 2's bounds [5120,1080,7040,2160] ✓
+                                  if (data->targetX >= logLeft && data->targetX < logRight &&
+                                      data->targetY >= logTop && data->targetY < logBottom)
+                                  {
+                                    data->foundMonitor = hMon;
+                                    data->foundDpi = dpi;
+                                    return FALSE; // Found the correct monitor, stop enumeration
+                                  }
+                                }
+                                return TRUE; // Not this monitor, continue searching
+                              },
+                              reinterpret_cast<LPARAM>(&findData));
+
+          // Fallback to primary monitor if logical point is not in any monitor
+          // (This shouldn't happen in normal cases, but provides safety)
+          if (findData.foundMonitor == nullptr)
+          {
+            findData.foundMonitor = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+            findData.foundDpi = FlutterDesktopGetDpiForMonitor(findData.foundMonitor);
+          }
+
+          // Now convert logical coordinates to physical using the correct monitor's DPI
+          // Example: Monitor 2 @ 100% DPI (scale=1.0)
+          //   Logical (5680, 1234) * 1.0 = Physical (5680, 1234)
+          // Example: Monitor 1 @ 225% DPI (scale=2.25)
+          //   Logical (738, 182) * 2.25 = Physical (1660, 409)
+          float dpiScale = findData.foundDpi / 96.0f;
           int scaledX = static_cast<int>(x * dpiScale);
           int scaledY = static_cast<int>(y * dpiScale);
 
@@ -402,11 +485,11 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       ZeroMemory(pInputs, sizeof(INPUT));
 
       pInputs[0].type = INPUT_KEYBOARD;
-      pInputs[0].ki.wVk = VK_MENU;         // Alt down
+      pInputs[0].ki.wVk = VK_MENU; // Alt down
       pInputs[0].ki.dwFlags = 0;
 
       pInputs[1].type = INPUT_KEYBOARD;
-      pInputs[1].ki.wVk = VK_MENU;         // Alt up
+      pInputs[1].ki.wVk = VK_MENU; // Alt up
       pInputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
 
       SendInput(2, pInputs, sizeof(INPUT));
