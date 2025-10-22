@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_hotkey_view.dart';
+import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -14,6 +16,10 @@ class WoxThemePreview extends StatelessWidget {
 
   const WoxThemePreview({super.key, required this.theme});
 
+  String tr(String key) {
+    return Get.find<WoxSettingController>().tr(key);
+  }
+
   @override
   Widget build(BuildContext context) {
     Color backgroundColor = safeFromCssColor(theme.appBackgroundColor);
@@ -22,11 +28,11 @@ class WoxThemePreview extends StatelessWidget {
     Color resultItemColor = safeFromCssColor(theme.appBackgroundColor);
 
     final List<String> previewTexts = [
-      "Search for applications, folders, files and more",
-      "Plenty of Plugins and AI Themes",
-      "Single executable file, no installation required",
-      "Develop plugins with Javascript, Python, C#",
-      "Customizable and extensible launcher",
+      tr("ui_theme_preview_text_1"),
+      tr("ui_theme_preview_text_2"),
+      tr("ui_theme_preview_text_3"),
+      tr("ui_theme_preview_text_4"),
+      tr("ui_theme_preview_text_5"),
     ];
 
     return Padding(
@@ -51,7 +57,7 @@ class WoxThemePreview extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.only(left: 10),
                     child: Text(
-                      "Wox Theme Preview",
+                      tr("ui_theme_preview_title"),
                       style: TextStyle(color: safeFromCssColor(theme.queryBoxFontColor)),
                     ),
                   ),
@@ -81,7 +87,7 @@ class WoxThemePreview extends StatelessWidget {
                         ),
                       ),
                       subtitle: Text(
-                        "Wox Feature ${index + 1}",
+                        tr("ui_theme_preview_subtitle").replaceAll("{index}", "${index + 1}"),
                         style: TextStyle(
                           color: safeFromCssColor(isActive ? theme.resultItemActiveSubTitleColor : theme.resultItemSubTitleColor),
                         ),
@@ -116,7 +122,7 @@ class WoxThemePreview extends StatelessWidget {
                     Row(
                       children: [
                         Text(
-                          "Open",
+                          tr("ui_theme_preview_open"),
                           style: TextStyle(color: safeFromCssColor(theme.toolbarFontColor)),
                         ),
                         const SizedBox(width: 8),

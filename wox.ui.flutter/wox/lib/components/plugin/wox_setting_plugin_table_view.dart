@@ -497,10 +497,10 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                   ],
                   rows: const [],
                 ),
-                const Center(
+                Center(
                   child: Padding(
-                    padding: EdgeInsets.only(top: 10),
-                    child: Text("No data"),
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Text(tr("ui_no_data")),
                   ),
                 ),
               ],

@@ -32,7 +32,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
           child: Text(
             controller.tr("ui_data_backup_folder_link"),
             style: TextStyle(
-              color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor),
+              color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
               fontSize: 13,
               decoration: TextDecoration.underline,
             ),
@@ -216,7 +216,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
                             children: [
                               HyperlinkButton(
                                 style: ButtonStyle(
-                                  foregroundColor: ButtonState.all(safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
+                                  foregroundColor: ButtonState.all(safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor)),
                                 ),
                                 child: Text(controller.tr("ui_data_backup_restore")),
                                 onPressed: () {
@@ -248,7 +248,7 @@ class WoxSettingDataView extends WoxSettingBaseView {
                               ),
                               HyperlinkButton(
                                 style: ButtonStyle(
-                                  foregroundColor: ButtonState.all(safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
+                                  foregroundColor: ButtonState.all(safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor)),
                                 ),
                                 child: Text(controller.tr("plugin_file_open")),
                                 onPressed: () {

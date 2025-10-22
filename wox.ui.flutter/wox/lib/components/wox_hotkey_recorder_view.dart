@@ -6,6 +6,8 @@ import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/log.dart';
+import 'package:get/get.dart';
+import 'package:wox/controllers/wox_setting_controller.dart';
 
 class WoxHotkeyRecorder extends StatefulWidget {
   final ValueChanged<String> onHotKeyRecorded;
@@ -23,6 +25,10 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
   late FocusNode _focusNode;
   final Map<LogicalKeyboardKey, int> _lastKeyUpTimestamp = {};
   static const int _doubleClickThreshold = 500; // milliseconds
+
+  String tr(String key) {
+    return Get.find<WoxSettingController>().tr(key);
+  }
 
   @override
   void initState() {
@@ -157,12 +163,12 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
               ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
-                child: _hotKey == null
+                child: _hotKey == null || (!_hotKey!.isDoubleHotkey && !_hotKey!.isNormalHotkey && !_hotKey!.isSingleHotkey)
                     ? SizedBox(
                         width: 80,
                         height: 18,
                         child: Text(
-                          _isFocused ? "Recording..." : "Click to set",
+                          _isFocused ? tr("ui_hotkey_recording") : tr("ui_hotkey_click_to_set"),
                           style: TextStyle(color: Colors.grey[400], fontSize: 13),
                         ),
                       )
@@ -181,7 +187,7 @@ class _WoxHotkeyRecorderState extends State<WoxHotkeyRecorder> {
               Padding(
                 padding: const EdgeInsets.only(left: 8.0),
                 child: Text(
-                  "Press any key to set hotkey, or double click modifier keys",
+                  tr("ui_hotkey_press_hint"),
                   style: TextStyle(color: Colors.grey[500], fontSize: 13),
                 ),
               ),

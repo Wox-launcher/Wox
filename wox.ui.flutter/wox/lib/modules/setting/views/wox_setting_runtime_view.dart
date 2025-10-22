@@ -26,31 +26,21 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
     }
   }
 
-  Widget _buildRuntimeStatusCard(
-      BuildContext context, WoxRuntimeStatus status) {
+  Widget _buildRuntimeStatusCard(BuildContext context, WoxRuntimeStatus status) {
     final bool isRunning = status.isStarted;
-    final Color accentColor = getThemeActiveBackgroundColor();
     final Color baseBackground = getThemeBackgroundColor();
     final bool isDarkTheme = baseBackground.computeLuminance() < 0.5;
     final Color panelColor = getThemePanelBackgroundColor();
-    Color cardColor = panelColor.opacity < 1
-        ? Color.alphaBlend(panelColor, baseBackground)
-        : panelColor;
+    Color cardColor = panelColor.opacity < 1 ? Color.alphaBlend(panelColor, baseBackground) : panelColor;
     cardColor = isDarkTheme ? cardColor.lighter(6) : cardColor.darker(4);
     final Color textColor = getThemeTextColor();
     final Color subTextColor = getThemeSubTextColor();
-    final Color statusColor = isRunning ? accentColor : Colors.red;
-    final Color outlineColor =
-        getThemeDividerColor().withOpacity(isDarkTheme ? 0.45 : 0.25);
+    final Color statusColor = isRunning ? Colors.green : Colors.red;
+    final Color outlineColor = getThemeDividerColor().withOpacity(isDarkTheme ? 0.45 : 0.25);
 
-    final IconData statusIcon =
-        isRunning ? FluentIcons.completed : FluentIcons.status_circle_error_x;
-    final String stateLabel = isRunning
-        ? controller.tr("ui_runtime_status_running")
-        : controller.tr("ui_runtime_status_stopped");
-    final String pluginCountLabel = controller
-        .tr("ui_runtime_status_plugin_count")
-        .replaceAll("{count}", status.loadedPluginCount.toString());
+    final IconData statusIcon = isRunning ? FluentIcons.completed : FluentIcons.status_circle_error_x;
+    final String stateLabel = isRunning ? controller.tr("ui_runtime_status_running") : controller.tr("ui_runtime_status_stopped");
+    final String pluginCountLabel = controller.tr("ui_runtime_status_plugin_count").replaceAll("{count}", status.loadedPluginCount.toString());
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -145,12 +135,10 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
         final version = result.stdout.toString().trim();
         pythonValidationMessage.value = '✓ $version';
       } else {
-        pythonValidationMessage.value =
-            '✗ ${controller.tr("ui_runtime_validation_failed")}';
+        pythonValidationMessage.value = '✗ ${controller.tr("ui_runtime_validation_failed")}';
       }
     } catch (e) {
-      pythonValidationMessage.value =
-          '✗ ${controller.tr("ui_runtime_validation_error")}: ${e.toString()}';
+      pythonValidationMessage.value = '✗ ${controller.tr("ui_runtime_validation_error")}: ${e.toString()}';
     } finally {
       isPythonValidating.value = false;
     }
@@ -169,12 +157,10 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
         final version = result.stdout.toString().trim();
         nodejsValidationMessage.value = '✓ $version';
       } else {
-        nodejsValidationMessage.value =
-            '✗ ${controller.tr("ui_runtime_validation_failed")}';
+        nodejsValidationMessage.value = '✗ ${controller.tr("ui_runtime_validation_failed")}';
       }
     } catch (e) {
-      nodejsValidationMessage.value =
-          '✗ ${controller.tr("ui_runtime_validation_error")}: ${e.toString()}';
+      nodejsValidationMessage.value = '✗ ${controller.tr("ui_runtime_validation_error")}: ${e.toString()}';
     } finally {
       isNodejsValidating.value = false;
     }
@@ -214,10 +200,8 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
   @override
   Widget build(BuildContext context) {
     // Initialize controllers with current values
-    pythonController = TextEditingController(
-        text: controller.woxSetting.value.customPythonPath);
-    nodejsController = TextEditingController(
-        text: controller.woxSetting.value.customNodejsPath);
+    pythonController = TextEditingController(text: controller.woxSetting.value.customPythonPath);
+    nodejsController = TextEditingController(text: controller.woxSetting.value.customNodejsPath);
 
     // Initial validation
     if (pythonController.text.isNotEmpty) {
@@ -230,9 +214,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
       final statuses = controller.runtimeStatuses;
       final bool isLoadingStatuses = controller.isRuntimeStatusLoading.value;
       final String runtimeStatusError = controller.runtimeStatusError.value;
-      final List<WoxRuntimeStatus> visibleStatuses = statuses
-          .where((status) => status.runtime.toUpperCase() != 'SCRIPT')
-          .toList();
+      final List<WoxRuntimeStatus> visibleStatuses = statuses.where((status) => status.runtime.toUpperCase() != 'SCRIPT').toList();
 
       return form(children: [
         formField(
@@ -267,9 +249,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                 ),
                 const SizedBox(height: 4),
               ],
-              if (!isLoadingStatuses &&
-                  runtimeStatusError.isEmpty &&
-                  visibleStatuses.isEmpty)
+              if (!isLoadingStatuses && runtimeStatusError.isEmpty && visibleStatuses.isEmpty)
                 Text(
                   controller.tr("ui_runtime_status_empty"),
                   style: TextStyle(color: Colors.grey[120]),
@@ -277,14 +257,10 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
               if (visibleStatuses.isNotEmpty)
                 LayoutBuilder(
                   builder: (context, constraints) {
-                    final double availableWidth = constraints.maxWidth.isFinite
-                        ? constraints.maxWidth
-                        : 960;
+                    final double availableWidth = constraints.maxWidth.isFinite ? constraints.maxWidth : 960;
                     final double spacing = 12;
                     final int columnCount = availableWidth >= 640 ? 2 : 1;
-                    final double cardWidth = columnCount == 1
-                        ? availableWidth
-                        : (availableWidth - spacing) / columnCount;
+                    final double cardWidth = columnCount == 1 ? availableWidth : (availableWidth - spacing) / columnCount;
 
                     return Wrap(
                       spacing: spacing,
@@ -292,8 +268,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                       children: visibleStatuses
                           .map(
                             (status) => SizedBox(
-                              width:
-                                  columnCount == 1 ? availableWidth : cardWidth,
+                              width: columnCount == 1 ? availableWidth : cardWidth,
                               child: _buildRuntimeStatusCard(context, status),
                             ),
                           )
@@ -315,8 +290,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                   Expanded(
                     child: TextBox(
                       controller: pythonController,
-                      placeholder:
-                          controller.tr("ui_runtime_python_path_placeholder"),
+                      placeholder: controller.tr("ui_runtime_python_path_placeholder"),
                       onChanged: (value) {
                         updatePythonPath(value);
                       },
@@ -351,8 +325,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                 if (isPythonValidating.value) {
                   return Row(
                     children: [
-                      const SizedBox(
-                          width: 16, height: 16, child: ProgressRing()),
+                      const SizedBox(width: 16, height: 16, child: ProgressRing()),
                       const SizedBox(width: 8),
                       Text(controller.tr("ui_runtime_validating")),
                     ],
@@ -361,9 +334,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                   return Text(
                     pythonValidationMessage.value,
                     style: TextStyle(
-                      color: pythonValidationMessage.value.startsWith('✓')
-                          ? Colors.green
-                          : Colors.red,
+                      color: pythonValidationMessage.value.startsWith('✓') ? Colors.green : Colors.red,
                       fontSize: 12,
                     ),
                   );
@@ -384,8 +355,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                   Expanded(
                     child: TextBox(
                       controller: nodejsController,
-                      placeholder:
-                          controller.tr("ui_runtime_nodejs_path_placeholder"),
+                      placeholder: controller.tr("ui_runtime_nodejs_path_placeholder"),
                       onChanged: (value) {
                         updateNodejsPath(value);
                       },
@@ -420,8 +390,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                 if (isNodejsValidating.value) {
                   return Row(
                     children: [
-                      const SizedBox(
-                          width: 16, height: 16, child: ProgressRing()),
+                      const SizedBox(width: 16, height: 16, child: ProgressRing()),
                       const SizedBox(width: 8),
                       Text(controller.tr("ui_runtime_validating")),
                     ],
@@ -430,9 +399,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                   return Text(
                     nodejsValidationMessage.value,
                     style: TextStyle(
-                      color: nodejsValidationMessage.value.startsWith('✓')
-                          ? Colors.green
-                          : Colors.red,
+                      color: nodejsValidationMessage.value.startsWith('✓') ? Colors.green : Colors.red,
                       fontSize: 12,
                     ),
                   );
