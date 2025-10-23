@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -36,27 +37,41 @@ var (
 	getFileVersionInfoSize = version.NewProc("GetFileVersionInfoSizeW")
 	getFileVersionInfo     = version.NewProc("GetFileVersionInfoW")
 	verQueryValue          = version.NewProc("VerQueryValueW")
+
+	// Load psapi.dll for process enumeration
+	psapi                = syscall.NewLazyDLL("psapi.dll")
+	enumProcesses        = psapi.NewProc("EnumProcesses")
+	getModuleFileNameExW = psapi.NewProc("GetModuleFileNameExW")
+	getProcessMemoryInfo = psapi.NewProc("GetProcessMemoryInfo")
+	kernel32             = syscall.NewLazyDLL("kernel32.dll")
+	openProcess          = kernel32.NewProc("OpenProcess")
+	closeHandle          = kernel32.NewProc("CloseHandle")
+	getProcessTimes      = kernel32.NewProc("GetProcessTimes")
 )
 
 // Windows constants for icon extraction
 const (
-    SHGFI_ICON          = 0x000000100
-    SHGFI_DISPLAYNAME   = 0x000000200
-    SHGFI_LARGEICON     = 0x000000000
-    SHGFI_SMALLICON     = 0x000000001
-    SHGFI_SYSICONINDEX  = 0x000004000
-    SHGFI_SHELLICONSIZE = 0x000000004
-    SHGFI_USEFILEATTRIBUTES = 0x000000010
+	SHGFI_ICON              = 0x000000100
+	SHGFI_DISPLAYNAME       = 0x000000200
+	SHGFI_LARGEICON         = 0x000000000
+	SHGFI_SMALLICON         = 0x000000001
+	SHGFI_SYSICONINDEX      = 0x000004000
+	SHGFI_SHELLICONSIZE     = 0x000000004
+	SHGFI_USEFILEATTRIBUTES = 0x000000010
 
-    FILE_ATTRIBUTE_READONLY  = 0x00000001
-    FILE_ATTRIBUTE_HIDDEN    = 0x00000002
-    FILE_ATTRIBUTE_SYSTEM    = 0x00000004
-    FILE_ATTRIBUTE_DIRECTORY = 0x00000010
-    FILE_ATTRIBUTE_ARCHIVE   = 0x00000020
-    FILE_ATTRIBUTE_NORMAL    = 0x00000080
-    IMAGE_ICON          = 1
-    LR_DEFAULTSIZE      = 0x00000040
-    LR_LOADFROMFILE     = 0x00000010
+	FILE_ATTRIBUTE_READONLY  = 0x00000001
+	FILE_ATTRIBUTE_HIDDEN    = 0x00000002
+	FILE_ATTRIBUTE_SYSTEM    = 0x00000004
+	FILE_ATTRIBUTE_DIRECTORY = 0x00000010
+	FILE_ATTRIBUTE_ARCHIVE   = 0x00000020
+	FILE_ATTRIBUTE_NORMAL    = 0x00000080
+	IMAGE_ICON               = 1
+	LR_DEFAULTSIZE           = 0x00000040
+	LR_LOADFROMFILE          = 0x00000010
+
+	// Process access rights
+	PROCESS_QUERY_INFORMATION = 0x0400
+	PROCESS_VM_READ           = 0x0010
 )
 
 // SHFILEINFO structure for SHGetFileInfo
@@ -68,12 +83,41 @@ type SHFILEINFO struct {
 	SzTypeName    [80]uint16
 }
 
+// PROCESS_MEMORY_COUNTERS_EX structure for GetProcessMemoryInfo
+type PROCESS_MEMORY_COUNTERS_EX struct {
+	cb                         uint32
+	PageFaultCount             uint32
+	PeakWorkingSetSize         uintptr
+	WorkingSetSize             uintptr
+	QuotaPeakPagedPoolUsage    uintptr
+	QuotaPagedPoolUsage        uintptr
+	QuotaPeakNonPagedPoolUsage uintptr
+	QuotaNonPagedPoolUsage     uintptr
+	PagefileUsage              uintptr
+	PeakPagefileUsage          uintptr
+	PrivateUsage               uintptr
+}
+
 var appRetriever = &WindowsRetriever{}
+
+type processInfo struct {
+	Pid  int
+	Path string
+}
+
+type cpuSample struct {
+	kernelTime int64
+	userTime   int64
+	timestamp  int64
+}
 
 type WindowsRetriever struct {
 	api plugin.API
 
-	uwpIconCache map[string]string // appID -> icon path
+	uwpIconCache          map[string]string // appID -> icon path
+	runningProcesses      []processInfo
+	lastProcessUpdateTime int64
+	cpuSamples            map[string]cpuSample // app path -> last CPU sample
 }
 
 func (a *WindowsRetriever) UpdateAPI(api plugin.API) {
@@ -94,9 +138,10 @@ func (a *WindowsRetriever) GetAppDirectories(ctx context.Context) []appDirectory
 			RecursiveDepth: 2,
 		},
 		{
-			Path:           usr.HomeDir + "\\AppData\\Local",
-			Recursive:      true,
-			RecursiveDepth: 4,
+			Path:              usr.HomeDir + "\\AppData\\Local",
+			RecursiveExcludes: []string{"Temp"},
+			Recursive:         true,
+			RecursiveDepth:    4,
 		},
 		{
 			Path:           "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs",
@@ -212,73 +257,18 @@ func (a *WindowsRetriever) parseExe(ctx context.Context, appPath string) (appInf
 }
 
 func (a *WindowsRetriever) GetAppIcon(ctx context.Context, path string) (image.Image, error) {
-    // Priority 1: Try to get high resolution icon using PrivateExtractIconsW (best quality)
-    if icon, err := a.getHighResIcon(ctx, path); err == nil {
-        return icon, nil
-    }
+	// Priority 1: Try to get high resolution icon using PrivateExtractIconsW (best quality)
+	if icon, err := a.getHighResIcon(ctx, path); err == nil {
+		return icon, nil
+	}
 
-    // Priority 2: Try ExtractIconEx (avoid SHGetFileInfo due to occasional instability)
-    if icon, err := a.getIconUsingExtractIconEx(ctx, path); err == nil {
-        return icon, nil
-    }
+	// Priority 2: Try ExtractIconEx (avoid SHGetFileInfo due to occasional instability)
+	if icon, err := a.getIconUsingExtractIconEx(ctx, path); err == nil {
+		return icon, nil
+	}
 
-    // Priority 3: Final fallback to Windows default executable icon
-    return a.getWindowsDefaultIcon(ctx)
-}
-
-func (a *WindowsRetriever) getIconUsingSHGetFileInfo(ctx context.Context, path string) (image.Image, error) {
-    // Defensive coding: normalize separators and handle non-existing paths via SHGFI_USEFILEATTRIBUTES
-    safePath := filepath.Clean(filepath.FromSlash(path))
-
-    // Convert file path to UTF16
-    lpPath, err := syscall.UTF16PtrFromString(safePath)
-    if err != nil {
-        return nil, err
-    }
-
-    // If the file does not exist, ask shell to infer icon from attributes to avoid crashes in shell32
-    var attrs uint32 = 0
-    var flags uint32 = SHGFI_ICON | SHGFI_LARGEICON
-    if fi, statErr := os.Stat(safePath); statErr != nil {
-        // File not found: infer by extension as normal file
-        attrs = FILE_ATTRIBUTE_NORMAL
-        flags |= SHGFI_USEFILEATTRIBUTES
-    } else if fi.IsDir() {
-        attrs = FILE_ATTRIBUTE_DIRECTORY
-        flags |= SHGFI_USEFILEATTRIBUTES
-    }
-
-    // Call SHGetFileInfo with recovery to protect from external crashes
-    var (
-        shfi SHFILEINFO
-        ret  uintptr
-    )
-    var callErr error
-    func() {
-        defer func() {
-            if r := recover(); r != nil {
-                callErr = fmt.Errorf("SHGetFileInfo panic: %v", r)
-            }
-        }()
-        r, _, _ := shGetFileInfo.Call(
-            uintptr(unsafe.Pointer(lpPath)),
-            uintptr(attrs),
-            uintptr(unsafe.Pointer(&shfi)),
-            uintptr(unsafe.Sizeof(shfi)),
-            uintptr(flags),
-        )
-        ret = r
-    }()
-    if callErr != nil {
-        return nil, callErr
-    }
-
-    if ret == 0 || shfi.HIcon == 0 {
-        return nil, fmt.Errorf("failed to get icon using SHGetFileInfo")
-    }
-    defer win.DestroyIcon(shfi.HIcon)
-
-    return a.convertIconToImage(ctx, shfi.HIcon)
+	// Priority 3: Final fallback to Windows default executable icon
+	return a.getWindowsDefaultIcon(ctx)
 }
 
 func (a *WindowsRetriever) getIconUsingExtractIconEx(ctx context.Context, path string) (image.Image, error) {
@@ -547,6 +537,185 @@ func (a *WindowsRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) 
 	return uwpApps, nil
 }
 
+// getPrivateWorkingSet calculates the private (non-shared) working set size for a process
+func getPrivateWorkingSet(handle syscall.Handle) (uintptr, error) {
+	type PSAPI_WORKING_SET_BLOCK struct {
+		Flags uintptr
+	}
+
+	type PSAPI_WORKING_SET_INFORMATION struct {
+		NumberOfEntries uintptr
+		WorkingSetInfo  [1]PSAPI_WORKING_SET_BLOCK
+	}
+
+	psapi := syscall.NewLazyDLL("psapi.dll")
+	queryWorkingSet := psapi.NewProc("QueryWorkingSet")
+
+	// First call to get the required buffer size
+	var wsInfo PSAPI_WORKING_SET_INFORMATION
+	queryWorkingSet.Call(
+		uintptr(handle),
+		uintptr(unsafe.Pointer(&wsInfo)),
+		unsafe.Sizeof(wsInfo),
+	)
+
+	if wsInfo.NumberOfEntries == 0 || wsInfo.NumberOfEntries > 1000000 {
+		return 0, fmt.Errorf("invalid number of entries: %d", wsInfo.NumberOfEntries)
+	}
+
+	// Allocate buffer for all entries
+	bufferSize := unsafe.Sizeof(uintptr(0)) + wsInfo.NumberOfEntries*unsafe.Sizeof(PSAPI_WORKING_SET_BLOCK{})
+	buffer := make([]byte, bufferSize)
+
+	// Second call to get actual data
+	ret, _, _ := queryWorkingSet.Call(
+		uintptr(handle),
+		uintptr(unsafe.Pointer(&buffer[0])),
+		bufferSize,
+	)
+
+	if ret == 0 {
+		return 0, fmt.Errorf("QueryWorkingSet failed")
+	}
+
+	// Parse working set entries and count private pages
+	actualEntries := *(*uintptr)(unsafe.Pointer(&buffer[0]))
+	pageSize := uintptr(4096)
+	var privateBytes uintptr
+
+	// Bit 8 of flags indicates if page is shared (1) or private (0)
+	offset := unsafe.Sizeof(uintptr(0))
+	for i := uintptr(0); i < actualEntries; i++ {
+		flags := *(*uintptr)(unsafe.Pointer(&buffer[offset+i*unsafe.Sizeof(uintptr(0))]))
+		isShared := (flags & (1 << 8)) != 0
+		if !isShared {
+			privateBytes += pageSize
+		}
+	}
+
+	return privateBytes, nil
+}
+
+func (a *WindowsRetriever) GetProcessStat(ctx context.Context, app appInfo) (*ProcessStat, error) {
+	// Initialize cpuSamples map if needed
+	if a.cpuSamples == nil {
+		a.cpuSamples = make(map[string]cpuSample)
+	}
+
+	// For multi-process apps (like Chrome), we need to sum memory from all processes with the same path
+	// Update process list if needed
+	if util.GetSystemTimestamp()-a.lastProcessUpdateTime > 1000 {
+		a.lastProcessUpdateTime = util.GetSystemTimestamp()
+		a.runningProcesses = a.getRunningProcesses(ctx)
+	}
+
+	// Collect stats from all processes with the same path
+	appPathLower := strings.ToLower(filepath.Clean(app.Path))
+	var totalMemory float64
+	var totalKernelTime int64
+	var totalUserTime int64
+	var processCount int
+	currentTimestamp := util.GetSystemTimestamp()
+
+	for _, proc := range a.runningProcesses {
+		procPathLower := strings.ToLower(filepath.Clean(proc.Path))
+		if procPathLower == appPathLower {
+			// Open process with query information access
+			hProcess, _, _ := openProcess.Call(
+				uintptr(PROCESS_QUERY_INFORMATION|PROCESS_VM_READ),
+				0,
+				uintptr(proc.Pid),
+			)
+
+			if hProcess == 0 {
+				util.GetLogger().Debug(ctx, fmt.Sprintf("Failed to open process %d for %s", proc.Pid, app.Name))
+				continue // Skip processes we can't open
+			}
+
+			// Get CPU times
+			var creationTime, exitTime, kernelTime, userTime syscall.Filetime
+			ret, _, _ := getProcessTimes.Call(
+				hProcess,
+				uintptr(unsafe.Pointer(&creationTime)),
+				uintptr(unsafe.Pointer(&exitTime)),
+				uintptr(unsafe.Pointer(&kernelTime)),
+				uintptr(unsafe.Pointer(&userTime)),
+			)
+
+			if ret != 0 {
+				// Convert FILETIME to int64 (100-nanosecond intervals)
+				kernelTime64 := int64(kernelTime.HighDateTime)<<32 | int64(kernelTime.LowDateTime)
+				userTime64 := int64(userTime.HighDateTime)<<32 | int64(userTime.LowDateTime)
+				totalKernelTime += kernelTime64
+				totalUserTime += userTime64
+			}
+
+			// Try to get private working set
+			privateWS, err := getPrivateWorkingSet(syscall.Handle(hProcess))
+
+			var memCounters PROCESS_MEMORY_COUNTERS_EX
+			memCounters.cb = uint32(unsafe.Sizeof(memCounters))
+
+			ret, _, _ = getProcessMemoryInfo.Call(
+				hProcess,
+				uintptr(unsafe.Pointer(&memCounters)),
+				uintptr(memCounters.cb),
+			)
+
+			closeHandle.Call(hProcess)
+
+			if ret != 0 {
+				// Use Private Working Set if available, otherwise fall back to Commit Size
+				if err == nil && privateWS > 0 {
+					totalMemory += float64(privateWS)
+				} else {
+					totalMemory += float64(memCounters.PagefileUsage)
+				}
+				processCount++
+			}
+		}
+	}
+
+	if processCount == 0 {
+		return nil, fmt.Errorf("no running processes found for %s", app.Name)
+	}
+
+	// Calculate CPU usage
+	var cpuPercent float64
+	if lastSample, exists := a.cpuSamples[appPathLower]; exists {
+		// Calculate time elapsed in milliseconds
+		timeElapsed := currentTimestamp - lastSample.timestamp
+		if timeElapsed > 0 {
+			// Calculate CPU time difference (in 100-nanosecond intervals)
+			kernelDiff := totalKernelTime - lastSample.kernelTime
+			userDiff := totalUserTime - lastSample.userTime
+			totalCPUTime := kernelDiff + userDiff
+
+			// Convert to percentage
+			// CPU time is in 100-nanosecond intervals, elapsed time is in milliseconds
+			// CPU% = (CPU time in ms / elapsed time in ms) * 100 / number of CPUs
+			cpuTimeMs := float64(totalCPUTime) / 10000.0 // Convert 100-ns to ms
+			rawPercent := (cpuTimeMs / float64(timeElapsed)) * 100.0
+
+			// Normalize to single CPU (divide by number of logical processors)
+			numCPU := runtime.NumCPU()
+			cpuPercent = rawPercent / float64(numCPU)
+		}
+	}
+
+	// Save current sample for next calculation
+	a.cpuSamples[appPathLower] = cpuSample{
+		kernelTime: totalKernelTime,
+		userTime:   totalUserTime,
+		timestamp:  currentTimestamp,
+	}
+
+	return &ProcessStat{
+		CPU:    cpuPercent,
+		Memory: totalMemory,
+	}, nil
+}
+
 func (a *WindowsRetriever) OpenAppFolder(ctx context.Context, app appInfo) error {
 	if app.Type != AppTypeUWP {
 		return shell.OpenFileInFolder(app.Path)
@@ -669,8 +838,97 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 }
 
 func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {
-	// Get pid of the app
+	// Update process list if it's been more than 1 second since last update
+	if util.GetSystemTimestamp()-a.lastProcessUpdateTime > 1000 {
+		a.lastProcessUpdateTime = util.GetSystemTimestamp()
+		a.runningProcesses = a.getRunningProcesses(ctx)
+	}
+
+	// For desktop apps, match by path
+	if app.Type == AppTypeDesktop {
+		appPathLower := strings.ToLower(filepath.Clean(app.Path))
+		for _, proc := range a.runningProcesses {
+			procPathLower := strings.ToLower(filepath.Clean(proc.Path))
+			if procPathLower == appPathLower {
+				return proc.Pid
+			}
+		}
+	}
+
 	return 0
+}
+
+func (a *WindowsRetriever) getRunningProcesses(ctx context.Context) []processInfo {
+	var infos []processInfo
+
+	// Allocate buffer for process IDs (max 4096 processes)
+	const maxProcesses = 4096
+	pids := make([]uint32, maxProcesses)
+	var bytesReturned uint32
+
+	// Call EnumProcesses to get all process IDs
+	ret, _, _ := enumProcesses.Call(
+		uintptr(unsafe.Pointer(&pids[0])),
+		uintptr(maxProcesses*4), // size in bytes
+		uintptr(unsafe.Pointer(&bytesReturned)),
+	)
+
+	if ret == 0 {
+		util.GetLogger().Error(ctx, "Failed to enumerate processes")
+		return infos
+	}
+
+	// Calculate number of processes returned
+	numProcesses := int(bytesReturned / 4)
+
+	// Iterate through each process
+	for i := 0; i < numProcesses; i++ {
+		pid := pids[i]
+		if pid == 0 {
+			continue
+		}
+
+		// Open process with query information and VM read access
+		hProcess, _, _ := openProcess.Call(
+			uintptr(PROCESS_QUERY_INFORMATION|PROCESS_VM_READ),
+			0,
+			uintptr(pid),
+		)
+
+		if hProcess == 0 {
+			continue
+		}
+
+		// Get the executable path
+		var exePath [syscall.MAX_PATH]uint16
+		ret, _, _ := getModuleFileNameExW.Call(
+			hProcess,
+			0, // NULL for main executable
+			uintptr(unsafe.Pointer(&exePath[0])),
+			uintptr(syscall.MAX_PATH),
+		)
+
+		// Close process handle
+		closeHandle.Call(hProcess)
+
+		if ret == 0 {
+			continue
+		}
+
+		// Convert path to string
+		path := syscall.UTF16ToString(exePath[:])
+		if path == "" {
+			continue
+		}
+
+		infos = append(infos, processInfo{
+			Pid:  int(pid),
+			Path: path,
+		})
+	}
+
+	util.GetLogger().Debug(ctx, fmt.Sprintf("Found %d running processes", len(infos)))
+	return infos
 }
 
 func (a *WindowsRetriever) GetUWPAppIcon(ctx context.Context, appID string) (common.WoxImage, error) {

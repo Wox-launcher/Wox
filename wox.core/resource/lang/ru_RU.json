@@ -238,6 +238,8 @@
   "plugin_app_open_containing_folder": "Открыть содержащую папку",
   "plugin_app_copy_path": "Копировать путь",
   "plugin_app_terminate": "Завершить",
+  "plugin_app_cpu": "ЦП",
+  "plugin_app_memory": "Память",
   "plugin_browser_bookmark_open_in_browser": "Открыть в браузере",
   "plugin_clipboard_copy_date": "Копировать дату",
   "plugin_clipboard_copy_characters": "Копировать символы",

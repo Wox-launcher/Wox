@@ -44,6 +44,10 @@ func (a *LinuxRetriever) GetPid(ctx context.Context, app appInfo) int {
 	return 0
 }
 
+func (a *LinuxRetriever) GetProcessStat(ctx context.Context, app appInfo) (*ProcessStat, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (a *LinuxRetriever) OpenAppFolder(ctx context.Context, app appInfo) error {
 	return shell.OpenFileInFolder(app.Path)
 }

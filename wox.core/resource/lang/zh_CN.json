@@ -239,6 +239,8 @@
   "plugin_app_copy_path": "复制路径",
   "plugin_app_terminate": "终止",
   "plugin_app_open_failed_description": "打开失败：%s",
+  "plugin_app_cpu": "CPU",
+  "plugin_app_memory": "内存",
   "plugin_browser_bookmark_open_in_browser": "在浏览器中打开",
   "plugin_clipboard_copy_date": "复制日期",
   "plugin_clipboard_copy_characters": "复制字符",

@@ -22,7 +22,6 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
-	"github.com/struCoder/pidusage"
 	"github.com/tidwall/pretty"
 )
 
@@ -64,9 +63,11 @@ func (a *appInfo) IsRunning() bool {
 }
 
 type appDirectory struct {
-	Path           string
-	Recursive      bool
-	RecursiveDepth int
+	Path              string
+	Recursive         bool
+	RecursiveDepth    int
+	RecursiveExcludes []string
+	excludeAbsPaths   []string // internal: absolute paths of excluded directories
 }
 
 func init() {
@@ -283,7 +284,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 				// refresh cpu and mem
 				result.RefreshInterval = 1000
 				result.OnRefresh = func(ctx context.Context, result plugin.RefreshableResult) plugin.RefreshableResult {
-					result.Tails = a.getRunningProcessResult(info.Pid)
+					result.Tails = a.getRunningProcessResult(info)
 					return result
 				}
 			}
@@ -295,35 +296,39 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 	return results
 }
 
-func (a *ApplicationPlugin) getRunningProcessResult(pid int) (tails []plugin.QueryResultTail) {
-	stat, err := pidusage.GetStat(pid)
+func (a *ApplicationPlugin) getRunningProcessResult(app appInfo) (tails []plugin.QueryResultTail) {
+	ctx := context.Background()
+	stat, err := a.retriever.GetProcessStat(ctx, app)
 	if err != nil {
-		a.api.Log(context.Background(), plugin.LogLevelError, fmt.Sprintf("error getting process %d stat: %s", pid, err.Error()))
+		a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("error getting process stat for %s: %s", app.Name, err.Error()))
 		return
 	}
 
+	// Show CPU usage
+	cpuLabel := a.api.GetTranslation(ctx, "i18n:plugin_app_cpu")
 	tails = append(tails, plugin.QueryResultTail{
 		Type: plugin.QueryResultTailTypeText,
-		Text: fmt.Sprintf("CPU: %.1f%%", stat.CPU),
+		Text: fmt.Sprintf("%s: %.1f%%", cpuLabel, stat.CPU),
 	})
 
+	// Format memory size
 	memSize := stat.Memory
-	// if mem size is too large, it's probably in bytes, convert it to MB
 	unit := "B"
 	if memSize > 1024*1024*1024 {
-		memSize = memSize / 1024 / 1024 / 1024 // convert to GB
+		memSize = memSize / 1024 / 1024 / 1024
 		unit = "GB"
 	} else if memSize > 1024*1024 {
-		memSize = memSize / 1024 / 1024 // convert to MB
+		memSize = memSize / 1024 / 1024
 		unit = "MB"
 	} else if memSize > 1024 {
-		memSize = memSize / 1024 // convert to KB
+		memSize = memSize / 1024
 		unit = "KB"
 	}
 
+	memLabel := a.api.GetTranslation(ctx, "i18n:plugin_app_memory")
 	tails = append(tails, plugin.QueryResultTail{
 		Type: plugin.QueryResultTailTypeText,
-		Text: fmt.Sprintf("Mem: %.1f %s", memSize, unit),
+		Text: fmt.Sprintf("%s: %.1f %s", memLabel, memSize, unit),
 	})
 
 	return
@@ -541,6 +546,16 @@ func (a *ApplicationPlugin) indexExtraApps(ctx context.Context) []appInfo {
 func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []appDirectory) (appPaths []string) {
 	var appExtensions = a.retriever.GetAppExtensions(ctx)
 	for _, dir := range appDirectories {
+		// Initialize excludeAbsPaths on first call
+		if len(dir.RecursiveExcludes) > 0 && len(dir.excludeAbsPaths) == 0 {
+			dir.excludeAbsPaths = make([]string, 0, len(dir.RecursiveExcludes))
+			for _, exclude := range dir.RecursiveExcludes {
+				excludeAbsPath := filepath.Join(dir.Path, exclude)
+				cleanExcludePath := filepath.Clean(excludeAbsPath)
+				dir.excludeAbsPaths = append(dir.excludeAbsPaths, strings.ToLower(cleanExcludePath))
+			}
+		}
+
 		appPath, readErr := os.ReadDir(dir.Path)
 		if readErr != nil {
 			a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error reading directory %s: %s", dir.Path, readErr.Error()))
@@ -563,8 +578,26 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []ap
 				continue
 			}
 
+			// Check if this directory should be excluded
+			if len(dir.excludeAbsPaths) > 0 {
+				cleanSubDir := strings.ToLower(filepath.Clean(subDir))
+				isExcluded := lo.ContainsBy(dir.excludeAbsPaths, func(excludePath string) bool {
+					// Check if subDir starts with the exclude path (case-insensitive)
+					return strings.HasPrefix(cleanSubDir, excludePath)
+				})
+				if isExcluded {
+					a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("skipping excluded directory: %s", subDir))
+					continue
+				}
+			}
+
 			if dir.Recursive && dir.RecursiveDepth > 0 {
-				appPaths = append(appPaths, a.getAppPaths(ctx, []appDirectory{{Path: subDir, Recursive: true, RecursiveDepth: dir.RecursiveDepth - 1}})...)
+				appPaths = append(appPaths, a.getAppPaths(ctx, []appDirectory{{
+					Path:            subDir,
+					Recursive:       true,
+					RecursiveDepth:  dir.RecursiveDepth - 1,
+					excludeAbsPaths: dir.excludeAbsPaths,
+				}})...)
 			}
 		}
 	}
@@ -717,7 +750,7 @@ func (a *ApplicationPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.Qu
 
 		result.RefreshInterval = 1000
 		result.OnRefresh = func(ctx context.Context, result plugin.RefreshableResult) plugin.RefreshableResult {
-			result.Tails = a.getRunningProcessResult(appInfo.Pid)
+			result.Tails = a.getRunningProcessResult(*appInfo)
 			return result
 		}
 	}

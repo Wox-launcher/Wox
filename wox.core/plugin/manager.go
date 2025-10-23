@@ -861,6 +861,12 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	result.Title = m.translatePlugin(ctx, pluginInstance, result.Title)
 	// translate subtitle
 	result.SubTitle = m.translatePlugin(ctx, pluginInstance, result.SubTitle)
+	// translate tail text
+	for i := range result.Tails {
+		if result.Tails[i].Type == QueryResultTailTypeText {
+			result.Tails[i].Text = m.translatePlugin(ctx, pluginInstance, result.Tails[i].Text)
+		}
+	}
 	// translate preview properties
 	var previewProperties = make(map[string]string)
 	for key, value := range result.Preview.PreviewProperties {

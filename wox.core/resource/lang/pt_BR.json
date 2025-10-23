@@ -238,6 +238,8 @@
   "plugin_app_open_containing_folder": "Abrir pasta contendo",
   "plugin_app_copy_path": "Copiar caminho",
   "plugin_app_terminate": "Encerrar",
+  "plugin_app_cpu": "CPU",
+  "plugin_app_memory": "Mem",
   "plugin_browser_bookmark_open_in_browser": "Abrir no navegador",
   "plugin_clipboard_copy_date": "Copiar data",
   "plugin_clipboard_copy_characters": "Copiar caracteres",

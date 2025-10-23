@@ -33,6 +33,7 @@ import (
 
 	"github.com/disintegration/imaging"
 	"github.com/mitchellh/go-homedir"
+	"github.com/struCoder/pidusage"
 	"github.com/tidwall/gjson"
 	"howett.net/plist"
 )
@@ -514,6 +515,24 @@ func (a *MacRetriever) getRunningProcesses() (infos []processInfo) {
 	}
 
 	return
+}
+
+func (a *MacRetriever) GetProcessStat(ctx context.Context, app appInfo) (*ProcessStat, error) {
+	// For macOS, use pidusage library with the main process PID
+	// Note: This doesn't handle multi-process apps like Chrome yet
+	if app.Pid == 0 {
+		return nil, fmt.Errorf("app %s is not running", app.Name)
+	}
+
+	stat, err := pidusage.GetStat(app.Pid)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ProcessStat{
+		CPU:    stat.CPU,
+		Memory: stat.Memory,
+	}, nil
 }
 
 func (a *MacRetriever) OpenAppFolder(ctx context.Context, app appInfo) error {
