@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_drag_move_view.dart';
 import 'package:wox/components/wox_image_view.dart';
+import 'package:wox/components/wox_platform_focus.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/utils/color_util.dart';
@@ -67,12 +68,19 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
 
       return Stack(children: [
         Positioned(
-            child: Focus(
+            child: WoxPlatformFocus(
                 onKeyEvent: (FocusNode node, KeyEvent event) {
                   var traceId = const UuidV4().generate();
 
-                  Logger.instance.debug(traceId,
-                      "onKeyEvent: ${event.logicalKey.keyLabel}, iskeyDown: ${event is KeyDownEvent}, isKeyUp: ${event is KeyUpEvent}, isKeyRepeat: ${event is KeyRepeatEvent}");
+                  String eventType = event is KeyDownEvent
+                      ? "DOWN"
+                      : event is KeyUpEvent
+                          ? "UP"
+                          : event is KeyRepeatEvent
+                              ? "REPEAT"
+                              : "UNKNOWN";
+                  Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] KeyEvent: ${event.logicalKey.keyLabel} ($eventType) - keyId: ${event.logicalKey.keyId}");
+
                   // Handle number keys in quick select mode first (higher priority)
                   if (controller.isQuickSelectMode.value && event is KeyDownEvent) {
                     var numberKey = getNumberFromKey(event.logicalKey);
@@ -95,9 +103,11 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                     if (event is KeyDownEvent) {
                       switch (event.logicalKey) {
                         case LogicalKeyboardKey.escape:
+                          Logger.instance.info(traceId, "[KEYLOG][FLUTTER] ESC KeyDown -> hiding app");
                           controller.hideApp(const UuidV4().generate());
                           return KeyEventResult.handled;
                         case LogicalKeyboardKey.enter:
+                          Logger.instance.info(traceId, "[KEYLOG][FLUTTER] Enter KeyDown -> executing action");
                           controller.executeToolbarAction(const UuidV4().generate());
                           return KeyEventResult.handled;
                         case LogicalKeyboardKey.arrowDown:
@@ -131,12 +141,15 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                   }
 
                   var pressedHotkey = WoxHotkey.parseNormalHotkeyFromEvent(event);
+                  Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] parseNormalHotkeyFromEvent returned: $pressedHotkey");
                   if (pressedHotkey == null) {
                     return KeyEventResult.ignored;
                   }
 
                   // list all actions
+                  Logger.instance.debug(traceId, "[KEYLOG][FLUTTER] Checking if action hotkey: $pressedHotkey");
                   if (controller.isActionHotkey(pressedHotkey)) {
+                    Logger.instance.info(traceId, "[KEYLOG][FLUTTER] Alt+J detected -> toggling action panel");
                     controller.toggleActionPanel(const UuidV4().generate());
                     return KeyEventResult.handled;
                   }

@@ -1,6 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' as base;
-import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/wox_theme_icon_view.dart';
 import 'package:wox/components/wox_theme_preview.dart';
@@ -17,32 +16,18 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 20),
-          child: Focus(
-            autofocus: true,
-            onKeyEvent: (FocusNode node, KeyEvent event) {
-              if (event is KeyDownEvent) {
-                switch (event.logicalKey) {
-                  case LogicalKeyboardKey.escape:
-                    controller.hideWindow();
-                    return KeyEventResult.handled;
-                }
-              }
-
-              return KeyEventResult.ignored;
-            },
-            child: Obx(() {
-              return TextBox(
-                autofocus: true,
-                placeholder: Strings.format(controller.tr('ui_setting_theme_search_placeholder'), [controller.filteredThemeList.length]),
-                padding: const EdgeInsets.all(10),
-                suffix: const Padding(
-                  padding: EdgeInsets.only(right: 8.0),
-                  child: Icon(FluentIcons.search),
-                ),
-                onChanged: (value) => {controller.onFilterThemes(value)},
-              );
-            }),
-          ),
+          child: Obx(() {
+            return TextBox(
+              autofocus: true,
+              placeholder: Strings.format(controller.tr('ui_setting_theme_search_placeholder'), [controller.filteredThemeList.length]),
+              padding: const EdgeInsets.all(10),
+              suffix: const Padding(
+                padding: EdgeInsets.only(right: 8.0),
+                child: Icon(FluentIcons.search),
+              ),
+              onChanged: (value) => {controller.onFilterThemes(value)},
+            );
+          }),
         ),
         Expanded(
           child: base.Scrollbar(

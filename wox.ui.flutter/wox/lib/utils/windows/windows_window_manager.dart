@@ -3,15 +3,62 @@ import 'package:uuid/v4.dart';
 import 'package:wox/utils/log.dart';
 import 'package:wox/utils/windows/base_window_manager.dart';
 
+/// Modifier key states from Windows
+class WindowsModifierKeyStates {
+  final bool isShiftPressed;
+  final bool isControlPressed;
+  final bool isAltPressed;
+  final bool isMetaPressed;
+
+  WindowsModifierKeyStates({
+    required this.isShiftPressed,
+    required this.isControlPressed,
+    required this.isAltPressed,
+    required this.isMetaPressed,
+  });
+}
+
+/// Callback type for keyboard events from Windows message loop
+typedef WindowsKeyboardEventCallback = void Function(
+  String eventType,
+  int keyCode,
+  int scanCode,
+  WindowsModifierKeyStates modifierStates,
+);
+
 /// Windows implementation of the window manager
 class WindowsWindowManager extends BaseWindowManager {
   static const _channel = MethodChannel('com.wox.windows_window_manager');
 
   static final WindowsWindowManager instance = WindowsWindowManager._();
 
+  /// Keyboard event listeners
+  final List<WindowsKeyboardEventCallback> _keyboardEventListeners = [];
+
+  /// Current modifier key states (updated from Windows message loop)
+  WindowsModifierKeyStates _currentModifierStates = WindowsModifierKeyStates(
+    isShiftPressed: false,
+    isControlPressed: false,
+    isAltPressed: false,
+    isMetaPressed: false,
+  );
+
+  /// Get current modifier key states
+  WindowsModifierKeyStates get currentModifierStates => _currentModifierStates;
+
   WindowsWindowManager._() {
     // Set up method call handler for events from native
     _channel.setMethodCallHandler(_handleMethodCall);
+  }
+
+  /// Add a keyboard event listener
+  void addKeyboardEventListener(WindowsKeyboardEventCallback callback) {
+    _keyboardEventListeners.add(callback);
+  }
+
+  /// Remove a keyboard event listener
+  void removeKeyboardEventListener(WindowsKeyboardEventCallback callback) {
+    _keyboardEventListeners.remove(callback);
   }
 
   /// Handle method calls from native code
@@ -24,6 +71,26 @@ class WindowsWindowManager extends BaseWindowManager {
         // Log messages from native code
         final message = call.arguments as String;
         Logger.instance.info(const UuidV4().generate(), " [NATIVE] $message");
+        break;
+      case 'onKeyboardEvent':
+        // Handle keyboard events from Windows message loop
+        final eventData = call.arguments as Map<dynamic, dynamic>;
+        final eventType = eventData['type'] as String;
+        final keyCode = eventData['keyCode'] as int;
+        final scanCode = eventData['scanCode'] as int;
+
+        // Get modifier key states and update current state
+        _currentModifierStates = WindowsModifierKeyStates(
+          isShiftPressed: eventData['isShiftPressed'] as bool? ?? false,
+          isControlPressed: eventData['isControlPressed'] as bool? ?? false,
+          isAltPressed: eventData['isAltPressed'] as bool? ?? false,
+          isMetaPressed: eventData['isMetaPressed'] as bool? ?? false,
+        );
+
+        // Notify all listeners
+        for (final listener in _keyboardEventListeners) {
+          listener(eventType, keyCode, scanCode, _currentModifierStates);
+        }
         break;
       default:
         Logger.instance.warn(const UuidV4().generate(), "Unhandled method call: ${call.method}");

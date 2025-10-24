@@ -927,7 +927,6 @@ func (a *WindowsRetriever) getRunningProcesses(ctx context.Context) []processInf
 		})
 	}
 
-	util.GetLogger().Debug(ctx, fmt.Sprintf("Found %d running processes", len(infos)))
 	return infos
 }
 

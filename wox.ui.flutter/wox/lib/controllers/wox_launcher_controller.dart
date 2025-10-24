@@ -1016,6 +1016,15 @@ class WoxLauncherController extends GetxController {
       await windowManager.show();
     }
     await windowManager.focus();
+
+    // On Windows, ensure focus is properly set after window is shown
+    if (Platform.isWindows) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await Future.delayed(const Duration(milliseconds: 100));
+        await windowManager.focus();
+        Logger.instance.info(traceId, "[SETTING] Windows focus requested after delay");
+      });
+    }
   }
 
   Future<void> exitSetting(String traceId) async {

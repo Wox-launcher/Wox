@@ -21,6 +21,9 @@ public:
   // Log message to console and Flutter
   void Log(const std::string &message);
 
+  // Send keyboard event to Flutter (Windows-specific workaround)
+  void SendKeyboardEvent(UINT message, WPARAM wparam, LPARAM lparam);
+
 protected:
   // Win32Window:
   bool OnCreate() override;

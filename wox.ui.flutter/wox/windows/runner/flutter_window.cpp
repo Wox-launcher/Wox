@@ -44,6 +44,53 @@ void FlutterWindow::Log(const std::string &message)
   }
 }
 
+// Send keyboard event to Flutter (Windows-specific workaround)
+void FlutterWindow::SendKeyboardEvent(UINT message, WPARAM wparam, LPARAM lparam)
+{
+  if (!window_manager_channel_)
+  {
+    return;
+  }
+
+  // Determine event type
+  std::string eventType;
+  if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN)
+  {
+    eventType = "keydown";
+  }
+  else if (message == WM_KEYUP || message == WM_SYSKEYUP)
+  {
+    eventType = "keyup";
+  }
+  else
+  {
+    return; // Not a keyboard event we care about
+  }
+
+  // Get modifier key states using GetAsyncKeyState
+  bool isShiftPressed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+  bool isControlPressed = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+  bool isAltPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+  bool isMetaPressed = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+
+  // Build event data
+  flutter::EncodableMap eventData;
+  eventData[flutter::EncodableValue("type")] = flutter::EncodableValue(eventType);
+  eventData[flutter::EncodableValue("keyCode")] = flutter::EncodableValue(static_cast<int>(wparam));
+  eventData[flutter::EncodableValue("scanCode")] = flutter::EncodableValue(static_cast<int>((lparam >> 16) & 0xFF));
+  eventData[flutter::EncodableValue("repeatCount")] = flutter::EncodableValue(static_cast<int>(lparam & 0xFFFF));
+  eventData[flutter::EncodableValue("isExtended")] = flutter::EncodableValue(((lparam >> 24) & 1) == 1);
+
+  // Add modifier key states
+  eventData[flutter::EncodableValue("isShiftPressed")] = flutter::EncodableValue(isShiftPressed);
+  eventData[flutter::EncodableValue("isControlPressed")] = flutter::EncodableValue(isControlPressed);
+  eventData[flutter::EncodableValue("isAltPressed")] = flutter::EncodableValue(isAltPressed);
+  eventData[flutter::EncodableValue("isMetaPressed")] = flutter::EncodableValue(isMetaPressed);
+
+  // Send to Flutter
+  window_manager_channel_->InvokeMethod("onKeyboardEvent", std::make_unique<flutter::EncodableValue>(eventData));
+}
+
 // Get the DPI scaling factor for the window
 float FlutterWindow::GetDpiScale(HWND hwnd)
 {
@@ -153,10 +200,84 @@ void FlutterWindow::OnDestroy()
 LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message, WPARAM const wparam, LPARAM const lparam) noexcept
 {
+  // Log keyboard events BEFORE Flutter handles them
+  switch (message)
+  {
+  case WM_KEYDOWN:
+  case WM_SYSKEYDOWN:
+  {
+    char keyName[256];
+    GetKeyNameTextA(static_cast<LONG>(lparam), keyName, sizeof(keyName));
+    HWND foreground = GetForegroundWindow();
+    bool isForeground = (foreground == hwnd);
+    char hwndStr[32];
+    sprintf_s(hwndStr, "%p", hwnd);
+    char parentStr[32];
+    HWND parent = GetParent(hwnd);
+    sprintf_s(parentStr, "%p", parent);
+    std::string logMsg = "[KEYLOG][NATIVE] WM_KEYDOWN: vk=" + std::to_string(wparam) +
+                         " (" + keyName + ")" +
+                         " repeat=" + std::to_string((lparam >> 30) & 1) +
+                         " scancode=" + std::to_string((lparam >> 16) & 0xFF) +
+                         " hwnd=" + hwndStr +
+                         " parent=" + parentStr +
+                         " isForeground=" + (isForeground ? "true" : "false");
+    Log(logMsg);
+  }
+  break;
+
+  case WM_KEYUP:
+  case WM_SYSKEYUP:
+  {
+    char keyName[256];
+    GetKeyNameTextA(static_cast<LONG>(lparam), keyName, sizeof(keyName));
+    HWND foreground = GetForegroundWindow();
+    bool isForeground = (foreground == hwnd);
+    char hwndStr[32];
+    sprintf_s(hwndStr, "%p", hwnd);
+    char parentStr[32];
+    HWND parent = GetParent(hwnd);
+    sprintf_s(parentStr, "%p", parent);
+    std::string logMsg = "[KEYLOG][NATIVE] WM_KEYUP: vk=" + std::to_string(wparam) +
+                         " (" + keyName + ")" +
+                         " scancode=" + std::to_string((lparam >> 16) & 0xFF) +
+                         " hwnd=" + hwndStr +
+                         " parent=" + parentStr +
+                         " isForeground=" + (isForeground ? "true" : "false");
+    Log(logMsg);
+  }
+  break;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_)
   {
     std::optional<LRESULT> result = flutter_controller_->HandleTopLevelWindowProc(hwnd, message, wparam, lparam);
+
+    // Log Flutter's handling result for keyboard events
+    if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN)
+    {
+      if (result)
+      {
+        Log("[KEYLOG][NATIVE] Flutter consumed WM_KEYDOWN vk=" + std::to_string(wparam) + ", result=" + std::to_string(*result));
+      }
+      else
+      {
+        Log("[KEYLOG][NATIVE] Flutter did NOT consume WM_KEYDOWN vk=" + std::to_string(wparam));
+      }
+    }
+    else if (message == WM_KEYUP || message == WM_SYSKEYUP)
+    {
+      if (result)
+      {
+        Log("[KEYLOG][NATIVE] Flutter consumed WM_KEYUP vk=" + std::to_string(wparam) + ", result=" + std::to_string(*result));
+      }
+      else
+      {
+        Log("[KEYLOG][NATIVE] Flutter did NOT consume WM_KEYUP vk=" + std::to_string(wparam));
+      }
+    }
+
     if (result)
     {
       return *result;
@@ -187,6 +308,28 @@ LRESULT CALLBACK FlutterWindow::WindowProc(HWND hwnd, UINT message, WPARAM wpara
   if (g_window_instance == nullptr || g_window_instance->original_window_proc_ == nullptr)
   {
     return DefWindowProc(hwnd, message, wparam, lparam);
+  }
+
+  // Log keyboard events in WindowProc
+  if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN)
+  {
+    char keyName[256];
+    GetKeyNameTextA(static_cast<LONG>(lparam), keyName, sizeof(keyName));
+    char hwndStr[32];
+    sprintf_s(hwndStr, "%p", hwnd);
+    std::string logMsg = "[KEYLOG][WINDOWPROC] WM_KEYDOWN: vk=" + std::to_string(wparam) +
+                         " (" + keyName + ") hwnd=" + hwndStr;
+    g_window_instance->Log(logMsg);
+  }
+  else if (message == WM_KEYUP || message == WM_SYSKEYUP)
+  {
+    char keyName[256];
+    GetKeyNameTextA(static_cast<LONG>(lparam), keyName, sizeof(keyName));
+    char hwndStr[32];
+    sprintf_s(hwndStr, "%p", hwnd);
+    std::string logMsg = "[KEYLOG][WINDOWPROC] WM_KEYUP: vk=" + std::to_string(wparam) +
+                         " (" + keyName + ") hwnd=" + hwndStr;
+    g_window_instance->Log(logMsg);
   }
 
   // Handle window messages and send events to Flutter
@@ -440,10 +583,12 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     }
     else if (method_name == "hide")
     {
-      // Instead of hiding the window (which causes keyboard state issues),
-      // move it far off-screen to make it invisible
-      // This keeps the window technically visible so keyboard state is preserved
-      SetWindowPos(hwnd, nullptr, -10000, -10000, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+      Log("[KEYLOG][NATIVE] Hide called, using ShowWindow(SW_HIDE)");
+
+      // Use ShowWindow to properly hide the window
+      // This should properly reset Flutter's internal state
+      ShowWindow(hwnd, SW_HIDE);
+
       result->Success();
     }
     else if (method_name == "focus")
@@ -471,6 +616,7 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       {
         AttachThreadInput(fgTid, curTid, FALSE);
       }
+
       if (GetForegroundWindow() == hwnd)
       {
         Log("Focus: use attach thread input");
@@ -500,11 +646,8 @@ void FlutterWindow::HandleWindowManagerMethodCall(
     }
     else if (method_name == "isVisible")
     {
-      // Check if window is on-screen (not hidden off-screen)
-      RECT rect;
-      GetWindowRect(hwnd, &rect);
-      // If window is at the off-screen position (-10000, -10000), it's considered hidden
-      bool is_visible = (rect.left != -10000 || rect.top != -10000);
+      // Use IsWindowVisible to check if window is actually visible
+      bool is_visible = IsWindowVisible(hwnd) != 0;
       result->Success(flutter::EncodableValue(is_visible));
     }
     else if (method_name == "setAlwaysOnTop")
