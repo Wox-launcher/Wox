@@ -15,7 +15,7 @@ import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_setting_util.dart';
 
 class WoxSettingController extends GetxController {
-  final activePaneIndex = 0.obs;
+  final activeNavPath = 'general'.obs;
   final woxSetting = WoxSettingUtil.instance.currentSetting.obs;
   final userDataLocation = "".obs;
   final backups = <WoxBackup>[].obs;
@@ -47,6 +47,7 @@ class WoxSettingController extends GetxController {
   var langMap = <String, String>{}.obs;
 
   final isInstallingPlugin = false.obs;
+  final FocusNode settingFocusNode = FocusNode();
 
   @override
   void onInit() {
@@ -70,8 +71,7 @@ class WoxSettingController extends GetxController {
     try {
       final statuses = await WoxApi.instance.getRuntimeStatuses();
       runtimeStatuses.assignAll(statuses);
-      Logger.instance
-          .info(traceId, 'Runtime statuses loaded, count: ${statuses.length}');
+      Logger.instance.info(traceId, 'Runtime statuses loaded, count: ${statuses.length}');
     } catch (e) {
       runtimeStatuses.clear();
       runtimeStatusError.value = e.toString();
@@ -89,20 +89,16 @@ class WoxSettingController extends GetxController {
   Future<void> updateConfig(String key, String value) async {
     await WoxApi.instance.updateSetting(key, value);
     await reloadSetting();
-    Logger.instance
-        .info(const UuidV4().generate(), 'Setting updated: $key=$value');
+    Logger.instance.info(const UuidV4().generate(), 'Setting updated: $key=$value');
 
     // If user switches to last_location, save current window position immediately
-    if (key == "ShowPosition" &&
-        value == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
+    if (key == "ShowPosition" && value == WoxPositionTypeEnum.POSITION_TYPE_LAST_LOCATION.code) {
       try {
         final launcherController = Get.find<WoxLauncherController>();
         launcherController.saveWindowPositionIfNeeded();
-        Logger.instance.info(const UuidV4().generate(),
-            'Saved current window position when switching to last_location');
+        Logger.instance.info(const UuidV4().generate(), 'Saved current window position when switching to last_location');
       } catch (e) {
-        Logger.instance.error(const UuidV4().generate(),
-            'Failed to save window position when switching to last_location: $e');
+        Logger.instance.error(const UuidV4().generate(), 'Failed to save window position when switching to last_location: $e');
       }
     }
   }
@@ -130,21 +126,18 @@ class WoxSettingController extends GetxController {
       storePluginsFromAPI.sort((a, b) => a.name.compareTo(b.name));
       storePlugins.clear();
       storePlugins.addAll(storePluginsFromAPI);
-      Logger.instance.info(traceId,
-          'Store plugins loaded, cost ${DateTime.now().difference(start).inMilliseconds} ms');
+      Logger.instance.info(traceId, 'Store plugins loaded, cost ${DateTime.now().difference(start).inMilliseconds} ms');
     } finally {}
   }
 
   Future<void> loadInstalledPlugins(String traceId) async {
     try {
       var start = DateTime.now();
-      final installedPluginsFromAPI =
-          await WoxApi.instance.findInstalledPlugins();
+      final installedPluginsFromAPI = await WoxApi.instance.findInstalledPlugins();
       installedPluginsFromAPI.sort((a, b) => a.name.compareTo(b.name));
       installedPlugins.clear();
       installedPlugins.addAll(installedPluginsFromAPI);
-      Logger.instance.info(traceId,
-          'Installed plugins loaded, cost ${DateTime.now().difference(start).inMilliseconds} ms');
+      Logger.instance.info(traceId, 'Installed plugins loaded, cost ${DateTime.now().difference(start).inMilliseconds} ms');
     } finally {}
   }
 
@@ -154,16 +147,12 @@ class WoxSettingController extends GetxController {
     unawaited(loadStorePlugins(traceId));
   }
 
-  Future<void> refreshPlugin(
-      String pluginId, String refreshType /* update / add / remove */) async {
-    Logger.instance.info(const UuidV4().generate(),
-        'Refreshing plugin: $pluginId, refreshType: $refreshType');
+  Future<void> refreshPlugin(String pluginId, String refreshType /* update / add / remove */) async {
+    Logger.instance.info(const UuidV4().generate(), 'Refreshing plugin: $pluginId, refreshType: $refreshType');
     if (refreshType == "add") {
-      PluginDetail updatedPlugin =
-          await WoxApi.instance.getPluginDetail(pluginId);
+      PluginDetail updatedPlugin = await WoxApi.instance.getPluginDetail(pluginId);
       if (updatedPlugin.id.isEmpty) {
-        Logger.instance
-            .info(const UuidV4().generate(), 'Plugin not found: $pluginId');
+        Logger.instance.info(const UuidV4().generate(), 'Plugin not found: $pluginId');
         return;
       }
 
@@ -177,8 +166,7 @@ class WoxSettingController extends GetxController {
       } else {
         installedPlugins.add(updatedPlugin);
       }
-      int filteredPluginListIndex =
-          filteredPluginList.indexWhere((p) => p.id == pluginId);
+      int filteredPluginListIndex = filteredPluginList.indexWhere((p) => p.id == pluginId);
       if (filteredPluginListIndex >= 0) {
         filteredPluginList[filteredPluginListIndex] = updatedPlugin;
       } else {
@@ -194,27 +182,22 @@ class WoxSettingController extends GetxController {
         storePlugins[storeIndex].isInstalled = false;
       }
       // if is in installed plugin view, remove from plugin list
-      if (activePaneIndex.value == 6) {
+      if (activeNavPath.value == 'plugins.installed') {
         pluginList.removeWhere((p) => p.id == pluginId);
         filteredPluginList.removeWhere((p) => p.id == pluginId);
       }
       // if is in store plugin view, update the installed property
-      if (activePaneIndex.value == 5) {
+      if (activeNavPath.value == 'plugins.store') {
         pluginList.firstWhere((p) => p.id == pluginId).isInstalled = false;
-        filteredPluginList.firstWhere((p) => p.id == pluginId).isInstalled =
-            false;
+        filteredPluginList.firstWhere((p) => p.id == pluginId).isInstalled = false;
       }
       if (activePlugin.value.id == pluginId) {
-        activePlugin.value = installedPlugins.isNotEmpty
-            ? installedPlugins[0]
-            : PluginDetail.empty();
+        activePlugin.value = installedPlugins.isNotEmpty ? installedPlugins[0] : PluginDetail.empty();
       }
     } else if (refreshType == "update") {
-      PluginDetail updatedPlugin =
-          await WoxApi.instance.getPluginDetail(pluginId);
+      PluginDetail updatedPlugin = await WoxApi.instance.getPluginDetail(pluginId);
       if (updatedPlugin.id.isEmpty) {
-        Logger.instance
-            .info(const UuidV4().generate(), 'Plugin not found: $pluginId');
+        Logger.instance.info(const UuidV4().generate(), 'Plugin not found: $pluginId');
         return;
       }
 
@@ -230,8 +213,7 @@ class WoxSettingController extends GetxController {
       if (pluginListIndex >= 0) {
         pluginList[pluginListIndex] = updatedPlugin;
       }
-      int filteredPluginListIndex =
-          filteredPluginList.indexWhere((p) => p.id == pluginId);
+      int filteredPluginListIndex = filteredPluginList.indexWhere((p) => p.id == pluginId);
       if (filteredPluginListIndex >= 0) {
         filteredPluginList[filteredPluginListIndex] = updatedPlugin;
       }
@@ -251,7 +233,7 @@ class WoxSettingController extends GetxController {
       pluginList.addAll(installedPlugins);
     }
 
-    activePaneIndex.value = isStorePlugin ? 6 : 7;
+    activeNavPath.value = isStorePlugin ? 'plugins.store' : 'plugins.installed';
     isStorePluginList.value = isStorePlugin;
     activePlugin.value = PluginDetail.empty();
     filterPluginKeywordController.text = "";
@@ -260,18 +242,15 @@ class WoxSettingController extends GetxController {
 
     //active plugin
     if (activePlugin.value.id.isNotEmpty) {
-      activePlugin.value = filteredPluginList.firstWhere(
-          (element) => element.id == activePlugin.value.id,
-          orElse: () => filteredPluginList.isNotEmpty
-              ? filteredPluginList[0]
-              : PluginDetail.empty());
+      activePlugin.value = filteredPluginList.firstWhere((element) => element.id == activePlugin.value.id,
+          orElse: () => filteredPluginList.isNotEmpty ? filteredPluginList[0] : PluginDetail.empty());
     } else {
       setFirstFilteredPluginDetailActive();
     }
   }
 
   Future<void> switchToDataView(String traceId) async {
-    activePaneIndex.value = 4;
+    activeNavPath.value = 'data';
   }
 
   void setFirstFilteredPluginDetailActive() {
@@ -283,8 +262,7 @@ class WoxSettingController extends GetxController {
   Future<void> installPlugin(PluginDetail plugin) async {
     try {
       isInstallingPlugin.value = true;
-      Logger.instance
-          .info(const UuidV4().generate(), 'installing plugin: ${plugin.name}');
+      Logger.instance.info(const UuidV4().generate(), 'installing plugin: ${plugin.name}');
       await WoxApi.instance.installPlugin(plugin.id);
       await refreshPlugin(plugin.id, "add");
     } catch (e) {
@@ -302,22 +280,19 @@ class WoxSettingController extends GetxController {
   }
 
   Future<void> disablePlugin(PluginDetail plugin) async {
-    Logger.instance
-        .info(const UuidV4().generate(), 'disabling plugin: ${plugin.name}');
+    Logger.instance.info(const UuidV4().generate(), 'disabling plugin: ${plugin.name}');
     await WoxApi.instance.disablePlugin(plugin.id);
     await refreshPlugin(plugin.id, "update");
   }
 
   Future<void> enablePlugin(PluginDetail plugin) async {
-    Logger.instance
-        .info(const UuidV4().generate(), 'enabling plugin: ${plugin.name}');
+    Logger.instance.info(const UuidV4().generate(), 'enabling plugin: ${plugin.name}');
     await WoxApi.instance.enablePlugin(plugin.id);
     await refreshPlugin(plugin.id, "update");
   }
 
   Future<void> uninstallPlugin(PluginDetail plugin) async {
-    Logger.instance
-        .info(const UuidV4().generate(), 'uninstalling plugin: ${plugin.name}');
+    Logger.instance.info(const UuidV4().generate(), 'uninstalling plugin: ${plugin.name}');
     await WoxApi.instance.uninstallPlugin(plugin.id);
     await refreshPlugin(plugin.id, "remove");
   }
@@ -328,9 +303,7 @@ class WoxSettingController extends GetxController {
     if (filterPluginKeywordController.text.isEmpty) {
       filteredPluginList.addAll(pluginList);
     } else {
-      filteredPluginList.addAll(pluginList.where((element) => element.name
-          .toLowerCase()
-          .contains(filterPluginKeywordController.text.toLowerCase())));
+      filteredPluginList.addAll(pluginList.where((element) => element.name.toLowerCase().contains(filterPluginKeywordController.text.toLowerCase())));
     }
   }
 
@@ -338,8 +311,7 @@ class WoxSettingController extends GetxController {
     await launchUrl(Uri.parse(website));
   }
 
-  Future<void> updatePluginSetting(
-      String pluginId, String key, String value) async {
+  Future<void> updatePluginSetting(String pluginId, String key, String value) async {
     final traceId = const UuidV4().generate();
     final activeTabIndex = activePluginTabController.index;
 
@@ -355,12 +327,10 @@ class WoxSettingController extends GetxController {
     });
   }
 
-  Future<void> updatePluginTriggerKeywords(
-      String pluginId, List<String> triggerKeywords) async {}
+  Future<void> updatePluginTriggerKeywords(String pluginId, List<String> triggerKeywords) async {}
 
   bool shouldShowSettingTab() {
-    return activePlugin.value.isInstalled &&
-        activePlugin.value.settingDefinitions.isNotEmpty;
+    return activePlugin.value.isInstalled && activePlugin.value.settingDefinitions.isNotEmpty;
   }
 
   void switchToPluginSettingTab() {
@@ -395,22 +365,19 @@ class WoxSettingController extends GetxController {
   }
 
   Future<void> installTheme(WoxTheme theme) async {
-    Logger.instance
-        .info(const UuidV4().generate(), 'Installing theme: ${theme.themeId}');
+    Logger.instance.info(const UuidV4().generate(), 'Installing theme: ${theme.themeId}');
     await WoxApi.instance.installTheme(theme.themeId);
     await refreshThemeList();
   }
 
   Future<void> uninstallTheme(WoxTheme theme) async {
-    Logger.instance.info(
-        const UuidV4().generate(), 'Uninstalling theme: ${theme.themeId}');
+    Logger.instance.info(const UuidV4().generate(), 'Uninstalling theme: ${theme.themeId}');
     await WoxApi.instance.uninstallTheme(theme.themeId);
     await refreshThemeList();
   }
 
   Future<void> applyTheme(WoxTheme theme) async {
-    Logger.instance
-        .info(const UuidV4().generate(), 'Applying theme: ${theme.themeId}');
+    Logger.instance.info(const UuidV4().generate(), 'Applying theme: ${theme.themeId}');
     await WoxApi.instance.applyTheme(theme.themeId);
     await refreshThemeList();
     await reloadSetting();
@@ -418,8 +385,7 @@ class WoxSettingController extends GetxController {
 
   onFilterThemes(String filter) {
     filteredThemeList.clear();
-    filteredThemeList.addAll(themeList.where((element) =>
-        element.themeName.toLowerCase().contains(filter.toLowerCase())));
+    filteredThemeList.addAll(themeList.where((element) => element.themeName.toLowerCase().contains(filter.toLowerCase())));
   }
 
   void setFirstFilteredThemeActive() {
@@ -437,16 +403,14 @@ class WoxSettingController extends GetxController {
 
     //active theme
     if (activeTheme.value.themeId.isNotEmpty) {
-      activeTheme.value = filteredThemeList.firstWhere(
-          (element) => element.themeId == activeTheme.value.themeId,
-          orElse: () => filteredThemeList[0]);
+      activeTheme.value = filteredThemeList.firstWhere((element) => element.themeId == activeTheme.value.themeId, orElse: () => filteredThemeList[0]);
     } else {
       setFirstFilteredThemeActive();
     }
   }
 
   Future<void> switchToThemeList(bool isStoreTheme) async {
-    activePaneIndex.value = isStoreTheme ? 10 : 11;
+    activeNavPath.value = isStoreTheme ? 'themes.store' : 'themes.installed';
     isStoreThemeList.value = isStoreTheme;
     activeTheme.value = WoxTheme.empty();
     await refreshThemeList();
@@ -485,5 +449,11 @@ class WoxSettingController extends GetxController {
     await WoxSettingUtil.instance.loadSetting();
     woxSetting.value = WoxSettingUtil.instance.currentSetting;
     Logger.instance.info(const UuidV4().generate(), 'Setting reloaded');
+  }
+
+  @override
+  void onClose() {
+    settingFocusNode.dispose();
+    super.onClose();
   }
 }

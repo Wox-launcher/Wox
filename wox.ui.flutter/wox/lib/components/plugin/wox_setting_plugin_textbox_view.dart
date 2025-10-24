@@ -1,8 +1,9 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_textbox.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
+import 'package:wox/utils/colors.dart';
 
 import 'wox_setting_plugin_item_view.dart';
 
@@ -39,9 +40,18 @@ class WoxSettingPluginTextBox extends WoxSettingPluginItem {
                 updateConfig(item.key, controller.text);
               }
             },
-            child: TextBox(
+            child: TextField(
               maxLines: item.maxLines,
               controller: controller,
+              style: TextStyle(color: getThemeTextColor(), fontSize: 13),
+              decoration: InputDecoration(
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: getThemeTextColor().withOpacity(0.3)),
+                ),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: getThemeActiveBackgroundColor(), width: 2),
+                ),
+              ),
               onChanged: (value) {
                 for (var element in item.validators) {
                   var errMsg = element.validator.validate(value);

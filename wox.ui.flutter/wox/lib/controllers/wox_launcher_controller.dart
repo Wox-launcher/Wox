@@ -971,6 +971,8 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> openSetting(String traceId, SettingWindowContext context) async {
+    final settingController = Get.find<WoxSettingController>();
+
     // Save current position before switching (used if we return to launcher)
     try {
       positionBeforeOpenSetting = await windowManager.getPosition();
@@ -984,12 +986,11 @@ class WoxLauncherController extends GetxController {
     // Preload theme/settings for settings view
     await WoxThemeUtil.instance.loadTheme();
     await WoxSettingUtil.instance.loadSetting();
-    Get.find<WoxSettingController>().activePaneIndex.value = 0;
+    settingController.activeNavPath.value = 'general';
 
     if (context.path == "/plugin/setting") {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await Future.delayed(const Duration(milliseconds: 100));
-        var settingController = Get.find<WoxSettingController>();
         await settingController.switchToPluginList(traceId, false);
         settingController.filterPluginKeywordController.text = context.param;
         settingController.filterPlugins();
@@ -1000,7 +1001,6 @@ class WoxLauncherController extends GetxController {
     if (context.path == "/data") {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await Future.delayed(const Duration(milliseconds: 100));
-        var settingController = Get.find<WoxSettingController>();
         await settingController.switchToDataView(traceId);
       });
     }
@@ -1017,11 +1017,17 @@ class WoxLauncherController extends GetxController {
     }
     await windowManager.focus();
 
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.delayed(const Duration(milliseconds: 50));
+      settingController.settingFocusNode.requestFocus();
+    });
+
     // On Windows, ensure focus is properly set after window is shown
     if (Platform.isWindows) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await Future.delayed(const Duration(milliseconds: 100));
         await windowManager.focus();
+        settingController.settingFocusNode.requestFocus();
         Logger.instance.info(traceId, "[SETTING] Windows focus requested after delay");
       });
     }

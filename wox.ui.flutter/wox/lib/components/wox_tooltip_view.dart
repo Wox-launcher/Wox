@@ -1,5 +1,4 @@
-import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/material.dart' as material;
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 
@@ -24,10 +23,10 @@ class _WoxTooltipViewState extends State<WoxTooltipView> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(left: widget.paddingLeft, right: widget.paddingRight),
-      child: material.Tooltip(
+      child: Tooltip(
         message: tr(widget.tooltip),
         child: Icon(
-          FluentIcons.info,
+          Icons.info,
           size: 13,
           color: widget.color,
         ),

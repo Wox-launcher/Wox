@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_list_item_view.dart';
+import 'package:wox/components/wox_platform_focus.dart';
 import 'package:wox/controllers/wox_list_controller.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_list_item.dart';
@@ -109,12 +110,7 @@ class WoxListView<T> extends StatelessWidget {
           ),
         ),
         if (showFilter)
-          Focus(
-            onFocusChange: (hasFocus) {
-              if (!hasFocus) {
-                controller.onFilterBoxLostFocus?.call(const UuidV4().generate());
-              }
-            },
+          WoxPlatformFocus(
             onKeyEvent: (FocusNode node, KeyEvent event) {
               var traceId = const UuidV4().generate();
               var isAnyModifierPressed = WoxHotkey.isAnyModifierPressed();

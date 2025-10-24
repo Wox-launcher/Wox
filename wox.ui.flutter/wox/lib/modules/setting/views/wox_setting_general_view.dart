@@ -1,16 +1,18 @@
 import 'dart:convert';
 
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
+import 'package:wox/components/wox_switch.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_lang.dart';
 import 'package:wox/enums/wox_query_mode_enum.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
+import 'package:wox/utils/colors.dart';
 
 class WoxSettingGeneralView extends WoxSettingBaseView {
   const WoxSettingGeneralView({super.key});
@@ -22,8 +24,8 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
         formField(
           label: controller.tr("ui_autostart"),
           tips: controller.tr("ui_autostart_tips"),
-          child: ToggleSwitch(
-            checked: controller.woxSetting.value.enableAutostart,
+          child: WoxSwitch(
+            value: controller.woxSetting.value.enableAutostart,
             onChanged: (bool value) {
               controller.updateConfig("EnableAutostart", value.toString());
             },
@@ -53,8 +55,8 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
           label: controller.tr("ui_use_pinyin"),
           tips: controller.tr("ui_use_pinyin_tips"),
           child: Obx(() {
-            return ToggleSwitch(
-              checked: controller.woxSetting.value.usePinYin,
+            return WoxSwitch(
+              value: controller.woxSetting.value.usePinYin,
               onChanged: (bool value) {
                 controller.updateConfig("UsePinYin", value.toString());
               },
@@ -65,8 +67,8 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
           label: controller.tr("ui_hide_on_lost_focus"),
           tips: controller.tr("ui_hide_on_lost_focus_tips"),
           child: Obx(() {
-            return ToggleSwitch(
-              checked: controller.woxSetting.value.hideOnLostFocus,
+            return WoxSwitch(
+              value: controller.woxSetting.value.hideOnLostFocus,
               onChanged: (bool value) {
                 controller.updateConfig("HideOnLostFocus", value.toString());
               },
@@ -77,8 +79,8 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
           label: controller.tr("ui_hide_on_start"),
           tips: controller.tr("ui_hide_on_start_tips"),
           child: Obx(() {
-            return ToggleSwitch(
-              checked: controller.woxSetting.value.hideOnStart,
+            return WoxSwitch(
+              value: controller.woxSetting.value.hideOnStart,
               onChanged: (bool value) {
                 controller.updateConfig("HideOnStart", value.toString());
               },
@@ -89,8 +91,8 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
           label: controller.tr("ui_switch_input_method_abc"),
           tips: controller.tr("ui_switch_input_method_abc_tips"),
           child: Obx(() {
-            return ToggleSwitch(
-              checked: controller.woxSetting.value.switchInputMethodABC,
+            return WoxSwitch(
+              value: controller.woxSetting.value.switchInputMethodABC,
               onChanged: (bool value) {
                 controller.updateConfig("SwitchInputMethodABC", value.toString());
               },
@@ -101,8 +103,8 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
           label: controller.tr("ui_enable_auto_update"),
           tips: controller.tr("ui_enable_auto_update_tips"),
           child: Obx(() {
-            return ToggleSwitch(
-              checked: controller.woxSetting.value.enableAutoUpdate,
+            return WoxSwitch(
+              value: controller.woxSetting.value.enableAutoUpdate,
               onChanged: (bool value) {
                 controller.updateConfig("EnableAutoUpdate", value.toString());
 
@@ -120,17 +122,17 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
           child: Obx(() {
             return SizedBox(
               width: 250,
-              child: ComboBox<String>(
+              child: DropdownButton<String>(
                 items: [
-                  ComboBoxItem(
+                  DropdownMenuItem(
                     value: WoxQueryModeEnum.WOX_QUERY_MODE_PRESERVE.code,
                     child: Text(controller.tr("ui_query_mode_preserve")),
                   ),
-                  ComboBoxItem(
+                  DropdownMenuItem(
                     value: WoxQueryModeEnum.WOX_QUERY_MODE_EMPTY.code,
                     child: Text(controller.tr("ui_query_mode_empty")),
                   ),
-                  ComboBoxItem(
+                  DropdownMenuItem(
                     value: WoxQueryModeEnum.WOX_QUERY_MODE_MRU.code,
                     child: Text(controller.tr("ui_query_mode_mru")),
                   ),
@@ -141,6 +143,10 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                     controller.updateConfig("QueryMode", v);
                   }
                 },
+                isExpanded: true,
+                style: TextStyle(color: getThemeTextColor(), fontSize: 13),
+                dropdownColor: getThemeActiveBackgroundColor().withOpacity(0.95),
+                iconEnabledColor: getThemeTextColor(),
               ),
             );
           }),
@@ -153,9 +159,9 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                 if (snapshot.connectionState == ConnectionState.done) {
                   final languages = snapshot.data as List<WoxLang>;
                   return Obx(() {
-                    return ComboBox<String>(
+                    return DropdownButton<String>(
                       items: languages.map((e) {
-                        return ComboBoxItem(
+                        return DropdownMenuItem(
                           value: e.code,
                           child: Text(e.name),
                         );
@@ -166,6 +172,10 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                           controller.updateLang(v);
                         }
                       },
+                      isExpanded: true,
+                      style: TextStyle(color: getThemeTextColor(), fontSize: 13),
+                      dropdownColor: getThemeActiveBackgroundColor().withOpacity(0.95),
+                      iconEnabledColor: getThemeTextColor(),
                     );
                   });
                 }
@@ -259,3 +269,4 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
     });
   }
 }
+

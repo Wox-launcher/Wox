@@ -13,6 +13,7 @@ class WoxPlatformFocus extends StatefulWidget {
   final FocusNode? focusNode;
   final bool autofocus;
   final KeyEventResult Function(FocusNode, KeyEvent)? onKeyEvent;
+  final void Function(bool)? onFocusChange;
 
   const WoxPlatformFocus({
     super.key,
@@ -20,6 +21,7 @@ class WoxPlatformFocus extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.onKeyEvent,
+    this.onFocusChange,
   });
 
   @override
@@ -58,6 +60,9 @@ class _WoxPlatformFocusState extends State<WoxPlatformFocus> {
       // Clear pressed keys when focus is lost
       _pressedKeys.clear();
     }
+
+    // Call user's onFocusChange callback if provided
+    widget.onFocusChange?.call(_focusNode.hasFocus);
   }
 
   @override
@@ -94,6 +99,12 @@ class _WoxPlatformFocusState extends State<WoxPlatformFocus> {
     // Create KeyEvent based on event type
     // Get physical key from logical key (more reliable than scan code)
     final physicalKey = _getPhysicalKeyFromLogicalKey(logicalKey);
+
+    // Skip if we couldn't map to a valid physical key
+    if (physicalKey.usbHidUsage == 0x00000000) {
+      Logger.instance.debug(traceId, "[KEYLOG][PLATFORM-FOCUS] Skipping unmapped key: ${logicalKey.keyLabel}");
+      return;
+    }
 
     KeyEvent? keyEvent;
     if (eventType == 'keydown') {
@@ -178,6 +189,29 @@ class _WoxPlatformFocusState extends State<WoxPlatformFocus> {
         return PhysicalKeyboardKey.arrowUp;
       case LogicalKeyboardKey.arrowDown:
         return PhysicalKeyboardKey.arrowDown;
+
+      // Modifier keys
+      case LogicalKeyboardKey.shift:
+      case LogicalKeyboardKey.shiftLeft:
+        return PhysicalKeyboardKey.shiftLeft;
+      case LogicalKeyboardKey.shiftRight:
+        return PhysicalKeyboardKey.shiftRight;
+      case LogicalKeyboardKey.control:
+      case LogicalKeyboardKey.controlLeft:
+        return PhysicalKeyboardKey.controlLeft;
+      case LogicalKeyboardKey.controlRight:
+        return PhysicalKeyboardKey.controlRight;
+      case LogicalKeyboardKey.alt:
+      case LogicalKeyboardKey.altLeft:
+        return PhysicalKeyboardKey.altLeft;
+      case LogicalKeyboardKey.altRight:
+        return PhysicalKeyboardKey.altRight;
+      case LogicalKeyboardKey.meta:
+      case LogicalKeyboardKey.metaLeft:
+        return PhysicalKeyboardKey.metaLeft;
+      case LogicalKeyboardKey.metaRight:
+        return PhysicalKeyboardKey.metaRight;
+
       default:
         // Return a generic physical key if we can't map it
         return const PhysicalKeyboardKey(0x00000000);

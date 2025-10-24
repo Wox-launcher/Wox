@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/entity/wox_runtime_status.dart';
@@ -38,7 +38,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
     final Color statusColor = isRunning ? Colors.green : Colors.red;
     final Color outlineColor = getThemeDividerColor().withOpacity(isDarkTheme ? 0.45 : 0.25);
 
-    final IconData statusIcon = isRunning ? FluentIcons.completed : FluentIcons.status_circle_error_x;
+    final IconData statusIcon = isRunning ? Icons.check_circle : Icons.error;
     final String stateLabel = isRunning ? controller.tr("ui_runtime_status_running") : controller.tr("ui_runtime_status_stopped");
     final String pluginCountLabel = controller.tr("ui_runtime_status_plugin_count").replaceAll("{count}", status.loadedPluginCount.toString());
 
@@ -114,8 +114,8 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
   final RxBool isNodejsValidating = false.obs;
 
   // Text controllers for immediate updates
-  late final TextEditingController pythonController;
-  late final TextEditingController nodejsController;
+  TextEditingController? pythonController;
+  TextEditingController? nodejsController;
 
   // Debounce timers for validation
   Timer? _pythonValidationTimer;
@@ -193,22 +193,22 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
   void dispose() {
     _pythonValidationTimer?.cancel();
     _nodejsValidationTimer?.cancel();
-    pythonController.dispose();
-    nodejsController.dispose();
+    pythonController?.dispose();
+    nodejsController?.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Initialize controllers with current values
-    pythonController = TextEditingController(text: controller.woxSetting.value.customPythonPath);
-    nodejsController = TextEditingController(text: controller.woxSetting.value.customNodejsPath);
+    // Initialize controllers with current values only if not already initialized
+    pythonController ??= TextEditingController(text: controller.woxSetting.value.customPythonPath);
+    nodejsController ??= TextEditingController(text: controller.woxSetting.value.customNodejsPath);
 
     // Initial validation
-    if (pythonController.text.isNotEmpty) {
-      validatePythonPath(pythonController.text);
+    if (pythonController!.text.isNotEmpty) {
+      validatePythonPath(pythonController!.text);
     }
-    if (nodejsController.text.isNotEmpty) {
-      validateNodejsPath(nodejsController.text);
+    if (nodejsController!.text.isNotEmpty) {
+      validateNodejsPath(nodejsController!.text);
     }
     return Obx(() {
       final statuses = controller.runtimeStatuses;
@@ -237,7 +237,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                     const SizedBox(
                       width: 16,
                       height: 16,
-                      child: ProgressRing(),
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                 ],
               ),
@@ -288,16 +288,26 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
               Row(
                 children: [
                   Expanded(
-                    child: TextBox(
-                      controller: pythonController,
-                      placeholder: controller.tr("ui_runtime_python_path_placeholder"),
+                    child: TextField(
+                      controller: pythonController!,
+                      style: TextStyle(color: getThemeTextColor(), fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: controller.tr("ui_runtime_python_path_placeholder"),
+                        hintStyle: TextStyle(color: getThemeTextColor().withOpacity(0.5), fontSize: 13),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: getThemeTextColor().withOpacity(0.3)),
+                        ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: getThemeActiveBackgroundColor(), width: 2),
+                        ),
+                      ),
                       onChanged: (value) {
                         updatePythonPath(value);
                       },
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Button(
+                  ElevatedButton(
                     child: Text(controller.tr("ui_runtime_browse")),
                     onPressed: () async {
                       final result = await FileSelector.pick(
@@ -305,16 +315,16 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                         FileSelectorParams(isDirectory: false),
                       );
                       if (result.isNotEmpty) {
-                        pythonController.text = result.first;
+                        pythonController!.text = result.first;
                         updatePythonPath(result.first);
                       }
                     },
                   ),
                   const SizedBox(width: 10),
-                  Button(
+                  ElevatedButton(
                     child: Text(controller.tr("ui_runtime_clear")),
                     onPressed: () {
-                      pythonController.clear();
+                      pythonController!.clear();
                       updatePythonPath("");
                     },
                   ),
@@ -325,7 +335,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                 if (isPythonValidating.value) {
                   return Row(
                     children: [
-                      const SizedBox(width: 16, height: 16, child: ProgressRing()),
+                      const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
                       const SizedBox(width: 8),
                       Text(controller.tr("ui_runtime_validating")),
                     ],
@@ -353,16 +363,26 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
               Row(
                 children: [
                   Expanded(
-                    child: TextBox(
-                      controller: nodejsController,
-                      placeholder: controller.tr("ui_runtime_nodejs_path_placeholder"),
+                    child: TextField(
+                      controller: nodejsController!,
+                      style: TextStyle(color: getThemeTextColor(), fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: controller.tr("ui_runtime_nodejs_path_placeholder"),
+                        hintStyle: TextStyle(color: getThemeTextColor().withOpacity(0.5), fontSize: 13),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: getThemeTextColor().withOpacity(0.3)),
+                        ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: getThemeActiveBackgroundColor(), width: 2),
+                        ),
+                      ),
                       onChanged: (value) {
                         updateNodejsPath(value);
                       },
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Button(
+                  ElevatedButton(
                     child: Text(controller.tr("ui_runtime_browse")),
                     onPressed: () async {
                       final result = await FileSelector.pick(
@@ -370,16 +390,16 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                         FileSelectorParams(isDirectory: false),
                       );
                       if (result.isNotEmpty) {
-                        nodejsController.text = result.first;
+                        nodejsController!.text = result.first;
                         updateNodejsPath(result.first);
                       }
                     },
                   ),
                   const SizedBox(width: 10),
-                  Button(
+                  ElevatedButton(
                     child: Text(controller.tr("ui_runtime_clear")),
                     onPressed: () {
-                      nodejsController.clear();
+                      nodejsController!.clear();
                       updateNodejsPath("");
                     },
                   ),
@@ -390,7 +410,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                 if (isNodejsValidating.value) {
                   return Row(
                     children: [
-                      const SizedBox(width: 16, height: 16, child: ProgressRing()),
+                      const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
                       const SizedBox(width: 8),
                       Text(controller.tr("ui_runtime_validating")),
                     ],

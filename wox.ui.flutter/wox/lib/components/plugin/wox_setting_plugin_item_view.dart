@@ -1,7 +1,8 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_plugin_setting.dart';
+import 'package:wox/utils/colors.dart';
 
 abstract class WoxSettingPluginItem extends StatelessWidget {
   final String value;
@@ -51,13 +52,13 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
           padding: const EdgeInsets.only(right: 4),
           child: SizedBox(
             width: style.labelWidth,
-            child: Text(text, style: const TextStyle(overflow: TextOverflow.ellipsis), textAlign: TextAlign.right),
+            child: Text(text, style: TextStyle(overflow: TextOverflow.ellipsis, color: getThemeTextColor(), fontSize: 13), textAlign: TextAlign.right),
           ),
         );
       } else {
         return Padding(
           padding: const EdgeInsets.only(right: 4),
-          child: Text(text),
+          child: Text(text, style: TextStyle(color: getThemeTextColor(), fontSize: 13)),
         );
       }
     }
@@ -69,7 +70,7 @@ abstract class WoxSettingPluginItem extends StatelessWidget {
     if (text != "") {
       return Padding(
         padding: const EdgeInsets.only(left: 4),
-        child: Text(text),
+        child: Text(text, style: TextStyle(color: getThemeTextColor(), fontSize: 13)),
       );
     }
 

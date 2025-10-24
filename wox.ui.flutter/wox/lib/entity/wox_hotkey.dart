@@ -208,8 +208,8 @@ class WoxHotkey {
     if (event is KeyUpEvent) return null;
 
     if (!WoxHotkey.isAllowedKey(event.physicalKey)) {
-      // Debug: log why key is not allowed
-      print("[KEYLOG][HOTKEY] Key not allowed: ${event.physicalKey} (${event.physicalKey.debugName})");
+      // Not an allowed key for hotkey combinations (e.g., modifier keys alone)
+      // This is normal behavior, not an error
       return null;
     }
 

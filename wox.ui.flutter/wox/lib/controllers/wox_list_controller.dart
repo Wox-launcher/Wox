@@ -35,6 +35,20 @@ class WoxListController<T> extends GetxController {
     this.onFilterBoxLostFocus,
   });
 
+  @override
+  void onInit() {
+    super.onInit();
+
+    // Listen to filter box focus changes
+    filterBoxFocusNode.addListener(_onFilterBoxFocusChange);
+  }
+
+  void _onFilterBoxFocusChange() {
+    if (!filterBoxFocusNode.hasFocus) {
+      onFilterBoxLostFocus?.call('focus_change');
+    }
+  }
+
   RxList<Rx<WoxListItem<T>>> get items => _items;
 
   RxInt get hoveredIndex => _hoveredIndex;
@@ -327,6 +341,7 @@ class WoxListController<T> extends GetxController {
   void onClose() {
     super.onClose();
 
+    filterBoxFocusNode.removeListener(_onFilterBoxFocusChange);
     scrollController.dispose();
   }
 }

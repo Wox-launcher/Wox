@@ -1,6 +1,8 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:wox/components/wox_switch.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
+import 'package:wox/utils/colors.dart';
 
 class WoxSettingUIView extends WoxSettingBaseView {
   const WoxSettingUIView({super.key});
@@ -15,17 +17,17 @@ class WoxSettingUIView extends WoxSettingBaseView {
           child: Obx(() {
             return SizedBox(
               width: 200,
-              child: ComboBox<String>(
+              child: DropdownButton<String>(
                 items: [
-                  ComboBoxItem(
+                  DropdownMenuItem(
                     value: "mouse_screen",
                     child: Text(controller.tr("ui_show_position_mouse_screen")),
                   ),
-                  ComboBoxItem(
+                  DropdownMenuItem(
                     value: "active_screen",
                     child: Text(controller.tr("ui_show_position_active_screen")),
                   ),
-                  ComboBoxItem(
+                  DropdownMenuItem(
                     value: "last_location",
                     child: Text(controller.tr("ui_show_position_last_location")),
                   ),
@@ -36,6 +38,10 @@ class WoxSettingUIView extends WoxSettingBaseView {
                     controller.updateConfig("ShowPosition", v);
                   }
                 },
+                isExpanded: true,
+                style: TextStyle(color: getThemeTextColor(), fontSize: 13),
+                dropdownColor: getThemeActiveBackgroundColor().withOpacity(0.95),
+                iconEnabledColor: getThemeTextColor(),
               ),
             );
           }),
@@ -44,8 +50,8 @@ class WoxSettingUIView extends WoxSettingBaseView {
           label: controller.tr("ui_show_tray"),
           tips: controller.tr("ui_show_tray_tips"),
           child: Obx(() {
-            return ToggleSwitch(
-              checked: controller.woxSetting.value.showTray,
+            return WoxSwitch(
+              value: controller.woxSetting.value.showTray,
               onChanged: (bool value) {
                 controller.updateConfig("ShowTray", value.toString());
               },
@@ -56,22 +62,38 @@ class WoxSettingUIView extends WoxSettingBaseView {
           label: controller.tr("ui_app_width"),
           tips: controller.tr("ui_app_width_tips"),
           child: Obx(() {
-            return Row(
-              children: [
-                Expanded(
-                  child: Slider(
-                    value: controller.woxSetting.value.appWidth.toDouble(),
-                    min: 600,
-                    max: 1600,
-                    divisions: 20,
-                    onChanged: (double value) {
-                      controller.updateConfig("AppWidth", value.toInt().toString());
-                    },
+            return Transform.translate(
+              offset: const Offset(-20, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderThemeData(
+                        activeTrackColor: getThemeActiveBackgroundColor(),
+                        inactiveTrackColor: getThemeTextColor().withOpacity(0.3),
+                        thumbColor: getThemeActiveBackgroundColor(),
+                        overlayColor: getThemeActiveBackgroundColor().withOpacity(0.2),
+                        valueIndicatorColor: getThemeActiveBackgroundColor(),
+                        valueIndicatorTextStyle: TextStyle(color: getThemeTextColor()),
+                      ),
+                      child: Slider(
+                        value: controller.woxSetting.value.appWidth.toDouble(),
+                        min: 600,
+                        max: 1600,
+                        divisions: 20,
+                        onChanged: (double value) {
+                          controller.updateConfig("AppWidth", value.toInt().toString());
+                        },
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Text('${controller.woxSetting.value.appWidth}'),
-              ],
+                  const SizedBox(width: 16),
+                  Text(
+                    '${controller.woxSetting.value.appWidth}',
+                    style: TextStyle(color: getThemeTextColor(), fontSize: 13),
+                  ),
+                ],
+              ),
             );
           }),
         ),
@@ -79,11 +101,11 @@ class WoxSettingUIView extends WoxSettingBaseView {
           label: controller.tr("ui_max_result_count"),
           tips: controller.tr("ui_max_result_count_tips"),
           child: Obx(() {
-            return ComboBox<int>(
+            return DropdownButton<int>(
               value: controller.woxSetting.value.maxResultCount,
               items: List.generate(11, (index) => index + 5)
                   .map(
-                    (count) => ComboBoxItem<int>(
+                    (count) => DropdownMenuItem<int>(
                       value: count,
                       child: Text(count.toString()),
                     ),
@@ -94,6 +116,9 @@ class WoxSettingUIView extends WoxSettingBaseView {
                   controller.updateConfig("MaxResultCount", v.toString());
                 }
               },
+              style: TextStyle(color: getThemeTextColor(), fontSize: 13),
+              dropdownColor: getThemeActiveBackgroundColor().withOpacity(0.95),
+              iconEnabledColor: getThemeTextColor(),
             );
           }),
         ),

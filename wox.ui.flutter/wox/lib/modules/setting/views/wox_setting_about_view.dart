@@ -1,4 +1,4 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
@@ -66,13 +66,13 @@ class WoxSettingAboutView extends WoxSettingBaseView {
                     _buildLinkButton(
                       'ui_about_docs',
                       'https://wox-launcher.github.io/Wox/#/',
-                      FluentIcons.document_set,
+                      Icons.description,
                     ),
                     const SizedBox(width: 30),
                     _buildLinkButton(
                       'ui_about_github',
                       'https://github.com/Wox-launcher/Wox',
-                      FluentIcons.open_source,
+                      Icons.code,
                     ),
                   ],
                 ),
@@ -86,7 +86,7 @@ class WoxSettingAboutView extends WoxSettingBaseView {
   }
 
   Widget _buildLinkButton(String labelKey, String url, IconData icon) {
-    return HyperlinkButton(
+    return TextButton(
       onPressed: () async {
         final uri = Uri.parse(url);
         if (await canLaunchUrl(uri)) {
@@ -94,6 +94,7 @@ class WoxSettingAboutView extends WoxSettingBaseView {
         }
       },
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 18, color: getThemeTextColor()),
           const SizedBox(width: 8),

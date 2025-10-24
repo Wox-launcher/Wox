@@ -1,6 +1,7 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
+import 'package:wox/components/wox_switch.dart';
 
 class WoxSettingNetworkView extends WoxSettingBaseView {
   const WoxSettingNetworkView({super.key});
@@ -16,8 +17,8 @@ class WoxSettingNetworkView extends WoxSettingBaseView {
         children: [
           formField(
             label: controller.tr("ui_proxy_enabled"),
-            child: ToggleSwitch(
-              checked: controller.woxSetting.value.httpProxyEnabled,
+            child: WoxSwitch(
+              value: controller.woxSetting.value.httpProxyEnabled,
               onChanged: (value) => controller.updateConfig(
                 'HttpProxyEnabled',
                 value.toString(),
@@ -27,9 +28,9 @@ class WoxSettingNetworkView extends WoxSettingBaseView {
           formField(
             label: controller.tr("ui_proxy_url"),
             tips: controller.tr("ui_proxy_url_tips"),
-            child: SizedBox(
+            child: SizedBox( 
               width: 400,
-              child: TextBox(
+              child: TextField(
                 enabled: controller.woxSetting.value.httpProxyEnabled,
                 controller: proxyUrlController,
                 onChanged: (value) => controller.updateConfig('HttpProxyUrl', value),

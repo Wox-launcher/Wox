@@ -89,10 +89,23 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get the base text theme with Chinese font support
+    final baseTextTheme = SystemChineseFont.textTheme(Brightness.light);
+
+    // Scale down all font sizes to match Fluent UI appearance
+    final scaledTextTheme = baseTextTheme.copyWith(
+      bodyLarge: baseTextTheme.bodyLarge?.copyWith(fontSize: 13),
+      bodyMedium: baseTextTheme.bodyMedium?.copyWith(fontSize: 13),
+      bodySmall: baseTextTheme.bodySmall?.copyWith(fontSize: 12),
+      labelLarge: baseTextTheme.labelLarge?.copyWith(fontSize: 13),
+      labelMedium: baseTextTheme.labelMedium?.copyWith(fontSize: 12),
+      labelSmall: baseTextTheme.labelSmall?.copyWith(fontSize: 11),
+    );
+
     return MaterialApp(
       theme: ThemeData(
         useMaterial3: true,
-        textTheme: SystemChineseFont.textTheme(Brightness.light),
+        textTheme: scaledTextTheme,
       ),
       debugShowCheckedModeBanner: false,
       home: const WoxApp(),

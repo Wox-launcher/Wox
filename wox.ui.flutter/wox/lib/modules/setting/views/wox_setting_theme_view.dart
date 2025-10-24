@@ -1,5 +1,4 @@
-import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/material.dart' as base;
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/wox_theme_icon_view.dart';
 import 'package:wox/components/wox_theme_preview.dart';
@@ -17,20 +16,30 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
         Padding(
           padding: const EdgeInsets.only(bottom: 20),
           child: Obx(() {
-            return TextBox(
+            return TextField(
               autofocus: true,
-              placeholder: Strings.format(controller.tr('ui_setting_theme_search_placeholder'), [controller.filteredThemeList.length]),
-              padding: const EdgeInsets.all(10),
-              suffix: const Padding(
-                padding: EdgeInsets.only(right: 8.0),
-                child: Icon(FluentIcons.search),
+              style: TextStyle(color: getThemeTextColor(), fontSize: 13),
+              decoration: InputDecoration(
+                hintText: Strings.format(controller.tr('ui_setting_theme_search_placeholder'), [controller.filteredThemeList.length]),
+                hintStyle: TextStyle(color: getThemeTextColor().withOpacity(0.5), fontSize: 13),
+                contentPadding: const EdgeInsets.all(10),
+                suffixIcon: Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: Icon(Icons.search, color: getThemeTextColor()),
+                ),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: getThemeTextColor().withOpacity(0.3)),
+                ),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: getThemeActiveBackgroundColor(), width: 2),
+                ),
               ),
               onChanged: (value) => {controller.onFilterThemes(value)},
             );
           }),
         ),
         Expanded(
-          child: base.Scrollbar(
+          child: Scrollbar(
             child: Obx(() {
               if (controller.filteredThemeList.isEmpty) {
                 return Center(
@@ -53,7 +62,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                       final isActive = controller.activeTheme.value.themeId == theme.themeId;
                       return Container(
                         decoration: BoxDecoration(
-                          color: isActive ? getThemeActiveBackgroundColor() : base.Colors.transparent,
+                          color: isActive ? getThemeActiveBackgroundColor() : Colors.transparent,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: GestureDetector(
@@ -61,7 +70,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                           onTap: () {
                             controller.activeTheme.value = theme;
                           },
-                          child: base.ListTile(
+                          child: ListTile(
                             leading: WoxThemeIconView(theme: theme, width: 32, height: 32),
                             title: Text(theme.themeName,
                                 maxLines: 1,
@@ -70,9 +79,9 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                                   fontSize: 15,
                                   color: isActive ? getThemeActionItemActiveColor() : getThemeTextColor(),
                                 )),
-                            subtitle: base.Row(
+                            subtitle: Row(
                               mainAxisAlignment: MainAxisAlignment.start,
-                              crossAxisAlignment: base.CrossAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 Text(
                                   theme.version,
@@ -83,7 +92,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                                     fontSize: 12,
                                   ),
                                 ),
-                                const base.SizedBox(width: 10),
+                                const SizedBox(width: 10),
                                 Text(
                                   theme.themeAuthor,
                                   maxLines: 1,
@@ -94,7 +103,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                                   ),
                                 ),
                                 if (theme.isSystem) ...[
-                                  const base.SizedBox(width: 8),
+                                  const SizedBox(width: 8),
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                                     decoration: BoxDecoration(
@@ -138,8 +147,8 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
           return Center(
             child: Text(
               controller.tr('ui_setting_theme_empty_data'),
-              style: const TextStyle(
-                color: base.Colors.grey,
+              style: TextStyle(
+                color: getThemeSubTextColor(),
               ),
             ),
           );
@@ -153,8 +162,9 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                   padding: const EdgeInsets.only(left: 8.0),
                   child: Text(
                     theme.themeName,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 20,
+                      color: getThemeTextColor(),
                     ),
                   ),
                 ),
@@ -175,7 +185,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                base.Row(
+                Row(
                   children: [
                     Text(
                       theme.themeAuthor,
@@ -187,11 +197,12 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                 ),
                 Padding(
                   padding: const EdgeInsets.only(left: 18.0),
-                  child: HyperlinkButton(
+                  child: TextButton(
                     onPressed: () {
                       controller.openPluginWebsite(theme.themeUrl);
                     },
-                    child: base.Row(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           controller.tr('ui_setting_theme_website'),
@@ -202,7 +213,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                         Padding(
                           padding: const EdgeInsets.only(left: 4.0),
                           child: Icon(
-                            FluentIcons.open_in_new_tab,
+                            Icons.open_in_new,
                             size: 12,
                             color: getThemeTextColor(),
                           ),
@@ -219,9 +230,13 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
             child: Row(
               children: [
                 if (!theme.isInstalled)
-                  base.Padding(
+                  Padding(
                     padding: const EdgeInsets.only(right: 8.0),
-                    child: Button(
+                    child: ElevatedButton(
+                      style: ButtonStyle(
+                        backgroundColor: WidgetStateProperty.all(getThemeActiveBackgroundColor()),
+                        foregroundColor: WidgetStateProperty.all(getThemeActionItemActiveColor()),
+                      ),
                       onPressed: () {
                         controller.installTheme(theme);
                       },
@@ -229,9 +244,13 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                     ),
                   ),
                 if (theme.isInstalled || theme.isSystem)
-                  base.Padding(
+                  Padding(
                     padding: const EdgeInsets.only(right: 8.0),
-                    child: Button(
+                    child: ElevatedButton(
+                      style: ButtonStyle(
+                        backgroundColor: WidgetStateProperty.all(getThemeActiveBackgroundColor()),
+                        foregroundColor: WidgetStateProperty.all(getThemeActionItemActiveColor()),
+                      ),
                       onPressed: controller.woxSetting.value.themeId == theme.themeId
                           ? null
                           : () {
@@ -241,9 +260,13 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                     ),
                   ),
                 if (theme.isInstalled && !theme.isSystem)
-                  base.Padding(
+                  Padding(
                     padding: const EdgeInsets.only(right: 8.0),
-                    child: Button(
+                    child: ElevatedButton(
+                      style: ButtonStyle(
+                        backgroundColor: WidgetStateProperty.all(getThemeActiveBackgroundColor()),
+                        foregroundColor: WidgetStateProperty.all(getThemeActionItemActiveColor()),
+                      ),
                       onPressed: () {
                         controller.uninstallTheme(theme);
                       },
@@ -254,27 +277,27 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
             ),
           ),
           Expanded(
-            child: base.DefaultTabController(
+            child: DefaultTabController(
               length: 2,
               child: Column(
                 children: [
-                  base.TabBar(
+                  TabBar(
                     isScrollable: true,
-                    tabAlignment: base.TabAlignment.start,
+                    tabAlignment: TabAlignment.start,
                     labelColor: getThemeTextColor(),
                     unselectedLabelColor: getThemeTextColor(),
                     indicatorColor: getThemeActiveBackgroundColor(),
                     tabs: [
-                      base.Tab(
-                        child: Text(controller.tr('ui_setting_theme_preview')),
+                      Tab(
+                        child: Text(controller.tr('ui_setting_theme_preview'), style: TextStyle(color: getThemeTextColor())),
                       ),
-                      base.Tab(
-                        child: Text(controller.tr('ui_setting_theme_description')),
+                      Tab(
+                        child: Text(controller.tr('ui_setting_theme_description'), style: TextStyle(color: getThemeTextColor())),
                       ),
                     ],
                   ),
                   Expanded(
-                    child: base.TabBarView(
+                    child: TabBarView(
                       children: [
                         themeTabPreview(theme),
                         themeTabDescription(),
@@ -299,13 +322,16 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
   }
 
   Widget themeTabDescription() {
-    return base.Padding(
+    return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             controller.activeTheme.value.description,
+            style: TextStyle(
+              color: getThemeTextColor(),
+            ),
           ),
         ],
       ),

@@ -1,4 +1,4 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_newline.dart';
 
 import 'wox_setting_plugin_item_view.dart';

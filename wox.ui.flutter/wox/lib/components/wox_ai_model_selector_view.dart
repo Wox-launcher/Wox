@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
@@ -106,7 +106,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(child: ProgressRing(strokeWidth: 2));
+      return Center(child: CircularProgressIndicator(strokeWidth: 2, color: getThemeActiveBackgroundColor()));
     }
 
     // When there are no models/providers available, guide user to AI settings
@@ -124,7 +124,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
           children: [
             const Padding(
               padding: EdgeInsets.only(top: 2.0),
-              child: Icon(FluentIcons.info_solid, size: 14),
+              child: Icon(Icons.info, size: 14),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -144,14 +144,14 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
               ),
             ),
             const SizedBox(width: 12),
-            HyperlinkButton(
+            TextButton(
               child: Text(
                 tr('ui_ai_model_selector_open_ai_settings'),
                 style: TextStyle(color: getThemeTextColor(), fontWeight: FontWeight.w600),
               ),
               onPressed: () {
                 // Switch to the AI settings page within the settings view
-                Get.find<WoxSettingController>().activePaneIndex.value = 2; // AI tab index
+                Get.find<WoxSettingController>().activeNavPath.value = 'ai';
               },
             )
           ],
@@ -174,10 +174,13 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
         // Provider selector
         Expanded(
           flex: 1,
-          child: ComboBox<String>(
+          child: DropdownButton<String>(
             value: _selectedProvider,
+            isExpanded: true,
+            dropdownColor: getThemeCardBackgroundColor(),
+            style: TextStyle(color: getThemeTextColor(), fontSize: 13),
             items: _providers
-                .map((provider) => ComboBoxItem<String>(
+                .map((provider) => DropdownMenuItem<String>(
                       value: provider,
                       child: SizedBox(
                         width: 100, // Limit width to prevent overflow
@@ -214,9 +217,19 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
         Expanded(
           flex: 2,
           child: _isEditMode
-              ? TextBox(
+              ? TextField(
                   controller: _nameController,
-                  placeholder: tr('ui_ai_model_selector_model_name'),
+                  style: TextStyle(color: getThemeTextColor(), fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: tr('ui_ai_model_selector_model_name'),
+                    hintStyle: TextStyle(color: getThemeSubTextColor()),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: getThemeTextColor().withOpacity(0.3)),
+                    ),
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: getThemeActiveBackgroundColor(), width: 2),
+                    ),
+                  ),
                   onChanged: (value) {
                     if (value.isNotEmpty && _selectedProvider != null) {
                       final updatedModel = AIModel(
@@ -228,11 +241,13 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
                     }
                   },
                 )
-              : ComboBox<String>(
+              : DropdownButton<String>(
                   value: _selectedModel?.name,
-                  popupColor: Colors.transparent,
+                  isExpanded: true,
+                  dropdownColor: getThemeCardBackgroundColor(),
+                  style: TextStyle(color: getThemeTextColor(), fontSize: 13),
                   items: getProviderModels()
-                      .map((model) => ComboBoxItem<String>(
+                      .map((model) => DropdownMenuItem<String>(
                             value: model.name,
                             child: SizedBox(
                               width: 200, // Limit width to prevent overflow
@@ -266,7 +281,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
         // Toggle edit/select mode button
         if (widget.allowEdit && _selectedModel != null)
           IconButton(
-            icon: Icon(_isEditMode ? FluentIcons.bulleted_list : FluentIcons.edit),
+            icon: Icon(_isEditMode ? Icons.list : Icons.edit, color: getThemeTextColor()),
             onPressed: () {
               setState(() {
                 _isEditMode = !_isEditMode;

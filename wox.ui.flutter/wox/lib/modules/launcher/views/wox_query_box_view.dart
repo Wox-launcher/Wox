@@ -47,10 +47,10 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
   bool isQuickSelectModifierKeyOnly(KeyEvent event) {
     if (Platform.isMacOS) {
       // On macOS, check if only Cmd key is pressed
-      return event.logicalKey == LogicalKeyboardKey.metaLeft || event.logicalKey == LogicalKeyboardKey.metaRight;
+      return event.logicalKey == LogicalKeyboardKey.meta || event.logicalKey == LogicalKeyboardKey.metaLeft || event.logicalKey == LogicalKeyboardKey.metaRight;
     } else {
       // On Windows/Linux, check if only Alt key is pressed
-      return event.logicalKey == LogicalKeyboardKey.altLeft || event.logicalKey == LogicalKeyboardKey.altRight;
+      return event.logicalKey == LogicalKeyboardKey.alt || event.logicalKey == LogicalKeyboardKey.altLeft || event.logicalKey == LogicalKeyboardKey.altRight;
     }
   }
 

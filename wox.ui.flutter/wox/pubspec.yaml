@@ -51,7 +51,6 @@ dependencies:
   syncfusion_flutter_pdfviewer: ^29.2.5
   desktop_drop: ^0.5.0
   file_picker: ^8.1.2
-  fluent_ui: ^4.11.2
   hotkey_manager: ^0.2.3
   url_launcher: ^6.2.5
   flutter_image_slideshow: ^0.1.6

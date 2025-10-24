@@ -1,4 +1,4 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_head.dart';
 import 'package:wox/utils/colors.dart';
@@ -24,9 +24,9 @@ class WoxSettingPluginHead extends WoxSettingPluginItem {
           children: [
             Text(
               item.content,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
-                fontWeight: FontWeight.bold,
+                color: getThemeTextColor(),
               ),
             ),
             if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip, color: getThemeTextColor()),

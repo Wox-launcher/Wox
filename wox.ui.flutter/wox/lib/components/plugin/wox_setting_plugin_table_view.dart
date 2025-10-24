@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_image_view.dart';
@@ -12,7 +12,6 @@ import 'package:wox/entity/wox_image.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
-import 'package:flutter/material.dart' as material;
 
 import 'wox_setting_plugin_item_view.dart';
 import 'wox_setting_plugin_table_update_view.dart';
@@ -93,7 +92,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Flexible(
-          child: material.Tooltip(
+          child: Tooltip(
             message: translatedLabel,
             child: Text(
               translatedLabel,
@@ -101,7 +100,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
               maxLines: 1,
               style: TextStyle(
                 color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
-                fontWeight: FontWeight.bold,
+                fontSize: 13,
               ),
             ),
           ),
@@ -170,7 +169,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       }
       return Row(
         children: [
-          isChecked ? const Icon(material.Icons.check_box) : const Icon(material.Icons.check_box_outline_blank),
+          isChecked ? Icon(Icons.check_box, color: getThemeTextColor()) : Icon(Icons.check_box_outline_blank, color: getThemeTextColor()),
         ],
       );
     }
@@ -262,13 +261,13 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
             isHeader: false,
             isOperation: false,
             child: snapshot.connectionState == ConnectionState.waiting
-                ? const Icon(material.Icons.circle, color: material.Colors.grey)
+                ? const Icon(Icons.circle, color: Colors.grey)
                 : snapshot.error != null
-                    ? material.Tooltip(
+                    ? Tooltip(
                         message: snapshot.error?.toString() ?? "",
-                        child: const Icon(material.Icons.circle, color: material.Colors.red),
+                        child: const Icon(Icons.circle, color: Colors.red),
                       )
-                    : const Icon(material.Icons.circle, color: material.Colors.green),
+                    : const Icon(Icons.circle, color: Colors.green),
           );
         },
       );
@@ -276,7 +275,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAIMCPServerTools) {
       var disabled = row["disabled"] ?? false;
       if (disabled) {
-        return const Icon(material.Icons.circle, color: material.Colors.grey);
+        return const Icon(Icons.circle, color: Colors.grey);
       }
 
       return FutureBuilder<List<AIMCPTool>>(
@@ -287,13 +286,13 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
             isHeader: false,
             isOperation: false,
             child: snapshot.connectionState == ConnectionState.waiting
-                ? const Icon(material.Icons.circle, color: material.Colors.grey)
+                ? const Icon(Icons.circle, color: Colors.grey)
                 : snapshot.error != null
-                    ? material.Tooltip(
+                    ? Tooltip(
                         message: snapshot.error?.toString() ?? "",
-                        child: const Icon(material.Icons.circle, color: material.Colors.red),
+                        child: const Icon(Icons.circle, color: Colors.red),
                       )
-                    : material.Tooltip(
+                    : Tooltip(
                         message: snapshot.data?.map((e) => e.name).join("\n") ?? "",
                         child: Text(
                           "${snapshot.data?.length ?? 0} tools",
@@ -308,7 +307,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     }
     if (column.type == PluginSettingValueType.pluginSettingValueTableColumnTypeAISelectMCPServerTools) {
       final toolNames = value as List<dynamic>;
-      return material.Tooltip(
+      return Tooltip(
         message: toolNames.join("\n"),
         child: columnWidth(
           column: column,
@@ -327,15 +326,15 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
     return Text("Unknown column type: ${column.type}");
   }
 
-  material.DataCell buildOperationCell(context, row, rows) {
-    return material.DataCell(
+  DataCell buildOperationCell(context, row, rows) {
+    return DataCell(
       SizedBox(
         width: operationWidth,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.start, // Align buttons to the start
           mainAxisSize: MainAxisSize.min, // Use minimum space needed
           children: [
-            HyperlinkButton(
+            TextButton(
               onPressed: () {
                 showDialog(
                     context: context,
@@ -369,9 +368,9 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
               style: ButtonStyle(
                 padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 4)),
               ),
-              child: Icon(material.Icons.edit, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+              child: Icon(Icons.edit, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
             ),
-            HyperlinkButton(
+            TextButton(
               style: ButtonStyle(
                 padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 4)),
               ),
@@ -380,18 +379,18 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 showDialog(
                     context: context,
                     builder: (context) {
-                      return ContentDialog(
-                        content: Text(tr("ui_delete_row_confirm")),
+                      return AlertDialog(
+                        content: Text(tr("ui_delete_row_confirm"), style: TextStyle(color: getThemeTextColor())),
                         actions: [
                           Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              Button(
-                                child: Text(tr("ui_cancel")),
+                              TextButton(
+                                child: Text(tr("ui_cancel"), style: TextStyle(color: getThemeTextColor())),
                                 onPressed: () => Navigator.pop(context),
                               ),
                               const SizedBox(width: 16),
-                              FilledButton(
+                              ElevatedButton(
                                 child: Text(tr("ui_delete")),
                                 onPressed: () {
                                   Navigator.pop(context);
@@ -415,7 +414,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                       );
                     });
               },
-              child: Icon(material.Icons.delete, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+              child: Icon(Icons.delete, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
             ),
           ],
         ),
@@ -439,23 +438,23 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                material.DataTable(
+                DataTable(
                   columnSpacing: columnSpacing,
                   horizontalMargin: 5,
                   clipBehavior: Clip.hardEdge,
                   headingRowHeight: 36,
                   dataRowMinHeight: 36,
                   dataRowMaxHeight: 36,
-                  headingRowColor: material.WidgetStateProperty.resolveWith((states) => safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
+                  headingRowColor: WidgetStateProperty.resolveWith((states) => safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
                   border: TableBorder.all(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
                   columns: [
                     for (var column in item.columns)
-                      material.DataColumn(
+                      DataColumn(
                         label: columnWidth(
                           column: column,
                           isHeader: false,
                           isOperation: false,
-                          child: material.Tooltip(
+                          child: Tooltip(
                             message: tr(column.label),
                             child: Text(
                               tr(column.label),
@@ -468,7 +467,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                           ),
                         ),
                       ),
-                    material.DataColumn(
+                    DataColumn(
                       label: columnWidth(
                         column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
                           "Key": "Operation",
@@ -480,7 +479,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                         }),
                         isHeader: false,
                         isOperation: true,
-                        child: material.Tooltip(
+                        child: Tooltip(
                           message: tr("ui_operation"),
                           child: Text(
                             tr("ui_operation"),
@@ -488,7 +487,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                             maxLines: 1,
                             style: TextStyle(
                               color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
-                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
                             ),
                           ),
                         ),
@@ -500,7 +499,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.only(top: 10),
-                    child: Text(tr("ui_no_data")),
+                    child: Text(tr("ui_no_data"), style: TextStyle(color: getThemeSubTextColor(), fontSize: 13)),
                   ),
                 ),
               ],
@@ -539,12 +538,12 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
       });
     }
 
-    var dataRows = <material.DataRow>[];
+    var dataRows = <DataRow>[];
     for (var row in rows) {
-      dataRows.add(material.DataRow(cells: [
+      dataRows.add(DataRow(cells: [
         for (var column in item.columns)
           if (!column.hideInTable)
-            material.DataCell(
+            DataCell(
               buildRowCell(column, row),
             ),
         if (!readonly) buildOperationCell(context, row, rows),
@@ -567,18 +566,18 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
               controller: verticalScrollController,
               child: SingleChildScrollView(
                 controller: verticalScrollController,
-                child: material.DataTable(
+                child: DataTable(
                   columnSpacing: columnSpacing,
                   horizontalMargin: 5,
                   headingRowHeight: 36,
                   dataRowMinHeight: 36,
                   dataRowMaxHeight: 36,
-                  headingRowColor: material.WidgetStateProperty.resolveWith((states) => safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
+                  headingRowColor: WidgetStateProperty.resolveWith((states) => safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveBackgroundColor)),
                   border: TableBorder.all(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.previewSplitLineColor)),
                   columns: [
                     for (var column in item.columns)
                       if (!column.hideInTable)
-                        material.DataColumn(
+                        DataColumn(
                           label: columnWidth(
                             column: column,
                             isHeader: true,
@@ -587,7 +586,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                           ),
                         ),
                     if (!readonly)
-                      material.DataColumn(
+                      DataColumn(
                         label: columnWidth(
                           column: PluginSettingValueTableColumn.fromJson(<String, dynamic>{
                             "Key": "Operation",
@@ -599,7 +598,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                           }),
                           isHeader: true,
                           isOperation: true,
-                          child: material.Tooltip(
+                          child: Tooltip(
                             message: tr("ui_operation"),
                             child: Text(
                               tr("ui_operation"),
@@ -607,7 +606,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                               maxLines: 1,
                               style: TextStyle(
                                 color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionItemActiveFontColor),
-                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
                               ),
                             ),
                           ),
@@ -638,12 +637,13 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                   children: [
                     Text(
                       item.title,
+                      style: TextStyle(color: getThemeTextColor(), fontSize: 13),
                     ),
                     if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip, color: getThemeTextColor()),
                   ],
                 ),
                 if (!readonly)
-                  HyperlinkButton(
+                  TextButton(
                       style: ButtonStyle(
                         padding: WidgetStateProperty.all(EdgeInsets.zero),
                       ),
@@ -673,7 +673,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                       },
                       child: Row(
                         children: [
-                          Icon(material.Icons.add, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+                          Icon(Icons.add, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
                           Text(tr("ui_add"), style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor))),
                         ],
                       )),

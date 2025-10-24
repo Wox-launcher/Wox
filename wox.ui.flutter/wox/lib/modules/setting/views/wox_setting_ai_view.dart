@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get_state_manager/src/rx_flutter/rx_obx_widget.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';

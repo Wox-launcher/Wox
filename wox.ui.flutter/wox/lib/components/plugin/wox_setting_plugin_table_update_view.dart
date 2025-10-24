@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
@@ -196,7 +195,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           spacing: 8,
           runSpacing: 8,
           children: [
-            Button(
+            ElevatedButton(
               style: ButtonStyle(
                 padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                 backgroundColor: WidgetStateProperty.all(getThemeActiveBackgroundColor().withAlpha(20)),
@@ -205,7 +204,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(material.Icons.emoji_emotions_outlined, size: 14, color: getThemeTextColor()),
+                  Icon(Icons.emoji_emotions_outlined, size: 14, color: getThemeTextColor()),
                   const SizedBox(width: 6),
                   Text(tr('ui_image_editor_emoji'), style: TextStyle(color: getThemeTextColor())),
                 ],
@@ -222,7 +221,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 }
               },
             ),
-            Button(
+            ElevatedButton(
               style: ButtonStyle(
                 padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                 backgroundColor: WidgetStateProperty.all(getThemeActiveBackgroundColor().withAlpha(20)),
@@ -231,7 +230,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(material.Icons.file_upload_outlined, size: 14, color: getThemeTextColor()),
+                  Icon(Icons.file_upload_outlined, size: 14, color: getThemeTextColor()),
                   const SizedBox(width: 6),
                   Text(tr('ui_image_editor_upload_image'), style: TextStyle(color: getThemeTextColor())),
                 ],
@@ -267,26 +266,26 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   }
 
   Future<String?> _showEmojiPicker(BuildContext context) async {
-    final commonEmojis = ["🤖", "👨‍💻", "👩‍💻", "🧠", "💡", "🔍", "📊", "📈", "📝", "🛠️", "⚙️", "🧩", "🎮", "🎯", "🏆", "🎨", "🎭", "🎬", "📱", "💻"];
+    final commonEmojis = ["🤖", "👨", "👩", "🧠", "💡", "🔍", "📊", "📈", "📝", "🛠", "⚙️", "🧩", "🎮", "🎯", "🏆", "🎨", "🎭", "🎬", "📱", "💻"];
 
     String? selectedEmoji;
 
-    await material.showDialog(
+    await showDialog(
       context: context,
       builder: (context) {
-        return material.AlertDialog(
+        return AlertDialog(
           title: Text(tr('ui_select_emoji')),
           content: SizedBox(
             width: 300,
             height: 200,
-            child: material.GridView.builder(
-              gridDelegate: const material.SliverGridDelegateWithFixedCrossAxisCount(
+            child: GridView.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 5,
                 childAspectRatio: 1,
               ),
               itemCount: commonEmojis.length,
               itemBuilder: (context, index) {
-                return material.InkWell(
+                return InkWell(
                   onTap: () {
                     selectedEmoji = commonEmojis[index];
                     Navigator.pop(context);
@@ -302,7 +301,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             ),
           ),
           actions: [
-            material.TextButton(
+            TextButton(
               child: Text(tr('ui_cancel')),
               onPressed: () {
                 Navigator.pop(context);
@@ -409,8 +408,17 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 setState(() {});
               }
             },
-            child: TextBox(
+            child: TextField(
               controller: textboxEditingController[column.key],
+              style: TextStyle(color: getThemeTextColor(), fontSize: 13),
+              decoration: InputDecoration(
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: getThemeTextColor().withOpacity(0.3)),
+                ),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: getThemeActiveBackgroundColor(), width: 2),
+                ),
+              ),
               onChanged: (value) {
                 updateValue(column.key, value);
 
@@ -432,7 +440,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeCheckbox:
         return Checkbox(
-          checked: getValueBool(column.key),
+          value: getValueBool(column.key),
           onChanged: (value) {
             updateValue(column.key, value);
             setState(() {});
@@ -448,41 +456,43 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeDirPath:
         return Expanded(
-          child: TextBox(
+          child: TextField(
             controller: TextEditingController(text: getValue(column.key)),
             onChanged: (value) {
               updateValue(column.key, value);
             },
-            suffixMode: OverlayVisibilityMode.always,
-            suffix: Button(
-              onPressed: disableBrowse
-                  ? null
-                  : () async {
-                      disableBrowse = true;
-                      final selectedDirectory = await FileSelector.pick(
-                        const UuidV4().generate(),
-                        FileSelectorParams(isDirectory: true),
-                      );
-                      if (selectedDirectory.isNotEmpty) {
-                        updateValue(column.key, selectedDirectory[0]);
-                        setState(() {});
-                      }
-                      disableBrowse = false;
-                    },
-              child: Text('Browse', style: TextStyle(color: getThemeTextColor())),
+            decoration: InputDecoration(
+              suffixIcon: ElevatedButton(
+                onPressed: disableBrowse
+                    ? null
+                    : () async {
+                        disableBrowse = true;
+                        final selectedDirectory = await FileSelector.pick(
+                          const UuidV4().generate(),
+                          FileSelectorParams(isDirectory: true),
+                        );
+                        if (selectedDirectory.isNotEmpty) {
+                          updateValue(column.key, selectedDirectory[0]);
+                          setState(() {});
+                        }
+                        disableBrowse = false;
+                      },
+                child: Text('Browse', style: TextStyle(color: getThemeTextColor())),
+              ),
             ),
           ),
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeSelect:
         return Expanded(
-          child: ComboBox<String>(
+          child: DropdownButton<String>(
             value: getValue(column.key),
+            isExpanded: true,
             onChanged: (value) {
               updateValue(column.key, value);
               setState(() {});
             },
             items: column.selectOptions.map((e) {
-              return ComboBoxItem(
+              return DropdownMenuItem(
                 value: e.value,
                 child: Text(e.label),
               );
@@ -507,7 +517,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           child: Builder(
             builder: (context) {
               if (isLoadingTools) {
-                return const Center(child: ProgressRing());
+                return const Center(child: CircularProgressIndicator(strokeWidth: 2));
               }
 
               final selectedTools = getValue(column.key) is List ? getValue(column.key) : [];
@@ -521,7 +531,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                     height: 200,
                     width: 400, // Limit width to prevent overflow
                     decoration: BoxDecoration(
-                      border: Border.all(color: getThemeSubTextColor().withAlpha(76)), // 0.3 * 255 ≈ 76
+                      border: Border.all(color: getThemeSubTextColor().withAlpha(76)), // 0.3 * 255 �?76
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: ListView.builder(
@@ -532,8 +542,8 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
 
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
-                          child: Checkbox(
-                            checked: isSelected,
+                          child: CheckboxListTile(
+                            value: isSelected,
                             onChanged: (value) {
                               setState(() {
                                 if (value == true) {
@@ -546,7 +556,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                                 updateValue(column.key, selectedTools);
                               });
                             },
-                            content: Text(
+                            title: Text(
                               tool.name, // Only display tool name
                               style: TextStyle(color: getThemeTextColor()),
                               overflow: TextOverflow.ellipsis,
@@ -594,7 +604,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                               setState(() {});
                             }
                           },
-                          child: TextBox(
+                          child: TextField(
                             controller: textboxEditingController[column.key + i.toString()],
                             onChanged: (value) {
                               columnValues[i] = value;
@@ -620,7 +630,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                         ),
                       ),
                       IconButton(
-                        icon: Icon(FluentIcons.delete, color: getThemeActiveBackgroundColor()),
+                        icon: Icon(Icons.delete, color: getThemeActiveBackgroundColor()),
                         onPressed: () {
                           columnValues.removeAt(i);
                           //remove controller
@@ -644,7 +654,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                       // last row show add button
                       if (i == columnValues.length - 1)
                         IconButton(
-                          icon: Icon(FluentIcons.add, color: getThemeActiveBackgroundColor()),
+                          icon: Icon(Icons.add, color: getThemeActiveBackgroundColor()),
                           onPressed: () {
                             columnValues.add("");
                             textboxEditingController[column.key + (columnValues.length - 1).toString()] = TextEditingController();
@@ -658,7 +668,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 ),
               if (columnValues.isEmpty)
                 IconButton(
-                  icon: Icon(FluentIcons.add, color: getThemeActiveBackgroundColor()),
+                  icon: Icon(Icons.add, color: getThemeActiveBackgroundColor()),
                   onPressed: () {
                     columnValues.add("");
                     values[column.key] = columnValues;
@@ -676,25 +686,16 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      return FluentApp(
+      return MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: FluentThemeData(
-          accentColor: AccentColor.swatch({
-            'normal': getThemeActiveBackgroundColor(),
-          }),
-          visualDensity: VisualDensity.standard,
-          brightness: getThemeBackgroundColor().computeLuminance() < 0.5 ? Brightness.dark : Brightness.light,
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: getThemeActiveBackgroundColor(),
+            brightness: getThemeBackgroundColor().computeLuminance() < 0.5 ? Brightness.dark : Brightness.light,
+          ),
           scaffoldBackgroundColor: Colors.transparent,
-          micaBackgroundColor: Colors.transparent,
-          acrylicBackgroundColor: Colors.transparent,
           cardColor: getThemeCardBackgroundColor(),
           shadowColor: getThemeTextColor().withAlpha(50),
-          inactiveBackgroundColor: getThemeBackgroundColor(),
-          inactiveColor: getThemeSubTextColor(),
-          focusTheme: FocusThemeData(
-            glowColor: getThemeActiveBackgroundColor().withAlpha(25),
-            primaryBorder: BorderSide(color: getThemeActiveBackgroundColor(), width: 2),
-          ),
         ),
         home: Focus(
           autofocus: true,
@@ -705,8 +706,8 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             }
             return KeyEventResult.ignored;
           },
-          child: ContentDialog(
-            constraints: const BoxConstraints(maxWidth: 800),
+          child: AlertDialog(
+            contentPadding: const EdgeInsets.all(24),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -746,7 +747,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                           Expanded(
                             child: Text(
                               customValidationError!,
-                              style: TextStyle(color: Colors.red.toAccentColor()),
+                              style: const TextStyle(color: Colors.red),
                             ),
                           ),
                         ],
@@ -759,7 +760,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Button(
+                  ElevatedButton(
                     style: ButtonStyle(
                       foregroundColor: WidgetStateProperty.all(getThemeTextColor()),
                     ),
@@ -767,7 +768,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                     onPressed: () => Navigator.pop(context),
                   ),
                   const SizedBox(width: 16),
-                  FilledButton(
+                  ElevatedButton(
                     style: ButtonStyle(
                       backgroundColor: WidgetStateProperty.all(getThemeActiveBackgroundColor()),
                       foregroundColor: WidgetStateProperty.all(getThemeActionItemActiveColor()),
