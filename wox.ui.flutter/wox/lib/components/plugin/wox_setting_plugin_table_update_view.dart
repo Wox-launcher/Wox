@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
@@ -484,20 +485,36 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeSelect:
         return Expanded(
-          child: DropdownButton<String>(
-            value: getValue(column.key),
-            isExpanded: true,
-            onChanged: (value) {
-              updateValue(column.key, value);
-              setState(() {});
-            },
-            items: column.selectOptions.map((e) {
-              return DropdownMenuItem(
-                value: e.value,
-                child: Text(e.label),
-              );
-            }).toList(),
-          ),
+          child: Builder(builder: (context) {
+            final Color dropdownSurface = getThemeCardBackgroundColor().withAlpha(255);
+            final TextStyle optionStyle = TextStyle(
+              color: getThemeTextColor(),
+              fontSize: 14,
+            );
+            return DropdownButton<String>(
+              value: getValue(column.key),
+              isExpanded: true,
+              style: optionStyle,
+              dropdownColor: dropdownSurface,
+              iconEnabledColor: getThemeSubTextColor(),
+              iconDisabledColor: getThemeSubTextColor(),
+              underline: Container(
+                height: 1,
+                color: getThemeDividerColor().withOpacity(0.6),
+              ),
+              onChanged: (value) {
+                updateValue(column.key, value);
+                setState(() {});
+              },
+              items: column.selectOptions.map((e) {
+                return DropdownMenuItem(
+                  value: e.value,
+                  alignment: Alignment.centerLeft,
+                  child: Text(e.label, style: optionStyle),
+                );
+              }).toList(),
+            );
+          }),
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeSelectAIModel:
         return Expanded(
@@ -686,16 +703,29 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
   @override
   Widget build(BuildContext context) {
     return Obx(() {
+      final Color themeBackground = getThemeBackgroundColor();
+      final bool isDarkTheme = themeBackground.computeLuminance() < 0.5;
+      final Color baseSurface = themeBackground.withAlpha(255);
+      final Color accentColor = getThemeActiveBackgroundColor();
+      final Color cardColor = (isDarkTheme ? baseSurface.lighter(12) : baseSurface.darker(6)).withAlpha(255);
+      final Color textColor = getThemeTextColor();
+      final Color actionTextColor = getThemeActionItemActiveColor();
+      final double maxLabelWidth = getMaxColumnWidth();
+      final double dialogContentWidth = math.max(600, maxLabelWidth + 320);
+      final Color outlineColor = accentColor.withOpacity(isDarkTheme ? 0.22 : 0.15);
+      final Color secondaryButtonColor = isDarkTheme ? cardColor.lighter(10) : cardColor.darker(4);
+      final Color secondaryButtonHover = isDarkTheme ? cardColor.lighter(20) : cardColor.darker(8);
+
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
-            seedColor: getThemeActiveBackgroundColor(),
-            brightness: getThemeBackgroundColor().computeLuminance() < 0.5 ? Brightness.dark : Brightness.light,
+            seedColor: accentColor,
+            brightness: isDarkTheme ? Brightness.dark : Brightness.light,
           ),
           scaffoldBackgroundColor: Colors.transparent,
-          cardColor: getThemeCardBackgroundColor(),
-          shadowColor: getThemeTextColor().withAlpha(50),
+          cardColor: cardColor,
+          shadowColor: textColor.withAlpha(50),
         ),
         home: Focus(
           autofocus: true,
@@ -707,78 +737,108 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             return KeyEventResult.ignored;
           },
           child: AlertDialog(
-            contentPadding: const EdgeInsets.all(24),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var column in columns)
-                    if (!column.hideInUpdate)
+            backgroundColor: cardColor,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: outlineColor),
+            ),
+            elevation: 18,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+            contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+            actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+            actionsAlignment: MainAxisAlignment.end,
+            content: SizedBox(
+              width: dialogContentWidth,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    for (var column in columns)
+                      if (!column.hideInUpdate)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: maxLabelWidth,
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      tr(column.label),
+                                      style: TextStyle(
+                                        color: textColor.withOpacity(0.92),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    if (column.tooltip != "")
+                                      WoxTooltipView(
+                                        tooltip: tr(column.tooltip),
+                                        color: textColor,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              buildColumn(column),
+                            ],
+                          ),
+                        ),
+                    if (customValidationError != null)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.only(top: 10),
                         child: Row(
                           children: [
-                            SizedBox(
-                              width: getMaxColumnWidth(),
-                              child: Row(
-                                children: [
-                                  Text(
-                                    tr(column.label),
-                                    style: TextStyle(color: getThemeTextColor()),
-                                  ),
-                                  if (column.tooltip != "")
-                                    WoxTooltipView(
-                                      tooltip: tr(column.tooltip),
-                                      color: getThemeTextColor(),
-                                    ),
-                                ],
+                            Expanded(
+                              child: Text(
+                                customValidationError!,
+                                style: const TextStyle(color: Colors.red),
                               ),
                             ),
-                            const SizedBox(width: 10),
-                            buildColumn(column),
                           ],
                         ),
                       ),
-                  if (customValidationError != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              customValidationError!,
-                              style: const TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
             actions: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  ElevatedButton(
-                    style: ButtonStyle(
-                      foregroundColor: WidgetStateProperty.all(getThemeTextColor()),
-                    ),
-                    child: const Text('Cancel'),
-                    onPressed: () => Navigator.pop(context),
+              ElevatedButton(
+                style: ButtonStyle(
+                  backgroundColor: WidgetStateProperty.all(secondaryButtonColor),
+                  foregroundColor: WidgetStateProperty.all(textColor),
+                  overlayColor: WidgetStateProperty.all(secondaryButtonHover),
+                  padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 22, vertical: 12)),
+                  shape: WidgetStateProperty.all(
+                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  const SizedBox(width: 16),
-                  ElevatedButton(
-                    style: ButtonStyle(
-                      backgroundColor: WidgetStateProperty.all(getThemeActiveBackgroundColor()),
-                      foregroundColor: WidgetStateProperty.all(getThemeActionItemActiveColor()),
-                    ),
-                    onPressed: () {
-                      _saveData(context);
-                    },
-                    child: const Text('Save'),
+                  side: WidgetStateProperty.all(BorderSide(color: outlineColor.withOpacity(0.45))),
+                  elevation: WidgetStateProperty.all(0),
+                ),
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton(
+                style: ButtonStyle(
+                  backgroundColor: WidgetStateProperty.all(accentColor),
+                  foregroundColor: WidgetStateProperty.all(actionTextColor),
+                  overlayColor: WidgetStateProperty.all(accentColor.darker(10)),
+                  padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 28, vertical: 12)),
+                  shape: WidgetStateProperty.all(
+                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ],
+                  side: WidgetStateProperty.all(BorderSide(color: accentColor.withOpacity(0.6))),
+                  elevation: WidgetStateProperty.all(0),
+                ),
+                onPressed: () {
+                  _saveData(context);
+                },
+                child: const Text('Save'),
               ),
             ],
           ),
