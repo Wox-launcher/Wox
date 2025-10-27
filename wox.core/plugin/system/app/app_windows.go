@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"unsafe"
 	"wox/common"
@@ -114,10 +115,11 @@ type cpuSample struct {
 type WindowsRetriever struct {
 	api plugin.API
 
-	uwpIconCache          map[string]string // appID -> icon path
+	uwpIconCache          sync.Map // map[string]string: appID -> icon path
 	runningProcesses      []processInfo
+	runningProcessesMutex sync.RWMutex // protects runningProcesses and lastProcessUpdateTime
 	lastProcessUpdateTime int64
-	cpuSamples            map[string]cpuSample // app path -> last CPU sample
+	cpuSamples            sync.Map // map[string]cpuSample: app path -> last CPU sample
 }
 
 func (a *WindowsRetriever) UpdateAPI(api plugin.API) {
@@ -597,16 +599,22 @@ func getPrivateWorkingSet(handle syscall.Handle) (uintptr, error) {
 }
 
 func (a *WindowsRetriever) GetProcessStat(ctx context.Context, app appInfo) (*ProcessStat, error) {
-	// Initialize cpuSamples map if needed
-	if a.cpuSamples == nil {
-		a.cpuSamples = make(map[string]cpuSample)
-	}
+	// sync.Map doesn't need initialization
 
 	// For multi-process apps (like Chrome), we need to sum memory from all processes with the same path
 	// Update process list if needed
-	if util.GetSystemTimestamp()-a.lastProcessUpdateTime > 1000 {
-		a.lastProcessUpdateTime = util.GetSystemTimestamp()
-		a.runningProcesses = a.getRunningProcesses(ctx)
+	a.runningProcessesMutex.RLock()
+	needUpdate := util.GetSystemTimestamp()-a.lastProcessUpdateTime > 1000
+	a.runningProcessesMutex.RUnlock()
+
+	if needUpdate {
+		a.runningProcessesMutex.Lock()
+		// Double-check after acquiring write lock
+		if util.GetSystemTimestamp()-a.lastProcessUpdateTime > 1000 {
+			a.lastProcessUpdateTime = util.GetSystemTimestamp()
+			a.runningProcesses = a.getRunningProcesses(ctx)
+		}
+		a.runningProcessesMutex.Unlock()
 	}
 
 	// Collect stats from all processes with the same path
@@ -617,7 +625,11 @@ func (a *WindowsRetriever) GetProcessStat(ctx context.Context, app appInfo) (*Pr
 	var processCount int
 	currentTimestamp := util.GetSystemTimestamp()
 
-	for _, proc := range a.runningProcesses {
+	a.runningProcessesMutex.RLock()
+	processes := a.runningProcesses
+	a.runningProcessesMutex.RUnlock()
+
+	for _, proc := range processes {
 		procPathLower := strings.ToLower(filepath.Clean(proc.Path))
 		if procPathLower == appPathLower {
 			// Open process with query information access
@@ -682,7 +694,8 @@ func (a *WindowsRetriever) GetProcessStat(ctx context.Context, app appInfo) (*Pr
 
 	// Calculate CPU usage
 	var cpuPercent float64
-	if lastSample, exists := a.cpuSamples[appPathLower]; exists {
+	if value, exists := a.cpuSamples.Load(appPathLower); exists {
+		lastSample := value.(cpuSample)
 		// Calculate time elapsed in milliseconds
 		timeElapsed := currentTimestamp - lastSample.timestamp
 		if timeElapsed > 0 {
@@ -704,11 +717,11 @@ func (a *WindowsRetriever) GetProcessStat(ctx context.Context, app appInfo) (*Pr
 	}
 
 	// Save current sample for next calculation
-	a.cpuSamples[appPathLower] = cpuSample{
+	a.cpuSamples.Store(appPathLower, cpuSample{
 		kernelTime: totalKernelTime,
 		userTime:   totalUserTime,
 		timestamp:  currentTimestamp,
-	}
+	})
 
 	return &ProcessStat{
 		CPU:    cpuPercent,
@@ -748,10 +761,7 @@ func (a *WindowsRetriever) OpenAppFolder(ctx context.Context, app appInfo) error
 }
 
 func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
-	// preload icon cache
-	if a.uwpIconCache == nil {
-		a.uwpIconCache = make(map[string]string)
-	}
+	// preload icon cache from file
 	iconCachePath := filepath.Join(util.GetLocation().GetCacheDirectory(), "app-uwp-icons.json")
 	if _, err := os.Stat(iconCachePath); !os.IsNotExist(err) {
 		iconCache, err := os.ReadFile(iconCachePath)
@@ -759,11 +769,18 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 			util.GetLogger().Error(ctx, fmt.Sprintf("Error reading uwp icon cache: %v", err))
 		} else {
 			// parse json
-			jsonErr := json.Unmarshal(iconCache, &a.uwpIconCache)
+			var cacheMap map[string]string
+			jsonErr := json.Unmarshal(iconCache, &cacheMap)
 			if jsonErr != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("Error parsing uwp icon cache: %v", jsonErr))
 			} else {
-				util.GetLogger().Info(ctx, fmt.Sprintf("Loaded %d uwp icon cache", len(a.uwpIconCache)))
+				// Load into sync.Map
+				count := 0
+				for k, v := range cacheMap {
+					a.uwpIconCache.Store(k, v)
+					count++
+				}
+				util.GetLogger().Info(ctx, fmt.Sprintf("Loaded %d uwp icon cache", count))
 			}
 		}
 	}
@@ -813,7 +830,7 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 			icon, err := a.GetUWPAppIcon(ctx, appID)
 			if err == nil {
 				app.Icon = icon
-				a.uwpIconCache[appID] = icon.ImageData
+				a.uwpIconCache.Store(appID, icon.ImageData)
 			} else {
 				util.GetLogger().Error(ctx, fmt.Sprintf("Error getting UWP icon for %s (%s), using default icon: %s", name, appID, err.Error()))
 				// Keep using default appIcon when UWP icon fails
@@ -825,12 +842,19 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 	}
 
 	// save icon cache
-	iconCache, err := json.Marshal(a.uwpIconCache)
+	cacheMap := make(map[string]string)
+	count := 0
+	a.uwpIconCache.Range(func(key, value interface{}) bool {
+		cacheMap[key.(string)] = value.(string)
+		count++
+		return true
+	})
+	iconCache, err := json.Marshal(cacheMap)
 	if err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Error marshalling uwp icon cache: %v", err))
 	} else {
 		os.WriteFile(iconCachePath, iconCache, 0644)
-		util.GetLogger().Info(ctx, fmt.Sprintf("Saved %d uwp icon cache", len(a.uwpIconCache)))
+		util.GetLogger().Info(ctx, fmt.Sprintf("Saved %d uwp icon cache", count))
 	}
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("Found %d UWP apps", len(apps)))
@@ -839,15 +863,28 @@ func (a *WindowsRetriever) GetUWPApps(ctx context.Context) []appInfo {
 
 func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {
 	// Update process list if it's been more than 1 second since last update
-	if util.GetSystemTimestamp()-a.lastProcessUpdateTime > 1000 {
-		a.lastProcessUpdateTime = util.GetSystemTimestamp()
-		a.runningProcesses = a.getRunningProcesses(ctx)
+	a.runningProcessesMutex.RLock()
+	needUpdate := util.GetSystemTimestamp()-a.lastProcessUpdateTime > 1000
+	a.runningProcessesMutex.RUnlock()
+
+	if needUpdate {
+		a.runningProcessesMutex.Lock()
+		// Double-check after acquiring write lock
+		if util.GetSystemTimestamp()-a.lastProcessUpdateTime > 1000 {
+			a.lastProcessUpdateTime = util.GetSystemTimestamp()
+			a.runningProcesses = a.getRunningProcesses(ctx)
+		}
+		a.runningProcessesMutex.Unlock()
 	}
+
+	a.runningProcessesMutex.RLock()
+	processes := a.runningProcesses
+	a.runningProcessesMutex.RUnlock()
 
 	// For desktop apps, match by path
 	if app.Type == AppTypeDesktop {
 		appPathLower := strings.ToLower(filepath.Clean(app.Path))
-		for _, proc := range a.runningProcesses {
+		for _, proc := range processes {
 			procPathLower := strings.ToLower(filepath.Clean(proc.Path))
 			if procPathLower == appPathLower {
 				return proc.Pid
@@ -931,13 +968,14 @@ func (a *WindowsRetriever) getRunningProcesses(ctx context.Context) []processInf
 }
 
 func (a *WindowsRetriever) GetUWPAppIcon(ctx context.Context, appID string) (common.WoxImage, error) {
-	if iconPath, ok := a.uwpIconCache[appID]; ok {
+	if value, ok := a.uwpIconCache.Load(appID); ok {
+		iconPath := value.(string)
 		// Verify cached path still exists
 		if _, err := os.Stat(iconPath); err == nil {
 			return common.NewWoxImageAbsolutePath(iconPath), nil
 		} else {
 			// Remove invalid cache entry
-			delete(a.uwpIconCache, appID)
+			a.uwpIconCache.Delete(appID)
 		}
 	}
 
