@@ -9,12 +9,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
 	"wox/ai"
 	"wox/common"
 	"wox/i18n"
@@ -23,6 +25,7 @@ import (
 	"wox/util"
 	"wox/util/notifier"
 	"wox/util/selection"
+	"wox/util/window"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/fsnotify/fsnotify"
@@ -1345,6 +1348,16 @@ func (m *Manager) getActiveBrowserUrl(ctx context.Context) string {
 	return m.activeBrowserUrl
 }
 
+func (m *Manager) getActiveFileExplorerPath(ctx context.Context) string {
+	// Only implemented for Windows currently
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+
+	// Use native COM via util/window for fast retrieval
+	return window.GetActiveFileExplorerPath()
+}
+
 func (m *Manager) expandQueryShortcut(ctx context.Context, query string, queryShorts []setting.QueryShortcut) (newQuery string) {
 	newQuery = query
 
@@ -1556,6 +1569,14 @@ func (m *Manager) ReplaceQueryVariable(ctx context.Context, query string) string
 	if strings.Contains(query, QueryVariableActiveBrowserUrl) {
 		activeBrowserUrl := m.activeBrowserUrl
 		query = strings.ReplaceAll(query, QueryVariableActiveBrowserUrl, activeBrowserUrl)
+	}
+
+	// Replace file explorer path variable if present
+	if strings.Contains(query, QueryVariableFileExplorerPath) {
+		startTime := time.Now()
+		explorerPath := m.getActiveFileExplorerPath(ctx)
+		query = strings.ReplaceAll(query, QueryVariableFileExplorerPath, explorerPath)
+		logger.Debug(ctx, fmt.Sprintf("replaced file explorer path variable in %d ms", time.Since(startTime).Milliseconds()))
 	}
 
 	return query

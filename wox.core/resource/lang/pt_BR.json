@@ -104,7 +104,7 @@
   "ui_query_hotkeys_hotkey": "Tecla de atalho",
   "ui_query_hotkeys_hotkey_tooltip": "A tecla de atalho para disparar a consulta.",
   "ui_query_hotkeys_query": "Consulta",
-  "ui_query_hotkeys_query_tooltip": "A consulta quando a tecla de atalho acionada. As seguintes variáveis são suportadas:\n\n{wox:selected_text} representa o texto selecionado.\n{wox:active_browser_url} representa o URL da guia do navegador ativo.",
+  "ui_query_hotkeys_query_tooltip": "A consulta quando a tecla de atalho acionada. As seguintes variáveis são suportadas:\n\n{wox:selected_text} representa o texto selecionado.\n{wox:active_browser_url} representa o URL da guia do navegador ativo.\n{wox:file_explorer_path} representa o caminho da pasta atualmente aberta no explorador de arquivos (se disponível).",
   "ui_query_hotkeys_silent": "Silencioso",
   "ui_query_hotkeys_silent_tooltip": "Quando selecionado, se o número de resultados da consulta for 1, o Wox executar a consulta diretamente sem mostrar a lista de resultados.\n\nIssotil quando você tem uma consulta que sempre retorna um resultado e deseja execut-la diretamente.\nNota: Esta opção s est disponível quando o número de resultados da consulta 1. Caso contrário, ser ignorado e notificar um aviso.",
   "ui_add": "Adicionar",

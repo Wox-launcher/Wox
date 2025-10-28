@@ -21,6 +21,8 @@ Wox Launcher allows you to use variables in your queries. These variables can be
 
 - `{wox:selected_text}`: This variable represents the text currently selected by the user.
 - `{wox:active_browser_url}`: This variable represents the URL of the currently active browser window.
+- `{wox:file_explorer_path}`: This variable represents the path of the currently open folder in the file explorer (if available).
+
 
 To use a variable in a query, simply include it in the query string. Wox Launcher will automatically replace the variable with the corresponding information when the query is
 performed.

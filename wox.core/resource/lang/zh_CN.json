@@ -104,7 +104,7 @@
   "ui_query_hotkeys_hotkey": "快捷键",
   "ui_query_hotkeys_hotkey_tooltip": "用于触发查询的快捷键",
   "ui_query_hotkeys_query": "查询",
-  "ui_query_hotkeys_query_tooltip": "当快捷键被触发时，查询的内容。支持以下变量：\n\n{wox:selected_text} 代表选中的文本\n{wox:active_browser_url} 代表活动的浏览器标签页的URL",
+  "ui_query_hotkeys_query_tooltip": "当快捷键被触发时，查询的内容。支持以下变量：\n\n{wox:selected_text} 代表选中的文本\n{wox:active_browser_url} 代表活动的浏览器标签页的URL\n{wox:file_explorer_path} 代表当前文件管理器中打开的文件夹路径（如果有）",
   "ui_query_hotkeys_silent": "静默",
   "ui_query_hotkeys_silent_tooltip": "当选中时，如果查询结果数量为1，Wox将直接执行查询而不显示结果列表。\n\n这在您有一个总是返回一个结果的查询并且您希望直接执行它时非常有用。\n注意：此选项仅在查询结果数量为1时可用。否则将忽略并通知警告。",
   "ui_add": "添加",
