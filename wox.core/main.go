@@ -41,6 +41,8 @@ import (
 	_ "wox/plugin/system/clipboard"
 
 	_ "wox/plugin/system/mediaplayer"
+
+	_ "wox/plugin/system/shell"
 )
 
 func main() {

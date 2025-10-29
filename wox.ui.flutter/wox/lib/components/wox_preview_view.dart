@@ -53,9 +53,10 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
   };
 
   Widget scrollableContent({required Widget child}) {
-    return SingleChildScrollView(
+    return Scrollbar(
       controller: scrollController,
-      child: Scrollbar(
+      child: SingleChildScrollView(
+        controller: scrollController,
         child: child,
       ),
     );
@@ -102,7 +103,9 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
           return CodeTheme(
             data: CodeThemeData(styles: monokaiTheme),
             child: Scrollbar(
+              controller: scrollController,
               child: SingleChildScrollView(
+                controller: scrollController,
                 child: CodeField(
                   textStyle: const TextStyle(fontSize: 13),
                   readOnly: true,
