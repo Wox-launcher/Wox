@@ -1555,12 +1555,12 @@ func (m *Manager) getActiveBrowserUrl(ctx context.Context) string {
 }
 
 func (m *Manager) getActiveFileExplorerPath(ctx context.Context) string {
-	// Only implemented for Windows currently
-	if runtime.GOOS != "windows" {
+	// Supported on Windows (File Explorer) and macOS (Finder)
+	if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
 		return ""
 	}
 
-	// Use native COM via util/window for fast retrieval
+	// Use platform-specific implementation via util/window
 	return window.GetActiveFileExplorerPath()
 }
 
