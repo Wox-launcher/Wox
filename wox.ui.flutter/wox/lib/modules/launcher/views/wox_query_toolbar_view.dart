@@ -22,8 +22,7 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
 
     return Obx(() {
       final toolbarInfo = controller.toolbar.value;
-      return SizedBox(
-        width: 550,
+      return Flexible(
         child: Row(
           children: [
             if (toolbarInfo.icon != null)
@@ -147,29 +146,46 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
 
     return Obx(() {
       final toolbarInfo = controller.toolbar.value;
-      if (toolbarInfo.hotkey == null || toolbarInfo.hotkey!.isEmpty) {
+
+      // Show all actions with hotkeys
+      if (toolbarInfo.actions == null || toolbarInfo.actions!.isEmpty) {
         return const SizedBox();
       }
 
-      var hotkey = WoxHotkey.parseHotkeyFromString(toolbarInfo.hotkey!);
+      List<Widget> actionWidgets = [];
+
+      for (var actionInfo in toolbarInfo.actions!) {
+        var hotkey = WoxHotkey.parseHotkeyFromString(actionInfo.hotkey);
+        if (hotkey != null) {
+          if (actionWidgets.isNotEmpty) {
+            actionWidgets.add(const SizedBox(width: 16));
+          }
+
+          actionWidgets.add(
+            Text(
+              actionInfo.name,
+              style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          );
+          actionWidgets.add(const SizedBox(width: 8));
+          actionWidgets.add(
+            WoxHotkeyView(
+              hotkey: hotkey,
+              backgroundColor: hasResultItems
+                  ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor)
+                  : safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor).withValues(alpha: 0.1),
+              borderColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+              textColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+            ),
+          );
+        }
+      }
+
       return Row(
         mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Text(
-            toolbarInfo.actionName ?? '',
-            style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(width: 8),
-          WoxHotkeyView(
-            hotkey: hotkey!,
-            backgroundColor: hasResultItems
-                ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor)
-                : safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor).withValues(alpha: 0.1),
-            borderColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
-            textColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
-          )
-        ],
+        children: actionWidgets,
       );
     });
   }
@@ -197,11 +213,11 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
               right: WoxThemeUtil.instance.currentTheme.value.toolbarPaddingRight.toDouble(),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 leftPart(),
-                rightPart(),
+                const SizedBox(width: 16),
+                Expanded(child: rightPart()),
               ],
             ),
           ),

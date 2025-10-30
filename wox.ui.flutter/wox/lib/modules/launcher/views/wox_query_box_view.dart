@@ -108,7 +108,7 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                           return KeyEventResult.handled;
                         case LogicalKeyboardKey.enter:
                           Logger.instance.info(traceId, "[KEYLOG][FLUTTER] Enter KeyDown -> executing action");
-                          controller.executeToolbarAction(const UuidV4().generate());
+                          controller.executeDefaultAction(const UuidV4().generate());
                           return KeyEventResult.handled;
                         case LogicalKeyboardKey.arrowDown:
                           controller.handleQueryBoxArrowDown();

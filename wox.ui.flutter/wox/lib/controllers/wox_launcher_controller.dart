@@ -112,11 +112,6 @@ class WoxLauncherController extends GetxController {
   final toolbar = ToolbarInfo.empty().obs;
   // store i18n key instead of literal text
   final toolbarCopyText = 'toolbar_copy'.obs;
-  // The timer to clean the toolbar when query changed
-  // on every query changed, it will reset the timer and will clear the toolbar after N ms
-  // If there is no this delay mechanism, the toolbar will flicker for fast typing
-  Timer cleanToolbarTimer = Timer(const Duration(), () => {});
-  final cleanToolbarDelay = 1000;
 
   // quick select related variables
   final isQuickSelectMode = false.obs;
@@ -131,7 +126,7 @@ class WoxLauncherController extends GetxController {
     resultListViewController = Get.put(
       WoxListController<WoxQueryResult>(
         onItemExecuted: (traceId, item) {
-          executeToolbarAction(traceId);
+          executeDefaultAction(traceId);
         },
         onItemActive: onResultItemActivated,
       ),
@@ -141,7 +136,7 @@ class WoxLauncherController extends GetxController {
     actionListViewController = Get.put(
       WoxListController<WoxResultAction>(
         onItemExecuted: (traceId, item) {
-          executeToolbarAction(traceId);
+          executeDefaultAction(traceId);
         },
         onItemActive: onActionItemActivated,
         onFilterBoxEscPressed: hideActionPanel,
@@ -549,7 +544,6 @@ class WoxLauncherController extends GetxController {
     }
     updateQueryIconOnQueryChanged(traceId, query);
     updateResultPreviewWidthRatioOnQueryChanged(traceId, query);
-    updateToolbarOnQueryChanged(traceId, query);
     if (query.isEmpty) {
       // Check if we should show MRU results when query is empty
       if (lastQueryMode == WoxQueryModeEnum.WOX_QUERY_MODE_MRU.code) {
@@ -727,11 +721,15 @@ class WoxLauncherController extends GetxController {
       toolbar.value = ToolbarInfo(
         text: doctorCheckInfo.value.message,
         icon: doctorCheckInfo.value.icon,
-        hotkey: "enter",
-        actionName: tr("plugin_doctor_check"),
-        action: () {
-          onQueryChanged(traceId, PlainQuery.text("doctor "), "user click doctor icon");
-        },
+        actions: [
+          ToolbarActionInfo(
+            name: tr("plugin_doctor_check"),
+            hotkey: "enter",
+            action: () {
+              onQueryChanged(traceId, PlainQuery.text("doctor "), "user click doctor icon");
+            },
+          ),
+        ],
       );
     } else {
       Logger.instance.debug(traceId, "update toolbar to empty because of query changed and is empty");
@@ -897,6 +895,9 @@ class WoxLauncherController extends GetxController {
               if (actionListViewController.activeIndex.value != newActiveIndex) {
                 actionListViewController.updateActiveIndex(traceId, newActiveIndex);
               }
+
+              // Update toolbar with all actions with hotkeys
+              updateToolbarWithActions(traceId, result.value.data.actions);
             }
 
             // update result list view item
@@ -1050,12 +1051,9 @@ class WoxLauncherController extends GetxController {
   }
 
   void showToolbarMsg(String traceId, ToolbarMsg msg) {
-    // cancel the timer if it is running
-    cleanToolbarTimer.cancel();
-
     // Snooze/mute enforcement is handled by backend before pushing to UI.
 
-    toolbar.value = ToolbarInfo(text: msg.text, icon: msg.icon, action: toolbar.value.action, actionName: toolbar.value.actionName, hotkey: toolbar.value.hotkey);
+    toolbar.value = ToolbarInfo(text: msg.text, icon: msg.icon, actions: toolbar.value.actions);
     if (msg.displaySeconds > 0) {
       Future.delayed(Duration(seconds: msg.displaySeconds), () {
         // only hide toolbar msg when the text is the same as the one we are showing
@@ -1066,9 +1064,53 @@ class WoxLauncherController extends GetxController {
     }
   }
 
-  void executeToolbarAction(String traceId) {
-    Logger.instance.info(traceId, "execute toolbar action");
-    toolbar.value.action?.call();
+  void executeDefaultAction(String traceId) {
+    Logger.instance.info(traceId, "execute default action");
+
+    // First check if toolbar has action callbacks (e.g., doctor check)
+    if (toolbar.value.actions != null && toolbar.value.actions!.isNotEmpty) {
+      // Find the default action (with Enter hotkey) or use the last one
+      var defaultToolbarAction = toolbar.value.actions!.firstWhereOrNull((action) => action.hotkey.toLowerCase() == "enter");
+      defaultToolbarAction ??= toolbar.value.actions!.last;
+
+      if (defaultToolbarAction.action != null) {
+        Logger.instance.debug(traceId, "executing toolbar action callback: ${defaultToolbarAction.name}");
+        defaultToolbarAction.action!.call();
+        return;
+      }
+    }
+
+    // Get the active result
+    if (resultListViewController.items.isEmpty) {
+      Logger.instance.debug(traceId, "no results to execute");
+      return;
+    }
+
+    var activeResult = resultListViewController.activeItem;
+    if (activeResult.isGroup) {
+      Logger.instance.debug(traceId, "cannot execute group item");
+      return;
+    }
+
+    // Get the active action (from action panel if visible, otherwise default action)
+    WoxResultAction? actionToExecute;
+    if (isShowActionPanel.value && actionListViewController.items.isNotEmpty) {
+      actionToExecute = actionListViewController.activeItem.data;
+    } else {
+      // Find default action
+      actionToExecute = activeResult.data.actions.firstWhereOrNull((action) => action.isDefault);
+      if (actionToExecute == null && activeResult.data.actions.isNotEmpty) {
+        // If no default action, use the first action
+        actionToExecute = activeResult.data.actions.first;
+      }
+    }
+
+    if (actionToExecute == null) {
+      Logger.instance.error(traceId, "no action to execute");
+      return;
+    }
+
+    executeAction(traceId, activeResult.data, actionToExecute);
   }
 
   void focusToChatInput(String traceId) {
@@ -1142,33 +1184,45 @@ class WoxLauncherController extends GetxController {
     if (defaultActionIndex != -1) {
       actionListViewController.updateActiveIndex(traceId, defaultActionIndex);
     }
+
+    // update toolbar to show all actions with hotkeys
+    updateToolbarWithActions(traceId, item.data.actions);
+  }
+
+  void updateToolbarWithActions(String traceId, List<WoxResultAction> actions) {
+    // Filter actions that have hotkeys
+    var actionsWithHotkeys = actions.where((action) => action.hotkey.isNotEmpty).toList();
+
+    if (actionsWithHotkeys.isEmpty) {
+      // No actions with hotkeys, clear toolbar right side
+      toolbar.value = toolbar.value.emptyRightSide();
+      return;
+    }
+
+    // Sort actions: non-default actions first, then default action (Enter) at the end
+    actionsWithHotkeys.sort((a, b) {
+      if (a.isDefault && !b.isDefault) return 1; // a is default, move to end
+      if (!a.isDefault && b.isDefault) return -1; // b is default, move to end
+      return 0; // keep original order
+    });
+
+    // Build toolbar action info list
+    var toolbarActions = actionsWithHotkeys.map((action) {
+      return ToolbarActionInfo(
+        name: action.name,
+        hotkey: action.hotkey,
+      );
+    }).toList();
+
+    // Update toolbar with all actions
+    toolbar.value = toolbar.value.copyWith(
+      actions: toolbarActions,
+    );
   }
 
   void onActionItemActivated(String traceId, WoxListItem<WoxResultAction> item) {
-    Logger.instance.debug(traceId, "on result action item activated: ${item.data.name}");
-
-    // update toolbar to active action
-    var action = item.data;
-    var actionResultId = action.resultId;
-    Logger.instance.debug(traceId, "update toolbar to active result: $actionResultId, default action: ${action.name}");
-
-    // cancel the timer if it is running
-    cleanToolbarTimer.cancel();
-
-    toolbar.value = toolbar.value.copyWith(
-      hotkey: "enter",
-      actionName: action.name,
-      action: () {
-        var result = resultListViewController.items.firstWhereOrNull((element) {
-          return element.value.data.id == actionResultId;
-        });
-        if (result != null) {
-          executeAction(traceId, result.value.data, action);
-        } else {
-          Logger.instance.error(traceId, "associated result ($actionResultId) not found, cannot execute action: ${action.name}");
-        }
-      },
-    );
+    Logger.instance.debug(traceId, "on action item activated: ${item.data.name}");
+    // No need to update toolbar here, executeDefaultAction will handle action execution
   }
 
   Future<void> handleDropFiles(DropDoneDetails details) async {
@@ -1235,26 +1289,6 @@ class WoxLauncherController extends GetxController {
     var resultPreviewWidthRatio = await WoxApi.instance.getResultPreviewWidthRatio(query);
     Logger.instance.debug(traceId, "update result preview width ratio: $resultPreviewWidthRatio");
     resultPreviewRatio.value = resultPreviewWidthRatio;
-  }
-
-  void updateToolbarOnQueryChanged(String traceId, PlainQuery query) {
-    cleanToolbarTimer.cancel();
-
-    if (isShowDoctorCheckInfo) {
-      return;
-    }
-
-    // if query is not empty, update the toolbar after 100ms to avoid flickering
-    cleanToolbarTimer = Timer(Duration(milliseconds: cleanToolbarDelay), () {
-      Logger.instance.debug(traceId, "update toolbar to empty because of query changed");
-      toolbar.value = toolbar.value.emptyRightSide();
-    });
-  }
-
-  /// Update the toolbar to chat view
-  void updateToolbarByChat(String traceId) {
-    Logger.instance.debug(traceId, "update toolbar to chat");
-    toolbar.value = ToolbarInfo(hotkey: "cmd+j", actionName: "Select models", action: () {});
   }
 
   // Quick select related methods
@@ -1385,7 +1419,7 @@ class WoxLauncherController extends GetxController {
         if (quickSelectNumber == number) {
           Logger.instance.debug(traceId, "Quick select: selecting item $number at index $i");
           resultListViewController.updateActiveIndex(traceId, i);
-          executeToolbarAction(traceId);
+          executeDefaultAction(traceId);
           return true;
         }
         quickSelectNumber++;

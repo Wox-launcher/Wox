@@ -1,21 +1,29 @@
 import 'package:wox/entity/wox_image.dart';
 
+class ToolbarActionInfo {
+  final String name;
+  final String hotkey;
+  final Function()? action; // Optional action callback for cases without result (e.g., doctor check)
+
+  ToolbarActionInfo({
+    required this.name,
+    required this.hotkey,
+    this.action,
+  });
+}
+
 class ToolbarInfo {
   // left side of the toolbar
   final WoxImage? icon;
   final String? text;
 
   // right side of the toolbar
-  final String? actionName;
-  final String? hotkey;
-  final Function()? action;
+  final List<ToolbarActionInfo>? actions; // All actions with hotkeys
 
   ToolbarInfo({
     this.icon,
     this.text,
-    this.action,
-    this.actionName,
-    this.hotkey,
+    this.actions,
   });
 
   static ToolbarInfo empty() {
@@ -27,30 +35,26 @@ class ToolbarInfo {
   ToolbarInfo copyWith({
     WoxImage? icon,
     String? text,
-    String? actionName,
-    String? hotkey,
-    Function()? action,
+    List<ToolbarActionInfo>? actions,
   }) {
     return ToolbarInfo(
       icon: icon ?? this.icon,
       text: text ?? this.text,
-      actionName: actionName ?? this.actionName,
-      hotkey: hotkey ?? this.hotkey,
-      action: action ?? this.action,
+      actions: actions ?? this.actions,
     );
   }
 
   ToolbarInfo emptyRightSide() {
-    return ToolbarInfo(icon: icon, text: text, actionName: null, hotkey: null, action: null);
+    return ToolbarInfo(icon: icon, text: text, actions: null);
   }
 
   ToolbarInfo emptyLeftSide() {
-    return ToolbarInfo(icon: null, text: null, actionName: actionName, hotkey: hotkey, action: action);
+    return ToolbarInfo(icon: null, text: null, actions: actions);
   }
 
-  // text and hotkey are both empty
+  // text and actions are both empty
   bool isEmpty() {
-    return (text == null || text!.isEmpty) && (hotkey == null || hotkey!.isEmpty);
+    return (text == null || text!.isEmpty) && (actions == null || actions!.isEmpty);
   }
 
   bool isNotEmpty() {

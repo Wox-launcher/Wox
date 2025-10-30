@@ -437,6 +437,7 @@ func (s *ShellPlugin) buildActions(ctx context.Context, data shellContextData, s
 			Name:                   "i18n:plugin_shell_execute",
 			Icon:                   plugin.CorrectIcon,
 			PreventHideAfterAction: true,
+			IsDefault:              true, // Mark as default action, will get Enter hotkey automatically
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if !*hasStarted {
 					*hasStarted = true
