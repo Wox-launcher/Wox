@@ -93,6 +93,7 @@ class WoxListView<T> extends StatelessWidget {
                           },
                           child: Obx(
                             () => WoxListItemView(
+                              key: ValueKey(item.value.id),
                               item: item.value,
                               woxTheme: WoxThemeUtil.instance.currentTheme.value,
                               isActive: controller.activeIndex.value == index,

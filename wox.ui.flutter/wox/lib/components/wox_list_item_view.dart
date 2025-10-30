@@ -105,6 +105,7 @@ class WoxListItemView extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(left: 10.0),
                     child: WoxImageView(
+                      key: ValueKey('${tail.image!.imageType}_${tail.image!.imageData}'),
                       woxImage: tail.image!,
                       width: getImageSize(tail.image!, 24),
                       height: getImageSize(tail.image!, 24),
@@ -177,6 +178,7 @@ class WoxListItemView extends StatelessWidget {
               : Padding(
                   padding: const EdgeInsets.only(left: 5.0, right: 10.0),
                   child: WoxImageView(
+                    key: ValueKey('${item.icon.imageType}_${item.icon.imageData}'),
                     woxImage: item.icon,
                     width: getImageSize(item.icon, 30),
                     height: getImageSize(item.icon, 30),

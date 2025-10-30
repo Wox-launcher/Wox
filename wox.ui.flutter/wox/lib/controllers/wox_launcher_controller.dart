@@ -874,6 +874,10 @@ class WoxLauncherController extends GetxController {
             result.value.data.contextData = refreshResult.contextData;
             result.value.data.refreshInterval = refreshResult.refreshInterval;
 
+            // Trigger reactive update for the list item
+            // This will cause Obx to rebuild, but with ValueKey the widget will be reused
+            result.refresh();
+
             // only update preview and toolbar when current result is active
             if (resultListViewController.isItemActive(result.value.data.id)) {
               currentPreview.value = result.value.data.preview;
@@ -899,22 +903,6 @@ class WoxLauncherController extends GetxController {
               // Update toolbar with all actions with hotkeys
               updateToolbarWithActions(traceId, result.value.data.actions);
             }
-
-            // update result list view item
-            resultListViewController.updateItem(
-              traceId,
-              WoxListItem(
-                id: result.value.data.id,
-                icon: result.value.data.icon,
-                title: result.value.data.title,
-                tails: result.value.data.tails,
-                subTitle: result.value.data.subTitle,
-                isGroup: result.value.data.isGroup,
-                data: result.value.data,
-                isShowQuickSelect: result.value.isShowQuickSelect,
-                quickSelectNumber: result.value.quickSelectNumber,
-              ),
-            );
 
             isRequesting.remove(result.value.data.id);
           });
