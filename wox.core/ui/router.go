@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -84,7 +83,6 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/":                 handleHome,
 	"/show":             handleShow,
 	"/ping":             handlePing,
-	"/image":            handleImage,
 	"/preview":          handlePreview,
 	"/open":             handleOpen,
 	"/backup/now":       handleBackupNow,
@@ -108,28 +106,6 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 
 func handlePing(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "pong")
-}
-
-func handleImage(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Query().Get("id")
-	if id == "" {
-		writeErrorResponse(w, "id is empty")
-		return
-	}
-
-	imagePath, ok := common.GetLocalImageMap(id)
-	if !ok {
-		writeErrorResponse(w, "imagePath is empty")
-		return
-	}
-
-	if _, statErr := os.Stat(imagePath); os.IsNotExist(statErr) {
-		writeErrorResponse(w, "image not exist")
-		return
-	}
-
-	w.Header().Set("Cache-Control", "public, max-age=3600")
-	http.ServeFile(w, r, imagePath)
 }
 
 func handlePreview(w http.ResponseWriter, r *http.Request) {

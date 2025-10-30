@@ -697,7 +697,7 @@ func (a *ApplicationPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.Qu
 		Id:          uuid.NewString(),
 		Title:       appInfo.Name,
 		SubTitle:    displayPath,
-		Icon:        mruData.Icon,
+		Icon:        appInfo.Icon, // Use current icon instead of cached MRU icon to handle cache invalidation
 		ContextData: mruData.ContextData,
 		Actions: []plugin.QueryResultAction{
 			{

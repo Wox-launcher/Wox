@@ -1519,9 +1519,8 @@ func (m *Manager) GetResultPreview(ctx context.Context, resultId string) (WoxPre
 		return WoxPreview{}, fmt.Errorf("result cache not found for result id (get preview): %s", resultId)
 	}
 
-	preview := m.polishPreview(ctx, resultCache.Preview)
-
 	// if preview text is too long, ellipsis it, otherwise UI maybe freeze when render
+	preview := resultCache.Preview
 	if preview.PreviewType == WoxPreviewTypeText {
 		preview.PreviewData = util.EllipsisMiddle(preview.PreviewData, 2000)
 		// translate preview data if preview type is text
@@ -1529,27 +1528,6 @@ func (m *Manager) GetResultPreview(ctx context.Context, resultId string) (WoxPre
 	}
 
 	return preview, nil
-}
-
-func (m *Manager) polishPreview(ctx context.Context, preview WoxPreview) WoxPreview {
-	if preview.PreviewType == WoxPreviewTypeImage {
-		woxImage, err := common.ParseWoxImage(preview.PreviewData)
-		if err != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to parse wox image for preview: %s", err.Error()))
-			return preview
-		}
-
-		if woxImage.ImageType == common.WoxImageTypeAbsolutePath {
-			newWoxImage := common.ConvertLocalImageToUrl(ctx, woxImage)
-			return WoxPreview{
-				PreviewType:       WoxPreviewTypeImage,
-				PreviewData:       newWoxImage.String(),
-				PreviewProperties: preview.PreviewProperties,
-			}
-		}
-	}
-
-	return preview
 }
 
 func (m *Manager) ReplaceQueryVariable(ctx context.Context, query string) string {

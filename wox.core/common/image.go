@@ -25,7 +25,6 @@ type WoxImageType = string
 var NOT_PNG_ERR = errors.New("image is not png")
 
 var serverPort int
-var localImageMap = util.NewHashMap[string, string]()
 
 const (
 	WoxImageTypeAbsolutePath = "absolute"
@@ -325,7 +324,6 @@ func ConvertIcon(ctx context.Context, image WoxImage, pluginDirectory string) (n
 	newImage = ConvertRelativePathToAbsolutePath(ctx, image, pluginDirectory)
 	newImage = cropPngTransparentPaddings(ctx, newImage)
 	newImage = resizeImage(ctx, newImage, 40)
-	newImage = ConvertLocalImageToUrl(ctx, newImage)
 	return
 }
 
@@ -452,23 +450,6 @@ func ConvertRelativePathToAbsolutePath(ctx context.Context, image WoxImage, plug
 	}
 
 	return newImage
-}
-
-func ConvertLocalImageToUrl(ctx context.Context, image WoxImage) (newImage WoxImage) {
-	newImage = image
-
-	if image.ImageType == WoxImageTypeAbsolutePath {
-		imgHash := image.Hash()
-		newImage.ImageType = WoxImageTypeUrl
-		newImage.ImageData = fmt.Sprintf("http://localhost:%d/image?id=%s", serverPort, imgHash)
-		localImageMap.Store(imgHash, image.ImageData)
-	}
-
-	return newImage
-}
-
-func GetLocalImageMap(id string) (string, bool) {
-	return localImageMap.Load(id)
 }
 
 func SetServerPort(port int) {

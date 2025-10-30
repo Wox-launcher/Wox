@@ -179,20 +179,35 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 				util.GetLogger().Info(ctx, "memory profile saved to "+memoryProfPath)
 			},
 		})
-
-		r.commands = append(r.commands, SysCommand{
-			ID:    "delete_image_cache",
-			Title: "i18n:plugin_sys_delete_image_cache",
-			Icon:  common.NewWoxImageEmoji("🗑️"),
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				location := util.GetLocation()
-				imageCacheDirectory := location.GetImageCacheDirectory()
-				if _, err := os.Stat(imageCacheDirectory); err == nil {
-					os.RemoveAll(imageCacheDirectory)
-				}
-			},
-		})
 	}
+
+	// Clear cache command - available in all environments
+	r.commands = append(r.commands, SysCommand{
+		ID:       "clear_all_cache",
+		Title:    "i18n:plugin_sys_clear_all_cache",
+		SubTitle: "i18n:plugin_sys_clear_all_cache_subtitle",
+		Icon:     common.NewWoxImageEmoji("🗑️"),
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			location := util.GetLocation()
+			cacheDirectory := location.GetCacheDirectory()
+
+			// Remove entire cache directory
+			if _, err := os.Stat(cacheDirectory); err == nil {
+				removeErr := os.RemoveAll(cacheDirectory)
+				if removeErr != nil {
+					r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to remove cache directory: %s", removeErr.Error()))
+					r.api.Notify(ctx, "i18n:plugin_sys_clear_cache_failed")
+					return
+				}
+
+				// Recreate the cache directory structure
+				os.MkdirAll(location.GetImageCacheDirectory(), 0755)
+
+				r.api.Log(ctx, plugin.LogLevelInfo, "cache directory cleared successfully")
+				r.api.Notify(ctx, "i18n:plugin_sys_clear_cache_success")
+			}
+		},
+	})
 
 	r.api.OnMRURestore(ctx, r.handleMRURestore)
 }
