@@ -88,7 +88,7 @@ class PluginAPI(PublicAPI):
 
     async def log(self, ctx: Context, level: str, msg: str) -> None:
         """Write log"""
-        await self.invoke_method(ctx, "Log", {"level": level, "message": msg})
+        await self.invoke_method(ctx, "Log", {"level": level, "msg": msg})
 
     async def get_translation(self, ctx: Context, key: str) -> str:
         """Get a translation for a key"""
