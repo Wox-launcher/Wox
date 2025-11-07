@@ -106,9 +106,9 @@ class AppDelegate: FlutterAppDelegate {
         case "getPosition":
           let frame = window.frame
           let screenFrame = window.screen?.frame ?? NSScreen.main?.frame ?? NSRect.zero
-          // Convert to bottom-left origin coordinate system
+          // Convert to global bottom-left origin coordinate system; include screen origin.y for multi-monitor
           let x = frame.origin.x
-          let y = screenFrame.height - frame.origin.y - frame.height
+          let y = (screenFrame.origin.y + screenFrame.height) - frame.origin.y - frame.height
           result(["x": x, "y": y])
 
         case "setPosition":
@@ -116,9 +116,12 @@ class AppDelegate: FlutterAppDelegate {
             let x = args["x"] as? Double,
             let y = args["y"] as? Double
           {
-            let screenFrame = window.screen?.frame ?? NSScreen.main?.frame ?? NSRect.zero
-            // Convert from bottom-left to top-left origin coordinate system
-            let flippedY = screenFrame.height - y - window.frame.height
+            // Choose the target screen that contains the requested point (global bottom-left coords)
+            let point = NSPoint(x: x, y: y)
+            let targetScreen = NSScreen.screens.first { $0.frame.contains(point) } ?? window.screen ?? NSScreen.main
+            let screenFrame = targetScreen?.frame ?? NSRect.zero
+            // Convert from global bottom-left to AppKit's coordinate space. Include screen's origin.y for multi-monitor.
+            let flippedY = (screenFrame.origin.y + screenFrame.height) - y - window.frame.height
             window.setFrameOrigin(NSPoint(x: x, y: flippedY))
             result(nil)
           } else {
