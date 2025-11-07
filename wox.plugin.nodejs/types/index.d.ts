@@ -127,6 +127,43 @@ export interface RefreshableResult {
   Actions: ResultAction[]
 }
 
+/**
+ * Result that can be updated directly in the UI.
+ *
+ * Unlike RefreshableResult which uses polling, UpdateableResult directly pushes updates to the UI.
+ * All fields except Id are optional. Only non-undefined fields will be updated.
+ *
+ * Example usage:
+ * ```typescript
+ * // Update only the title
+ * const success = await api.updateResult(ctx, {
+ *   Id: resultId,
+ *   Title: "Downloading... 50%"
+ * })
+ *
+ * // Update title and tails
+ * const success = await api.updateResult(ctx, {
+ *   Id: resultId,
+ *   Title: "Processing...",
+ *   Tails: [{ Type: "text", Text: "Step 1/3" }]
+ * })
+ * ```
+ */
+export interface UpdateableResult {
+  /** Required - identifies which result to update */
+  Id: string
+  /** Optional - update the title */
+  Title?: string
+  /** Optional - update the subtitle */
+  SubTitle?: string
+  /** Optional - update the tails */
+  Tails?: ResultTail[]
+  /** Optional - update the preview */
+  Preview?: WoxPreview
+  /** Optional - update the actions */
+  Actions?: ResultAction[]
+}
+
 export interface ResultAction {
   /**
    * Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
@@ -154,6 +191,15 @@ export interface ResultAction {
 }
 
 export interface ActionContext {
+  /**
+   * The ID of the result that triggered this action
+   * This is automatically set by Wox when the action is invoked
+   * Useful for calling UpdateResult API to update the result's UI
+   */
+  ResultId: string
+  /**
+   * Additional data associated with this result
+   */
   ContextData: string
 }
 
@@ -258,6 +304,43 @@ export interface PublicAPI {
    *                 Return null if the MRU data is no longer valid
    */
   OnMRURestore: (ctx: Context, callback: (mruData: MRUData) => Promise<Result | null>) => Promise<void>
+
+  /**
+   * Update a query result that is currently displayed in the UI.
+   *
+   * Returns true if the result was successfully updated (still visible in UI).
+   * Returns false if the result is no longer visible.
+   *
+   * This method is designed for long-running operations within Action handlers.
+   * Best practices:
+   * - Set PreventHideAfterAction: true in your action
+   * - Only use during action execution or in background tasks spawned by actions
+   * - For periodic updates, use RefreshableResult with OnRefresh instead
+   *
+   * Example:
+   * ```typescript
+   * // In an action handler
+   * Action: async (actionContext) => {
+   *   // Update only the title
+   *   const success = await api.UpdateResult(ctx, {
+   *     Id: actionContext.ResultId,
+   *     Title: "Downloading... 50%"
+   *   })
+   *
+   *   // Update title and tails
+   *   const success = await api.UpdateResult(ctx, {
+   *     Id: actionContext.ResultId,
+   *     Title: "Processing...",
+   *     Tails: [{ Type: "text", Text: "Step 1/3" }]
+   *   })
+   * }
+   * ```
+   *
+   * @param ctx Context
+   * @param result UpdateableResult with Id (required) and optional fields to update
+   * @returns Promise<boolean> True if updated successfully, false if result no longer visible
+   */
+  UpdateResult: (ctx: Context, result: UpdateableResult) => Promise<boolean>
 }
 
 export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url" | "emoji" | "lottie"

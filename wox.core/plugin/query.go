@@ -139,7 +139,7 @@ func NewQueryResultTailTexts(texts ...string) []QueryResultTail {
 }
 
 type QueryResultAction struct {
-	// Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
+	// Action id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
 	Id string
 	// Name support i18n
 	Name string
@@ -161,6 +161,11 @@ type QueryResultAction struct {
 }
 
 type ActionContext struct {
+	// The ID of the result that triggered this action
+	// This is automatically set by Wox when the action is invoked
+	// Useful for calling UpdateResult API to update the result's UI
+	ResultId string
+
 	// Additional data associate with this result
 	ContextData string
 }
@@ -218,6 +223,41 @@ type QueryResultActionUI struct {
 
 	// internal use
 	IsSystemAction bool
+}
+
+// UpdateableResult is used to update a query result that is currently displayed in the UI.
+// Unlike RefreshableResult which uses polling, UpdateableResult directly pushes updates to the UI.
+//
+// All fields except Id are optional (pointers). Only non-nil fields will be updated.
+// This allows you to update specific fields without affecting others.
+//
+// Example usage:
+//
+//	// Update only the title
+//	title := "Downloading... 50%"
+//	success := api.UpdateResult(ctx, UpdateableResult{
+//	    Id:    resultId,
+//	    Title: &title,
+//	})
+//
+//	// Update title and tails
+//	title := "Processing..."
+//	tails := []QueryResultTail{NewQueryResultTailText("Step 1/3")}
+//	success := api.UpdateResult(ctx, UpdateableResult{
+//	    Id:    resultId,
+//	    Title: &title,
+//	    Tails: &tails,
+//	})
+type UpdateableResult struct {
+	// Id is required - identifies which result to update
+	Id string
+
+	// Optional fields - only non-nil fields will be updated
+	Title    *string
+	SubTitle *string
+	Tails    *[]QueryResultTail
+	Preview  *WoxPreview
+	Actions  *[]QueryResultActionUI
 }
 
 // store latest result value after query/refresh, so we can retrieve data later in action/refresh

@@ -41,6 +41,49 @@ type API interface {
 	OnMRURestore(ctx context.Context, callback func(mruData MRUData) (*QueryResult, error))
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
 	AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error
+
+	// UpdateResult updates a query result that is currently displayed in the UI.
+	//
+	// This method is designed for showing real-time progress updates during long-running operations,
+	// such as file downloads, plugin installations, or API calls. It directly pushes updates to the UI
+	// without polling, making it ideal for one-time or event-driven updates.
+	//
+	// Returns:
+	//   - true: The result was successfully updated (still visible in the UI)
+	//   - false: The result is no longer visible in the UI (caller should stop updating)
+	//
+	// When to use UpdateResult:
+	//   - Progress updates during Action execution (e.g., "Downloading... 50%")
+	//   - One-time status updates (e.g., "Installation complete")
+	//   - Event-driven updates with clear start/end (e.g., file change notifications)
+	//
+	// When NOT to use UpdateResult (use RefreshableResult instead):
+	//   - Periodic updates that continue indefinitely (e.g., CPU/memory monitoring)
+	//   - Updates that need to continue as long as the result is visible
+	//   - Scenarios where you don't want to manage the update lifecycle manually
+	//
+	// Best practices:
+	//   - Set PreventHideAfterAction: true in your action to keep the result visible
+	//   - Only call this within Action handlers or background goroutines spawned by actions
+	//   - Check the return value - if false, stop updating to avoid resource leaks
+	//   - Only update fields that have changed (use nil for fields you don't want to update)
+	//
+	// Example:
+	//   Action: func(ctx context.Context, actionContext ActionContext) {
+	//       title := "Installing..."
+	//       api.UpdateResult(ctx, UpdateableResult{Id: actionContext.ResultId, Title: &title})
+	//
+	//       go func() {
+	//           title := "Downloading..."
+	//           if !api.UpdateResult(ctx, UpdateableResult{Id: actionContext.ResultId, Title: &title}) {
+	//               return // Result no longer visible, stop updating
+	//           }
+	//           // ... perform download ...
+	//           title = "Installation complete"
+	//           api.UpdateResult(ctx, UpdateableResult{Id: actionContext.ResultId, Title: &title})
+	//       }()
+	//   }
+	UpdateResult(ctx context.Context, result UpdateableResult) bool
 }
 
 type APIImpl struct {
@@ -314,6 +357,12 @@ func (a *APIImpl) OnMRURestore(ctx context.Context, callback func(mruData MRUDat
 	}
 
 	a.pluginInstance.MRURestoreCallbacks = append(a.pluginInstance.MRURestoreCallbacks, callback)
+}
+
+func (a *APIImpl) UpdateResult(ctx context.Context, result UpdateableResult) bool {
+	// Polish the updateable result before sending to UI
+	polishedResult := GetPluginManager().PolishUpdateableResult(ctx, a.pluginInstance, result)
+	return GetPluginManager().GetUI().UpdateResult(ctx, polishedResult)
 }
 
 func NewAPI(instance *Instance) API {

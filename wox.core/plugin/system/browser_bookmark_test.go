@@ -274,3 +274,6 @@ func (m *mockAPI) AIChatStream(ctx context.Context, model common.Model, conversa
 }
 func (m *mockAPI) OnMRURestore(ctx context.Context, callback func(mruData plugin.MRUData) (*plugin.QueryResult, error)) {
 }
+func (m *mockAPI) UpdateResult(ctx context.Context, result plugin.UpdateableResult) bool {
+	return false
+}

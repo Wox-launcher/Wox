@@ -6,7 +6,11 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-3.0"
 authors = [{ name = "Wox Team", email = "qianlifeng@gmail.com" }]
-dependencies = ["loguru", "websockets", "wox-plugin==0.0.49"]
+dependencies = [
+    "loguru",
+    "websockets",
+    "wox-plugin @ file:///Users/qianlifeng/Projects/Wox/wox.plugin.python",
+]
 
 [project.scripts]
 run = "wox_plugin_host.__main__:run"
@@ -17,6 +21,9 @@ dev = ["shiv", "ruff", "mypy"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.ruff]
 line-length = 140

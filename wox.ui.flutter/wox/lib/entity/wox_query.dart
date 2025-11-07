@@ -372,12 +372,44 @@ class QueryIconInfo {
 
 class UpdateableResult {
   late String id;
-  late String? title;
+  String? title;
+  String? subTitle;
+  List<WoxListItemTail>? tails;
+  WoxPreview? preview;
+  List<WoxResultAction>? actions;
 
-  UpdateableResult({required this.id, this.title});
+  UpdateableResult({
+    required this.id,
+    this.title,
+    this.subTitle,
+    this.tails,
+    this.preview,
+    this.actions,
+  });
 
   UpdateableResult.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
     title = json['Title'];
+    subTitle = json['SubTitle'];
+
+    if (json['Tails'] != null) {
+      tails = [];
+      json['Tails'].forEach((v) {
+        tails!.add(WoxListItemTail.fromJson(v));
+      });
+    }
+
+    if (json['Preview'] != null) {
+      preview = WoxPreview.fromJson(json['Preview']);
+    }
+
+    if (json['Actions'] != null) {
+      actions = [];
+      json['Actions'].forEach((v) {
+        var action = WoxResultAction.fromJson(v);
+        action.resultId = id;
+        actions!.add(action);
+      });
+    }
   }
 }

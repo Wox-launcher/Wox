@@ -24,6 +24,7 @@ from .models.result import (
     ResultAction,
     ActionContext,
     RefreshableResult,
+    UpdateableResult,
     ResultTailType,
 )
 
@@ -68,6 +69,7 @@ __all__: List[str] = [
     "ResultAction",
     "ActionContext",
     "RefreshableResult",
+    "UpdateableResult",
     "MetadataCommand",
     "PluginSettingDefinitionItem",
     "PluginSettingValueStyle",

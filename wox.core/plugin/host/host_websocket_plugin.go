@@ -74,6 +74,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 		for j, action := range result.Actions {
 			result.Actions[j].Action = func(ctx context.Context, actionContext plugin.ActionContext) {
 				_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "action", map[string]string{
+					"ResultId":    actionContext.ResultId,
 					"ActionId":    action.Id,
 					"ContextData": actionContext.ContextData,
 				})
@@ -151,6 +152,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 						Hotkey:                 action.Hotkey,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "action", map[string]string{
+								"ResultId":    actionContext.ResultId,
 								"ActionId":    action.Id,
 								"ContextData": actionContext.ContextData,
 							})

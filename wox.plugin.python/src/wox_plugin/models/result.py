@@ -1,4 +1,4 @@
-from typing import List, Callable, Awaitable, Optional
+from typing import List, Callable, Awaitable, Optional, Dict, Any
 from dataclasses import dataclass, field
 from enum import Enum
 import json
@@ -51,12 +51,14 @@ class ResultTail:
 class ActionContext:
     """Context for result actions"""
 
-    context_data: str
+    result_id: str = field(default="")
+    context_data: str = field(default="")
 
     def to_json(self) -> str:
         """Convert to JSON string with camelCase naming"""
         return json.dumps(
             {
+                "ResultId": self.result_id,
                 "ContextData": self.context_data,
             }
         )
@@ -66,6 +68,7 @@ class ActionContext:
         """Create from JSON string with camelCase naming"""
         data = json.loads(json_str)
         return cls(
+            result_id=data.get("ResultId", ""),
             context_data=data.get("ContextData", ""),
         )
 
@@ -227,3 +230,51 @@ class RefreshableResult:
             return self
 
         return _awaitable().__await__()
+
+
+@dataclass
+class UpdateableResult:
+    """
+    Result that can be updated directly in the UI.
+
+    Unlike RefreshableResult which uses polling, UpdateableResult directly pushes updates to the UI.
+    All fields except id are optional. Only non-None fields will be updated.
+
+    Example usage:
+        # Update only the title
+        success = await api.update_result(ctx, UpdateableResult(
+            id=result_id,
+            title="Downloading... 50%"
+        ))
+
+        # Update title and tails
+        success = await api.update_result(ctx, UpdateableResult(
+            id=result_id,
+            title="Processing...",
+            tails=[ResultTail(type=ResultTailType.TEXT, text="Step 1/3")]
+        ))
+    """
+
+    id: str
+    title: Optional[str] = None
+    sub_title: Optional[str] = None
+    tails: Optional[List[ResultTail]] = None
+    preview: Optional[WoxPreview] = None
+    actions: Optional[List[ResultAction]] = None
+
+    def to_json(self) -> str:
+        """Convert to JSON string with camelCase naming"""
+        data: Dict[str, Any] = {"Id": self.id}
+
+        if self.title is not None:
+            data["Title"] = self.title
+        if self.sub_title is not None:
+            data["SubTitle"] = self.sub_title
+        if self.tails is not None:
+            data["Tails"] = [json.loads(tail.to_json()) for tail in self.tails]
+        if self.preview is not None:
+            data["Preview"] = json.loads(self.preview.to_json())
+        if self.actions is not None:
+            data["Actions"] = [json.loads(action.to_json()) for action in self.actions]
+
+        return json.dumps(data)

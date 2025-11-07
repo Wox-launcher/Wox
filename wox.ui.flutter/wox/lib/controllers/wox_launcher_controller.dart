@@ -638,8 +638,8 @@ class WoxLauncherController extends GetxController {
       Get.find<WoxAIChatController>().reloadChatResources(msg.traceId, resourceName: msg.data as String);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "UpdateResult") {
-      updateResult(msg.traceId, UpdateableResult.fromJson(msg.data));
-      responseWoxWebsocketRequest(msg, true, null);
+      final success = updateResult(msg.traceId, UpdateableResult.fromJson(msg.data));
+      responseWoxWebsocketRequest(msg, true, success);
     }
   }
 
@@ -794,18 +794,78 @@ class WoxLauncherController extends GetxController {
     resultListViewController.clearHoveredResult();
   }
 
-  updateResult(String traceId, UpdateableResult updateableResult) {
-    final result = resultListViewController.items.firstWhere((element) => element.value.data.id == updateableResult.id);
-    var needUpdate = false;
-    var updatedResult = result.value.copyWith();
+  bool updateResult(String traceId, UpdateableResult updateableResult) {
+    // Try to find the result in the current items
+    try {
+      final result = resultListViewController.items.firstWhere((element) => element.value.data.id == updateableResult.id);
+      var needUpdate = false;
+      var updatedResult = result.value;
+      var updatedData = result.value.data;
 
-    if (updateableResult.title != null) {
-      updatedResult = updatedResult.copyWith(title: updateableResult.title);
-      needUpdate = true;
-    }
+      // Update only non-null fields
+      if (updateableResult.title != null) {
+        updatedResult = updatedResult.copyWith(title: updateableResult.title);
+        updatedData.title = updateableResult.title!;
+        needUpdate = true;
+      }
 
-    if (needUpdate) {
-      resultListViewController.updateItem(traceId, updatedResult);
+      if (updateableResult.subTitle != null) {
+        updatedResult = updatedResult.copyWith(subTitle: updateableResult.subTitle);
+        updatedData.subTitle = updateableResult.subTitle!;
+        needUpdate = true;
+      }
+
+      if (updateableResult.tails != null) {
+        updatedResult = updatedResult.copyWith(tails: updateableResult.tails);
+        updatedData.tails = updateableResult.tails!;
+        needUpdate = true;
+      }
+
+      if (updateableResult.preview != null) {
+        updatedData.preview = updateableResult.preview!;
+        needUpdate = true;
+      }
+
+      if (updateableResult.actions != null) {
+        updatedData.actions = updateableResult.actions!;
+        needUpdate = true;
+      }
+
+      if (needUpdate) {
+        // Force create a new WoxListItem with updated data to trigger reactive update
+        updatedResult = updatedResult.copyWith(data: updatedData);
+        resultListViewController.updateItem(traceId, updatedResult);
+
+        // If this result is currently active, update the preview and actions
+        if (resultListViewController.isItemActive(updatedData.id)) {
+          if (updateableResult.preview != null) {
+            currentPreview.value = updateableResult.preview!;
+            isShowPreviewPanel.value = currentPreview.value.previewData != "";
+          }
+
+          if (updateableResult.actions != null) {
+            // Save user's current selection before updateItems (which calls filterItems and resets index)
+            var oldActionName = getCurrentActionName();
+
+            var actions = updatedData.actions.map((e) => WoxListItem.fromResultAction(e)).toList();
+            actionListViewController.updateItems(traceId, actions);
+
+            // Restore user's selected action after refresh
+            var newActiveIndex = calculatePreservedActionIndex(oldActionName);
+            if (actionListViewController.activeIndex.value != newActiveIndex) {
+              actionListViewController.updateActiveIndex(traceId, newActiveIndex);
+            }
+
+            // Update toolbar with all actions with hotkeys
+            updateToolbarWithActions(traceId, updatedData.actions);
+          }
+        }
+      }
+
+      return true; // Successfully found and updated the result
+    } catch (e) {
+      // Result not found in current items (no longer visible)
+      return false;
     }
   }
 

@@ -1,4 +1,4 @@
-import { ChangeQueryParam, Context, MapString, PublicAPI, Result } from "@wox-launcher/wox-plugin"
+import { ChangeQueryParam, Context, MapString, PublicAPI, Result, UpdateableResult } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { waitingForResponse } from "./index"
@@ -132,5 +132,10 @@ export class PluginAPI implements PublicAPI {
     const callbackId = crypto.randomUUID()
     this.mruRestoreCallbacks.set(callbackId, callback)
     await this.invokeMethod(ctx, "OnMRURestore", { callbackId })
+  }
+
+  async UpdateResult(ctx: Context, result: UpdateableResult): Promise<boolean> {
+    const response = await this.invokeMethod(ctx, "UpdateResult", { result: JSON.stringify(result) })
+    return response === true
   }
 }

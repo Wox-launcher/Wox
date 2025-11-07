@@ -113,8 +113,27 @@ func (u *uiImpl) ReloadChatResources(ctx context.Context, resouceName string) {
 	u.invokeWebsocketMethod(ctx, "ReloadChatResources", resouceName)
 }
 
-func (u *uiImpl) UpdateResult(ctx context.Context, result common.UpdateableResult) {
-	u.invokeWebsocketMethod(ctx, "UpdateResult", result)
+func (u *uiImpl) UpdateResult(ctx context.Context, result interface{}) bool {
+	// Type assert to plugin.UpdateableResult
+	// We use interface{} in the signature to avoid circular dependency between common and plugin packages
+	response, err := u.invokeWebsocketMethod(ctx, "UpdateResult", result)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("UpdateResult error: %s", err.Error()))
+		return false
+	}
+
+	// The UI returns true if the result was found and updated, false otherwise
+	if response == nil {
+		return false
+	}
+
+	success, ok := response.(bool)
+	if !ok {
+		logger.Error(ctx, "UpdateResult response is not a boolean")
+		return false
+	}
+
+	return success
 }
 
 func (u *uiImpl) isNotifyInToolbar(ctx context.Context, pluginId string) bool {

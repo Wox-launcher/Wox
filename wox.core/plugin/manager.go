@@ -819,6 +819,74 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 	return defaultActions
 }
 
+func (m *Manager) formatFileListPreview(ctx context.Context, filePaths []string) string {
+	totalFiles := len(filePaths)
+	if totalFiles == 0 {
+		return i18n.GetI18nManager().TranslateWox(ctx, "selection_no_files_selected")
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "selection_selected_files_count"), totalFiles))
+	sb.WriteString("\n\n")
+
+	maxDisplayFiles := 10
+	for i, filePath := range filePaths {
+		if i < maxDisplayFiles {
+			sb.WriteString(fmt.Sprintf("- `%s`\n", filePath))
+		} else {
+			remainingFiles := totalFiles - maxDisplayFiles
+			sb.WriteString("\n")
+			sb.WriteString(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "selection_remaining_files_not_shown"), remainingFiles))
+			break
+		}
+	}
+
+	return sb.String()
+}
+
+func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string, currentQuery string) int64 {
+	var score int64 = 0
+
+	resultHash := setting.NewResultHash(pluginId, title, subTitle)
+	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
+	actionResults, ok := woxSetting.ActionedResults.Get().Load(resultHash)
+	if !ok {
+		return score
+	}
+
+	// actioned score are based on actioned counts, the more actioned, the more score
+	// also, action timestamp will be considered, the more recent actioned, the more score weight. If action is in recent 7 days, it will be considered as recent actioned and add score weight
+	// we will use fibonacci sequence to calculate score, the more recent actioned, the more score: 5, 8, 13, 21, 34, 55, 89
+	// that means, actions in day one, we will add weight 89, day two, we will add weight 55, day three, we will add weight 34, and so on
+	// E.g. if actioned 3 times in day one, 2 times in day two, 1 time in day three, the score will be: 89*3 + 55*2 + 34*1 = 450
+
+	for _, actionResult := range actionResults {
+		var weight int64 = 2
+
+		hours := (util.GetSystemTimestamp() - actionResult.Timestamp) / 1000 / 60 / 60
+		if hours < 24*7 {
+			fibonacciIndex := int(math.Ceil(float64(hours) / 24))
+			if fibonacciIndex > 7 {
+				fibonacciIndex = 7
+			}
+			if fibonacciIndex < 1 {
+				fibonacciIndex = 1
+			}
+			fibonacci := []int64{5, 8, 13, 21, 34, 55, 89}
+			score += fibonacci[7-fibonacciIndex]
+		}
+
+		// If the current query is within the historical selected actions, it indicates a stronger connection and increases the score.
+		if currentQuery != "" && actionResult.Query == currentQuery {
+			score += 20
+		}
+
+		score += weight
+	}
+
+	return score
+}
+
 func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult) QueryResult {
 	// set default id
 	if result.Id == "" {
@@ -977,74 +1045,6 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	return result
 }
 
-func (m *Manager) formatFileListPreview(ctx context.Context, filePaths []string) string {
-	totalFiles := len(filePaths)
-	if totalFiles == 0 {
-		return i18n.GetI18nManager().TranslateWox(ctx, "selection_no_files_selected")
-	}
-
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "selection_selected_files_count"), totalFiles))
-	sb.WriteString("\n\n")
-
-	maxDisplayFiles := 10
-	for i, filePath := range filePaths {
-		if i < maxDisplayFiles {
-			sb.WriteString(fmt.Sprintf("- `%s`\n", filePath))
-		} else {
-			remainingFiles := totalFiles - maxDisplayFiles
-			sb.WriteString("\n")
-			sb.WriteString(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "selection_remaining_files_not_shown"), remainingFiles))
-			break
-		}
-	}
-
-	return sb.String()
-}
-
-func (m *Manager) calculateResultScore(ctx context.Context, pluginId, title, subTitle string, currentQuery string) int64 {
-	var score int64 = 0
-
-	resultHash := setting.NewResultHash(pluginId, title, subTitle)
-	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	actionResults, ok := woxSetting.ActionedResults.Get().Load(resultHash)
-	if !ok {
-		return score
-	}
-
-	// actioned score are based on actioned counts, the more actioned, the more score
-	// also, action timestamp will be considered, the more recent actioned, the more score weight. If action is in recent 7 days, it will be considered as recent actioned and add score weight
-	// we will use fibonacci sequence to calculate score, the more recent actioned, the more score: 5, 8, 13, 21, 34, 55, 89
-	// that means, actions in day one, we will add weight 89, day two, we will add weight 55, day three, we will add weight 34, and so on
-	// E.g. if actioned 3 times in day one, 2 times in day two, 1 time in day three, the score will be: 89*3 + 55*2 + 34*1 = 450
-
-	for _, actionResult := range actionResults {
-		var weight int64 = 2
-
-		hours := (util.GetSystemTimestamp() - actionResult.Timestamp) / 1000 / 60 / 60
-		if hours < 24*7 {
-			fibonacciIndex := int(math.Ceil(float64(hours) / 24))
-			if fibonacciIndex > 7 {
-				fibonacciIndex = 7
-			}
-			if fibonacciIndex < 1 {
-				fibonacciIndex = 1
-			}
-			fibonacci := []int64{5, 8, 13, 21, 34, 55, 89}
-			score += fibonacci[7-fibonacciIndex]
-		}
-
-		// If the current query is within the historical selected actions, it indicates a stronger connection and increases the score.
-		if currentQuery != "" && actionResult.Query == currentQuery {
-			score += 20
-		}
-
-		score += weight
-	}
-
-	return score
-}
-
 func (m *Manager) polishRefreshableResult(ctx context.Context, resultCache *QueryResultCache, result RefreshableResult) RefreshableResult {
 	pluginInstance := resultCache.PluginInstance
 
@@ -1122,6 +1122,93 @@ func (m *Manager) polishRefreshableResult(ctx context.Context, resultCache *Quer
 			PreviewType: WoxPreviewTypeRemote,
 			PreviewData: fmt.Sprintf("/preview?id=%s", resultCache.ResultId),
 		}
+	}
+
+	return result
+}
+
+func (m *Manager) PolishUpdateableResult(ctx context.Context, pluginInstance *Instance, result UpdateableResult) UpdateableResult {
+	// Polish actions if they are being updated
+	if result.Actions != nil {
+		actions := *result.Actions
+
+		// Set default action id and icon if not present
+		for actionIndex := range actions {
+			if actions[actionIndex].Id == "" {
+				actions[actionIndex].Id = uuid.NewString()
+			}
+			if actions[actionIndex].Icon.IsEmpty() {
+				actions[actionIndex].Icon = DefaultActionIcon
+			}
+		}
+
+		// Set first action as default if no default action is set
+		defaultActionCount := lo.CountBy(actions, func(item QueryResultActionUI) bool {
+			return item.IsDefault
+		})
+		if defaultActionCount == 0 && len(actions) > 0 {
+			actions[0].IsDefault = true
+			actions[0].Hotkey = "Enter"
+		}
+
+		// If default action's hotkey is empty, set it as Enter
+		for actionIndex := range actions {
+			if actions[actionIndex].IsDefault && actions[actionIndex].Hotkey == "" {
+				actions[actionIndex].Hotkey = "Enter"
+			}
+			// Normalize hotkey for platform specific modifiers
+			actions[actionIndex].Hotkey = normalizeHotkeyForPlatform(actions[actionIndex].Hotkey)
+		}
+
+		// Move default action to first position
+		sort.Slice(actions, func(i, j int) bool {
+			return actions[i].IsDefault
+		})
+
+		// Translate action names
+		for actionIndex := range actions {
+			actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, actions[actionIndex].Name)
+		}
+
+		result.Actions = &actions
+	}
+
+	// Translate title if present
+	if result.Title != nil {
+		translated := m.translatePlugin(ctx, pluginInstance, *result.Title)
+		result.Title = &translated
+	}
+
+	// Translate subtitle if present
+	if result.SubTitle != nil {
+		translated := m.translatePlugin(ctx, pluginInstance, *result.SubTitle)
+		result.SubTitle = &translated
+	}
+
+	// Translate tails if present
+	if result.Tails != nil {
+		tails := *result.Tails
+		for i := range tails {
+			if tails[i].Type == QueryResultTailTypeText {
+				tails[i].Text = m.translatePlugin(ctx, pluginInstance, tails[i].Text)
+			}
+			if tails[i].Type == QueryResultTailTypeImage {
+				tails[i].Image = common.ConvertIcon(ctx, tails[i].Image, pluginInstance.PluginDirectory)
+			}
+		}
+		result.Tails = &tails
+	}
+
+	// Translate preview properties if present
+	if result.Preview != nil {
+		preview := *result.Preview
+		var previewProperties = make(map[string]string)
+		for key, value := range preview.PreviewProperties {
+			translatedKey := m.translatePlugin(ctx, pluginInstance, key)
+			previewProperties[translatedKey] = value
+		}
+		preview.PreviewProperties = previewProperties
+		result.Preview = &preview
 	}
 
 	return result
@@ -1408,6 +1495,7 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 	}
 
 	action(ctx, ActionContext{
+		ResultId:    resultId,
 		ContextData: resultCache.ContextData,
 	})
 

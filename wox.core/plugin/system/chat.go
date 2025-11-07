@@ -822,7 +822,7 @@ func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData
 			r.saveChats(ctx)
 
 			if resultId, ok := r.resultChatIdMap.Load(chat.Id); ok {
-				plugin.GetPluginManager().GetUI().UpdateResult(ctx, common.UpdateableResult{
+				plugin.GetPluginManager().GetUI().UpdateResult(ctx, plugin.UpdateableResult{
 					Id:    resultId,
 					Title: &title,
 				})

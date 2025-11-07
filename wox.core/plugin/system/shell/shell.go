@@ -3,12 +3,10 @@ package shell
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 	"wox/common"
 	"wox/i18n"
@@ -32,43 +30,28 @@ func init() {
 type ShellPlugin struct {
 	api            plugin.API
 	historyManager *ShellHistoryManager
+	// Map to store execution states by result ID
+	executionStates sync.Map // map[string]*shellExecutionState
 }
 
 type shellContextData struct {
 	Command     string `json:"command"`
 	Interpreter string `json:"interpreter"`
+	HistoryID   string `json:"-"`
+	FromHistory bool   `json:"-"`
 }
 
 type shellExecutionState struct {
-	output       strings.Builder
-	isRunning    bool
-	isFinished   bool
-	exitCode     int
-	errorMessage string
-	startTime    time.Time
-	endTime      time.Time
-	cmd          *exec.Cmd
-	mutex        sync.RWMutex
-}
-
-// isProcessRunning checks if a process is still running
-func isProcessRunning(cmd *exec.Cmd) bool {
-	if cmd == nil || cmd.Process == nil {
-		return false
-	}
-
-	// Send signal 0 to check if process exists
-	// This works on Unix-like systems (macOS, Linux)
-	// On Windows, we need to use a different approach
-	if util.IsWindows() {
-		// On Windows, Process.Signal is not supported
-		// We check if the process has exited by checking ProcessState
-		return cmd.ProcessState == nil || !cmd.ProcessState.Exited()
-	}
-
-	// On Unix-like systems, send signal 0 to check if process exists
-	err := cmd.Process.Signal(syscall.Signal(0))
-	return err == nil
+	output         strings.Builder
+	isRunning      bool
+	isFinished     bool
+	isKilledByUser bool // true if command was killed by user action
+	exitCode       int
+	errorMessage   string
+	startTime      time.Time
+	endTime        time.Time
+	cmd            *exec.Cmd
+	mutex          sync.RWMutex
 }
 
 func (s *ShellPlugin) GetMetadata() plugin.Metadata {
@@ -98,6 +81,9 @@ func (s *ShellPlugin) GetMetadata() plugin.Metadata {
 				Params: map[string]string{
 					"WidthRatio": "0.25",
 				},
+			},
+			{
+				Name: plugin.MetadataFeatureIgnoreAutoScore,
 			},
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
@@ -202,7 +188,9 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 	}
 
 	var results []plugin.QueryResult
-	for i, history := range histories {
+	for _, history := range histories {
+		s.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("History: %s, created_at:%s", history.Command, history.CreatedAt.String()))
+
 		// Check if running status is still valid (process might have died)
 		// This handles cases where Wox was restarted or process died unexpectedly
 		if history.Status == "running" {
@@ -250,31 +238,76 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 			previewProperties[i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_exit_code")] = fmt.Sprintf("%d", history.ExitCode)
 		}
 
-		// Create context data for re-execution
-		contextData := shellContextData{
-			Command:     history.Command,
-			Interpreter: interpreter,
-		}
-		contextDataJson, _ := json.Marshal(contextData)
+		// Build actions based on status
+		var actions []plugin.QueryResultAction
 
-		// Create execution state for this history item
-		state := &shellExecutionState{}
-		hasStarted := false
+		// Always add re-execute action
+		actions = append(actions, plugin.QueryResultAction{
+			Id:                     "reexecute",
+			Name:                   "i18n:plugin_shell_reexecute",
+			Icon:                   plugin.UpdateIcon,
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				// Toggle: if running then stop; otherwise re-execute
+				if stateVal, ok := s.executionStates.Load(actionContext.ResultId); ok {
+					state := stateVal.(*shellExecutionState)
+					state.mutex.Lock()
+					if state.isRunning && state.cmd != nil && state.cmd.Process != nil {
+						state.isKilledByUser = true
+						state.cmd.Process.Kill()
+						s.api.Log(ctx, plugin.LogLevelInfo, "Command killed by user via re-execute toggle")
+						state.mutex.Unlock()
+						return
+					}
+					state.mutex.Unlock()
+				}
+				// Start execution
+				contextData := shellContextData{
+					Command:     history.Command,
+					Interpreter: interpreter,
+					HistoryID:   history.ID,
+					FromHistory: true,
+				}
+				executionState := &shellExecutionState{}
+				s.executionStates.Store(actionContext.ResultId, executionState)
+				util.Go(ctx, "re-execute shell command from history", func() {
+					s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, contextData, executionState)
+				})
+			},
+		})
+
+		// Only add stop action if command is still running
+		if history.Status == "running" {
+			actions = append(actions, plugin.QueryResultAction{
+				Id:                     "stop",
+				Name:                   "i18n:plugin_shell_stop",
+				Icon:                   plugin.TerminateAppIcon,
+				PreventHideAfterAction: true,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					if stateVal, ok := s.executionStates.Load(actionContext.ResultId); ok {
+						state := stateVal.(*shellExecutionState)
+						state.mutex.Lock()
+						if state.cmd != nil && state.cmd.Process != nil {
+							state.isKilledByUser = true // Mark as killed by user
+							state.cmd.Process.Kill()
+							s.api.Log(ctx, plugin.LogLevelInfo, "Command killed by user")
+						}
+						state.mutex.Unlock()
+					}
+				},
+			})
+		}
 
 		results = append(results, plugin.QueryResult{
-			Title:           history.Command,
-			SubTitle:        subtitle,
-			Icon:            shellIcon,
-			Score:           int64(100 - i), // Recent commands have higher scores
-			ContextData:     string(contextDataJson),
-			RefreshInterval: 100, // Enable refresh for re-execution
+			Title:    history.Command,
+			SubTitle: subtitle,
+			Icon:     shellIcon,
 			Preview: plugin.WoxPreview{
 				PreviewType:       plugin.WoxPreviewTypeText,
 				PreviewData:       history.Output,
 				PreviewProperties: previewProperties,
 			},
-			OnRefresh: s.createOnRefreshCallback(contextData, state, &hasStarted),
-			Actions:   s.buildActions(ctx, contextData, state, &hasStarted),
+			Actions: actions,
 		})
 	}
 
@@ -300,211 +333,106 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 	contextData := shellContextData{
 		Command:     command,
 		Interpreter: interpreter,
+		FromHistory: false,
 	}
-	contextDataJson, _ := json.Marshal(contextData)
 
 	// Build subtitle with interpreter info
 	subtitle := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_with"), interpreter, command)
 
-	// Create execution state for this command
-	executionState := &shellExecutionState{}
-	hasStarted := false
-
 	return []plugin.QueryResult{
 		{
-			Title:           command,
-			SubTitle:        subtitle,
-			Icon:            shellIcon,
-			Score:           100,
-			ContextData:     string(contextDataJson),
-			RefreshInterval: 100, // Refresh every 100ms to show real-time output
+			Title:    command,
+			SubTitle: subtitle,
+			Icon:     shellIcon,
+			Score:    100,
 			Preview: plugin.WoxPreview{
 				PreviewType:    plugin.WoxPreviewTypeText,
 				PreviewData:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_enter_to_execute"),
 				ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 			},
-			OnRefresh: s.createOnRefreshCallback(contextData, executionState, &hasStarted),
-			Actions:   s.buildActions(ctx, contextData, executionState, &hasStarted),
+			Actions: []plugin.QueryResultAction{
+				{
+					Id:                     "execute",
+					Name:                   "i18n:plugin_shell_execute",
+					Icon:                   plugin.CorrectIcon,
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						executionState := &shellExecutionState{}
+						s.executionStates.Store(actionContext.ResultId, executionState)
+						util.Go(ctx, "execute shell command", func() {
+							s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, contextData, executionState)
+						})
+					},
+				},
+				{
+					Id:                     "execute_background",
+					Name:                   "i18n:plugin_shell_execute_background",
+					Icon:                   plugin.OpenIcon,
+					PreventHideAfterAction: false,
+					Hotkey:                 "ctrl+enter",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						util.Go(ctx, "execute shell command in background", func() {
+							s.executeCommandInBackground(ctx, contextData)
+						})
+					},
+				},
+				{
+					Id:                     "stop",
+					Name:                   "i18n:plugin_shell_stop",
+					Icon:                   plugin.TerminateAppIcon,
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						if stateVal, ok := s.executionStates.Load(actionContext.ResultId); ok {
+							state := stateVal.(*shellExecutionState)
+							state.mutex.Lock()
+							if state.cmd != nil && state.cmd.Process != nil {
+								state.isKilledByUser = true // Mark as killed by user
+								state.cmd.Process.Kill()
+								s.api.Log(ctx, plugin.LogLevelInfo, "Command killed by user")
+							}
+							state.mutex.Unlock()
+						}
+					},
+				},
+				{
+					Id:                     "reexecute",
+					Name:                   "i18n:plugin_shell_reexecute",
+					Icon:                   plugin.UpdateIcon,
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						executionState := &shellExecutionState{}
+						s.executionStates.Store(actionContext.ResultId, executionState)
+						util.Go(ctx, "re-execute shell command", func() {
+							s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, contextData, executionState)
+						})
+					},
+				},
+			},
 		},
 	}
 }
 
-// createOnRefreshCallback creates the OnRefresh callback for shell command execution
-func (s *ShellPlugin) createOnRefreshCallback(contextData shellContextData, executionState *shellExecutionState, hasStarted *bool) func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
-	return func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
-		if !*hasStarted {
-			return current
-		}
-
-		executionState.mutex.Lock()
-
-		// Check if process is still running (for running state)
-		if executionState.isRunning && !isProcessRunning(executionState.cmd) {
-			// Process died unexpectedly
-			executionState.isRunning = false
-			executionState.isFinished = true
-			executionState.endTime = time.Now()
-			executionState.errorMessage = "Process terminated unexpectedly"
-			s.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Shell command process died unexpectedly: %s", contextData.Command))
-		}
-
-		// Build preview content
-		var previewBuilder strings.Builder
-		previewBuilder.WriteString(fmt.Sprintf("$ %s\n\n", contextData.Command))
-
-		var statusText string
-		var statusIcon string
-		previewProperties := make(map[string]string)
-
-		if executionState.isRunning {
-			elapsed := time.Since(executionState.startTime)
-			previewBuilder.WriteString(fmt.Sprintf("⏱️ Running... (%.1fs)\n\n", elapsed.Seconds()))
-			statusIcon = "⏱️"
-			statusText = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_running")
-
-			// Add properties for running state
-			previewProperties[i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_status")] = statusText
-			previewProperties[i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_interpreter")] = contextData.Interpreter
-			previewProperties[i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_duration")] = fmt.Sprintf("%.1fs", elapsed.Seconds())
-			previewProperties[i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_start_time")] = executionState.startTime.Format("2006-01-02 15:04:05")
-		} else if executionState.isFinished {
-			duration := executionState.endTime.Sub(executionState.startTime)
-			if executionState.exitCode == 0 {
-				previewBuilder.WriteString(fmt.Sprintf("✅ Completed in %.2fs\n\n", duration.Seconds()))
-				statusIcon = "✅"
-				statusText = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_success")
-			} else {
-				previewBuilder.WriteString(fmt.Sprintf("❌ Failed with exit code %d (%.2fs)\n\n", executionState.exitCode, duration.Seconds()))
-				statusIcon = "❌"
-				statusText = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_failed")
-			}
-
-			// Add properties for finished state
-			previewProperties[i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_status")] = statusText
-			previewProperties[i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_interpreter")] = contextData.Interpreter
-			previewProperties[i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_duration")] = fmt.Sprintf("%.2fs", duration.Seconds())
-			previewProperties[i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_start_time")] = executionState.startTime.Format("2006-01-02 15:04:05")
-			previewProperties[i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_exit_code")] = fmt.Sprintf("%d", executionState.exitCode)
-		}
-
-		// Add output
-		output := executionState.output.String()
-		if output != "" {
-			previewBuilder.WriteString(output)
-		} else if executionState.isFinished {
-			previewBuilder.WriteString(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_no_output"))
-		}
-
-		// Add error message if any
-		if executionState.errorMessage != "" {
-			previewBuilder.WriteString("\n\n❌ Error:\n")
-			previewBuilder.WriteString(executionState.errorMessage)
-		}
-
-		executionState.mutex.Unlock()
-
-		// Update subtitle with simple status
-		current.SubTitle = fmt.Sprintf("%s %s", statusIcon, statusText)
-
-		// Update preview
-		current.Preview.PreviewData = previewBuilder.String()
-		current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
-		current.Preview.PreviewProperties = previewProperties
-
-		// Stop refreshing when finished
-		if executionState.isFinished {
-			current.RefreshInterval = 0
-		}
-
-		// Update actions based on execution state
-		current.Actions = s.buildActions(ctx, contextData, executionState, hasStarted)
-
-		return current
-	}
-}
-
-func (s *ShellPlugin) buildActions(ctx context.Context, data shellContextData, state *shellExecutionState, hasStarted *bool) []plugin.QueryResultAction {
-	state.mutex.RLock()
-	isRunning := state.isRunning
-	isFinished := state.isFinished
-	state.mutex.RUnlock()
-
-	var actions []plugin.QueryResultAction
-
-	if !*hasStarted {
-		// Not started yet - show Execute and Execute in Background actions
-		actions = append(actions, plugin.QueryResultAction{
-			Name:                   "i18n:plugin_shell_execute",
-			Icon:                   plugin.CorrectIcon,
-			PreventHideAfterAction: true,
-			IsDefault:              true, // Mark as default action, will get Enter hotkey automatically
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				if !*hasStarted {
-					*hasStarted = true
-					util.Go(ctx, "execute shell command", func() {
-						s.executeCommandWithState(ctx, data, state)
-					})
-				}
-			},
-		})
-
-		// Add "Execute in Background" action
-		actions = append(actions, plugin.QueryResultAction{
-			Name:                   "i18n:plugin_shell_execute_background",
-			Icon:                   plugin.OpenIcon,
-			PreventHideAfterAction: false, // Hide Wox after execution
-			Hotkey:                 "ctrl+enter",
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				util.Go(ctx, "execute shell command in background", func() {
-					s.executeCommandInBackground(ctx, data)
-				})
-			},
-		})
-	} else if isRunning {
-		// Running - show Stop action
-		actions = append(actions, plugin.QueryResultAction{
-			Name:                   "i18n:plugin_shell_stop",
-			Icon:                   plugin.TerminateAppIcon,
-			PreventHideAfterAction: true,
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				state.mutex.Lock()
-				if state.cmd != nil && state.cmd.Process != nil {
-					state.cmd.Process.Kill()
-					s.api.Log(ctx, plugin.LogLevelInfo, "Command killed by user")
-				}
-				state.mutex.Unlock()
-			},
-		})
-	} else if isFinished {
-		// Finished - show Re-execute action
-		actions = append(actions, plugin.QueryResultAction{
-			Name:                   "i18n:plugin_shell_reexecute",
-			Icon:                   plugin.UpdateIcon,
-			PreventHideAfterAction: true,
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				// Reset state
-				state.mutex.Lock()
-				state.output.Reset()
-				state.isRunning = false
-				state.isFinished = false
-				state.exitCode = 0
-				state.errorMessage = ""
-				state.cmd = nil
-				state.mutex.Unlock()
-
-				// Re-execute
-				util.Go(ctx, "re-execute shell command", func() {
-					s.executeCommandWithState(ctx, data, state)
-				})
-			},
-		})
-	}
-
-	return actions
-}
-
-func (s *ShellPlugin) executeCommandWithState(ctx context.Context, data shellContextData, state *shellExecutionState) {
+// executeCommandWithUpdateResult executes a shell command and uses UpdateResult API to push updates
+func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, resultId string, data shellContextData, state *shellExecutionState) {
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Executing shell command: %s with interpreter: %s", data.Command, data.Interpreter))
+
+	// Helper function to update the result UI
+	updateUI := func(subtitle, previewData string, previewProperties map[string]string, actions []plugin.QueryResultActionUI) bool {
+		preview := plugin.WoxPreview{
+			PreviewType:       plugin.WoxPreviewTypeText,
+			PreviewData:       previewData,
+			PreviewProperties: previewProperties,
+			ScrollPosition:    plugin.WoxPreviewScrollPositionBottom,
+		}
+		success := s.api.UpdateResult(ctx, plugin.UpdateableResult{
+			Id:       resultId,
+			SubTitle: &subtitle,
+			Preview:  &preview,
+			Actions:  &actions,
+		})
+		s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("UpdateResult called for %s, success: %v, preview length: %d", resultId, success, len(previewData)))
+		return success
+	}
 
 	// Build command based on interpreter
 	var cmd *exec.Cmd
@@ -527,18 +455,42 @@ func (s *ShellPlugin) executeCommandWithState(ctx context.Context, data shellCon
 		cmd = exec.CommandContext(ctx, data.Interpreter, "-c", data.Command)
 	}
 
-	// Create history record
-	historyID := uuid.NewString()
-	historyRecord := &ShellHistory{
-		ID:          historyID,
-		Command:     data.Command,
-		Interpreter: data.Interpreter,
-		Status:      "running",
-		StartTime:   util.GetSystemTimestamp(),
-	}
-	err := s.historyManager.Create(ctx, historyRecord)
-	if err != nil {
-		s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create shell history: %s", err.Error()))
+	// Prepare or reuse history record
+	startTs := util.GetSystemTimestamp()
+	var historyID string
+	if data.FromHistory && data.HistoryID != "" {
+		// Reset existing record instead of creating a new one
+		if err := s.historyManager.ResetForReexecute(ctx, data.HistoryID, data.Command, data.Interpreter, startTs); err != nil {
+			s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to reset shell history for re-execute (id=%s), fallback to create new: %s", data.HistoryID, err.Error()))
+			// Fallback: create a new record
+			historyID = uuid.NewString()
+			historyRecord := &ShellHistory{
+				ID:          historyID,
+				Command:     data.Command,
+				Interpreter: data.Interpreter,
+				Status:      "running",
+				StartTime:   startTs,
+			}
+			if err := s.historyManager.Create(ctx, historyRecord); err != nil {
+				s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create shell history: %s", err.Error()))
+			}
+		} else {
+			// Success: reuse existing record
+			historyID = data.HistoryID
+		}
+	} else {
+		// Fresh execution: create a new record
+		historyID = uuid.NewString()
+		historyRecord := &ShellHistory{
+			ID:          historyID,
+			Command:     data.Command,
+			Interpreter: data.Interpreter,
+			Status:      "running",
+			StartTime:   startTs,
+		}
+		if err := s.historyManager.Create(ctx, historyRecord); err != nil {
+			s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create shell history: %s", err.Error()))
+		}
 	}
 
 	// Start history tracker for periodic output saving
@@ -561,6 +513,14 @@ func (s *ShellPlugin) executeCommandWithState(ctx context.Context, data shellCon
 		state.isFinished = true
 		state.endTime = time.Now()
 		state.mutex.Unlock()
+
+		// Update UI with error
+		updateUI(
+			"❌ "+i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_failed"),
+			fmt.Sprintf("$ %s\n\n❌ Error:\n%s", data.Command, state.errorMessage),
+			nil,
+			nil,
+		)
 		return
 	}
 
@@ -572,6 +532,14 @@ func (s *ShellPlugin) executeCommandWithState(ctx context.Context, data shellCon
 		state.isFinished = true
 		state.endTime = time.Now()
 		state.mutex.Unlock()
+
+		// Update UI with error
+		updateUI(
+			"❌ "+i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_failed"),
+			fmt.Sprintf("$ %s\n\n❌ Error:\n%s", data.Command, state.errorMessage),
+			nil,
+			nil,
+		)
 		return
 	}
 
@@ -585,10 +553,84 @@ func (s *ShellPlugin) executeCommandWithState(ctx context.Context, data shellCon
 		state.exitCode = 1
 		state.mutex.Unlock()
 
+		// Update UI with error
+		updateUI(
+			"❌ "+i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_failed"),
+			fmt.Sprintf("$ %s\n\n❌ Error:\n%s", data.Command, state.errorMessage),
+			nil,
+			nil,
+		)
+
 		// Stop tracker and save failed state
 		tracker.stop(ctx, "failed", 1)
 		return
 	}
+
+	// Start a goroutine to periodically update UI while running
+	stopUpdater := make(chan struct{})
+	util.Go(ctx, "shell command UI updater", func() {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-stopUpdater:
+				return
+			case <-ticker.C:
+				state.mutex.RLock()
+				if !state.isRunning {
+					state.mutex.RUnlock()
+					return
+				}
+
+				elapsed := time.Since(state.startTime)
+				output := state.output.String()
+				state.mutex.RUnlock()
+
+				// Build preview
+				var previewBuilder strings.Builder
+				previewBuilder.WriteString(fmt.Sprintf("$ %s\n\n", data.Command))
+				previewBuilder.WriteString(fmt.Sprintf("⏱️ Running... (%.1fs)\n\n", elapsed.Seconds()))
+				if output != "" {
+					previewBuilder.WriteString(output)
+				}
+
+				// Build properties
+				previewProperties := map[string]string{
+					i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_status"):      i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_running"),
+					i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_interpreter"): data.Interpreter,
+					i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_duration"):    fmt.Sprintf("%.1fs", elapsed.Seconds()),
+					i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_start_time"):  state.startTime.Format("2006-01-02 15:04:05"),
+				}
+
+				// Build actions (Stop action)
+				actionId := "stop"
+				if data.FromHistory {
+					actionId = "reexecute" // use reexecute id so the cached action can toggle stop
+				}
+				actions := []plugin.QueryResultActionUI{
+					{
+						Id:                     actionId,
+						Name:                   i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_stop"),
+						Icon:                   plugin.TerminateAppIcon,
+						PreventHideAfterAction: true,
+					},
+				}
+
+				// Update UI - if it fails, just stop updating UI but let the command continue
+				if !updateUI(
+					"⏱️ "+i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_running"),
+					previewBuilder.String(),
+					previewProperties,
+					actions,
+				) {
+					// Result no longer visible in UI, stop updating but let command continue
+					s.api.Log(ctx, plugin.LogLevelInfo, "Result no longer visible, stopping UI updates but command continues")
+					return
+				}
+			}
+		}
+	})
 
 	// Read output in real-time
 	var wg sync.WaitGroup
@@ -626,6 +668,9 @@ func (s *ShellPlugin) executeCommandWithState(ctx context.Context, data shellCon
 	// Wait for command to finish
 	err = cmd.Wait()
 
+	// Stop the UI updater
+	close(stopUpdater)
+
 	// Update state
 	state.mutex.Lock()
 	state.isRunning = false
@@ -633,7 +678,18 @@ func (s *ShellPlugin) executeCommandWithState(ctx context.Context, data shellCon
 	state.endTime = time.Now()
 
 	var historyStatus string
-	if err != nil {
+	var statusIcon string
+	var statusText string
+
+	// Check if command was killed by user
+	if state.isKilledByUser {
+		state.exitCode = -1
+		historyStatus = "killed"
+		statusIcon = "🛑"
+		statusText = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_killed")
+		s.api.Log(ctx, plugin.LogLevelInfo, "Command killed by user")
+	} else if err != nil {
+		// Command failed naturally
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			state.exitCode = exitErr.ExitCode()
 		} else {
@@ -641,17 +697,70 @@ func (s *ShellPlugin) executeCommandWithState(ctx context.Context, data shellCon
 			state.errorMessage = err.Error()
 		}
 		historyStatus = "failed"
+		statusIcon = "❌"
+		statusText = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_failed")
 		s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Command failed: %s", err.Error()))
 	} else {
+		// Command completed successfully
 		state.exitCode = 0
 		historyStatus = "completed"
+		statusIcon = "✅"
+		statusText = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_success")
 		s.api.Log(ctx, plugin.LogLevelInfo, "Command completed successfully")
 	}
 	exitCode := state.exitCode
+	duration := state.endTime.Sub(state.startTime)
+	output := state.output.String()
+	errorMessage := state.errorMessage
 	state.mutex.Unlock()
 
 	// Stop history tracker and save final state
 	tracker.stop(ctx, historyStatus, exitCode)
+
+	// Build final preview
+	var previewBuilder strings.Builder
+	previewBuilder.WriteString(fmt.Sprintf("$ %s\n\n", data.Command))
+	if exitCode == 0 {
+		previewBuilder.WriteString(fmt.Sprintf("✅ Completed in %.2fs\n\n", duration.Seconds()))
+	} else {
+		previewBuilder.WriteString(fmt.Sprintf("❌ Failed with exit code %d (%.2fs)\n\n", exitCode, duration.Seconds()))
+	}
+	if output != "" {
+		previewBuilder.WriteString(output)
+	} else {
+		previewBuilder.WriteString(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_no_output"))
+	}
+	if errorMessage != "" {
+		previewBuilder.WriteString("\n\n❌ Error:\n")
+		previewBuilder.WriteString(errorMessage)
+	}
+
+	// Build final properties
+	previewProperties := map[string]string{
+		i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_status"):      statusText,
+		i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_interpreter"): data.Interpreter,
+		i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_duration"):    fmt.Sprintf("%.2fs", duration.Seconds()),
+		i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_start_time"):  state.startTime.Format("2006-01-02 15:04:05"),
+		i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_exit_code"):   fmt.Sprintf("%d", exitCode),
+	}
+
+	// Build final actions (Re-execute action)
+	actions := []plugin.QueryResultActionUI{
+		{
+			Id:                     "reexecute",
+			Name:                   i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_reexecute"),
+			Icon:                   plugin.UpdateIcon,
+			PreventHideAfterAction: true,
+		},
+	}
+
+	// Final UI update
+	updateUI(
+		statusIcon+" "+statusText,
+		previewBuilder.String(),
+		previewProperties,
+		actions,
+	)
 }
 
 func (s *ShellPlugin) executeCommandInBackground(ctx context.Context, data shellContextData) {

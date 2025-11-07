@@ -5,7 +5,7 @@ from .models.context import Context
 from .models.query import ChangeQueryParam
 from .models.ai import AIModel, Conversation, ChatStreamCallback
 from .models.mru import MRUData
-from .models.result import Result
+from .models.result import Result, UpdateableResult
 from .models.setting import PluginSettingDefinitionItem
 
 
@@ -92,5 +92,43 @@ class PublicAPI(Protocol):
             ctx: Context
             callback: Callback function that takes MRUData and returns Result or None
                      Return None if the MRU data is no longer valid
+        """
+        ...
+
+    async def update_result(self, ctx: Context, result: UpdateableResult) -> bool:
+        """
+        Update a query result that is currently displayed in the UI.
+
+        Returns True if the result was successfully updated (still visible in UI).
+        Returns False if the result is no longer visible.
+
+        This method is designed for long-running operations within Action handlers.
+        Best practices:
+        - Set prevent_hide_after_action=True in your action
+        - Only use during action execution or in background tasks spawned by actions
+        - For periodic updates, use RefreshableResult with on_refresh instead
+
+        Example:
+            # In an action handler
+            async def my_action(action_context: ActionContext):
+                # Update only the title
+                success = await api.update_result(ctx, UpdateableResult(
+                    id=action_context.result_id,
+                    title="Downloading... 50%"
+                ))
+
+                # Update title and tails
+                success = await api.update_result(ctx, UpdateableResult(
+                    id=action_context.result_id,
+                    title="Processing...",
+                    tails=[ResultTail(type=ResultTailType.TEXT, text="Step 1/3")]
+                ))
+
+        Args:
+            ctx: Context
+            result: UpdateableResult with id (required) and optional fields to update
+
+        Returns:
+            bool: True if updated successfully, False if result no longer visible
         """
         ...

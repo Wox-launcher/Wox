@@ -1,7 +1,7 @@
 import { logger } from "./logger"
 import path from "path"
 import { PluginAPI } from "./pluginAPI"
-import { Context, MapString, Plugin, PluginInitParams, Query, QueryEnv, RefreshableResult, Result, ResultAction, Selection, MRUData } from "@wox-launcher/wox-plugin"
+import { Context, MapString, Plugin, PluginInitParams, Query, QueryEnv, RefreshableResult, Result, ResultAction, Selection, MRUData, ActionContext } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { AI } from "@wox-launcher/wox-plugin/types/ai"
@@ -253,9 +253,11 @@ async function action(ctx: Context, request: PluginJsonRpcRequest) {
     return
   }
 
-  pluginAction({
+  const actionContext: ActionContext = {
+    ResultId: request.Params.ResultId,
     ContextData: request.Params.ContextData
-  })
+  }
+  pluginAction(actionContext)
 
   return
 }

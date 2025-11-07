@@ -14,6 +14,7 @@ from wox_plugin import (
     ChatStreamCallback,
     MRUData,
     Result,
+    UpdateableResult,
     PluginSettingDefinitionItem,
 )
 from .constants import PLUGIN_JSONRPC_TYPE_REQUEST
@@ -164,3 +165,8 @@ class PluginAPI(PublicAPI):
         callback_id = str(uuid.uuid4())
         self.mru_restore_callbacks[callback_id] = callback
         await self.invoke_method(ctx, "OnMRURestore", {"callbackId": callback_id})
+
+    async def update_result(self, ctx: Context, result: UpdateableResult) -> bool:
+        """Update a query result that is currently displayed in the UI"""
+        response = await self.invoke_method(ctx, "UpdateResult", {"result": json.loads(result.to_json())})
+        return bool(response) if response is not None else False

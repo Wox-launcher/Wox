@@ -502,22 +502,54 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 						Name:                   "i18n:plugin_wpm_upgrade",
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
-							if installErr != nil {
-								w.api.Notify(ctx, "i18n:plugin_wpm_install_failed")
-								return
-							}
-							// on success: change query to the plugin's first trigger keyword if exists
-							time.Sleep(500 * time.Millisecond)
-							instances := plugin.GetPluginManager().GetPluginInstances()
-							if len(instances) > 0 {
-								if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
-									if len(inst.Metadata.TriggerKeywords) > 0 {
-										kw := inst.Metadata.TriggerKeywords[0]
-										w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
+							// Show upgrading progress
+							upgradingTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_upgrading")
+							w.api.UpdateResult(ctx, plugin.UpdateableResult{
+								Id:    actionContext.ResultId,
+								Title: &upgradingTitle,
+							})
+
+							// Start installation in background with progress updates
+							util.Go(ctx, "upgrade plugin", func() {
+								// Update to downloading state
+								downloadingTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_downloading")
+								if !w.api.UpdateResult(ctx, plugin.UpdateableResult{
+									Id:    actionContext.ResultId,
+									Title: &downloadingTitle,
+								}) {
+									return // Result no longer visible, stop updating
+								}
+
+								installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
+								if installErr != nil {
+									failedTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_install_failed")
+									w.api.UpdateResult(ctx, plugin.UpdateableResult{
+										Id:    actionContext.ResultId,
+										Title: &failedTitle,
+									})
+									w.api.Notify(ctx, "i18n:plugin_wpm_install_failed")
+									return
+								}
+
+								// Update to success state
+								successTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_upgrade_success")
+								w.api.UpdateResult(ctx, plugin.UpdateableResult{
+									Id:    actionContext.ResultId,
+									Title: &successTitle,
+								})
+
+								// on success: change query to the plugin's first trigger keyword if exists
+								time.Sleep(500 * time.Millisecond)
+								instances := plugin.GetPluginManager().GetPluginInstances()
+								if len(instances) > 0 {
+									if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
+										if len(inst.Metadata.TriggerKeywords) > 0 {
+											kw := inst.Metadata.TriggerKeywords[0]
+											w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
+										}
 									}
 								}
-							}
+							})
 						},
 					},
 				}
@@ -532,22 +564,54 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 					Name:                   "i18n:plugin_wpm_install",
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
-						if installErr != nil {
-							w.api.Notify(ctx, "i18n:plugin_wpm_install_failed")
-							return
-						}
-						// on success: change query to the plugin's first trigger keyword if exists
-						time.Sleep(500 * time.Millisecond)
-						instances := plugin.GetPluginManager().GetPluginInstances()
-						if len(instances) > 0 {
-							if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
-								if len(inst.Metadata.TriggerKeywords) > 0 {
-									kw := inst.Metadata.TriggerKeywords[0]
-									w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
+						// Show installing progress
+						installingTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_installing")
+						w.api.UpdateResult(ctx, plugin.UpdateableResult{
+							Id:    actionContext.ResultId,
+							Title: &installingTitle,
+						})
+
+						// Start installation in background with progress updates
+						util.Go(ctx, "install plugin", func() {
+							// Update to downloading state
+							downloadingTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_downloading")
+							if !w.api.UpdateResult(ctx, plugin.UpdateableResult{
+								Id:    actionContext.ResultId,
+								Title: &downloadingTitle,
+							}) {
+								return // Result no longer visible, stop updating
+							}
+
+							installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
+							if installErr != nil {
+								failedTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_install_failed")
+								w.api.UpdateResult(ctx, plugin.UpdateableResult{
+									Id:    actionContext.ResultId,
+									Title: &failedTitle,
+								})
+								w.api.Notify(ctx, "i18n:plugin_wpm_install_failed")
+								return
+							}
+
+							// Update to success state
+							successTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_install_success")
+							w.api.UpdateResult(ctx, plugin.UpdateableResult{
+								Id:    actionContext.ResultId,
+								Title: &successTitle,
+							})
+
+							// on success: change query to the plugin's first trigger keyword if exists
+							time.Sleep(500 * time.Millisecond)
+							instances := plugin.GetPluginManager().GetPluginInstances()
+							if len(instances) > 0 {
+								if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
+									if len(inst.Metadata.TriggerKeywords) > 0 {
+										kw := inst.Metadata.TriggerKeywords[0]
+										w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
+									}
 								}
 							}
-						}
+						})
 					},
 				},
 			}

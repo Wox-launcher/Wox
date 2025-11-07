@@ -75,6 +75,22 @@ func (m *ShellHistoryManager) UpdateStatus(ctx context.Context, id string, statu
 		}).Error
 }
 
+// ResetForReexecute resets an existing record to a fresh running state for re-execution
+func (m *ShellHistoryManager) ResetForReexecute(ctx context.Context, id string, command string, interpreter string, startTime int64) error {
+	return m.db.WithContext(ctx).Model(&ShellHistory{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"status":      "running",
+			"exit_code":   0,
+			"output":      "",
+			"start_time":  startTime,
+			"end_time":    0,
+			"duration":    0,
+			"command":     command,
+			"interpreter": interpreter,
+		}).Error
+}
+
 // GetByID retrieves a shell history record by ID
 func (m *ShellHistoryManager) GetByID(ctx context.Context, id string) (*ShellHistory, error) {
 	var record ShellHistory

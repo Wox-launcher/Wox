@@ -219,6 +219,7 @@ async def action(ctx: Context, request: Dict[str, Any]) -> None:
 
     try:
         params: Dict[str, str] = request.get("Params", {})
+        result_id = params.get("ResultId", "")
         action_id = params.get("ActionId", "")
         context_data = params.get("ContextData", "")
 
@@ -226,7 +227,7 @@ async def action(ctx: Context, request: Dict[str, Any]) -> None:
         action_func = plugin_instance.actions.get(action_id)
         if action_func:
             # Handle both coroutine and regular functions
-            result = action_func(ActionContext(context_data=context_data))
+            result = action_func(ActionContext(result_id=result_id, context_data=context_data))
             if asyncio.iscoroutine(result):
                 asyncio.create_task(result)
 
