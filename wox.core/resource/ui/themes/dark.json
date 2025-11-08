@@ -48,7 +48,7 @@
   "ActionQueryBoxBackgroundColor": "rgba(44, 48, 50, 0.98)",
   "ActionQueryBoxBorderRadius": 8,
   "PreviewFontColor": "#f0f0f0",
-  "PreviewSplitLineColor": "#3a474e",
+  "PreviewSplitLineColor": "#b0b3b5",
   "PreviewPropertyTitleColor": "#b0b3b5",
   "PreviewPropertyContentColor": "#f0f0f0",
   "PreviewTextSelectionColor": "rgba(31, 118, 124, 0.8)",

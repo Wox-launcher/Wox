@@ -283,6 +283,25 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 			record.FileSize = &fileSize
 			record.Content = fmt.Sprintf("Image (%d×%d) (%s)", width, height, c.formatFileSize(fileSize))
 			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("saved clipboard image to disk: %s", imageFilePath))
+
+			// Generate preview and icon caches at insert time to avoid query-time decoding/resizing
+			imagePreviewFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_preview.png", record.ID))
+			imageIconFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_icon.png", record.ID))
+			previewImg := imaging.Resize(imageData.Image, 400, 0, imaging.Lanczos)
+			iconImg := imaging.Resize(imageData.Image, 40, 0, imaging.Lanczos)
+			if err := imaging.Save(previewImg, imagePreviewFile); err != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save clipboard image preview cache: %s", err.Error()))
+			}
+			if err := imaging.Save(iconImg, imageIconFile); err != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save clipboard image icon cache: %s", err.Error()))
+			}
+			// Pre-warm memory cache so first query is instant
+			if util.IsFileExists(imagePreviewFile) && util.IsFileExists(imageIconFile) {
+				c.imageCache[record.ID] = &ImageCacheEntry{
+					Preview: common.NewWoxImageAbsolutePath(imagePreviewFile),
+					Icon:    common.NewWoxImageAbsolutePath(imageIconFile),
+				}
+			}
 		}
 
 		// Insert into database (non-favorite items only)
@@ -514,6 +533,22 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 		})
 	}
 
+	// Delete action (works for both history and favorites)
+	actions = append(actions, plugin.QueryResultAction{
+		Name:                   "Delete",
+		Icon:                   plugin.TrashIcon,
+		PreventHideAfterAction: true,
+		Hotkey:                 "Ctrl+D",
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			if err := c.deleteRecord(ctx, record); err != nil {
+				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to delete record: %s", err.Error()))
+				return
+			}
+			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("deleted clipboard record: %s", record.ID))
+			system.RefreshQuery(ctx, c.api, query)
+		},
+	})
+
 	group, groupScore := c.getResultGroup(ctx, record)
 
 	// Use stored icon data if available, otherwise use default text icon
@@ -537,6 +572,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 				"i18n:plugin_clipboard_copy_characters": fmt.Sprintf("%d", len(record.Content)),
 			},
 		},
+
 		Score:   record.Timestamp,
 		Actions: actions,
 	}
@@ -587,8 +623,60 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 					}
 				},
 			},
+			{
+				Name:                   "Delete",
+				Icon:                   plugin.TrashIcon,
+				PreventHideAfterAction: true,
+				Hotkey:                 "Ctrl+D",
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					if err := c.deleteRecord(ctx, record); err != nil {
+						c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to delete record: %s", err.Error()))
+						return
+					}
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("deleted clipboard record: %s", record.ID))
+					system.RefreshQuery(ctx, c.api, query)
+				},
+			},
 		},
 	}
+}
+
+// deleteRecord removes a clipboard record from its storage (DB or favorites) and cleans up related assets
+func (c *ClipboardPlugin) deleteRecord(ctx context.Context, record ClipboardRecord) error {
+	// Remove from data source
+	if record.IsFavorite {
+		if err := c.removeFromFavorites(ctx, record.ID); err != nil {
+			return fmt.Errorf("failed to remove favorite %s: %w", record.ID, err)
+		}
+	} else {
+		if err := c.db.Delete(ctx, record.ID); err != nil {
+			return fmt.Errorf("failed to delete record %s from DB: %w", record.ID, err)
+		}
+	}
+
+	// Clean up files and memory cache
+	c.deleteRecordAssets(ctx, record)
+	return nil
+}
+
+// deleteRecordAssets removes image file, preview/icon caches, and memory cache for a record
+func (c *ClipboardPlugin) deleteRecordAssets(ctx context.Context, record ClipboardRecord) {
+	// Remove original image file if any
+	if record.FilePath != "" && util.IsFileExists(record.FilePath) {
+		if err := os.Remove(record.FilePath); err != nil {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to remove image file: %s", err.Error()))
+		}
+	}
+
+	// Remove cached preview and icon files
+	cacheDir := util.GetLocation().GetImageCacheDirectory()
+	previewPath := path.Join(cacheDir, fmt.Sprintf("clipboard_%s_preview.png", record.ID))
+	iconPath := path.Join(cacheDir, fmt.Sprintf("clipboard_%s_icon.png", record.ID))
+	_ = os.Remove(previewPath)
+	_ = os.Remove(iconPath)
+
+	// Remove memory cache
+	delete(c.imageCache, record.ID)
 }
 
 // moveRecordToTop updates the timestamp of a record to move it to the top
