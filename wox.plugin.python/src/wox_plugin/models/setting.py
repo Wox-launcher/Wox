@@ -6,6 +6,7 @@ import json
 
 class PluginSettingDefinitionType(str, Enum):
     """Plugin setting definition type enum"""
+
     HEAD = "head"
     TEXTBOX = "textbox"
     CHECKBOX = "checkbox"
@@ -19,6 +20,7 @@ class PluginSettingDefinitionType(str, Enum):
 @dataclass
 class PluginSettingValueStyle:
     """Style configuration for plugin settings"""
+
     padding_left: int = field(default=0)
     padding_top: int = field(default=0)
     padding_right: int = field(default=0)
@@ -38,21 +40,22 @@ class PluginSettingValueStyle:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'PluginSettingValueStyle':
+    def from_dict(cls, data: Dict[str, Any]) -> "PluginSettingValueStyle":
         """Create from dictionary with camelCase naming"""
         return cls(
-            padding_left=data.get('PaddingLeft', 0),
-            padding_top=data.get('PaddingTop', 0),
-            padding_right=data.get('PaddingRight', 0),
-            padding_bottom=data.get('PaddingBottom', 0),
-            width=data.get('Width', 0),
-            label_width=data.get('LabelWidth', 0),
+            padding_left=data.get("PaddingLeft", 0),
+            padding_top=data.get("PaddingTop", 0),
+            padding_right=data.get("PaddingRight", 0),
+            padding_bottom=data.get("PaddingBottom", 0),
+            width=data.get("Width", 0),
+            label_width=data.get("LabelWidth", 0),
         )
 
 
 @dataclass
 class PluginSettingDefinitionValue:
     """Base class for plugin setting values"""
+
     key: str
     default_value: str = field(default="")
 
@@ -75,6 +78,7 @@ class PluginSettingDefinitionValue:
 @dataclass
 class PluginSettingValueTextBox(PluginSettingDefinitionValue):
     """Text box setting value"""
+
     label: str = field(default="")
     suffix: str = field(default="")
     tooltip: str = field(default="")
@@ -97,6 +101,7 @@ class PluginSettingValueTextBox(PluginSettingDefinitionValue):
 @dataclass
 class PluginSettingValueCheckBox(PluginSettingDefinitionValue):
     """Checkbox setting value"""
+
     label: str = field(default="")
     tooltip: str = field(default="")
     style: PluginSettingValueStyle = field(default_factory=PluginSettingValueStyle)
@@ -115,6 +120,7 @@ class PluginSettingValueCheckBox(PluginSettingDefinitionValue):
 @dataclass
 class PluginSettingValueLabel(PluginSettingDefinitionValue):
     """Label setting value"""
+
     content: str = field(default="")
     tooltip: str = field(default="")
     style: PluginSettingValueStyle = field(default_factory=PluginSettingValueStyle)
@@ -131,6 +137,7 @@ class PluginSettingValueLabel(PluginSettingDefinitionValue):
 @dataclass
 class PluginSettingDefinitionItem:
     """Plugin setting definition item"""
+
     type: PluginSettingDefinitionType
     value: PluginSettingDefinitionValue
     disabled_in_platforms: List[str] = field(default_factory=list)
@@ -150,54 +157,51 @@ class PluginSettingDefinitionItem:
         return json.dumps(self.to_dict())
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'PluginSettingDefinitionItem':
+    def from_dict(cls, data: Dict[str, Any]) -> "PluginSettingDefinitionItem":
         """Create from dictionary"""
-        setting_type = PluginSettingDefinitionType(data.get('Type', 'textbox'))
+        setting_type = PluginSettingDefinitionType(data.get("Type", "textbox"))
 
         # Create appropriate value object based on type
-        value_data = data.get('Value', {})
+        value_data = data.get("Value", {})
         value: PluginSettingDefinitionValue
         if setting_type == PluginSettingDefinitionType.TEXTBOX:
             value = PluginSettingValueTextBox(
-                key=value_data.get('Key', ''),
-                label=value_data.get('Label', ''),
-                suffix=value_data.get('Suffix', ''),
-                default_value=value_data.get('DefaultValue', ''),
-                tooltip=value_data.get('Tooltip', ''),
-                max_lines=value_data.get('MaxLines', 1),
-                style=PluginSettingValueStyle.from_dict(value_data.get('Style', {}))
+                key=value_data.get("Key", ""),
+                label=value_data.get("Label", ""),
+                suffix=value_data.get("Suffix", ""),
+                default_value=value_data.get("DefaultValue", ""),
+                tooltip=value_data.get("Tooltip", ""),
+                max_lines=value_data.get("MaxLines", 1),
+                style=PluginSettingValueStyle.from_dict(value_data.get("Style", {})),
             )
         elif setting_type == PluginSettingDefinitionType.CHECKBOX:
             value = PluginSettingValueCheckBox(
-                key=value_data.get('Key', ''),
-                label=value_data.get('Label', ''),
-                default_value=value_data.get('DefaultValue', ''),
-                tooltip=value_data.get('Tooltip', ''),
-                style=PluginSettingValueStyle.from_dict(value_data.get('Style', {}))
+                key=value_data.get("Key", ""),
+                label=value_data.get("Label", ""),
+                default_value=value_data.get("DefaultValue", ""),
+                tooltip=value_data.get("Tooltip", ""),
+                style=PluginSettingValueStyle.from_dict(value_data.get("Style", {})),
             )
         elif setting_type == PluginSettingDefinitionType.LABEL:
             value = PluginSettingValueLabel(
-                key=value_data.get('Key', ''),
-                content=value_data.get('Content', ''),
-                tooltip=value_data.get('Tooltip', ''),
-                style=PluginSettingValueStyle.from_dict(value_data.get('Style', {}))
+                key=value_data.get("Key", ""),
+                content=value_data.get("Content", ""),
+                tooltip=value_data.get("Tooltip", ""),
+                style=PluginSettingValueStyle.from_dict(value_data.get("Style", {})),
             )
         else:
             # Default to basic value
-            value = PluginSettingDefinitionValue(
-                key=value_data.get('Key', ''),
-                default_value=value_data.get('DefaultValue', '')
-            )
+            value = PluginSettingDefinitionValue(key=value_data.get("Key", ""), default_value=value_data.get("DefaultValue", ""))
 
         return cls(
             type=setting_type,
             value=value,
-            disabled_in_platforms=data.get('DisabledInPlatforms', []),
-            is_platform_specific=data.get('IsPlatformSpecific', False)
+            disabled_in_platforms=data.get("DisabledInPlatforms", []),
+            is_platform_specific=data.get("IsPlatformSpecific", False),
         )
 
     @classmethod
-    def from_json(cls, json_str: str) -> 'PluginSettingDefinitionItem':
+    def from_json(cls, json_str: str) -> "PluginSettingDefinitionItem":
         """Create from JSON string"""
         data = json.loads(json_str)
         return cls.from_dict(data)
@@ -208,12 +212,7 @@ def create_textbox_setting(key: str, label: str, default_value: str = "", toolti
     """Create a textbox setting"""
     return PluginSettingDefinitionItem(
         type=PluginSettingDefinitionType.TEXTBOX,
-        value=PluginSettingValueTextBox(
-            key=key,
-            label=label,
-            default_value=default_value,
-            tooltip=tooltip
-        )
+        value=PluginSettingValueTextBox(key=key, label=label, default_value=default_value, tooltip=tooltip),
     )
 
 
@@ -221,12 +220,7 @@ def create_checkbox_setting(key: str, label: str, default_value: str = "false", 
     """Create a checkbox setting"""
     return PluginSettingDefinitionItem(
         type=PluginSettingDefinitionType.CHECKBOX,
-        value=PluginSettingValueCheckBox(
-            key=key,
-            label=label,
-            default_value=default_value,
-            tooltip=tooltip
-        )
+        value=PluginSettingValueCheckBox(key=key, label=label, default_value=default_value, tooltip=tooltip),
     )
 
 
@@ -237,6 +231,6 @@ def create_label_setting(content: str, tooltip: str = "") -> PluginSettingDefini
         value=PluginSettingValueLabel(
             key="",  # Labels don't need keys
             content=content,
-            tooltip=tooltip
-        )
+            tooltip=tooltip,
+        ),
     )
