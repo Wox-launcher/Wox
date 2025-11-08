@@ -190,7 +190,7 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list[dict[str, Any]]:
                     }
                     for action in result.actions
                 ],
-                "Preview": result.preview,
+                "Preview": json.loads(result.preview.to_json()),
                 "Score": result.score,
                 "Group": result.group,
                 "GroupScore": result.group_score,
