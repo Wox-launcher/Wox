@@ -94,16 +94,25 @@ func (a *MacRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, 
 		appName, err = a.getPrefPaneName(path)
 	} else {
 		appName, err = a.getAppNameFromMdls(path)
+		if err != nil || appName == "(null)" || strings.TrimSpace(appName) == "" {
+			// Spotlight/mdls unavailable or returned invalid value, fallback to Info.plist then filename
+			if err != nil {
+				a.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to get app name from mdls(%s): %s, falling back to Info.plist/filename", path, err.Error()))
+			} else {
+				a.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("mdls returned empty/(null) for %s, falling back to Info.plist/filename", path))
+			}
+
+			if nameFromPlist, err2 := a.getAppNameFromPlist(ctx, path); err2 == nil && strings.TrimSpace(nameFromPlist) != "" {
+				appName = nameFromPlist
+			} else {
+				base := filepath.Base(path)
+				appName = base
+				a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("using filename as app name for %s (plistErr=%v)", path, err2))
+			}
+		}
 	}
 
-	if err != nil {
-		return appInfo{}, err
-	}
-
-	if appName == "(null)" {
-		appName = filepath.Base(path)
-		a.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to get app name from mdls(%s), using filename instead", path))
-	}
+	// Strip extension suffix (.app/.prefPane)
 	for _, extension := range a.GetAppExtensions(ctx) {
 		if strings.HasSuffix(appName, "."+extension) {
 			appName = appName[:len(appName)-len(extension)-1]
@@ -160,6 +169,38 @@ func (a *MacRetriever) getAppNameFromMdls(path string) (string, error) {
 	}
 
 	return strings.TrimSpace(string(out)), nil
+}
+
+func (a *MacRetriever) getAppNameFromPlist(ctx context.Context, appPath string) (string, error) {
+	plistPath := path.Join(appPath, "Contents", "Info.plist")
+	plistFile, openErr := os.Open(plistPath)
+	if openErr != nil {
+		plistPath = path.Join(appPath, "WrappedBundle", "Info.plist")
+		plistFile, openErr = os.Open(plistPath)
+		if openErr != nil {
+			return "", fmt.Errorf("can't find Info.plist in this app: %s", openErr.Error())
+		}
+	}
+	defer plistFile.Close()
+
+	decoder := plist.NewDecoder(plistFile)
+	var plistData map[string]any
+	if err := decoder.Decode(&plistData); err != nil {
+		return "", fmt.Errorf("failed to decode Info.plist: %s", err.Error())
+	}
+
+	// Prefer CFBundleDisplayName, then CFBundleName, then CFBundleExecutable
+	if name, ok := plistData["CFBundleDisplayName"].(string); ok && strings.TrimSpace(name) != "" {
+		return name, nil
+	}
+	if name, ok := plistData["CFBundleName"].(string); ok && strings.TrimSpace(name) != "" {
+		return name, nil
+	}
+	if name, ok := plistData["CFBundleExecutable"].(string); ok && strings.TrimSpace(name) != "" {
+		return name, nil
+	}
+
+	return "", fmt.Errorf("no suitable display name keys in Info.plist")
 }
 
 func (a *MacRetriever) getMacAppIcon(ctx context.Context, appPath string) (common.WoxImage, error) {
