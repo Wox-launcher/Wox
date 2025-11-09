@@ -876,6 +876,9 @@ class WoxLauncherController extends GetxController {
       if (!isVisible) {
         return;
       }
+      if (isInSettingView.value) {
+        return;
+      }
 
       refreshCounter = refreshCounter + 100;
       for (var result in resultListViewController.items) {
