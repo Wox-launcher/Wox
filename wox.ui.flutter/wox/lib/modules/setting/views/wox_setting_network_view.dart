@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
 import 'package:wox/components/wox_switch.dart';
+import 'package:wox/components/wox_textfield.dart';
 
 class WoxSettingNetworkView extends WoxSettingBaseView {
   const WoxSettingNetworkView({super.key});
@@ -28,13 +29,10 @@ class WoxSettingNetworkView extends WoxSettingBaseView {
           formField(
             label: controller.tr("ui_proxy_url"),
             tips: controller.tr("ui_proxy_url_tips"),
-            child: SizedBox( 
-              width: 400,
-              child: TextField(
-                enabled: controller.woxSetting.value.httpProxyEnabled,
-                controller: proxyUrlController,
-                onChanged: (value) => controller.updateConfig('HttpProxyUrl', value),
-              ),
+            child: WoxTextField(
+              enabled: controller.woxSetting.value.httpProxyEnabled,
+              controller: proxyUrlController,
+              onChanged: (value) => controller.updateConfig('HttpProxyUrl', value),
             ),
           ),
         ],

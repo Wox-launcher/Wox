@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart' hide DataTable;
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_switch.dart';
+import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:wox/utils/picker.dart';
@@ -21,7 +23,8 @@ class WoxSettingDataView extends WoxSettingBaseView {
           controller.tr("ui_data_backup_auto_tips_prefix"),
           style: TextStyle(color: getThemeSubTextColor(), fontSize: 13),
         ),
-        TextButton(
+        WoxButton.text(
+          text: controller.tr("ui_data_backup_folder_link"),
           onPressed: () async {
             try {
               final backupPath = await WoxApi.instance.getBackupFolder();
@@ -30,14 +33,6 @@ class WoxSettingDataView extends WoxSettingBaseView {
               // Handle error silently or show a notification
             }
           },
-          child: Text(
-            controller.tr("ui_data_backup_folder_link"),
-            style: TextStyle(
-              color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
-              fontSize: 13,
-              decoration: TextDecoration.underline,
-            ),
-          ),
         ),
         Text(
           controller.tr("ui_data_backup_auto_tips_suffix"),
@@ -56,15 +51,15 @@ class WoxSettingDataView extends WoxSettingBaseView {
           children: [
             Expanded(
               child: Obx(() {
-                return TextField(
+                return WoxTextField(
                   controller: TextEditingController(text: controller.userDataLocation.value),
-                  readOnly: true,
+                  enabled: false,
                 );
               }),
             ),
             const SizedBox(width: 10),
-            ElevatedButton(
-              child: Text(controller.tr("ui_data_config_location_change")),
+            WoxButton.primary(
+              text: controller.tr("ui_data_config_location_change"),
               onPressed: () async {
                 final currentContext = context;
                 final result = await FileSelector.pick(
@@ -77,12 +72,12 @@ class WoxSettingDataView extends WoxSettingBaseView {
                     builder: (context) => AlertDialog(
                       content: Text(controller.tr("ui_data_config_location_change_confirm").replaceAll("{0}", result[0])),
                       actions: [
-                        TextButton(
-                          child: Text(controller.tr("ui_data_config_location_change_cancel")),
+                        WoxButton.secondary(
+                          text: controller.tr("ui_data_config_location_change_cancel"),
                           onPressed: () => Navigator.pop(context),
                         ),
-                        ElevatedButton(
-                          child: Text(controller.tr("ui_data_config_location_change_confirm_button")),
+                        WoxButton.primary(
+                          text: controller.tr("ui_data_config_location_change_confirm_button"),
                           onPressed: () {
                             Navigator.pop(context);
                             controller.updateUserDataLocation(result[0]);
@@ -95,8 +90,8 @@ class WoxSettingDataView extends WoxSettingBaseView {
               },
             ),
             const SizedBox(width: 10),
-            ElevatedButton(
-              child: Text(controller.tr("plugin_file_open")),
+            WoxButton.primary(
+              text: controller.tr("plugin_file_open"),
               onPressed: () => controller.openFolder(controller.userDataLocation.value),
             ),
           ],
@@ -122,8 +117,8 @@ class WoxSettingDataView extends WoxSettingBaseView {
           children: [
             Row(
               children: [
-                ElevatedButton(
-                  child: Text(controller.tr("ui_data_backup_now")),
+                WoxButton.primary(
+                  text: controller.tr("ui_data_backup_now"),
                   onPressed: () {
                     controller.backupNow();
                   },
@@ -215,11 +210,8 @@ class WoxSettingDataView extends WoxSettingBaseView {
                         material.DataCell(
                           Row(
                             children: [
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                  foregroundColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
-                                ),
-                                child: Text(controller.tr("ui_data_backup_restore")),
+                              WoxButton.text(
+                                text: controller.tr("ui_data_backup_restore"),
                                 onPressed: () {
                                   showDialog(
                                     context: context,
@@ -228,14 +220,14 @@ class WoxSettingDataView extends WoxSettingBaseView {
                                         title: Text(controller.tr("ui_data_backup_restore_confirm_title")),
                                         content: Text(controller.tr("ui_data_backup_restore_confirm_message")),
                                         actions: [
-                                          TextButton(
-                                            child: Text(controller.tr("ui_data_backup_restore_cancel")),
+                                          WoxButton.secondary(
+                                            text: controller.tr("ui_data_backup_restore_cancel"),
                                             onPressed: () {
                                               Navigator.pop(context);
                                             },
                                           ),
-                                          ElevatedButton(
-                                            child: Text(controller.tr("ui_data_backup_restore_confirm")),
+                                          WoxButton.primary(
+                                            text: controller.tr("ui_data_backup_restore_confirm"),
                                             onPressed: () {
                                               Navigator.pop(context);
                                               controller.restoreBackup(backup.id);
@@ -247,11 +239,8 @@ class WoxSettingDataView extends WoxSettingBaseView {
                                   );
                                 },
                               ),
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                  foregroundColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor),
-                                ),
-                                child: Text(controller.tr("plugin_file_open")),
+                              WoxButton.text(
+                                text: controller.tr("plugin_file_open"),
                                 onPressed: () {
                                   controller.openFolder(backup.path);
                                 },

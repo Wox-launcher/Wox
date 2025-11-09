@@ -41,43 +41,57 @@ class WoxDropdownButton<T> extends StatelessWidget {
     final textColor = getThemeTextColor();
     final activeTextColor = getThemeActiveTextColor();
     final dropdownBg = dropdownColor ?? getThemeActiveBackgroundColor().withValues(alpha: 0.95);
+    final borderColor = getThemeSubTextColor();
 
-    final dropdown = DropdownButton<T>(
-      items: items,
-      value: value,
-      onChanged: onChanged,
-      isExpanded: isExpanded,
-      // This style applies to dropdown menu items (when expanded)
-      style: TextStyle(color: activeTextColor, fontSize: fontSize),
-      // This builder customizes how the selected value appears when dropdown is closed
-      selectedItemBuilder: (BuildContext context) {
-        return items.map<Widget>((DropdownMenuItem<T> item) {
-          return Align(
-            alignment: alignment,
-            child: DefaultTextStyle(
-              style: TextStyle(color: textColor, fontSize: fontSize),
-              child: item.child,
-            ),
-          );
-        }).toList();
-      },
-      dropdownColor: dropdownBg,
-      iconEnabledColor: textColor,
-      iconDisabledColor: textColor.withValues(alpha: 0.5),
-      hint: hint,
-      icon: icon,
-      iconSize: iconSize ?? 24.0,
-      menuMaxHeight: menuMaxHeight,
-      alignment: alignment,
-      itemHeight: itemHeight,
-      underline: underline,
+    final dropdown = DropdownButtonHideUnderline(
+      child: DropdownButton<T>(
+        items: items,
+        value: value,
+        onChanged: onChanged,
+        isExpanded: isExpanded,
+        // This style applies to dropdown menu items (when expanded)
+        style: TextStyle(color: activeTextColor, fontSize: fontSize),
+        // This builder customizes how the selected value appears when dropdown is closed
+        selectedItemBuilder: (BuildContext context) {
+          return items.map<Widget>((DropdownMenuItem<T> item) {
+            return Align(
+              alignment: alignment,
+              child: DefaultTextStyle(
+                style: TextStyle(color: textColor, fontSize: fontSize),
+                child: item.child,
+              ),
+            );
+          }).toList();
+        },
+        dropdownColor: dropdownBg,
+        iconEnabledColor: textColor,
+        iconDisabledColor: textColor.withValues(alpha: 0.5),
+        hint: hint,
+        icon: icon,
+        iconSize: iconSize ?? 24.0,
+        menuMaxHeight: menuMaxHeight,
+        alignment: alignment,
+        itemHeight: itemHeight,
+        underline: underline ?? const SizedBox.shrink(),
+        // Remove default padding
+        isDense: true,
+        padding: EdgeInsets.zero,
+      ),
     );
 
-    // Always wrap with SizedBox to ensure consistent width
-    // Default width is 300 if not specified
+    // Wrap with Container to add border, similar to hotkey recorder
     return SizedBox(
       width: width ?? 300.0,
-      child: dropdown,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: borderColor),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
+          child: dropdown,
+        ),
+      ),
     );
   }
 }

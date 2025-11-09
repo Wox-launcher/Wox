@@ -118,66 +118,67 @@ class _WoxSettingViewState extends State<WoxSettingView> {
 
   @override
   Widget build(BuildContext context) {
-    // Define navigation items with tree structure
-    final List<_NavItem> navItems = [
-      _NavItem(id: 'general', icon: Icons.settings_outlined, title: controller.tr('ui_general'), body: const WoxSettingGeneralView()),
-      _NavItem(id: 'ui', icon: Icons.palette_outlined, title: controller.tr('ui_ui'), body: const WoxSettingUIView()),
-      _NavItem(id: 'ai', icon: Icons.psychology_outlined, title: controller.tr('ui_ai'), body: const WoxSettingAIView()),
-      _NavItem(id: 'network', icon: Icons.public_outlined, title: controller.tr('ui_network'), body: const WoxSettingNetworkView()),
-      _NavItem(id: 'data', icon: Icons.folder_outlined, title: controller.tr('ui_data'), body: const WoxSettingDataView()),
-      _NavItem(
-        id: 'plugins',
-        icon: Icons.extension_outlined,
-        title: controller.tr('ui_plugins'),
-        isExpanded: true,
-        children: [
-          _NavItem(
-              id: 'plugins.store',
-              icon: Icons.shopping_bag_outlined,
-              title: controller.tr('ui_store_plugins'),
-              body: const WoxSettingPluginView(),
-              onTap: () async {
-                await controller.switchToPluginList(const UuidV4().generate(), true);
-              }),
-          _NavItem(
-              id: 'plugins.installed',
-              icon: Icons.widgets_outlined,
-              title: controller.tr('ui_installed_plugins'),
-              body: const WoxSettingPluginView(),
-              onTap: () async {
-                await controller.switchToPluginList(const UuidV4().generate(), false);
-              }),
-          _NavItem(id: 'plugins.runtime', icon: Icons.terminal_outlined, title: controller.tr('ui_runtime_settings'), body: WoxSettingRuntimeView()),
-        ],
-      ),
-      _NavItem(
-        id: 'themes',
-        icon: Icons.color_lens_outlined,
-        title: controller.tr('ui_themes'),
-        isExpanded: true,
-        children: [
-          _NavItem(
-              id: 'themes.store',
-              icon: Icons.shopping_bag_outlined,
-              title: controller.tr('ui_store_themes'),
-              body: const WoxSettingThemeView(),
-              onTap: () async {
-                await controller.switchToThemeList(true);
-              }),
-          _NavItem(
-              id: 'themes.installed',
-              icon: Icons.brush_outlined,
-              title: controller.tr('ui_installed_themes'),
-              body: const WoxSettingThemeView(),
-              onTap: () async {
-                await controller.switchToThemeList(false);
-              }),
-        ],
-      ),
-      _NavItem(id: 'about', icon: Icons.info_outline, title: controller.tr('ui_about'), body: const WoxSettingAboutView()),
-    ];
-
     return Obx(() {
+      // Define navigation items with tree structure
+      // This needs to be inside Obx so it rebuilds when language changes
+      final List<_NavItem> navItems = [
+        _NavItem(id: 'general', icon: Icons.settings_outlined, title: controller.tr('ui_general'), body: const WoxSettingGeneralView()),
+        _NavItem(id: 'ui', icon: Icons.palette_outlined, title: controller.tr('ui_ui'), body: const WoxSettingUIView()),
+        _NavItem(id: 'ai', icon: Icons.psychology_outlined, title: controller.tr('ui_ai'), body: const WoxSettingAIView()),
+        _NavItem(id: 'network', icon: Icons.public_outlined, title: controller.tr('ui_network'), body: const WoxSettingNetworkView()),
+        _NavItem(id: 'data', icon: Icons.folder_outlined, title: controller.tr('ui_data'), body: const WoxSettingDataView()),
+        _NavItem(
+          id: 'plugins',
+          icon: Icons.extension_outlined,
+          title: controller.tr('ui_plugins'),
+          isExpanded: true,
+          children: [
+            _NavItem(
+                id: 'plugins.store',
+                icon: Icons.shopping_bag_outlined,
+                title: controller.tr('ui_store_plugins'),
+                body: const WoxSettingPluginView(),
+                onTap: () async {
+                  await controller.switchToPluginList(const UuidV4().generate(), true);
+                }),
+            _NavItem(
+                id: 'plugins.installed',
+                icon: Icons.widgets_outlined,
+                title: controller.tr('ui_installed_plugins'),
+                body: const WoxSettingPluginView(),
+                onTap: () async {
+                  await controller.switchToPluginList(const UuidV4().generate(), false);
+                }),
+            _NavItem(id: 'plugins.runtime', icon: Icons.terminal_outlined, title: controller.tr('ui_runtime_settings'), body: WoxSettingRuntimeView()),
+          ],
+        ),
+        _NavItem(
+          id: 'themes',
+          icon: Icons.color_lens_outlined,
+          title: controller.tr('ui_themes'),
+          isExpanded: true,
+          children: [
+            _NavItem(
+                id: 'themes.store',
+                icon: Icons.shopping_bag_outlined,
+                title: controller.tr('ui_store_themes'),
+                body: const WoxSettingThemeView(),
+                onTap: () async {
+                  await controller.switchToThemeList(true);
+                }),
+            _NavItem(
+                id: 'themes.installed',
+                icon: Icons.brush_outlined,
+                title: controller.tr('ui_installed_themes'),
+                body: const WoxSettingThemeView(),
+                onTap: () async {
+                  await controller.switchToThemeList(false);
+                }),
+          ],
+        ),
+        _NavItem(id: 'about', icon: Icons.info_outline, title: controller.tr('ui_about'), body: const WoxSettingAboutView()),
+      ];
+
       return WoxPlatformFocus(
         focusNode: controller.settingFocusNode,
         autofocus: true,

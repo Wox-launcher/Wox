@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:wox/api/wox_api.dart';
+import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
@@ -145,11 +146,8 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
               ),
             ),
             const SizedBox(width: 12),
-            TextButton(
-              child: Text(
-                tr('ui_ai_model_selector_open_ai_settings'),
-                style: TextStyle(color: getThemeTextColor(), fontWeight: FontWeight.w600),
-              ),
+            WoxButton.text(
+              text: tr('ui_ai_model_selector_open_ai_settings'),
               onPressed: () {
                 // Switch to the AI settings page within the settings view
                 Get.find<WoxSettingController>().activeNavPath.value = 'ai';

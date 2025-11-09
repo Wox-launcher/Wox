@@ -7,10 +7,11 @@ import 'package:flutter/services.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_ai_model_selector_view.dart';
+import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_image_view.dart';
-import 'package:wox/components/wox_tooltip_view.dart';
+import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_ai.dart';
@@ -146,7 +147,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
       }
     }
 
-    return max > 0 ? max + 22 /* for tooltip width*/ : 100;
+    return max > 0 ? max : 100;
   }
 
   String tr(String key) {
@@ -197,20 +198,10 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           spacing: 8,
           runSpacing: 8,
           children: [
-            ElevatedButton(
-              style: ButtonStyle(
-                padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                backgroundColor: WidgetStateProperty.all(getThemeActiveBackgroundColor().withAlpha(20)),
-                foregroundColor: WidgetStateProperty.all(getThemeTextColor()),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.emoji_emotions_outlined, size: 14, color: getThemeTextColor()),
-                  const SizedBox(width: 6),
-                  Text(tr('ui_image_editor_emoji'), style: TextStyle(color: getThemeTextColor())),
-                ],
-              ),
+            WoxButton.secondary(
+              text: tr('ui_image_editor_emoji'),
+              icon: Icon(Icons.emoji_emotions_outlined, size: 14, color: getThemeTextColor()),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               onPressed: () async {
                 final emojiResult = await _showEmojiPicker(context);
                 if (emojiResult != null && emojiResult.isNotEmpty) {
@@ -223,20 +214,10 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 }
               },
             ),
-            ElevatedButton(
-              style: ButtonStyle(
-                padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                backgroundColor: WidgetStateProperty.all(getThemeActiveBackgroundColor().withAlpha(20)),
-                foregroundColor: WidgetStateProperty.all(getThemeTextColor()),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.file_upload_outlined, size: 14, color: getThemeTextColor()),
-                  const SizedBox(width: 6),
-                  Text(tr('ui_image_editor_upload_image'), style: TextStyle(color: getThemeTextColor())),
-                ],
-              ),
+            WoxButton.secondary(
+              text: tr('ui_image_editor_upload_image'),
+              icon: Icon(Icons.file_upload_outlined, size: 14, color: getThemeTextColor()),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               onPressed: () async {
                 final result = await FilePicker.platform.pickFiles(
                   type: FileType.image,
@@ -303,8 +284,8 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             ),
           ),
           actions: [
-            TextButton(
-              child: Text(tr('ui_cancel')),
+            WoxButton.secondary(
+              text: tr('ui_cancel'),
               onPressed: () {
                 Navigator.pop(context);
               },
@@ -410,17 +391,9 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 setState(() {});
               }
             },
-            child: TextField(
+            child: WoxTextField(
               controller: textboxEditingController[column.key],
-              style: TextStyle(color: getThemeTextColor(), fontSize: 13),
-              decoration: InputDecoration(
-                enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: getThemeTextColor().withOpacity(0.3)),
-                ),
-                focusedBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: getThemeActiveBackgroundColor(), width: 2),
-                ),
-              ),
+              maxLines: column.textMaxLines,
               onChanged: (value) {
                 updateValue(column.key, value);
 
@@ -436,7 +409,6 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 fieldValidationErrors.remove(column.key);
                 setState(() {});
               },
-              maxLines: column.textMaxLines,
             ),
           ),
         );
@@ -458,29 +430,27 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeDirPath:
         return Expanded(
-          child: TextField(
+          child: WoxTextField(
             controller: TextEditingController(text: getValue(column.key)),
             onChanged: (value) {
               updateValue(column.key, value);
             },
-            decoration: InputDecoration(
-              suffixIcon: ElevatedButton(
-                onPressed: disableBrowse
-                    ? null
-                    : () async {
-                        disableBrowse = true;
-                        final selectedDirectory = await FileSelector.pick(
-                          const UuidV4().generate(),
-                          FileSelectorParams(isDirectory: true),
-                        );
-                        if (selectedDirectory.isNotEmpty) {
-                          updateValue(column.key, selectedDirectory[0]);
-                          setState(() {});
-                        }
-                        disableBrowse = false;
-                      },
-                child: Text('Browse', style: TextStyle(color: getThemeTextColor())),
-              ),
+            suffixIcon: WoxButton.primary(
+              text: 'Browse',
+              onPressed: disableBrowse
+                  ? null
+                  : () async {
+                      disableBrowse = true;
+                      final selectedDirectory = await FileSelector.pick(
+                        const UuidV4().generate(),
+                        FileSelectorParams(isDirectory: true),
+                      );
+                      if (selectedDirectory.isNotEmpty) {
+                        updateValue(column.key, selectedDirectory[0]);
+                        setState(() {});
+                      }
+                      disableBrowse = false;
+                    },
             ),
           ),
         );
@@ -614,8 +584,13 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                               setState(() {});
                             }
                           },
-                          child: TextField(
+                          child: WoxTextField(
                             controller: textboxEditingController[column.key + i.toString()],
+                            maxLines: 1,
+                            style: TextStyle(
+                              overflow: TextOverflow.ellipsis,
+                              color: getThemeTextColor(),
+                            ),
                             onChanged: (value) {
                               columnValues[i] = value;
 
@@ -631,11 +606,6 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                               fieldValidationErrors.remove(column.key);
                               setState(() {});
                             },
-                            maxLines: 1,
-                            style: TextStyle(
-                              overflow: TextOverflow.ellipsis,
-                              color: getThemeTextColor(),
-                            ),
                           ),
                         ),
                       ),
@@ -702,12 +672,9 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
       final Color accentColor = getThemeActiveBackgroundColor();
       final Color cardColor = (isDarkTheme ? baseSurface.lighter(12) : baseSurface.darker(6)).withAlpha(255);
       final Color textColor = getThemeTextColor();
-      final Color actionTextColor = getThemeActionItemActiveColor();
       final double maxLabelWidth = getMaxColumnWidth();
       final double dialogContentWidth = math.max(600, maxLabelWidth + 320);
       final Color outlineColor = accentColor.withOpacity(isDarkTheme ? 0.22 : 0.15);
-      final Color secondaryButtonColor = isDarkTheme ? cardColor.lighter(10) : cardColor.darker(4);
-      final Color secondaryButtonHover = isDarkTheme ? cardColor.lighter(20) : cardColor.darker(8);
 
       return MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -753,14 +720,15 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                       if (!column.hideInUpdate)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 10),
-                          child: Row(
+                          child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              SizedBox(
-                                width: maxLabelWidth,
-                                child: Row(
-                                  children: [
-                                    Text(
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: maxLabelWidth,
+                                    child: Text(
                                       tr(column.label),
                                       style: TextStyle(
                                         color: textColor.withOpacity(0.92),
@@ -768,16 +736,22 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                    if (column.tooltip != "")
-                                      WoxTooltipView(
-                                        tooltip: tr(column.tooltip),
-                                        color: textColor,
-                                      ),
-                                  ],
-                                ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  buildColumn(column),
+                                ],
                               ),
-                              const SizedBox(width: 10),
-                              buildColumn(column),
+                              if (column.tooltip != "")
+                                Padding(
+                                  padding: EdgeInsets.only(top: 4, left: maxLabelWidth + 10),
+                                  child: Text(
+                                    tr(column.tooltip),
+                                    style: TextStyle(
+                                      color: textColor.withOpacity(0.6),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -800,38 +774,18 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
               ),
             ),
             actions: [
-              ElevatedButton(
-                style: ButtonStyle(
-                  backgroundColor: WidgetStateProperty.all(secondaryButtonColor),
-                  foregroundColor: WidgetStateProperty.all(textColor),
-                  overlayColor: WidgetStateProperty.all(secondaryButtonHover),
-                  padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 22, vertical: 12)),
-                  shape: WidgetStateProperty.all(
-                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  side: WidgetStateProperty.all(BorderSide(color: outlineColor.withOpacity(0.45))),
-                  elevation: WidgetStateProperty.all(0),
-                ),
+              WoxButton.secondary(
+                text: 'Cancel',
+                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
               ),
               const SizedBox(width: 12),
-              ElevatedButton(
-                style: ButtonStyle(
-                  backgroundColor: WidgetStateProperty.all(accentColor),
-                  foregroundColor: WidgetStateProperty.all(actionTextColor),
-                  overlayColor: WidgetStateProperty.all(accentColor.darker(10)),
-                  padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 28, vertical: 12)),
-                  shape: WidgetStateProperty.all(
-                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  side: WidgetStateProperty.all(BorderSide(color: accentColor.withOpacity(0.6))),
-                  elevation: WidgetStateProperty.all(0),
-                ),
+              WoxButton.primary(
+                text: 'Save',
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
                 onPressed: () {
                   _saveData(context);
                 },
-                child: const Text('Save'),
               ),
             ],
           ),

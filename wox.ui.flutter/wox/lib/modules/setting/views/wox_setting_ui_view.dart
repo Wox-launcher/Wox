@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
+import 'package:wox/components/wox_slider.dart';
 import 'package:wox/components/wox_switch.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
-import 'package:wox/utils/colors.dart';
 
 class WoxSettingUIView extends WoxSettingBaseView {
   const WoxSettingUIView({super.key});
@@ -57,38 +57,14 @@ class WoxSettingUIView extends WoxSettingBaseView {
           label: controller.tr("ui_app_width"),
           tips: controller.tr("ui_app_width_tips"),
           child: Obx(() {
-            return Transform.translate(
-              offset: const Offset(-20, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderThemeData(
-                        activeTrackColor: getThemeActiveBackgroundColor(),
-                        inactiveTrackColor: getThemeTextColor().withOpacity(0.3),
-                        thumbColor: getThemeActiveBackgroundColor(),
-                        overlayColor: getThemeActiveBackgroundColor().withOpacity(0.2),
-                        valueIndicatorColor: getThemeActiveBackgroundColor(),
-                        valueIndicatorTextStyle: TextStyle(color: getThemeTextColor()),
-                      ),
-                      child: Slider(
-                        value: controller.woxSetting.value.appWidth.toDouble(),
-                        min: 600,
-                        max: 1600,
-                        divisions: 20,
-                        onChanged: (double value) {
-                          controller.updateConfig("AppWidth", value.toInt().toString());
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Text(
-                    '${controller.woxSetting.value.appWidth}',
-                    style: TextStyle(color: getThemeTextColor(), fontSize: 13),
-                  ),
-                ],
-              ),
+            return WoxSlider(
+              value: controller.woxSetting.value.appWidth.toDouble(),
+              min: 600,
+              max: 1600,
+              divisions: 20,
+              onChanged: (double value) {
+                controller.updateConfig("AppWidth", value.toInt().toString());
+              },
             );
           }),
         ),

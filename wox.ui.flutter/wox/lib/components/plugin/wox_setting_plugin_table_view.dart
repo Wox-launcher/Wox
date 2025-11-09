@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
+import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
@@ -20,7 +21,7 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
   final PluginSettingValueTable item;
   static const String rowUniqueIdKey = "wox_table_row_id";
   final double tableWidth;
-  final operationWidth = 75.0;
+  final operationWidth = 80.0;
   final columnSpacing = 10.0;
   final columnTooltipWidth = 20.0;
   final bool readonly;
@@ -334,7 +335,10 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
           mainAxisAlignment: MainAxisAlignment.start, // Align buttons to the start
           mainAxisSize: MainAxisSize.min, // Use minimum space needed
           children: [
-            TextButton(
+            WoxButton.text(
+              text: '',
+              icon: Icon(Icons.edit, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
               onPressed: () {
                 showDialog(
                     context: context,
@@ -365,15 +369,11 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                       );
                     });
               },
-              style: ButtonStyle(
-                padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 4)),
-              ),
-              child: Icon(Icons.edit, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
             ),
-            TextButton(
-              style: ButtonStyle(
-                padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 4)),
-              ),
+            WoxButton.text(
+              text: '',
+              icon: Icon(Icons.delete, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
               onPressed: () {
                 //confirm delete
                 showDialog(
@@ -385,13 +385,13 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              TextButton(
-                                child: Text(tr("ui_cancel"), style: TextStyle(color: getThemeTextColor())),
+                              WoxButton.secondary(
+                                text: tr("ui_cancel"),
                                 onPressed: () => Navigator.pop(context),
                               ),
                               const SizedBox(width: 16),
-                              ElevatedButton(
-                                child: Text(tr("ui_delete")),
+                              WoxButton.primary(
+                                text: tr("ui_delete"),
                                 onPressed: () {
                                   Navigator.pop(context);
 
@@ -414,7 +414,6 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                       );
                     });
               },
-              child: Icon(Icons.delete, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
             ),
           ],
         ),
@@ -643,40 +642,35 @@ class WoxSettingPluginTable extends WoxSettingPluginItem {
                   ],
                 ),
                 if (!readonly)
-                  TextButton(
-                      style: ButtonStyle(
-                        padding: WidgetStateProperty.all(EdgeInsets.zero),
-                      ),
-                      onPressed: () {
-                        showDialog(
-                            context: context,
-                            builder: (context) {
-                              return WoxSettingPluginTableUpdate(
-                                item: item,
-                                row: const {},
-                                onUpdate: (key, row) {
-                                  var rowsJson = getSetting(key);
-                                  if (rowsJson == "") {
-                                    rowsJson = "[]";
-                                  }
-                                  var rows = json.decode(rowsJson);
-                                  rows.add(row);
-                                  //remove the unique key
-                                  rows.forEach((element) {
-                                    element.remove(rowUniqueIdKey);
-                                  });
+                  WoxButton.text(
+                    text: tr("ui_add"),
+                    icon: Icon(Icons.add, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
+                    padding: EdgeInsets.zero,
+                    onPressed: () {
+                      showDialog(
+                          context: context,
+                          builder: (context) {
+                            return WoxSettingPluginTableUpdate(
+                              item: item,
+                              row: const {},
+                              onUpdate: (key, row) {
+                                var rowsJson = getSetting(key);
+                                if (rowsJson == "") {
+                                  rowsJson = "[]";
+                                }
+                                var rows = json.decode(rowsJson);
+                                rows.add(row);
+                                //remove the unique key
+                                rows.forEach((element) {
+                                  element.remove(rowUniqueIdKey);
+                                });
 
-                                  updateConfig(key, json.encode(rows));
-                                },
-                              );
-                            });
-                      },
-                      child: Row(
-                        children: [
-                          Icon(Icons.add, color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor)),
-                          Text(tr("ui_add"), style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemSubTitleColor))),
-                        ],
-                      )),
+                                updateConfig(key, json.encode(rows));
+                              },
+                            );
+                          });
+                    },
+                  ),
               ],
             ),
           ),

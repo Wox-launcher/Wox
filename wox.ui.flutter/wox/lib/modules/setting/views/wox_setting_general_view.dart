@@ -175,6 +175,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
         ),
         formField(
           label: controller.tr("ui_query_hotkeys"),
+          tips: controller.tr("ui_query_hotkeys_tips"),
           child: Obx(() {
             return WoxSettingPluginTable(
               value: json.encode(controller.woxSetting.value.queryHotkeys),
@@ -206,7 +207,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                     "Key": "IsSilentExecution",
                     "Label": "i18n:ui_query_hotkeys_silent",
                     "Tooltip": "i18n:ui_query_hotkeys_silent_tooltip",
-                    "Width": 60,
+                    "Width": 54,
                     "Type": "checkbox",
                   }
                 ],
@@ -220,6 +221,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
         ),
         formField(
           label: controller.tr("ui_query_shortcuts"),
+          tips: controller.tr("ui_query_shortcuts_tips"),
           child: Obx(() {
             return WoxSettingPluginTable(
               value: json.encode(controller.woxSetting.value.queryShortcuts),

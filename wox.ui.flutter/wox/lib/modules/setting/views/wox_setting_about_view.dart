@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
@@ -86,27 +87,15 @@ class WoxSettingAboutView extends WoxSettingBaseView {
   }
 
   Widget _buildLinkButton(String labelKey, String url, IconData icon) {
-    return TextButton(
+    return WoxButton.text(
+      text: controller.tr(labelKey),
+      icon: Icon(icon, size: 18, color: getThemeTextColor()),
       onPressed: () async {
         final uri = Uri.parse(url);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri);
         }
       },
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 18, color: getThemeTextColor()),
-          const SizedBox(width: 8),
-          Text(
-            controller.tr(labelKey),
-            style: TextStyle(
-              color: getThemeTextColor(),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
