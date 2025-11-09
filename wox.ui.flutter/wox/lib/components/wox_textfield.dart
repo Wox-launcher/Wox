@@ -41,7 +41,6 @@ class WoxTextField extends StatelessWidget {
   Widget build(BuildContext context) {
     final textColor = getThemeTextColor();
     final borderColor = getThemeSubTextColor();
-    final activeColor = getThemeActiveBackgroundColor();
 
     final textField = TextField(
       controller: controller,
@@ -57,7 +56,7 @@ class WoxTextField extends StatelessWidget {
       decoration: InputDecoration(
         hintText: hintText,
         hintStyle: hintStyle ?? TextStyle(color: textColor.withValues(alpha: 0.5), fontSize: 13),
-        contentPadding: contentPadding ?? const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        contentPadding: contentPadding ?? const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
         suffixIcon: suffixIcon,
         border: InputBorder.none,
         enabledBorder: InputBorder.none,

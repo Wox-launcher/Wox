@@ -74,7 +74,7 @@ class WoxButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var buttonPadding = padding ?? const EdgeInsets.symmetric(horizontal: 20, vertical: 14);
+    var buttonPadding = padding ?? const EdgeInsets.symmetric(horizontal: 20, vertical: 16);
     if (type == WoxButtonType.text) {
       buttonPadding = const EdgeInsets.symmetric(horizontal: 6, vertical: 4);
     }

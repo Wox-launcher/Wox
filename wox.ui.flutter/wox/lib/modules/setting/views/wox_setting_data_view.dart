@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart' hide DataTable;
 import 'package:get/get.dart';
-import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_switch.dart';
-import 'package:wox/components/wox_textfield.dart';
+import 'package:wox/components/wox_path_finder.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
 import 'package:wox/utils/colors.dart';
-import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:flutter/material.dart' as material;
 import 'package:wox/api/wox_api.dart';
@@ -47,55 +45,15 @@ class WoxSettingDataView extends WoxSettingBaseView {
     return form(children: [
       formField(
         label: controller.tr("ui_data_config_location"),
-        child: Row(
-          children: [
-            Expanded(
-              child: Obx(() {
-                return WoxTextField(
-                  controller: TextEditingController(text: controller.userDataLocation.value),
-                  enabled: false,
-                );
-              }),
-            ),
-            const SizedBox(width: 10),
-            WoxButton.primary(
-              text: controller.tr("ui_data_config_location_change"),
-              onPressed: () async {
-                final currentContext = context;
-                final result = await FileSelector.pick(
-                  const UuidV4().generate(),
-                  FileSelectorParams(isDirectory: true),
-                );
-                if (result.isNotEmpty && currentContext.mounted) {
-                  showDialog(
-                    context: currentContext,
-                    builder: (context) => AlertDialog(
-                      content: Text(controller.tr("ui_data_config_location_change_confirm").replaceAll("{0}", result[0])),
-                      actions: [
-                        WoxButton.secondary(
-                          text: controller.tr("ui_data_config_location_change_cancel"),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                        WoxButton.primary(
-                          text: controller.tr("ui_data_config_location_change_confirm_button"),
-                          onPressed: () {
-                            Navigator.pop(context);
-                            controller.updateUserDataLocation(result[0]);
-                          },
-                        ),
-                      ],
-                    ),
-                  );
-                }
-              },
-            ),
-            const SizedBox(width: 10),
-            WoxButton.primary(
-              text: controller.tr("plugin_file_open"),
-              onPressed: () => controller.openFolder(controller.userDataLocation.value),
-            ),
-          ],
-        ),
+        child: Obx(() => WoxPathFinder(
+              value: controller.userDataLocation.value,
+              enabled: false, // read-only display
+              showOpenButton: true,
+              showChangeButton: true,
+              confirmOnChange: true,
+              changeButtonTextKey: 'ui_data_config_location_change',
+              onChanged: (path) => controller.updateUserDataLocation(path),
+            )),
         tips: controller.tr("ui_data_config_location_tips"),
       ),
       formField(

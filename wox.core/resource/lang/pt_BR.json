@@ -159,6 +159,7 @@
   "ui_delete_row_confirm": "Tem certeza que deseja excluir esta linha?",
   "ui_cancel": "Cancelar",
   "ui_delete": "Excluir",
+  "ui_save": "Salvar",
   "ui_data_backup_auto_title": "Backup automático",
   "ui_data_backup_auto_tips": "Habilitar backup automático para salvar as configurações do Wox diariamente na pasta data",
   "ui_data_backup_auto_tips_prefix": "Habilitar backup automático para salvar dados diariamente na",

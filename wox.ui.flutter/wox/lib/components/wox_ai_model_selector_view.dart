@@ -5,6 +5,8 @@ import 'package:get/get.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_button.dart';
 import 'package:wox/components/wox_dropdown_button.dart';
+import 'package:wox/components/wox_textfield.dart';
+
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/utils/colors.dart';
@@ -214,19 +216,10 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
         Expanded(
           flex: 2,
           child: _isEditMode
-              ? TextField(
+              ? WoxTextField(
                   controller: _nameController,
-                  style: TextStyle(color: getThemeTextColor(), fontSize: 13),
-                  decoration: InputDecoration(
-                    hintText: tr('ui_ai_model_selector_model_name'),
-                    hintStyle: TextStyle(color: getThemeSubTextColor()),
-                    enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: getThemeTextColor().withOpacity(0.3)),
-                    ),
-                    focusedBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: getThemeActiveBackgroundColor(), width: 2),
-                    ),
-                  ),
+                  hintText: tr('ui_ai_model_selector_model_name'),
+                  width: double.infinity, // fill the Expanded width
                   onChanged: (value) {
                     if (value.isNotEmpty && _selectedProvider != null) {
                       final updatedModel = AIModel(

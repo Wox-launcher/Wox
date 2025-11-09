@@ -159,6 +159,7 @@
   "ui_delete_row_confirm": "确定要删除此行吗？",
   "ui_cancel": "取消",
   "ui_delete": "删除",
+  "ui_save": "保存",
   "ui_data_backup_auto_title": "自动备份",
   "ui_data_backup_auto_tips": "启用自动备份，每天在data文件夹中备份一次Wox设置",
   "ui_data_backup_auto_tips_prefix": "启用自动备份，每天在",

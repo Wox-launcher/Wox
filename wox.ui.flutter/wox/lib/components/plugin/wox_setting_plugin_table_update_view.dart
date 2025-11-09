@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
-import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_ai_model_selector_view.dart';
 import 'package:wox/components/wox_button.dart';
@@ -12,13 +11,15 @@ import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_textfield.dart';
+import 'package:wox/components/wox_checkbox.dart';
+import 'package:wox/components/wox_checkbox_tile.dart';
+import 'package:wox/components/wox_path_finder.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/enums/wox_image_type_enum.dart';
-import 'package:wox/utils/picker.dart';
 import 'package:wox/utils/colors.dart';
 import 'package:get/get.dart';
 
@@ -43,7 +44,6 @@ class WoxSettingPluginTableUpdate extends StatefulWidget {
 class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdate> {
   Map<String, dynamic> values = {};
   bool isUpdate = false;
-  bool disableBrowse = false;
   Map<String, String> fieldValidationErrors = {};
   Map<String, TextEditingController> textboxEditingController = {};
   List<PluginSettingValueTableColumn> columns = [];
@@ -413,7 +413,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
           ),
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeCheckbox:
-        return Checkbox(
+        return WoxCheckbox(
           value: getValueBool(column.key),
           onChanged: (value) {
             updateValue(column.key, value);
@@ -430,28 +430,17 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeDirPath:
         return Expanded(
-          child: WoxTextField(
-            controller: TextEditingController(text: getValue(column.key)),
-            onChanged: (value) {
-              updateValue(column.key, value);
+          child: WoxPathFinder(
+            value: getValue(column.key),
+            enabled: true,
+            showOpenButton: false,
+            showChangeButton: true,
+            confirmOnChange: false,
+            changeButtonTextKey: 'ui_runtime_browse',
+            onChanged: (path) {
+              updateValue(column.key, path);
+              setState(() {});
             },
-            suffixIcon: WoxButton.primary(
-              text: 'Browse',
-              onPressed: disableBrowse
-                  ? null
-                  : () async {
-                      disableBrowse = true;
-                      final selectedDirectory = await FileSelector.pick(
-                        const UuidV4().generate(),
-                        FileSelectorParams(isDirectory: true),
-                      );
-                      if (selectedDirectory.isNotEmpty) {
-                        updateValue(column.key, selectedDirectory[0]);
-                        setState(() {});
-                      }
-                      disableBrowse = false;
-                    },
-            ),
           ),
         );
       case PluginSettingValueType.pluginSettingValueTableColumnTypeSelect:
@@ -460,7 +449,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             return WoxDropdownButton<String>(
               value: getValue(column.key),
               isExpanded: true,
-              fontSize: 14,
+              fontSize: 13,
               underline: Container(
                 height: 1,
                 color: getThemeDividerColor().withOpacity(0.6),
@@ -509,9 +498,9 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                   const SizedBox(height: 8),
                   Container(
                     height: 200,
-                    width: 400, // Limit width to prevent overflow
+                    width: double.infinity, // Fill available width for consistency
                     decoration: BoxDecoration(
-                      border: Border.all(color: getThemeSubTextColor().withAlpha(76)), // 0.3 * 255 �?76
+                      border: Border.all(color: getThemeSubTextColor()), // unify with TextField border color
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: ListView.builder(
@@ -520,28 +509,21 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                         final tool = allMCPTools[index];
                         final isSelected = selectedTools.contains(tool.name);
 
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
-                          child: CheckboxListTile(
-                            value: isSelected,
-                            onChanged: (value) {
-                              setState(() {
-                                if (value == true) {
-                                  if (!selectedTools.contains(tool.name)) {
-                                    selectedTools.add(tool.name);
-                                  }
-                                } else {
-                                  selectedTools.remove(tool.name);
+                        return WoxCheckboxTile(
+                          value: isSelected,
+                          onChanged: (value) {
+                            setState(() {
+                              if (value == true) {
+                                if (!selectedTools.contains(tool.name)) {
+                                  selectedTools.add(tool.name);
                                 }
-                                updateValue(column.key, selectedTools);
-                              });
-                            },
-                            title: Text(
-                              tool.name, // Only display tool name
-                              style: TextStyle(color: getThemeTextColor()),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
+                              } else {
+                                selectedTools.remove(tool.name);
+                              }
+                              updateValue(column.key, selectedTools);
+                            });
+                          },
+                          title: tool.name,
                         );
                       },
                     ),
@@ -724,7 +706,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   SizedBox(
                                     width: maxLabelWidth,
@@ -775,13 +757,13 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
             ),
             actions: [
               WoxButton.secondary(
-                text: 'Cancel',
+                text: tr("ui_cancel"),
                 padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
                 onPressed: () => Navigator.pop(context),
               ),
               const SizedBox(width: 12),
               WoxButton.primary(
-                text: 'Save',
+                text: tr("ui_save"),
                 padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
                 onPressed: () {
                   _saveData(context);
