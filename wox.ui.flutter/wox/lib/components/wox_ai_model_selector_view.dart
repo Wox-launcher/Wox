@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:wox/api/wox_api.dart';
+import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/utils/colors.dart';
@@ -174,11 +175,9 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
         // Provider selector
         Expanded(
           flex: 1,
-          child: DropdownButton<String>(
+          child: WoxDropdownButton<String>(
             value: _selectedProvider,
             isExpanded: true,
-            dropdownColor: getThemeCardBackgroundColor(),
-            style: TextStyle(color: getThemeTextColor(), fontSize: 13),
             items: _providers
                 .map((provider) => DropdownMenuItem<String>(
                       value: provider,
@@ -241,11 +240,9 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
                     }
                   },
                 )
-              : DropdownButton<String>(
+              : WoxDropdownButton<String>(
                   value: _selectedModel?.name,
                   isExpanded: true,
-                  dropdownColor: getThemeCardBackgroundColor(),
-                  style: TextStyle(color: getThemeTextColor(), fontSize: 13),
                   items: getProviderModels()
                       .map((model) => DropdownMenuItem<String>(
                             value: model.name,

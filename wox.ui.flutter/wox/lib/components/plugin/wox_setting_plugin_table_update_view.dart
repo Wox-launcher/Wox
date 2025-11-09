@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/wox_ai_model_selector_view.dart';
+import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_tooltip_view.dart';
@@ -486,18 +487,10 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
       case PluginSettingValueType.pluginSettingValueTableColumnTypeSelect:
         return Expanded(
           child: Builder(builder: (context) {
-            final Color dropdownSurface = getThemeCardBackgroundColor().withAlpha(255);
-            final TextStyle optionStyle = TextStyle(
-              color: getThemeTextColor(),
-              fontSize: 14,
-            );
-            return DropdownButton<String>(
+            return WoxDropdownButton<String>(
               value: getValue(column.key),
               isExpanded: true,
-              style: optionStyle,
-              dropdownColor: dropdownSurface,
-              iconEnabledColor: getThemeSubTextColor(),
-              iconDisabledColor: getThemeSubTextColor(),
+              fontSize: 14,
               underline: Container(
                 height: 1,
                 color: getThemeDividerColor().withOpacity(0.6),
@@ -510,7 +503,7 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 return DropdownMenuItem(
                   value: e.value,
                   alignment: Alignment.centerLeft,
-                  child: Text(e.label, style: optionStyle),
+                  child: Text(e.label),
                 );
               }).toList(),
             );

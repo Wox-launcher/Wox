@@ -6,13 +6,13 @@ import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
 import 'package:wox/components/wox_hotkey_recorder_view.dart';
 import 'package:wox/components/wox_switch.dart';
+import 'package:wox/components/wox_dropdown_button.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_lang.dart';
 import 'package:wox/enums/wox_query_mode_enum.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
-import 'package:wox/utils/colors.dart';
 
 class WoxSettingGeneralView extends WoxSettingBaseView {
   const WoxSettingGeneralView({super.key});
@@ -120,34 +120,28 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
           label: controller.tr("ui_query_mode"),
           tips: controller.tr("ui_query_mode_tips"),
           child: Obx(() {
-            return SizedBox(
-              width: 250,
-              child: DropdownButton<String>(
-                items: [
-                  DropdownMenuItem(
-                    value: WoxQueryModeEnum.WOX_QUERY_MODE_PRESERVE.code,
-                    child: Text(controller.tr("ui_query_mode_preserve")),
-                  ),
-                  DropdownMenuItem(
-                    value: WoxQueryModeEnum.WOX_QUERY_MODE_EMPTY.code,
-                    child: Text(controller.tr("ui_query_mode_empty")),
-                  ),
-                  DropdownMenuItem(
-                    value: WoxQueryModeEnum.WOX_QUERY_MODE_MRU.code,
-                    child: Text(controller.tr("ui_query_mode_mru")),
-                  ),
-                ],
-                value: controller.woxSetting.value.queryMode,
-                onChanged: (v) {
-                  if (v != null) {
-                    controller.updateConfig("QueryMode", v);
-                  }
-                },
-                isExpanded: true,
-                style: TextStyle(color: getThemeTextColor(), fontSize: 13),
-                dropdownColor: getThemeActiveBackgroundColor().withOpacity(0.95),
-                iconEnabledColor: getThemeTextColor(),
-              ),
+            return WoxDropdownButton<String>(
+              items: [
+                DropdownMenuItem(
+                  value: WoxQueryModeEnum.WOX_QUERY_MODE_PRESERVE.code,
+                  child: Text(controller.tr("ui_query_mode_preserve")),
+                ),
+                DropdownMenuItem(
+                  value: WoxQueryModeEnum.WOX_QUERY_MODE_EMPTY.code,
+                  child: Text(controller.tr("ui_query_mode_empty")),
+                ),
+                DropdownMenuItem(
+                  value: WoxQueryModeEnum.WOX_QUERY_MODE_MRU.code,
+                  child: Text(controller.tr("ui_query_mode_mru")),
+                ),
+              ],
+              value: controller.woxSetting.value.queryMode,
+              onChanged: (v) {
+                if (v != null) {
+                  controller.updateConfig("QueryMode", v);
+                }
+              },
+              isExpanded: true,
             );
           }),
         ),
@@ -159,7 +153,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                 if (snapshot.connectionState == ConnectionState.done) {
                   final languages = snapshot.data as List<WoxLang>;
                   return Obx(() {
-                    return DropdownButton<String>(
+                    return WoxDropdownButton<String>(
                       items: languages.map((e) {
                         return DropdownMenuItem(
                           value: e.code,
@@ -173,9 +167,6 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                         }
                       },
                       isExpanded: true,
-                      style: TextStyle(color: getThemeTextColor(), fontSize: 13),
-                      dropdownColor: getThemeActiveBackgroundColor().withOpacity(0.95),
-                      iconEnabledColor: getThemeTextColor(),
                     );
                   });
                 }
@@ -269,4 +260,3 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
     });
   }
 }
-
