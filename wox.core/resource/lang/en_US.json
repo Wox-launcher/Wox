@@ -427,6 +427,7 @@
   "plugin_calculator_input_expression": "Input expression to calculate",
   "plugin_file_open": "Open",
   "plugin_file_open_containing_folder": "Open containing folder",
+  "plugin_file_show_context_menu": "Show system context menu",
   "plugin_file_everything_not_running": "Everything is not running",
   "plugin_file_everything_please_run_everything": "Please run Everything",
   "plugin_file_everything_goto_website": "Go to Everything website",

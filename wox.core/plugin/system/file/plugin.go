@@ -3,8 +3,11 @@ package file
 import (
 	"context"
 	"errors"
+	"os"
 	"wox/plugin"
 	"wox/setting/definition"
+	"wox/util/fileicon"
+	"wox/util/nativecontextmenu"
 	"wox/util/shell"
 
 	"github.com/samber/lo"
@@ -95,23 +98,54 @@ func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryRe
 	}
 
 	return lo.Map(results, func(item SearchResult, _ int) plugin.QueryResult {
+		// 根据路径类型选择图标：文件/文件夹/文件类型图标（带缓存）
+		icon := fileIcon
+		if info, err := os.Stat(item.Path); err == nil {
+			if info.IsDir() {
+				icon = plugin.FolderIcon
+			} else {
+				// 文件：尝试获取系统文件类型图标
+				if img, err := fileicon.GetFileTypeIconByPath(ctx, item.Path); err == nil {
+					icon = img
+				} else {
+					c.api.Log(ctx, plugin.LogLevelDebug, "Failed to get file type icon for "+item.Path+": "+err.Error())
+				}
+			}
+		}
+
 		return plugin.QueryResult{
 			Title:    item.Name,
 			SubTitle: item.Path,
-			Icon:     fileIcon,
+			Icon:     icon,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_file_open",
+					Icon: plugin.PreviewIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						shell.Open(item.Path)
 					},
 				},
 				{
 					Name: "i18n:plugin_file_open_containing_folder",
+					Icon: plugin.OpenContainingFolderIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						shell.OpenFileInFolder(item.Path)
 					},
 					Hotkey: "ctrl+enter",
+				},
+				{
+					Name: "i18n:plugin_file_show_context_menu",
+					Icon: plugin.PluginMenusIcon,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						c.api.Log(ctx, plugin.LogLevelInfo, "Showing context menu for: "+item.Path)
+						err := nativecontextmenu.ShowContextMenu(item.Path)
+						if err != nil {
+							c.api.Log(ctx, plugin.LogLevelError, err.Error())
+							c.api.Notify(ctx, err.Error())
+						}
+					},
+					Hotkey:                 "ctrl+m",
+					PreventHideAfterAction: true,
 				},
 			},
 		}

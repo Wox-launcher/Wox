@@ -426,6 +426,7 @@
   "plugin_calculator_input_expression": "Введите выражение для вычисления",
   "plugin_file_open": "Открыть",
   "plugin_file_open_containing_folder": "Открыть содержащую папку",
+  "plugin_file_show_context_menu": "Показать системное контекстное меню",
   "plugin_file_everything_not_running": "Everything не запущен",
   "plugin_file_everything_please_run_everything": "Пожалуйста, запустите Everything",
   "plugin_file_everything_goto_website": "Перейти на сайт Everything",
