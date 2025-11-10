@@ -23,10 +23,15 @@ class WoxSwitch extends StatelessWidget {
         child: Switch(
           value: value,
           onChanged: onChanged,
-          activeThumbColor: Colors.white,
-          activeTrackColor: activeColor,
-          inactiveThumbColor: Colors.white,
-          inactiveTrackColor: getThemeTextColor().withValues(alpha: 0.3),
+          thumbColor: WidgetStateProperty.all(Colors.white),
+          trackColor: WidgetStateProperty.resolveWith<Color>(
+            (Set<WidgetState> states) {
+              if (states.contains(WidgetState.selected)) {
+                return activeColor;
+              }
+              return getThemeTextColor().withValues(alpha: 0.3);
+            },
+          ),
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
       ),
