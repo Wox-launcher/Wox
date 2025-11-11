@@ -798,20 +798,30 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instance, query Query, title, subTitle string) (defaultActions []QueryResultAction) {
 	if setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle) {
 		defaultActions = append(defaultActions, QueryResultAction{
-			Name:           "i18n:plugin_manager_remove_from_favorite",
-			Icon:           RemoveFromFavIcon,
-			IsSystemAction: true,
+			Name:                   "i18n:plugin_manager_remove_from_favorite",
+			Icon:                   RemoveFromFavIcon,
+			IsSystemAction:         true,
+			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext ActionContext) {
 				setting.GetSettingManager().RemoveFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
+
+				// Get API instance to send notification
+				api := NewAPI(pluginInstance)
+				api.Notify(ctx, "i18n:plugin_manager_remove_from_favorite_success")
 			},
 		})
 	} else {
 		defaultActions = append(defaultActions, QueryResultAction{
-			Name:           "i18n:plugin_manager_add_to_favorite",
-			Icon:           AddToFavIcon,
-			IsSystemAction: true,
+			Name:                   "i18n:plugin_manager_add_to_favorite",
+			Icon:                   AddToFavIcon,
+			IsSystemAction:         true,
+			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext ActionContext) {
 				setting.GetSettingManager().AddFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
+
+				// Get API instance to send notification
+				api := NewAPI(pluginInstance)
+				api.Notify(ctx, "i18n:plugin_manager_add_to_favorite_success")
 			},
 		})
 	}

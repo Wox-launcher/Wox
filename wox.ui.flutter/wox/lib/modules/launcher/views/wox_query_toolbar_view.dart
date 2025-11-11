@@ -200,6 +200,42 @@ class WoxQueryToolbarView extends GetView<WoxLauncherController> {
         builder: (context, constraints) {
           final availableWidth = constraints.maxWidth;
 
+          // When there's a left message, only show "More Actions" hotkey to maximize space for the message
+          if (hasLeftMessage) {
+            // Find the "More Actions" action (usually the last one)
+            final moreActionsInfo = toolbarInfo.actions!.lastWhere(
+              (action) => action.name.toLowerCase().contains('more') || action.name.contains('更多'),
+              orElse: () => toolbarInfo.actions!.last,
+            );
+
+            final hotkey = WoxHotkey.parseHotkeyFromString(moreActionsInfo.hotkey);
+            if (hotkey == null) {
+              return const SizedBox();
+            }
+
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  moreActionsInfo.name,
+                  style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor)),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+                const SizedBox(width: 8),
+                WoxHotkeyView(
+                  hotkey: hotkey,
+                  backgroundColor: hasResultItems
+                      ? safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarBackgroundColor)
+                      : safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor).withValues(alpha: 0.1),
+                  borderColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+                  textColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.toolbarFontColor),
+                ),
+              ],
+            );
+          }
+
+          // When there's no left message, show as many actions as can fit
           // Parse all actions and calculate their widths
           final actionData = <Map<String, dynamic>>[];
           for (var actionInfo in toolbarInfo.actions!) {
