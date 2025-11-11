@@ -98,13 +98,11 @@ func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryRe
 	}
 
 	return lo.Map(results, func(item SearchResult, _ int) plugin.QueryResult {
-		// 根据路径类型选择图标：文件/文件夹/文件类型图标（带缓存）
 		icon := fileIcon
 		if info, err := os.Stat(item.Path); err == nil {
 			if info.IsDir() {
 				icon = plugin.FolderIcon
 			} else {
-				// 文件：尝试获取系统文件类型图标
 				if img, err := fileicon.GetFileTypeIconByPath(ctx, item.Path); err == nil {
 					icon = img
 				} else {

@@ -487,5 +487,7 @@
   "toolbar_snooze_3d": "Don't remind me for 3 days",
   "toolbar_snooze_7d": "Don't remind me for 7 days",
   "toolbar_snooze_1m": "Don't remind me for 1 month",
-  "toolbar_snooze_forever": "Never show again"
+  "toolbar_snooze_forever": "Never show again",
+  "toolbar_more_actions": "More Actions",
+  "ui_actions": "Actions"
 }

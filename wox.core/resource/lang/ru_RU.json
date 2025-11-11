@@ -484,5 +484,7 @@
   "toolbar_snooze_3d": "Не напоминать 3 дня",
   "toolbar_snooze_7d": "Не напоминать 7 дней",
   "toolbar_snooze_1m": "Не напоминать 1 месяц",
-  "toolbar_snooze_forever": "Больше не показывать"
+  "toolbar_snooze_forever": "Больше не показывать",
+  "toolbar_more_actions": "Больше действий",
+  "ui_actions": "Действия"
 }

@@ -487,5 +487,7 @@
   "toolbar_snooze_3d": "3 天内不要提醒我",
   "toolbar_snooze_7d": "7 天内不要提醒我",
   "toolbar_snooze_1m": "1 个月内不要提醒我",
-  "toolbar_snooze_forever": "不再提示"
+  "toolbar_snooze_forever": "不再提示",
+  "toolbar_more_actions": "更多操作",
+  "ui_actions": "操作"
 }

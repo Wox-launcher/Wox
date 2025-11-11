@@ -1771,10 +1771,9 @@ func (m *Manager) QueryMRU(ctx context.Context) []QueryResultUI {
 
 			// Add "Remove from MRU" action to each MRU result
 			removeMRUAction := QueryResultAction{
-				Id:     uuid.NewString(),
-				Name:   i18n.GetI18nManager().TranslateWox(ctx, "mru_remove_action"),
-				Icon:   common.NewWoxImageEmoji("🗑️"),
-				Hotkey: "ctrl+d",
+				Id:   uuid.NewString(),
+				Name: i18n.GetI18nManager().TranslateWox(ctx, "mru_remove_action"),
+				Icon: common.NewWoxImageEmoji("🗑️"),
 				Action: func(ctx context.Context, actionContext ActionContext) {
 					err := setting.GetSettingManager().RemoveMRUItem(ctx, item.PluginID, item.Title, item.SubTitle)
 					if err != nil {

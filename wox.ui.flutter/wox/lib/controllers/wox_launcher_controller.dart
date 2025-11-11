@@ -1244,8 +1244,12 @@ class WoxLauncherController extends GetxController {
     // Filter actions that have hotkeys
     var actionsWithHotkeys = actions.where((action) => action.hotkey.isNotEmpty).toList();
 
-    if (actionsWithHotkeys.isEmpty) {
-      // No actions with hotkeys, clear toolbar right side
+    // Check if we should show "More Actions" hotkey
+    // Only show when there are >= 1 actions (regardless of whether they have hotkeys)
+    final shouldShowMoreActions = actions.isNotEmpty;
+
+    if (actionsWithHotkeys.isEmpty && !shouldShowMoreActions) {
+      // No actions with hotkeys and no actions at all, clear toolbar right side
       toolbar.value = toolbar.value.emptyRightSide();
       return;
     }
@@ -1264,6 +1268,17 @@ class WoxLauncherController extends GetxController {
         hotkey: action.hotkey,
       );
     }).toList();
+
+    // Add "More Actions" hotkey at the end if there are actions
+    if (shouldShowMoreActions) {
+      final moreActionsHotkey = Platform.isMacOS ? "cmd+j" : "alt+j";
+      toolbarActions.add(
+        ToolbarActionInfo(
+          name: tr("toolbar_more_actions"),
+          hotkey: moreActionsHotkey,
+        ),
+      );
+    }
 
     // Update toolbar with all actions
     toolbar.value = toolbar.value.copyWith(

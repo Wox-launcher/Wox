@@ -47,7 +47,7 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                     mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Actions", style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
+                      Text(controller.tr("ui_actions"), style: TextStyle(color: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.actionContainerHeaderFontColor), fontSize: 16.0)),
                       const Divider(),
                       WoxListView<WoxResultAction>(
                         controller: controller.actionListViewController,
