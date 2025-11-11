@@ -114,6 +114,10 @@ export interface ResultTail {
   Type: "text" | "image"
   Text?: string
   Image?: WoxImage
+  /** Tail id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you */
+  Id?: string
+  /** Additional data associate with this tail, can be retrieved later */
+  ContextData?: string
 }
 
 export interface RefreshableResult {
@@ -201,7 +205,7 @@ export interface UpdateableResultAction {
   /** Optional - update the action icon */
   Icon?: WoxImage
   /** Optional - update the action callback */
-  Action?: (actionContext: ActionContext) => void
+  Action?: (actionContext: ActionContext) => Promise<void>
 }
 
 export interface ResultAction {
@@ -350,6 +354,40 @@ export interface PublicAPI {
    *                 Return null if the MRU data is no longer valid
    */
   OnMRURestore: (ctx: Context, callback: (mruData: MRUData) => Promise<Result | null>) => Promise<void>
+
+  /**
+   * Get the current state of a result that is displayed in the UI.
+   *
+   * Returns UpdateableResult with current values if the result is still visible.
+   * Returns null if the result is no longer visible.
+   *
+   * Note: System actions and tails (like favorite icon) are automatically filtered out.
+   * They will be re-added by the system when you call UpdateResult().
+   *
+   * Example:
+   * ```typescript
+   * // In an action handler
+   * Action: async (actionContext) => {
+   *   // Get current result state
+   *   const updatableResult = await api.GetUpdatableResult(ctx, actionContext.ResultId)
+   *   if (updatableResult === null) {
+   *     return  // Result no longer visible
+   *   }
+   *
+   *   // Modify the result
+   *   updatableResult.Title = "Updated title"
+   *   updatableResult.Tails?.push({ Type: "text", Text: "New tail" })
+   *
+   *   // Update the result
+   *   await api.UpdateResult(ctx, updatableResult)
+   * }
+   * ```
+   *
+   * @param ctx Context
+   * @param resultId ID of the result to get
+   * @returns Promise<UpdateableResult | null> Current result state, or null if not visible
+   */
+  GetUpdatableResult: (ctx: Context, resultId: string) => Promise<UpdateableResult | null>
 
   /**
    * Update a query result that is currently displayed in the UI.

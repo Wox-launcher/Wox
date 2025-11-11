@@ -7,7 +7,7 @@ import * as crypto from "crypto"
 import { AI } from "@wox-launcher/wox-plugin/types/ai"
 import { PluginInstance, PluginJsonRpcRequest, RefreshableResultWithResultId, ResultActionUI } from "./types"
 
-const pluginInstances = new Map<PluginJsonRpcRequest["PluginId"], PluginInstance>()
+export const pluginInstances = new Map<PluginJsonRpcRequest["PluginId"], PluginInstance>()
 
 export const PluginJsonRpcTypeRequest: string = "WOX_JSONRPC_REQUEST"
 export const PluginJsonRpcTypeResponse: string = "WOX_JSONRPC_RESPONSE"

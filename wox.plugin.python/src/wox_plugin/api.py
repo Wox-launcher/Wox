@@ -94,6 +94,40 @@ class PublicAPI(Protocol):
         """
         ...
 
+    async def get_updatable_result(self, ctx: Context, result_id: str) -> Optional[UpdateableResult]:
+        """
+        Get the current state of a result that is displayed in the UI.
+
+        Returns UpdateableResult with current values if the result is still visible.
+        Returns None if the result is no longer visible.
+
+        Note: System actions and tails (like favorite icon) are automatically filtered out.
+        They will be re-added by the system when you call update_result().
+
+        Example:
+            # In an action handler
+            async def toggle_favorite(action_context: ActionContext):
+                # Get current result state
+                updatable_result = await api.get_updatable_result(ctx, action_context.result_id)
+                if updatable_result is None:
+                    return  # Result no longer visible
+
+                # Modify the result
+                updatable_result.title = "Updated title"
+                updatable_result.tails.append(ResultTail(type=ResultTailType.TEXT, text="New tail"))
+
+                # Update the result
+                await api.update_result(ctx, updatable_result)
+
+        Args:
+            ctx: Context
+            result_id: ID of the result to get
+
+        Returns:
+            Optional[UpdateableResult]: Current result state, or None if not visible
+        """
+        ...
+
     async def update_result(self, ctx: Context, result: UpdateableResult) -> bool:
         """
         Update a query result that is currently displayed in the UI.

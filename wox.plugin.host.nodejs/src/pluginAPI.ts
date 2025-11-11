@@ -1,4 +1,13 @@
-import { ChangeQueryParam, Context, MapString, PublicAPI, Result, UpdateableResult, UpdateableResultAction } from "@wox-launcher/wox-plugin"
+import {
+  ChangeQueryParam,
+  Context,
+  MapString,
+  PublicAPI,
+  Result,
+  ResultAction,
+  UpdateableResult,
+  UpdateableResultAction
+} from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { waitingForResponse } from "./index"
@@ -7,7 +16,7 @@ import { logger } from "./logger"
 import { MetadataCommand, PluginSettingDefinitionItem } from "@wox-launcher/wox-plugin/types/setting"
 import { AI } from "@wox-launcher/wox-plugin/types/ai"
 import { MRUData } from "@wox-launcher/wox-plugin"
-import { PluginJsonRpcTypeRequest } from "./jsonrpc"
+import { PluginJsonRpcTypeRequest, pluginInstances } from "./jsonrpc"
 import { PluginJsonRpcRequest } from "./types"
 
 export class PluginAPI implements PublicAPI {
@@ -134,6 +143,45 @@ export class PluginAPI implements PublicAPI {
     await this.invokeMethod(ctx, "OnMRURestore", { callbackId })
   }
 
+  async GetUpdatableResult(ctx: Context, resultId: string): Promise<UpdateableResult | null> {
+    const response = await this.invokeMethod(ctx, "GetUpdatableResult", { resultId })
+    if (response === null || response === undefined) {
+      return null
+    }
+
+    // Parse the response into UpdateableResult
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const responseData = response as any
+    const updatableResult: UpdateableResult = { Id: resultId }
+
+    if (responseData.Title !== undefined) {
+      updatableResult.Title = responseData.Title
+    }
+    if (responseData.SubTitle !== undefined) {
+      updatableResult.SubTitle = responseData.SubTitle
+    }
+    if (responseData.Tails !== undefined) {
+      updatableResult.Tails = responseData.Tails
+    }
+    if (responseData.Preview !== undefined) {
+      updatableResult.Preview = responseData.Preview
+    }
+    if (responseData.Actions !== undefined) {
+      // Restore action callbacks from cache
+      const pluginInstance = pluginInstances.get(this.pluginId)
+      if (pluginInstance) {
+        updatableResult.Actions = responseData.Actions.map((action: ResultAction) => ({
+          ...action,
+          Action: pluginInstance.Actions.get(action.Id)
+        }))
+      } else {
+        updatableResult.Actions = responseData.Actions
+      }
+    }
+
+    return updatableResult
+  }
+
   async UpdateResult(ctx: Context, result: UpdateableResult): Promise<boolean> {
     const response = await this.invokeMethod(ctx, "UpdateResult", { result: JSON.stringify(result) })
     return response === true
@@ -142,7 +190,6 @@ export class PluginAPI implements PublicAPI {
   async UpdateResultAction(ctx: Context, action: UpdateableResultAction): Promise<boolean> {
     // Cache the action callback if present
     if (action.Action) {
-      const { pluginInstances } = await import("./index")
       const pluginInstance = pluginInstances.get(this.pluginId)
       if (pluginInstance) {
         pluginInstance.Actions.set(action.ActionId, action.Action)

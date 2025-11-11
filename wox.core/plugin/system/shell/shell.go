@@ -417,19 +417,36 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Executing shell command: %s with interpreter: %s", data.Command, data.Interpreter))
 
 	// Helper function to update the result UI
-	updateUI := func(subtitle, previewData string, previewProperties map[string]string, actions []plugin.QueryResultActionUI) bool {
+	updateUI := func(subtitle, previewData string, previewProperties map[string]string, actionName *string, actionIcon *common.WoxImage) bool {
 		preview := plugin.WoxPreview{
 			PreviewType:       plugin.WoxPreviewTypeText,
 			PreviewData:       previewData,
 			PreviewProperties: previewProperties,
 			ScrollPosition:    plugin.WoxPreviewScrollPositionBottom,
 		}
-		success := s.api.UpdateResult(ctx, plugin.UpdateableResult{
+
+		updateableResult := plugin.UpdateableResult{
 			Id:       resultId,
 			SubTitle: &subtitle,
 			Preview:  &preview,
-			Actions:  &actions,
-		})
+		}
+
+		// Update action if provided
+		if actionName != nil && actionIcon != nil {
+			// Get current result to update actions
+			currentResult := s.api.GetUpdatableResult(ctx, resultId)
+			if currentResult != nil && currentResult.Actions != nil {
+				// Update the first action (reexecute/stop action)
+				actions := *currentResult.Actions
+				if len(actions) > 0 {
+					actions[0].Name = *actionName
+					actions[0].Icon = *actionIcon
+				}
+				updateableResult.Actions = &actions
+			}
+		}
+
+		success := s.api.UpdateResult(ctx, updateableResult)
 		s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("UpdateResult called for %s, success: %v, preview length: %d", resultId, success, len(previewData)))
 		return success
 	}
@@ -520,6 +537,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 			fmt.Sprintf("$ %s\n\n❌ Error:\n%s", data.Command, state.errorMessage),
 			nil,
 			nil,
+			nil,
 		)
 		return
 	}
@@ -537,6 +555,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		updateUI(
 			"❌ "+i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_failed"),
 			fmt.Sprintf("$ %s\n\n❌ Error:\n%s", data.Command, state.errorMessage),
+			nil,
 			nil,
 			nil,
 		)
@@ -557,6 +576,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		updateUI(
 			"❌ "+i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_failed"),
 			fmt.Sprintf("$ %s\n\n❌ Error:\n%s", data.Command, state.errorMessage),
+			nil,
 			nil,
 			nil,
 		)
@@ -603,26 +623,17 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 					i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_start_time"):  state.startTime.Format("2006-01-02 15:04:05"),
 				}
 
-				// Build actions (Stop action)
-				actionId := "stop"
-				if data.FromHistory {
-					actionId = "reexecute" // use reexecute id so the cached action can toggle stop
-				}
-				actions := []plugin.QueryResultActionUI{
-					{
-						Id:                     actionId,
-						Name:                   i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_stop"),
-						Icon:                   plugin.TerminateAppIcon,
-						PreventHideAfterAction: true,
-					},
-				}
+				// Build action name and icon (Stop action)
+				actionName := i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_stop")
+				actionIcon := plugin.TerminateAppIcon
 
 				// Update UI - if it fails, just stop updating UI but let the command continue
 				if !updateUI(
 					"⏱️ "+i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_status_running"),
 					previewBuilder.String(),
 					previewProperties,
-					actions,
+					&actionName,
+					&actionIcon,
 				) {
 					// Result no longer visible in UI, stop updating but let command continue
 					s.api.Log(ctx, plugin.LogLevelInfo, "Result no longer visible, stopping UI updates but command continues")
@@ -744,22 +755,17 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 		i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_property_exit_code"):   fmt.Sprintf("%d", exitCode),
 	}
 
-	// Build final actions (Re-execute action)
-	actions := []plugin.QueryResultActionUI{
-		{
-			Id:                     "reexecute",
-			Name:                   i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_reexecute"),
-			Icon:                   plugin.UpdateIcon,
-			PreventHideAfterAction: true,
-		},
-	}
+	// Build final action name and icon (Re-execute action)
+	actionName := i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_reexecute")
+	actionIcon := plugin.UpdateIcon
 
 	// Final UI update
 	updateUI(
 		statusIcon+" "+statusText,
 		previewBuilder.String(),
 		previewProperties,
-		actions,
+		&actionName,
+		&actionIcon,
 	)
 }
 

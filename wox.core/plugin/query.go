@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"wox/common"
-	"wox/util"
 	"wox/util/selection"
 
 	"github.com/samber/lo"
@@ -116,13 +115,20 @@ type QueryResult struct {
 	// E.g. if you set 123, Wox will use 200, if you set 1234, Wox will use 1300
 	RefreshInterval int
 	// refresh result by calling OnRefresh function
-	OnRefresh func(ctx context.Context, current RefreshableResult) RefreshableResult
+	OnRefresh func(ctx context.Context, current RefreshableResult) RefreshableResult `json:"-"` // Exclude from JSON serialization
 }
 
 type QueryResultTail struct {
+	// Tail id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
+	Id    string
 	Type  QueryResultTailType
 	Text  string          // only available when type is QueryResultTailTypeText
 	Image common.WoxImage // only available when type is QueryResultTailTypeImage
+	// Additional data associate with this tail, can be retrieved later
+	ContextData string
+
+	// internal use
+	IsSystemTail bool
 }
 
 func NewQueryResultTailText(text string) QueryResultTail {
@@ -149,7 +155,7 @@ type QueryResultAction struct {
 	IsDefault bool
 	// If true, Wox will not hide after user select this result
 	PreventHideAfterAction bool
-	Action                 func(ctx context.Context, actionContext ActionContext)
+	Action                 func(ctx context.Context, actionContext ActionContext) `json:"-"` // Exclude from JSON serialization
 	// Hotkey to trigger this action. E.g. "ctrl+Shift+Space", "Ctrl+1", "Command+K"
 	// Case insensitive, space insensitive
 	// If IsDefault is true, Hotkey will be set to enter key by default
@@ -233,26 +239,31 @@ type QueryResultActionUI struct {
 // UpdateableResult is used to update a query result that is currently displayed in the UI.
 // Unlike RefreshableResult which uses polling, UpdateableResult directly pushes updates to the UI.
 //
-// All fields except Id are optional (pointers). Only non-nil fields will be updated.
-// This allows you to update specific fields without affecting others.
+// This struct serves two purposes:
+// 1. As the return type of GetUpdatableResult() - contains the current state of the result
+// 2. As the parameter of UpdateResult() - specifies which fields to update
+//
+// When returned by GetUpdatableResult():
+// - All fields contain the current values from the result cache
+// - You can modify any fields and pass it back to UpdateResult()
+//
+// When passed to UpdateResult():
+// - All fields except Id are optional (pointers). Only non-nil fields will be updated.
+// - This allows you to update specific fields without affecting others.
 //
 // Example usage:
 //
-//	// Update only the title
-//	title := "Downloading... 50%"
-//	success := api.UpdateResult(ctx, UpdateableResult{
-//	    Id:    resultId,
-//	    Title: &title,
-//	})
+//	// Get current result state
+//	updatableResult := api.GetUpdatableResult(ctx, resultId)
+//	if updatableResult != nil {
+//	    // Modify any fields
+//	    newTitle := "Downloading... 50%"
+//	    updatableResult.Title = &newTitle
+//	    updatableResult.Tails = append(*updatableResult.Tails, NewQueryResultTailText("50%"))
 //
-//	// Update title and tails
-//	title := "Processing..."
-//	tails := []QueryResultTail{NewQueryResultTailText("Step 1/3")}
-//	success := api.UpdateResult(ctx, UpdateableResult{
-//	    Id:    resultId,
-//	    Title: &title,
-//	    Tails: &tails,
-//	})
+//	    // Update the result
+//	    api.UpdateResult(ctx, *updatableResult)
+//	}
 type UpdateableResult struct {
 	// Id is required - identifies which result to update
 	Id string
@@ -260,71 +271,17 @@ type UpdateableResult struct {
 	// Optional fields - only non-nil fields will be updated
 	Title    *string
 	SubTitle *string
-	Tails    *[]QueryResultTail
-	Preview  *WoxPreview
-	Actions  *[]QueryResultActionUI
-}
-
-// UpdateableResultAction is used to update a single action within a query result that is currently displayed in the UI.
-// Unlike UpdateableResult which updates the entire actions array, UpdateableResultAction allows updating specific fields
-// of a single action without affecting other actions.
-//
-// All fields except ResultId and ActionId are optional (pointers). Only non-nil fields will be updated.
-// This allows you to update specific fields without affecting others.
-//
-// Example usage:
-//
-//	// Update only the action name
-//	name := "Cancel favorite"
-//	success := api.UpdateResultAction(ctx, UpdateableResultAction{
-//	    ResultId: actionContext.ResultId,
-//	    ActionId: actionContext.ResultActionId,
-//	    Name:     &name,
-//	})
-//
-//	// Update name and icon
-//	name := "Remove from favorite"
-//	icon := plugin.RemoveFromFavIcon
-//	success := api.UpdateResultAction(ctx, UpdateableResultAction{
-//	    ResultId: actionContext.ResultId,
-//	    ActionId: actionContext.ResultActionId,
-//	    Name:     &name,
-//	    Icon:     &icon,
-//	})
-type UpdateableResultAction struct {
-	// ResultId is required - identifies which result contains the action to update
-	ResultId string
-
-	// ActionId is required - identifies which action to update
-	ActionId string
-
-	// Optional fields - only non-nil fields will be updated
-	Name   *string
-	Icon   *common.WoxImage
-	Action func(context.Context, ActionContext)
-}
-
-// UpdateableResultActionUI is the JSON-serializable version of UpdateableResultAction
-// It excludes the Action field which cannot be serialized to JSON
-type UpdateableResultActionUI struct {
-	ResultId string
-	ActionId string
-	Name     *string
 	Icon     *common.WoxImage
+	Preview  *WoxPreview
+	Tails    *[]QueryResultTail
+	Actions  *[]QueryResultAction
 }
 
 // store latest result value after query/refresh, so we can retrieve data later in action/refresh
 type QueryResultCache struct {
-	ResultId       string
-	ResultTitle    string
-	ResultSubTitle string
-	ContextData    string
-	Icon           common.WoxImage
-	Refresh        func(context.Context, RefreshableResult) RefreshableResult
+	Result         QueryResult // store the full QueryResult including actions with callbacks
 	PluginInstance *Instance
 	Query          Query
-	Preview        WoxPreview
-	Actions        *util.HashMap[string, func(ctx context.Context, actionContext ActionContext)]
 }
 
 func newQueryInputWithPlugins(query string, pluginInstances []*Instance) (Query, *Instance) {

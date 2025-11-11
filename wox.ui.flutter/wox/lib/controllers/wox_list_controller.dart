@@ -327,7 +327,7 @@ class WoxListController<T> extends GetxController {
 
   void clearFilter(String traceId) {
     filterBoxController.clear();
-    updateActiveIndex(traceId, 0);
+    filterItems(traceId, '');
   }
 
   void clearItems() {

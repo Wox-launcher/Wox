@@ -21,6 +21,10 @@ class ResultTail:
     type: ResultTailType = field(default=ResultTailType.TEXT)
     text: str = field(default="")
     image: WoxImage = field(default_factory=WoxImage)
+    id: str = field(default="")
+    """Tail id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you"""
+    context_data: str = field(default="")
+    """Additional data associate with this tail, can be retrieved later"""
 
     def to_json(self) -> str:
         """Convert to JSON string with camelCase naming"""
@@ -29,6 +33,8 @@ class ResultTail:
                 "Type": self.type,
                 "Text": self.text,
                 "Image": json.loads(self.image.to_json()),
+                "Id": self.id,
+                "ContextData": self.context_data,
             }
         )
 
@@ -45,6 +51,8 @@ class ResultTail:
             type=ResultTailType(data.get("Type")),
             text=data.get("Text", ""),
             image=WoxImage.from_json(json.dumps(data["Image"])),
+            id=data.get("Id", ""),
+            context_data=data.get("ContextData", ""),
         )
 
 

@@ -39,6 +39,11 @@ var managerInstance *Manager
 var managerOnce sync.Once
 var logger *util.Log
 
+const (
+	// ContextData value for favorite tail
+	favoriteTailContextData = "system:favorite"
+)
+
 type debounceTimer struct {
 	timer  *time.Timer
 	onStop func()
@@ -804,46 +809,44 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 	addToFavoriteAction = func(ctx context.Context, actionContext ActionContext) {
 		setting.GetSettingManager().AddFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
 
-		// Get API instance to send notification
+		// Get API instance
 		api := NewAPI(pluginInstance)
 		api.Notify(ctx, "i18n:plugin_manager_add_to_favorite_success")
 
-		// Update the action UI and callback to show "Remove from favorite"
-		newName := "i18n:plugin_manager_remove_from_favorite"
-		newIcon := RemoveFromFavIcon
+		// Get current result state
+		updatableResult := api.GetUpdatableResult(ctx, actionContext.ResultId)
+		if updatableResult == nil {
+			return // Result no longer visible
+		}
 
-		logger.Debug(ctx, fmt.Sprintf("UpdateResultAction: ResultId=%s, ActionId=%s, Name=%s",
-			actionContext.ResultId, actionContext.ResultActionId, newName))
-
-		success := api.UpdateResultAction(ctx, UpdateableResultAction{
-			ResultId: actionContext.ResultId,
-			ActionId: actionContext.ResultActionId,
-			Name:     &newName,
-			Icon:     &newIcon,
-			Action:   removeFromFavoriteAction,
-		})
-
-		logger.Debug(ctx, fmt.Sprintf("UpdateResultAction success: %v", success))
+		// Update the result to refresh UI
+		// Note: We don't need to manually add favorite tail here because:
+		// 1. GetUpdatableResult filters out system tails (including favorite icon)
+		// 2. PolishUpdateableResult will automatically add favorite tail back if this is a favorite result
+		// 3. This ensures the favorite tail is always managed by the system
+		api.UpdateResult(ctx, *updatableResult)
 	}
 
 	// Define remove from favorite action
 	removeFromFavoriteAction = func(ctx context.Context, actionContext ActionContext) {
 		setting.GetSettingManager().RemoveFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
 
-		// Get API instance to send notification
+		// Get API instance
 		api := NewAPI(pluginInstance)
 		api.Notify(ctx, "i18n:plugin_manager_remove_from_favorite_success")
 
-		// Update the action UI and callback to show "Add to favorite"
-		newName := "i18n:plugin_manager_add_to_favorite"
-		newIcon := AddToFavIcon
-		api.UpdateResultAction(ctx, UpdateableResultAction{
-			ResultId: actionContext.ResultId,
-			ActionId: actionContext.ResultActionId,
-			Name:     &newName,
-			Icon:     &newIcon,
-			Action:   addToFavoriteAction,
-		})
+		// Get current result state
+		updatableResult := api.GetUpdatableResult(ctx, actionContext.ResultId)
+		if updatableResult == nil {
+			return // Result no longer visible
+		}
+
+		// Update the result to refresh UI
+		// Note: We don't need to manually remove favorite tail here because:
+		// 1. GetUpdatableResult filters out system tails (including favorite icon)
+		// 2. PolishUpdateableResult will NOT add favorite tail back if this is not a favorite result
+		// 3. This ensures the favorite tail is always managed by the system
+		api.UpdateResult(ctx, *updatableResult)
 	}
 
 	if setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle) {
@@ -950,8 +953,6 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		}
 	}
 
-	originalIcon := result.Icon
-
 	// convert icon
 	result.Icon = common.ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
 	for i := range result.Tails {
@@ -980,8 +981,11 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	result.Title = m.translatePlugin(ctx, pluginInstance, result.Title)
 	// translate subtitle
 	result.SubTitle = m.translatePlugin(ctx, pluginInstance, result.SubTitle)
-	// translate tail text
+	// translate tail text and assign IDs if not present
 	for i := range result.Tails {
+		if result.Tails[i].Id == "" {
+			result.Tails[i].Id = uuid.NewString()
+		}
 		if result.Tails[i].Type == QueryResultTailTypeText {
 			result.Tails[i].Text = m.translatePlugin(ctx, pluginInstance, result.Tails[i].Text)
 		}
@@ -1016,18 +1020,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		return result.Actions[i].IsDefault
 	})
 
-	var resultCache = &QueryResultCache{
-		ResultId:       result.Id,
-		ResultTitle:    result.Title,
-		ResultSubTitle: result.SubTitle,
-		ContextData:    result.ContextData,
-		Icon:           originalIcon,
-		PluginInstance: pluginInstance,
-		Query:          query,
-		Actions:        util.NewHashMap[string, func(ctx context.Context, actionContext ActionContext)](),
-	}
-
-	// store actions for ui invoke later
+	// normalize hotkeys for all actions
 	for actionIndex := range result.Actions {
 		var action = result.Actions[actionIndex]
 
@@ -1038,10 +1031,6 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 
 		// normalize hotkey for platform specific modifiers
 		result.Actions[actionIndex].Hotkey = normalizeHotkeyForPlatform(result.Actions[actionIndex].Hotkey)
-
-		if action.Action != nil {
-			resultCache.Actions.Store(action.Id, action.Action)
-		}
 	}
 
 	// if query is input and trigger keyword is global, disable preview and group
@@ -1055,8 +1044,8 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	// because preview may contain some heavy data (E.g. image or large text),
 	// we will store preview in cache and only send preview to ui when user select the result
 	var maximumPreviewSize = 1024
+	var originalPreview = result.Preview
 	if !result.Preview.IsEmpty() && result.Preview.PreviewType != WoxPreviewTypeRemote && len(result.Preview.PreviewData) > maximumPreviewSize {
-		resultCache.Preview = result.Preview
 		result.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,
 			PreviewData: fmt.Sprintf("/preview?id=%s", result.Id),
@@ -1069,7 +1058,6 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 			logger.Info(ctx, fmt.Sprintf("[%s] result(%s) refresh interval %d is not divisible by 100, use %d instead", pluginInstance.Metadata.Name, result.Id, result.RefreshInterval, newInterval))
 			result.RefreshInterval = newInterval
 		}
-		resultCache.Refresh = result.OnRefresh
 	}
 
 	ignoreAutoScore := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureIgnoreAutoScore)
@@ -1082,13 +1070,40 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	}
 	// check if result is favorite result
 	// favorite result will not be affected by ignoreAutoScore setting, so we add score here
-	if setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle) {
+	isFavorite := setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
+	if isFavorite {
 		favScore := int64(100000)
 		logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) is favorite result, add score: %d", pluginInstance.Metadata.Name, result.Title, favScore))
 		result.Score += favScore
+
+		// Add favorite icon to tails if not already present
+		hasFavoriteTail := false
+		for _, tail := range result.Tails {
+			if tail.ContextData == favoriteTailContextData {
+				hasFavoriteTail = true
+				break
+			}
+		}
+		if !hasFavoriteTail {
+			result.Tails = append(result.Tails, QueryResultTail{
+				Type:         QueryResultTailTypeImage,
+				Image:        AddToFavIcon,
+				ContextData:  favoriteTailContextData, // Use ContextData to identify favorite tail
+				IsSystemTail: true,                    // Mark as system tail so it will be filtered out in GetUpdatableResult
+			})
+		}
 	}
 
-	m.resultCache.Store(result.Id, resultCache)
+	// Create cache at the end
+	resultCopy := result
+	// Because we may have replaced preview with remote preview
+	// we need to restore the original preview in the cache
+	resultCopy.Preview = originalPreview
+	m.resultCache.Store(result.Id, &QueryResultCache{
+		Result:         resultCopy,
+		PluginInstance: pluginInstance,
+		Query:          query,
+	})
 
 	return result
 }
@@ -1150,32 +1165,51 @@ func (m *Manager) polishRefreshableResult(ctx context.Context, resultCache *Quer
 		result.Actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, result.Actions[actionIndex].Name)
 	}
 
-	// update result cache
-	resultCache.ResultTitle = result.Title
-	resultCache.ResultSubTitle = result.SubTitle
-	resultCache.ContextData = result.ContextData
-	resultCache.Actions = util.NewHashMap[string, func(ctx context.Context, actionContext ActionContext)]()
-	for _, newAction := range result.Actions {
-		if newAction.Action != nil {
-			resultCache.Actions.Store(newAction.Id, newAction.Action)
-		}
-	}
-
 	// convert non-remote preview to remote preview
 	// because preview may contain some heavy data (E.g. image or large text),
 	// we will store preview in cache and only send preview to ui when user select the result
+	var originalPreview WoxPreview
 	if !result.Preview.IsEmpty() && result.Preview.PreviewType != WoxPreviewTypeRemote {
-		resultCache.Preview = result.Preview
+		originalPreview = result.Preview
 		result.Preview = WoxPreview{
 			PreviewType: WoxPreviewTypeRemote,
-			PreviewData: fmt.Sprintf("/preview?id=%s", resultCache.ResultId),
+			PreviewData: fmt.Sprintf("/preview?id=%s", resultCache.Result.Id),
 		}
 	}
+
+	// Update cache at the end - store the complete, final result
+	resultCopy := RefreshableResult{
+		Title:       result.Title,
+		SubTitle:    result.SubTitle,
+		Icon:        result.Icon,
+		Preview:     originalPreview,
+		Tails:       result.Tails,
+		ContextData: result.ContextData,
+		Actions:     result.Actions,
+	}
+	if originalPreview.IsEmpty() {
+		resultCopy.Preview = result.Preview
+	}
+
+	// Update the cache with the new result data
+	resultCache.Result.Title = resultCopy.Title
+	resultCache.Result.SubTitle = resultCopy.SubTitle
+	resultCache.Result.Icon = resultCopy.Icon
+	resultCache.Result.Preview = resultCopy.Preview
+	resultCache.Result.Tails = resultCopy.Tails
+	resultCache.Result.ContextData = resultCopy.ContextData
+	resultCache.Result.Actions = resultCopy.Actions
 
 	return result
 }
 
 func (m *Manager) PolishUpdateableResult(ctx context.Context, pluginInstance *Instance, result UpdateableResult) UpdateableResult {
+	// Get result cache to update it
+	resultCache, found := m.resultCache.Load(result.Id)
+	if !found {
+		return result // Result not in cache, just return as-is
+	}
+
 	// Polish actions if they are being updated
 	if result.Actions != nil {
 		actions := *result.Actions
@@ -1191,7 +1225,7 @@ func (m *Manager) PolishUpdateableResult(ctx context.Context, pluginInstance *In
 		}
 
 		// Set first action as default if no default action is set
-		defaultActionCount := lo.CountBy(actions, func(item QueryResultActionUI) bool {
+		defaultActionCount := lo.CountBy(actions, func(item QueryResultAction) bool {
 			return item.IsDefault
 		})
 		if defaultActionCount == 0 && len(actions) > 0 {
@@ -1213,30 +1247,45 @@ func (m *Manager) PolishUpdateableResult(ctx context.Context, pluginInstance *In
 			return actions[i].IsDefault
 		})
 
+		// Add system actions (like favorite/unfavorite)
+		// System actions are added after user actions
+		systemActions := m.getDefaultActions(ctx, pluginInstance, resultCache.Query, resultCache.Result.Title, resultCache.Result.SubTitle)
+		actions = append(actions, systemActions...)
+
 		// Translate action names
 		for actionIndex := range actions {
 			actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, actions[actionIndex].Name)
 		}
 
 		result.Actions = &actions
+
+		// Update cache: use the new actions directly (including callbacks)
+		// Developer may have added/removed/reordered actions or updated callbacks
+		resultCache.Result.Actions = actions
 	}
 
 	// Translate title if present
 	if result.Title != nil {
 		translated := m.translatePlugin(ctx, pluginInstance, *result.Title)
 		result.Title = &translated
+		resultCache.Result.Title = translated
 	}
 
 	// Translate subtitle if present
 	if result.SubTitle != nil {
 		translated := m.translatePlugin(ctx, pluginInstance, *result.SubTitle)
 		result.SubTitle = &translated
+		resultCache.Result.SubTitle = translated
 	}
 
 	// Translate tails if present
 	if result.Tails != nil {
 		tails := *result.Tails
 		for i := range tails {
+			// Assign ID if not present
+			if tails[i].Id == "" {
+				tails[i].Id = uuid.NewString()
+			}
 			if tails[i].Type == QueryResultTailTypeText {
 				tails[i].Text = m.translatePlugin(ctx, pluginInstance, tails[i].Text)
 			}
@@ -1244,7 +1293,30 @@ func (m *Manager) PolishUpdateableResult(ctx context.Context, pluginInstance *In
 				tails[i].Image = common.ConvertIcon(ctx, tails[i].Image, pluginInstance.PluginDirectory)
 			}
 		}
+
+		// Add favorite icon to tails if this is a favorite result
+		isFavorite := setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, resultCache.Result.Title, resultCache.Result.SubTitle)
+		if isFavorite {
+			// Check if favorite tail already exists
+			hasFavoriteTail := false
+			for _, tail := range tails {
+				if tail.ContextData == favoriteTailContextData {
+					hasFavoriteTail = true
+					break
+				}
+			}
+			if !hasFavoriteTail {
+				tails = append(tails, QueryResultTail{
+					Type:         QueryResultTailTypeImage,
+					Image:        AddToFavIcon,
+					ContextData:  favoriteTailContextData, // Use ContextData to identify favorite tail
+					IsSystemTail: true,                    // Mark as system tail so it will be filtered out in GetUpdatableResult
+				})
+			}
+		}
+
 		result.Tails = &tails
+		resultCache.Result.Tails = tails
 	}
 
 	// Translate preview properties if present
@@ -1257,33 +1329,57 @@ func (m *Manager) PolishUpdateableResult(ctx context.Context, pluginInstance *In
 		}
 		preview.PreviewProperties = previewProperties
 		result.Preview = &preview
+		resultCache.Result.Preview = preview
+	}
+
+	// Update icon in cache if present
+	if result.Icon != nil {
+		resultCache.Result.Icon = *result.Icon
 	}
 
 	return result
 }
 
-func (m *Manager) PolishUpdateableResultAction(ctx context.Context, pluginInstance *Instance, action UpdateableResultAction) UpdateableResultAction {
-	// Set default icon if not present
-	if action.Icon != nil && action.Icon.IsEmpty() {
-		defaultIcon := DefaultActionIcon
-		action.Icon = &defaultIcon
+func (m *Manager) GetUpdatableResult(ctx context.Context, resultId string) *UpdateableResult {
+	// Try to find the result in the cache
+	resultCache, found := m.resultCache.Load(resultId)
+	if !found {
+		return nil // Result not found (no longer visible)
 	}
 
-	// Translate action name if present
-	if action.Name != nil {
-		translated := m.translatePlugin(ctx, pluginInstance, *action.Name)
-		action.Name = &translated
-	}
+	// Construct UpdateableResult from cache
+	title := resultCache.Result.Title
+	subTitle := resultCache.Result.SubTitle
+	icon := resultCache.Result.Icon
+	preview := resultCache.Result.Preview
 
-	// Update action callback in cache if present
-	if action.Action != nil {
-		resultCache, found := m.resultCache.Load(action.ResultId)
-		if found {
-			resultCache.Actions.Store(action.ActionId, action.Action)
+	// Make a copy of tails to avoid modifying cache when developer appends to it
+	// Filter out system tails (they will be added back in polish)
+	tails := []QueryResultTail{}
+	for _, tail := range resultCache.Result.Tails {
+		if !tail.IsSystemTail {
+			tails = append(tails, tail)
 		}
 	}
 
-	return action
+	// Make a copy of actions to avoid modifying cache when developer modifies it
+	// Filter out system actions (they will be added back in polish)
+	actions := []QueryResultAction{}
+	for _, action := range resultCache.Result.Actions {
+		if !action.IsSystemAction {
+			actions = append(actions, action)
+		}
+	}
+
+	return &UpdateableResult{
+		Id:       resultId,
+		Title:    &title,
+		SubTitle: &subTitle,
+		Icon:     &icon,
+		Preview:  &preview,
+		Tails:    &tails,
+		Actions:  &actions,
+	}
 }
 
 func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryResultUI, done chan bool) {
@@ -1561,15 +1657,23 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 	if !found {
 		return fmt.Errorf("result cache not found for result id (execute action): %s", resultId)
 	}
-	action, exist := resultCache.Actions.Load(actionId)
-	if !exist {
+
+	// Find the action in cache
+	var actionCache *QueryResultAction
+	for i := range resultCache.Result.Actions {
+		if resultCache.Result.Actions[i].Id == actionId {
+			actionCache = &resultCache.Result.Actions[i]
+			break
+		}
+	}
+	if actionCache == nil {
 		return fmt.Errorf("action not found for result id: %s, action id: %s", resultId, actionId)
 	}
 
-	action(ctx, ActionContext{
+	actionCache.Action(ctx, ActionContext{
 		ResultId:       resultId,
 		ResultActionId: actionId,
-		ContextData:    resultCache.ContextData,
+		ContextData:    resultCache.Result.ContextData,
 	})
 
 	util.Go(ctx, fmt.Sprintf("[%s] post execute action", resultCache.PluginInstance.Metadata.Name), func() {
@@ -1581,16 +1685,16 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 
 func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResultCache) {
 	// Add actioned result for statistics
-	setting.GetSettingManager().AddActionedResult(ctx, resultCache.PluginInstance.Metadata.Id, resultCache.ResultTitle, resultCache.ResultSubTitle, resultCache.Query.RawQuery)
+	setting.GetSettingManager().AddActionedResult(ctx, resultCache.PluginInstance.Metadata.Id, resultCache.Result.Title, resultCache.Result.SubTitle, resultCache.Query.RawQuery)
 
 	// Add to MRU if plugin supports it
 	if resultCache.PluginInstance.Metadata.IsSupportFeature(MetadataFeatureMRU) {
 		mruItem := setting.MRUItem{
 			PluginID:    resultCache.PluginInstance.Metadata.Id,
-			Title:       resultCache.ResultTitle,
-			SubTitle:    resultCache.ResultSubTitle,
-			Icon:        resultCache.Icon,
-			ContextData: resultCache.ContextData,
+			Title:       resultCache.Result.Title,
+			SubTitle:    resultCache.Result.SubTitle,
+			Icon:        resultCache.Result.Icon,
+			ContextData: resultCache.Result.ContextData,
 		}
 		if err := setting.GetSettingManager().AddMRUItem(ctx, mruItem); err != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to add MRU item: %s", err.Error()))
@@ -1624,8 +1728,14 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 	refreshableResult.Actions = []QueryResultAction{}
 	for _, action := range refreshableResultWithId.Actions {
 		// get actual action from cache
-		actionFunc, exist := resultCache.Actions.Load(action.Id)
-		if !exist {
+		var actionCache *QueryResultAction
+		for i := range resultCache.Result.Actions {
+			if resultCache.Result.Actions[i].Id == action.Id {
+				actionCache = &resultCache.Result.Actions[i]
+				break
+			}
+		}
+		if actionCache == nil {
 			continue
 		}
 		refreshableResult.Actions = append(refreshableResult.Actions, QueryResultAction{
@@ -1635,12 +1745,12 @@ func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId Re
 			IsDefault:              action.IsDefault,
 			PreventHideAfterAction: action.PreventHideAfterAction,
 			Hotkey:                 action.Hotkey,
-			Action:                 actionFunc,
+			Action:                 actionCache.Action,
 			IsSystemAction:         action.IsSystemAction,
 		})
 	}
 
-	newResult := resultCache.Refresh(ctx, refreshableResult)
+	newResult := resultCache.Result.OnRefresh(ctx, refreshableResult)
 
 	// add default actions if there is no system action
 	if lo.CountBy(newResult.Actions, func(action QueryResultAction) bool {
@@ -1681,7 +1791,7 @@ func (m *Manager) GetResultPreview(ctx context.Context, resultId string) (WoxPre
 	}
 
 	// if preview text is too long, ellipsis it, otherwise UI maybe freeze when render
-	preview := resultCache.Preview
+	preview := resultCache.Result.Preview
 	if preview.PreviewType == WoxPreviewTypeText {
 		preview.PreviewData = util.EllipsisMiddle(preview.PreviewData, 2000)
 		// translate preview data if preview type is text

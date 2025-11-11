@@ -169,6 +169,44 @@ class PluginAPI(PublicAPI):
         self.mru_restore_callbacks[callback_id] = callback
         await self.invoke_method(ctx, "OnMRURestore", {"callbackId": callback_id})
 
+    async def get_updatable_result(self, ctx: Context, result_id: str) -> Optional[UpdateableResult]:
+        """Get the current state of a result that is displayed in the UI"""
+        response = await self.invoke_method(ctx, "GetUpdatableResult", {"resultId": result_id})
+        if response is None:
+            return None
+
+        # Parse the response into UpdateableResult
+        # The response is a dict with optional fields
+        updatable_result = UpdateableResult(id=result_id)
+
+        if "Title" in response:
+            updatable_result.title = response["Title"]
+        if "SubTitle" in response:
+            updatable_result.sub_title = response["SubTitle"]
+        if "Tails" in response:
+            from wox_plugin import ResultTail
+
+            updatable_result.tails = [ResultTail.from_json(json.dumps(tail)) for tail in response["Tails"]]
+        if "Preview" in response:
+            from wox_plugin import WoxPreview
+
+            updatable_result.preview = WoxPreview.from_json(json.dumps(response["Preview"]))
+        if "Actions" in response:
+            from wox_plugin import ResultAction
+
+            actions = [ResultAction.from_json(json.dumps(action)) for action in response["Actions"]]
+            # Restore action callbacks from cache
+            from .plugin_manager import plugin_instances
+
+            plugin_instance = plugin_instances.get(self.plugin_id)
+            if plugin_instance:
+                for action in actions:
+                    if action.id in plugin_instance.actions:
+                        action.action = plugin_instance.actions[action.id]
+            updatable_result.actions = actions
+
+        return updatable_result
+
     async def update_result(self, ctx: Context, result: UpdateableResult) -> bool:
         """Update a query result that is currently displayed in the UI"""
         response = await self.invoke_method(ctx, "UpdateResult", {"result": json.loads(result.to_json())})
