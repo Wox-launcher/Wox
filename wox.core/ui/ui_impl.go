@@ -136,6 +136,29 @@ func (u *uiImpl) UpdateResult(ctx context.Context, result interface{}) bool {
 	return success
 }
 
+func (u *uiImpl) UpdateResultAction(ctx context.Context, action interface{}) bool {
+	// Type assert to plugin.UpdateableResultAction
+	// We use interface{} in the signature to avoid circular dependency between common and plugin packages
+	response, err := u.invokeWebsocketMethod(ctx, "UpdateResultAction", action)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("UpdateResultAction error: %s", err.Error()))
+		return false
+	}
+
+	// The UI returns true if the action was found and updated, false otherwise
+	if response == nil {
+		return false
+	}
+
+	success, ok := response.(bool)
+	if !ok {
+		logger.Error(ctx, "UpdateResultAction response is not a boolean")
+		return false
+	}
+
+	return success
+}
+
 func (u *uiImpl) isNotifyInToolbar(ctx context.Context, pluginId string) bool {
 	isVisible, err := u.invokeWebsocketMethod(ctx, "IsVisible", nil)
 	if err != nil {

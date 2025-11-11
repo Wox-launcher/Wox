@@ -6,49 +6,49 @@ This package provides the SDK for developing Wox plugins in Python.
 
 from typing import List
 
-from .plugin import Plugin, PluginInitParams
-from .api import PublicAPI, ChatStreamCallback
-from .models.context import Context
-from .models.query import (
-    Query,
-    QueryEnv,
-    Selection,
-    ChangeQueryParam,
-    QueryType,
-    SelectionType,
-    MetadataCommand,
-)
-from .models.result import (
-    Result,
-    ResultTail,
-    ResultAction,
-    ActionContext,
-    RefreshableResult,
-    UpdateableResult,
-    ResultTailType,
-)
-
+from .api import ChatStreamCallback, PublicAPI
 from .models.ai import (
     AIModel,
+    ChatStreamDataType,
     Conversation,
     ConversationRole,
-    ChatStreamDataType,
 )
+from .models.context import Context
 from .models.image import WoxImage, WoxImageType
-from .models.preview import WoxPreview, WoxPreviewType, WoxPreviewScrollPosition
 from .models.mru import MRUData, MRURestoreCallback
+from .models.preview import WoxPreview, WoxPreviewScrollPosition, WoxPreviewType
+from .models.query import (
+    ChangeQueryParam,
+    MetadataCommand,
+    Query,
+    QueryEnv,
+    QueryType,
+    Selection,
+    SelectionType,
+)
+from .models.result import (
+    ActionContext,
+    RefreshableResult,
+    Result,
+    ResultAction,
+    ResultTail,
+    ResultTailType,
+    UpdateableResult,
+    UpdateableResultAction,
+)
 from .models.setting import (
     PluginSettingDefinitionItem,
     PluginSettingDefinitionType,
     PluginSettingDefinitionValue,
-    PluginSettingValueStyle,
-    PluginSettingValueTextBox,
     PluginSettingValueCheckBox,
     PluginSettingValueLabel,
-    create_textbox_setting,
+    PluginSettingValueStyle,
+    PluginSettingValueTextBox,
     create_checkbox_setting,
     create_label_setting,
+    create_textbox_setting,
 )
+from .plugin import Plugin, PluginInitParams
 
 __all__: List[str] = [
     # Plugin
@@ -70,6 +70,7 @@ __all__: List[str] = [
     "ActionContext",
     "RefreshableResult",
     "UpdateableResult",
+    "UpdateableResultAction",
     "MetadataCommand",
     "PluginSettingDefinitionItem",
     "PluginSettingValueStyle",

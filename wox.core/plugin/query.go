@@ -166,6 +166,11 @@ type ActionContext struct {
 	// Useful for calling UpdateResult API to update the result's UI
 	ResultId string
 
+	// The ID of the action that was triggered
+	// This is automatically set by Wox when the action is invoked
+	// Useful for calling UpdateResultAction API to update this specific action's UI
+	ResultActionId string
+
 	// Additional data associate with this result
 	ContextData string
 }
@@ -258,6 +263,54 @@ type UpdateableResult struct {
 	Tails    *[]QueryResultTail
 	Preview  *WoxPreview
 	Actions  *[]QueryResultActionUI
+}
+
+// UpdateableResultAction is used to update a single action within a query result that is currently displayed in the UI.
+// Unlike UpdateableResult which updates the entire actions array, UpdateableResultAction allows updating specific fields
+// of a single action without affecting other actions.
+//
+// All fields except ResultId and ActionId are optional (pointers). Only non-nil fields will be updated.
+// This allows you to update specific fields without affecting others.
+//
+// Example usage:
+//
+//	// Update only the action name
+//	name := "Cancel favorite"
+//	success := api.UpdateResultAction(ctx, UpdateableResultAction{
+//	    ResultId: actionContext.ResultId,
+//	    ActionId: actionContext.ResultActionId,
+//	    Name:     &name,
+//	})
+//
+//	// Update name and icon
+//	name := "Remove from favorite"
+//	icon := plugin.RemoveFromFavIcon
+//	success := api.UpdateResultAction(ctx, UpdateableResultAction{
+//	    ResultId: actionContext.ResultId,
+//	    ActionId: actionContext.ResultActionId,
+//	    Name:     &name,
+//	    Icon:     &icon,
+//	})
+type UpdateableResultAction struct {
+	// ResultId is required - identifies which result contains the action to update
+	ResultId string
+
+	// ActionId is required - identifies which action to update
+	ActionId string
+
+	// Optional fields - only non-nil fields will be updated
+	Name   *string
+	Icon   *common.WoxImage
+	Action func(context.Context, ActionContext)
+}
+
+// UpdateableResultActionUI is the JSON-serializable version of UpdateableResultAction
+// It excludes the Action field which cannot be serialized to JSON
+type UpdateableResultActionUI struct {
+	ResultId string
+	ActionId string
+	Name     *string
+	Icon     *common.WoxImage
 }
 
 // store latest result value after query/refresh, so we can retrieve data later in action/refresh

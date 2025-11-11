@@ -1,11 +1,10 @@
-from typing import Protocol, Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Protocol
 
-from .models.query import MetadataCommand
+from .models.ai import AIModel, ChatStreamCallback, Conversation
 from .models.context import Context
-from .models.query import ChangeQueryParam
-from .models.ai import AIModel, Conversation, ChatStreamCallback
 from .models.mru import MRUData
-from .models.result import Result, UpdateableResult
+from .models.query import ChangeQueryParam, MetadataCommand
+from .models.result import Result, UpdateableResult, UpdateableResultAction  # noqa: F401
 from .models.setting import PluginSettingDefinitionItem
 
 
@@ -127,6 +126,50 @@ class PublicAPI(Protocol):
         Args:
             ctx: Context
             result: UpdateableResult with id (required) and optional fields to update
+
+        Returns:
+            bool: True if updated successfully, False if result no longer visible
+        """
+        ...
+
+    async def update_result_action(self, ctx: Context, action: UpdateableResultAction) -> bool:
+        """
+        Update a single action within a query result that is currently displayed in the UI.
+
+        Returns True if the action was successfully updated (result still visible in UI).
+        Returns False if the result is no longer visible.
+
+        This method is designed for updating action UI after execution, such as toggling
+        between "Add to favorite" and "Remove from favorite" states.
+
+        Best practices:
+        - Set prevent_hide_after_action=True in your action
+        - Use action_context.result_action_id to identify which action to update
+        - Only update fields that have changed (use None for fields you don't want to update)
+
+        Example:
+            # In an action handler
+            async def toggle_favorite(action_context: ActionContext):
+                if is_favorite:
+                    remove_favorite()
+                    success = await api.update_result_action(ctx, UpdateableResultAction(
+                        result_id=action_context.result_id,
+                        action_id=action_context.result_action_id,
+                        name="Add to favorite",
+                        icon=WoxImage(image_type="emoji", image_data="⭐")
+                    ))
+                else:
+                    add_favorite()
+                    success = await api.update_result_action(ctx, UpdateableResultAction(
+                        result_id=action_context.result_id,
+                        action_id=action_context.result_action_id,
+                        name="Remove from favorite",
+                        icon=WoxImage(image_type="emoji", image_data="❌")
+                    ))
+
+        Args:
+            ctx: Context
+            action: UpdateableResultAction with result_id, action_id (required) and optional fields to update
 
         Returns:
             bool: True if updated successfully, False if result no longer visible

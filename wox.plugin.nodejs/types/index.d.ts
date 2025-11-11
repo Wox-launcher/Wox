@@ -164,6 +164,46 @@ export interface UpdateableResult {
   Actions?: ResultAction[]
 }
 
+/**
+ * Represents an action that can be updated directly in the UI.
+ *
+ * This allows updating a single action's UI (name, icon, action callback) without replacing the entire actions array.
+ * All fields except ResultId and ActionId are optional. Only non-undefined fields will be updated.
+ *
+ * @example
+ * ```typescript
+ * // Update only the action name
+ * const success = await api.UpdateResultAction(ctx, {
+ *   ResultId: actionContext.ResultId,
+ *   ActionId: actionContext.ResultActionId,
+ *   Name: "Remove from favorite"
+ * })
+ *
+ * // Update name, icon and action callback
+ * const success = await api.UpdateResultAction(ctx, {
+ *   ResultId: actionContext.ResultId,
+ *   ActionId: actionContext.ResultActionId,
+ *   Name: "Add to favorite",
+ *   Icon: { ImageType: "emoji", ImageData: "⭐" },
+ *   Action: async (actionContext) => {
+ *     // New action logic
+ *   }
+ * })
+ * ```
+ */
+export interface UpdateableResultAction {
+  /** Required - identifies which result contains the action */
+  ResultId: string
+  /** Required - identifies which action to update */
+  ActionId: string
+  /** Optional - update the action name */
+  Name?: string
+  /** Optional - update the action icon */
+  Icon?: WoxImage
+  /** Optional - update the action callback */
+  Action?: (actionContext: ActionContext) => void
+}
+
 export interface ResultAction {
   /**
    * Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
@@ -197,6 +237,12 @@ export interface ActionContext {
    * Useful for calling UpdateResult API to update the result's UI
    */
   ResultId: string
+  /**
+   * The ID of the action that was triggered
+   * This is automatically set by Wox when the action is invoked
+   * Useful for calling UpdateResultAction API to update this action's UI
+   */
+  ResultActionId: string
   /**
    * Additional data associated with this result
    */
@@ -341,6 +387,50 @@ export interface PublicAPI {
    * @returns Promise<boolean> True if updated successfully, false if result no longer visible
    */
   UpdateResult: (ctx: Context, result: UpdateableResult) => Promise<boolean>
+
+  /**
+   * Update a single action within a query result that is currently displayed in the UI.
+   *
+   * Returns true if the action was successfully updated (result still visible in UI).
+   * Returns false if the result is no longer visible.
+   *
+   * This method is designed for updating action UI after execution, such as toggling
+   * between "Add to favorite" and "Remove from favorite" states.
+   *
+   * Best practices:
+   * - Set PreventHideAfterAction: true in your action
+   * - Use actionContext.ResultActionId to identify which action to update
+   * - Only update fields that have changed (use undefined for fields you don't want to update)
+   *
+   * Example:
+   * ```typescript
+   * // In an action handler
+   * Action: async (actionContext) => {
+   *   if (isFavorite) {
+   *     removeFavorite()
+   *     const success = await api.UpdateResultAction(ctx, {
+   *       ResultId: actionContext.ResultId,
+   *       ActionId: actionContext.ResultActionId,
+   *       Name: "Add to favorite",
+   *       Icon: { ImageType: "emoji", ImageData: "⭐" }
+   *     })
+   *   } else {
+   *     addFavorite()
+   *     const success = await api.UpdateResultAction(ctx, {
+   *       ResultId: actionContext.ResultId,
+   *       ActionId: actionContext.ResultActionId,
+   *       Name: "Remove from favorite",
+   *       Icon: { ImageType: "emoji", ImageData: "❌" }
+   *     })
+   *   }
+   * }
+   * ```
+   *
+   * @param ctx Context
+   * @param action UpdateableResultAction with ResultId, ActionId (required) and optional fields to update
+   * @returns Promise<boolean> True if updated successfully, false if result no longer visible
+   */
+  UpdateResultAction: (ctx: Context, action: UpdateableResultAction) => Promise<boolean>
 }
 
 export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url" | "emoji" | "lottie"

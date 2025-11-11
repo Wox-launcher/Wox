@@ -1,22 +1,25 @@
 import asyncio
 import json
 import uuid
-from typing import Any, Dict, Callable, Optional
+from typing import Any, Callable, Dict, Optional
+
 import websockets
-from . import logger
 from wox_plugin import (
-    Context,
-    PublicAPI,
-    ChangeQueryParam,
-    MetadataCommand,
-    Conversation,
     AIModel,
+    ChangeQueryParam,
     ChatStreamCallback,
+    Context,
+    Conversation,
+    MetadataCommand,
     MRUData,
+    PluginSettingDefinitionItem,
+    PublicAPI,
     Result,
     UpdateableResult,
-    PluginSettingDefinitionItem,
+    UpdateableResultAction,
 )
+
+from . import logger
 from .constants import PLUGIN_JSONRPC_TYPE_REQUEST
 from .plugin_manager import waiting_for_response
 
@@ -169,4 +172,17 @@ class PluginAPI(PublicAPI):
     async def update_result(self, ctx: Context, result: UpdateableResult) -> bool:
         """Update a query result that is currently displayed in the UI"""
         response = await self.invoke_method(ctx, "UpdateResult", {"result": json.loads(result.to_json())})
+        return bool(response) if response is not None else False
+
+    async def update_result_action(self, ctx: Context, action: "UpdateableResultAction") -> bool:
+        """Update a single action within a query result that is currently displayed in the UI"""
+        # Cache the action callback if present
+        if action.action is not None:
+            from .plugin_manager import plugin_instances
+
+            plugin_instance = plugin_instances.get(self.plugin_id)
+            if plugin_instance:
+                plugin_instance.actions[action.action_id] = action.action
+
+        response = await self.invoke_method(ctx, "UpdateResultAction", {"action": json.loads(action.to_json())})
         return bool(response) if response is not None else False

@@ -640,6 +640,9 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "UpdateResult") {
       final success = updateResult(msg.traceId, UpdateableResult.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, success);
+    } else if (msg.method == "UpdateResultAction") {
+      final success = updateResultAction(msg.traceId, UpdateableResultAction.fromJson(msg.data));
+      responseWoxWebsocketRequest(msg, true, success);
     }
   }
 
@@ -865,6 +868,87 @@ class WoxLauncherController extends GetxController {
       return true; // Successfully found and updated the result
     } catch (e) {
       // Result not found in current items (no longer visible)
+      return false;
+    }
+  }
+
+  bool updateResultAction(String traceId, UpdateableResultAction updateableResultAction) {
+    // Try to find the result in the current items
+    try {
+      Logger.instance.info(traceId, "updateResultAction: resultId=${updateableResultAction.resultId}, actionId=${updateableResultAction.actionId}, name=${updateableResultAction.name}");
+
+      final result = resultListViewController.items.firstWhere((element) => element.value.data.id == updateableResultAction.resultId);
+      var updatedData = result.value.data;
+
+      Logger.instance.info(traceId, "Found result: ${updatedData.title}, actions count: ${updatedData.actions.length}");
+
+      // Find the action to update
+      final actionIndex = updatedData.actions.indexWhere((action) => action.id == updateableResultAction.actionId);
+      if (actionIndex == -1) {
+        // Action not found
+        Logger.instance.error(traceId, "Action not found: ${updateableResultAction.actionId}");
+        return false;
+      }
+
+      Logger.instance.info(traceId, "Found action at index $actionIndex: ${updatedData.actions[actionIndex].name}");
+
+      var needUpdate = false;
+      var updatedAction = updatedData.actions[actionIndex];
+
+      // Update only non-null fields
+      if (updateableResultAction.name != null) {
+        Logger.instance.info(traceId, "Updating action name from '${updatedAction.name}' to '${updateableResultAction.name}'");
+        updatedAction.name = updateableResultAction.name!;
+        needUpdate = true;
+      }
+
+      if (updateableResultAction.icon != null) {
+        Logger.instance.info(traceId, "Updating action icon");
+        updatedAction.icon = updateableResultAction.icon!;
+        needUpdate = true;
+      }
+
+      if (needUpdate) {
+        // Update the action in the actions list
+        updatedData.actions[actionIndex] = updatedAction;
+
+        // Force create a new WoxListItem with updated data to trigger reactive update
+        var updatedResult = result.value.copyWith(data: updatedData);
+        resultListViewController.updateItem(traceId, updatedResult);
+
+        Logger.instance.info(traceId, "Updated result item");
+
+        // If this result is currently active, update the action panel
+        if (resultListViewController.isItemActive(updatedData.id)) {
+          Logger.instance.info(traceId, "Result is active, updating action panel");
+
+          // Save user's current selection before updateItems
+          var oldActionName = getCurrentActionName();
+
+          var actions = updatedData.actions.map((e) => WoxListItem.fromResultAction(e)).toList();
+          actionListViewController.updateItems(traceId, actions);
+
+          Logger.instance.info(traceId, "Updated action list, old action name: $oldActionName");
+
+          // Restore user's selected action after refresh
+          var newActiveIndex = calculatePreservedActionIndex(oldActionName);
+          if (actionListViewController.activeIndex.value != newActiveIndex) {
+            actionListViewController.updateActiveIndex(traceId, newActiveIndex);
+          }
+
+          Logger.instance.info(traceId, "Restored action index to $newActiveIndex");
+
+          // Update toolbar with all actions with hotkeys
+          updateToolbarWithActions(traceId, updatedData.actions);
+        } else {
+          Logger.instance.info(traceId, "Result is NOT active, skipping action panel update");
+        }
+      }
+
+      return true; // Successfully found and updated the action
+    } catch (e) {
+      // Result not found in current items (no longer visible)
+      Logger.instance.error(traceId, "updateResultAction error: $e");
       return false;
     }
   }

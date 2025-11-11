@@ -413,3 +413,27 @@ class UpdateableResult {
     }
   }
 }
+
+class UpdateableResultAction {
+  late String resultId;
+  late String actionId;
+  String? name;
+  WoxImage? icon;
+
+  UpdateableResultAction({
+    required this.resultId,
+    required this.actionId,
+    this.name,
+    this.icon,
+  });
+
+  UpdateableResultAction.fromJson(Map<String, dynamic> json) {
+    resultId = json['ResultId'];
+    actionId = json['ActionId'];
+    name = json['Name'];
+
+    if (json['Icon'] != null) {
+      icon = WoxImage.fromJson(json['Icon']);
+    }
+  }
+}

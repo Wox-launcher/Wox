@@ -84,6 +84,52 @@ type API interface {
 	//       }()
 	//   }
 	UpdateResult(ctx context.Context, result UpdateableResult) bool
+
+	// UpdateResultAction updates a single action within a query result that is currently displayed in the UI.
+	//
+	// This method is designed for updating action UI (name, icon) after the action is executed,
+	// such as toggling between "Add to favorite" and "Remove from favorite" states.
+	//
+	// Returns:
+	//   - true: The action was successfully updated (result still visible in the UI)
+	//   - false: The result is no longer visible in the UI (caller should stop updating)
+	//
+	// When to use UpdateResultAction:
+	//   - Toggle action states (e.g., "Pin" ↔ "Unpin", "Favorite" ↔ "Unfavorite")
+	//   - Update action icon or name based on operation result
+	//   - Provide visual feedback for action execution
+	//
+	// Best practices:
+	//   - Set PreventHideAfterAction: true in your action to keep the result visible
+	//   - Use actionContext.ResultActionId to identify which action to update
+	//   - Only update fields that have changed (use nil for fields you don't want to update)
+	//
+	// Example:
+	//   Action: func(ctx context.Context, actionContext ActionContext) {
+	//       // Toggle favorite state
+	//       if isFavorite {
+	//           removeFavorite()
+	//           name := "Add to favorite"
+	//           icon := plugin.AddToFavIcon
+	//           api.UpdateResultAction(ctx, UpdateResultAction{
+	//               ResultId: actionContext.ResultId,
+	//               ActionId: actionContext.ResultActionId,
+	//               Name:     &name,
+	//               Icon:     &icon,
+	//           })
+	//       } else {
+	//           addFavorite()
+	//           name := "Remove from favorite"
+	//           icon := plugin.RemoveFromFavIcon
+	//           api.UpdateResultAction(ctx, UpdateResultAction{
+	//               ResultId: actionContext.ResultId,
+	//               ActionId: actionContext.ResultActionId,
+	//               Name:     &name,
+	//               Icon:     &icon,
+	//           })
+	//       }
+	//   }
+	UpdateResultAction(ctx context.Context, action UpdateableResultAction) bool
 }
 
 type APIImpl struct {
@@ -363,6 +409,22 @@ func (a *APIImpl) UpdateResult(ctx context.Context, result UpdateableResult) boo
 	// Polish the updateable result before sending to UI
 	polishedResult := GetPluginManager().PolishUpdateableResult(ctx, a.pluginInstance, result)
 	return GetPluginManager().GetUI().UpdateResult(ctx, polishedResult)
+}
+
+func (a *APIImpl) UpdateResultAction(ctx context.Context, action UpdateableResultAction) bool {
+	// Polish the updateable result action (this caches the Action callback if present)
+	polishedAction := GetPluginManager().PolishUpdateableResultAction(ctx, a.pluginInstance, action)
+
+	// Create a JSON-serializable version without the Action field
+	// The Action field cannot be serialized to JSON, so we use a separate struct for UI communication
+	actionForUI := UpdateableResultActionUI{
+		ResultId: polishedAction.ResultId,
+		ActionId: polishedAction.ActionId,
+		Name:     polishedAction.Name,
+		Icon:     polishedAction.Icon,
+	}
+
+	return GetPluginManager().GetUI().UpdateResultAction(ctx, actionForUI)
 }
 
 func NewAPI(instance *Instance) API {

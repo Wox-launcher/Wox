@@ -255,6 +255,7 @@ async function action(ctx: Context, request: PluginJsonRpcRequest) {
 
   const actionContext: ActionContext = {
     ResultId: request.Params.ResultId,
+    ResultActionId: request.Params.ResultActionId,
     ContextData: request.Params.ContextData
   }
   pluginAction(actionContext)

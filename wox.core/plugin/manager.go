@@ -796,19 +796,63 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 }
 
 func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instance, query Query, title, subTitle string) (defaultActions []QueryResultAction) {
+	// Declare both actions first
+	var addToFavoriteAction func(context.Context, ActionContext)
+	var removeFromFavoriteAction func(context.Context, ActionContext)
+
+	// Define add to favorite action
+	addToFavoriteAction = func(ctx context.Context, actionContext ActionContext) {
+		setting.GetSettingManager().AddFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
+
+		// Get API instance to send notification
+		api := NewAPI(pluginInstance)
+		api.Notify(ctx, "i18n:plugin_manager_add_to_favorite_success")
+
+		// Update the action UI and callback to show "Remove from favorite"
+		newName := "i18n:plugin_manager_remove_from_favorite"
+		newIcon := RemoveFromFavIcon
+
+		logger.Debug(ctx, fmt.Sprintf("UpdateResultAction: ResultId=%s, ActionId=%s, Name=%s",
+			actionContext.ResultId, actionContext.ResultActionId, newName))
+
+		success := api.UpdateResultAction(ctx, UpdateableResultAction{
+			ResultId: actionContext.ResultId,
+			ActionId: actionContext.ResultActionId,
+			Name:     &newName,
+			Icon:     &newIcon,
+			Action:   removeFromFavoriteAction,
+		})
+
+		logger.Debug(ctx, fmt.Sprintf("UpdateResultAction success: %v", success))
+	}
+
+	// Define remove from favorite action
+	removeFromFavoriteAction = func(ctx context.Context, actionContext ActionContext) {
+		setting.GetSettingManager().RemoveFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
+
+		// Get API instance to send notification
+		api := NewAPI(pluginInstance)
+		api.Notify(ctx, "i18n:plugin_manager_remove_from_favorite_success")
+
+		// Update the action UI and callback to show "Add to favorite"
+		newName := "i18n:plugin_manager_add_to_favorite"
+		newIcon := AddToFavIcon
+		api.UpdateResultAction(ctx, UpdateableResultAction{
+			ResultId: actionContext.ResultId,
+			ActionId: actionContext.ResultActionId,
+			Name:     &newName,
+			Icon:     &newIcon,
+			Action:   addToFavoriteAction,
+		})
+	}
+
 	if setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle) {
 		defaultActions = append(defaultActions, QueryResultAction{
 			Name:                   "i18n:plugin_manager_remove_from_favorite",
 			Icon:                   RemoveFromFavIcon,
 			IsSystemAction:         true,
 			PreventHideAfterAction: true,
-			Action: func(ctx context.Context, actionContext ActionContext) {
-				setting.GetSettingManager().RemoveFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
-
-				// Get API instance to send notification
-				api := NewAPI(pluginInstance)
-				api.Notify(ctx, "i18n:plugin_manager_remove_from_favorite_success")
-			},
+			Action:                 removeFromFavoriteAction,
 		})
 	} else {
 		defaultActions = append(defaultActions, QueryResultAction{
@@ -816,13 +860,7 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 			Icon:                   AddToFavIcon,
 			IsSystemAction:         true,
 			PreventHideAfterAction: true,
-			Action: func(ctx context.Context, actionContext ActionContext) {
-				setting.GetSettingManager().AddFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
-
-				// Get API instance to send notification
-				api := NewAPI(pluginInstance)
-				api.Notify(ctx, "i18n:plugin_manager_add_to_favorite_success")
-			},
+			Action:                 addToFavoriteAction,
 		})
 	}
 
@@ -1224,6 +1262,30 @@ func (m *Manager) PolishUpdateableResult(ctx context.Context, pluginInstance *In
 	return result
 }
 
+func (m *Manager) PolishUpdateableResultAction(ctx context.Context, pluginInstance *Instance, action UpdateableResultAction) UpdateableResultAction {
+	// Set default icon if not present
+	if action.Icon != nil && action.Icon.IsEmpty() {
+		defaultIcon := DefaultActionIcon
+		action.Icon = &defaultIcon
+	}
+
+	// Translate action name if present
+	if action.Name != nil {
+		translated := m.translatePlugin(ctx, pluginInstance, *action.Name)
+		action.Name = &translated
+	}
+
+	// Update action callback in cache if present
+	if action.Action != nil {
+		resultCache, found := m.resultCache.Load(action.ResultId)
+		if found {
+			resultCache.Actions.Store(action.ActionId, action.Action)
+		}
+	}
+
+	return action
+}
+
 func (m *Manager) Query(ctx context.Context, query Query) (results chan []QueryResultUI, done chan bool) {
 	results = make(chan []QueryResultUI, 10)
 	done = make(chan bool)
@@ -1505,8 +1567,9 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 	}
 
 	action(ctx, ActionContext{
-		ResultId:    resultId,
-		ContextData: resultCache.ContextData,
+		ResultId:       resultId,
+		ResultActionId: actionId,
+		ContextData:    resultCache.ContextData,
 	})
 
 	util.Go(ctx, fmt.Sprintf("[%s] post execute action", resultCache.PluginInstance.Metadata.Name), func() {

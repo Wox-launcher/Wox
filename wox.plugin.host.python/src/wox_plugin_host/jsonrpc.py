@@ -1,23 +1,25 @@
-import json
+import asyncio
 import importlib
-from os import path
+import json
 import sys
-from typing import Any, Dict
+import traceback
 import uuid
+from os import path
+from typing import Any, Dict
+
 import websockets
-from . import logger
 from wox_plugin import (
+    ActionContext,
     Context,
+    MRUData,
+    PluginInitParams,
     Query,
     RefreshableResult,
-    PluginInitParams,
-    ActionContext,
-    MRUData,
 )
-from .plugin_manager import plugin_instances, PluginInstance
+
+from . import logger
 from .plugin_api import PluginAPI
-import traceback
-import asyncio
+from .plugin_manager import PluginInstance, plugin_instances
 
 
 async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: websockets.asyncio.server.ServerConnection) -> Any:
@@ -221,13 +223,14 @@ async def action(ctx: Context, request: Dict[str, Any]) -> None:
         params: Dict[str, str] = request.get("Params", {})
         result_id = params.get("ResultId", "")
         action_id = params.get("ActionId", "")
+        result_action_id = params.get("ResultActionId", "")
         context_data = params.get("ContextData", "")
 
         # Get action from cache
         action_func = plugin_instance.actions.get(action_id)
         if action_func:
             # Handle both coroutine and regular functions
-            result = action_func(ActionContext(result_id=result_id, context_data=context_data))
+            result = action_func(ActionContext(result_id=result_id, result_action_id=result_action_id, context_data=context_data))
             if asyncio.iscoroutine(result):
                 asyncio.create_task(result)
 

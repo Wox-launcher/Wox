@@ -55,6 +55,12 @@ type UI interface {
 	// The result parameter should be plugin.UpdateableResult, but we use interface{} to avoid circular dependency.
 	UpdateResult(ctx context.Context, result interface{}) bool
 
+	// UpdateResultAction updates a single action within a result that is currently displayed in the UI.
+	// Returns true if the action was successfully updated (result still visible in UI).
+	// Returns false if the result is no longer visible (caller should stop updating).
+	// The action parameter should be plugin.UpdateableResultAction, but we use interface{} to avoid circular dependency.
+	UpdateResultAction(ctx context.Context, action interface{}) bool
+
 	// AI chat plugin related methods
 	FocusToChatInput(ctx context.Context)
 	SendChatResponse(ctx context.Context, chatData AIChatData)

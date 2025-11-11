@@ -1,7 +1,8 @@
-from typing import List, Callable, Awaitable, Optional, Dict, Any
+import json
 from dataclasses import dataclass, field
 from enum import Enum
-import json
+from typing import Any, Awaitable, Callable, Dict, List, Optional
+
 from .image import WoxImage
 from .preview import WoxPreview
 
@@ -52,6 +53,7 @@ class ActionContext:
     """Context for result actions"""
 
     result_id: str = field(default="")
+    result_action_id: str = field(default="")
     context_data: str = field(default="")
 
     def to_json(self) -> str:
@@ -59,6 +61,7 @@ class ActionContext:
         return json.dumps(
             {
                 "ResultId": self.result_id,
+                "ResultActionId": self.result_action_id,
                 "ContextData": self.context_data,
             }
         )
@@ -69,6 +72,7 @@ class ActionContext:
         data = json.loads(json_str)
         return cls(
             result_id=data.get("ResultId", ""),
+            result_action_id=data.get("ResultActionId", ""),
             context_data=data.get("ContextData", ""),
         )
 
@@ -276,5 +280,56 @@ class UpdateableResult:
             data["Preview"] = json.loads(self.preview.to_json())
         if self.actions is not None:
             data["Actions"] = [json.loads(action.to_json()) for action in self.actions]
+
+        return json.dumps(data)
+
+
+@dataclass
+class UpdateableResultAction:
+    """
+    Action that can be updated directly in the UI.
+
+    This allows updating a single action's UI (name, icon, action callback) without replacing the entire actions array.
+    All fields except result_id and action_id are optional. Only non-None fields will be updated.
+
+    Example usage:
+        # Update only the action name
+        success = await api.update_result_action(ctx, UpdateableResultAction(
+            result_id=action_context.result_id,
+            action_id=action_context.result_action_id,
+            name="Remove from favorite"
+        ))
+
+        # Update name, icon and action callback
+        async def new_action(action_context: ActionContext):
+            # New action logic
+            pass
+
+        success = await api.update_result_action(ctx, UpdateableResultAction(
+            result_id=action_context.result_id,
+            action_id=action_context.result_action_id,
+            name="Add to favorite",
+            icon=WoxImage(image_type="emoji", image_data="⭐"),
+            action=new_action
+        ))
+    """
+
+    result_id: str
+    action_id: str
+    name: Optional[str] = None
+    icon: Optional[WoxImage] = None
+    action: Optional[Callable[[ActionContext], Awaitable[None]]] = None
+
+    def to_json(self) -> str:
+        """Convert to JSON string with camelCase naming"""
+        data: Dict[str, Any] = {
+            "ResultId": self.result_id,
+            "ActionId": self.action_id,
+        }
+
+        if self.name is not None:
+            data["Name"] = self.name
+        if self.icon is not None:
+            data["Icon"] = json.loads(self.icon.to_json())
 
         return json.dumps(data)
