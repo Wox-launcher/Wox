@@ -234,6 +234,7 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
               : WoxDropdownButton<String>(
                   value: _selectedModel?.name,
                   isExpanded: true,
+                  enableFilter: true,
                   items: getProviderModels()
                       .map((model) => DropdownMenuItem<String>(
                             value: model.name,

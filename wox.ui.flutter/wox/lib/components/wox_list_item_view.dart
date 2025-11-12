@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
@@ -152,25 +154,28 @@ class WoxListItemView extends StatelessWidget {
     final bool isResultList = listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code;
     final BorderRadius borderRadius = isResultList && woxTheme.resultItemBorderRadius > 0 ? BorderRadius.circular(woxTheme.resultItemBorderRadius.toDouble()) : BorderRadius.zero;
 
+    // Calculate the maximum border width to reserve space
+    final double maxBorderWidth = listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
+        ? 0
+        : math.max(woxTheme.resultItemBorderLeftWidth.toDouble(), woxTheme.resultItemActiveBorderLeftWidth.toDouble());
+
+    // Calculate the actual border width for current state
+    final double actualBorderWidth = listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
+        ? 0
+        : (isActive ? woxTheme.resultItemActiveBorderLeftWidth.toDouble() : woxTheme.resultItemBorderLeftWidth.toDouble());
+
     Widget content = Container(
       decoration: BoxDecoration(
         color: getBackgroundColor(),
-        border: Border(
-            left: listViewType == WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code
-                ? BorderSide.none
-                : BorderSide(
-                    color: isActive ? safeFromCssColor(woxTheme.resultItemActiveBackgroundColor) : Colors.transparent,
-                    width: isActive ? woxTheme.resultItemActiveBorderLeftWidth.toDouble() : woxTheme.resultItemBorderLeftWidth.toDouble(),
-                  )),
       ),
       padding: isResultList
           ? EdgeInsets.only(
               top: woxTheme.resultItemPaddingTop.toDouble(),
               right: woxTheme.resultItemPaddingRight.toDouble(),
               bottom: woxTheme.resultItemPaddingBottom.toDouble(),
-              left: woxTheme.resultItemPaddingLeft.toDouble(),
+              left: woxTheme.resultItemPaddingLeft.toDouble() + maxBorderWidth,
             )
-          : EdgeInsets.zero,
+          : EdgeInsets.only(left: maxBorderWidth),
       child: Row(
         children: [
           item.isGroup
@@ -231,6 +236,32 @@ class WoxListItemView extends StatelessWidget {
       content = ClipRRect(
         borderRadius: borderRadius,
         child: content,
+      );
+    }
+
+    // Use Stack to overlay the left border indicator without affecting layout
+    if (actualBorderWidth > 0) {
+      content = Stack(
+        children: [
+          content,
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: Container(
+              width: actualBorderWidth,
+              decoration: BoxDecoration(
+                color: safeFromCssColor(woxTheme.resultItemActiveBackgroundColor),
+                borderRadius: borderRadius != BorderRadius.zero
+                    ? BorderRadius.only(
+                        topLeft: borderRadius.topLeft,
+                        bottomLeft: borderRadius.bottomLeft,
+                      )
+                    : BorderRadius.zero,
+              ),
+            ),
+          ),
+        ],
       );
     }
 

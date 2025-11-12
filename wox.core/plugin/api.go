@@ -405,28 +405,8 @@ func (a *APIImpl) OnMRURestore(ctx context.Context, callback func(mruData MRUDat
 }
 
 func (a *APIImpl) UpdateResult(ctx context.Context, result UpdatableResult) bool {
-	a.Log(ctx, LogLevelInfo, fmt.Sprintf("UpdateResult called for result %s", result.Id))
 	polishedResult := GetPluginManager().PolishUpdatableResult(ctx, a.pluginInstance, result)
-
-	// Log what fields are being updated
-	if polishedResult.Title != nil {
-		a.Log(ctx, LogLevelInfo, fmt.Sprintf("  - Title: %s", *polishedResult.Title))
-	}
-	if polishedResult.SubTitle != nil {
-		a.Log(ctx, LogLevelInfo, fmt.Sprintf("  - SubTitle: %s", *polishedResult.SubTitle))
-	}
-	if polishedResult.Tails != nil {
-		a.Log(ctx, LogLevelInfo, fmt.Sprintf("  - Tails: %d items", len(*polishedResult.Tails)))
-	}
-	if polishedResult.Actions != nil {
-		a.Log(ctx, LogLevelInfo, fmt.Sprintf("  - Actions: %d items", len(*polishedResult.Actions)))
-		for i, action := range *polishedResult.Actions {
-			a.Log(ctx, LogLevelInfo, fmt.Sprintf("    [%d] %s (id=%s, default=%v)", i, action.Name, action.Id, action.IsDefault))
-		}
-	}
-
 	success := GetPluginManager().GetUI().UpdateResult(ctx, polishedResult)
-	a.Log(ctx, LogLevelInfo, fmt.Sprintf("UpdateResult result: %v", success))
 	return success
 }
 

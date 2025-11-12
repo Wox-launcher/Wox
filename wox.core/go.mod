@@ -62,12 +62,13 @@ require (
 	github.com/josephspurrier/goversioninfo v1.5.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
+	github.com/openai/openai-go/v3 v3.8.1 // indirect
 	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/saracen/zipextra v0.0.0-20250129175152-f1aa42d25216 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
-	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/vcaesar/keycode v0.10.1 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect

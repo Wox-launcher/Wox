@@ -9,11 +9,11 @@ import (
 	"wox/setting"
 	"wox/util"
 
-	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/option"
-	"github.com/openai/openai-go/packages/pagination"
-	"github.com/openai/openai-go/packages/param"
-	"github.com/openai/openai-go/packages/ssestream"
+	"github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/pagination"
+	"github.com/openai/openai-go/v3/packages/param"
+	"github.com/openai/openai-go/v3/packages/ssestream"
 )
 
 type OpenAIBaseProviderOptions struct {
@@ -28,9 +28,10 @@ type OpenAIBaseProvider struct {
 
 // OpenAIBaseProviderStream represents a stream from OpenAI compatible providers
 type OpenAIBaseProviderStream struct {
-	stream        *ssestream.Stream[openai.ChatCompletionChunk]
-	conversations []common.Conversation
-	acc           openai.ChatCompletionAccumulator
+	stream            *ssestream.Stream[openai.ChatCompletionChunk]
+	conversations     []common.Conversation
+	acc               openai.ChatCompletionAccumulator
+	accumulatedReason string // accumulated reasoning content from chunks
 }
 
 // NewOpenAIBaseProvider creates a new OpenAI base provider
@@ -53,7 +54,9 @@ func (o *OpenAIBaseProvider) ChatStream(ctx context.Context, model common.Model,
 	}
 	convertedTools := o.convertTools(options.Tools)
 	for i, tool := range convertedTools {
-		util.GetLogger().Debug(ctx, fmt.Sprintf("AI: converted tool[%d] name: %s, paramters: %v", i, tool.Function.Name, tool.Function.Parameters))
+		if function := tool.GetFunction(); function != nil {
+			util.GetLogger().Debug(ctx, fmt.Sprintf("AI: converted tool[%d] name: %s, paramters: %v", i, function.Name, function.Parameters))
+		}
 	}
 
 	var createdStream *ssestream.Stream[openai.ChatCompletionChunk]
@@ -105,7 +108,7 @@ func (o *OpenAIBaseProvider) Ping(ctx context.Context) error {
 	return err
 }
 
-func (o *OpenAIBaseProvider) convertTools(tools []common.MCPTool) []openai.ChatCompletionToolParam {
+func (o *OpenAIBaseProvider) convertTools(tools []common.MCPTool) []openai.ChatCompletionToolUnionParam {
 	/*
 		{
 			Type: "function",
@@ -133,7 +136,7 @@ func (o *OpenAIBaseProvider) convertTools(tools []common.MCPTool) []openai.ChatC
 			},
 		}
 	*/
-	convertedTools := make([]openai.ChatCompletionToolParam, len(tools))
+	convertedTools := make([]openai.ChatCompletionToolUnionParam, len(tools))
 	for i, tool := range tools {
 		parametersMap := make(map[string]any)
 		parametersMap["type"] = tool.Parameters.Type
@@ -148,13 +151,11 @@ func (o *OpenAIBaseProvider) convertTools(tools []common.MCPTool) []openai.ChatC
 			parametersMap["required"] = tool.Parameters.Required
 		}
 
-		convertedTools[i] = openai.ChatCompletionToolParam{
-			Function: openai.FunctionDefinitionParam{
-				Name:        tool.Name,
-				Description: openai.String(tool.Description),
-				Parameters:  openai.FunctionParameters(parametersMap),
-			},
-		}
+		convertedTools[i] = openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
+			Name:        tool.Name,
+			Description: openai.String(tool.Description),
+			Parameters:  openai.FunctionParameters(parametersMap),
+		})
 	}
 	return convertedTools
 }
@@ -194,10 +195,30 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 			}
 		}
 
-		util.GetLogger().Debug(ctx, "AI: Stream ended, final message received"+s.acc.Choices[0].Message.Content)
+		// Combine reasoning and content for final message
+		finalContent := s.acc.Choices[0].Message.Content
+		if s.accumulatedReason != "" {
+			// Format reasoning as markdown blockquote
+			reasoningLines := strings.Split(s.accumulatedReason, "\n")
+			var formattedReasoning strings.Builder
+			for _, line := range reasoningLines {
+				formattedReasoning.WriteString("> ")
+				formattedReasoning.WriteString(line)
+				formattedReasoning.WriteString("\n")
+			}
+
+			// Combine reasoning and content
+			if finalContent != "" {
+				finalContent = formattedReasoning.String() + "\n" + finalContent
+			} else {
+				finalContent = formattedReasoning.String()
+			}
+		}
+
+		util.GetLogger().Debug(ctx, "AI: Stream ended, final message received"+finalContent)
 		return common.ChatStreamData{
 			Status:    common.ChatStreamStatusStreamed,
-			Data:      s.acc.Choices[0].Message.Content,
+			Data:      finalContent,
 			ToolCalls: toolCallInfos,
 		}, nil
 	}
@@ -205,16 +226,75 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 	chunk := s.stream.Current()
 	util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Received raw chunk: %s", chunk.RawJSON()))
 
+	// Store previous content and reasoning before adding chunk
+	var previousContent string
+	var previousReasoning string
+	if len(s.acc.Choices) > 0 {
+		previousContent = s.acc.Choices[0].Message.Content
+	}
+	previousReasoning = s.accumulatedReason
+
+	// Extract reasoning from current chunk if present
+	if len(chunk.Choices) > 0 {
+		delta := chunk.Choices[0].Delta
+
+		if reasoningField, exists := delta.JSON.ExtraFields["reasoning"]; exists {
+			// The reasoning field is already a JSON string, so we need to unmarshal it
+			rawReasoning := reasoningField.Raw()
+
+			// Only process if reasoning is not null
+			if rawReasoning != "null" && rawReasoning != "" {
+				var reasoningStr string
+				if err := json.Unmarshal([]byte(rawReasoning), &reasoningStr); err == nil {
+					if reasoningStr != "" {
+						s.accumulatedReason += reasoningStr
+						util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Extracted reasoning from chunk: %s", reasoningStr))
+					}
+				} else {
+					util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal reasoning: %s, error: %s", rawReasoning, err.Error()))
+				}
+			}
+		}
+	}
+
 	s.acc.AddChunk(chunk)
 
-	// skip empty chunk, maybe invoke receive too fast
-	if s.isChunkEmpty(chunk) {
+	// Check if content has changed after adding chunk
+	// This handles both regular content and reasoning content (which OpenAI SDK accumulates into Message.Content)
+	var currentContent string
+	if len(s.acc.Choices) > 0 {
+		currentContent = s.acc.Choices[0].Message.Content
+	}
+
+	// If neither content nor reasoning has changed and there are no tool calls, skip this chunk
+	if currentContent == previousContent && s.accumulatedReason == previousReasoning && s.isChunkEmpty(chunk) {
 		return common.ChatStreamData{}, ChatStreamNoContentErr
+	}
+
+	// Combine reasoning and content for display
+	// Format reasoning as markdown quote (similar to <think> tag handling)
+	displayContent := currentContent
+	if s.accumulatedReason != "" {
+		// Format reasoning as markdown blockquote
+		reasoningLines := strings.Split(s.accumulatedReason, "\n")
+		var formattedReasoning strings.Builder
+		for _, line := range reasoningLines {
+			formattedReasoning.WriteString("> ")
+			formattedReasoning.WriteString(line)
+			formattedReasoning.WriteString("\n")
+		}
+
+		// Combine reasoning and content
+		if currentContent != "" {
+			displayContent = formattedReasoning.String() + "\n" + currentContent
+		} else {
+			displayContent = formattedReasoning.String()
+		}
 	}
 
 	streamData := common.ChatStreamData{
 		Status: common.ChatStreamStatusStreaming,
-		Data:   s.acc.Choices[0].Message.Content,
+		Data:   displayContent,
 	}
 	var totalToolCallCount = len(s.acc.Choices[0].Message.ToolCalls)
 	if totalToolCallCount > 0 {
@@ -343,11 +423,20 @@ func (s *OpenAIBaseProviderStream) isChunkEmpty(chunk openai.ChatCompletionChunk
 	if len(chunk.Choices) == 0 {
 		return true
 	}
-	if chunk.Choices[0].Delta.Content == "" && chunk.Choices[0].Delta.Refusal == "" && len(chunk.Choices[0].Delta.ToolCalls) == 0 {
-		return true
+
+	delta := chunk.Choices[0].Delta
+
+	// Check regular fields
+	if delta.Content != "" || delta.Refusal != "" || len(delta.ToolCalls) > 0 {
+		return false
 	}
 
-	return false
+	// Check for reasoning field in ExtraFields (for reasoning models like o1, o3-mini, etc.)
+	if reasoningField, exists := delta.JSON.ExtraFields["reasoning"]; exists && reasoningField.Valid() {
+		return false
+	}
+
+	return true
 }
 
 // convertConversations converts the conversations to OpenAI format
@@ -366,13 +455,14 @@ func (o *OpenAIBaseProvider) convertConversations(conversations []common.Convers
 		if conversation.Role == common.ConversationRoleTool {
 			// add tool message first, and then add tool output message
 			chatMessages = append(chatMessages, openai.ChatCompletionMessageParamUnion{OfAssistant: &openai.ChatCompletionAssistantMessageParam{
-				ToolCalls: []openai.ChatCompletionMessageToolCallParam{
+				ToolCalls: []openai.ChatCompletionMessageToolCallUnionParam{
 					{
-						ID:   conversation.ToolCallInfo.Id,
-						Type: "function",
-						Function: openai.ChatCompletionMessageToolCallFunctionParam{
-							Name:      conversation.ToolCallInfo.Name,
-							Arguments: conversation.ToolCallInfo.Delta,
+						OfFunction: &openai.ChatCompletionMessageFunctionToolCallParam{
+							ID: conversation.ToolCallInfo.Id,
+							Function: openai.ChatCompletionMessageFunctionToolCallFunctionParam{
+								Name:      conversation.ToolCallInfo.Name,
+								Arguments: conversation.ToolCallInfo.Delta,
+							},
 						},
 					},
 				},
