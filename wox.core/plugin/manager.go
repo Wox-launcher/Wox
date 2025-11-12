@@ -30,7 +30,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
-	"github.com/jinzhu/copier"
 	"github.com/samber/lo"
 	"github.com/wissance/stringFormatter"
 )
@@ -822,7 +821,7 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 		// Update the result to refresh UI
 		// Note: We don't need to manually add favorite tail here because:
 		// 1. GetUpdatableResult filters out system tails (including favorite icon)
-		// 2. PolishUpdateableResult will automatically add favorite tail back if this is a favorite result
+		// 2. PolishUpdatableResult will automatically add favorite tail back if this is a favorite result
 		// 3. This ensures the favorite tail is always managed by the system
 		api.UpdateResult(ctx, *updatableResult)
 	}
@@ -844,7 +843,7 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 		// Update the result to refresh UI
 		// Note: We don't need to manually remove favorite tail here because:
 		// 1. GetUpdatableResult filters out system tails (including favorite icon)
-		// 2. PolishUpdateableResult will NOT add favorite tail back if this is not a favorite result
+		// 2. PolishUpdatableResult will NOT add favorite tail back if this is not a favorite result
 		// 3. This ensures the favorite tail is always managed by the system
 		api.UpdateResult(ctx, *updatableResult)
 	}
@@ -1052,14 +1051,6 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		}
 	}
 
-	if result.RefreshInterval > 0 && result.OnRefresh != nil {
-		newInterval := int(math.Floor(float64(result.RefreshInterval)/100) * 100)
-		if result.RefreshInterval != newInterval {
-			logger.Info(ctx, fmt.Sprintf("[%s] result(%s) refresh interval %d is not divisible by 100, use %d instead", pluginInstance.Metadata.Name, result.Id, result.RefreshInterval, newInterval))
-			result.RefreshInterval = newInterval
-		}
-	}
-
 	ignoreAutoScore := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureIgnoreAutoScore)
 	if !ignoreAutoScore {
 		score := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle, query.RawQuery)
@@ -1108,102 +1099,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	return result
 }
 
-func (m *Manager) polishRefreshableResult(ctx context.Context, resultCache *QueryResultCache, result RefreshableResult) RefreshableResult {
-	pluginInstance := resultCache.PluginInstance
-
-	for actionIndex := range result.Actions {
-		if result.Actions[actionIndex].Id == "" {
-			result.Actions[actionIndex].Id = uuid.NewString()
-		}
-		if result.Actions[actionIndex].Icon.IsEmpty() {
-			// set default action icon if not present
-			result.Actions[actionIndex].Icon = DefaultActionIcon
-		}
-	}
-
-	// set first action as default if no default action is set
-	defaultActionCount := lo.CountBy(result.Actions, func(item QueryResultAction) bool {
-		return item.IsDefault
-	})
-	if defaultActionCount == 0 && len(result.Actions) > 0 {
-		result.Actions[0].IsDefault = true
-		result.Actions[0].Hotkey = "Enter"
-	}
-
-	//move default action to first one of the actions
-	sort.Slice(result.Actions, func(i, j int) bool {
-		return result.Actions[i].IsDefault
-	})
-
-	// convert icon
-	result.Icon = common.ConvertIcon(ctx, result.Icon, pluginInstance.PluginDirectory)
-	for i := range result.Tails {
-		if result.Tails[i].Type == QueryResultTailTypeImage {
-			result.Tails[i].Image = common.ConvertIcon(ctx, result.Tails[i].Image, pluginInstance.PluginDirectory)
-		}
-	}
-
-	// translate title
-	result.Title = m.translatePlugin(ctx, pluginInstance, result.Title)
-	// translate subtitle
-	result.SubTitle = m.translatePlugin(ctx, pluginInstance, result.SubTitle)
-	// translate tail text
-	for i := range result.Tails {
-		if result.Tails[i].Type == QueryResultTailTypeText {
-			result.Tails[i].Text = m.translatePlugin(ctx, pluginInstance, result.Tails[i].Text)
-		}
-	}
-	// translate preview properties
-	var previewProperties = make(map[string]string)
-	for key, value := range result.Preview.PreviewProperties {
-		translatedKey := m.translatePlugin(ctx, pluginInstance, key)
-		previewProperties[translatedKey] = value
-	}
-	result.Preview.PreviewProperties = previewProperties
-	// translate action names
-	for actionIndex := range result.Actions {
-		result.Actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, result.Actions[actionIndex].Name)
-	}
-
-	// convert non-remote preview to remote preview
-	// because preview may contain some heavy data (E.g. image or large text),
-	// we will store preview in cache and only send preview to ui when user select the result
-	var originalPreview WoxPreview
-	if !result.Preview.IsEmpty() && result.Preview.PreviewType != WoxPreviewTypeRemote {
-		originalPreview = result.Preview
-		result.Preview = WoxPreview{
-			PreviewType: WoxPreviewTypeRemote,
-			PreviewData: fmt.Sprintf("/preview?id=%s", resultCache.Result.Id),
-		}
-	}
-
-	// Update cache at the end - store the complete, final result
-	resultCopy := RefreshableResult{
-		Title:       result.Title,
-		SubTitle:    result.SubTitle,
-		Icon:        result.Icon,
-		Preview:     originalPreview,
-		Tails:       result.Tails,
-		ContextData: result.ContextData,
-		Actions:     result.Actions,
-	}
-	if originalPreview.IsEmpty() {
-		resultCopy.Preview = result.Preview
-	}
-
-	// Update the cache with the new result data
-	resultCache.Result.Title = resultCopy.Title
-	resultCache.Result.SubTitle = resultCopy.SubTitle
-	resultCache.Result.Icon = resultCopy.Icon
-	resultCache.Result.Preview = resultCopy.Preview
-	resultCache.Result.Tails = resultCopy.Tails
-	resultCache.Result.ContextData = resultCopy.ContextData
-	resultCache.Result.Actions = resultCopy.Actions
-
-	return result
-}
-
-func (m *Manager) PolishUpdateableResult(ctx context.Context, pluginInstance *Instance, result UpdateableResult) UpdateableResult {
+func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Instance, result UpdatableResult) UpdatableResult {
 	// Get result cache to update it
 	resultCache, found := m.resultCache.Load(result.Id)
 	if !found {
@@ -1340,14 +1236,14 @@ func (m *Manager) PolishUpdateableResult(ctx context.Context, pluginInstance *In
 	return result
 }
 
-func (m *Manager) GetUpdatableResult(ctx context.Context, resultId string) *UpdateableResult {
+func (m *Manager) GetUpdatableResult(ctx context.Context, resultId string) *UpdatableResult {
 	// Try to find the result in the cache
 	resultCache, found := m.resultCache.Load(resultId)
 	if !found {
 		return nil // Result not found (no longer visible)
 	}
 
-	// Construct UpdateableResult from cache
+	// Construct UpdatableResult from cache
 	title := resultCache.Result.Title
 	subTitle := resultCache.Result.SubTitle
 	icon := resultCache.Result.Icon
@@ -1371,7 +1267,7 @@ func (m *Manager) GetUpdatableResult(ctx context.Context, resultId string) *Upda
 		}
 	}
 
-	return &UpdateableResult{
+	return &UpdatableResult{
 		Id:       resultId,
 		Title:    &title,
 		SubTitle: &subTitle,
@@ -1709,79 +1605,6 @@ func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResul
 		}
 		setting.GetSettingManager().AddQueryHistory(ctx, plainQuery)
 	}
-}
-
-func (m *Manager) ExecuteRefresh(ctx context.Context, refreshableResultWithId RefreshableResultWithResultId) (RefreshableResultWithResultId, error) {
-	var refreshableResult RefreshableResult
-	copyErr := copier.Copy(&refreshableResult, &refreshableResultWithId)
-	if copyErr != nil {
-		return RefreshableResultWithResultId{}, fmt.Errorf("failed to copy refreshable result: %w", copyErr)
-	}
-
-	// maybe user has changed the query, which may flush the result cache
-	resultCache, found := m.resultCache.Load(refreshableResultWithId.ResultId)
-	if !found {
-		return refreshableResultWithId, fmt.Errorf("result cache not found for result id (execute refresh): %s", refreshableResultWithId.ResultId)
-	}
-
-	//restore actions in cache
-	refreshableResult.Actions = []QueryResultAction{}
-	for _, action := range refreshableResultWithId.Actions {
-		// get actual action from cache
-		var actionCache *QueryResultAction
-		for i := range resultCache.Result.Actions {
-			if resultCache.Result.Actions[i].Id == action.Id {
-				actionCache = &resultCache.Result.Actions[i]
-				break
-			}
-		}
-		if actionCache == nil {
-			continue
-		}
-		refreshableResult.Actions = append(refreshableResult.Actions, QueryResultAction{
-			Id:                     action.Id,
-			Name:                   action.Name,
-			Icon:                   action.Icon,
-			IsDefault:              action.IsDefault,
-			PreventHideAfterAction: action.PreventHideAfterAction,
-			Hotkey:                 action.Hotkey,
-			Action:                 actionCache.Action,
-			IsSystemAction:         action.IsSystemAction,
-		})
-	}
-
-	newResult := resultCache.Result.OnRefresh(ctx, refreshableResult)
-
-	// add default actions if there is no system action
-	if lo.CountBy(newResult.Actions, func(action QueryResultAction) bool {
-		return action.IsSystemAction
-	}) == 0 {
-		defaultActions := m.getDefaultActions(ctx, resultCache.PluginInstance, resultCache.Query, newResult.Title, newResult.SubTitle)
-		newResult.Actions = append(newResult.Actions, defaultActions...)
-	}
-
-	newResult = m.polishRefreshableResult(ctx, resultCache, newResult)
-	return RefreshableResultWithResultId{
-		ResultId:        refreshableResultWithId.ResultId,
-		Title:           newResult.Title,
-		SubTitle:        newResult.SubTitle,
-		Icon:            newResult.Icon,
-		Tails:           newResult.Tails,
-		Preview:         newResult.Preview,
-		ContextData:     newResult.ContextData,
-		RefreshInterval: newResult.RefreshInterval,
-		Actions: lo.Map(newResult.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
-			return QueryResultActionUI{
-				Id:                     action.Id,
-				Name:                   action.Name,
-				Icon:                   action.Icon,
-				IsDefault:              action.IsDefault,
-				PreventHideAfterAction: action.PreventHideAfterAction,
-				Hotkey:                 action.Hotkey,
-				IsSystemAction:         action.IsSystemAction,
-			}
-		}),
-	}, nil
 }
 
 func (m *Manager) GetResultPreview(ctx context.Context, resultId string) (WoxPreview, error) {

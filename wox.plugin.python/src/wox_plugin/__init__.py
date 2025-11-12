@@ -28,13 +28,12 @@ from .models.query import (
 )
 from .models.result import (
     ActionContext,
-    RefreshableResult,
     Result,
     ResultAction,
     ResultTail,
     ResultTailType,
-    UpdateableResult,
-    UpdateableResultAction,
+    UpdatableResult,
+    UpdatableResultAction,
 )
 from .models.setting import (
     PluginSettingDefinitionItem,
@@ -68,9 +67,8 @@ __all__: List[str] = [
     "ResultTail",
     "ResultAction",
     "ActionContext",
-    "RefreshableResult",
-    "UpdateableResult",
-    "UpdateableResultAction",
+    "UpdatableResult",
+    "UpdatableResultAction",
     "MetadataCommand",
     "PluginSettingDefinitionItem",
     "PluginSettingValueStyle",

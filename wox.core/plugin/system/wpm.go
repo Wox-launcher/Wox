@@ -504,7 +504,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							// Show upgrading progress
 							upgradingTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_upgrading")
-							w.api.UpdateResult(ctx, plugin.UpdateableResult{
+							w.api.UpdateResult(ctx, plugin.UpdatableResult{
 								Id:    actionContext.ResultId,
 								Title: &upgradingTitle,
 							})
@@ -513,7 +513,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 							util.Go(ctx, "upgrade plugin", func() {
 								// Update to downloading state
 								downloadingTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_downloading")
-								if !w.api.UpdateResult(ctx, plugin.UpdateableResult{
+								if !w.api.UpdateResult(ctx, plugin.UpdatableResult{
 									Id:    actionContext.ResultId,
 									Title: &downloadingTitle,
 								}) {
@@ -523,7 +523,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 								installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
 								if installErr != nil {
 									failedTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_install_failed")
-									w.api.UpdateResult(ctx, plugin.UpdateableResult{
+									w.api.UpdateResult(ctx, plugin.UpdatableResult{
 										Id:    actionContext.ResultId,
 										Title: &failedTitle,
 									})
@@ -533,7 +533,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 
 								// Update to success state
 								successTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_upgrade_success")
-								w.api.UpdateResult(ctx, plugin.UpdateableResult{
+								w.api.UpdateResult(ctx, plugin.UpdatableResult{
 									Id:    actionContext.ResultId,
 									Title: &successTitle,
 								})
@@ -566,7 +566,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						// Show installing progress
 						installingTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_installing")
-						w.api.UpdateResult(ctx, plugin.UpdateableResult{
+						w.api.UpdateResult(ctx, plugin.UpdatableResult{
 							Id:    actionContext.ResultId,
 							Title: &installingTitle,
 						})
@@ -575,7 +575,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 						util.Go(ctx, "install plugin", func() {
 							// Update to downloading state
 							downloadingTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_downloading")
-							if !w.api.UpdateResult(ctx, plugin.UpdateableResult{
+							if !w.api.UpdateResult(ctx, plugin.UpdatableResult{
 								Id:    actionContext.ResultId,
 								Title: &downloadingTitle,
 							}) {
@@ -585,7 +585,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 							installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
 							if installErr != nil {
 								failedTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_install_failed")
-								w.api.UpdateResult(ctx, plugin.UpdateableResult{
+								w.api.UpdateResult(ctx, plugin.UpdatableResult{
 									Id:    actionContext.ResultId,
 									Title: &failedTitle,
 								})
@@ -595,7 +595,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 
 							// Update to success state
 							successTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_install_success")
-							w.api.UpdateResult(ctx, plugin.UpdateableResult{
+							w.api.UpdateResult(ctx, plugin.UpdatableResult{
 								Id:    actionContext.ResultId,
 								Title: &successTitle,
 							})

@@ -55,7 +55,6 @@ Future<void> initialServices(List<String> arguments) async {
   await WoxSettingUtil.instance.loadSetting();
 
   var launcherController = WoxLauncherController();
-  launcherController.startRefreshSchedule();
 
   Timer.periodic(const Duration(minutes: 1), (timer) async {
     launcherController.doctorCheck();

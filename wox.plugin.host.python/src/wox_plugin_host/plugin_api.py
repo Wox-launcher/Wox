@@ -15,8 +15,8 @@ from wox_plugin import (
     PluginSettingDefinitionItem,
     PublicAPI,
     Result,
-    UpdateableResult,
-    UpdateableResultAction,
+    UpdatableResult,
+    UpdatableResultAction,
 )
 
 from . import logger
@@ -85,6 +85,11 @@ class PluginAPI(PublicAPI):
     async def show_app(self, ctx: Context) -> None:
         """Show the Wox window"""
         await self.invoke_method(ctx, "ShowApp", {})
+
+    async def is_visible(self, ctx: Context) -> bool:
+        """Check if Wox window is currently visible"""
+        result = await self.invoke_method(ctx, "IsVisible", {})
+        return bool(result) if result is not None else False
 
     async def notify(self, ctx: Context, message: str) -> None:
         """Show a notification message"""
@@ -169,15 +174,15 @@ class PluginAPI(PublicAPI):
         self.mru_restore_callbacks[callback_id] = callback
         await self.invoke_method(ctx, "OnMRURestore", {"callbackId": callback_id})
 
-    async def get_updatable_result(self, ctx: Context, result_id: str) -> Optional[UpdateableResult]:
+    async def get_updatable_result(self, ctx: Context, result_id: str) -> Optional[UpdatableResult]:
         """Get the current state of a result that is displayed in the UI"""
         response = await self.invoke_method(ctx, "GetUpdatableResult", {"resultId": result_id})
         if response is None:
             return None
 
-        # Parse the response into UpdateableResult
+        # Parse the response into UpdatableResult
         # The response is a dict with optional fields
-        updatable_result = UpdateableResult(id=result_id)
+        updatable_result = UpdatableResult(id=result_id)
 
         if "Title" in response:
             updatable_result.title = response["Title"]
@@ -207,12 +212,12 @@ class PluginAPI(PublicAPI):
 
         return updatable_result
 
-    async def update_result(self, ctx: Context, result: UpdateableResult) -> bool:
+    async def update_result(self, ctx: Context, result: UpdatableResult) -> bool:
         """Update a query result that is currently displayed in the UI"""
         response = await self.invoke_method(ctx, "UpdateResult", {"result": json.loads(result.to_json())})
         return bool(response) if response is not None else False
 
-    async def update_result_action(self, ctx: Context, action: "UpdateableResultAction") -> bool:
+    async def update_result_action(self, ctx: Context, action: "UpdatableResultAction") -> bool:
         """Update a single action within a query result that is currently displayed in the UI"""
         # Cache the action callback if present
         if action.action is not None:

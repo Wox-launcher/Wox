@@ -13,6 +13,7 @@ import (
 	"wox/util/clipboard"
 	"wox/util/selection"
 
+	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
 )
@@ -176,58 +177,6 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 			}
 		}
 
-		var startAnsweringTime int64
-		onPreparing := func(current plugin.RefreshableResult) plugin.RefreshableResult {
-			current.Preview.PreviewData = i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_answering")
-			current.SubTitle = "i18n:plugin_ai_command_answering"
-			startAnsweringTime = util.GetSystemTimestamp()
-			return current
-		}
-
-		isFirstAnswer := true
-		onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
-			if isFirstAnswer {
-				current.Preview.PreviewData = ""
-				current.ContextData = ""
-				isFirstAnswer = false
-			}
-
-			current.SubTitle = "i18n:plugin_ai_command_answering"
-			current.ContextData = deltaAnswer
-
-			// Process thinking tags to convert them to markdown quote format
-			thinking, content := processAIThinking(current.ContextData)
-			current.Preview.PreviewData = convertAIThinkingToMarkdown(thinking, content)
-			current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
-
-			if isFinished {
-				current.RefreshInterval = 0
-				current.SubTitle = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_answered_cost"), util.GetSystemTimestamp()-startAnsweringTime)
-				current.Actions = []plugin.QueryResultAction{
-					{
-						Name: "i18n:plugin_ai_command_copy",
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							clipboard.WriteText(content)
-						},
-					},
-				}
-
-				// paste to active window
-				pasteToActiveWindowAction, pasteToActiveWindowErr := GetPasteToActiveWindowAction(ctx, c.api, func() {
-					clipboard.WriteText(content)
-				})
-				if pasteToActiveWindowErr == nil {
-					current.Actions = append(current.Actions, pasteToActiveWindowAction)
-				}
-			}
-			return current
-		}
-		onAnswerErr := func(current plugin.RefreshableResult, err error) plugin.RefreshableResult {
-			current.Preview.PreviewData += fmt.Sprintf("\n\nError: %s", err.Error())
-			current.RefreshInterval = 0 // stop refreshing
-			return current
-		}
-
 		var conversations []common.Conversation
 		if query.Selection.Type == selection.SelectionTypeFile {
 			var images []common.WoxImage
@@ -250,26 +199,111 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 			})
 		}
 
-		startGenerate := false
-		results = append(results, plugin.QueryResult{
-			Title:           command.Name,
-			SubTitle:        fmt.Sprintf("%s - %s", command.AIModel().Provider, command.AIModel().Name),
-			Icon:            aiCommandIcon,
-			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: "i18n:plugin_ai_command_enter_to_start"},
-			RefreshInterval: 100,
-			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, command.AIModel(), conversations, common.EmptyChatOptions, func() bool {
-				return startGenerate
-			}, onPreparing, onAnswering, onAnswerErr),
+		result := plugin.QueryResult{
+			Id:       uuid.NewString(),
+			Title:    command.Name,
+			SubTitle: fmt.Sprintf("%s - %s", command.AIModel().Provider, command.AIModel().Name),
+			Icon:     aiCommandIcon,
+			Preview:  plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: "i18n:plugin_ai_command_enter_to_start"},
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_ai_command_run",
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						startGenerate = true
+						util.Go(ctx, "ai command stream", func() {
+							var contextData string
+							var startAnsweringTime int64
+
+							// Show preparing state
+							if updatable := c.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
+								previewData := i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_answering")
+								subTitle := "i18n:plugin_ai_command_answering"
+								preview := plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: previewData}
+								updatable.Preview = &preview
+								updatable.SubTitle = &subTitle
+								startAnsweringTime = util.GetSystemTimestamp()
+								if !c.api.UpdateResult(ctx, *updatable) {
+									return
+								}
+							}
+
+							// Start streaming
+							err := c.api.AIChatStream(ctx, command.AIModel(), conversations, common.EmptyChatOptions, func(streamResult common.ChatStreamData) {
+								updatable := c.api.GetUpdatableResult(ctx, actionContext.ResultId)
+								if updatable == nil {
+									return
+								}
+
+								switch streamResult.Status {
+								case common.ChatStreamStatusStreaming:
+									contextData = streamResult.Data
+									thinking, content := processAIThinking(contextData)
+									previewData := convertAIThinkingToMarkdown(thinking, content)
+									subTitle := "i18n:plugin_ai_command_answering"
+									preview := plugin.WoxPreview{
+										PreviewType:    plugin.WoxPreviewTypeMarkdown,
+										PreviewData:    previewData,
+										ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
+									}
+									updatable.SubTitle = &subTitle
+									updatable.Preview = &preview
+									c.api.UpdateResult(ctx, *updatable)
+
+								case common.ChatStreamStatusFinished:
+									contextData = streamResult.Data
+									thinking, content := processAIThinking(contextData)
+									previewData := convertAIThinkingToMarkdown(thinking, content)
+									subTitle := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_answered_cost"), util.GetSystemTimestamp()-startAnsweringTime)
+									preview := plugin.WoxPreview{
+										PreviewType:    plugin.WoxPreviewTypeMarkdown,
+										PreviewData:    previewData,
+										ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
+									}
+									actions := []plugin.QueryResultAction{
+										{
+											Name: "i18n:plugin_ai_command_copy",
+											Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+												clipboard.WriteText(content)
+											},
+										},
+									}
+									pasteToActiveWindowAction, pasteToActiveWindowErr := GetPasteToActiveWindowAction(ctx, c.api, func() {
+										clipboard.WriteText(content)
+									})
+									if pasteToActiveWindowErr == nil {
+										actions = append(actions, pasteToActiveWindowAction)
+									}
+									updatable.SubTitle = &subTitle
+									updatable.Preview = &preview
+									updatable.Actions = &actions
+									c.api.UpdateResult(ctx, *updatable)
+
+								case common.ChatStreamStatusError:
+									if updatable.Preview != nil {
+										previewData := updatable.Preview.PreviewData + fmt.Sprintf("\n\nError: %s", streamResult.Data)
+										preview := *updatable.Preview
+										preview.PreviewData = previewData
+										updatable.Preview = &preview
+										c.api.UpdateResult(ctx, *updatable)
+									}
+								}
+							})
+
+							if err != nil {
+								if updatable := c.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil && updatable.Preview != nil {
+									previewData := updatable.Preview.PreviewData + fmt.Sprintf("\n\nError: %s", err.Error())
+									preview := *updatable.Preview
+									preview.PreviewData = previewData
+									updatable.Preview = &preview
+									c.api.UpdateResult(ctx, *updatable)
+								}
+							}
+						})
 					},
 				},
 			},
-		})
+		}
+		results = append(results, result)
 	}
 	return results
 }
@@ -395,39 +429,19 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 		}
 	}
 
-	onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
-		current.ContextData = deltaAnswer
-		// Process thinking tags to convert them to markdown quote format
-		thinking, content := processAIThinking(current.ContextData)
-		current.Preview.PreviewData = convertAIThinkingToMarkdown(thinking, content)
-		current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
-		if isFinished {
-			current.RefreshInterval = 0 // stop refreshing
-		}
-
-		return current
-	}
-	onAnswerErr := func(current plugin.RefreshableResult, err error) plugin.RefreshableResult {
-		current.Preview.PreviewData += fmt.Sprintf("\n\nError: %s", err.Error())
-		current.RefreshInterval = 0 // stop refreshing
-		return current
-	}
-
+	var contextData string
 	result := plugin.QueryResult{
-		Title:           fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_chat_with"), aiCommandSetting.Name),
-		SubTitle:        fmt.Sprintf("%s - %s", aiCommandSetting.AIModel().Provider, aiCommandSetting.AIModel().Name),
-		Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
-		Icon:            aiCommandIcon,
-		RefreshInterval: 100,
-		OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, aiCommandSetting.AIModel(), conversations, common.EmptyChatOptions, func() bool {
-			return true
-		}, nil, onAnswering, onAnswerErr),
+		Id:       uuid.NewString(),
+		Title:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_chat_with"), aiCommandSetting.Name),
+		SubTitle: fmt.Sprintf("%s - %s", aiCommandSetting.AIModel().Provider, aiCommandSetting.AIModel().Name),
+		Preview:  plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
+		Icon:     aiCommandIcon,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: "i18n:plugin_ai_command_copy",
 				Icon: plugin.CopyIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					_, content := processAIThinking(actionContext.ContextData)
+					_, content := processAIThinking(contextData)
 					clipboard.WriteText(content)
 				},
 			},
@@ -436,12 +450,67 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 
 	// paste to active window
 	pasteToActiveWindowAction, pasteToActiveWindowErr := GetPasteToActiveWindowAction(ctx, c.api, func() {
-		_, content := processAIThinking(result.ContextData)
+		_, content := processAIThinking(contextData)
 		clipboard.WriteText(content)
 	})
 	if pasteToActiveWindowErr == nil {
 		result.Actions = append(result.Actions, pasteToActiveWindowAction)
 	}
+
+	// Start LLM stream immediately when result is displayed
+	util.Go(ctx, "ai chat stream", func() {
+		err := c.api.AIChatStream(ctx, aiCommandSetting.AIModel(), conversations, common.EmptyChatOptions, func(streamResult common.ChatStreamData) {
+			updatable := c.api.GetUpdatableResult(ctx, result.Id)
+			if updatable == nil {
+				return
+			}
+
+			switch streamResult.Status {
+			case common.ChatStreamStatusStreaming:
+				contextData = streamResult.Data
+				thinking, _ := processAIThinking(contextData)
+				previewData := convertAIThinkingToMarkdown(thinking, contextData)
+				preview := plugin.WoxPreview{
+					PreviewType:    plugin.WoxPreviewTypeMarkdown,
+					PreviewData:    previewData,
+					ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
+				}
+				updatable.Preview = &preview
+				c.api.UpdateResult(ctx, *updatable)
+
+			case common.ChatStreamStatusFinished:
+				contextData = streamResult.Data
+				thinking, _ := processAIThinking(contextData)
+				previewData := convertAIThinkingToMarkdown(thinking, contextData)
+				preview := plugin.WoxPreview{
+					PreviewType:    plugin.WoxPreviewTypeMarkdown,
+					PreviewData:    previewData,
+					ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
+				}
+				updatable.Preview = &preview
+				c.api.UpdateResult(ctx, *updatable)
+
+			case common.ChatStreamStatusError:
+				if updatable.Preview != nil {
+					previewData := updatable.Preview.PreviewData + fmt.Sprintf("\n\nError: %s", streamResult.Data)
+					preview := *updatable.Preview
+					preview.PreviewData = previewData
+					updatable.Preview = &preview
+					c.api.UpdateResult(ctx, *updatable)
+				}
+			}
+		})
+
+		if err != nil {
+			if updatable := c.api.GetUpdatableResult(ctx, result.Id); updatable != nil && updatable.Preview != nil {
+				previewData := updatable.Preview.PreviewData + fmt.Sprintf("\n\nError: %s", err.Error())
+				preview := *updatable.Preview
+				preview.PreviewData = previewData
+				updatable.Preview = &preview
+				c.api.UpdateResult(ctx, *updatable)
+			}
+		}
+	})
 
 	return []plugin.QueryResult{result}
 }

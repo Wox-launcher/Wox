@@ -224,6 +224,9 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 	case "ShowApp":
 		pluginInstance.API.ShowApp(ctx)
 		w.sendResponseToHost(ctx, request, "")
+	case "IsVisible":
+		result := pluginInstance.API.IsVisible(ctx)
+		w.sendResponseToHost(ctx, request, result)
 	case "ChangeQuery":
 		queryType, exist := request.Params["queryType"]
 		if !exist {
@@ -489,7 +492,7 @@ func (w *WebsocketHost) handleResponseFromPlugin(ctx context.Context, response J
 	resultChan <- response
 }
 
-func (w *WebsocketHost) sendResponseToHost(ctx context.Context, request JsonRpcRequest, result string) {
+func (w *WebsocketHost) sendResponseToHost(ctx context.Context, request JsonRpcRequest, result any) {
 	response := JsonRpcResponse{
 		Id:     request.Id,
 		Method: request.Method,

@@ -63,13 +63,11 @@ class WoxListView<T> extends StatelessWidget {
                       return MouseRegion(
                         onEnter: (_) {
                           if (controller.isMouseMoved && !item.value.isGroup) {
-                            Logger.instance.info(const UuidV4().generate(), "MOUSE: onenter, is mouse moved: ${controller.isMouseMoved}, is group: ${item.value.isGroup}");
                             controller.updateHoveredIndex(index);
                           }
                         },
                         onHover: (_) {
                           if (!controller.isMouseMoved && !item.value.isGroup) {
-                            Logger.instance.info(const UuidV4().generate(), "MOUSE: onHover, is mouse moved: ${controller.isMouseMoved}, is group: ${item.value.isGroup}");
                             controller.isMouseMoved = true;
                             controller.updateHoveredIndex(index);
                           }

@@ -4,7 +4,7 @@ from .models.ai import AIModel, ChatStreamCallback, Conversation
 from .models.context import Context
 from .models.mru import MRUData
 from .models.query import ChangeQueryParam, MetadataCommand
-from .models.result import Result, UpdateableResult, UpdateableResultAction  # noqa: F401
+from .models.result import Result, UpdatableResult, UpdatableResultAction  # noqa: F401
 from .models.setting import PluginSettingDefinitionItem
 
 
@@ -21,6 +21,10 @@ class PublicAPI(Protocol):
 
     async def show_app(self, ctx: Context) -> None:
         """Show the Wox window"""
+        ...
+
+    async def is_visible(self, ctx: Context) -> bool:
+        """Check if Wox window is currently visible"""
         ...
 
     async def notify(self, ctx: Context, message: str) -> None:
@@ -94,11 +98,11 @@ class PublicAPI(Protocol):
         """
         ...
 
-    async def get_updatable_result(self, ctx: Context, result_id: str) -> Optional[UpdateableResult]:
+    async def get_updatable_result(self, ctx: Context, result_id: str) -> Optional[UpdatableResult]:
         """
         Get the current state of a result that is displayed in the UI.
 
-        Returns UpdateableResult with current values if the result is still visible.
+        Returns UpdatableResult with current values if the result is still visible.
         Returns None if the result is no longer visible.
 
         Note: System actions and tails (like favorite icon) are automatically filtered out.
@@ -124,11 +128,11 @@ class PublicAPI(Protocol):
             result_id: ID of the result to get
 
         Returns:
-            Optional[UpdateableResult]: Current result state, or None if not visible
+            Optional[UpdatableResult]: Current result state, or None if not visible
         """
         ...
 
-    async def update_result(self, ctx: Context, result: UpdateableResult) -> bool:
+    async def update_result(self, ctx: Context, result: UpdatableResult) -> bool:
         """
         Update a query result that is currently displayed in the UI.
 
@@ -139,19 +143,19 @@ class PublicAPI(Protocol):
         Best practices:
         - Set prevent_hide_after_action=True in your action
         - Only use during action execution or in background tasks spawned by actions
-        - For periodic updates, use RefreshableResult with on_refresh instead
+        - For periodic updates, start a timer in init() and track result IDs
 
         Example:
             # In an action handler
             async def my_action(action_context: ActionContext):
                 # Update only the title
-                success = await api.update_result(ctx, UpdateableResult(
+                success = await api.update_result(ctx, UpdatableResult(
                     id=action_context.result_id,
                     title="Downloading... 50%"
                 ))
 
                 # Update title and tails
-                success = await api.update_result(ctx, UpdateableResult(
+                success = await api.update_result(ctx, UpdatableResult(
                     id=action_context.result_id,
                     title="Processing...",
                     tails=[ResultTail(type=ResultTailType.TEXT, text="Step 1/3")]
@@ -159,14 +163,14 @@ class PublicAPI(Protocol):
 
         Args:
             ctx: Context
-            result: UpdateableResult with id (required) and optional fields to update
+            result: UpdatableResult with id (required) and optional fields to update
 
         Returns:
             bool: True if updated successfully, False if result no longer visible
         """
         ...
 
-    async def update_result_action(self, ctx: Context, action: UpdateableResultAction) -> bool:
+    async def update_result_action(self, ctx: Context, action: UpdatableResultAction) -> bool:
         """
         Update a single action within a query result that is currently displayed in the UI.
 
@@ -186,7 +190,7 @@ class PublicAPI(Protocol):
             async def toggle_favorite(action_context: ActionContext):
                 if is_favorite:
                     remove_favorite()
-                    success = await api.update_result_action(ctx, UpdateableResultAction(
+                    success = await api.update_result_action(ctx, UpdatableResultAction(
                         result_id=action_context.result_id,
                         action_id=action_context.result_action_id,
                         name="Add to favorite",
@@ -194,7 +198,7 @@ class PublicAPI(Protocol):
                     ))
                 else:
                     add_favorite()
-                    success = await api.update_result_action(ctx, UpdateableResultAction(
+                    success = await api.update_result_action(ctx, UpdatableResultAction(
                         result_id=action_context.result_id,
                         action_id=action_context.result_action_id,
                         name="Remove from favorite",
@@ -203,7 +207,7 @@ class PublicAPI(Protocol):
 
         Args:
             ctx: Context
-            action: UpdateableResultAction with result_id, action_id (required) and optional fields to update
+            action: UpdatableResultAction with result_id, action_id (required) and optional fields to update
 
         Returns:
             bool: True if updated successfully, False if result no longer visible

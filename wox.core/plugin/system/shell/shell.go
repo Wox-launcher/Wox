@@ -425,7 +425,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 			ScrollPosition:    plugin.WoxPreviewScrollPositionBottom,
 		}
 
-		updateableResult := plugin.UpdateableResult{
+		UpdatableResult := plugin.UpdatableResult{
 			Id:       resultId,
 			SubTitle: &subtitle,
 			Preview:  &preview,
@@ -442,11 +442,11 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 					actions[0].Name = *actionName
 					actions[0].Icon = *actionIcon
 				}
-				updateableResult.Actions = &actions
+				UpdatableResult.Actions = &actions
 			}
 		}
 
-		success := s.api.UpdateResult(ctx, updateableResult)
+		success := s.api.UpdateResult(ctx, UpdatableResult)
 		s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("UpdateResult called for %s, success: %v, preview length: %d", resultId, success, len(previewData)))
 		return success
 	}

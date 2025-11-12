@@ -60,6 +60,7 @@ func GetUIManager() *Manager {
 		managerInstance.selectionHotkey = &hotkey.Hotkey{}
 		managerInstance.ui = &uiImpl{
 			requestMap: util.NewHashMap[string, chan WebsocketMsg](),
+			isVisible:  false, // Initially hidden
 		}
 		managerInstance.themes = util.NewHashMap[string, common.Theme]()
 		logger = util.GetLogger()
@@ -421,7 +422,10 @@ func (m *Manager) PostUIReady(ctx context.Context) {
 }
 
 func (m *Manager) PostOnShow(ctx context.Context) {
-	//no-op
+	// Update cached visibility state
+	if impl, ok := m.ui.(*uiImpl); ok {
+		impl.isVisible = true
+	}
 }
 
 func (m *Manager) PostOnQueryBoxFocus(ctx context.Context) {
@@ -435,8 +439,11 @@ func (m *Manager) PostOnQueryBoxFocus(ctx context.Context) {
 	}
 }
 
-func (m *Manager) PostOnHide(ctx context.Context, query common.PlainQuery) {
-	// no-op
+func (m *Manager) PostOnHide(ctx context.Context) {
+	// Update cached visibility state
+	if impl, ok := m.ui.(*uiImpl); ok {
+		impl.isVisible = false
+	}
 }
 
 func (m *Manager) IsSystemTheme(id string) bool {

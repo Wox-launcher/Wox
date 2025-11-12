@@ -1,13 +1,4 @@
-import {
-  ChangeQueryParam,
-  Context,
-  MapString,
-  PublicAPI,
-  Result,
-  ResultAction,
-  UpdateableResult,
-  UpdateableResultAction
-} from "@wox-launcher/wox-plugin"
+import { ChangeQueryParam, Context, MapString, PublicAPI, Result, ResultAction, UpdatableResult, UpdatableResultAction } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { waitingForResponse } from "./index"
@@ -87,6 +78,10 @@ export class PluginAPI implements PublicAPI {
     await this.invokeMethod(ctx, "ShowApp", {})
   }
 
+  async IsVisible(ctx: Context): Promise<boolean> {
+    return (await this.invokeMethod(ctx, "IsVisible", {})) as boolean
+  }
+
   async Notify(ctx: Context, message: string): Promise<void> {
     await this.invokeMethod(ctx, "Notify", { message })
   }
@@ -143,16 +138,16 @@ export class PluginAPI implements PublicAPI {
     await this.invokeMethod(ctx, "OnMRURestore", { callbackId })
   }
 
-  async GetUpdatableResult(ctx: Context, resultId: string): Promise<UpdateableResult | null> {
+  async GetUpdatableResult(ctx: Context, resultId: string): Promise<UpdatableResult | null> {
     const response = await this.invokeMethod(ctx, "GetUpdatableResult", { resultId })
     if (response === null || response === undefined) {
       return null
     }
 
-    // Parse the response into UpdateableResult
+    // Parse the response into UpdatableResult
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const responseData = response as any
-    const updatableResult: UpdateableResult = { Id: resultId }
+    const updatableResult: UpdatableResult = { Id: resultId }
 
     if (responseData.Title !== undefined) {
       updatableResult.Title = responseData.Title
@@ -182,12 +177,12 @@ export class PluginAPI implements PublicAPI {
     return updatableResult
   }
 
-  async UpdateResult(ctx: Context, result: UpdateableResult): Promise<boolean> {
+  async UpdateResult(ctx: Context, result: UpdatableResult): Promise<boolean> {
     const response = await this.invokeMethod(ctx, "UpdateResult", { result: JSON.stringify(result) })
     return response === true
   }
 
-  async UpdateResultAction(ctx: Context, action: UpdateableResultAction): Promise<boolean> {
+  async UpdateResultAction(ctx: Context, action: UpdatableResultAction): Promise<boolean> {
     // Cache the action callback if present
     if (action.Action) {
       const pluginInstance = pluginInstances.get(this.pluginId)

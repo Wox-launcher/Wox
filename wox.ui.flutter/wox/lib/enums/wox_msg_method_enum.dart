@@ -4,7 +4,6 @@ enum WoxMsgMethodEnum {
   WOX_MSG_METHOD_Log("Log", "Log"),
   WOX_MSG_METHOD_QUERY("Query", "Query"),
   WOX_MSG_METHOD_ACTION("Action", "Action"),
-  WOX_MSG_METHOD_REFRESH("Refresh", "Refresh"),
   WOX_MSG_METHOD_VISIBILITY_CHANGED("VisibilityChanged", "Visibility changed");
 
   final String code;

@@ -52,8 +52,10 @@ type UI interface {
 	// UpdateResult updates a result that is currently displayed in the UI.
 	// Returns true if the result was successfully updated (still visible in UI).
 	// Returns false if the result is no longer visible (caller should stop updating).
-	// The result parameter should be plugin.UpdateableResult, but we use interface{} to avoid circular dependency.
+	// The result parameter should be plugin.UpdatableResult, but we use interface{} to avoid circular dependency.
 	UpdateResult(ctx context.Context, result interface{}) bool
+	// IsVisible returns true if the Wox window is currently visible
+	IsVisible(ctx context.Context) bool
 
 	// AI chat plugin related methods
 	FocusToChatInput(ctx context.Context)

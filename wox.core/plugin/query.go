@@ -110,12 +110,6 @@ type QueryResult struct {
 	// Additional data associate with this result, can be retrieved in Action function
 	ContextData string
 	Actions     []QueryResultAction
-	// refresh result after specified interval, in milliseconds. If this value is 0, Wox will not refresh this result
-	// interval can only divisible by 100, if not, Wox will use the nearest number which is divisible by 100
-	// E.g. if you set 123, Wox will use 200, if you set 1234, Wox will use 1300
-	RefreshInterval int
-	// refresh result by calling OnRefresh function
-	OnRefresh func(ctx context.Context, current RefreshableResult) RefreshableResult `json:"-"` // Exclude from JSON serialization
 }
 
 type QueryResultTail struct {
@@ -161,6 +155,8 @@ type QueryResultAction struct {
 	// If IsDefault is true, Hotkey will be set to enter key by default
 	// Wox will normalize the hotkey to platform specific format. E.g. "ctrl" will be converted to "control" on macOS
 	Hotkey string
+	// Additional data associate with this action, can be retrieved later
+	ContextData string
 
 	// internal use
 	IsSystemAction bool
@@ -204,24 +200,22 @@ func (q *QueryResult) ToUI() QueryResultUI {
 				IsSystemAction:         action.IsSystemAction,
 			}
 		}),
-		RefreshInterval: q.RefreshInterval,
 	}
 }
 
 type QueryResultUI struct {
-	QueryId         string
-	Id              string
-	Title           string
-	SubTitle        string
-	Icon            common.WoxImage
-	Preview         WoxPreview
-	Score           int64
-	Group           string
-	GroupScore      int64
-	Tails           []QueryResultTail
-	ContextData     string
-	Actions         []QueryResultActionUI
-	RefreshInterval int
+	QueryId     string
+	Id          string
+	Title       string
+	SubTitle    string
+	Icon        common.WoxImage
+	Preview     WoxPreview
+	Score       int64
+	Group       string
+	GroupScore  int64
+	Tails       []QueryResultTail
+	ContextData string
+	Actions     []QueryResultActionUI
 }
 
 type QueryResultActionUI struct {
@@ -236,8 +230,7 @@ type QueryResultActionUI struct {
 	IsSystemAction bool
 }
 
-// UpdateableResult is used to update a query result that is currently displayed in the UI.
-// Unlike RefreshableResult which uses polling, UpdateableResult directly pushes updates to the UI.
+// UpdatableResult is used to update a query result that is currently displayed in the UI.
 //
 // This struct serves two purposes:
 // 1. As the return type of GetUpdatableResult() - contains the current state of the result
@@ -264,7 +257,7 @@ type QueryResultActionUI struct {
 //	    // Update the result
 //	    api.UpdateResult(ctx, *updatableResult)
 //	}
-type UpdateableResult struct {
+type UpdatableResult struct {
 	// Id is required - identifies which result to update
 	Id string
 

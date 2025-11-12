@@ -102,12 +102,6 @@ export interface Result {
   Tails?: ResultTail[]
   ContextData?: string
   Actions?: ResultAction[]
-  // refresh result after specified interval, in milliseconds. If this value is 0, Wox will not refresh this result
-  // interval can only divisible by 100, if not, Wox will use the nearest number which is divisible by 100
-  // E.g. if you set 123, Wox will use 200, if you set 1234, Wox will use 1300
-  RefreshInterval?: number
-  // refresh result by calling OnRefresh function
-  OnRefresh?: (current: RefreshableResult) => Promise<RefreshableResult>
 }
 
 export interface ResultTail {
@@ -120,21 +114,9 @@ export interface ResultTail {
   ContextData?: string
 }
 
-export interface RefreshableResult {
-  Title: string
-  SubTitle: string
-  Icon: WoxImage
-  Preview: WoxPreview
-  Tails: ResultTail[]
-  ContextData: string
-  RefreshInterval: number
-  Actions: ResultAction[]
-}
-
 /**
  * Result that can be updated directly in the UI.
  *
- * Unlike RefreshableResult which uses polling, UpdateableResult directly pushes updates to the UI.
  * All fields except Id are optional. Only non-undefined fields will be updated.
  *
  * Example usage:
@@ -153,7 +135,7 @@ export interface RefreshableResult {
  * })
  * ```
  */
-export interface UpdateableResult {
+export interface UpdatableResult {
   /** Required - identifies which result to update */
   Id: string
   /** Optional - update the title */
@@ -195,7 +177,7 @@ export interface UpdateableResult {
  * })
  * ```
  */
-export interface UpdateableResultAction {
+export interface UpdatableResultAction {
   /** Required - identifies which result contains the action */
   ResultId: string
   /** Required - identifies which action to update */
@@ -232,6 +214,10 @@ export interface ResultAction {
    * If IsDefault is true, Hotkey will be set to enter key by default
    */
   Hotkey?: string
+  /**
+   * Additional data associate with this action, can be retrieved later
+   */
+  ContextData?: string
 }
 
 export interface ActionContext {
@@ -287,6 +273,11 @@ export interface PublicAPI {
    * Show Wox
    */
   ShowApp: (ctx: Context) => Promise<void>
+
+  /**
+   * Check if Wox window is currently visible
+   */
+  IsVisible: (ctx: Context) => Promise<boolean>
 
   /**
    * Notify message
@@ -358,7 +349,7 @@ export interface PublicAPI {
   /**
    * Get the current state of a result that is displayed in the UI.
    *
-   * Returns UpdateableResult with current values if the result is still visible.
+   * Returns UpdatableResult with current values if the result is still visible.
    * Returns null if the result is no longer visible.
    *
    * Note: System actions and tails (like favorite icon) are automatically filtered out.
@@ -385,9 +376,9 @@ export interface PublicAPI {
    *
    * @param ctx Context
    * @param resultId ID of the result to get
-   * @returns Promise<UpdateableResult | null> Current result state, or null if not visible
+   * @returns Promise<UpdatableResult | null> Current result state, or null if not visible
    */
-  GetUpdatableResult: (ctx: Context, resultId: string) => Promise<UpdateableResult | null>
+  GetUpdatableResult: (ctx: Context, resultId: string) => Promise<UpdatableResult | null>
 
   /**
    * Update a query result that is currently displayed in the UI.
@@ -399,7 +390,7 @@ export interface PublicAPI {
    * Best practices:
    * - Set PreventHideAfterAction: true in your action
    * - Only use during action execution or in background tasks spawned by actions
-   * - For periodic updates, use RefreshableResult with OnRefresh instead
+   * - For periodic updates, start a timer in init() and track result IDs
    *
    * Example:
    * ```typescript
@@ -421,10 +412,10 @@ export interface PublicAPI {
    * ```
    *
    * @param ctx Context
-   * @param result UpdateableResult with Id (required) and optional fields to update
+   * @param result UpdatableResult with Id (required) and optional fields to update
    * @returns Promise<boolean> True if updated successfully, false if result no longer visible
    */
-  UpdateResult: (ctx: Context, result: UpdateableResult) => Promise<boolean>
+  UpdateResult: (ctx: Context, result: UpdatableResult) => Promise<boolean>
 
   /**
    * Update a single action within a query result that is currently displayed in the UI.
@@ -465,10 +456,10 @@ export interface PublicAPI {
    * ```
    *
    * @param ctx Context
-   * @param action UpdateableResultAction with ResultId, ActionId (required) and optional fields to update
+   * @param action UpdatableResultAction with ResultId, ActionId (required) and optional fields to update
    * @returns Promise<boolean> True if updated successfully, false if result no longer visible
    */
-  UpdateResultAction: (ctx: Context, action: UpdateableResultAction) => Promise<boolean>
+  UpdateResultAction: (ctx: Context, action: UpdatableResultAction) => Promise<boolean>
 }
 
 export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url" | "emoji" | "lottie"

@@ -217,76 +217,111 @@ Generation rules:
 Please directly output the JSON configuration, do not add any other content.
 	`, exampleThemeJson, query.Search)})
 
-	onAnswering := func(current plugin.RefreshableResult, deltaAnswer string, isFinished bool) plugin.RefreshableResult {
-		current.SubTitle = "i18n:plugin_theme_ai_generating"
-		current.Preview.PreviewData = deltaAnswer
-		current.Preview.ScrollPosition = plugin.WoxPreviewScrollPositionBottom
+	result := plugin.QueryResult{
+		Id:       uuid.NewString(),
+		Title:    "Generate theme with ai",
+		SubTitle: "Enter to generate",
+		Icon:     themeIcon,
+		Preview:  plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
+		Actions: []plugin.QueryResultAction{
+			{
+				Name:                   "Apply",
+				PreventHideAfterAction: true,
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					util.Go(ctx, "theme ai stream", func() {
+						// Show preparing state
+						if updatable := c.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
+							subTitle := "i18n:plugin_theme_ai_contacting"
+							previewData := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_waiting")
+							preview := plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: previewData}
+							updatable.SubTitle = &subTitle
+							updatable.Preview = &preview
+							if !c.api.UpdateResult(ctx, *updatable) {
+								return
+							}
+						}
 
-		if isFinished {
-			current.RefreshInterval = 0 // stop refreshing
-			current.SubTitle = "i18n:plugin_theme_ai_generated"
+						// Start streaming
+						err := c.api.AIChatStream(ctx, aiModel, conversations, common.EmptyChatOptions, func(streamResult common.ChatStreamData) {
+							updatable := c.api.GetUpdatableResult(ctx, actionContext.ResultId)
+							if updatable == nil {
+								return
+							}
 
-			var themeJson = current.Preview.PreviewData
-			util.Go(ctx, "theme generated", func() {
-				// use regex to get json snippet from the whole text
-				group := util.FindRegexGroup(`(?ms){(?P<json>.*?)}`, themeJson)
-				if len(group) == 0 {
-					c.api.Notify(ctx, "Failed to extract json")
-					return
-				}
+							switch streamResult.Status {
+							case common.ChatStreamStatusStreaming:
+								subTitle := "i18n:plugin_theme_ai_generating"
+								preview := plugin.WoxPreview{
+									PreviewType:    plugin.WoxPreviewTypeMarkdown,
+									PreviewData:    streamResult.Data,
+									ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
+								}
+								updatable.SubTitle = &subTitle
+								updatable.Preview = &preview
+								c.api.UpdateResult(ctx, *updatable)
 
-				var jsonTheme = fmt.Sprintf("{%s}", group["json"])
-				var theme common.Theme
-				unmarshalErr := json.Unmarshal([]byte(jsonTheme), &theme)
-				if unmarshalErr != nil {
-					c.api.Notify(ctx, unmarshalErr.Error())
-					return
-				}
+							case common.ChatStreamStatusFinished:
+								subTitle := "i18n:plugin_theme_ai_generated"
+								preview := plugin.WoxPreview{
+									PreviewType:    plugin.WoxPreviewTypeMarkdown,
+									PreviewData:    streamResult.Data,
+									ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
+								}
+								updatable.SubTitle = &subTitle
+								updatable.Preview = &preview
+								c.api.UpdateResult(ctx, *updatable)
 
-				theme.ThemeId = uuid.NewString()
-				theme.ThemeAuthor = "Wox launcher AI"
-				theme.ThemeUrl = "https://www.github.com/wox-launcher/wox"
-				theme.Version = "1.0.0"
-				theme.IsSystem = false
-				plugin.GetPluginManager().GetUI().InstallTheme(ctx, theme)
-			})
-		}
+								// Extract and install theme
+								themeJson := streamResult.Data
+								util.Go(ctx, "theme generated", func() {
+									group := util.FindRegexGroup(`(?ms){(?P<json>.*?)}`, themeJson)
+									if len(group) == 0 {
+										c.api.Notify(ctx, "Failed to extract json")
+										return
+									}
 
-		return current
-	}
-	onPreparing := func(current plugin.RefreshableResult) plugin.RefreshableResult {
-		current.SubTitle = "i18n:plugin_theme_ai_contacting"
-		current.Preview.PreviewData = i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_waiting")
-		return current
-	}
-	onAnswerErr := func(current plugin.RefreshableResult, err error) plugin.RefreshableResult {
-		current.Preview.PreviewData += fmt.Sprintf("\n\nError: %s", err.Error())
-		current.RefreshInterval = 0 // stop refreshing
-		return current
-	}
+									jsonTheme := fmt.Sprintf("{%s}", group["json"])
+									var theme common.Theme
+									unmarshalErr := json.Unmarshal([]byte(jsonTheme), &theme)
+									if unmarshalErr != nil {
+										c.api.Notify(ctx, unmarshalErr.Error())
+										return
+									}
 
-	startGenerate := false
-	return []plugin.QueryResult{
-		{
-			Title:           "Generate theme with ai",
-			SubTitle:        "Enter to generate",
-			Icon:            themeIcon,
-			Preview:         plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
-			RefreshInterval: 100,
-			OnRefresh: createLLMOnRefreshHandler(ctx, c.api.AIChatStream, aiModel, conversations, common.EmptyChatOptions, func() bool {
-				return startGenerate
-			}, onPreparing, onAnswering, onAnswerErr),
-			Actions: []plugin.QueryResultAction{
-				{
-					Name:                   "Apply",
-					PreventHideAfterAction: true,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						startGenerate = true
-					},
+									theme.ThemeId = uuid.NewString()
+									theme.ThemeAuthor = "Wox launcher AI"
+									theme.ThemeUrl = "https://www.github.com/wox-launcher/wox"
+									theme.Version = "1.0.0"
+									theme.IsSystem = false
+									plugin.GetPluginManager().GetUI().InstallTheme(ctx, theme)
+								})
+
+							case common.ChatStreamStatusError:
+								if updatable.Preview != nil {
+									previewData := updatable.Preview.PreviewData + fmt.Sprintf("\n\nError: %s", streamResult.Data)
+									preview := *updatable.Preview
+									preview.PreviewData = previewData
+									updatable.Preview = &preview
+									c.api.UpdateResult(ctx, *updatable)
+								}
+							}
+						})
+
+						if err != nil {
+							if updatable := c.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil && updatable.Preview != nil {
+								previewData := updatable.Preview.PreviewData + fmt.Sprintf("\n\nError: %s", err.Error())
+								preview := *updatable.Preview
+								preview.PreviewData = previewData
+								updatable.Preview = &preview
+								c.api.UpdateResult(ctx, *updatable)
+							}
+						}
+					})
 				},
 			},
 		},
 	}
+	return []plugin.QueryResult{result}
 }
 
 func (c *ThemePlugin) queryRestore(ctx context.Context, query plugin.Query) []plugin.QueryResult {

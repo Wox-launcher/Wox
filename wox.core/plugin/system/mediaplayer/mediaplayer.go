@@ -3,8 +3,12 @@ package mediaplayer
 import (
 	"context"
 	"fmt"
+	"time"
 	"wox/common"
 	"wox/plugin"
+	"wox/util"
+
+	"github.com/google/uuid"
 )
 
 var mediaIcon = plugin.PluginMediaPlayerIcon
@@ -17,6 +21,9 @@ type MediaPlayerPlugin struct {
 	api             plugin.API
 	pluginDirectory string
 	retriever       MediaRetriever
+
+	// Track results that need periodic refresh
+	trackedResults *util.HashMap[string, bool] // resultId -> true
 }
 
 type mediaContextData struct {
@@ -56,6 +63,16 @@ func (m *MediaPlayerPlugin) Init(ctx context.Context, initParams plugin.InitPara
 	m.pluginDirectory = initParams.PluginDirectory
 	m.retriever = mediaRetriever
 	m.retriever.UpdateAPI(m.api)
+	m.trackedResults = util.NewHashMap[string, bool]()
+
+	// Start global refresh timer
+	util.Go(ctx, "refresh media player", func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			m.refreshMediaPlayer(util.NewTraceContext())
+		}
+	})
 }
 
 func (m *MediaPlayerPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -79,6 +96,7 @@ func (m *MediaPlayerPlugin) Query(ctx context.Context, query plugin.Query) []plu
 	}
 
 	result := plugin.QueryResult{
+		Id:       uuid.NewString(),
 		Title:    mediaInfo.Title,
 		SubTitle: m.formatSubTitle(mediaInfo),
 		Icon:     m.formatIcon(mediaInfo),
@@ -94,21 +112,10 @@ func (m *MediaPlayerPlugin) Query(ctx context.Context, query plugin.Query) []plu
 				},
 			},
 		},
-		RefreshInterval: 1000,
-		OnRefresh: func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
-			updated, err := m.retriever.GetCurrentMedia(ctx)
-			if err != nil || updated == nil {
-				return current
-			}
-
-			current.Title = updated.Title
-			current.SubTitle = m.formatSubTitle(updated)
-			current.Icon = m.formatIcon(updated)
-			current.Preview = m.formatPreview(updated)
-			current.Tails = plugin.NewQueryResultTailTexts(m.formatProgress(updated))
-			return current
-		},
 	}
+
+	// Track this result for periodic refresh
+	m.trackedResults.Store(result.Id, true)
 
 	results = append(results, result)
 
@@ -185,4 +192,55 @@ func (m *MediaPlayerPlugin) getMediaIcon(mediaInfo *MediaInfo) common.WoxImage {
 
 	// Fall back to default media icon
 	return mediaIcon
+}
+
+func (m *MediaPlayerPlugin) refreshMediaPlayer(ctx context.Context) {
+	// Skip refresh if window is hidden (for periodic updates like media player status)
+	if !m.api.IsVisible(ctx) {
+		return
+	}
+
+	var toRemove []string
+
+	m.trackedResults.Range(func(resultId string, _ bool) bool {
+		// Try to get the result, if it returns nil, the result is no longer visible
+		updatableResult := m.api.GetUpdatableResult(ctx, resultId)
+		if updatableResult == nil {
+			// Mark for removal from tracking queue
+			toRemove = append(toRemove, resultId)
+			return true
+		}
+
+		// Get updated media information
+		mediaInfo, err := m.retriever.GetCurrentMedia(ctx)
+		if err != nil || mediaInfo == nil {
+			// Keep current state if we can't get updated info
+			return true
+		}
+
+		// Update all fields
+		title := mediaInfo.Title
+		subTitle := m.formatSubTitle(mediaInfo)
+		icon := m.formatIcon(mediaInfo)
+		preview := m.formatPreview(mediaInfo)
+		tails := plugin.NewQueryResultTailTexts(m.formatProgress(mediaInfo))
+
+		updatableResult.Title = &title
+		updatableResult.SubTitle = &subTitle
+		updatableResult.Icon = &icon
+		updatableResult.Preview = &preview
+		updatableResult.Tails = &tails
+
+		// Push update to UI
+		// If UpdateResult returns false, the result is no longer visible in UI
+		if !m.api.UpdateResult(ctx, *updatableResult) {
+			toRemove = append(toRemove, resultId)
+		}
+		return true
+	})
+
+	// Clean up results that are no longer visible
+	for _, resultId := range toRemove {
+		m.trackedResults.Delete(resultId)
+	}
 }

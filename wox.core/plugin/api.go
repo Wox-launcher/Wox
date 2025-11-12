@@ -44,9 +44,9 @@ type API interface {
 
 	// GetUpdatableResult retrieves the current state of a result from the result cache.
 	// Returns nil if the result is not found (no longer visible in UI).
-	// Returns a pointer to UpdateableResult containing the current state if found.
+	// Returns a pointer to UpdatableResult containing the current state if found.
 	//
-	// The returned UpdateableResult can be modified and passed to UpdateResult() to update the UI.
+	// The returned UpdatableResult can be modified and passed to UpdateResult() to update the UI.
 	//
 	// Example - Toggle favorite state:
 	//   Action: func(ctx context.Context, actionContext ActionContext) {
@@ -76,7 +76,7 @@ type API interface {
 	//       // Update the result
 	//       api.UpdateResult(ctx, *updatableResult)
 	//   }
-	GetUpdatableResult(ctx context.Context, resultId string) *UpdateableResult
+	GetUpdatableResult(ctx context.Context, resultId string) *UpdatableResult
 
 	// UpdateResult updates a query result that is currently displayed in the UI.
 	//
@@ -92,11 +92,7 @@ type API interface {
 	//   - Progress updates during Action execution (e.g., "Downloading... 50%")
 	//   - One-time status updates (e.g., "Installation complete")
 	//   - Event-driven updates with clear start/end (e.g., file change notifications)
-	//
-	// When NOT to use UpdateResult (use RefreshableResult instead):
-	//   - Periodic updates that continue indefinitely (e.g., CPU/memory monitoring)
-	//   - Updates that need to continue as long as the result is visible
-	//   - Scenarios where you don't want to manage the update lifecycle manually
+	//   - Periodic updates (e.g., CPU/memory monitoring) - start a timer in Init() and track result IDs
 	//
 	// Best practices:
 	//   - Set PreventHideAfterAction: true in your action to keep the result visible
@@ -107,19 +103,32 @@ type API interface {
 	// Example:
 	//   Action: func(ctx context.Context, actionContext ActionContext) {
 	//       title := "Installing..."
-	//       api.UpdateResult(ctx, UpdateableResult{Id: actionContext.ResultId, Title: &title})
+	//       api.UpdateResult(ctx, UpdatableResult{Id: actionContext.ResultId, Title: &title})
 	//
 	//       go func() {
 	//           title := "Downloading..."
-	//           if !api.UpdateResult(ctx, UpdateableResult{Id: actionContext.ResultId, Title: &title}) {
+	//           if !api.UpdateResult(ctx, UpdatableResult{Id: actionContext.ResultId, Title: &title}) {
 	//               return // Result no longer visible, stop updating
 	//           }
 	//           // ... perform download ...
 	//           title = "Installation complete"
-	//           api.UpdateResult(ctx, UpdateableResult{Id: actionContext.ResultId, Title: &title})
+	//           api.UpdateResult(ctx, UpdatableResult{Id: actionContext.ResultId, Title: &title})
 	//       }()
 	//   }
-	UpdateResult(ctx context.Context, result UpdateableResult) bool
+	UpdateResult(ctx context.Context, result UpdatableResult) bool
+
+	// IsVisible returns true if the Wox window is currently visible.
+	// This is useful for plugins that perform periodic updates (e.g., CPU/memory monitoring)
+	// to avoid wasting resources when the window is hidden.
+	//
+	// Example:
+	//   func (p *Plugin) refreshData(ctx context.Context) {
+	//       if !p.api.IsVisible(ctx) {
+	//           return // Window is hidden, skip update
+	//       }
+	//       // ... update data ...
+	//   }
+	IsVisible(ctx context.Context) bool
 }
 
 type APIImpl struct {
@@ -395,9 +404,9 @@ func (a *APIImpl) OnMRURestore(ctx context.Context, callback func(mruData MRUDat
 	a.pluginInstance.MRURestoreCallbacks = append(a.pluginInstance.MRURestoreCallbacks, callback)
 }
 
-func (a *APIImpl) UpdateResult(ctx context.Context, result UpdateableResult) bool {
+func (a *APIImpl) UpdateResult(ctx context.Context, result UpdatableResult) bool {
 	a.Log(ctx, LogLevelInfo, fmt.Sprintf("UpdateResult called for result %s", result.Id))
-	polishedResult := GetPluginManager().PolishUpdateableResult(ctx, a.pluginInstance, result)
+	polishedResult := GetPluginManager().PolishUpdatableResult(ctx, a.pluginInstance, result)
 
 	// Log what fields are being updated
 	if polishedResult.Title != nil {
@@ -421,8 +430,12 @@ func (a *APIImpl) UpdateResult(ctx context.Context, result UpdateableResult) boo
 	return success
 }
 
-func (a *APIImpl) GetUpdatableResult(ctx context.Context, resultId string) *UpdateableResult {
+func (a *APIImpl) GetUpdatableResult(ctx context.Context, resultId string) *UpdatableResult {
 	return GetPluginManager().GetUpdatableResult(ctx, resultId)
+}
+
+func (a *APIImpl) IsVisible(ctx context.Context) bool {
+	return GetPluginManager().GetUI().IsVisible(ctx)
 }
 
 func NewAPI(instance *Instance) API {

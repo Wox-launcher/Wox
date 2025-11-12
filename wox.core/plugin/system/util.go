@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"image/png"
 	"io"
@@ -13,7 +12,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"sync"
 	"time"
 	"wox/common"
 	"wox/plugin"
@@ -192,70 +190,6 @@ func PrefetchWebsiteIcons(ctx context.Context, urls []string) {
 	close(jobs)
 }
 
-func createLLMOnRefreshHandler(ctx context.Context,
-	chatStreamAPI func(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error,
-	model common.Model,
-	conversations []common.Conversation,
-	options common.ChatOptions,
-	shouldStartAnswering func() bool,
-	onPreparing func(plugin.RefreshableResult) plugin.RefreshableResult,
-	onAnswering func(plugin.RefreshableResult, string, bool) plugin.RefreshableResult,
-	onAnswerErr func(plugin.RefreshableResult, error) plugin.RefreshableResult) func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
-
-	var isStreamCreated bool
-	var locker sync.Locker = &sync.Mutex{}
-	var chatStreamDataStatus common.ChatStreamDataStatus
-	var responseBuffer string
-	return func(ctx context.Context, current plugin.RefreshableResult) plugin.RefreshableResult {
-		if !shouldStartAnswering() {
-			return current
-		}
-
-		if !isStreamCreated {
-			isStreamCreated = true
-			util.GetLogger().Info(ctx, "creating stream")
-			if onPreparing != nil {
-				current = onPreparing(current)
-			}
-			err := chatStreamAPI(ctx, model, conversations, options, func(streamResult common.ChatStreamData) {
-				locker.Lock()
-				chatStreamDataStatus = streamResult.Status
-				responseBuffer = streamResult.Data
-				util.GetLogger().Info(ctx, fmt.Sprintf("stream buffered: %s", responseBuffer))
-				locker.Unlock()
-			})
-			if err != nil {
-				util.GetLogger().Info(ctx, fmt.Sprintf("failed to create stream: %s", err.Error()))
-				return onAnswerErr(current, err)
-			}
-		}
-
-		if chatStreamDataStatus == common.ChatStreamStatusFinished {
-			util.GetLogger().Info(ctx, "stream finished")
-			locker.Lock()
-			buf := responseBuffer
-			locker.Unlock()
-			return onAnswering(current, buf, true)
-		}
-		if chatStreamDataStatus == common.ChatStreamStatusError {
-			util.GetLogger().Info(ctx, fmt.Sprintf("stream error: %s", responseBuffer))
-			locker.Lock()
-			err := errors.New(responseBuffer)
-			locker.Unlock()
-			return onAnswerErr(current, err)
-		}
-		if chatStreamDataStatus == common.ChatStreamStatusStreaming {
-			util.GetLogger().Info(ctx, fmt.Sprintf("streaming: %s", responseBuffer))
-			locker.Lock()
-			buf := responseBuffer
-			locker.Unlock()
-			return onAnswering(current, buf, false)
-		}
-
-		return current
-	}
-}
-
 func GetActiveWindowIcon(ctx context.Context) (common.WoxImage, error) {
 	cacheKey := fmt.Sprintf("%s-%d", window.GetActiveWindowName(), window.GetActiveWindowPid())
 	if icon, ok := windowIconCache.Load(cacheKey); ok {
@@ -319,14 +253,6 @@ func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, actionCal
 	}
 
 	return plugin.QueryResultAction{}, fmt.Errorf("no active window")
-}
-
-// truncateString 截断字符串到指定长度，并在超出长度时添加省略号
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
 }
 
 // processThinking parse the text to get the thinking and content

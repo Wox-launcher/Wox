@@ -96,6 +96,7 @@ class ResultAction:
     is_default: bool = field(default=False)
     prevent_hide_after_action: bool = field(default=False)
     hotkey: str = field(default="")
+    context_data: str = field(default="")
 
     def to_json(self) -> str:
         """Convert to JSON string with camelCase naming"""
@@ -107,6 +108,7 @@ class ResultAction:
                 "PreventHideAfterAction": self.prevent_hide_after_action,
                 "Hotkey": self.hotkey,
                 "Icon": json.loads(self.icon.to_json()),
+                "ContextData": self.context_data,
             }
         )
 
@@ -121,6 +123,7 @@ class ResultAction:
             is_default=data.get("IsDefault", False),
             prevent_hide_after_action=data.get("PreventHideAfterAction", False),
             hotkey=data.get("Hotkey", ""),
+            context_data=data.get("ContextData", ""),
         )
 
 
@@ -139,8 +142,6 @@ class Result:
     tails: List[ResultTail] = field(default_factory=list)
     context_data: str = field(default="")
     actions: List[ResultAction] = field(default_factory=list)
-    refresh_interval: int = field(default=0)
-    on_refresh: Optional[Callable[["RefreshableResult"], Awaitable["RefreshableResult"]]] = None
 
     def to_json(self) -> str:
         """Convert to JSON string with camelCase naming"""
@@ -153,7 +154,6 @@ class Result:
             "Group": self.group,
             "GroupScore": self.group_score,
             "ContextData": self.context_data,
-            "RefreshInterval": self.refresh_interval,
         }
         if self.preview:
             data["Preview"] = json.loads(self.preview.to_json())
@@ -189,78 +189,25 @@ class Result:
             tails=tails,
             context_data=data.get("ContextData", ""),
             actions=actions,
-            refresh_interval=data.get("RefreshInterval", 0),
         )
 
 
 @dataclass
-class RefreshableResult:
-    """Result that can be refreshed periodically"""
-
-    title: str
-    sub_title: str
-    icon: WoxImage
-    preview: WoxPreview
-    tails: List[ResultTail] = field(default_factory=list)
-    context_data: str = field(default="")
-    refresh_interval: int = field(default=0)
-    actions: List[ResultAction] = field(default_factory=list)
-
-    def to_json(self) -> str:
-        """Convert to JSON string with camelCase naming"""
-        return json.dumps(
-            {
-                "Title": self.title,
-                "SubTitle": self.sub_title,
-                "Icon": json.loads(self.icon.to_json()),
-                "Preview": json.loads(self.preview.to_json()),
-                "Tails": [json.loads(tail.to_json()) for tail in self.tails],
-                "ContextData": self.context_data,
-                "RefreshInterval": self.refresh_interval,
-                "Actions": [json.loads(action.to_json()) for action in self.actions],
-            },
-        )
-
-    @classmethod
-    def from_json(cls, json_str: str) -> "RefreshableResult":
-        """Create from JSON string with camelCase naming"""
-        data = json.loads(json_str)
-        return cls(
-            title=data["Title"],
-            sub_title=data["SubTitle"],
-            icon=WoxImage.from_json(json.dumps(data.get("Icon", {}))),
-            preview=WoxPreview.from_json(json.dumps(data.get("Preview", {}))),
-            tails=[ResultTail.from_json(json.dumps(tail)) for tail in data.get("Tails", [])],
-            context_data=data.get("ContextData", ""),
-            refresh_interval=data.get("RefreshInterval", 0),
-            actions=[ResultAction.from_json(json.dumps(action)) for action in data["Actions"]],
-        )
-
-    def __await__(self):
-        # Make RefreshableResult awaitable by returning itself
-        async def _awaitable():
-            return self
-
-        return _awaitable().__await__()
-
-
-@dataclass
-class UpdateableResult:
+class UpdatableResult:
     """
     Result that can be updated directly in the UI.
 
-    Unlike RefreshableResult which uses polling, UpdateableResult directly pushes updates to the UI.
     All fields except id are optional. Only non-None fields will be updated.
 
     Example usage:
         # Update only the title
-        success = await api.update_result(ctx, UpdateableResult(
+        success = await api.update_result(ctx, UpdatableResult(
             id=result_id,
             title="Downloading... 50%"
         ))
 
         # Update title and tails
-        success = await api.update_result(ctx, UpdateableResult(
+        success = await api.update_result(ctx, UpdatableResult(
             id=result_id,
             title="Processing...",
             tails=[ResultTail(type=ResultTailType.TEXT, text="Step 1/3")]
@@ -293,7 +240,7 @@ class UpdateableResult:
 
 
 @dataclass
-class UpdateableResultAction:
+class UpdatableResultAction:
     """
     Action that can be updated directly in the UI.
 
@@ -302,7 +249,7 @@ class UpdateableResultAction:
 
     Example usage:
         # Update only the action name
-        success = await api.update_result_action(ctx, UpdateableResultAction(
+        success = await api.update_result_action(ctx, UpdatableResultAction(
             result_id=action_context.result_id,
             action_id=action_context.result_action_id,
             name="Remove from favorite"
@@ -313,7 +260,7 @@ class UpdateableResultAction:
             # New action logic
             pass
 
-        success = await api.update_result_action(ctx, UpdateableResultAction(
+        success = await api.update_result_action(ctx, UpdatableResultAction(
             result_id=action_context.result_id,
             action_id=action_context.result_action_id,
             name="Add to favorite",

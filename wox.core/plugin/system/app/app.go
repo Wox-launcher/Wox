@@ -80,6 +80,9 @@ type ApplicationPlugin struct {
 
 	apps      []appInfo
 	retriever Retriever
+
+	// Track results that need periodic refresh (running apps with CPU/memory stats)
+	trackedResults *util.HashMap[string, appInfo] // resultId -> appInfo
 }
 
 func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
@@ -130,6 +133,7 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 	a.pluginDirectory = initParams.PluginDirectory
 	a.retriever = a.getRetriever(ctx)
 	a.retriever.UpdateAPI(a.api)
+	a.trackedResults = util.NewHashMap[string, appInfo]()
 
 	appCache, cacheErr := a.loadAppCache(ctx)
 	if cacheErr == nil {
@@ -142,11 +146,11 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 	util.Go(ctx, "watch app changes", func() {
 		a.watchAppChanges(util.NewTraceContext())
 	})
-	util.Go(ctx, "update app process", func() {
-		for range time.NewTicker(time.Second * 3).C {
-			for i := range a.apps {
-				a.apps[i].Pid = a.retriever.GetPid(ctx, a.apps[i])
-			}
+	util.Go(ctx, "refresh running apps", func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			a.refreshRunningApps(util.NewTraceContext())
 		}
 	})
 
@@ -262,32 +266,8 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 				},
 			}
 
-			if info.IsRunning() {
-				result.Actions = append(result.Actions, plugin.QueryResultAction{
-					Name: "i18n:plugin_app_terminate",
-					Icon: plugin.TerminateAppIcon,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						// peacefully kill the process
-						p, getErr := os.FindProcess(info.Pid)
-						if getErr != nil {
-							a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error finding process %d: %s", info.Pid, getErr.Error()))
-							return
-						}
-
-						killErr := p.Kill()
-						if killErr != nil {
-							a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error killing process %d: %s", info.Pid, killErr.Error()))
-						}
-					},
-				})
-
-				// refresh cpu and mem
-				result.RefreshInterval = 1000
-				result.OnRefresh = func(ctx context.Context, result plugin.RefreshableResult) plugin.RefreshableResult {
-					result.Tails = a.getRunningProcessResult(info)
-					return result
-				}
-			}
+			// Track this result for periodic refresh (refreshRunningApps will handle running state)
+			a.trackedResults.Store(result.Id, info)
 
 			results = append(results, result)
 		}
@@ -730,30 +710,112 @@ func (a *ApplicationPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.Qu
 		},
 	}
 
-	if appInfo.IsRunning() {
-		result.Actions = append(result.Actions, plugin.QueryResultAction{
-			Name: "i18n:plugin_app_terminate",
-			Icon: plugin.TerminateAppIcon,
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				p, getErr := os.FindProcess(appInfo.Pid)
-				if getErr != nil {
-					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error finding process %d: %s", appInfo.Pid, getErr.Error()))
-					return
-				}
-
-				killErr := p.Kill()
-				if killErr != nil {
-					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error killing process %d: %s", appInfo.Pid, killErr.Error()))
-				}
-			},
-		})
-
-		result.RefreshInterval = 1000
-		result.OnRefresh = func(ctx context.Context, result plugin.RefreshableResult) plugin.RefreshableResult {
-			result.Tails = a.getRunningProcessResult(*appInfo)
-			return result
-		}
-	}
+	// Track this result for periodic refresh (refreshRunningApps will handle running state)
+	a.trackedResults.Store(result.Id, *appInfo)
 
 	return result, nil
+}
+
+func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
+	// Skip refresh if window is hidden (for periodic updates like CPU/memory)
+	if !a.api.IsVisible(ctx) {
+		return
+	}
+
+	type updateItem struct {
+		resultId string
+		app      appInfo
+	}
+
+	var toRemove []string
+	var toUpdate []updateItem
+
+	a.trackedResults.Range(func(resultId string, appInfo appInfo) bool {
+		// Try to get the result, if it returns nil, the result is no longer visible
+		updatableResult := a.api.GetUpdatableResult(ctx, resultId)
+		if updatableResult == nil {
+			// Mark for removal from tracking queue
+			toRemove = append(toRemove, resultId)
+			return true
+		}
+
+		// Update Pid first (app may have been restarted with a new Pid, or started for the first time)
+		currentPid := a.retriever.GetPid(ctx, appInfo)
+		pidChanged := currentPid != appInfo.Pid
+		appInfo.Pid = currentPid
+
+		if pidChanged {
+			// Don't call Store here (would cause deadlock), collect for later update
+			toUpdate = append(toUpdate, updateItem{resultId, appInfo})
+		}
+
+		// Update CPU/memory data and actions based on running state
+		if appInfo.Pid > 0 {
+			// App is running - update CPU/memory tails
+			tails := a.getRunningProcessResult(appInfo)
+			updatableResult.Tails = &tails
+
+			// Add terminate action if not exists
+			hasTerminateAction := false
+			if updatableResult.Actions != nil {
+				for _, action := range *updatableResult.Actions {
+					if action.ContextData == "app.terminate" {
+						hasTerminateAction = true
+						break
+					}
+				}
+			}
+
+			if !hasTerminateAction {
+				// Capture current Pid for the closure
+				currentAppPid := appInfo.Pid
+				*updatableResult.Actions = append(*updatableResult.Actions, plugin.QueryResultAction{
+					Name:        "i18n:plugin_app_terminate",
+					Icon:        plugin.TerminateAppIcon,
+					ContextData: "app.terminate",
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						// peacefully kill the process
+						p, getErr := os.FindProcess(currentAppPid)
+						if getErr != nil {
+							a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error finding process %d: %s", currentAppPid, getErr.Error()))
+							return
+						}
+
+						killErr := p.Kill()
+						if killErr != nil {
+							a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error killing process %d: %s", currentAppPid, killErr.Error()))
+						}
+					},
+				})
+			}
+		} else {
+			// App is not running - clear tails and remove terminate action
+			emptyTails := []plugin.QueryResultTail{}
+			updatableResult.Tails = &emptyTails
+
+			// Remove terminate action if exists
+			if updatableResult.Actions != nil {
+				*updatableResult.Actions = lo.Filter(*updatableResult.Actions, func(action plugin.QueryResultAction, _ int) bool {
+					return action.ContextData != "app.terminate"
+				})
+			}
+		}
+
+		// Push update to UI
+		// If UpdateResult returns false, the result is no longer visible in UI
+		if !a.api.UpdateResult(ctx, *updatableResult) {
+			toRemove = append(toRemove, resultId)
+		}
+		return true
+	})
+
+	// Update tracked results with new Pid (after Range to avoid deadlock)
+	for _, item := range toUpdate {
+		a.trackedResults.Store(item.resultId, item.app)
+	}
+
+	// Clean up results that are no longer visible
+	for _, resultId := range toRemove {
+		a.trackedResults.Delete(resultId)
+	}
 }

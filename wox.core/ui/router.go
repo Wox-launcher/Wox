@@ -835,23 +835,7 @@ func handleOnQueryBoxFocus(w http.ResponseWriter, r *http.Request) {
 
 func handleOnHide(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
-
-	body, _ := io.ReadAll(r.Body)
-	queryResult := gjson.GetBytes(body, "query")
-	if !queryResult.Exists() {
-		writeErrorResponse(w, "query is empty")
-		return
-	}
-
-	var plainQuery common.PlainQuery
-	unmarshalErr := json.Unmarshal([]byte(queryResult.String()), &plainQuery)
-	if unmarshalErr != nil {
-		logger.Error(ctx, unmarshalErr.Error())
-		writeErrorResponse(w, unmarshalErr.Error())
-		return
-	}
-
-	GetUIManager().PostOnHide(ctx, plainQuery)
+	GetUIManager().PostOnHide(ctx)
 	writeSuccessResponse(w, "")
 }
 

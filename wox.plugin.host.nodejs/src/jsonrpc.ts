@@ -1,11 +1,11 @@
 import { logger } from "./logger"
 import path from "path"
 import { PluginAPI } from "./pluginAPI"
-import { Context, MapString, Plugin, PluginInitParams, Query, QueryEnv, RefreshableResult, Result, ResultAction, Selection, MRUData, ActionContext } from "@wox-launcher/wox-plugin"
+import { Context, MapString, Plugin, PluginInitParams, Query, QueryEnv, Result, ResultAction, Selection, MRUData, ActionContext } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { AI } from "@wox-launcher/wox-plugin/types/ai"
-import { PluginInstance, PluginJsonRpcRequest, RefreshableResultWithResultId, ResultActionUI } from "./types"
+import { PluginInstance, PluginJsonRpcRequest } from "./types"
 
 export const pluginInstances = new Map<PluginJsonRpcRequest["PluginId"], PluginInstance>()
 
@@ -27,8 +27,6 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
       return query(ctx, request)
     case "action":
       return action(ctx, request)
-    case "refresh":
-      return refresh(ctx, request)
     case "unloadPlugin":
       return unloadPlugin(ctx, request)
     case "onPluginSettingChange":
@@ -65,8 +63,7 @@ async function loadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
     Plugin: module["plugin"] as Plugin,
     API: {} as PluginAPI,
     ModulePath: modulePath,
-    Actions: new Map<Result["Id"], ResultAction["Action"]>(),
-    Refreshes: new Map<Result["Id"], Result["OnRefresh"]>()
+    Actions: new Map<Result["Id"], ResultAction["Action"]>()
   })
 }
 
@@ -197,7 +194,6 @@ async function query(ctx: Context, request: PluginJsonRpcRequest) {
 
   //clean action cache for current plugin
   plugin.Actions.clear()
-  plugin.Refreshes.clear()
 
   const results = await query(ctx, {
     Type: request.Params.Type,
@@ -227,14 +223,6 @@ async function query(ctx: Context, request: PluginJsonRpcRequest) {
         plugin.Actions.set(action.Id, action.Action)
       })
     }
-    if (result.RefreshInterval === undefined || result.RefreshInterval === null) {
-      result.RefreshInterval = 0
-    }
-    if (result.RefreshInterval > 0) {
-      if (result.OnRefresh !== undefined && result.OnRefresh !== null) {
-        plugin.Refreshes.set(result.Id, result.OnRefresh)
-      }
-    }
   })
 
   return results
@@ -261,61 +249,6 @@ async function action(ctx: Context, request: PluginJsonRpcRequest) {
   pluginAction(actionContext)
 
   return
-}
-
-async function refresh(ctx: Context, request: PluginJsonRpcRequest) {
-  const plugin = pluginInstances.get(request.PluginId)
-  if (plugin === undefined || plugin === null) {
-    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
-    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
-  }
-
-  const pluginRefresh = plugin.Refreshes.get(request.Params.ResultId)
-  if (pluginRefresh === undefined || pluginRefresh === null) {
-    logger.error(ctx, `<${request.PluginName}> plugin refresh not found: ${request.PluginName}`)
-    return
-  }
-
-  const result = JSON.parse(request.Params.RefreshableResult) as RefreshableResultWithResultId
-  const refreshableResult = {
-    ...result,
-    Actions: result.Actions.map(action => ({
-      ...action,
-      Action: plugin.Actions.get(action.Id)
-    }))
-  } as RefreshableResult
-
-  const refreshedResult = await pluginRefresh(refreshableResult)
-
-  // add actions to cache
-  refreshedResult.Actions.forEach(action => {
-    if (action.Id === undefined || action.Id === null) {
-      action.Id = crypto.randomUUID()
-    }
-    plugin.Actions.set(action.Id, action.Action)
-  })
-
-  return {
-    ResultId: result.ResultId,
-    Title: refreshedResult.Title,
-    SubTitle: refreshedResult.SubTitle,
-    Icon: refreshedResult.Icon,
-    Preview: refreshedResult.Preview,
-    Tails: refreshedResult.Tails,
-    ContextData: refreshedResult.ContextData,
-    RefreshInterval: refreshedResult.RefreshInterval,
-    Actions: refreshedResult.Actions.map(
-      action =>
-        ({
-          Id: action.Id,
-          Name: action.Name,
-          Icon: action.Icon,
-          IsDefault: action.IsDefault,
-          PreventHideAfterAction: action.PreventHideAfterAction,
-          Hotkey: action.Hotkey
-        }) as ResultActionUI
-    )
-  } as RefreshableResultWithResultId
 }
 
 async function onMRURestore(ctx: Context, request: PluginJsonRpcRequest): Promise<Result | null> {

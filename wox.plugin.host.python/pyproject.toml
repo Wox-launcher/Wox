@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-3.0"
 authors = [{ name = "Wox Team", email = "qianlifeng@gmail.com" }]
-dependencies = ["loguru", "websockets", "wox-plugin==0.0.51"]
+dependencies = ["loguru", "websockets", "wox-plugin==0.0.52"]
 
 [project.scripts]
 run = "wox_plugin_host.__main__:run"

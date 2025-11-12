@@ -62,7 +62,7 @@ func (e emptyAPIImpl) AIChatStream(ctx context.Context, model common.Model, conv
 func (e emptyAPIImpl) OnMRURestore(ctx context.Context, callback func(mruData plugin.MRUData) (*plugin.QueryResult, error)) {
 }
 
-func (e emptyAPIImpl) UpdateResult(ctx context.Context, result plugin.UpdateableResult) bool {
+func (e emptyAPIImpl) UpdateResult(ctx context.Context, result plugin.UpdatableResult) bool {
 	return false
 }
 

@@ -91,7 +91,6 @@ class WoxLauncherController extends GetxController {
   final latestQueryHistories = <QueryHistory>[]; // the latest query histories
   var currentQueryHistoryIndex = 0; //  query history index, used to navigate query history
 
-  var refreshCounter = 0;
   var lastQueryMode = WoxQueryModeEnum.WOX_QUERY_MODE_PRESERVE.code;
   final isInSettingView = false.obs;
   var positionBeforeOpenSetting = const Offset(0, 0);
@@ -325,8 +324,7 @@ class WoxLauncherController extends GetxController {
     isInSettingView.value = false;
 
     await windowManager.hide();
-
-    await WoxApi.instance.onHide(currentQuery.value);
+    await WoxApi.instance.onHide();
   }
 
   void saveWindowPositionIfNeeded() {
@@ -625,9 +623,6 @@ class WoxLauncherController extends GetxController {
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "GetCurrentQuery") {
       responseWoxWebsocketRequest(msg, true, currentQuery.value.toJson());
-    } else if (msg.method == "IsVisible") {
-      var isVisible = await windowManager.isVisible();
-      responseWoxWebsocketRequest(msg, true, isVisible);
     } else if (msg.method == "FocusToChatInput") {
       focusToChatInput(msg.traceId);
       responseWoxWebsocketRequest(msg, true, null);
@@ -638,7 +633,7 @@ class WoxLauncherController extends GetxController {
       Get.find<WoxAIChatController>().reloadChatResources(msg.traceId, resourceName: msg.data as String);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "UpdateResult") {
-      final success = updateResult(msg.traceId, UpdateableResult.fromJson(msg.data));
+      final success = updateResult(msg.traceId, UpdatableResult.fromJson(msg.data));
       responseWoxWebsocketRequest(msg, true, success);
     }
   }
@@ -794,40 +789,40 @@ class WoxLauncherController extends GetxController {
     resultListViewController.clearHoveredResult();
   }
 
-  bool updateResult(String traceId, UpdateableResult updateableResult) {
+  bool updateResult(String traceId, UpdatableResult UpdatableResult) {
     // Try to find the result in the current items
     try {
-      final result = resultListViewController.items.firstWhere((element) => element.value.data.id == updateableResult.id);
+      final result = resultListViewController.items.firstWhere((element) => element.value.data.id == UpdatableResult.id);
       var needUpdate = false;
       var updatedResult = result.value;
       var updatedData = result.value.data;
 
       // Update only non-null fields
-      if (updateableResult.title != null) {
-        updatedResult = updatedResult.copyWith(title: updateableResult.title);
-        updatedData.title = updateableResult.title!;
+      if (UpdatableResult.title != null) {
+        updatedResult = updatedResult.copyWith(title: UpdatableResult.title);
+        updatedData.title = UpdatableResult.title!;
         needUpdate = true;
       }
 
-      if (updateableResult.subTitle != null) {
-        updatedResult = updatedResult.copyWith(subTitle: updateableResult.subTitle);
-        updatedData.subTitle = updateableResult.subTitle!;
+      if (UpdatableResult.subTitle != null) {
+        updatedResult = updatedResult.copyWith(subTitle: UpdatableResult.subTitle);
+        updatedData.subTitle = UpdatableResult.subTitle!;
         needUpdate = true;
       }
 
-      if (updateableResult.tails != null) {
-        updatedResult = updatedResult.copyWith(tails: updateableResult.tails);
-        updatedData.tails = updateableResult.tails!;
+      if (UpdatableResult.tails != null) {
+        updatedResult = updatedResult.copyWith(tails: UpdatableResult.tails);
+        updatedData.tails = UpdatableResult.tails!;
         needUpdate = true;
       }
 
-      if (updateableResult.preview != null) {
-        updatedData.preview = updateableResult.preview!;
+      if (UpdatableResult.preview != null) {
+        updatedData.preview = UpdatableResult.preview!;
         needUpdate = true;
       }
 
-      if (updateableResult.actions != null) {
-        updatedData.actions = updateableResult.actions!;
+      if (UpdatableResult.actions != null) {
+        updatedData.actions = UpdatableResult.actions!;
         needUpdate = true;
       }
 
@@ -838,12 +833,18 @@ class WoxLauncherController extends GetxController {
 
         // If this result is currently active, update the preview and actions
         if (resultListViewController.isItemActive(updatedData.id)) {
-          if (updateableResult.preview != null) {
-            currentPreview.value = updateableResult.preview!;
+          if (UpdatableResult.preview != null) {
+            final oldShowPreview = isShowPreviewPanel.value;
+            currentPreview.value = UpdatableResult.preview!;
             isShowPreviewPanel.value = currentPreview.value.previewData != "";
+
+            // If preview panel visibility changed, resize window height
+            if (oldShowPreview != isShowPreviewPanel.value) {
+              resizeHeight();
+            }
           }
 
-          if (updateableResult.actions != null) {
+          if (UpdatableResult.actions != null) {
             // Save user's current selection before updateItems (which calls filterItems and resets index)
             var oldActionName = getCurrentActionName();
 
@@ -867,113 +868,6 @@ class WoxLauncherController extends GetxController {
       // Result not found in current items (no longer visible)
       return false;
     }
-  }
-
-
-
-  startRefreshSchedule() {
-    var isRequesting = <String, bool>{};
-    Timer.periodic(const Duration(milliseconds: 100), (timer) async {
-      var isVisible = await windowManager.isVisible();
-      if (!isVisible) {
-        return;
-      }
-      if (isInSettingView.value) {
-        return;
-      }
-
-      refreshCounter = refreshCounter + 100;
-      for (var result in resultListViewController.items) {
-        if (result.value.data.refreshInterval > 0 && refreshCounter % result.value.data.refreshInterval == 0) {
-          if (isRequesting.containsKey(result.value.data.id)) {
-            continue;
-          } else {
-            isRequesting[result.value.data.id] = true;
-          }
-
-          final traceId = const UuidV4().generate();
-          final msg = WoxWebsocketMsg(
-            requestId: const UuidV4().generate(),
-            traceId: traceId,
-            type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
-            method: WoxMsgMethodEnum.WOX_MSG_METHOD_REFRESH.code,
-            data: {
-              "queryId": result.value.data.queryId,
-              "refreshableResult": WoxRefreshableResult(
-                resultId: result.value.data.id,
-                title: result.value.data.title,
-                subTitle: result.value.data.subTitle,
-                icon: result.value.data.icon,
-                preview: result.value.data.preview,
-                tails: result.value.data.tails,
-                contextData: result.value.data.contextData,
-                refreshInterval: result.value.data.refreshInterval,
-                actions: result.value.data.actions,
-              ).toJson(),
-            },
-          );
-          final startTime = DateTime.now().millisecondsSinceEpoch;
-          WoxWebsocketMsgUtil.instance.sendMessage(msg).then((resp) {
-            final endTime = DateTime.now().millisecondsSinceEpoch;
-            if (endTime - startTime > 100) {
-              Logger.instance.warn(traceId, "refresh result <${result.value.data.title}> (resultId: ${result.value.data.id}) too slow, cost ${endTime - startTime} ms");
-            }
-
-            // check result id, because the result may be removed during the refresh
-            if (!resultListViewController.items.any((element) => element.value.data.id == result.value.data.id)) {
-              isRequesting.remove(result.value.data.id);
-              Logger.instance.info(
-                traceId,
-                "result <${result.value.data.title}> (resultId: ${result.value.data.id}) is removed (maybe caused by new query) during refresh, skip update result",
-              );
-              return;
-            }
-
-            final refreshResult = WoxRefreshableResult.fromJson(resp);
-            result.value.data.title = refreshResult.title;
-            result.value.data.subTitle = refreshResult.subTitle;
-            result.value.data.icon = refreshResult.icon;
-            result.value.data.preview = refreshResult.preview;
-            result.value.data.tails.assignAll(refreshResult.tails);
-            result.value.data.actions.assignAll(refreshResult.actions);
-            result.value.data.contextData = refreshResult.contextData;
-            result.value.data.refreshInterval = refreshResult.refreshInterval;
-
-            // Trigger reactive update for the list item
-            // This will cause Obx to rebuild, but with ValueKey the widget will be reused
-            result.refresh();
-
-            // only update preview and toolbar when current result is active
-            if (resultListViewController.isItemActive(result.value.data.id)) {
-              currentPreview.value = result.value.data.preview;
-              final oldShowPreview = isShowPreviewPanel.value;
-              isShowPreviewPanel.value = currentPreview.value.previewData != "";
-              if (oldShowPreview != isShowPreviewPanel.value) {
-                Logger.instance.debug(traceId, "preview panel visibility changed, resize height");
-                resizeHeight();
-              }
-
-              // Save user's current selection before updateItems (which calls filterItems and resets index)
-              var oldActionName = getCurrentActionName();
-
-              var actions = result.value.data.actions.map((e) => WoxListItem.fromResultAction(e)).toList();
-              actionListViewController.updateItems(traceId, actions);
-
-              // Restore user's selected action after refresh
-              var newActiveIndex = calculatePreservedActionIndex(oldActionName);
-              if (actionListViewController.activeIndex.value != newActiveIndex) {
-                actionListViewController.updateActiveIndex(traceId, newActiveIndex);
-              }
-
-              // Update toolbar with all actions with hotkeys
-              updateToolbarWithActions(traceId, result.value.data.actions);
-            }
-
-            isRequesting.remove(result.value.data.id);
-          });
-        }
-      }
-    });
   }
 
   /// Process doctor check results and update the doctor check info

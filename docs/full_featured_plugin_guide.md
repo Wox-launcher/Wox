@@ -5,6 +5,7 @@ Full-featured plugins are comprehensive plugins that run in dedicated host proce
 ## Overview
 
 Full-featured plugins are designed for complex applications that require:
+
 - Persistent state management
 - High-performance query processing
 - Advanced Wox API integration (AI, settings, previews)
@@ -16,10 +17,12 @@ Full-featured plugins are designed for complex applications that require:
 ### Python Plugins
 
 **Requirements:**
+
 - Python >= 3.8 (Python 3.12 recommended)
 - `wox-plugin` SDK
 
 **Installation:**
+
 ```bash
 # Using pip
 pip install wox-plugin
@@ -29,6 +32,7 @@ uv add wox-plugin
 ```
 
 **Basic Structure:**
+
 ```python
 from wox_plugin import Plugin, Query, Result, Context, PluginInitParams
 
@@ -36,7 +40,7 @@ class MyPlugin(Plugin):
     async def init(self, ctx: Context, params: PluginInitParams) -> None:
         self.api = params.api
         self.plugin_dir = params.plugin_directory
-        
+
     async def query(self, ctx: Context, query: Query) -> list[Result]:
         # Your plugin logic here
         results = []
@@ -57,10 +61,12 @@ plugin = MyPlugin()
 ### Node.js Plugins
 
 **Requirements:**
+
 - Node.js >= 16
 - `@wox-launcher/wox-plugin` SDK
 
 **Installation:**
+
 ```bash
 npm install @wox-launcher/wox-plugin
 # or
@@ -68,6 +74,7 @@ pnpm add @wox-launcher/wox-plugin
 ```
 
 **Basic Structure:**
+
 ```javascript
 import { Plugin, Query, Result, Context, PluginInitParams } from '@wox-launcher/wox-plugin'
 
@@ -102,6 +109,7 @@ export const plugin = new MyPlugin()
 ### Plugin Host System
 
 Full-featured plugins run in dedicated host processes:
+
 - **Python Host**: `wox.plugin.host.python` manages Python plugins
 - **Node.js Host**: `wox.plugin.host.nodejs` manages Node.js plugins
 
@@ -169,13 +177,6 @@ Result(
         preview_type=WoxPreviewType.TEXT,
         preview_data="Document content here..."
     )
-)
-
-# Refreshable result
-Result(
-    title="Live Data",
-    subtitle="Updates automatically",
-    on_refresh=self.refresh_data
 )
 
 # Result with custom actions
@@ -260,7 +261,7 @@ async def query(self, ctx: Context, query: Query) -> list[Result]:
             self.fetch_data(session, url3)
         ]
         results = await asyncio.gather(*tasks)
-    
+
     return self.process_results(results)
 ```
 
@@ -274,22 +275,22 @@ class MyPlugin(Plugin):
     def __init__(self):
         self.cache = {}
         self.cache_ttl = 300  # 5 minutes
-    
+
     async def query(self, ctx: Context, query: Query) -> list[Result]:
         cache_key = f"query:{query.search}"
-        
+
         # Check cache
         if cache_key in self.cache:
             data, timestamp = self.cache[cache_key]
             if time.time() - timestamp < self.cache_ttl:
                 return data
-        
+
         # Fetch new data
         results = await self.fetch_results(query.search)
-        
+
         # Update cache
         self.cache[cache_key] = (results, time.time())
-        
+
         return results
 ```
 
@@ -326,17 +327,17 @@ from your_plugin import MyPlugin
 @pytest.mark.asyncio
 async def test_query():
     plugin = MyPlugin()
-    
+
     # Mock API
     mock_api = AsyncMock()
     await plugin.init(mock_context, PluginInitParams(
         api=mock_api,
         plugin_directory="/test"
     ))
-    
+
     # Test query
     results = await plugin.query(mock_context, Query(search="test"))
-    
+
     assert len(results) > 0
     assert results[0].title == "Expected Title"
 ```
