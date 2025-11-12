@@ -749,11 +749,15 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 			toUpdate = append(toUpdate, updateItem{resultId, appInfo})
 		}
 
+		// Track if we need to update the UI
+		needsUpdate := false
+
 		// Update CPU/memory data and actions based on running state
 		if appInfo.Pid > 0 {
 			// App is running - update CPU/memory tails
 			tails := a.getRunningProcessResult(appInfo)
 			updatableResult.Tails = &tails
+			needsUpdate = true // Always update when running (CPU/memory changes)
 
 			// Add terminate action if not exists
 			hasTerminateAction := false
@@ -788,23 +792,31 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 					},
 				})
 			}
-		} else {
-			// App is not running - clear tails and remove terminate action
+		} else if pidChanged {
+			// App just stopped running - clear tails and remove terminate action
 			emptyTails := []plugin.QueryResultTail{}
 			updatableResult.Tails = &emptyTails
+			needsUpdate = true
 
 			// Remove terminate action if exists
 			if updatableResult.Actions != nil {
+				originalLen := len(*updatableResult.Actions)
 				*updatableResult.Actions = lo.Filter(*updatableResult.Actions, func(action plugin.QueryResultAction, _ int) bool {
 					return action.ContextData != "app.terminate"
 				})
+				// Only mark as needing update if we actually removed an action
+				if len(*updatableResult.Actions) != originalLen {
+					needsUpdate = true
+				}
 			}
 		}
 
-		// Push update to UI
-		// If UpdateResult returns false, the result is no longer visible in UI
-		if !a.api.UpdateResult(ctx, *updatableResult) {
-			toRemove = append(toRemove, resultId)
+		// Only push update to UI if something actually changed
+		if needsUpdate {
+			// If UpdateResult returns false, the result is no longer visible in UI
+			if !a.api.UpdateResult(ctx, *updatableResult) {
+				toRemove = append(toRemove, resultId)
+			}
 		}
 		return true
 	})

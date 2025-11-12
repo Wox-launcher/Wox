@@ -644,7 +644,9 @@ class WoxLauncherController extends GetxController {
       if (msg.sendTimestamp > 0) {
         final receiveTimestamp = DateTime.now().millisecondsSinceEpoch;
         final latency = receiveTimestamp - msg.sendTimestamp;
-        Logger.instance.info(msg.traceId, "📨 WebSocket latency (Wox→UI): ${latency}ms");
+        if (latency > 10) {
+          Logger.instance.info(msg.traceId, "📨 WebSocket latency (Wox→UI): ${latency}ms");
+        }
       }
 
       // Parse QueryResponse object
