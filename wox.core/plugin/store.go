@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"wox/i18n"
 	"wox/util"
 
 	"github.com/Masterminds/semver/v3"
@@ -160,7 +161,15 @@ func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifes
 	})
 }
 
+// InstallProgressCallback is called during plugin installation to report progress
+// message: progress message (e.g., "Downloading: 50%", "Extracting files...", "Loading plugin...")
+type InstallProgressCallback func(message string)
+
 func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error {
+	return s.InstallWithProgress(ctx, manifest, nil)
+}
+
+func (s *Store) InstallWithProgress(ctx context.Context, manifest StorePluginManifest, progressCallback InstallProgressCallback) error {
 	logger.Info(ctx, fmt.Sprintf("start to install plugin %s(%s)", manifest.Name, manifest.Version))
 
 	// check if plugin's runtime is started
@@ -196,15 +205,19 @@ func (s *Store) Install(ctx context.Context, manifest StorePluginManifest) error
 
 	// handle script plugins differently
 	if manifest.Runtime == PLUGIN_RUNTIME_SCRIPT {
-		return s.installScriptPlugin(ctx, manifest)
+		return s.installScriptPluginWithProgress(ctx, manifest, progressCallback)
 	} else {
-		return s.installNormalPlugin(ctx, manifest)
+		return s.installNormalPluginWithProgress(ctx, manifest, progressCallback)
 	}
 }
 
-func (s *Store) installNormalPlugin(ctx context.Context, manifest StorePluginManifest) error {
+func (s *Store) installNormalPluginWithProgress(ctx context.Context, manifest StorePluginManifest, progressCallback InstallProgressCallback) error {
 	// download plugin
 	logger.Info(ctx, fmt.Sprintf("start to download plugin: %s", manifest.DownloadUrl))
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_starting_download"))
+	}
+
 	pluginDirectory := path.Join(util.GetLocation().GetPluginDirectory(), fmt.Sprintf("%s_%s@%s", manifest.Id, manifest.Name, manifest.Version))
 	directoryErr := util.GetLocation().EnsureDirectoryExist(pluginDirectory)
 	if directoryErr != nil {
@@ -212,7 +225,19 @@ func (s *Store) installNormalPlugin(ctx context.Context, manifest StorePluginMan
 		return fmt.Errorf("failed to create plugin directory %s: %s", pluginDirectory, directoryErr.Error())
 	}
 	pluginZipPath := path.Join(pluginDirectory, "plugin.zip")
-	downloadErr := util.HttpDownload(ctx, manifest.DownloadUrl, pluginZipPath)
+
+	// Download with progress tracking
+	downloadErr := util.HttpDownloadWithProgress(ctx, manifest.DownloadUrl, pluginZipPath, func(downloaded int64, total int64) {
+		if progressCallback != nil {
+			if total > 0 {
+				percentage := float64(downloaded) / float64(total) * 100
+				progressCallback(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_downloading"), percentage))
+			} else {
+				// Total size unknown, just show downloaded bytes
+				progressCallback(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_downloaded_bytes"), downloaded))
+			}
+		}
+	})
 	if downloadErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to download plugin %s(%s): %s", manifest.Name, manifest.Version, downloadErr.Error()))
 		removeErr := os.Remove(pluginZipPath)
@@ -222,8 +247,16 @@ func (s *Store) installNormalPlugin(ctx context.Context, manifest StorePluginMan
 		return fmt.Errorf("failed to download plugin %s(%s): %s", manifest.Name, manifest.Version, downloadErr.Error())
 	}
 
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_download_complete"))
+	}
+
 	//unzip plugin
 	logger.Info(ctx, fmt.Sprintf("start to unzip plugin %s(%s)", manifest.Name, manifest.Version))
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_extracting"))
+	}
+
 	unzipErr := util.Unzip(pluginZipPath, pluginDirectory)
 	if unzipErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to unzip plugin %s(%s): %s", manifest.Name, manifest.Version, unzipErr.Error()))
@@ -234,8 +267,16 @@ func (s *Store) installNormalPlugin(ctx context.Context, manifest StorePluginMan
 		return fmt.Errorf("failed to unzip plugin %s(%s): %s", manifest.Name, manifest.Version, unzipErr.Error())
 	}
 
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_extraction_complete"))
+	}
+
 	//load plugin
 	logger.Info(ctx, fmt.Sprintf("start to load plugin %s(%s)", manifest.Name, manifest.Version))
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_loading"))
+	}
+
 	loadErr := GetPluginManager().LoadPlugin(ctx, pluginDirectory)
 	if loadErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to load plugin %s(%s): %s", manifest.Name, manifest.Version, loadErr.Error()))
@@ -253,6 +294,10 @@ func (s *Store) installNormalPlugin(ctx context.Context, manifest StorePluginMan
 		return fmt.Errorf("failed to load plugin %s(%s): %s", manifest.Name, manifest.Version, loadErr.Error())
 	}
 
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_loaded"))
+	}
+
 	//remove plugin zip
 	removeErr := os.Remove(pluginZipPath)
 	if removeErr != nil {
@@ -260,11 +305,23 @@ func (s *Store) installNormalPlugin(ctx context.Context, manifest StorePluginMan
 		return fmt.Errorf("failed to remove plugin zip %s: %s", pluginZipPath, removeErr.Error())
 	}
 
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_complete"))
+	}
+
 	return nil
 }
 
 func (s *Store) installScriptPlugin(ctx context.Context, manifest StorePluginManifest) error {
+	return s.installScriptPluginWithProgress(ctx, manifest, nil)
+}
+
+func (s *Store) installScriptPluginWithProgress(ctx context.Context, manifest StorePluginManifest, progressCallback InstallProgressCallback) error {
 	logger.Info(ctx, fmt.Sprintf("detected script plugin, use script install flow: %s", manifest.Name))
+
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_preparing"))
+	}
 
 	userScriptDir := util.GetLocation().GetUserScriptPluginsDirectory()
 	if err := util.GetLocation().EnsureDirectoryExist(userScriptDir); err != nil {
@@ -372,19 +429,41 @@ func (s *Store) installScriptPlugin(ctx context.Context, manifest StorePluginMan
 
 	// 4) download new script
 	logger.Info(ctx, fmt.Sprintf("start to download script plugin: %s", manifest.DownloadUrl))
-	if err := util.HttpDownload(ctx, manifest.DownloadUrl, newScriptPath); err != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to download script plugin %s(%s): %s", manifest.Name, manifest.Version, err.Error()))
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_starting_download"))
+	}
+
+	downloadErr := util.HttpDownloadWithProgress(ctx, manifest.DownloadUrl, newScriptPath, func(downloaded int64, total int64) {
+		if progressCallback != nil {
+			if total > 0 {
+				percentage := float64(downloaded) / float64(total) * 100
+				progressCallback(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_downloading"), percentage))
+			} else {
+				progressCallback(fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_downloaded_bytes"), downloaded))
+			}
+		}
+	})
+	if downloadErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to download script plugin %s(%s): %s", manifest.Name, manifest.Version, downloadErr.Error()))
 		// rollback
 		if hasBackup {
 			_ = os.Remove(newScriptPath)
 			_ = os.Rename(backupPath, existingScriptPath)
 			_ = os.RemoveAll(backupDir)
 		}
-		return fmt.Errorf("failed to download script plugin %s(%s): %s", manifest.Name, manifest.Version, err.Error())
+		return fmt.Errorf("failed to download script plugin %s(%s): %s", manifest.Name, manifest.Version, downloadErr.Error())
 	}
 	_ = os.Chmod(newScriptPath, 0755)
 
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_download_complete"))
+	}
+
 	// 5) parse metadata from the new script
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_parsing"))
+	}
+
 	metadata, metaErr := GetPluginManager().ParseScriptMetadata(ctx, newScriptPath)
 	if metaErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to parse script plugin metadata: %s", metaErr.Error()))
@@ -401,6 +480,10 @@ func (s *Store) installScriptPlugin(ctx context.Context, manifest StorePluginMan
 	}
 
 	// 6) load (reload) the script plugin
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_loading"))
+	}
+
 	virtualDirectory := path.Join(userScriptDir, metadata.Id)
 	loadErr := GetPluginManager().ReloadPlugin(ctx, MetadataWithDirectory{Metadata: metadata, Directory: virtualDirectory})
 	if loadErr != nil {
@@ -417,6 +500,10 @@ func (s *Store) installScriptPlugin(ctx context.Context, manifest StorePluginMan
 	// 7) success - cleanup backup
 	if hasBackup {
 		_ = os.RemoveAll(backupDir)
+	}
+
+	if progressCallback != nil {
+		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_complete"))
 	}
 
 	logger.Info(ctx, fmt.Sprintf("script plugin %s(%s) installed", metadata.Name, metadata.Version))

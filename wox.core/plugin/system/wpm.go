@@ -452,6 +452,130 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 	return results
 }
 
+// createInstallAction creates an install action that updates to uninstall action after success
+func (w *WPMPlugin) createInstallAction(pluginManifest plugin.StorePluginManifest) plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Name:                   "i18n:plugin_wpm_install",
+		Icon:                   common.NewWoxImageEmoji("⬇️"),
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			util.Go(ctx, "install plugin", func() {
+				// notify starting
+				w.api.Notify(ctx, fmt.Sprintf(
+					w.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"),
+					w.api.GetTranslation(ctx, "i18n:plugin_installer_install"),
+					pluginManifest.Name,
+				))
+
+				// Install with progress callback
+				installErr := plugin.GetStoreManager().InstallWithProgress(ctx, pluginManifest, func(message string) {
+					// Show progress notification
+					w.api.Notify(ctx, fmt.Sprintf("%s: %s", pluginManifest.Name, message))
+				})
+
+				if installErr != nil {
+					w.api.Notify(ctx, fmt.Sprintf(
+						w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
+						w.api.GetTranslation(ctx, "i18n:plugin_installer_install"),
+						fmt.Sprintf("%s(%s): %s", pluginManifest.Name, pluginManifest.Version, installErr.Error()),
+					))
+					return
+				}
+
+				// update tails and actions after successful install
+				if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
+					newTails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: common.NewWoxImageEmoji("\u2705")}}
+					updatable.Tails = &newTails
+
+					// create actions: uninstall + start using (if not wildcard trigger)
+					newActions := []plugin.QueryResultAction{w.createUninstallAction(pluginManifest)}
+
+					// add "Start Using" action if plugin has non-wildcard trigger keyword
+					time.Sleep(500 * time.Millisecond)
+					instances := plugin.GetPluginManager().GetPluginInstances()
+					if len(instances) > 0 {
+						if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
+							if len(inst.Metadata.TriggerKeywords) > 0 {
+								kw := inst.Metadata.TriggerKeywords[0]
+								if kw != "*" && strings.TrimSpace(kw) != "" {
+									// add "Start Using" action
+									newActions = append(newActions, plugin.QueryResultAction{
+										Name:                   "i18n:plugin_wpm_start_using",
+										Icon:                   common.NewWoxImageEmoji("▶️"),
+										PreventHideAfterAction: true,
+										IsDefault:              true,
+										Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+											w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
+										},
+									})
+								}
+							}
+						}
+					}
+
+					updatable.Actions = &newActions
+					w.api.UpdateResult(ctx, *updatable)
+				}
+
+				// success
+				w.api.Notify(ctx, fmt.Sprintf(
+					w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
+					pluginManifest.Name,
+					w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_install_past"),
+				))
+			})
+		},
+	}
+}
+
+// createUninstallAction creates an uninstall action that updates to install action after success
+func (w *WPMPlugin) createUninstallAction(pluginManifest plugin.StorePluginManifest) plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Name:                   "i18n:plugin_wpm_uninstall",
+		Icon:                   common.NewWoxImageEmoji("🗑️"),
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			instances := plugin.GetPluginManager().GetPluginInstances()
+			if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
+				util.Go(ctx, "uninstall plugin", func() {
+					// notify starting
+					w.api.Notify(ctx, fmt.Sprintf(
+						w.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"),
+						w.api.GetTranslation(ctx, "i18n:plugin_installer_uninstall"),
+						pluginManifest.Name,
+					))
+
+					uninstallErr := plugin.GetStoreManager().Uninstall(ctx, inst)
+					if uninstallErr != nil {
+						w.api.Notify(ctx, fmt.Sprintf(
+							w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
+							w.api.GetTranslation(ctx, "i18n:plugin_installer_uninstall"),
+							fmt.Sprintf("%s(%s): %s", pluginManifest.Name, pluginManifest.Version, uninstallErr.Error()),
+						))
+						return
+					}
+
+					// update tails and actions after uninstall
+					if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
+						newTails := []plugin.QueryResultTail{}
+						updatable.Tails = &newTails
+						newActions := []plugin.QueryResultAction{w.createInstallAction(pluginManifest)}
+						updatable.Actions = &newActions
+						w.api.UpdateResult(ctx, *updatable)
+					}
+
+					// success
+					w.api.Notify(ctx, fmt.Sprintf(
+						w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
+						pluginManifest.Name,
+						w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_uninstall_past"),
+					))
+				})
+			}
+		},
+	}
+}
+
 func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	pluginManifests := plugin.GetStoreManager().Search(ctx, query.Search)
@@ -492,125 +616,91 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 				}
 			}
 			if upgradeFlag {
-				// show Upgrade action (reuse install flow)
-				actions = []plugin.QueryResultAction{
-					{
-						Name:                   "i18n:plugin_wpm_upgrade",
-						PreventHideAfterAction: true,
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							// Show upgrading progress
-							upgradingTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_upgrading")
-							w.api.UpdateResult(ctx, plugin.UpdatableResult{
-								Id:    actionContext.ResultId,
-								Title: &upgradingTitle,
+				// show Upgrade action
+				actions = make([]plugin.QueryResultAction, 0, 2)
+
+				actions = append(actions, plugin.QueryResultAction{
+					Name:                   "i18n:plugin_wpm_upgrade",
+					Icon:                   plugin.UpdateIcon,
+					PreventHideAfterAction: true,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						// notify starting
+						w.api.Notify(ctx, fmt.Sprintf(
+							w.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"),
+							w.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"),
+							pluginManifest.Name,
+						))
+
+						// Start installation in background, show progress via notifications
+						util.Go(ctx, "upgrade plugin", func() {
+							// Install with progress callback
+							installErr := plugin.GetStoreManager().InstallWithProgress(ctx, pluginManifest, func(message string) {
+								// Show progress notification
+								w.api.Notify(ctx, fmt.Sprintf("%s: %s", pluginManifest.Name, message))
 							})
 
-							// Start installation in background with progress updates
-							util.Go(ctx, "upgrade plugin", func() {
-								// Update to downloading state
-								downloadingTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_downloading")
-								if !w.api.UpdateResult(ctx, plugin.UpdatableResult{
-									Id:    actionContext.ResultId,
-									Title: &downloadingTitle,
-								}) {
-									return // Result no longer visible, stop updating
-								}
+							if installErr != nil {
+								w.api.Notify(ctx, fmt.Sprintf(
+									w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
+									w.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"),
+									fmt.Sprintf("%s(%s): %s", pluginManifest.Name, pluginManifest.Version, installErr.Error()),
+								))
+								return
+							}
 
-								installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
-								if installErr != nil {
-									failedTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_install_failed")
-									w.api.UpdateResult(ctx, plugin.UpdatableResult{
-										Id:    actionContext.ResultId,
-										Title: &failedTitle,
-									})
-									w.api.Notify(ctx, "i18n:plugin_wpm_install_failed")
-									return
-								}
+							// update tails and actions after successful upgrade
+							if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
+								newTails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: common.NewWoxImageEmoji("\u2705")}}
+								updatable.Tails = &newTails
 
-								// Update to success state
-								successTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_upgrade_success")
-								w.api.UpdateResult(ctx, plugin.UpdatableResult{
-									Id:    actionContext.ResultId,
-									Title: &successTitle,
-								})
+								// create actions: uninstall + start using (if not wildcard trigger)
+								newActions := []plugin.QueryResultAction{w.createUninstallAction(pluginManifest)}
 
-								// on success: change query to the plugin's first trigger keyword if exists
+								// add "Start Using" action if plugin has non-wildcard trigger keyword
 								time.Sleep(500 * time.Millisecond)
 								instances := plugin.GetPluginManager().GetPluginInstances()
 								if len(instances) > 0 {
 									if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
 										if len(inst.Metadata.TriggerKeywords) > 0 {
 											kw := inst.Metadata.TriggerKeywords[0]
-											w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
+											if kw != "*" && strings.TrimSpace(kw) != "" {
+												// add "Start Using" action
+												newActions = append(newActions, plugin.QueryResultAction{
+													Name:                   "i18n:plugin_wpm_start_using",
+													Icon:                   common.NewWoxImageEmoji("▶️"),
+													PreventHideAfterAction: true,
+													IsDefault:              true,
+													Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+														w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
+													},
+												})
+											}
 										}
 									}
 								}
-							})
-						},
+
+								updatable.Actions = &newActions
+								w.api.UpdateResult(ctx, *updatable)
+							}
+
+							// success
+							w.api.Notify(ctx, fmt.Sprintf(
+								w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
+								pluginManifest.Name,
+								w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_upgrade_past"),
+							))
+						})
 					},
-				}
+				})
+
+				actions = append(actions, w.createUninstallAction(pluginManifest))
 			} else {
-				// installed and up-to-date: no action
-				actions = []plugin.QueryResultAction{}
+				// installed and up-to-date: provide uninstall
+				actions = []plugin.QueryResultAction{w.createUninstallAction(pluginManifest)}
 			}
 		} else {
 			// not installed: show Install
-			actions = []plugin.QueryResultAction{
-				{
-					Name:                   "i18n:plugin_wpm_install",
-					PreventHideAfterAction: true,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						// Show installing progress
-						installingTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_installing")
-						w.api.UpdateResult(ctx, plugin.UpdatableResult{
-							Id:    actionContext.ResultId,
-							Title: &installingTitle,
-						})
-
-						// Start installation in background with progress updates
-						util.Go(ctx, "install plugin", func() {
-							// Update to downloading state
-							downloadingTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_downloading")
-							if !w.api.UpdateResult(ctx, plugin.UpdatableResult{
-								Id:    actionContext.ResultId,
-								Title: &downloadingTitle,
-							}) {
-								return // Result no longer visible, stop updating
-							}
-
-							installErr := plugin.GetStoreManager().Install(ctx, pluginManifest)
-							if installErr != nil {
-								failedTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_install_failed")
-								w.api.UpdateResult(ctx, plugin.UpdatableResult{
-									Id:    actionContext.ResultId,
-									Title: &failedTitle,
-								})
-								w.api.Notify(ctx, "i18n:plugin_wpm_install_failed")
-								return
-							}
-
-							// Update to success state
-							successTitle := w.api.GetTranslation(ctx, "i18n:plugin_wpm_install_success")
-							w.api.UpdateResult(ctx, plugin.UpdatableResult{
-								Id:    actionContext.ResultId,
-								Title: &successTitle,
-							})
-
-							// on success: change query to the plugin's first trigger keyword if exists
-							time.Sleep(500 * time.Millisecond)
-							instances := plugin.GetPluginManager().GetPluginInstances()
-							if len(instances) > 0 {
-								if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
-									if len(inst.Metadata.TriggerKeywords) > 0 {
-										kw := inst.Metadata.TriggerKeywords[0]
-										w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
-									}
-								}
-							}
-						})
-					},
-				},
-			}
+			actions = []plugin.QueryResultAction{w.createInstallAction(pluginManifest)}
 		}
 
 		// Create plugin detail JSON for preview

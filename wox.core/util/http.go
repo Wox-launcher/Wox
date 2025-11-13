@@ -80,6 +80,12 @@ func HttpPost(ctx context.Context, url string, body any) ([]byte, error) {
 }
 
 func HttpDownload(ctx context.Context, url string, dest string) error {
+	return HttpDownloadWithProgress(ctx, url, dest, nil)
+}
+
+// HttpDownloadWithProgress downloads a file from url to dest with optional progress callback
+// progressCallback receives (downloaded bytes, total bytes). Total bytes may be -1 if Content-Length is not available.
+func HttpDownloadWithProgress(ctx context.Context, url string, dest string, progressCallback func(downloaded int64, total int64)) error {
 	req, err := newRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -101,7 +107,46 @@ func HttpDownload(ctx context.Context, url string, dest string) error {
 	}
 	defer out.Close()
 
-	_, err = io.Copy(out, resp.Body)
+	// Get total size from Content-Length header (may be -1 if not available)
+	totalSize := resp.ContentLength
+
+	// If no progress callback provided, use simple copy
+	if progressCallback == nil {
+		_, err = io.Copy(out, resp.Body)
+		return err
+	}
+
+	// Use progress tracking copy
+	var downloaded int64
+	buf := make([]byte, 32*1024) // 32KB buffer
+
+	for {
+		nr, er := resp.Body.Read(buf)
+		if nr > 0 {
+			nw, ew := out.Write(buf[0:nr])
+			if nw > 0 {
+				downloaded += int64(nw)
+			}
+			if ew != nil {
+				err = ew
+				break
+			}
+			if nr != nw {
+				err = io.ErrShortWrite
+				break
+			}
+
+			// Call progress callback
+			progressCallback(downloaded, totalSize)
+		}
+		if er != nil {
+			if er != io.EOF {
+				err = er
+			}
+			break
+		}
+	}
+
 	return err
 }
 
