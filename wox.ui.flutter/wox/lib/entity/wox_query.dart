@@ -1,7 +1,6 @@
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/entity/wox_preview.dart';
-import 'package:wox/enums/wox_query_mode_enum.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
 import 'package:wox/enums/wox_selection_type_enum.dart';
@@ -262,10 +261,12 @@ class ShowAppParams {
   late bool selectAll;
   late Position position;
   late List<QueryHistory> queryHistories;
-  late WoxQueryMode queryMode;
+  late String launchMode;
+  late String startPage;
   late bool autoFocusToChatInput;
 
-  ShowAppParams({required this.selectAll, required this.position, required this.queryHistories, required this.queryMode, this.autoFocusToChatInput = false});
+  ShowAppParams(
+      {required this.selectAll, required this.position, required this.queryHistories, required this.launchMode, required this.startPage, this.autoFocusToChatInput = false});
 
   ShowAppParams.fromJson(Map<String, dynamic> json) {
     selectAll = json['SelectAll'];
@@ -277,7 +278,8 @@ class ShowAppParams {
       final List<dynamic> histories = json['QueryHistories'];
       queryHistories = histories.map((v) => QueryHistory.fromJson(v)).toList();
     }
-    queryMode = json['QueryMode'] ?? 'empty';
+    launchMode = json['LaunchMode'] ?? 'continue';
+    startPage = json['StartPage'] ?? 'mru';
     autoFocusToChatInput = json['AutoFocusToChatInput'] ?? false;
   }
 }

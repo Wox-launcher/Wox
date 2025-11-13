@@ -459,10 +459,9 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
                 setState(() {});
               },
               items: column.selectOptions.map((e) {
-                return DropdownMenuItem(
+                return WoxDropdownItem(
                   value: e.value,
-                  alignment: Alignment.centerLeft,
-                  child: Text(e.label),
+                  label: e.label,
                 );
               }).toList(),
             );

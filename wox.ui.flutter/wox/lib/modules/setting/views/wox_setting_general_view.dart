@@ -11,7 +11,8 @@ import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_lang.dart';
-import 'package:wox/enums/wox_query_mode_enum.dart';
+import 'package:wox/enums/wox_launch_mode_enum.dart';
+import 'package:wox/enums/wox_start_page_enum.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
 
 class WoxSettingGeneralView extends WoxSettingBaseView {
@@ -117,28 +118,53 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
           }),
         ),
         formField(
-          label: controller.tr("ui_query_mode"),
-          tips: controller.tr("ui_query_mode_tips"),
+          label: controller.tr("ui_launch_mode"),
+          tips: controller.tr("ui_launch_mode_tips"),
           child: Obx(() {
             return WoxDropdownButton<String>(
               items: [
-                DropdownMenuItem(
-                  value: WoxQueryModeEnum.WOX_QUERY_MODE_PRESERVE.code,
-                  child: Text(controller.tr("ui_query_mode_preserve")),
+                WoxDropdownItem(
+                  value: WoxLaunchModeEnum.WOX_LAUNCH_MODE_FRESH.code,
+                  label: controller.tr("ui_launch_mode_fresh"),
+                  tooltip: controller.tr("ui_launch_mode_fresh_tips"),
                 ),
-                DropdownMenuItem(
-                  value: WoxQueryModeEnum.WOX_QUERY_MODE_EMPTY.code,
-                  child: Text(controller.tr("ui_query_mode_empty")),
-                ),
-                DropdownMenuItem(
-                  value: WoxQueryModeEnum.WOX_QUERY_MODE_MRU.code,
-                  child: Text(controller.tr("ui_query_mode_mru")),
+                WoxDropdownItem(
+                  value: WoxLaunchModeEnum.WOX_LAUNCH_MODE_CONTINUE.code,
+                  label: controller.tr("ui_launch_mode_continue"),
+                  tooltip: controller.tr("ui_launch_mode_continue_tips"),
                 ),
               ],
-              value: controller.woxSetting.value.queryMode,
+              value: controller.woxSetting.value.launchMode,
               onChanged: (v) {
                 if (v != null) {
-                  controller.updateConfig("QueryMode", v);
+                  controller.updateConfig("LaunchMode", v);
+                }
+              },
+              isExpanded: true,
+            );
+          }),
+        ),
+        formField(
+          label: controller.tr("ui_start_page"),
+          tips: controller.tr("ui_start_page_tips"),
+          child: Obx(() {
+            return WoxDropdownButton<String>(
+              items: [
+                WoxDropdownItem(
+                  value: WoxStartPageEnum.WOX_START_PAGE_BLANK.code,
+                  label: controller.tr("ui_start_page_blank"),
+                  tooltip: controller.tr("ui_start_page_blank_tips"),
+                ),
+                WoxDropdownItem(
+                  value: WoxStartPageEnum.WOX_START_PAGE_MRU.code,
+                  label: controller.tr("ui_start_page_mru"),
+                  tooltip: controller.tr("ui_start_page_mru_tips"),
+                ),
+              ],
+              value: controller.woxSetting.value.startPage,
+              onChanged: (v) {
+                if (v != null) {
+                  controller.updateConfig("StartPage", v);
                 }
               },
               isExpanded: true,
@@ -155,9 +181,9 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                   return Obx(() {
                     return WoxDropdownButton<String>(
                       items: languages.map((e) {
-                        return DropdownMenuItem(
+                        return WoxDropdownItem(
                           value: e.code,
-                          child: Text(e.name),
+                          label: e.name,
                         );
                       }).toList(),
                       value: controller.woxSetting.value.langCode,

@@ -21,9 +21,9 @@ class WoxSettingPluginSelect extends WoxSettingPluginItem {
           value: getSetting(item.key),
           isExpanded: true,
           items: item.options.map((e) {
-            return DropdownMenuItem(
+            return WoxDropdownItem(
               value: e.value,
-              child: Text(e.label),
+              label: e.label,
             );
           }).toList(),
           onChanged: (v) {

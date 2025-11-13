@@ -1,9 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:wox/utils/colors.dart';
 
+/// Data model for dropdown items with optional tooltip
+class WoxDropdownItem<T> {
+  final T value;
+  final String label;
+  final String? tooltip;
+
+  const WoxDropdownItem({
+    required this.value,
+    required this.label,
+    this.tooltip,
+  });
+}
+
 /// Wox dropdown button with theme-aware styling
 class WoxDropdownButton<T> extends StatefulWidget {
-  final List<DropdownMenuItem<T>> items;
+  final List<WoxDropdownItem<T>> items;
   final T? value;
   final ValueChanged<T?>? onChanged;
   final bool isExpanded;
@@ -18,7 +31,6 @@ class WoxDropdownButton<T> extends StatefulWidget {
   final double? width;
   final Widget? underline;
   final bool enableFilter;
-  final String Function(T?)? itemToString;
 
   const WoxDropdownButton({
     super.key,
@@ -37,7 +49,6 @@ class WoxDropdownButton<T> extends StatefulWidget {
     this.width,
     this.underline,
     this.enableFilter = false,
-    this.itemToString,
   });
 
   @override
@@ -49,7 +60,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
   final FocusNode _filterFocusNode = FocusNode();
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
-  List<DropdownMenuItem<T>> _filteredItems = [];
+  List<WoxDropdownItem<T>> _filteredItems = [];
 
   @override
   void initState() {
@@ -80,8 +91,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
         _filteredItems = widget.items;
       } else {
         _filteredItems = widget.items.where((item) {
-          final itemText = _getItemText(item);
-          return itemText.toLowerCase().contains(query.toLowerCase());
+          return item.label.toLowerCase().contains(query.toLowerCase());
         }).toList();
       }
     });
@@ -89,18 +99,6 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
     if (_overlayEntry != null) {
       _overlayEntry!.markNeedsBuild();
     }
-  }
-
-  String _getItemText(DropdownMenuItem<T> item) {
-    if (widget.itemToString != null) {
-      return widget.itemToString!(item.value);
-    }
-    // Try to extract text from the child widget
-    if (item.child is Text) {
-      return (item.child as Text).data ?? '';
-    }
-    // Fallback to value's toString
-    return item.value?.toString() ?? '';
   }
 
   void _removeOverlay() {
@@ -188,7 +186,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
                                   color: isSelected ? activeTextColor.withValues(alpha: 0.1) : null,
                                   child: DefaultTextStyle(
                                     style: TextStyle(color: activeTextColor, fontSize: widget.fontSize),
-                                    child: item.child,
+                                    child: _buildDropdownMenuItem(item, activeTextColor),
                                   ),
                                 ),
                               );
@@ -210,6 +208,31 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
     _filterFocusNode.requestFocus();
   }
 
+  // Build dropdown menu item with optional tooltip icon
+  Widget _buildDropdownMenuItem(WoxDropdownItem<T> item, Color activeTextColor) {
+    if (item.tooltip == null || item.tooltip!.isEmpty) {
+      return Text(item.label);
+    }
+
+    return Row(
+      children: [
+        Expanded(child: Text(item.label)),
+        Tooltip(
+          message: item.tooltip!,
+          child: Icon(Icons.info_outline, size: 16, color: activeTextColor),
+        ),
+      ],
+    );
+  }
+
+  // Build selected item (without tooltip icon)
+  Widget _buildSelectedItem(WoxDropdownItem<T> item, Color textColor) {
+    return Align(
+      alignment: widget.alignment,
+      child: Text(item.label, style: TextStyle(color: textColor, fontSize: widget.fontSize)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final textColor = getThemeTextColor();
@@ -218,23 +241,25 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
     final borderColor = getThemeSubTextColor();
 
     if (!widget.enableFilter) {
+      // Convert WoxDropdownItem to DropdownMenuItem
+      final dropdownMenuItems = widget.items.map((item) {
+        return DropdownMenuItem<T>(
+          value: item.value,
+          child: _buildDropdownMenuItem(item, activeTextColor),
+        );
+      }).toList();
+
       // Original non-filterable dropdown
       final dropdown = DropdownButtonHideUnderline(
         child: DropdownButton<T>(
-          items: widget.items,
+          items: dropdownMenuItems,
           value: widget.value,
           onChanged: widget.onChanged,
           isExpanded: widget.isExpanded,
           style: TextStyle(color: activeTextColor, fontSize: widget.fontSize),
           selectedItemBuilder: (BuildContext context) {
-            return widget.items.map<Widget>((DropdownMenuItem<T> item) {
-              return Align(
-                alignment: widget.alignment,
-                child: DefaultTextStyle(
-                  style: TextStyle(color: textColor, fontSize: widget.fontSize),
-                  child: item.child,
-                ),
-              );
+            return widget.items.map<Widget>((item) {
+              return _buildSelectedItem(item, textColor);
             }).toList();
           },
           dropdownColor: dropdownBg,
@@ -291,7 +316,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
                   Expanded(
                     child: DefaultTextStyle(
                       style: TextStyle(color: textColor, fontSize: widget.fontSize),
-                      child: widget.value != null ? selectedItem.child : (widget.hint ?? const SizedBox.shrink()),
+                      child: widget.value != null ? Text(selectedItem.label) : (widget.hint ?? const SizedBox.shrink()),
                     ),
                   ),
                   Icon(

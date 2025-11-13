@@ -18,17 +18,17 @@ class WoxSettingUIView extends WoxSettingBaseView {
           child: Obx(() {
             return WoxDropdownButton<String>(
               items: [
-                DropdownMenuItem(
+                WoxDropdownItem(
                   value: "mouse_screen",
-                  child: Text(controller.tr("ui_show_position_mouse_screen")),
+                  label: controller.tr("ui_show_position_mouse_screen"),
                 ),
-                DropdownMenuItem(
+                WoxDropdownItem(
                   value: "active_screen",
-                  child: Text(controller.tr("ui_show_position_active_screen")),
+                  label: controller.tr("ui_show_position_active_screen"),
                 ),
-                DropdownMenuItem(
+                WoxDropdownItem(
                   value: "last_location",
-                  child: Text(controller.tr("ui_show_position_last_location")),
+                  label: controller.tr("ui_show_position_last_location"),
                 ),
               ],
               value: controller.woxSetting.value.showPosition,
@@ -76,9 +76,9 @@ class WoxSettingUIView extends WoxSettingBaseView {
               value: controller.woxSetting.value.maxResultCount,
               items: List.generate(11, (index) => index + 5)
                   .map(
-                    (count) => DropdownMenuItem<int>(
+                    (count) => WoxDropdownItem<int>(
                       value: count,
-                      child: Text(count.toString()),
+                      label: count.toString(),
                     ),
                   )
                   .toList(),

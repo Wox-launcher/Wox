@@ -470,7 +470,8 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.LangCode = woxSetting.LangCode.Get()
 	settingDto.QueryHotkeys = woxSetting.QueryHotkeys.Get()
 	settingDto.QueryShortcuts = woxSetting.QueryShortcuts.Get()
-	settingDto.QueryMode = woxSetting.QueryMode.Get()
+	settingDto.LaunchMode = woxSetting.LaunchMode.Get()
+	settingDto.StartPage = woxSetting.StartPage.Get()
 	settingDto.AIProviders = woxSetting.AIProviders.Get()
 	settingDto.HttpProxyEnabled = woxSetting.HttpProxyEnabled.Get()
 	settingDto.HttpProxyUrl = woxSetting.HttpProxyUrl.Get()
@@ -547,8 +548,10 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		woxSetting.QueryShortcuts.Set(queryShortcuts)
-	case "QueryMode":
-		woxSetting.QueryMode.Set(vs)
+	case "LaunchMode":
+		woxSetting.LaunchMode.Set(setting.LaunchMode(vs))
+	case "StartPage":
+		woxSetting.StartPage.Set(setting.StartPage(vs))
 	case "ShowPosition":
 		woxSetting.ShowPosition.Set(setting.PositionType(vs))
 	case "AIProviders":

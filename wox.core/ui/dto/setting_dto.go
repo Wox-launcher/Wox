@@ -17,7 +17,8 @@ type WoxSettingDto struct {
 	LangCode             i18n.LangCode
 	QueryHotkeys         []setting.QueryHotkey
 	QueryShortcuts       []setting.QueryShortcut
-	QueryMode            setting.QueryMode
+	LaunchMode           setting.LaunchMode
+	StartPage            setting.StartPage
 	AIProviders          []setting.AIProvider
 	HttpProxyEnabled     bool
 	HttpProxyUrl         string

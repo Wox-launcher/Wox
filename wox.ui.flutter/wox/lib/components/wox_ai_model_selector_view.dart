@@ -179,15 +179,9 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
             value: _selectedProvider,
             isExpanded: true,
             items: _providers
-                .map((provider) => DropdownMenuItem<String>(
+                .map((provider) => WoxDropdownItem<String>(
                       value: provider,
-                      child: SizedBox(
-                        width: 100, // Limit width to prevent overflow
-                        child: Text(
-                          provider,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
+                      label: provider,
                     ))
                 .toList(),
             onChanged: (provider) {
@@ -236,15 +230,9 @@ class _WoxAIModelSelectorViewState extends State<WoxAIModelSelectorView> {
                   isExpanded: true,
                   enableFilter: true,
                   items: getProviderModels()
-                      .map((model) => DropdownMenuItem<String>(
+                      .map((model) => WoxDropdownItem<String>(
                             value: model.name,
-                            child: SizedBox(
-                              width: 200, // Limit width to prevent overflow
-                              child: Text(
-                                model.name,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
+                            label: model.name,
                           ))
                       .toList(),
                   onChanged: (modelName) {

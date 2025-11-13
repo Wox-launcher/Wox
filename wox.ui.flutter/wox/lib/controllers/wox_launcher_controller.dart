@@ -22,7 +22,8 @@ import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/entity/wox_query.dart';
-import 'package:wox/enums/wox_query_mode_enum.dart';
+import 'package:wox/enums/wox_launch_mode_enum.dart';
+import 'package:wox/enums/wox_start_page_enum.dart';
 import 'package:wox/entity/wox_setting.dart';
 import 'package:wox/entity/wox_theme.dart';
 import 'package:wox/entity/wox_toolbar.dart';
@@ -91,7 +92,8 @@ class WoxLauncherController extends GetxController {
   final latestQueryHistories = <QueryHistory>[]; // the latest query histories
   var currentQueryHistoryIndex = 0; //  query history index, used to navigate query history
 
-  var lastQueryMode = WoxQueryModeEnum.WOX_QUERY_MODE_PRESERVE.code;
+  var lastLaunchMode = WoxLaunchModeEnum.WOX_LAUNCH_MODE_CONTINUE.code;
+  var lastStartPage = WoxStartPageEnum.WOX_START_PAGE_MRU.code;
   final isInSettingView = false.obs;
   var positionBeforeOpenSetting = const Offset(0, 0);
   // Whether settings was opened when window was hidden (e.g., from tray)
@@ -251,9 +253,14 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> showApp(String traceId, ShowAppParams params) async {
+    // update some properties to latest for later use
+    latestQueryHistories.assignAll(params.queryHistories);
+    lastLaunchMode = params.launchMode;
+    lastStartPage = params.startPage;
+
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code) {
       canArrowUpHistory = true;
-      if (lastQueryMode == WoxQueryModeEnum.WOX_QUERY_MODE_PRESERVE.code) {
+      if (lastLaunchMode == WoxLaunchModeEnum.WOX_LAUNCH_MODE_CONTINUE.code) {
         //skip the first one, because it's the current query
         currentQueryHistoryIndex = 0;
       } else {
@@ -261,21 +268,26 @@ class WoxLauncherController extends GetxController {
       }
     }
 
-    // update some properties to latest for later use
-    latestQueryHistories.assignAll(params.queryHistories);
-    lastQueryMode = params.queryMode;
+    // Handle launch mode: fresh or continue
+    final isInputWithText = currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code && currentQuery.value.queryText.isNotEmpty;
+    final isSelectionQuery = currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code;
 
-    // Handle MRU mode only when there is no current input
-    if (lastQueryMode == WoxQueryModeEnum.WOX_QUERY_MODE_MRU.code) {
-      // If we are opening via a query hotkey, ChangeQuery has already set a non-empty query.
-      // In that case, do NOT override it with MRU.
-      final isInputWithText = currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_INPUT.code && currentQuery.value.queryText.isNotEmpty;
-      final isSelectionQuery = currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code;
+    if (lastLaunchMode == WoxLaunchModeEnum.WOX_LAUNCH_MODE_FRESH.code) {
+      // Fresh mode: clear query if not opened via query hotkey or selection
       if (!isInputWithText && !isSelectionQuery) {
-        // Show MRU only when opening with empty input
         currentQuery.value = PlainQuery.emptyInput();
         queryBoxTextFieldController.clear();
+      }
+    }
+    // Continue mode: keep last query (do nothing)
+
+    // Handle start page: show content when query is empty (works in both modes)
+    if (!isInputWithText && !isSelectionQuery) {
+      if (lastStartPage == WoxStartPageEnum.WOX_START_PAGE_MRU.code) {
         queryMRU(traceId);
+      } else {
+        // Blank page - clear results
+        await clearQueryResults(traceId);
       }
     }
 
@@ -302,10 +314,8 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> hideApp(String traceId) async {
-    //clear query box text if query type is selection or last query mode is empty or MRU
-    if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code ||
-        lastQueryMode == WoxQueryModeEnum.WOX_QUERY_MODE_EMPTY.code ||
-        lastQueryMode == WoxQueryModeEnum.WOX_QUERY_MODE_MRU.code) {
+    //clear query box text if query type is selection or launch mode is fresh
+    if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code || lastLaunchMode == WoxLaunchModeEnum.WOX_LAUNCH_MODE_FRESH.code) {
       currentQuery.value = PlainQuery.emptyInput();
       queryBoxTextFieldController.clear();
       hideActionPanel(traceId);
@@ -543,8 +553,8 @@ class WoxLauncherController extends GetxController {
     updateQueryIconOnQueryChanged(traceId, query);
     updateResultPreviewWidthRatioOnQueryChanged(traceId, query);
     if (query.isEmpty) {
-      // Check if we should show MRU results when query is empty
-      if (lastQueryMode == WoxQueryModeEnum.WOX_QUERY_MODE_MRU.code) {
+      // Check if we should show MRU results when query is empty (based on start page setting)
+      if (lastStartPage == WoxStartPageEnum.WOX_START_PAGE_MRU.code) {
         queryMRU(traceId);
       } else {
         clearQueryResults(traceId);

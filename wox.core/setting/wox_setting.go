@@ -22,7 +22,8 @@ type WoxSetting struct {
 	LangCode             *WoxSettingValue[i18n.LangCode]
 	QueryHotkeys         *PlatformValue[[]QueryHotkey]
 	QueryShortcuts       *WoxSettingValue[[]QueryShortcut]
-	QueryMode            *WoxSettingValue[QueryMode]
+	LaunchMode           *WoxSettingValue[LaunchMode]
+	StartPage            *WoxSettingValue[StartPage]
 	ShowPosition         *WoxSettingValue[PositionType]
 	AIProviders          *WoxSettingValue[[]AIProvider]
 	EnableAutoBackup     *WoxSettingValue[bool]
@@ -48,7 +49,8 @@ type WoxSetting struct {
 	ActionedResults *WoxSettingValue[*util.HashMap[ResultHash, []ActionedResult]]
 }
 
-type QueryMode = string
+type LaunchMode = string
+type StartPage = string
 
 type PositionType string
 
@@ -59,9 +61,13 @@ const (
 )
 
 const (
-	QueryModePreserve QueryMode = "preserve" // preserve last query and select all for quick modify
-	QueryModeEmpty    QueryMode = "empty"    // empty last query
-	QueryModeMRU      QueryMode = "mru"      // show MRU (Most Recently Used) list
+	LaunchModeFresh    LaunchMode = "fresh"    // start fresh with empty query
+	LaunchModeContinue LaunchMode = "continue" // continue with last query
+)
+
+const (
+	StartPageBlank StartPage = "blank" // show blank page
+	StartPageMRU   StartPage = "mru"   // show MRU (Most Recently Used) list
 )
 
 const (
@@ -134,7 +140,8 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		LangCode: NewWoxSettingValueWithValidator(store, "LangCode", defaultLangCode, func(code i18n.LangCode) bool {
 			return i18n.IsSupportedLangCode(string(code))
 		}),
-		QueryMode:        NewWoxSettingValue(store, "QueryMode", QueryModeEmpty),
+		LaunchMode:       NewWoxSettingValue(store, "LaunchMode", LaunchModeContinue),
+		StartPage:        NewWoxSettingValue(store, "StartPage", StartPageMRU),
 		ShowPosition:     NewWoxSettingValue(store, "ShowPosition", PositionTypeMouseScreen),
 		AppWidth:         NewWoxSettingValue(store, "AppWidth", 800),
 		MaxResultCount:   NewWoxSettingValue(store, "MaxResultCount", 10),

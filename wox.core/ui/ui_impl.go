@@ -236,7 +236,8 @@ func getShowAppParams(ctx context.Context, showContext common.ShowContext) map[s
 		"AutoFocusToChatInput": showContext.AutoFocusToChatInput,
 		"Position":             position,
 		"QueryHistories":       setting.GetSettingManager().GetLatestQueryHistory(ctx, 10),
-		"QueryMode":            woxSetting.QueryMode.Get(),
+		"LaunchMode":           woxSetting.LaunchMode.Get(),
+		"StartPage":            woxSetting.StartPage.Get(),
 	}
 }
 
