@@ -112,7 +112,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
 
   void _showFilterableMenu() {
     final activeTextColor = getThemeActiveTextColor();
-    final dropdownBg = widget.dropdownColor ?? getThemeActiveBackgroundColor();
+    final dropdownBg = widget.dropdownColor ?? getThemeActiveBackgroundColor().withAlpha(255);
     final borderColor = getThemeSubTextColor();
 
     final RenderBox renderBox = context.findRenderObject() as RenderBox;
@@ -214,7 +214,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
   Widget build(BuildContext context) {
     final textColor = getThemeTextColor();
     final activeTextColor = getThemeActiveTextColor();
-    final dropdownBg = widget.dropdownColor ?? getThemeActiveBackgroundColor();
+    final dropdownBg = widget.dropdownColor ?? getThemeActiveBackgroundColor().withAlpha(255);
     final borderColor = getThemeSubTextColor();
 
     if (!widget.enableFilter) {

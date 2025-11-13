@@ -199,7 +199,18 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
         launcherController.hasPendingAutoFocusToChatInput = false;
       }
 
-      contentWidget = const WoxAIChatView();
+      // Handle scroll position for chat view
+      if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          chatController.scrollToBottomOfAiChat();
+        });
+      }
+
+      // Chat view has its own layout structure with Expanded widgets, return it directly
+      return Container(
+        padding: const EdgeInsets.only(top: 10.0, bottom: 10.0, left: 10.0),
+        child: const WoxAIChatView(),
+      );
     }
 
     if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {

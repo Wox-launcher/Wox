@@ -361,10 +361,8 @@ class WoxAIChatController extends GetxController {
   // Scroll to bottom of AI chat
   void scrollToBottomOfAiChat() {
     if (aiChatScrollController.hasClients) {
-      aiChatScrollController.animateTo(
+      aiChatScrollController.jumpTo(
         aiChatScrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
       );
     }
   }
