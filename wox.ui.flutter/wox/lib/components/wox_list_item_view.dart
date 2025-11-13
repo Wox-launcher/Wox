@@ -33,7 +33,7 @@ class WoxListItemView extends StatelessWidget {
 
   double getImageSize(WoxImage img, double defaultSize) {
     if (img.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
-      return defaultSize - 10;
+      return defaultSize - 4;
     } else {
       return defaultSize;
     }
@@ -109,8 +109,8 @@ class WoxListItemView extends StatelessWidget {
                     child: WoxImageView(
                       key: ValueKey('${tail.image!.imageType}_${tail.image!.imageData}'),
                       woxImage: tail.image!,
-                      width: getImageSize(tail.image!, 24),
-                      height: getImageSize(tail.image!, 24),
+                      width: getImageSize(tail.image!, 20),
+                      height: getImageSize(tail.image!, 20),
                     ),
                   ),
             ],

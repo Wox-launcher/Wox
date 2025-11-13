@@ -66,6 +66,14 @@ func (e emptyAPIImpl) UpdateResult(ctx context.Context, result plugin.UpdatableR
 	return false
 }
 
+func (e emptyAPIImpl) GetUpdatableResult(ctx context.Context, resultId string) *plugin.UpdatableResult {
+	return nil
+}
+
+func (e emptyAPIImpl) IsVisible(ctx context.Context) bool {
+	return false
+}
+
 func TestMacRetriever_ParseAppInfo(t *testing.T) {
 	if util.IsMacOS() {
 		util.GetLocation().Init()

@@ -125,6 +125,8 @@
   "ui_ai_providers_host_required": "Хост обязателен",
   "ui_ai_model": "Модель",
   "ui_search_plugins": "Найти %d плагинов",
+  "ui_plugin_author": "Автор",
+  "ui_plugin_runtime": "Рантайм",
   "ui_plugin_website": "Сайт",
   "ui_plugin_dev_tag": "dev",
   "ui_plugin_uninstall": "Удалить",

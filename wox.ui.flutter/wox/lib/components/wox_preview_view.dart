@@ -17,6 +17,7 @@ import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_ai_chat_view.dart';
 import 'package:wox/components/wox_markdown.dart';
+import 'package:wox/components/wox_plugin_detail_view.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
@@ -187,6 +188,8 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
           child: WoxImageView(woxImage: parsedWoxImage),
         );
       }
+    } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_PLUGIN_DETAIL.code) {
+      contentWidget = WoxPluginDetailView(pluginDetailJson: widget.woxPreview.previewData);
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
       var previewChatData = WoxAIChatData.fromJson(jsonDecode(widget.woxPreview.previewData));
       var chatController = Get.find<WoxAIChatController>();

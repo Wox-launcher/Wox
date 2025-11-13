@@ -479,10 +479,6 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 			}
 		}
 
-		screenShotsMarkdown := lo.Map(pluginManifest.ScreenshotUrls, func(screenshot string, _ int) string {
-			return fmt.Sprintf("![screenshot](%s)", screenshot)
-		})
-
 		// decide actions based on install/upgrade status
 		var actions []plugin.QueryResultAction
 		installedFlag := lo.ContainsBy(installed, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id })
@@ -617,33 +613,28 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 			}
 		}
 
+		// Create plugin detail JSON for preview
+		pluginDetailData := map[string]interface{}{
+			"Id":             pluginManifest.Id,
+			"Name":           pluginManifest.Name,
+			"Description":    pluginManifest.Description,
+			"Author":         pluginManifest.Author,
+			"Version":        pluginManifest.Version,
+			"Website":        pluginManifest.Website,
+			"Runtime":        pluginManifest.Runtime,
+			"ScreenshotUrls": pluginManifest.ScreenshotUrls,
+		}
+		pluginDetailJSON, _ := json.Marshal(pluginDetailData)
+
 		results = append(results, plugin.QueryResult{
 			Id:       uuid.NewString(),
 			Title:    pluginManifest.Name,
 			SubTitle: pluginManifest.Description,
 			Icon:     common.NewWoxImageUrl(pluginManifest.IconUrl),
 			Tails:    tails,
-
 			Preview: plugin.WoxPreview{
-				PreviewType: plugin.WoxPreviewTypeMarkdown,
-				PreviewData: fmt.Sprintf(`
-### Description
-
-%s
-
-### Website
-
-%s
-
-### Screenshots
-
-%s
-`, pluginManifest.Description, pluginManifest.Website, strings.Join(screenShotsMarkdown, "\n")),
-				PreviewProperties: map[string]string{
-					"Author":  pluginManifest.Author,
-					"Version": pluginManifest.Version,
-					"Website": pluginManifest.Website,
-				},
+				PreviewType: plugin.WoxPreviewTypePluginDetail,
+				PreviewData: string(pluginDetailJSON),
 			},
 			Actions: actions,
 		})

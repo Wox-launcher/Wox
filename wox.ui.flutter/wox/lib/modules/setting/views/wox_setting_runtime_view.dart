@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_panel.dart';
 import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/entity/wox_runtime_status.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
@@ -32,32 +33,15 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
     final bool isRunning = status.isStarted;
     final Color baseBackground = getThemeBackgroundColor();
     final bool isDarkTheme = baseBackground.computeLuminance() < 0.5;
-    final Color panelColor = getThemePanelBackgroundColor();
-    Color cardColor = panelColor.opacity < 1 ? Color.alphaBlend(panelColor, baseBackground) : panelColor;
-    cardColor = isDarkTheme ? cardColor.lighter(6) : cardColor.darker(4);
     final Color textColor = getThemeTextColor();
     final Color subTextColor = getThemeSubTextColor();
     final Color statusColor = isRunning ? Colors.green : Colors.red;
-    final Color outlineColor = getThemeDividerColor().withOpacity(isDarkTheme ? 0.45 : 0.25);
 
     final IconData statusIcon = isRunning ? Icons.check_circle : Icons.error;
     final String stateLabel = isRunning ? controller.tr("ui_runtime_status_running") : controller.tr("ui_runtime_status_stopped");
     final String pluginCountLabel = controller.tr("ui_runtime_status_plugin_count").replaceAll("{count}", status.loadedPluginCount.toString());
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: outlineColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDarkTheme ? 0.24 : 0.08),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
+    return WoxPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -68,7 +52,7 @@ class WoxSettingRuntimeView extends WoxSettingBaseView {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(isDarkTheme ? 0.32 : 0.18),
+                  color: statusColor.withValues(alpha: isDarkTheme ? 0.32 : 0.18),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(statusIcon, color: statusColor, size: 20),

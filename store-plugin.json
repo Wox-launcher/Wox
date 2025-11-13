@@ -88,7 +88,7 @@
     "Id": "09ea2847-929c-440a-aa2c-9b74bcaae88f",
     "Name": "OSX Volume Control",
     "Author": "lyl",
-    "Version": "0.0.5",
+    "Version": "0.0.4",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "OSX Volume Control",

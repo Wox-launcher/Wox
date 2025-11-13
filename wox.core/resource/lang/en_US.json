@@ -125,6 +125,8 @@
   "ui_ai_providers_host_required": "Host is required.",
   "ui_ai_model": "AI Model",
   "ui_search_plugins": "Search %d plugins",
+  "ui_plugin_author": "Author",
+  "ui_plugin_runtime": "Runtime",
   "ui_plugin_website": "Website",
   "ui_plugin_dev_tag": "dev",
   "ui_plugin_uninstall": "Uninstall",

@@ -10,7 +10,6 @@ import 'package:wox/entity/wox_hotkey.dart';
 import 'package:wox/entity/wox_list_item.dart';
 import 'package:wox/enums/wox_direction_enum.dart';
 import 'package:wox/enums/wox_list_view_type_enum.dart';
-import 'package:wox/utils/log.dart';
 import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/color_util.dart';
 

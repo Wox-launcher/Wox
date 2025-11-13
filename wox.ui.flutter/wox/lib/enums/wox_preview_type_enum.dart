@@ -7,6 +7,7 @@ enum WoxPreviewTypeEnum {
   WOX_PREVIEW_TYPE_URL("url", "url"),
   WOX_PREVIEW_TYPE_FILE("file", "file"),
   WOX_PREVIEW_TYPE_REMOTE("remote", "remote"),
+  WOX_PREVIEW_TYPE_PLUGIN_DETAIL("plugin_detail", "plugin_detail"),
   WOX_PREVIEW_TYPE_CHAT("chat", "chat");
 
   final String code;

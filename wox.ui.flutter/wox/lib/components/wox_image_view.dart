@@ -84,7 +84,7 @@ class WoxImageView extends StatelessWidget {
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
       imageWidget = Padding(
         padding: const EdgeInsets.only(left: 2, right: 2),
-        child: Text(woxImage.imageData, style: const TextStyle(fontSize: 25)),
+        child: Text(woxImage.imageData, style: TextStyle(fontSize: width)),
       );
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_LOTTIE.code) {
       final bytes = utf8.encode(woxImage.imageData);

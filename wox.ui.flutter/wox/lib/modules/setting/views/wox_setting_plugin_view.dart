@@ -2,11 +2,10 @@ import 'dart:convert';
 
 import 'package:dynamic_tabbar/dynamic_tabbar.dart' as dt;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_image_slideshow/flutter_image_slideshow.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_head_view.dart';
+import 'package:wox/components/wox_plugin_detail_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_label_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_newline_view.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_select_ai_model_view.dart';
@@ -401,44 +400,75 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
               labelColor: getThemeTextColor(),
               unselectedLabelColor: getThemeTextColor(),
               indicatorColor: getThemeActiveBackgroundColor(),
-              dynamicTabs: [
-                if (controller.shouldShowSettingTab())
-                  dt.TabData(
-                    index: 0,
-                    title: Tab(
-                      child: Text(controller.tr('ui_plugin_tab_settings'), style: TextStyle(color: getThemeTextColor())),
-                    ),
-                    content: pluginTabSetting(),
-                  ),
-                dt.TabData(
-                  index: 1,
-                  title: Tab(
-                    child: Text(controller.tr('ui_plugin_tab_trigger_keywords'), style: TextStyle(color: getThemeTextColor())),
-                  ),
-                  content: pluginTabTriggerKeywords(),
-                ),
-                dt.TabData(
-                  index: 2,
-                  title: Tab(
-                    child: Text(controller.tr('ui_plugin_tab_commands'), style: TextStyle(color: getThemeTextColor())),
-                  ),
-                  content: pluginTabCommand(),
-                ),
-                dt.TabData(
-                  index: 3,
-                  title: Tab(
-                    child: Text(controller.tr('ui_plugin_tab_description'), style: TextStyle(color: getThemeTextColor())),
-                  ),
-                  content: pluginTabDescription(),
-                ),
-                dt.TabData(
-                  index: 4,
-                  title: Tab(
-                    child: Text(controller.tr('ui_plugin_tab_privacy'), style: TextStyle(color: getThemeTextColor())),
-                  ),
-                  content: pluginTabPrivacy(),
-                ),
-              ],
+              dynamicTabs: controller.activeNavPath.value == 'plugins.installed'
+                  ? [
+                      dt.TabData(
+                        index: 0,
+                        title: Tab(
+                          child: Text(controller.tr('ui_plugin_tab_settings'), style: TextStyle(color: getThemeTextColor())),
+                        ),
+                        content: pluginTabSetting(),
+                      ),
+                      dt.TabData(
+                        index: 1,
+                        title: Tab(
+                          child: Text(controller.tr('ui_plugin_tab_trigger_keywords'), style: TextStyle(color: getThemeTextColor())),
+                        ),
+                        content: pluginTabTriggerKeywords(),
+                      ),
+                      dt.TabData(
+                        index: 2,
+                        title: Tab(
+                          child: Text(controller.tr('ui_plugin_tab_commands'), style: TextStyle(color: getThemeTextColor())),
+                        ),
+                        content: pluginTabCommand(),
+                      ),
+                      dt.TabData(
+                        index: 3,
+                        title: Tab(
+                          child: Text(controller.tr('ui_plugin_tab_description'), style: TextStyle(color: getThemeTextColor())),
+                        ),
+                        content: pluginTabDescription(),
+                      ),
+                      dt.TabData(
+                        index: 4,
+                        title: Tab(
+                          child: Text(controller.tr('ui_plugin_tab_privacy'), style: TextStyle(color: getThemeTextColor())),
+                        ),
+                        content: pluginTabPrivacy(),
+                      ),
+                    ]
+                  : [
+                      // For uninstalled plugins: Description tab first
+                      dt.TabData(
+                        index: 0,
+                        title: Tab(
+                          child: Text(controller.tr('ui_plugin_tab_description'), style: TextStyle(color: getThemeTextColor())),
+                        ),
+                        content: pluginTabDescription(),
+                      ),
+                      dt.TabData(
+                        index: 1,
+                        title: Tab(
+                          child: Text(controller.tr('ui_plugin_tab_trigger_keywords'), style: TextStyle(color: getThemeTextColor())),
+                        ),
+                        content: pluginTabTriggerKeywords(),
+                      ),
+                      dt.TabData(
+                        index: 2,
+                        title: Tab(
+                          child: Text(controller.tr('ui_plugin_tab_commands'), style: TextStyle(color: getThemeTextColor())),
+                        ),
+                        content: pluginTabCommand(),
+                      ),
+                      dt.TabData(
+                        index: 3,
+                        title: Tab(
+                          child: Text(controller.tr('ui_plugin_tab_privacy'), style: TextStyle(color: getThemeTextColor())),
+                        ),
+                        content: pluginTabPrivacy(),
+                      ),
+                    ],
               onTabControllerUpdated: (tabController) {
                 controller.activePluginTabController = tabController;
                 tabController.index = 0;
@@ -452,28 +482,20 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   }
 
   Widget pluginTabDescription() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            controller.activePlugin.value.description,
-            style: TextStyle(color: getThemeTextColor(), fontSize: 13),
-          ),
-          const SizedBox(height: 20),
-          controller.activePlugin.value.screenshotUrls.isNotEmpty
-              ? ImageSlideshow(
-                  width: double.infinity,
-                  height: 400,
-                  indicatorColor: getThemeActiveBackgroundColor(),
-                  children: [
-                    ...controller.activePlugin.value.screenshotUrls.map((e) => Image.network(e)),
-                  ],
-                )
-              : const SizedBox(),
-        ],
-      ),
+    // Convert PluginDetail to JSON format expected by WoxPluginDetailView
+    final pluginData = {
+      'Id': controller.activePlugin.value.id,
+      'Name': controller.activePlugin.value.name,
+      'Description': controller.activePlugin.value.description,
+      'Author': controller.activePlugin.value.author,
+      'Version': controller.activePlugin.value.version,
+      'Website': controller.activePlugin.value.website,
+      'Runtime': controller.activePlugin.value.runtime,
+      'ScreenshotUrls': controller.activePlugin.value.screenshotUrls,
+    };
+
+    return WoxPluginDetailView(
+      pluginDetailJson: jsonEncode(pluginData),
     );
   }
 
