@@ -130,6 +130,7 @@ class WoxLauncherController extends GetxController {
           executeDefaultAction(traceId);
         },
         onItemActive: onResultItemActivated,
+        onItemsEmpty: onResultItemsEmpty,
       ),
       tag: 'result',
     );
@@ -490,6 +491,9 @@ class WoxLauncherController extends GetxController {
     if (currentQuery.value.queryType == WoxQueryTypeEnum.WOX_QUERY_TYPE_SELECTION.code) {
       // do local filter if query type is selection
       resultListViewController.filterItems(const UuidV4().generate(), value);
+      // there maybe no results after filtering, we need to resize height to hide the action panel
+      // or show the preview panel
+      resizeHeight();
     } else {
       onQueryChanged(
         const UuidV4().generate(),
@@ -774,7 +778,8 @@ class WoxLauncherController extends GetxController {
     if (resultListViewController.items.isNotEmpty) {
       resultHeight += WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingTop + WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingBottom;
     }
-    if (toolbar.value.isNotEmpty()) {
+    // Only add toolbar height when toolbar is actually shown in UI
+    if (isShowToolbar) {
       resultHeight += WoxThemeUtil.instance.getToolbarHeight();
     }
     var totalHeight = WoxThemeUtil.instance.getQueryBoxHeight() + resultHeight;
@@ -1146,6 +1151,16 @@ class WoxLauncherController extends GetxController {
 
     // update toolbar to show all actions with hotkeys
     updateToolbarWithActions(traceId, item.data.actions);
+  }
+
+  void onResultItemsEmpty(String traceId) {
+    // Hide preview panel when there are no results after filtering
+    // otherwise in selection mode, when no result filtered, preview may still be shown
+    isShowPreviewPanel.value = false;
+    currentPreview.value = WoxPreview.empty();
+
+    // Clear toolbar actions so height isn't reserved by resizeHeight
+    toolbar.value = toolbar.value.emptyRightSide();
   }
 
   void updateToolbarWithActions(String traceId, List<WoxResultAction> actions) {

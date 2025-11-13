@@ -509,5 +509,15 @@
   "toolbar_snooze_1m": "Не напоминать 1 месяц",
   "toolbar_snooze_forever": "Больше не показывать",
   "toolbar_more_actions": "Больше действий",
-  "ui_actions": "Действия"
+  "ui_actions": "Действия",
+  "selection_copy": "Копировать",
+  "selection_copy_to_clipboard": "Копировать в буфер обмена",
+  "selection_copy_path": "Копировать путь",
+  "selection_share_with_airdrop": "Поделиться через AirDrop",
+  "selection_share": "Поделиться",
+  "selection_open_containing_folder": "Открыть папку",
+  "selection_preview": "Предпросмотр",
+  "selection_created_at": "Создано",
+  "selection_modified_at": "Изменено",
+  "selection_size": "Размер"
 }

@@ -514,5 +514,15 @@
   "toolbar_snooze_1m": "Don't remind me for 1 month",
   "toolbar_snooze_forever": "Never show again",
   "toolbar_more_actions": "More Actions",
-  "ui_actions": "Actions"
+  "ui_actions": "Actions",
+  "selection_copy": "Copy",
+  "selection_copy_to_clipboard": "Copy to clipboard",
+  "selection_copy_path": "Copy path",
+  "selection_share_with_airdrop": "Share with AirDrop",
+  "selection_share": "Share",
+  "selection_open_containing_folder": "Open containing folder",
+  "selection_preview": "Preview",
+  "selection_created_at": "Created At",
+  "selection_modified_at": "Modified At",
+  "selection_size": "Size"
 }

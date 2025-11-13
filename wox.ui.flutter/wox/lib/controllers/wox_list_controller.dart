@@ -19,6 +19,7 @@ class WoxListController<T> extends GetxController {
   final Function(String traceId, WoxListItem<T> item)? onItemActive;
   final Function(String traceId)? onFilterBoxEscPressed;
   final Function(String traceId)? onFilterBoxLostFocus;
+  final Function(String traceId)? onItemsEmpty;
 
   /// This flag is used to control whether the item is selected by mouse hover.
   /// This is used to prevent the item from being selected when the mouse is just hovering over the item in the result list.
@@ -33,6 +34,7 @@ class WoxListController<T> extends GetxController {
     this.onItemActive,
     this.onFilterBoxEscPressed,
     this.onFilterBoxLostFocus,
+    this.onItemsEmpty,
   });
 
   @override
@@ -282,7 +284,13 @@ class WoxListController<T> extends GetxController {
 
       _items.assignAll(filteredItems.map((item) => item.obs));
     }
-    updateActiveIndex(traceId, 0, silent: silent);
+
+    // If items are empty after filtering, notify the callback
+    if (_items.isEmpty) {
+      onItemsEmpty?.call(traceId);
+    } else {
+      updateActiveIndex(traceId, 0, silent: silent);
+    }
   }
 
   /// Find all items to include in the filtered list (matched items and their parent groups)

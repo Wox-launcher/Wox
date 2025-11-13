@@ -514,5 +514,15 @@
   "toolbar_snooze_1m": "1 个月内不要提醒我",
   "toolbar_snooze_forever": "不再提示",
   "toolbar_more_actions": "更多操作",
-  "ui_actions": "操作"
+  "ui_actions": "操作",
+  "selection_copy": "复制",
+  "selection_copy_to_clipboard": "复制到剪贴板",
+  "selection_copy_path": "复制路径",
+  "selection_share_with_airdrop": "通过 AirDrop 分享",
+  "selection_share": "分享",
+  "selection_open_containing_folder": "打开所在文件夹",
+  "selection_preview": "预览",
+  "selection_created_at": "创建时间",
+  "selection_modified_at": "修改时间",
+  "selection_size": "大小"
 }

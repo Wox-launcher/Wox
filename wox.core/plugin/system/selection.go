@@ -71,11 +71,11 @@ func (i *SelectionPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 func (i *SelectionPlugin) queryForSelectionText(ctx context.Context, text string) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	results = append(results, plugin.QueryResult{
-		Title: "Copy",
+		Title: i.api.GetTranslation(ctx, "selection_copy"),
 		Icon:  plugin.CopyIcon,
 		Actions: []plugin.QueryResultAction{
 			{
-				Name: "Copy to clipboard",
+				Name: i.api.GetTranslation(ctx, "selection_copy_to_clipboard"),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					clipboard.WriteText(text)
 				},
@@ -93,11 +93,11 @@ func (i *SelectionPlugin) queryForSelectionText(ctx context.Context, text string
 func (i *SelectionPlugin) queryForSelectionFile(ctx context.Context, filePaths []string) []plugin.QueryResult {
 	var results []plugin.QueryResult
 	results = append(results, plugin.QueryResult{
-		Title: "Copy path",
+		Title: i.api.GetTranslation(ctx, "selection_copy_path"),
 		Icon:  plugin.CopyIcon,
 		Actions: []plugin.QueryResultAction{
 			{
-				Name: "Copy",
+				Name: i.api.GetTranslation(ctx, "selection_copy"),
 				Icon: plugin.CopyIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					clipboard.WriteText(strings.Join(filePaths, "\n"))
@@ -112,11 +112,11 @@ func (i *SelectionPlugin) queryForSelectionFile(ctx context.Context, filePaths [
 	if util.IsMacOS() {
 		// share with airdrop
 		results = append(results, plugin.QueryResult{
-			Title: "Share with AirDrop",
+			Title: i.api.GetTranslation(ctx, "selection_share_with_airdrop"),
 			Icon:  plugin.AirdropIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "Share",
+					Name: i.api.GetTranslation(ctx, "selection_share"),
 					Icon: plugin.AirdropIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						airdrop.Airdrop(filePaths)
@@ -135,11 +135,11 @@ func (i *SelectionPlugin) queryForFile(ctx context.Context, filePath string) (re
 	}
 
 	results = append(results, plugin.QueryResult{
-		Title: "Open containing folder",
+		Title: i.api.GetTranslation(ctx, "selection_open_containing_folder"),
 		Icon:  plugin.OpenContainingFolderIcon,
 		Actions: []plugin.QueryResultAction{
 			{
-				Name: "Open containing folder",
+				Name: i.api.GetTranslation(ctx, "selection_open_containing_folder"),
 				Icon: plugin.OpenContainingFolderIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					shell.OpenFileInFolder(filePath)
@@ -149,12 +149,12 @@ func (i *SelectionPlugin) queryForFile(ctx context.Context, filePath string) (re
 	})
 
 	results = append(results, plugin.QueryResult{
-		Title: "Preview",
+		Title: i.api.GetTranslation(ctx, "selection_preview"),
 		Score: 1000,
 		Icon:  plugin.PreviewIcon,
 		Actions: []plugin.QueryResultAction{
 			{
-				Name: "Preview",
+				Name: i.api.GetTranslation(ctx, "selection_preview"),
 				Icon: plugin.PreviewIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				},
@@ -164,9 +164,9 @@ func (i *SelectionPlugin) queryForFile(ctx context.Context, filePath string) (re
 			PreviewType: plugin.WoxPreviewTypeFile,
 			PreviewData: filePath,
 			PreviewProperties: map[string]string{
-				"Created At":  util.GetFileCreatedAt(filePath),
-				"Modified At": util.GetFileModifiedAt(filePath),
-				"Size":        util.GetFileSize(filePath),
+				i.api.GetTranslation(ctx, "selection_created_at"):  util.GetFileCreatedAt(filePath),
+				i.api.GetTranslation(ctx, "selection_modified_at"): util.GetFileModifiedAt(filePath),
+				i.api.GetTranslation(ctx, "selection_size"):        util.GetFileSize(filePath),
 			},
 		},
 	})

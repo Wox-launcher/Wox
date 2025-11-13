@@ -510,5 +510,15 @@
   "toolbar_snooze_1m": "Não me lembrar por 1 mês",
   "toolbar_snooze_forever": "Nunca mostrar novamente",
   "toolbar_more_actions": "Mais Ações",
-  "ui_actions": "Ações"
+  "ui_actions": "Ações",
+  "selection_copy": "Copiar",
+  "selection_copy_to_clipboard": "Copiar para a área de transferência",
+  "selection_copy_path": "Copiar caminho",
+  "selection_share_with_airdrop": "Compartilhar com AirDrop",
+  "selection_share": "Compartilhar",
+  "selection_open_containing_folder": "Abrir pasta",
+  "selection_preview": "Visualizar",
+  "selection_created_at": "Criado em",
+  "selection_modified_at": "Modificado em",
+  "selection_size": "Tamanho"
 }
