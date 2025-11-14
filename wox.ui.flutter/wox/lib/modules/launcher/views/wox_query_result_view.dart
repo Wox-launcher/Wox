@@ -54,6 +54,13 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
                         controller: controller.actionListViewController,
                         maxHeight: 400,
                         listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_ACTION.code,
+                        onFilteHotkeyPressed: (traceId, hotkey) {
+                          if (controller.isActionHotkey(hotkey)) {
+                            controller.hideActionPanel(traceId);
+                            return true;
+                          }
+                          return false;
+                        },
                       ),
                     ],
                   ),

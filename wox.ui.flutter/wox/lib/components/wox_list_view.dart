@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:uuid/v4.dart';
 import 'package:wox/components/wox_list_item_view.dart';
 import 'package:wox/components/wox_platform_focus.dart';
@@ -19,6 +20,7 @@ class WoxListView<T> extends StatelessWidget {
   final bool showFilter;
   final double maxHeight;
   final VoidCallback? onItemTapped;
+  final bool Function(String traceId, HotKey hotkey)? onFilteHotkeyPressed;
 
   const WoxListView({
     super.key,
@@ -27,6 +29,7 @@ class WoxListView<T> extends StatelessWidget {
     this.showFilter = true,
     required this.maxHeight,
     this.onItemTapped,
+    this.onFilteHotkeyPressed,
   });
 
   @override
@@ -150,6 +153,11 @@ class WoxListView<T> extends StatelessWidget {
               var pressedHotkey = WoxHotkey.parseNormalHotkeyFromEvent(event);
               if (pressedHotkey == null) {
                 return KeyEventResult.ignored;
+              }
+
+              // Let caller handle hotkey first
+              if (onFilteHotkeyPressed != null && onFilteHotkeyPressed!(traceId, pressedHotkey)) {
+                return KeyEventResult.handled;
               }
 
               Rx<WoxListItem<T>>? itemMatchedHotkey = controller.items.firstWhereOrNull((element) {
