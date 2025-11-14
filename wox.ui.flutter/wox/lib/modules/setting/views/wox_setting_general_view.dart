@@ -233,7 +233,7 @@ class WoxSettingGeneralView extends WoxSettingBaseView {
                     "Key": "IsSilentExecution",
                     "Label": "i18n:ui_query_hotkeys_silent",
                     "Tooltip": "i18n:ui_query_hotkeys_silent_tooltip",
-                    "Width": 54,
+                    "Width": 40,
                     "Type": "checkbox",
                   }
                 ],

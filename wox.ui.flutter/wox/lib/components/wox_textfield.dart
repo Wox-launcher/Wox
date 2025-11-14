@@ -52,6 +52,7 @@ class WoxTextField extends StatelessWidget {
       minLines: minLines,
       autofocus: autofocus,
       focusNode: focusNode,
+      textAlignVertical: TextAlignVertical.center,
       style: style ?? TextStyle(color: textColor, fontSize: 13),
       decoration: InputDecoration(
         hintText: hintText,

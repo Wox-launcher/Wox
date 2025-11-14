@@ -43,7 +43,6 @@ class WoxSettingAIView extends WoxSettingBaseView {
                         "Tooltip": "i18n:ui_ai_providers_api_key_tooltip",
                         "Type": "text",
                         "TextMaxLines": 1,
-                        "Width": 250,
                       },
                       {
                         "Key": "Host",

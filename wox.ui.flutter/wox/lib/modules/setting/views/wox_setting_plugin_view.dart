@@ -197,31 +197,37 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
 
     // Script tag (non-system script plugins)
     if (!plugin.isSystem && WoxPluginRuntimeEnum.equals(plugin.runtime, WoxPluginRuntimeEnum.SCRIPT)) {
-      rightItems.add(Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(3),
-          border: Border.all(color: borderColor, width: 0.5),
-        ),
-        child: Text(
-          controller.tr('ui_setting_plugin_script_tag'),
-          style: TextStyle(color: borderColor, fontSize: 11, height: 1.1),
+      rightItems.add(Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(color: borderColor, width: 0.5),
+          ),
+          child: Text(
+            controller.tr('ui_setting_plugin_script_tag'),
+            style: TextStyle(color: borderColor, fontSize: 11, height: 1.1),
+          ),
         ),
       ));
     }
 
     // System tag
     if (plugin.isSystem) {
-      rightItems.add(Container(
-        margin: const EdgeInsets.only(left: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(3),
-          border: Border.all(color: borderColor, width: 0.5),
-        ),
-        child: Text(
-          controller.tr('ui_setting_plugin_system_tag'),
-          style: TextStyle(color: borderColor, fontSize: 11, height: 1.1),
+      rightItems.add(Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: Container(
+          margin: const EdgeInsets.only(left: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(color: borderColor, width: 0.5),
+          ),
+          child: Text(
+            controller.tr('ui_setting_plugin_system_tag'),
+            style: TextStyle(color: borderColor, fontSize: 11, height: 1.1),
+          ),
         ),
       ));
     }
@@ -229,8 +235,8 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
     // Store list: show installed check icon
     if (controller.isStorePluginList.value && plugin.isInstalled) {
       rightItems.add(Padding(
-        padding: const EdgeInsets.only(left: 8.0),
-        child: Icon(Icons.check_circle, color: isActive ? getThemeActionItemActiveColor() : Colors.green),
+        padding: const EdgeInsets.only(right: 6),
+        child: Icon(Icons.check_circle, size: 20, color: isActive ? getThemeActionItemActiveColor() : Colors.green),
       ));
     }
 
@@ -339,7 +345,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 if (plugin.isInstalled && !plugin.isSystem)
                   Padding(
                     padding: const EdgeInsets.only(right: 8.0),
-                    child: WoxButton.primary(
+                    child: WoxButton.secondary(
                       text: controller.tr('ui_plugin_uninstall'),
                       onPressed: () {
                         controller.uninstallPlugin(plugin);
@@ -349,7 +355,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 if (!plugin.isInstalled)
                   Padding(
                     padding: const EdgeInsets.only(right: 8.0),
-                    child: Obx(() => WoxButton.primary(
+                    child: Obx(() => WoxButton.secondary(
                           text: controller.isInstallingPlugin.value ? controller.tr("ui_plugin_installing") : controller.tr('ui_plugin_install'),
                           icon: controller.isInstallingPlugin.value
                               ? SizedBox(
@@ -368,7 +374,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 if (plugin.isInstalled && !plugin.isDisable)
                   Padding(
                     padding: const EdgeInsets.only(right: 8.0),
-                    child: WoxButton.primary(
+                    child: WoxButton.secondary(
                       text: controller.tr('ui_plugin_disable'),
                       onPressed: () {
                         controller.disablePlugin(plugin);
@@ -378,7 +384,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                 if (plugin.isInstalled && plugin.isDisable)
                   Padding(
                     padding: const EdgeInsets.only(right: 8.0),
-                    child: WoxButton.primary(
+                    child: WoxButton.secondary(
                       text: controller.tr('ui_plugin_enable'),
                       onPressed: () {
                         controller.enablePlugin(plugin);

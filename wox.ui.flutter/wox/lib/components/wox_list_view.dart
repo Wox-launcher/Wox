@@ -76,18 +76,10 @@ class WoxListView<T> extends StatelessWidget {
                             controller.clearHoveredResult();
                           }
                         },
-                        child: GestureDetector(
-                          onTap: () {
-                            if (!item.value.isGroup) {
-                              controller.updateActiveIndex(const UuidV4().generate(), index);
-                              controller.onItemActive?.call(const UuidV4().generate(), item.value);
-                            }
-                          },
-                          onDoubleTap: () {
-                            if (!item.value.isGroup) {
-                              controller.onItemExecuted?.call(const UuidV4().generate(), item.value);
-                            }
-                          },
+                        child: _WoxListItemGestureWrapper<T>(
+                          controller: controller,
+                          index: index,
+                          item: item,
                           child: Obx(
                             () => WoxListItemView(
                               key: ValueKey(item.value.id),
@@ -211,6 +203,59 @@ class WoxListView<T> extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _WoxListItemGestureWrapper<T> extends StatefulWidget {
+  final WoxListController<T> controller;
+  final int index;
+  final Rx<WoxListItem<T>> item;
+  final Widget child;
+
+  const _WoxListItemGestureWrapper({
+    required this.controller,
+    required this.index,
+    required this.item,
+    required this.child,
+  });
+
+  @override
+  State<_WoxListItemGestureWrapper<T>> createState() => _WoxListItemGestureWrapperState<T>();
+}
+
+class _WoxListItemGestureWrapperState<T> extends State<_WoxListItemGestureWrapper<T>> {
+  DateTime? _lastTapTime;
+  static const _doubleClickThreshold = Duration(milliseconds: 200);
+
+  void _handleTapDown() {
+    if (widget.item.value.isGroup) {
+      return;
+    }
+
+    final traceId = const UuidV4().generate();
+    final now = DateTime.now();
+
+    // Double click
+    if (_lastTapTime != null && now.difference(_lastTapTime!) <= _doubleClickThreshold) {
+      widget.controller.onItemExecuted?.call(traceId, widget.item.value);
+      _lastTapTime = null;
+      return;
+    }
+
+    // Single click
+    widget.controller.updateActiveIndex(traceId, widget.index);
+    widget.controller.onItemActive?.call(traceId, widget.item.value);
+
+    _lastTapTime = now;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => _handleTapDown(),
+      child: widget.child,
     );
   }
 }
