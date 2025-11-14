@@ -234,12 +234,6 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			return
 		}
 
-		// Parse PreserveSelectedIndex parameter (optional, defaults to false)
-		preserveSelectedIndex := false
-		if preserveSelectedIndexStr, exists := request.Params["preserveSelectedIndex"]; exists {
-			preserveSelectedIndex = preserveSelectedIndexStr == "true"
-		}
-
 		if queryType == plugin.QueryTypeInput {
 			queryText, queryTextExist := request.Params["queryText"]
 			if !queryTextExist {
@@ -247,9 +241,8 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 				return
 			}
 			pluginInstance.API.ChangeQuery(ctx, common.PlainQuery{
-				QueryType:             plugin.QueryTypeInput,
-				QueryText:             queryText,
-				PreserveSelectedIndex: preserveSelectedIndex,
+				QueryType: plugin.QueryTypeInput,
+				QueryText: queryText,
 			})
 		}
 		if queryType == plugin.QueryTypeSelection {
@@ -267,35 +260,20 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			}
 
 			pluginInstance.API.ChangeQuery(ctx, common.PlainQuery{
-				QueryType:             plugin.QueryTypeSelection,
-				QuerySelection:        selection,
-				PreserveSelectedIndex: preserveSelectedIndex,
+				QueryType:      plugin.QueryTypeSelection,
+				QuerySelection: selection,
 			})
 		}
 
 		w.sendResponseToHost(ctx, request, "")
 	case "RefreshQuery":
-		queryType, exist := request.Params["queryType"]
-		if !exist {
-			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] RefreshQuery method must have a queryType parameter", request.PluginName))
-			return
-		}
-
-		queryText, queryTextExist := request.Params["queryText"]
-		if !queryTextExist {
-			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] RefreshQuery method must have a queryText parameter", request.PluginName))
-			return
-		}
-
 		// Parse PreserveSelectedIndex parameter (optional, defaults to false)
 		preserveSelectedIndex := false
 		if preserveSelectedIndexStr, exists := request.Params["preserveSelectedIndex"]; exists {
 			preserveSelectedIndex = preserveSelectedIndexStr == "true"
 		}
 
-		pluginInstance.API.ChangeQuery(ctx, common.PlainQuery{
-			QueryType:             queryType,
-			QueryText:             queryText,
+		pluginInstance.API.RefreshQuery(ctx, plugin.RefreshQueryParam{
 			PreserveSelectedIndex: preserveSelectedIndex,
 		})
 

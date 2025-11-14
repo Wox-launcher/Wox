@@ -6,10 +6,9 @@ import (
 )
 
 type PlainQuery struct {
-	QueryType             string
-	QueryText             string
-	QuerySelection        selection.Selection
-	PreserveSelectedIndex bool
+	QueryType      string
+	QueryText      string
+	QuerySelection selection.Selection
 }
 
 var DefaultSettingWindowContext = SettingWindowContext{Path: "/"}
@@ -35,6 +34,7 @@ func (c PlainQuery) String() string {
 // because the golang recycle dependency issue, we can't use UI interface directly from plugin, so we need to define a new interface here
 type UI interface {
 	ChangeQuery(ctx context.Context, query PlainQuery)
+	RefreshQuery(ctx context.Context, preserveSelectedIndex bool)
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context, showContext ShowContext)
 	ToggleApp(ctx context.Context)

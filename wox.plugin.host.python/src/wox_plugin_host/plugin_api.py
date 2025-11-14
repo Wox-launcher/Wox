@@ -14,8 +14,7 @@ from wox_plugin import (
     MRUData,
     PluginSettingDefinitionItem,
     PublicAPI,
-    Query,
-    RefreshQueryOption,
+    RefreshQueryParam,
     Result,
     UpdatableResult,
     UpdatableResultAction,
@@ -77,7 +76,6 @@ class PluginAPI(PublicAPI):
             "QueryType": query.query_type,
             "QueryText": query.query_text,
             "QuerySelection": (query.query_selection.__dict__ if query.query_selection else None),
-            "PreserveSelectedIndex": query.preserve_selected_index,
         }
         await self.invoke_method(ctx, "ChangeQuery", params)
 
@@ -233,11 +231,9 @@ class PluginAPI(PublicAPI):
         response = await self.invoke_method(ctx, "UpdateResultAction", {"action": json.loads(action.to_json())})
         return bool(response) if response is not None else False
 
-    async def refresh_query(self, ctx: Context, query: Query, option: RefreshQueryOption) -> None:
+    async def refresh_query(self, ctx: Context, param: RefreshQueryParam) -> None:
         """Re-execute the current query with the existing query text"""
         params = {
-            "QueryType": query.type,
-            "QueryText": query.raw_query,
-            "PreserveSelectedIndex": option.preserve_selected_index,
+            "PreserveSelectedIndex": param.preserve_selected_index,
         }
         await self.invoke_method(ctx, "RefreshQuery", params)

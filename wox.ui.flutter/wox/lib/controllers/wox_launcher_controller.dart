@@ -562,7 +562,7 @@ class WoxLauncherController extends GetxController {
   }
 
   void onQueryChanged(String traceId, PlainQuery query, String changeReason, {bool moveCursorToEnd = false}) {
-    Logger.instance.debug(traceId, "query changed: ${query.queryText}, reason: $changeReason, preserveSelectedIndex: ${query.preserveSelectedIndex}");
+    Logger.instance.debug(traceId, "query changed: ${query.queryText}, reason: $changeReason");
 
     if (query.queryId == "") {
       query.queryId = const UuidV4().generate();
@@ -573,13 +573,6 @@ class WoxLauncherController extends GetxController {
     //hide setting view if query changed
     if (isInSettingView.value) {
       isInSettingView.value = false;
-    }
-
-    // Save current active index if we need to preserve it
-    int? savedActiveIndex;
-    if (query.preserveSelectedIndex) {
-      savedActiveIndex = resultListViewController.activeIndex.value;
-      Logger.instance.debug(traceId, "preserving selected index: $savedActiveIndex");
     }
 
     currentQuery.value = query;
@@ -606,23 +599,13 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
-    // Store saved index for later restoration
-    if (savedActiveIndex != null) {
-      _pendingPreservedIndex = savedActiveIndex;
-    }
-
     // delay clear results, otherwise windows height will shrink immediately,
     // and then the query result is received which will expand the windows height. so it will causes window flicker
     clearQueryResultsTimer.cancel();
 
-    // if preserveSelectedIndex, we will wait longer to clear the results
-    // since this paramter is only used in refreshQuery api, and we can assume that results
-    // should be almost same with the previous query, so we can wait longer to clear the results, which can avoid window flicker
-    if (query.preserveSelectedIndex) {
-      clearQueryResultDelay = 250;
-      Logger.instance.debug(const UuidV4().generate(), "Adaptive clear delay: preserveSelectedIndex, wait longer to clear results");
-    } else {
-      // Adaptive: adjust clearQueryResultDelay based on recent resize flicker
+    // Adaptive: adjust clearQueryResultDelay based on recent resize flicker
+    // Note: clearQueryResultDelay may have been set by onRefreshQuery for longer delay
+    if (changeReason != "refresh query") {
       final adjust = windowFlickerDetector.adjustClearDelay(clearQueryResultDelay);
       clearQueryResultDelay = adjust.newDelay;
       Logger.instance.debug(
@@ -649,6 +632,33 @@ class WoxLauncherController extends GetxController {
     );
   }
 
+  void onRefreshQuery(String traceId, bool preserveSelectedIndex) {
+    Logger.instance.debug(traceId, "refresh query, preserveSelectedIndex: $preserveSelectedIndex");
+
+    // Save current active index if we need to preserve it
+    if (preserveSelectedIndex) {
+      final savedActiveIndex = resultListViewController.activeIndex.value;
+      _pendingPreservedIndex = savedActiveIndex;
+      Logger.instance.debug(traceId, "preserving selected index: $savedActiveIndex");
+    }
+
+    // Set longer delay for clearing results to avoid flicker
+    // since refresh query usually returns similar results
+    clearQueryResultDelay = 250;
+
+    // Get current query and create a new query with the same content but new ID
+    final currentQueryValue = currentQuery.value;
+    final refreshedQuery = PlainQuery(
+      queryId: const UuidV4().generate(),
+      queryType: currentQueryValue.queryType,
+      queryText: currentQueryValue.queryText,
+      querySelection: currentQueryValue.querySelection,
+    );
+
+    // Re-execute the query
+    onQueryChanged(traceId, refreshedQuery, "refresh query");
+  }
+
   Future<void> handleWebSocketMessage(WoxWebsocketMsg msg) async {
     if (msg.method != WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY.code && msg.type == WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code) {
       Logger.instance.info(msg.traceId, "Received message: ${msg.method}");
@@ -673,6 +683,10 @@ class WoxLauncherController extends GetxController {
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ChangeQuery") {
       onQueryChanged(msg.traceId, PlainQuery.fromJson(msg.data), "receive change query from wox", moveCursorToEnd: true);
+      responseWoxWebsocketRequest(msg, true, null);
+    } else if (msg.method == "RefreshQuery") {
+      final preserveSelectedIndex = msg.data['preserveSelectedIndex'] as bool? ?? false;
+      onRefreshQuery(msg.traceId, preserveSelectedIndex);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ChangeTheme") {
       final theme = WoxTheme.fromJson(msg.data);

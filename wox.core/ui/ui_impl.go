@@ -29,6 +29,12 @@ func (u *uiImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
 	u.invokeWebsocketMethod(ctx, "ChangeQuery", query)
 }
 
+func (u *uiImpl) RefreshQuery(ctx context.Context, preserveSelectedIndex bool) {
+	u.invokeWebsocketMethod(ctx, "RefreshQuery", map[string]interface{}{
+		"preserveSelectedIndex": preserveSelectedIndex,
+	})
+}
+
 func (u *uiImpl) HideApp(ctx context.Context) {
 	u.invokeWebsocketMethod(ctx, "HideApp", nil)
 }

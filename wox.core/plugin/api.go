@@ -135,23 +135,22 @@ type API interface {
 	//
 	// Parameters:
 	//   - ctx: Context
-	//   - query: The current query to refresh
-	//   - option: RefreshQueryOption to control refresh behavior
+	//   - param: RefreshQueryParam to control refresh behavior
 	//
 	// Example - Refresh after marking item as favorite:
 	//   Action: func(ctx context.Context, actionContext ActionContext) {
 	//       markAsFavorite(item)
 	//       // Refresh query and preserve user's current selection
-	//       api.RefreshQuery(ctx, query, RefreshQueryOption{PreserveSelectedIndex: true})
+	//       api.RefreshQuery(ctx, RefreshQueryParam{PreserveSelectedIndex: true})
 	//   }
 	//
 	// Example - Refresh after deleting item:
 	//   Action: func(ctx context.Context, actionContext ActionContext) {
 	//       deleteItem(item)
 	//       // Refresh query and reset to first item
-	//       api.RefreshQuery(ctx, query, RefreshQueryOption{PreserveSelectedIndex: false})
+	//       api.RefreshQuery(ctx, RefreshQueryParam{PreserveSelectedIndex: false})
 	//   }
-	RefreshQuery(ctx context.Context, query Query, option RefreshQueryOption)
+	RefreshQuery(ctx context.Context, param RefreshQueryParam)
 }
 
 type APIImpl struct {
@@ -441,16 +440,8 @@ func (a *APIImpl) IsVisible(ctx context.Context) bool {
 	return GetPluginManager().GetUI().IsVisible(ctx)
 }
 
-func (a *APIImpl) RefreshQuery(ctx context.Context, query Query, option RefreshQueryOption) {
-	if query.Type == QueryTypeSelection {
-		return
-	}
-
-	a.ChangeQuery(ctx, common.PlainQuery{
-		QueryType:             query.Type,
-		QueryText:             query.RawQuery,
-		PreserveSelectedIndex: option.PreserveSelectedIndex,
-	})
+func (a *APIImpl) RefreshQuery(ctx context.Context, param RefreshQueryParam) {
+	GetPluginManager().GetUI().RefreshQuery(ctx, param.PreserveSelectedIndex)
 }
 
 func NewAPI(instance *Instance) API {

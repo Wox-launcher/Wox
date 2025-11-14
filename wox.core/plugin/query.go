@@ -89,8 +89,8 @@ type QueryEnv struct {
 	ActiveBrowserUrl string
 }
 
-// RefreshQueryOption contains options for refreshing a query
-type RefreshQueryOption struct {
+// RefreshQueryParam contains parameters for refreshing a query
+type RefreshQueryParam struct {
 	// PreserveSelectedIndex controls whether to maintain the previously selected item index after refresh
 	// When true, the user's current selection index in the results list is preserved
 	// When false, the selection resets to the first item (index 0)

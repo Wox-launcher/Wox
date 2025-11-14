@@ -513,7 +513,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to set favorite: %s", err.Error()))
 				} else {
 					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("marked record as favorite: %s", record.ID))
-					c.api.RefreshQuery(ctx, query, plugin.RefreshQueryOption{PreserveSelectedIndex: true})
+					c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 				}
 			},
 		})
@@ -527,7 +527,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to cancel favorite: %s", err.Error()))
 				} else {
 					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("cancelled record favorite: %s", record.ID))
-					c.api.RefreshQuery(ctx, query, plugin.RefreshQueryOption{PreserveSelectedIndex: true})
+					c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 				}
 			},
 		})
@@ -545,7 +545,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 				return
 			}
 			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("deleted clipboard record: %s", record.ID))
-			c.api.RefreshQuery(ctx, query, plugin.RefreshQueryOption{PreserveSelectedIndex: true})
+			c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 		},
 	})
 
@@ -634,7 +634,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 						return
 					}
 					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("deleted clipboard record: %s", record.ID))
-					c.api.RefreshQuery(ctx, query, plugin.RefreshQueryOption{PreserveSelectedIndex: true})
+					c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 				},
 			},
 		},
