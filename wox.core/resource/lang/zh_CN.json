@@ -515,6 +515,7 @@
   "toolbar_snooze_forever": "不再提示",
   "toolbar_more_actions": "更多操作",
   "ui_actions": "操作",
+  "ui_no_matches": "无匹配结果",
   "selection_copy": "复制",
   "selection_copy_to_clipboard": "复制到剪贴板",
   "selection_copy_path": "复制路径",

@@ -510,6 +510,7 @@
   "toolbar_snooze_forever": "Больше не показывать",
   "toolbar_more_actions": "Больше действий",
   "ui_actions": "Действия",
+  "ui_no_matches": "Нет совпадений",
   "selection_copy": "Копировать",
   "selection_copy_to_clipboard": "Копировать в буфер обмена",
   "selection_copy_path": "Копировать путь",

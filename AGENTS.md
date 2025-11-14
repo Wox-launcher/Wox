@@ -36,6 +36,8 @@ This document guides AI coding agents working in this repository.
   - Python: `snake_case` for functions, `CamelCase` for classes, prefer type hints and explicit returns.
 - **Internationalization:**
   - All user-facing text should be i18n-friendly. Prefer existing i18n facilities under `wox.core/i18n/` and UI-level localization rather than hardcoding text.
+  - When adding new i18n keys, **always translate for ALL supported languages**: `en_US.json`, `zh_CN.json`, `pt_BR.json`, and `ru_RU.json`.
+  - Organize i18n keys by prefix in language files: keep `ui_*` keys together, `plugin_*` keys together, etc. for maintainability.
 - **Comments:**
   - Use concise English comments only when logic is non-trivial. Do not add redundant or narrative comments.
 
