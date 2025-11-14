@@ -142,7 +142,6 @@ class WoxLauncherController extends GetxController {
         },
         onItemActive: onActionItemActivated,
         onFilterBoxEscPressed: hideActionPanel,
-        onFilterBoxLostFocus: hideActionPanel,
       ),
       tag: 'action',
     );
@@ -150,6 +149,9 @@ class WoxLauncherController extends GetxController {
     // Add focus listener to query box
     queryBoxFocusNode.addListener(() {
       if (queryBoxFocusNode.hasFocus) {
+        var traceId = const UuidV4().generate();
+        hideActionPanel(traceId);
+
         // Call API when query box gains focus
         WoxApi.instance.onQueryBoxFocus();
       }

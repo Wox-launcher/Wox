@@ -18,6 +18,7 @@ class WoxListView<T> extends StatelessWidget {
   final WoxListViewType listViewType;
   final bool showFilter;
   final double maxHeight;
+  final VoidCallback? onItemTapped;
 
   const WoxListView({
     super.key,
@@ -25,6 +26,7 @@ class WoxListView<T> extends StatelessWidget {
     required this.listViewType,
     this.showFilter = true,
     required this.maxHeight,
+    this.onItemTapped,
   });
 
   @override
@@ -80,6 +82,9 @@ class WoxListView<T> extends StatelessWidget {
                           controller: controller,
                           index: index,
                           item: item,
+                          onItemTapped: () {
+                            onItemTapped?.call();
+                          },
                           child: Obx(
                             () => WoxListItemView(
                               key: ValueKey(item.value.id),
@@ -212,12 +217,14 @@ class _WoxListItemGestureWrapper<T> extends StatefulWidget {
   final int index;
   final Rx<WoxListItem<T>> item;
   final Widget child;
+  final VoidCallback? onItemTapped;
 
   const _WoxListItemGestureWrapper({
     required this.controller,
     required this.index,
     required this.item,
     required this.child,
+    this.onItemTapped,
   });
 
   @override
@@ -239,6 +246,7 @@ class _WoxListItemGestureWrapperState<T> extends State<_WoxListItemGestureWrappe
     // Double click
     if (_lastTapTime != null && now.difference(_lastTapTime!) <= _doubleClickThreshold) {
       widget.controller.onItemExecuted?.call(traceId, widget.item.value);
+      widget.onItemTapped?.call();
       _lastTapTime = null;
       return;
     }
@@ -246,6 +254,8 @@ class _WoxListItemGestureWrapperState<T> extends State<_WoxListItemGestureWrappe
     // Single click
     widget.controller.updateActiveIndex(traceId, widget.index);
     widget.controller.onItemActive?.call(traceId, widget.item.value);
+
+    widget.onItemTapped?.call();
 
     _lastTapTime = now;
   }
