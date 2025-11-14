@@ -45,7 +45,7 @@ type WoxSetting struct {
 	LastWindowY *WoxSettingValue[int]
 
 	QueryHistories  *WoxSettingValue[[]QueryHistory]
-	FavoriteResults *WoxSettingValue[*util.HashMap[ResultHash, bool]]
+	PinedResults    *WoxSettingValue[*util.HashMap[ResultHash, bool]]
 	ActionedResults *WoxSettingValue[*util.HashMap[ResultHash, []ActionedResult]]
 }
 
@@ -159,7 +159,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		QueryShortcuts:   NewWoxSettingValue(store, "QueryShortcuts", []QueryShortcut{}),
 		AIProviders:      NewWoxSettingValue(store, "AIProviders", []AIProvider{}),
 		QueryHistories:   NewWoxSettingValue(store, "QueryHistories", []QueryHistory{}),
-		FavoriteResults:  NewWoxSettingValue(store, "FavoriteResults", util.NewHashMap[ResultHash, bool]()),
+		PinedResults:     NewWoxSettingValue(store, "PinedResults", util.NewHashMap[ResultHash, bool]()),
 		ActionedResults:  NewWoxSettingValue(store, "ActionedResults", util.NewHashMap[ResultHash, []ActionedResult]()),
 	}
 }

@@ -122,25 +122,25 @@ func (m *Manager) AddActionedResult(ctx context.Context, pluginId string, result
 	m.woxSetting.ActionedResults.Set(actionedResults)
 }
 
-func (m *Manager) AddFavoriteResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string) {
-	util.GetLogger().Info(ctx, fmt.Sprintf("add favorite result: %s, %s", resultTitle, resultSubTitle))
+func (m *Manager) PinResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string) {
+	util.GetLogger().Info(ctx, fmt.Sprintf("pin result: %s, %s", resultTitle, resultSubTitle))
 	resultHash := NewResultHash(pluginId, resultTitle, resultSubTitle)
-	favoriteResults := m.woxSetting.FavoriteResults.Get()
-	favoriteResults.Store(resultHash, true)
-	m.woxSetting.FavoriteResults.Set(favoriteResults)
+	results := m.woxSetting.PinedResults.Get()
+	results.Store(resultHash, true)
+	m.woxSetting.PinedResults.Set(results)
 }
 
-func (m *Manager) IsFavoriteResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string) bool {
+func (m *Manager) IsPinedResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string) bool {
 	resultHash := NewResultHash(pluginId, resultTitle, resultSubTitle)
-	return m.woxSetting.FavoriteResults.Get().Exist(resultHash)
+	return m.woxSetting.PinedResults.Get().Exist(resultHash)
 }
 
-func (m *Manager) RemoveFavoriteResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string) {
-	util.GetLogger().Info(ctx, fmt.Sprintf("remove favorite result: %s, %s", resultTitle, resultSubTitle))
+func (m *Manager) UnpinResult(ctx context.Context, pluginId string, resultTitle string, resultSubTitle string) {
+	util.GetLogger().Info(ctx, fmt.Sprintf("unpin result: %s, %s", resultTitle, resultSubTitle))
 	resultHash := NewResultHash(pluginId, resultTitle, resultSubTitle)
-	favoriteResults := m.woxSetting.FavoriteResults.Get()
-	favoriteResults.Delete(resultHash)
-	m.woxSetting.FavoriteResults.Set(favoriteResults)
+	results := m.woxSetting.PinedResults.Get()
+	results.Delete(resultHash)
+	m.woxSetting.PinedResults.Set(results)
 }
 
 func (m *Manager) AddQueryHistory(ctx context.Context, query common.PlainQuery) {

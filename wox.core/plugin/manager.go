@@ -806,11 +806,11 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 
 	// Define add to favorite action
 	addToFavoriteAction = func(ctx context.Context, actionContext ActionContext) {
-		setting.GetSettingManager().AddFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
+		setting.GetSettingManager().PinResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
 
 		// Get API instance
 		api := NewAPI(pluginInstance)
-		api.Notify(ctx, "i18n:plugin_manager_add_to_favorite_success")
+		api.Notify(ctx, "i18n:plugin_manager_pin_in_query_success")
 
 		// Get current result state
 		updatableResult := api.GetUpdatableResult(ctx, actionContext.ResultId)
@@ -828,11 +828,11 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 
 	// Define remove from favorite action
 	removeFromFavoriteAction = func(ctx context.Context, actionContext ActionContext) {
-		setting.GetSettingManager().RemoveFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
+		setting.GetSettingManager().UnpinResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
 
 		// Get API instance
 		api := NewAPI(pluginInstance)
-		api.Notify(ctx, "i18n:plugin_manager_remove_from_favorite_success")
+		api.Notify(ctx, "i18n:plugin_manager_unpin_in_query")
 
 		// Get current result state
 		updatableResult := api.GetUpdatableResult(ctx, actionContext.ResultId)
@@ -848,18 +848,18 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 		api.UpdateResult(ctx, *updatableResult)
 	}
 
-	if setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, title, subTitle) {
+	if setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, title, subTitle) {
 		defaultActions = append(defaultActions, QueryResultAction{
-			Name:                   "i18n:plugin_manager_remove_from_favorite",
-			Icon:                   RemoveFromFavIcon,
+			Name:                   "i18n:plugin_manager_unpin_in_query",
+			Icon:                   UnpinIcon,
 			IsSystemAction:         true,
 			PreventHideAfterAction: true,
 			Action:                 removeFromFavoriteAction,
 		})
 	} else {
 		defaultActions = append(defaultActions, QueryResultAction{
-			Name:                   "i18n:plugin_manager_add_to_favorite",
-			Icon:                   AddToFavIcon,
+			Name:                   "i18n:plugin_manager_pin_in_query",
+			Icon:                   PinIcon,
 			IsSystemAction:         true,
 			PreventHideAfterAction: true,
 			Action:                 addToFavoriteAction,
@@ -1061,7 +1061,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	}
 	// check if result is favorite result
 	// favorite result will not be affected by ignoreAutoScore setting, so we add score here
-	isFavorite := setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
+	isFavorite := setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
 	if isFavorite {
 		favScore := int64(100000)
 		logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) is favorite result, add score: %d", pluginInstance.Metadata.Name, result.Title, favScore))
@@ -1078,7 +1078,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		if !hasFavoriteTail {
 			result.Tails = append(result.Tails, QueryResultTail{
 				Type:         QueryResultTailTypeImage,
-				Image:        AddToFavIcon,
+				Image:        PinIcon,
 				ContextData:  favoriteTailContextData, // Use ContextData to identify favorite tail
 				IsSystemTail: true,                    // Mark as system tail so it will be filtered out in GetUpdatableResult
 			})
@@ -1191,7 +1191,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 		}
 
 		// Add favorite icon to tails if this is a favorite result
-		isFavorite := setting.GetSettingManager().IsFavoriteResult(ctx, pluginInstance.Metadata.Id, resultCache.Result.Title, resultCache.Result.SubTitle)
+		isFavorite := setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, resultCache.Result.Title, resultCache.Result.SubTitle)
 		if isFavorite {
 			// Check if favorite tail already exists
 			hasFavoriteTail := false
@@ -1204,7 +1204,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			if !hasFavoriteTail {
 				tails = append(tails, QueryResultTail{
 					Type:         QueryResultTailTypeImage,
-					Image:        AddToFavIcon,
+					Image:        PinIcon,
 					ContextData:  favoriteTailContextData, // Use ContextData to identify favorite tail
 					IsSystemTail: true,                    // Mark as system tail so it will be filtered out in GetUpdatableResult
 				})
@@ -1444,7 +1444,14 @@ func (m *Manager) translatePlugin(ctx context.Context, pluginInstance *Instance,
 	if pluginInstance.IsSystemPlugin {
 		return i18n.GetI18nManager().TranslateWox(ctx, key)
 	} else {
-		return i18n.GetI18nManager().TranslatePlugin(ctx, key, pluginInstance.PluginDirectory)
+		// Try plugin translation first
+		translated := i18n.GetI18nManager().TranslatePlugin(ctx, key, pluginInstance.PluginDirectory)
+		// If translation failed, fallback to system translation
+		// This handles cases where third-party plugins have system actions (like "Pin to current query")
+		if key == translated {
+			translated = i18n.GetI18nManager().TranslateWox(ctx, key)
+		}
+		return translated
 	}
 }
 

@@ -506,7 +506,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	if !record.IsFavorite {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "Mark as favorite",
-			Icon:                   plugin.AddToFavIcon,
+			Icon:                   plugin.PinIcon,
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := c.markAsFavorite(ctx, record); err != nil {
@@ -520,7 +520,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	} else {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "Cancel favorite",
-			Icon:                   plugin.RemoveFromFavIcon,
+			Icon:                   plugin.UnpinIcon,
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := c.cancelFavorite(ctx, record.ID); err != nil {
