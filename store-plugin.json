@@ -139,7 +139,7 @@
     "Id": "9575a1fc-d81b-4947-bcce-bd075f118f3e",
     "Name": "RSS Reader",
     "Author": "qianlifeng",
-    "Version": "0.0.2",
+    "Version": "0.0.3",
     "MinWoxVersion": "2.0.0",
     "Runtime": "nodejs",
     "Description": "Read RSS feeds",
