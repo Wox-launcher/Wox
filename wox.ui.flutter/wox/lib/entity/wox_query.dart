@@ -10,14 +10,16 @@ class PlainQuery {
   late WoxQueryType queryType;
   late String queryText;
   late Selection querySelection;
+  late bool preserveSelectedIndex;
 
-  PlainQuery({required this.queryId, required this.queryType, required this.queryText, required this.querySelection});
+  PlainQuery({required this.queryId, required this.queryType, required this.queryText, required this.querySelection, this.preserveSelectedIndex = false});
 
   PlainQuery.fromJson(Map<String, dynamic> json) {
     queryId = json['QueryId'] ?? "";
     queryType = json['QueryType'];
     queryText = json['QueryText'];
     querySelection = Selection.fromJson(json['QuerySelection']);
+    preserveSelectedIndex = json['PreserveSelectedIndex'] ?? false;
   }
 
   Map<String, dynamic> toJson() {
@@ -26,6 +28,7 @@ class PlainQuery {
     data['QueryType'] = queryType;
     data['QueryText'] = queryText;
     data['QuerySelection'] = querySelection.toJson();
+    data['PreserveSelectedIndex'] = preserveSelectedIndex;
     return data;
   }
 

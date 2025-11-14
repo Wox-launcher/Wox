@@ -89,6 +89,14 @@ type QueryEnv struct {
 	ActiveBrowserUrl string
 }
 
+// RefreshQueryOption contains options for refreshing a query
+type RefreshQueryOption struct {
+	// PreserveSelectedIndex controls whether to maintain the previously selected item index after refresh
+	// When true, the user's current selection index in the results list is preserved
+	// When false, the selection resets to the first item (index 0)
+	PreserveSelectedIndex bool
+}
+
 // Query result return from plugin
 type QueryResult struct {
 	// Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you

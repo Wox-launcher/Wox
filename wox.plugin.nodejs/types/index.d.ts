@@ -256,6 +256,16 @@ export interface ChangeQueryParam {
   QueryType: "input" | "selection"
   QueryText?: string
   QuerySelection?: Selection
+  PreserveSelectedIndex?: boolean
+}
+
+export interface RefreshQueryOption {
+  /**
+   * Controls whether to maintain the previously selected item index after refresh.
+   * When true, the user's current selection index in the results list is preserved.
+   * When false, the selection resets to the first item (index 0).
+   */
+  PreserveSelectedIndex: boolean
 }
 
 export interface PublicAPI {
@@ -460,6 +470,34 @@ export interface PublicAPI {
    * @returns Promise<boolean> True if updated successfully, false if result no longer visible
    */
   UpdateResultAction: (ctx: Context, action: UpdatableResultAction) => Promise<boolean>
+
+  /**
+   * Re-execute the current query with the existing query text.
+   * This is useful when plugin data changes and you want to update the displayed results.
+   *
+   * Example - Refresh after marking item as favorite:
+   * ```typescript
+   * Action: async (actionContext) => {
+   *   markAsFavorite(item)
+   *   // Refresh query and preserve user's current selection
+   *   await api.RefreshQuery(ctx, query, { PreserveSelectedIndex: true })
+   * }
+   * ```
+   *
+   * Example - Refresh after deleting item:
+   * ```typescript
+   * Action: async (actionContext) => {
+   *   deleteItem(item)
+   *   // Refresh query and reset to first item
+   *   await api.RefreshQuery(ctx, query, { PreserveSelectedIndex: false })
+   * }
+   * ```
+   *
+   * @param ctx Context
+   * @param query The current query to refresh
+   * @param option RefreshQueryOption to control refresh behavior
+   */
+  RefreshQuery: (ctx: Context, query: Query, option: RefreshQueryOption) => Promise<void>
 }
 
 export type WoxImageType = "absolute" | "relative" | "base64" | "svg" | "url" | "emoji" | "lottie"

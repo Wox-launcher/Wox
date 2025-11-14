@@ -1,4 +1,4 @@
-import { ChangeQueryParam, Context, MapString, PublicAPI, Result, ResultAction, UpdatableResult, UpdatableResultAction } from "@wox-launcher/wox-plugin"
+import { ChangeQueryParam, Context, MapString, PublicAPI, Query, RefreshQueryOption, Result, ResultAction, UpdatableResult, UpdatableResultAction } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { waitingForResponse } from "./index"
@@ -62,7 +62,8 @@ export class PluginAPI implements PublicAPI {
     await this.invokeMethod(ctx, "ChangeQuery", {
       queryType: query.QueryType,
       queryText: query.QueryText === undefined ? "" : query.QueryText,
-      querySelection: JSON.stringify(query.QuerySelection)
+      querySelection: JSON.stringify(query.QuerySelection),
+      preserveSelectedIndex: (query.PreserveSelectedIndex === undefined ? false : query.PreserveSelectedIndex).toString()
     })
   }
 
@@ -193,5 +194,13 @@ export class PluginAPI implements PublicAPI {
 
     const response = await this.invokeMethod(ctx, "UpdateResultAction", { action: JSON.stringify(action) })
     return response === true
+  }
+
+  async RefreshQuery(ctx: Context, query: Query, option: RefreshQueryOption): Promise<void> {
+    await this.invokeMethod(ctx, "RefreshQuery", {
+      queryType: query.Type,
+      queryText: query.RawQuery,
+      preserveSelectedIndex: option.PreserveSelectedIndex.toString()
+    })
   }
 }

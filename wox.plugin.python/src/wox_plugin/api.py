@@ -3,7 +3,7 @@ from typing import Callable, Dict, List, Optional, Protocol
 from .models.ai import AIModel, ChatStreamCallback, Conversation
 from .models.context import Context
 from .models.mru import MRUData
-from .models.query import ChangeQueryParam, MetadataCommand
+from .models.query import ChangeQueryParam, MetadataCommand, Query, RefreshQueryOption
 from .models.result import Result, UpdatableResult, UpdatableResultAction  # noqa: F401
 from .models.setting import PluginSettingDefinitionItem
 
@@ -211,5 +211,29 @@ class PublicAPI(Protocol):
 
         Returns:
             bool: True if updated successfully, False if result no longer visible
+        """
+        ...
+
+    async def refresh_query(self, ctx: Context, query: Query, option: RefreshQueryOption) -> None:
+        """
+        Re-execute the current query with the existing query text.
+        This is useful when plugin data changes and you want to update the displayed results.
+
+        Args:
+            ctx: Context
+            query: The current query to refresh
+            option: RefreshQueryOption to control refresh behavior
+
+        Example - Refresh after marking item as favorite:
+            async def mark_favorite(action_context: ActionContext):
+                mark_as_favorite(item)
+                # Refresh query and preserve user's current selection
+                await api.refresh_query(ctx, query, RefreshQueryOption(preserve_selected_index=True))
+
+        Example - Refresh after deleting item:
+            async def delete_item(action_context: ActionContext):
+                delete(item)
+                # Refresh query and reset to first item
+                await api.refresh_query(ctx, query, RefreshQueryOption(preserve_selected_index=False))
         """
         ...

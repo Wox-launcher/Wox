@@ -92,6 +92,9 @@ class WoxLauncherController extends GetxController {
   final latestQueryHistories = <QueryHistory>[]; // the latest query histories
   var currentQueryHistoryIndex = 0; //  query history index, used to navigate query history
 
+  /// Pending preserved index for query refresh
+  int? _pendingPreservedIndex;
+
   var lastLaunchMode = WoxLaunchModeEnum.WOX_LAUNCH_MODE_CONTINUE.code;
   var lastStartPage = WoxStartPageEnum.WOX_START_PAGE_MRU.code;
   final isInSettingView = false.obs;
@@ -233,10 +236,38 @@ class WoxLauncherController extends GetxController {
     // Following resetActiveResult will trigger the callback
     resultListViewController.updateItems(traceId, finalResultsSorted.map((e) => WoxListItem.fromQueryResult(e)).toList(), silent: true);
 
-    // if current query already has results and active result is not the first one, then do not reset active result and action
-    // this will prevent the active result from being reset to the first one when the query results are received
-    if (existingQueryResults.isEmpty || resultListViewController.activeIndex.value == 0) {
-      resetActiveResult();
+    // Handle index preservation or reset
+    if (_pendingPreservedIndex != null) {
+      // Restore the preserved index
+      final targetIndex = _pendingPreservedIndex!;
+      _pendingPreservedIndex = null; // Clear the pending index
+
+      // Ensure the index is within bounds
+      if (targetIndex < resultListViewController.items.length) {
+        // Skip group items - find the next non-group item
+        var actualIndex = targetIndex;
+        while (actualIndex < resultListViewController.items.length && resultListViewController.items[actualIndex].value.data.isGroup) {
+          actualIndex++;
+        }
+
+        // If we found a valid non-group item, use it; otherwise reset to first
+        if (actualIndex < resultListViewController.items.length) {
+          resultListViewController.updateActiveIndex(traceId, actualIndex);
+          Logger.instance.debug(traceId, "restored active index to: $actualIndex (original: $targetIndex)");
+        } else {
+          resetActiveResult();
+          Logger.instance.debug(traceId, "could not restore index $targetIndex (all remaining items are groups), reset to first");
+        }
+      } else {
+        resetActiveResult();
+        Logger.instance.debug(traceId, "could not restore index $targetIndex (out of bounds), reset to first");
+      }
+    } else {
+      // Normal behavior: if current query already has results and active result is not the first one, then do not reset active result and action
+      // this will prevent the active result from being reset to the first one when the query results are received
+      if (existingQueryResults.isEmpty || resultListViewController.activeIndex.value == 0) {
+        resetActiveResult();
+      }
     }
 
     resizeHeight();
@@ -531,7 +562,7 @@ class WoxLauncherController extends GetxController {
   }
 
   void onQueryChanged(String traceId, PlainQuery query, String changeReason, {bool moveCursorToEnd = false}) {
-    Logger.instance.debug(traceId, "query changed: ${query.queryText}, reason: $changeReason");
+    Logger.instance.debug(traceId, "query changed: ${query.queryText}, reason: $changeReason, preserveSelectedIndex: ${query.preserveSelectedIndex}");
 
     if (query.queryId == "") {
       query.queryId = const UuidV4().generate();
@@ -542,6 +573,13 @@ class WoxLauncherController extends GetxController {
     //hide setting view if query changed
     if (isInSettingView.value) {
       isInSettingView.value = false;
+    }
+
+    // Save current active index if we need to preserve it
+    int? savedActiveIndex;
+    if (query.preserveSelectedIndex) {
+      savedActiveIndex = resultListViewController.activeIndex.value;
+      Logger.instance.debug(traceId, "preserving selected index: $savedActiveIndex");
     }
 
     currentQuery.value = query;
@@ -568,17 +606,30 @@ class WoxLauncherController extends GetxController {
       return;
     }
 
+    // Store saved index for later restoration
+    if (savedActiveIndex != null) {
+      _pendingPreservedIndex = savedActiveIndex;
+    }
+
     // delay clear results, otherwise windows height will shrink immediately,
     // and then the query result is received which will expand the windows height. so it will causes window flicker
     clearQueryResultsTimer.cancel();
 
-    // Adaptive: adjust clearQueryResultDelay based on recent resize flicker
-    final adjust = windowFlickerDetector.adjustClearDelay(clearQueryResultDelay);
-    clearQueryResultDelay = adjust.newDelay;
-    Logger.instance.debug(
-      const UuidV4().generate(),
-      "Adaptive clear delay: $clearQueryResultDelay ms (flicker=${adjust.status.flicker}, reason=${adjust.status.reason}, events=${adjust.status.events})",
-    );
+    // if preserveSelectedIndex, we will wait longer to clear the results
+    // since this paramter is only used in refreshQuery api, and we can assume that results
+    // should be almost same with the previous query, so we can wait longer to clear the results, which can avoid window flicker
+    if (query.preserveSelectedIndex) {
+      clearQueryResultDelay = 250;
+      Logger.instance.debug(const UuidV4().generate(), "Adaptive clear delay: preserveSelectedIndex, wait longer to clear results");
+    } else {
+      // Adaptive: adjust clearQueryResultDelay based on recent resize flicker
+      final adjust = windowFlickerDetector.adjustClearDelay(clearQueryResultDelay);
+      clearQueryResultDelay = adjust.newDelay;
+      Logger.instance.debug(
+        const UuidV4().generate(),
+        "Adaptive clear delay: $clearQueryResultDelay ms (flicker=${adjust.status.flicker}, reason=${adjust.status.reason}, events=${adjust.status.events})",
+      );
+    }
 
     clearQueryResultsTimer = Timer(Duration(milliseconds: clearQueryResultDelay), () {
       clearQueryResults(traceId);

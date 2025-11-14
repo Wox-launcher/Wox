@@ -23,6 +23,7 @@ from .models.query import (
     Query,
     QueryEnv,
     QueryType,
+    RefreshQueryOption,
     Selection,
     SelectionType,
 )
@@ -81,6 +82,7 @@ __all__: List[str] = [
     "ai_message",
     # Query
     "ChangeQueryParam",
+    "RefreshQueryOption",
     "QueryType",
     "Selection",
     "SelectionType",

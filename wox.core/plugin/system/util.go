@@ -213,17 +213,6 @@ func GetActiveWindowIcon(ctx context.Context) (common.WoxImage, error) {
 	return woxIcon, nil
 }
 
-func RefreshQuery(ctx context.Context, api plugin.API, query plugin.Query) {
-	if query.Type == plugin.QueryTypeSelection {
-		return
-	}
-
-	api.ChangeQuery(ctx, common.PlainQuery{
-		QueryType: query.Type,
-		QueryText: query.RawQuery,
-	})
-}
-
 func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, actionCallback func()) (plugin.QueryResultAction, error) {
 	windowName := window.GetActiveWindowName()
 	windowIcon, windowIconErr := window.GetActiveWindowIcon()

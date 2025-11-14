@@ -6,9 +6,10 @@ import (
 )
 
 type PlainQuery struct {
-	QueryType      string
-	QueryText      string
-	QuerySelection selection.Selection
+	QueryType             string
+	QueryText             string
+	QuerySelection        selection.Selection
+	PreserveSelectedIndex bool
 }
 
 var DefaultSettingWindowContext = SettingWindowContext{Path: "/"}

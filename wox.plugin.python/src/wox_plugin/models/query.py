@@ -195,12 +195,14 @@ class ChangeQueryParam:
     query_type: QueryType
     query_text: str = field(default="")
     query_selection: Selection = field(default_factory=Selection)
+    preserve_selected_index: bool = field(default=False)
 
     def to_json(self) -> str:
         """Convert to JSON string with camelCase naming"""
         data = {
             "QueryType": self.query_type,
             "QueryText": self.query_text,
+            "PreserveSelectedIndex": self.preserve_selected_index,
         }
         if self.query_selection:
             data["QuerySelection"] = json.loads(self.query_selection.to_json())
@@ -218,4 +220,17 @@ class ChangeQueryParam:
             query_type=QueryType(data.get("QueryType")),
             query_text=data.get("QueryText", ""),
             query_selection=Selection.from_json(data.get("QuerySelection", Selection().to_json())),
+            preserve_selected_index=data.get("PreserveSelectedIndex", False),
         )
+
+
+@dataclass
+class RefreshQueryOption:
+    """Options for refreshing a query"""
+
+    preserve_selected_index: bool = field(default=False)
+    """
+    Controls whether to maintain the previously selected item index after refresh.
+    When True, the user's current selection index in the results list is preserved.
+    When False, the selection resets to the first item (index 0).
+    """
