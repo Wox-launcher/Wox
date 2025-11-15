@@ -215,6 +215,20 @@ class PluginAPI(PublicAPI):
 
     async def update_result(self, ctx: Context, result: UpdatableResult) -> bool:
         """Update a query result that is currently displayed in the UI"""
+        # Cache action callbacks before serialization
+        if result.actions:
+            from .plugin_manager import plugin_instances
+
+            plugin_instance = plugin_instances.get(self.plugin_id)
+            if plugin_instance:
+                for action in result.actions:
+                    # Generate ID for actions that don't have one
+                    if not action.id:
+                        action.id = str(uuid.uuid4())
+
+                    if action.action is not None:
+                        plugin_instance.actions[action.id] = action.action
+
         response = await self.invoke_method(ctx, "UpdateResult", {"result": json.loads(result.to_json())})
         return bool(response) if response is not None else False
 

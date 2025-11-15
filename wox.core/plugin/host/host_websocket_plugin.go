@@ -26,6 +26,21 @@ func (w *WebsocketPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	})
 }
 
+// CreateActionProxy creates a proxy callback for an action that will invoke the host's action method
+func (w *WebsocketPlugin) CreateActionProxy(actionId string) func(context.Context, plugin.ActionContext) {
+	return func(ctx context.Context, actionContext plugin.ActionContext) {
+		_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "action", map[string]string{
+			"ResultId":       actionContext.ResultId,
+			"ActionId":       actionId,
+			"ResultActionId": actionContext.ResultActionId,
+			"ContextData":    actionContext.ContextData,
+		})
+		if actionErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", w.metadata.Name, actionErr.Error()))
+		}
+	}
+}
+
 func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	selectionJson, marshalErr := json.Marshal(query.Selection)
 	if marshalErr != nil {

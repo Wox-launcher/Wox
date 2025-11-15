@@ -178,6 +178,23 @@ export class PluginAPI implements PublicAPI {
   }
 
   async UpdateResult(ctx: Context, result: UpdatableResult): Promise<boolean> {
+    // Cache action callbacks before serialization
+    if (result.Actions) {
+      const pluginInstance = pluginInstances.get(this.pluginId)
+      if (pluginInstance) {
+        for (const action of result.Actions) {
+          // Generate ID for actions that don't have one
+          if (!action.Id) {
+            action.Id = crypto.randomUUID()
+          }
+
+          if (action.Action) {
+            pluginInstance.Actions.set(action.Id, action.Action)
+          }
+        }
+      }
+    }
+
     const response = await this.invokeMethod(ctx, "UpdateResult", { result: JSON.stringify(result) })
     return response === true
   }

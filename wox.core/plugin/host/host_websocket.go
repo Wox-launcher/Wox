@@ -426,6 +426,51 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 			})
 		})
 		w.sendResponseToHost(ctx, request, "")
+	case "OnMRURestore":
+		callbackId, exist := request.Params["callbackId"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] OnMRURestore method must have a callbackId parameter", request.PluginName))
+			return
+		}
+
+		metadata := pluginInstance.Metadata
+		pluginInstance.API.OnMRURestore(ctx, func(mruData plugin.MRUData) (*plugin.QueryResult, error) {
+			mruDataJson, marshalErr := json.Marshal(mruData)
+			if marshalErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal MRU data: %s", request.PluginName, marshalErr))
+				return nil, marshalErr
+			}
+
+			result, invokeErr := w.invokeMethod(ctx, metadata, "onMRURestore", map[string]string{
+				"CallbackId": callbackId,
+				"mruData":    string(mruDataJson),
+			})
+			if invokeErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to invoke MRU restore callback: %s", request.PluginName, invokeErr))
+				return nil, invokeErr
+			}
+
+			if result == nil {
+				return nil, nil
+			}
+
+			// Parse the result back to QueryResult
+			var queryResult plugin.QueryResult
+			resultStr, ok := result.(string)
+			if !ok {
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] MRU restore result is not a string", request.PluginName))
+				return nil, fmt.Errorf("MRU restore result is not a string")
+			}
+
+			unmarshalErr := json.Unmarshal([]byte(resultStr), &queryResult)
+			if unmarshalErr != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal MRU restore result: %s", request.PluginName, unmarshalErr))
+				return nil, unmarshalErr
+			}
+
+			return &queryResult, nil
+		})
+		w.sendResponseToHost(ctx, request, "")
 	case "RegisterQueryCommands":
 		var commands []plugin.MetadataCommand
 		unmarshalErr := json.Unmarshal([]byte(request.Params["commands"]), &commands)
@@ -436,6 +481,43 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 
 		pluginInstance.API.RegisterQueryCommands(ctx, commands)
 		w.sendResponseToHost(ctx, request, "")
+	case "GetUpdatableResult":
+		resultId, exist := request.Params["resultId"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] GetUpdatableResult method must have a resultId parameter", request.PluginName))
+			return
+		}
+
+		result := pluginInstance.API.GetUpdatableResult(ctx, resultId)
+		if result == nil {
+			w.sendResponseToHost(ctx, request, nil)
+			return
+		}
+
+		// Marshal the result to JSON for sending to plugin host
+		resultJson, marshalErr := json.Marshal(result)
+		if marshalErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to marshal updatable result: %s", request.PluginName, marshalErr))
+			return
+		}
+
+		w.sendResponseToHost(ctx, request, string(resultJson))
+	case "UpdateResult":
+		resultStr, exist := request.Params["result"]
+		if !exist {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] UpdateResult method must have a result parameter", request.PluginName))
+			return
+		}
+
+		var result plugin.UpdatableResult
+		unmarshalErr := json.Unmarshal([]byte(resultStr), &result)
+		if unmarshalErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to unmarshal updatable result: %s", request.PluginName, unmarshalErr))
+			return
+		}
+
+		success := pluginInstance.API.UpdateResult(ctx, result)
+		w.sendResponseToHost(ctx, request, success)
 	case "AIChatStream":
 		callbackId, exist := request.Params["callbackId"]
 		if !exist {

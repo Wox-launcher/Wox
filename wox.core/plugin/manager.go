@@ -1120,6 +1120,19 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			}
 		}
 
+		// For external plugins (Node.js/Python), create proxy action callbacks
+		// These callbacks will invoke the host's action method, which will then
+		// call the actual cached callback in the plugin host
+		if proxyCreator, ok := pluginInstance.Plugin.(ActionProxyCreator); ok {
+			for actionIndex := range actions {
+				// Always create proxy callback for external plugins
+				// because the Action field is not serialized and will be nil
+				if actions[actionIndex].Action == nil {
+					actions[actionIndex].Action = proxyCreator.CreateActionProxy(actions[actionIndex].Id)
+				}
+			}
+		}
+
 		// Set first action as default if no default action is set
 		defaultActionCount := lo.CountBy(actions, func(item QueryResultAction) bool {
 			return item.IsDefault
@@ -1143,7 +1156,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			return actions[i].IsDefault
 		})
 
-		// Add system actions (like favorite/unfavorite)
+		// Add system actions (like pin/unpin)
 		// System actions are added after user actions
 		systemActions := m.getDefaultActions(ctx, pluginInstance, resultCache.Query, resultCache.Result.Title, resultCache.Result.SubTitle)
 		actions = append(actions, systemActions...)
@@ -1155,8 +1168,26 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 
 		result.Actions = &actions
 
-		// Update cache: use the new actions directly (including callbacks)
-		// Developer may have added/removed/reordered actions or updated callbacks
+		// Update cache: merge new actions with cached actions to preserve callbacks
+		// When updating actions, we need to preserve the Action callbacks from cache
+		// because callbacks cannot be serialized and may be nil in the updated actions
+		for i := range actions {
+			// Find matching action in cache by ID
+			var cachedAction *QueryResultAction
+			for j := range resultCache.Result.Actions {
+				if resultCache.Result.Actions[j].Id == actions[i].Id {
+					cachedAction = &resultCache.Result.Actions[j]
+					break
+				}
+			}
+
+			// If action callback is nil in the new action but exists in cache, preserve it
+			if actions[i].Action == nil && cachedAction != nil && cachedAction.Action != nil {
+				actions[i].Action = cachedAction.Action
+			}
+		}
+
+		// Update cache with merged actions
 		resultCache.Result.Actions = actions
 	}
 
@@ -1571,6 +1602,11 @@ func (m *Manager) ExecuteAction(ctx context.Context, resultId string, actionId s
 	}
 	if actionCache == nil {
 		return fmt.Errorf("action not found for result id: %s, action id: %s", resultId, actionId)
+	}
+
+	// Check if action callback is nil
+	if actionCache.Action == nil {
+		return fmt.Errorf("action callback is nil for result id: %s, action id: %s", resultId, actionId)
 	}
 
 	actionCache.Action(ctx, ActionContext{

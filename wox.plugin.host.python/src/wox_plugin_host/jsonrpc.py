@@ -224,6 +224,11 @@ async def action(ctx: Context, request: Dict[str, Any]) -> None:
             result = action_func(ActionContext(result_id=result_id, result_action_id=result_action_id, context_data=context_data))
             if asyncio.iscoroutine(result):
                 asyncio.create_task(result)
+        else:
+            await logger.error(
+                ctx.get_trace_id(),
+                f"<{plugin_name}> plugin action not found: {action_id}",
+            )
 
     except Exception as e:
         error_stack = traceback.format_exc()

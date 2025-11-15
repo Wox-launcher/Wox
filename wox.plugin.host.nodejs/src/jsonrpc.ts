@@ -237,7 +237,7 @@ async function action(ctx: Context, request: PluginJsonRpcRequest) {
 
   const pluginAction = plugin.Actions.get(request.Params.ActionId)
   if (pluginAction === undefined || pluginAction === null) {
-    logger.error(ctx, `<${request.PluginName}> plugin action not found: ${request.PluginName}`)
+    logger.error(ctx, `<${request.PluginName}> plugin action not found: ${request.Params.ActionId}`)
     return
   }
 
