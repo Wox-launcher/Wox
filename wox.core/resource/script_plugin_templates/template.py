@@ -1,15 +1,28 @@
 #!/usr/bin/env python3
-# Required parameters:
-# @wox.id python-script-template
-# @wox.name Python Script Template
-# @wox.keywords pst
-
-# Optional parameters:
-# @wox.icon emoji:🐍
-# @wox.version 1.0.0
-# @wox.author Wox Team
-# @wox.description A Python template for Wox script plugins
-# @wox.minWoxVersion 2.0.0
+# {
+#   "Id": "python-script-template",
+#   "Name": "Python Script Template",
+#   "Author": "Wox Team",
+#   "Version": "1.0.0",
+#   "MinWoxVersion": "2.0.0",
+#   "Description": "A Python template for Wox script plugins",
+#   "Icon": "emoji:🐍",
+#   "TriggerKeywords": ["pst"],
+#   "SettingDefinitions": [
+#     {
+#       "Type": "textbox",
+#       "Value": {
+#         "Key": "api_key",
+#         "Label": "API Key",
+#         "Tooltip": "Enter your API key here (optional example)",
+#         "DefaultValue": "",
+#         "Style": {
+#           "Width": 400
+#         }
+#       }
+#     }
+#   ]
+# }
 
 """
 Wox Python Script Plugin Template
@@ -24,11 +37,14 @@ Available methods:
 - action: Handle user selection of a result
 
 Available environment variables:
+- WOX_PLUGIN_ID: Plugin ID
+- WOX_PLUGIN_NAME: Plugin name
 - WOX_DIRECTORY_USER_SCRIPT_PLUGINS: Directory where script plugins are stored
 - WOX_DIRECTORY_USER_DATA: User data directory
 - WOX_DIRECTORY_WOX_DATA: Wox application data directory
 - WOX_DIRECTORY_PLUGINS: Plugin directory
 - WOX_DIRECTORY_THEMES: Theme directory
+- WOX_SETTING_<KEY>: Plugin settings (e.g., WOX_SETTING_API_KEY for setting key "api_key")
 """
 
 import sys
@@ -47,6 +63,10 @@ def handle_query(params, request_id):
     Returns:
         A JSON-RPC response with the query results
     """
+    # Access plugin settings via environment variables
+    # Settings are prefixed with WOX_SETTING_ and keys are uppercase
+    api_key = os.getenv('WOX_SETTING_API_KEY', '')
+
     # Generate results
     results = [
         {
@@ -55,6 +75,15 @@ def handle_query(params, request_id):
             "score": 100,
             "action": {
                 "id": "open-plugin-directory",
+                "data": ""
+            }
+        },
+        {
+            "title": "Settings Example",
+            "subtitle": f"API Key configured: {'Yes' if api_key else 'No'}",
+            "score": 90,
+            "action": {
+                "id": "show-settings",
                 "data": ""
             }
         }

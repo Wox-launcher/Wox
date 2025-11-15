@@ -1,15 +1,28 @@
 #!/bin/bash
-# Required parameters:
-# @wox.id bash-script-template
-# @wox.name Bash Script Template
-# @wox.keywords bst
-
-# Optional parameters:
-# @wox.icon emoji:🐚
-# @wox.version 1.0.0
-# @wox.author Wox Team
-# @wox.description A Bash template for Wox script plugins
-# @wox.minWoxVersion 2.0.0
+# {
+#   "Id": "bash-script-template",
+#   "Name": "Bash Script Template",
+#   "Author": "Wox Team",
+#   "Version": "1.0.0",
+#   "MinWoxVersion": "2.0.0",
+#   "Description": "A Bash template for Wox script plugins",
+#   "Icon": "emoji:🐚",
+#   "TriggerKeywords": ["bst"],
+#   "SettingDefinitions": [
+#     {
+#       "Type": "textbox",
+#       "Value": {
+#         "Key": "api_key",
+#         "Label": "API Key",
+#         "Tooltip": "Enter your API key here (optional example)",
+#         "DefaultValue": "",
+#         "Style": {
+#           "Width": 400
+#         }
+#       }
+#     }
+#   ]
+# }
 
 # Wox Bash Script Plugin Template
 #
@@ -23,11 +36,14 @@
 # - action: Handle user selection of a result
 #
 # Available environment variables:
+# - WOX_PLUGIN_ID: Plugin ID
+# - WOX_PLUGIN_NAME: Plugin name
 # - WOX_DIRECTORY_USER_SCRIPT_PLUGINS: Directory where script plugins are stored
 # - WOX_DIRECTORY_USER_DATA: User data directory
 # - WOX_DIRECTORY_WOX_DATA: Wox application data directory
 # - WOX_DIRECTORY_PLUGINS: Plugin directory
 # - WOX_DIRECTORY_THEMES: Theme directory
+# - WOX_SETTING_<KEY>: Plugin settings (e.g., WOX_SETTING_API_KEY for setting key "api_key")
 
 # Read input from command line or stdin
 if [ $# -gt 0 ]; then
@@ -63,6 +79,14 @@ fi
 case "$METHOD" in
   "query")
     # Handle query request
+    # Access plugin settings via environment variables
+    # Settings are prefixed with WOX_SETTING_ and keys are uppercase
+    API_KEY="${WOX_SETTING_API_KEY:-}"
+    API_KEY_STATUS="No"
+    if [ -n "$API_KEY" ]; then
+      API_KEY_STATUS="Yes"
+    fi
+
     # Generate results
     cat << EOF
 {
@@ -75,6 +99,15 @@ case "$METHOD" in
         "score": 100,
         "action": {
           "id": "open-plugin-directory",
+          "data": ""
+        }
+      },
+      {
+        "title": "Settings Example",
+        "subtitle": "API Key configured: $API_KEY_STATUS",
+        "score": 90,
+        "action": {
+          "id": "show-settings",
           "data": ""
         }
       }

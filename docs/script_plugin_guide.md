@@ -17,44 +17,196 @@ wpm create <name>
 ```
 
 Available templates:
+
 - `python` - Python script template
 - `javascript` - JavaScript/Node.js script template
 - `bash` - Bash script template
 
 ### Script Plugin Structure
 
-A script plugin consists of a single executable file with metadata defined in comments:
+A script plugin consists of a single executable file with metadata defined as a JSON object in comments:
 
 ```python
 #!/usr/bin/env python3
-# Required parameters:
-# @wox.id my-calculator
-# @wox.name My Calculator
-# @wox.keywords calc
-
-# Optional parameters:
-# @wox.icon 🧮
-# @wox.version 1.0.0
-# @wox.author Your Name
-# @wox.description A simple calculator plugin
-# @wox.minWoxVersion 2.0.0
+# {
+#   "Id": "my-calculator",
+#   "Name": "My Calculator",
+#   "Author": "Your Name",
+#   "Version": "1.0.0",
+#   "MinWoxVersion": "2.0.0",
+#   "Description": "A simple calculator plugin",
+#   "Icon": "emoji:🧮",
+#   "TriggerKeywords": ["calc"],
+#   "SettingDefinitions": [
+#     {
+#       "Type": "textbox",
+#       "Value": {
+#         "Key": "precision",
+#         "Label": "Decimal Precision",
+#         "Tooltip": "Number of decimal places to show",
+#         "DefaultValue": "2",
+#         "Style": {
+#           "Width": 100
+#         }
+#       }
+#     }
+#   ],
+#   "Features": [
+#     {
+#       "Name": "debounce",
+#       "Params": {
+#         "intervalMs": "300"
+#       }
+#     }
+#   ]
+# }
 
 # Your plugin code here...
 ```
 
-## Metadata Parameters
+The JSON metadata block must:
 
-### Required Parameters
-- `@wox.id` - Unique plugin identifier
-- `@wox.name` - Display name of the plugin
-- `@wox.keywords` - Trigger keywords (space-separated)
+- Be placed in comments at the beginning of the file (after the shebang line)
+- Use `#` for Python/Bash or `//` for JavaScript
+- Contain a complete JSON object with all metadata fields
 
-### Optional Parameters
-- `@wox.icon` - Plugin icon (emoji or file path)
-- `@wox.version` - Plugin version
-- `@wox.author` - Plugin author
-- `@wox.description` - Plugin description
-- `@wox.minWoxVersion` - Minimum required Wox version
+## Metadata Fields
+
+### Required Fields
+
+- `Id` - Unique plugin identifier (use UUID format recommended)
+- `Name` - Display name of the plugin
+- `TriggerKeywords` - Array of trigger keywords
+
+### Optional Fields
+
+- `Icon` - Plugin icon (emoji:🧮, relative:path/to/icon.png, or absolute path)
+- `Version` - Plugin version (default: "1.0.0")
+- `Author` - Plugin author (default: "Unknown")
+- `Description` - Plugin description (default: "A script plugin")
+- `MinWoxVersion` - Minimum required Wox version (default: "2.0.0")
+- `SettingDefinitions` - Array of setting definitions (see Settings section below)
+- `Features` - Array of plugin features (debounce, querySelection, etc.)
+- `Commands` - Array of plugin commands
+- `SupportedOS` - Array of supported operating systems (default: all platforms)
+
+## Plugin Settings
+
+You can define settings that users can configure in the Wox settings UI. Settings are defined in the `SettingDefinitions` array:
+
+```python
+#!/usr/bin/env python3
+# {
+#   "Id": "weather-plugin",
+#   "Name": "Weather",
+#   "TriggerKeywords": ["weather"],
+#   "SettingDefinitions": [
+#     {
+#       "Type": "textbox",
+#       "Value": {
+#         "Key": "api_key",
+#         "Label": "API Key",
+#         "Tooltip": "Your weather API key",
+#         "DefaultValue": "",
+#         "Style": {
+#           "Width": 400
+#         }
+#       }
+#     },
+#     {
+#       "Type": "select",
+#       "Value": {
+#         "Key": "units",
+#         "Label": "Temperature Units",
+#         "DefaultValue": "celsius",
+#         "Options": [
+#           {"Label": "Celsius", "Value": "celsius"},
+#           {"Label": "Fahrenheit", "Value": "fahrenheit"}
+#         ]
+#       }
+#     },
+#     {
+#       "Type": "checkbox",
+#       "Value": {
+#         "Key": "show_forecast",
+#         "Label": "Show 7-day forecast",
+#         "DefaultValue": "true"
+#       }
+#     }
+#   ]
+# }
+```
+
+### Supported Setting Types
+
+- **textbox** - Single or multi-line text input
+- **checkbox** - Boolean checkbox
+- **select** - Dropdown selection
+- **label** - Display-only text label
+- **head** - Section header
+- **newline** - Line break
+- **table** - Table with editable rows
+
+### Accessing Settings in Your Script
+
+Settings are automatically passed to script plugins as environment variables. Each setting is prefixed with `WOX_SETTING_` and the key is converted to uppercase.
+
+For example, if you define a setting with key `api_key`, it will be available as the environment variable `WOX_SETTING_API_KEY`.
+
+**Python Example:**
+
+```python
+import os
+
+# Get setting value
+api_key = os.getenv('WOX_SETTING_API_KEY', '')
+enable_feature = os.getenv('WOX_SETTING_ENABLE_FEATURE', 'false')
+output_format = os.getenv('WOX_SETTING_OUTPUT_FORMAT', 'json')
+
+# Use the settings
+if api_key:
+    print(f"Using API key: {api_key[:4]}...")
+```
+
+**JavaScript Example:**
+
+```javascript
+// Get setting value
+const apiKey = process.env.WOX_SETTING_API_KEY || "";
+const enableFeature = process.env.WOX_SETTING_ENABLE_FEATURE === "true";
+const outputFormat = process.env.WOX_SETTING_OUTPUT_FORMAT || "json";
+
+// Use the settings
+if (apiKey) {
+  console.log(`Using API key: ${apiKey.substring(0, 4)}...`);
+}
+```
+
+**Bash Example:**
+
+```bash
+# Get setting value
+API_KEY="${WOX_SETTING_API_KEY:-}"
+ENABLE_FEATURE="${WOX_SETTING_ENABLE_FEATURE:-false}"
+OUTPUT_FORMAT="${WOX_SETTING_OUTPUT_FORMAT:-json}"
+
+# Use the settings
+if [ -n "$API_KEY" ]; then
+    echo "Using API key: ${API_KEY:0:4}..."
+fi
+```
+
+**Additional Environment Variables:**
+
+Script plugins also have access to these environment variables:
+
+- `WOX_PLUGIN_ID` - The plugin's unique ID
+- `WOX_PLUGIN_NAME` - The plugin's display name
+- `WOX_DIRECTORY_USER_SCRIPT_PLUGINS` - Directory where script plugins are stored
+- `WOX_DIRECTORY_USER_DATA` - User data directory
+- `WOX_DIRECTORY_WOX_DATA` - Wox application data directory
+- `WOX_DIRECTORY_PLUGINS` - Plugin directory
+- `WOX_DIRECTORY_THEMES` - Theme directory
 
 ## JSON-RPC Communication
 
@@ -109,6 +261,7 @@ Your script should respond via stdout:
 Handles user queries and returns search results.
 
 **Parameters:**
+
 - `search` - The search term entered by user
 - `trigger_keyword` - The keyword that triggered this plugin
 - `command` - Command if using plugin commands
@@ -119,6 +272,7 @@ Handles user queries and returns search results.
 Handles user selection of a result item.
 
 **Parameters:**
+
 - `id` - The action ID from the result item
 - `data` - The action data from the result item
 
@@ -137,7 +291,9 @@ Script plugins have access to these environment variables:
 Script plugins can return actions that Wox will handle:
 
 ### open-url
+
 Opens a URL in the default browser:
+
 ```json
 {
   "action": "open-url",
@@ -146,7 +302,9 @@ Opens a URL in the default browser:
 ```
 
 ### open-directory
+
 Opens a directory in the file manager:
+
 ```json
 {
   "action": "open-directory",
@@ -274,49 +432,51 @@ echo '{"jsonrpc":"2.0","result":{"items":['$items']},"id":"'$id'"}'
 // @wox.name Weather
 // @wox.keywords weather
 
-const https = require('https');
+const https = require("https");
 
 function handleQuery(params, requestId) {
-    const search = params.search || '';
+  const search = params.search || "";
 
-    if (!search) {
-        return {
-            jsonrpc: "2.0",
-            result: { items: [] },
-            id: requestId
-        };
-    }
-
-    // Mock weather data (replace with real API)
-    const weatherData = {
-        temperature: "22°C",
-        condition: "Sunny",
-        location: search
-    };
-
+  if (!search) {
     return {
-        jsonrpc: "2.0",
-        result: {
-            items: [{
-                title: `${weatherData.temperature} - ${weatherData.condition}`,
-                subtitle: `Weather in ${weatherData.location}`,
-                score: 100,
-                action: {
-                    id: "show-details",
-                    data: JSON.stringify(weatherData)
-                }
-            }]
-        },
-        id: requestId
+      jsonrpc: "2.0",
+      result: { items: [] },
+      id: requestId,
     };
+  }
+
+  // Mock weather data (replace with real API)
+  const weatherData = {
+    temperature: "22°C",
+    condition: "Sunny",
+    location: search,
+  };
+
+  return {
+    jsonrpc: "2.0",
+    result: {
+      items: [
+        {
+          title: `${weatherData.temperature} - ${weatherData.condition}`,
+          subtitle: `Weather in ${weatherData.location}`,
+          score: 100,
+          action: {
+            id: "show-details",
+            data: JSON.stringify(weatherData),
+          },
+        },
+      ],
+    },
+    id: requestId,
+  };
 }
 
 // Main execution
 const input = process.stdin.read();
 if (input) {
-    const request = JSON.parse(input.toString());
-    const response = handleQuery(request.params || {}, request.id);
-    console.log(JSON.stringify(response));
+  const request = JSON.parse(input.toString());
+  const response = handleQuery(request.params || {}, request.id);
+  console.log(JSON.stringify(response));
 }
 ```
 
@@ -327,7 +487,7 @@ if (input) {
 3. **Performance**: Remember that scripts are executed for each query
 4. **Security**: Be careful with user input, especially when using `eval()` or executing commands
 5. **Testing**: Test your script manually with JSON input before using in Wox
-6. **Use Environment Variables**: Leverage the provided WOX_DIRECTORY_* variables
+6. **Use Environment Variables**: Leverage the provided WOX*DIRECTORY*\* variables
 7. **Validate Input**: Always validate and sanitize user input
 8. **Provide Meaningful Results**: Use descriptive titles and subtitles
 
@@ -356,9 +516,9 @@ echo '{"jsonrpc":"2.0","method":"query","params":{"search":"test"},"id":"1"}' | 
 
 - **Execution Timeout**: Scripts must complete within 10 seconds
 - **No Persistent State**: Scripts are executed fresh for each query
-- **Limited API**: No access to advanced Wox APIs like AI integration or settings UI
+- **Limited API**: No access to advanced Wox APIs like AI integration
 - **Performance**: Not suitable for high-frequency queries or complex operations
-- **No Settings UI**: Cannot provide custom settings interface
+- **Settings Access**: While you can define settings UI, accessing settings values requires additional implementation (store in files or use environment variables)
 
 ## Migration to Full-featured Plugin
 

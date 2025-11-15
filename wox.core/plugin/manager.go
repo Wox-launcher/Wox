@@ -434,6 +434,9 @@ func (m *Manager) ParseMetadata(ctx context.Context, pluginDirectory string) (Me
 }
 
 // ParseScriptMetadata parses metadata from script plugin file comments
+// Supports two formats:
+// 1. JSON block format (preferred): # { ... } with complete plugin.json structure
+// 2. Legacy @wox.xxx format: individual @wox.id, @wox.name, etc. annotations
 func (m *Manager) ParseScriptMetadata(ctx context.Context, scriptPath string) (Metadata, error) {
 	content, err := os.ReadFile(scriptPath)
 	if err != nil {
@@ -441,78 +444,87 @@ func (m *Manager) ParseScriptMetadata(ctx context.Context, scriptPath string) (M
 	}
 
 	lines := strings.Split(string(content), "\n")
-	metadata := Metadata{
-		Runtime: string(PLUGIN_RUNTIME_SCRIPT),
-		Entry:   filepath.Base(scriptPath),
-		Version: "1.0.0", // Default version
-	}
 
-	// Parse metadata from comments
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
+	// Parse JSON block format
+	var jsonBuilder strings.Builder
+	inJsonBlock := false
+	jsonStartLine := -1
+	braceDepth := 0
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
 
 		// Stop parsing when we reach non-comment lines (except shebang)
-		if !strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "//") && !strings.HasPrefix(line, "#!/") {
-			if line != "" {
+		if !strings.HasPrefix(trimmed, "#") && !strings.HasPrefix(trimmed, "//") && !strings.HasPrefix(trimmed, "#!/") {
+			if trimmed != "" {
 				break
 			}
 			continue
 		}
 
 		// Remove comment markers
-		line = strings.TrimPrefix(line, "#")
-		line = strings.TrimPrefix(line, "//")
-		line = strings.TrimPrefix(line, "#!/usr/bin/env")
-		line = strings.TrimPrefix(line, "#!/bin/")
-		line = strings.TrimSpace(line)
+		cleaned := strings.TrimPrefix(trimmed, "#")
+		cleaned = strings.TrimPrefix(cleaned, "//")
+		cleaned = strings.TrimSpace(cleaned)
 
-		// Parse @wox.xxx metadata
-		if strings.HasPrefix(line, "@wox.") {
-			parts := strings.SplitN(line, " ", 2)
-			if len(parts) != 2 {
-				continue
+		// Check for JSON block start
+		if !inJsonBlock && cleaned == "{" {
+			inJsonBlock = true
+			jsonStartLine = i
+			braceDepth = 1
+			jsonBuilder.WriteString(cleaned)
+			continue
+		}
+
+		// Collect JSON content
+		if inJsonBlock {
+			jsonBuilder.WriteString("\n")
+			jsonBuilder.WriteString(cleaned)
+
+			// Track brace depth
+			for _, ch := range cleaned {
+				if ch == '{' {
+					braceDepth++
+				} else if ch == '}' {
+					braceDepth--
+				}
 			}
 
-			key := strings.TrimPrefix(parts[0], "@wox.")
-			value := strings.TrimSpace(parts[1])
-
-			switch key {
-			case "id":
-				metadata.Id = value
-			case "name":
-				metadata.Name = value
-			case "author":
-				metadata.Author = value
-			case "version":
-				metadata.Version = value
-			case "description":
-				metadata.Description = value
-			case "icon":
-				metadata.Icon = value
-			case "keywords":
-				// Split keywords by comma or space
-				keywords := strings.FieldsFunc(value, func(c rune) bool {
-					return c == ',' || c == ' '
-				})
-				for i, keyword := range keywords {
-					keywords[i] = strings.TrimSpace(keyword)
+			// Check for JSON block end (when braces are balanced)
+			if braceDepth == 0 {
+				// Try to parse the collected JSON
+				jsonStr := jsonBuilder.String()
+				var metadata Metadata
+				unmarshalErr := json.Unmarshal([]byte(jsonStr), &metadata)
+				if unmarshalErr != nil {
+					return Metadata{}, fmt.Errorf("failed to parse JSON metadata block (starting at line %d): %w", jsonStartLine+1, unmarshalErr)
 				}
-				metadata.TriggerKeywords = keywords
-			case "minWoxVersion":
-				metadata.MinWoxVersion = value
+
+				// Set script-specific fields
+				metadata.Runtime = string(PLUGIN_RUNTIME_SCRIPT)
+				metadata.Entry = filepath.Base(scriptPath)
+
+				// Validate and set defaults
+				return m.validateAndSetScriptMetadataDefaults(metadata)
 			}
 		}
 	}
 
+	// No JSON block found
+	return Metadata{}, fmt.Errorf("no JSON metadata block found in script file. Script plugins must define metadata as a JSON object in comments")
+}
+
+// validateAndSetScriptMetadataDefaults validates required fields and sets default values
+func (m *Manager) validateAndSetScriptMetadataDefaults(metadata Metadata) (Metadata, error) {
 	// Validate required fields
 	if metadata.Id == "" {
-		return Metadata{}, fmt.Errorf("missing required field: @wox.id")
+		return Metadata{}, fmt.Errorf("missing required field: Id")
 	}
 	if metadata.Name == "" {
-		return Metadata{}, fmt.Errorf("missing required field: @wox.name")
+		return Metadata{}, fmt.Errorf("missing required field: Name")
 	}
 	if len(metadata.TriggerKeywords) == 0 {
-		return Metadata{}, fmt.Errorf("missing required field: @wox.keywords")
+		return Metadata{}, fmt.Errorf("missing required field: TriggerKeywords")
 	}
 
 	// Set default values
@@ -528,9 +540,14 @@ func (m *Manager) ParseScriptMetadata(ctx context.Context, scriptPath string) (M
 	if metadata.MinWoxVersion == "" {
 		metadata.MinWoxVersion = "2.0.0"
 	}
+	if metadata.Version == "" {
+		metadata.Version = "1.0.0"
+	}
 
 	// Set supported OS to all platforms by default
-	metadata.SupportedOS = []string{"Windows", "Linux", "Macos"}
+	if len(metadata.SupportedOS) == 0 {
+		metadata.SupportedOS = []string{"Windows", "Linux", "Macos"}
+	}
 
 	return metadata, nil
 }

@@ -73,6 +73,7 @@ func (s *ScriptHost) UnloadPlugin(ctx context.Context, metadata plugin.Metadata)
 type ScriptPlugin struct {
 	metadata   plugin.Metadata
 	scriptPath string
+	api        plugin.API // API for accessing plugin settings
 }
 
 func NewScriptPlugin(metadata plugin.Metadata, scriptPath string) *ScriptPlugin {
@@ -83,7 +84,8 @@ func NewScriptPlugin(metadata plugin.Metadata, scriptPath string) *ScriptPlugin 
 }
 
 func (sp *ScriptPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
-	// Script plugins don't need initialization since they're executed on-demand
+	// Save API reference for accessing settings
+	sp.api = initParams.API
 	util.GetLogger().Debug(ctx, fmt.Sprintf("Script plugin %s initialized", sp.metadata.Name))
 }
 
@@ -237,13 +239,34 @@ func (sp *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string
 	}
 
 	// Set up environment variables for script plugins
-	cmd.Env = append(os.Environ(),
-		"WOX_DIRECTORY_USER_SCRIPT_PLUGINS="+util.GetLocation().GetUserScriptPluginsDirectory(),
-		"WOX_DIRECTORY_USER_DATA="+util.GetLocation().GetUserDataDirectory(),
-		"WOX_DIRECTORY_WOX_DATA="+util.GetLocation().GetWoxDataDirectory(),
-		"WOX_DIRECTORY_PLUGINS="+util.GetLocation().GetPluginDirectory(),
-		"WOX_DIRECTORY_THEMES="+util.GetLocation().GetThemeDirectory(),
-	)
+	envVars := []string{
+		"WOX_DIRECTORY_USER_SCRIPT_PLUGINS=" + util.GetLocation().GetUserScriptPluginsDirectory(),
+		"WOX_DIRECTORY_USER_DATA=" + util.GetLocation().GetUserDataDirectory(),
+		"WOX_DIRECTORY_WOX_DATA=" + util.GetLocation().GetWoxDataDirectory(),
+		"WOX_DIRECTORY_PLUGINS=" + util.GetLocation().GetPluginDirectory(),
+		"WOX_DIRECTORY_THEMES=" + util.GetLocation().GetThemeDirectory(),
+		"WOX_PLUGIN_ID=" + sp.metadata.Id,
+		"WOX_PLUGIN_NAME=" + sp.metadata.Name,
+	}
+
+	// Add plugin settings as environment variables
+	// Settings are prefixed with WOX_SETTING_ to avoid conflicts
+	if sp.api != nil {
+		// Iterate through setting definitions to get all setting values
+		for _, settingDef := range sp.metadata.SettingDefinitions {
+			if settingDef.Value != nil {
+				key := settingDef.Value.GetKey()
+				value := sp.api.GetSetting(ctx, key)
+
+				// Convert setting key to uppercase and replace special characters for env var name
+				// e.g., "api_key" -> "WOX_SETTING_API_KEY"
+				envKey := "WOX_SETTING_" + strings.ToUpper(strings.ReplaceAll(key, ".", "_"))
+				envVars = append(envVars, envKey+"="+value)
+			}
+		}
+	}
+
+	cmd.Env = append(os.Environ(), envVars...)
 
 	// Set up stdin with the JSON-RPC request
 	cmd.Stdin = strings.NewReader(string(requestJSON))
