@@ -2,9 +2,12 @@ package system
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"wox/common"
 	"wox/plugin"
+	"wox/util"
 	"wox/util/selection"
 
 	"github.com/Masterminds/semver/v3"
@@ -101,6 +104,18 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 	// Get translated action title
 	actionTitle := i.api.GetTranslation(ctx, actionTitleKey)
 
+	// Create plugin detail JSON for preview
+	pluginDetailData := map[string]interface{}{
+		"Id":          pluginMetadata.Id,
+		"Name":        pluginMetadata.Name,
+		"Description": pluginMetadata.Description,
+		"Author":      pluginMetadata.Author,
+		"Version":     pluginMetadata.Version,
+		"Website":     pluginMetadata.Website,
+		"Runtime":     pluginMetadata.Runtime,
+	}
+	pluginDetailJSON, _ := json.Marshal(pluginDetailData)
+
 	// create result for plugin installation
 	results = append(results, plugin.QueryResult{
 		Title:    fmt.Sprintf("%s: %s", actionTitle, pluginMetadata.Name),
@@ -112,65 +127,59 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 				Icon:                   plugin.WoxIcon,
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_start"), actionButtonName, pluginMetadata.Name))
-					installErr := plugin.GetStoreManager().InstallFromLocal(ctx, filePath)
-					if installErr != nil {
-						i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_failed"), strings.ToLower(actionButtonName), installErr.Error()))
-					} else {
+					util.Go(ctx, "install plugin from local", func() {
+						// notify starting
+						i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_start"), actionButtonName, pluginMetadata.Name))
+
+						installErr := plugin.GetStoreManager().InstallFromLocal(ctx, filePath)
+						if installErr != nil {
+							i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_failed"), strings.ToLower(actionButtonName), installErr.Error()))
+							return
+						}
+
+						// update tails and actions after successful install
+						if updatable := i.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
+							newTails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: common.NewWoxImageEmoji("\u2705")}}
+							updatable.Tails = &newTails
+
+							// create "Start Using" action if plugin has non-wildcard trigger keyword
+							var newActions []plugin.QueryResultAction
+							instances := plugin.GetPluginManager().GetPluginInstances()
+							if len(instances) > 0 {
+								if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginMetadata.Id }); ok {
+									if len(inst.Metadata.TriggerKeywords) > 0 {
+										kw := inst.Metadata.TriggerKeywords[0]
+										if kw != "*" && strings.TrimSpace(kw) != "" {
+											// add "Start Using" action
+											newActions = append(newActions, plugin.QueryResultAction{
+												Name:                   "i18n:plugin_wpm_start_using",
+												Icon:                   common.NewWoxImageEmoji("▶️"),
+												PreventHideAfterAction: true,
+												IsDefault:              true,
+												Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+													i.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
+												},
+											})
+										}
+									}
+								}
+							}
+
+							updatable.Actions = &newActions
+							i.api.UpdateResult(ctx, *updatable)
+						}
+
+						// success
 						actionVerbKey := fmt.Sprintf("plugin_installer_verb_%s_past", strings.ToLower(actionButtonName))
 						actionVerb := i.api.GetTranslation(ctx, actionVerbKey)
-						i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_success"), actionVerb, pluginMetadata.Name))
-					}
+						i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_success"), pluginMetadata.Name, actionVerb))
+					})
 				},
 			},
 		},
 		Preview: plugin.WoxPreview{
-			PreviewType: plugin.WoxPreviewTypeMarkdown,
-			PreviewData: fmt.Sprintf(`# %s
-
-## Basic Information
-- **Version**: %s
-- **Author**: %s
-- **Website**: [%s](%s)
-
-## Description
-%s
-
-## Technical Details
-- **Runtime**: %s
-- **Min Wox Version**: %s
-- **Supported OS**: %s
-- **Plugin ID**: %s
-
-## Features
-%s`,
-				pluginMetadata.Name,
-				func() string {
-					versionText := pluginMetadata.Version
-					if isInstalled {
-						versionText += fmt.Sprintf(" (Installed: %s)", installedPlugin.Metadata.Version)
-					}
-					return versionText
-				}(),
-				pluginMetadata.Author,
-				pluginMetadata.Website,
-				pluginMetadata.Website,
-				pluginMetadata.Description,
-				pluginMetadata.Runtime,
-				pluginMetadata.MinWoxVersion,
-				strings.Join(pluginMetadata.SupportedOS, ", "),
-				pluginMetadata.Id,
-				func() string {
-					if len(pluginMetadata.Features) == 0 {
-						return "No special features"
-					}
-					var features []string
-					for _, f := range pluginMetadata.Features {
-						features = append(features, fmt.Sprintf("- %s", f.Name))
-					}
-					return strings.Join(features, "\n")
-				}(),
-			),
+			PreviewType: plugin.WoxPreviewTypePluginDetail,
+			PreviewData: string(pluginDetailJSON),
 		},
 		Score: 2000,
 	})
