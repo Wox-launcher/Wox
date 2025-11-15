@@ -140,6 +140,7 @@
   "ui_plugin_disable": "Disable",
   "ui_plugin_enable": "Enable",
   "ui_plugin_tab_settings": "Settings",
+  "ui_plugin_no_settings": "Este plugin não tem configurações",
   "ui_plugin_tab_trigger_keywords": "Trigger Keywords",
   "ui_plugin_tab_commands": "Commands",
   "ui_plugin_tab_description": "Description",

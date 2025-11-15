@@ -142,6 +142,7 @@
   "ui_plugin_disable": "禁用",
   "ui_plugin_enable": "启用",
   "ui_plugin_tab_settings": "设置",
+  "ui_plugin_no_settings": "此插件没有设置",
   "ui_plugin_tab_trigger_keywords": "触发关键词",
   "ui_plugin_tab_commands": "命令",
   "ui_plugin_tab_description": "描述",

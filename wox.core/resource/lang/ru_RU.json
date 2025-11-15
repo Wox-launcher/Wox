@@ -140,6 +140,7 @@
   "ui_plugin_disable": "Отключить",
   "ui_plugin_enable": "Включить",
   "ui_plugin_tab_settings": "Настройки",
+  "ui_plugin_no_settings": "У этого плагина нет настроек",
   "ui_plugin_tab_trigger_keywords": "Ключевые слова",
   "ui_plugin_tab_commands": "Команды",
   "ui_plugin_tab_description": "Описание",

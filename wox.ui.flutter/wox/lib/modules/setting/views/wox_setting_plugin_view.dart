@@ -508,6 +508,20 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   Widget pluginTabSetting() {
     return Obx(() {
       var plugin = controller.activePlugin.value;
+      
+      // Show empty state if no settings
+      if (plugin.settingDefinitions.isEmpty) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(controller.tr('ui_plugin_no_settings'), style: TextStyle(color: getThemeTextColor())),
+            ],
+          ),
+        );
+      }
+      
       return Padding(
         padding: const EdgeInsets.all(16.0),
         child: SingleChildScrollView(
