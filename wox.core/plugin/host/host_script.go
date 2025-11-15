@@ -1,6 +1,7 @@
 package host
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -256,6 +257,8 @@ func (s *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string]
 		return nil, err
 	}
 
+	util.GetLogger().Debug(ctx, fmt.Sprintf("Using interpreter: '%s' for script: %s", interpreter, s.scriptPath))
+
 	// Set timeout for script execution
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -264,8 +267,10 @@ func (s *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string]
 	var cmd *exec.Cmd
 	if interpreter != "" {
 		cmd = exec.CommandContext(timeoutCtx, interpreter, s.scriptPath)
+		util.GetLogger().Debug(ctx, fmt.Sprintf("Executing command: %s %s", interpreter, s.scriptPath))
 	} else {
 		cmd = exec.CommandContext(timeoutCtx, s.scriptPath)
+		util.GetLogger().Debug(ctx, fmt.Sprintf("Executing command: %s", s.scriptPath))
 	}
 
 	// Set up environment variables for script plugins
@@ -406,10 +411,32 @@ func (s *ScriptPlugin) handleActionResult(ctx context.Context, result map[string
 	}
 }
 
-// getInterpreter determines the appropriate interpreter for the script based on file extension
+// getInterpreter determines the appropriate interpreter for the script based on file extension or shebang
 func (s *ScriptPlugin) getInterpreter(ctx context.Context) (string, error) {
 	ext := strings.ToLower(filepath.Ext(s.scriptPath))
 
+	// Try to determine interpreter from file extension first
+	interpreter, err := s.getInterpreterFromExtension(ctx, ext)
+	if err == nil {
+		return interpreter, nil
+	}
+
+	// If extension is unknown or missing, try to read shebang from file
+	shebangInterpreter, shebangErr := s.getInterpreterFromShebang(ctx)
+	if shebangErr == nil && shebangInterpreter != "" {
+		return shebangInterpreter, nil
+	}
+
+	// If no extension and no valid shebang, assume it's executable
+	if ext == "" {
+		return "", nil
+	}
+
+	return "", fmt.Errorf("unsupported script type: %s", ext)
+}
+
+// getInterpreterFromExtension determines interpreter based on file extension
+func (s *ScriptPlugin) getInterpreterFromExtension(ctx context.Context, ext string) (string, error) {
 	switch ext {
 	case ".py":
 		// Check if user has configured a custom Python path
@@ -431,11 +458,98 @@ func (s *ScriptPlugin) getInterpreter(ctx context.Context) (string, error) {
 		return "ruby", nil
 	case ".pl":
 		return "perl", nil
-	case "": // No extension, assume it's executable
+	case "":
 		return "", nil
 	default:
-		return "", fmt.Errorf("unsupported script type: %s", ext)
+		return "", fmt.Errorf("unsupported extension: %s", ext)
 	}
+}
+
+// getInterpreterFromShebang reads the first line of the script to determine the interpreter
+func (s *ScriptPlugin) getInterpreterFromShebang(ctx context.Context) (string, error) {
+	file, err := os.Open(s.scriptPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open script file: %w", err)
+	}
+	defer file.Close()
+
+	// Read first line using scanner
+	scanner := bufio.NewScanner(file)
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return "", fmt.Errorf("failed to read script file: %w", err)
+		}
+		return "", fmt.Errorf("script file is empty")
+	}
+
+	shebangLine := strings.TrimSpace(scanner.Text())
+
+	// Check if it starts with shebang
+	if !strings.HasPrefix(shebangLine, "#!") {
+		return "", fmt.Errorf("no shebang found")
+	}
+
+	// Extract interpreter path from shebang
+	interpreterPath := strings.TrimSpace(shebangLine[2:])
+	util.GetLogger().Debug(ctx, fmt.Sprintf("Raw shebang line: %s", shebangLine))
+	util.GetLogger().Debug(ctx, fmt.Sprintf("Extracted interpreter path: %s", interpreterPath))
+
+	// Handle common shebang patterns
+	// e.g., "#!/usr/bin/env python3" -> "python3"
+	// e.g., "#!/usr/bin/python3" -> "python3"
+	// e.g., "#!/bin/bash" -> "bash"
+	parts := strings.Fields(interpreterPath)
+	util.GetLogger().Debug(ctx, fmt.Sprintf("Shebang parts: %v (count: %d)", parts, len(parts)))
+
+	if len(parts) == 0 {
+		return "", fmt.Errorf("empty shebang interpreter")
+	}
+
+	// Check if using env
+	if len(parts) >= 2 && (filepath.Base(parts[0]) == "env") {
+		// Format: /usr/bin/env python3
+		interpreterPath = parts[1]
+		util.GetLogger().Debug(ctx, fmt.Sprintf("Detected env-based shebang, using: %s", interpreterPath))
+	} else {
+		// Format: /usr/bin/python3 or /bin/bash
+		// Extract just the interpreter name from full path
+		interpreterPath = filepath.Base(parts[0])
+		util.GetLogger().Debug(ctx, fmt.Sprintf("Detected direct path shebang, using: %s", interpreterPath))
+	}
+
+	// Map common interpreter names and apply custom paths if configured
+	interpreterPath = s.mapInterpreterWithCustomPath(ctx, interpreterPath)
+
+	util.GetLogger().Debug(ctx, fmt.Sprintf("Final interpreter after mapping: %s", interpreterPath))
+	return interpreterPath, nil
+}
+
+// mapInterpreterWithCustomPath maps interpreter names to custom paths if configured
+func (s *ScriptPlugin) mapInterpreterWithCustomPath(ctx context.Context, interpreter string) string {
+	// Normalize interpreter name
+	interpreter = strings.ToLower(interpreter)
+
+	// Check for Python interpreters
+	if strings.HasPrefix(interpreter, "python") {
+		customPath := setting.GetSettingManager().GetWoxSetting(ctx).CustomPythonPath.Get()
+		if customPath != "" && util.IsFileExists(customPath) {
+			return customPath
+		}
+		// Normalize to python3
+		return "python3"
+	}
+
+	// Check for Node.js interpreters
+	if interpreter == "node" || interpreter == "nodejs" {
+		customPath := setting.GetSettingManager().GetWoxSetting(ctx).CustomNodejsPath.Get()
+		if customPath != "" && util.IsFileExists(customPath) {
+			return customPath
+		}
+		return "node"
+	}
+
+	// Return as-is for other interpreters (bash, ruby, perl, etc.)
+	return interpreter
 }
 
 // Helper functions to safely extract values from maps
