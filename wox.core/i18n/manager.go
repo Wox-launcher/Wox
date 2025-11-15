@@ -46,6 +46,7 @@ func (m *Manager) UpdateLang(ctx context.Context, langCode LangCode) error {
 
 	m.currentLangCode = langCode
 	m.currentLangJson = json
+	m.pluginLangJsonMap.Clear()
 	return nil
 }
 

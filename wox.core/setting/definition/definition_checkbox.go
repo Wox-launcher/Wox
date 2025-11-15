@@ -22,6 +22,8 @@ func (p *PluginSettingValueCheckBox) GetDefaultValue() string {
 	return p.DefaultValue
 }
 
-func (p *PluginSettingValueCheckBox) Translate(translator func(ctx context.Context, key string) string) {
-	p.Label = translator(context.Background(), p.Label)
+func (p *PluginSettingValueCheckBox) Translate(translator func(ctx context.Context, key string) string) PluginSettingDefinitionValue {
+	copy := *p
+	copy.Label = translator(context.Background(), p.Label)
+	return &copy
 }

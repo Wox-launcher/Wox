@@ -30,7 +30,7 @@ const (
 type PluginSettingDefinitionValue interface {
 	GetKey() string
 	GetDefaultValue() string
-	Translate(translator func(ctx context.Context, key string) string)
+	Translate(translator func(ctx context.Context, key string) string) PluginSettingDefinitionValue
 }
 
 type PluginSettingDefinitionItem struct {

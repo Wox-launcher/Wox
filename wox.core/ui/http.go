@@ -252,7 +252,7 @@ func convertPluginDto(ctx context.Context, pluginDto dto.PluginDto, pluginInstan
 		//translate setting definition labels
 		for i := range pluginDto.SettingDefinitions {
 			if pluginDto.SettingDefinitions[i].Value != nil {
-				pluginDto.SettingDefinitions[i].Value.Translate(pluginInstance.API.GetTranslation)
+				pluginDto.SettingDefinitions[i].Value = pluginDto.SettingDefinitions[i].Value.Translate(pluginInstance.API.GetTranslation)
 			}
 		}
 

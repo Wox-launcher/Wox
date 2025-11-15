@@ -24,5 +24,6 @@ func (p *PluginSettingValueHead) GetDefaultValue() string {
 	return ""
 }
 
-func (p *PluginSettingValueHead) Translate(translator func(ctx context.Context, key string) string) {
+func (p *PluginSettingValueHead) Translate(translator func(ctx context.Context, key string) string) PluginSettingDefinitionValue {
+	return p
 }

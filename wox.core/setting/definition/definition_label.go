@@ -2,6 +2,7 @@ package definition
 
 import (
 	"context"
+
 	"github.com/google/uuid"
 )
 
@@ -23,6 +24,8 @@ func (p *PluginSettingValueLabel) GetDefaultValue() string {
 	return ""
 }
 
-func (p *PluginSettingValueLabel) Translate(translator func(ctx context.Context, key string) string) {
-	p.Content = translator(context.Background(), p.Content)
+func (p *PluginSettingValueLabel) Translate(translator func(ctx context.Context, key string) string) PluginSettingDefinitionValue {
+	copy := *p
+	copy.Content = translator(context.Background(), p.Content)
+	return &copy
 }

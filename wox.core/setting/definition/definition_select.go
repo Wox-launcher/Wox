@@ -34,10 +34,15 @@ func (p *PluginSettingValueSelect) GetDefaultValue() string {
 	return p.DefaultValue
 }
 
-func (p *PluginSettingValueSelect) Translate(translator func(ctx context.Context, key string) string) {
-	p.Label = translator(context.Background(), p.Label)
-	p.Suffix = translator(context.Background(), p.Suffix)
+func (p *PluginSettingValueSelect) Translate(translator func(ctx context.Context, key string) string) PluginSettingDefinitionValue {
+	copy := *p
+	copy.Label = translator(context.Background(), p.Label)
+	copy.Suffix = translator(context.Background(), p.Suffix)
+	// Deep copy Options
+	copy.Options = make([]PluginSettingValueSelectOption, len(p.Options))
 	for i := range p.Options {
-		p.Options[i].Label = translator(context.Background(), p.Options[i].Label)
+		copy.Options[i].Label = translator(context.Background(), p.Options[i].Label)
+		copy.Options[i].Value = p.Options[i].Value
 	}
+	return &copy
 }

@@ -106,6 +106,29 @@ class WoxSettingController extends GetxController {
   Future<void> updateLang(String langCode) async {
     await updateConfig("LangCode", langCode);
     langMap.value = await WoxApi.instance.getLangJson(langCode);
+
+    // Refresh all loaded plugins to update translations
+    final traceId = const UuidV4().generate();
+
+    // Reload installed plugins list
+    if (installedPlugins.isNotEmpty) {
+      await loadInstalledPlugins(traceId);
+    }
+
+    // Reload store plugins list if loaded
+    if (storePlugins.isNotEmpty) {
+      await loadStorePlugins(traceId);
+    }
+
+    // Refresh current view
+    if (activeNavPath.value == 'plugins.installed' || activeNavPath.value == 'plugins.store') {
+      await switchToPluginList(traceId, isStorePluginList.value);
+    }
+
+    // Refresh active plugin detail if one is selected
+    if (activePlugin.value.id.isNotEmpty) {
+      await refreshPlugin(activePlugin.value.id, "update");
+    }
   }
 
   // get translation
