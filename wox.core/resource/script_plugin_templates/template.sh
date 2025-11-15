@@ -33,7 +33,26 @@
 #
 # Available methods:
 # - query: Process user queries and return results
-# - action: Handle user selection of a result
+# - action: Handle user selection of a result (optional, only needed for custom actions)
+#
+# Actions:
+# - Use "actions" field with an array of action objects (even for single action)
+# - Each action can have a "name" field (displayed in UI, defaults to "Execute")
+#
+# Built-in Actions (handled automatically by Wox, no need to implement in action method):
+# - copy-to-clipboard: Copy text to clipboard
+#   Usage: {"name": "Copy", "id": "copy-to-clipboard", "text": "text to copy"}
+# - open-url: Open URL in browser
+#   Usage: {"name": "Open", "id": "open-url", "url": "https://example.com"}
+# - open-directory: Open directory in file manager
+#   Usage: {"name": "Open Folder", "id": "open-directory", "path": "/path/to/directory"}
+# - notify: Show notification
+#   Usage: {"name": "Notify", "id": "notify", "message": "notification message"}
+#
+# Custom Actions:
+# - Define your own action IDs and handle them in the action method
+# - Wox will call the action method for both built-in and custom actions as a hook
+# - For built-in actions, you can optionally handle them for additional logic
 #
 # Available environment variables:
 # - WOX_PLUGIN_ID: Plugin ID
@@ -94,22 +113,50 @@ case "$METHOD" in
   "result": {
     "items": [
       {
-        "title": "Open Plugin Directory",
-        "subtitle": "Open the script plugins directory in file manager",
+        "title": "Example: Single Built-in Action",
+        "subtitle": "Click to copy 'Hello Wox!' to clipboard",
         "score": 100,
-        "action": {
-          "id": "open-plugin-directory",
-          "data": ""
-        }
+        "actions": [
+          {
+            "name": "Copy",
+            "id": "copy-to-clipboard",
+            "text": "Hello Wox!"
+          }
+        ]
+      },
+      {
+        "title": "Example: Multiple Actions",
+        "subtitle": "Right-click to see multiple actions",
+        "score": 90,
+        "actions": [
+          {
+            "name": "Copy",
+            "id": "copy-to-clipboard",
+            "text": "Copied text"
+          },
+          {
+            "name": "Open Directory",
+            "id": "open-directory",
+            "path": "$WOX_DIRECTORY_USER_SCRIPT_PLUGINS"
+          },
+          {
+            "name": "Custom Action",
+            "id": "custom-action",
+            "data": "custom data"
+          }
+        ]
       },
       {
         "title": "Settings Example",
         "subtitle": "API Key configured: $API_KEY_STATUS",
-        "score": 90,
-        "action": {
-          "id": "show-settings",
-          "data": ""
-        }
+        "score": 70,
+        "actions": [
+          {
+            "name": "Copy API Key",
+            "id": "copy-to-clipboard",
+            "text": "API Key: ${API_KEY:-Not configured}"
+          }
+        ]
       }
     ]
   },
@@ -119,30 +166,26 @@ EOF
     ;;
   "action")
     # Handle action request
+    # For built-in actions, you can optionally handle them here for additional logic
+    # For custom actions, you must handle them here
     case "$ACTION_ID" in
-      "open-plugin-directory")
-        # Open plugin directory action
+      "custom-action")
+        # Handle custom action
         cat << EOF
 {
   "jsonrpc": "2.0",
-  "result": {
-    "action": "open-directory",
-    "path": "$WOX_DIRECTORY_USER_SCRIPT_PLUGINS"
-  },
+  "result": {},
   "id": $ID
 }
 EOF
         ;;
       *)
-        # Unknown action
+        # For built-in actions or unknown actions, return empty result
+        # Wox will handle built-in actions automatically
         cat << EOF
 {
   "jsonrpc": "2.0",
-  "error": {
-    "code": -32000,
-    "message": "Unknown action",
-    "data": "Action '$ACTION_ID' not supported"
-  },
+  "result": {},
   "id": $ID
 }
 EOF

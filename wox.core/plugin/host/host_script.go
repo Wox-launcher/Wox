@@ -13,6 +13,7 @@ import (
 	"wox/plugin"
 	"wox/setting"
 	"wox/util"
+	"wox/util/clipboard"
 	"wox/util/shell"
 )
 
@@ -83,13 +84,13 @@ func NewScriptPlugin(metadata plugin.Metadata, scriptPath string) *ScriptPlugin 
 	}
 }
 
-func (sp *ScriptPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
+func (s *ScriptPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	// Save API reference for accessing settings
-	sp.api = initParams.API
-	util.GetLogger().Debug(ctx, fmt.Sprintf("Script plugin %s initialized", sp.metadata.Name))
+	s.api = initParams.API
+	util.GetLogger().Debug(ctx, fmt.Sprintf("Script plugin %s initialized", s.metadata.Name))
 }
 
-func (sp *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	// Prepare JSON-RPC request
 	request := map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -104,12 +105,12 @@ func (sp *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.
 	}
 
 	// Execute script and get results
-	results, err := sp.executeScript(ctx, request)
+	results, err := s.executeScript(ctx, request)
 	if err != nil {
 		requestJSON, _ := json.Marshal(request)
-		util.GetLogger().Error(ctx, fmt.Sprintf("script plugin query failed for %s: %s, raw request: %s", sp.metadata.Name, err.Error(), requestJSON))
+		util.GetLogger().Error(ctx, fmt.Sprintf("script plugin query failed for %s: %s, raw request: %s", s.metadata.Name, err.Error(), requestJSON))
 		return []plugin.QueryResult{
-			plugin.GetPluginManager().GetResultForFailedQuery(ctx, sp.metadata, query, err),
+			plugin.GetPluginManager().GetResultForFailedQuery(ctx, s.metadata, query, err),
 		}
 	}
 
@@ -117,9 +118,9 @@ func (sp *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.
 }
 
 // executeScript executes the script with the given JSON-RPC request and returns the results
-func (sp *ScriptPlugin) executeScript(ctx context.Context, request map[string]interface{}) ([]plugin.QueryResult, error) {
+func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]interface{}) ([]plugin.QueryResult, error) {
 	// Execute script and get raw response
-	response, err := sp.executeScriptRaw(ctx, request)
+	response, err := s.executeScriptRaw(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +163,7 @@ func (sp *ScriptPlugin) executeScript(ctx context.Context, request map[string]in
 		// Icon: WoxImage.String() format, e.g. "base64:data:image/png;base64,xxx" or "emoji:🧮"
 		if iconStr := getStringFromMap(itemMap, "icon"); iconStr != "" {
 			if img, err := common.ParseWoxImage(iconStr); err != nil {
-				util.GetLogger().Warn(ctx, fmt.Sprintf("script plugin %s returned invalid icon: %s, err: %s", sp.metadata.Name, iconStr, err.Error()))
+				util.GetLogger().Warn(ctx, fmt.Sprintf("script plugin %s returned invalid icon: %s, err: %s", s.metadata.Name, iconStr, err.Error()))
 			} else {
 				// Normalize base64 without data URI header to png
 				if img.ImageType == common.WoxImageTypeBase64 && !strings.Contains(img.ImageData, ",") {
@@ -172,16 +173,25 @@ func (sp *ScriptPlugin) executeScript(ctx context.Context, request map[string]in
 			}
 		}
 
-		// Handle action if present
-		if actionData, exists := itemMap["action"]; exists {
-			if actionMap, ok := actionData.(map[string]interface{}); ok {
-				queryResult.Actions = []plugin.QueryResultAction{
-					{
-						Name: "Execute",
-						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							sp.executeAction(ctx, actionMap)
-						},
-					},
+		// Handle actions - must be an array
+		if actionsData, exists := itemMap["actions"]; exists {
+			if actionsArray, ok := actionsData.([]interface{}); ok {
+				for _, actionItem := range actionsArray {
+					if actionMap, ok := actionItem.(map[string]interface{}); ok {
+						actionName := getStringFromMap(actionMap, "name")
+						if actionName == "" {
+							actionName = "Execute"
+						}
+
+						// Capture actionMap in closure
+						actionMapCopy := actionMap
+						queryResult.Actions = append(queryResult.Actions, plugin.QueryResultAction{
+							Name: actionName,
+							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+								s.executeAction(ctx, actionMapCopy)
+							},
+						})
+					}
 				}
 			}
 		}
@@ -193,27 +203,47 @@ func (sp *ScriptPlugin) executeScript(ctx context.Context, request map[string]in
 }
 
 // executeAction executes an action from a script plugin result
-func (sp *ScriptPlugin) executeAction(ctx context.Context, actionData map[string]interface{}) {
-	// Prepare JSON-RPC request for action
+func (s *ScriptPlugin) executeAction(ctx context.Context, actionData map[string]interface{}) {
+	actionId := getStringFromMap(actionData, "id")
+
+	// Check if this is a built-in action that can be handled directly
+	if s.handleBuiltInAction(ctx, actionId, actionData) {
+		// Built-in action was handled, still call script action as a hook (optional for script to handle)
+		request := map[string]interface{}{
+			"jsonrpc": "2.0",
+			"method":  "action",
+			"params": map[string]interface{}{
+				"id":   actionId,
+				"data": getStringFromMap(actionData, "data"),
+			},
+			"id": util.GetContextTraceId(ctx),
+		}
+
+		// Call script action as a hook, but ignore errors since it's optional
+		_ = s.executeScriptAction(ctx, request)
+		return
+	}
+
+	// Custom action - must be handled by script
 	request := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  "action",
 		"params": map[string]interface{}{
-			"id":   getStringFromMap(actionData, "id"),
+			"id":   actionId,
 			"data": getStringFromMap(actionData, "data"),
 		},
 		"id": util.GetContextTraceId(ctx),
 	}
 
-	// Execute script for action
-	err := sp.executeScriptAction(ctx, request)
+	// Execute script for custom action
+	err := s.executeScriptAction(ctx, request)
 	if err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s action failed: %s", sp.metadata.Name, err.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s action failed: %s", s.metadata.Name, err.Error()))
 	}
 }
 
 // executeScriptRaw executes the script with the given JSON-RPC request and returns the raw response
-func (sp *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string]interface{}) (map[string]interface{}, error) {
+func (s *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string]interface{}) (map[string]interface{}, error) {
 	// Convert request to JSON
 	requestJSON, err := json.Marshal(request)
 	if err != nil {
@@ -221,7 +251,7 @@ func (sp *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string
 	}
 
 	// Determine the interpreter based on file extension
-	interpreter, err := sp.getInterpreter(ctx)
+	interpreter, err := s.getInterpreter(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -233,9 +263,9 @@ func (sp *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string
 	// Prepare command
 	var cmd *exec.Cmd
 	if interpreter != "" {
-		cmd = exec.CommandContext(timeoutCtx, interpreter, sp.scriptPath)
+		cmd = exec.CommandContext(timeoutCtx, interpreter, s.scriptPath)
 	} else {
-		cmd = exec.CommandContext(timeoutCtx, sp.scriptPath)
+		cmd = exec.CommandContext(timeoutCtx, s.scriptPath)
 	}
 
 	// Set up environment variables for script plugins
@@ -245,18 +275,18 @@ func (sp *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string
 		"WOX_DIRECTORY_WOX_DATA=" + util.GetLocation().GetWoxDataDirectory(),
 		"WOX_DIRECTORY_PLUGINS=" + util.GetLocation().GetPluginDirectory(),
 		"WOX_DIRECTORY_THEMES=" + util.GetLocation().GetThemeDirectory(),
-		"WOX_PLUGIN_ID=" + sp.metadata.Id,
-		"WOX_PLUGIN_NAME=" + sp.metadata.Name,
+		"WOX_PLUGIN_ID=" + s.metadata.Id,
+		"WOX_PLUGIN_NAME=" + s.metadata.Name,
 	}
 
 	// Add plugin settings as environment variables
 	// Settings are prefixed with WOX_SETTING_ to avoid conflicts
-	if sp.api != nil {
+	if s.api != nil {
 		// Iterate through setting definitions to get all setting values
-		for _, settingDef := range sp.metadata.SettingDefinitions {
+		for _, settingDef := range s.metadata.SettingDefinitions {
 			if settingDef.Value != nil {
 				key := settingDef.Value.GetKey()
-				value := sp.api.GetSetting(ctx, key)
+				value := s.api.GetSetting(ctx, key)
 
 				// Convert setting key to uppercase and replace special characters for env var name
 				// e.g., "api_key" -> "WOX_SETTING_API_KEY"
@@ -296,9 +326,9 @@ func (sp *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string
 }
 
 // executeScriptAction executes the script for action requests
-func (sp *ScriptPlugin) executeScriptAction(ctx context.Context, request map[string]interface{}) error {
+func (s *ScriptPlugin) executeScriptAction(ctx context.Context, request map[string]interface{}) error {
 	// Execute script and get raw response
-	response, err := sp.executeScriptRaw(ctx, request)
+	response, err := s.executeScriptRaw(ctx, request)
 	if err != nil {
 		return err
 	}
@@ -306,54 +336,79 @@ func (sp *ScriptPlugin) executeScriptAction(ctx context.Context, request map[str
 	// Handle action result if present
 	if result, exists := response["result"]; exists {
 		if resultMap, ok := result.(map[string]interface{}); ok {
-			sp.handleActionResult(ctx, resultMap)
+			s.handleActionResult(ctx, resultMap)
 		}
 	}
 
 	return nil
 }
 
-// handleActionResult handles the result from an action execution
-func (sp *ScriptPlugin) handleActionResult(ctx context.Context, result map[string]interface{}) {
-	actionType := getStringFromMap(result, "action")
+// handleBuiltInAction handles built-in actions directly without calling script
+// Returns true if the action was a built-in action (handled or not), false if it's a custom action
+func (s *ScriptPlugin) handleBuiltInAction(ctx context.Context, actionId string, actionData map[string]interface{}) bool {
+	switch actionId {
+	case "copy-to-clipboard":
+		// Support both "text" and "data" fields
+		text := getStringFromMap(actionData, "text")
+		if text == "" {
+			text = getStringFromMap(actionData, "data")
+		}
+		if text != "" {
+			if err := clipboard.WriteText(text); err != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s failed to copy to clipboard: %s", s.metadata.Name, err.Error()))
+			} else {
+				util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s copied to clipboard: %s", s.metadata.Name, text))
+			}
+		}
+		return true
 
-	switch actionType {
 	case "open-url":
-		url := getStringFromMap(result, "url")
+		url := getStringFromMap(actionData, "url")
 		if url != "" {
 			// TODO: Implement URL opening functionality
-			util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s requested to open URL: %s", sp.metadata.Name, url))
+			util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s requested to open URL: %s", s.metadata.Name, url))
 		}
+		return true
+
 	case "open-directory":
-		path := getStringFromMap(result, "path")
+		path := getStringFromMap(actionData, "path")
 		if path != "" {
 			// Open directory using shell.Open
 			if err := shell.Open(path); err != nil {
-				util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s failed to open directory %s: %s", sp.metadata.Name, path, err.Error()))
+				util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s failed to open directory %s: %s", s.metadata.Name, path, err.Error()))
 			} else {
-				util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s opened directory: %s", sp.metadata.Name, path))
+				util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s opened directory: %s", s.metadata.Name, path))
 			}
 		}
+		return true
+
 	case "notify":
-		message := getStringFromMap(result, "message")
+		message := getStringFromMap(actionData, "message")
 		if message != "" {
 			// TODO: Implement notification functionality
-			util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s notification: %s", sp.metadata.Name, message))
+			util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s notification: %s", s.metadata.Name, message))
 		}
-	case "copy-to-clipboard":
-		text := getStringFromMap(result, "text")
-		if text != "" {
-			// TODO: Implement clipboard functionality
-			util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s requested to copy to clipboard: %s", sp.metadata.Name, text))
-		}
+		return true
+
 	default:
-		util.GetLogger().Warn(ctx, fmt.Sprintf("Script plugin %s returned unknown action type: %s", sp.metadata.Name, actionType))
+		// Not a built-in action
+		return false
+	}
+}
+
+// handleActionResult handles the result from an action execution (for custom actions that return results)
+func (s *ScriptPlugin) handleActionResult(ctx context.Context, result map[string]interface{}) {
+	actionType := getStringFromMap(result, "action")
+
+	// This is for backward compatibility - if script returns an action result, handle it
+	if actionType != "" {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("Script plugin %s returned action result (deprecated): %s", s.metadata.Name, actionType))
 	}
 }
 
 // getInterpreter determines the appropriate interpreter for the script based on file extension
-func (sp *ScriptPlugin) getInterpreter(ctx context.Context) (string, error) {
-	ext := strings.ToLower(filepath.Ext(sp.scriptPath))
+func (s *ScriptPlugin) getInterpreter(ctx context.Context) (string, error) {
+	ext := strings.ToLower(filepath.Ext(s.scriptPath))
 
 	switch ext {
 	case ".py":

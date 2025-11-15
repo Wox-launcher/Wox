@@ -286,31 +286,163 @@ Script plugins have access to these environment variables:
 - `WOX_DIRECTORY_PLUGINS` - Plugin directory
 - `WOX_DIRECTORY_THEMES` - Theme directory
 
-## Action Types
+## Actions
 
-Script plugins can return actions that Wox will handle:
+Script plugins can use two types of actions:
 
-### open-url
+### Action Format
+
+Each result must have an `actions` field with an array of action objects (even for a single action).
+
+Each action object can have:
+
+- `id` (required): The action identifier
+- `name` (optional): Display name in UI (defaults to "Execute")
+- Other fields depending on the action type (e.g., `text` for clipboard, `url` for open-url)
+
+**Example - Single Action**:
+
+```python
+{
+    "title": "Copy text",
+    "actions": [
+        {
+            "name": "Copy to Clipboard",
+            "id": "copy-to-clipboard",
+            "text": "Hello World"
+        }
+    ]
+}
+```
+
+**Example - Multiple Actions**:
+
+```python
+{
+    "title": "Multiple options",
+    "actions": [
+        {
+            "name": "Copy",
+            "id": "copy-to-clipboard",
+            "text": "Hello World"
+        },
+        {
+            "name": "Open URL",
+            "id": "open-url",
+            "url": "https://example.com"
+        }
+    ]
+}
+```
+
+### Built-in Actions
+
+Built-in actions are handled automatically by Wox. You can use them directly in your query results without implementing the `action` method in your script.
+
+**Important**: When using built-in actions, you don't need to implement `handle_action()` in your script. Wox will handle the action automatically. The `action` method is still called as a hook, but you can simply return an empty result.
+
+#### copy-to-clipboard
+
+Copies text to the clipboard:
+
+```python
+{
+    "title": "Copy this text",
+    "subtitle": "Click to copy",
+    "actions": [
+        {
+            "name": "Copy",
+            "id": "copy-to-clipboard",
+            "text": "Text to copy"
+        }
+    ]
+}
+```
+
+#### open-url
 
 Opens a URL in the default browser:
 
-```json
+```python
 {
-  "action": "open-url",
-  "url": "https://example.com"
+    "title": "Open website",
+    "subtitle": "Click to open",
+    "actions": [
+        {
+            "name": "Open in Browser",
+            "id": "open-url",
+            "url": "https://example.com"
+        }
+    ]
 }
 ```
 
-### open-directory
+#### open-directory
 
 Opens a directory in the file manager:
 
-```json
+```python
 {
-  "action": "open-directory",
-  "path": "/path/to/directory"
+    "title": "Open folder",
+    "subtitle": "Click to open",
+    "actions": [
+        {
+            "name": "Open Folder",
+            "id": "open-directory",
+            "path": "/path/to/directory"
+        }
+    ]
 }
 ```
+
+#### notify
+
+Shows a notification message:
+
+```python
+{
+    "title": "Show notification",
+    "subtitle": "Click to notify",
+    "actions": [
+        {
+            "name": "Notify",
+            "id": "notify",
+            "message": "Notification message"
+        }
+    ]
+}
+```
+
+### Custom Actions
+
+For custom actions, you need to implement the `action` method in your script:
+
+```python
+def handle_action(params, request_id):
+    action_id = params.get("id", "")
+    action_data = params.get("data", "")
+
+    if action_id == "my-custom-action":
+        # Handle your custom action
+        # You can return a built-in action as the result
+        return {
+            "jsonrpc": "2.0",
+            "result": {
+                "action": "notify",
+                "message": f"Custom action executed with: {action_data}"
+            },
+            "id": request_id
+        }
+
+    # For built-in actions or unknown actions, return empty result
+    return {
+        "jsonrpc": "2.0",
+        "result": {},
+        "id": request_id
+    }
+```
+
+**Note**: The `action` method is called for ALL actions (built-in and custom) as a hook. This allows you to add additional logic even for built-in actions if needed. However, for built-in actions, you can simply return an empty result and Wox will handle them automatically.
 
 ## Example: Simple Calculator
 

@@ -34,7 +34,26 @@ Communication with Wox is done via JSON-RPC over stdin/stdout.
 
 Available methods:
 - query: Process user queries and return results
-- action: Handle user selection of a result
+- action: Handle user selection of a result (optional, only needed for custom actions)
+
+Actions:
+- Use "actions" field with an array of action objects (even for single action)
+- Each action can have a "name" field (displayed in UI, defaults to "Execute")
+
+Built-in Actions (handled automatically by Wox, no need to implement in handle_action):
+- copy-to-clipboard: Copy text to clipboard
+  Usage: {"id": "copy-to-clipboard", "text": "text to copy"}
+- open-url: Open URL in browser
+  Usage: {"id": "open-url", "url": "https://example.com"}
+- open-directory: Open directory in file manager
+  Usage: {"id": "open-directory", "path": "/path/to/directory"}
+- notify: Show notification
+  Usage: {"id": "notify", "message": "notification message"}
+
+Custom Actions:
+- Define your own action IDs and handle them in handle_action()
+- Wox will call handle_action() for both built-in and custom actions as a hook
+- For built-in actions, you can optionally handle them in handle_action() for additional logic
 
 Available environment variables:
 - WOX_PLUGIN_ID: Plugin ID
@@ -70,22 +89,50 @@ def handle_query(params, request_id):
     # Generate results
     results = [
         {
-            "title": "Open Plugin Directory",
-            "subtitle": "Open the script plugins directory in file manager",
+            "title": "Example: Single Action",
+            "subtitle": "Click to copy 'Hello Wox!' to clipboard",
             "score": 100,
-            "action": {
-                "id": "open-plugin-directory",
-                "data": ""
-            }
+            "actions": [
+                {
+                    "name": "Copy",
+                    "id": "copy-to-clipboard",
+                    "text": "Hello Wox!"
+                }
+            ]
+        },
+        {
+            "title": "Example: Multiple Actions",
+            "subtitle": "Right-click to see multiple actions",
+            "score": 90,
+            "actions": [
+                {
+                    "name": "Copy",
+                    "id": "copy-to-clipboard",
+                    "text": "Copied text"
+                },
+                {
+                    "name": "Open Directory",
+                    "id": "open-directory",
+                    "path": os.environ.get("WOX_DIRECTORY_USER_SCRIPT_PLUGINS", "")
+                },
+                {
+                    "name": "Custom Action",
+                    "id": "custom-action",
+                    "data": "custom data"
+                }
+            ]
         },
         {
             "title": "Settings Example",
             "subtitle": f"API Key configured: {'Yes' if api_key else 'No'}",
-            "score": 90,
-            "action": {
-                "id": "show-settings",
-                "data": ""
-            }
+            "score": 70,
+            "actions": [
+                {
+                    "name": "Copy API Key",
+                    "id": "copy-to-clipboard",
+                    "text": f"API Key: {api_key if api_key else 'Not configured'}"
+                }
+            ]
         }
     ]
 
@@ -101,39 +148,49 @@ def handle_query(params, request_id):
 
 def handle_action(params, request_id):
     """
-    Handle action requests
+    Handle action requests (OPTIONAL - only needed for custom actions)
+
+    Built-in actions (copy-to-clipboard, open-url, open-directory, notify) are handled
+    automatically by Wox. You only need to implement this function if you have custom actions.
+
+    Note: This function is called as a hook for ALL actions (built-in and custom), so you can
+    optionally add additional logic for built-in actions if needed.
 
     Args:
         params: The parameters from the JSON-RPC request
         request_id: The ID of the JSON-RPC request
 
     Returns:
-        A JSON-RPC response with the action result
+        A JSON-RPC response (can be empty for built-in actions)
     """
     action_id = params.get("id", "")
+    action_data = params.get("data", "")
 
-    # Handle different action types
-    if action_id == "open-plugin-directory":
-        # Open plugin directory action
+    # Handle custom actions
+    if action_id == "custom-action":
+        # Example: Custom action that shows a notification
         return {
             "jsonrpc": "2.0",
             "result": {
-                "action": "open-directory",
-                "path": os.environ.get("WOX_DIRECTORY_USER_SCRIPT_PLUGINS", "")
+                "action": "notify",
+                "message": f"Custom action triggered with data: {action_data}"
             },
             "id": request_id
         }
-    else:
-        # Unknown action
-        return {
-            "jsonrpc": "2.0",
-            "error": {
-                "code": -32000,
-                "message": "Unknown action",
-                "data": f"Action '{action_id}' not supported"
-            },
-            "id": request_id
-        }
+
+    # For built-in actions, you can optionally add logic here
+    # For example, logging when clipboard action is triggered:
+    elif action_id == "copy-to-clipboard":
+        # Built-in action is already handled by Wox, this is just a hook
+        # You can add additional logic here if needed
+        pass
+
+    # Return empty result for built-in actions or unknown actions
+    return {
+        "jsonrpc": "2.0",
+        "result": {},
+        "id": request_id
+    }
 
 
 def main():

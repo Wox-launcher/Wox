@@ -34,7 +34,26 @@
  *
  * Available methods:
  * - query: Process user queries and return results
- * - action: Handle user selection of a result
+ * - action: Handle user selection of a result (optional, only needed for custom actions)
+ *
+ * Actions:
+ * - Use "actions" field with an array of action objects (even for single action)
+ * - Each action can have a "name" field (displayed in UI, defaults to "Execute")
+ *
+ * Built-in Actions (handled automatically by Wox, no need to implement in handleAction):
+ * - copy-to-clipboard: Copy text to clipboard
+ *   Usage: {id: "copy-to-clipboard", text: "text to copy"}
+ * - open-url: Open URL in browser
+ *   Usage: {id: "open-url", url: "https://example.com"}
+ * - open-directory: Open directory in file manager
+ *   Usage: {id: "open-directory", path: "/path/to/directory"}
+ * - notify: Show notification
+ *   Usage: {id: "notify", message: "notification message"}
+ *
+ * Custom Actions:
+ * - Define your own action IDs and handle them in handleAction()
+ * - Wox will call handleAction() for both built-in and custom actions as a hook
+ * - For built-in actions, you can optionally handle them in handleAction() for additional logic
  *
  * Available environment variables:
  * - WOX_PLUGIN_ID: Plugin ID
@@ -125,22 +144,50 @@ function handleQuery(request) {
   // Generate results
   const results = [
     {
-      title: "Open Plugin Directory",
-      subtitle: "Open the script plugins directory in file manager",
+      title: "Example: Single Action",
+      subtitle: "Click to copy 'Hello Wox!' to clipboard",
       score: 100,
-      action: {
-        id: "open-plugin-directory",
-        data: "",
-      },
+      actions: [
+        {
+          name: "Copy",
+          id: "copy-to-clipboard",
+          text: "Hello Wox!",
+        },
+      ],
+    },
+    {
+      title: "Example: Multiple Actions",
+      subtitle: "Right-click to see multiple actions",
+      score: 90,
+      actions: [
+        {
+          name: "Copy",
+          id: "copy-to-clipboard",
+          text: "Copied text",
+        },
+        {
+          name: "Open Directory",
+          id: "open-directory",
+          path: process.env.WOX_DIRECTORY_USER_SCRIPT_PLUGINS,
+        },
+        {
+          name: "Custom Action",
+          id: "custom-action",
+          data: "custom data",
+        },
+      ],
     },
     {
       title: "Settings Example",
       subtitle: `API Key configured: ${apiKey ? "Yes" : "No"}`,
-      score: 90,
-      action: {
-        id: "show-settings",
-        data: "",
-      },
+      score: 70,
+      actions: [
+        {
+          name: "Copy API Key",
+          id: "copy-to-clipboard",
+          text: `API Key: ${apiKey || "Not configured"}`,
+        },
+      ],
     },
   ];
 
@@ -157,37 +204,56 @@ function handleQuery(request) {
 }
 
 /**
- * Handle action requests
+ * Handle action requests (OPTIONAL - only needed for custom actions)
+ *
+ * Built-in actions (copy-to-clipboard, open-url, open-directory, notify) are handled
+ * automatically by Wox. You only need to implement this function if you have custom actions.
+ *
+ * Note: This function is called as a hook for ALL actions (built-in and custom), so you can
+ * optionally add additional logic for built-in actions if needed.
+ *
  * @param {Object} request - The JSON-RPC request
  */
 function handleAction(request) {
   const actionId = request.params.id;
+  const actionData = request.params.data || "";
 
-  // Handle different action types
+  // Handle custom actions
   switch (actionId) {
-    case "open-plugin-directory":
-      // Open plugin directory action
+    case "custom-action":
+      // Example: Custom action that shows a notification
       console.log(
         JSON.stringify({
           jsonrpc: "2.0",
           result: {
-            action: "open-directory",
-            path: process.env.WOX_DIRECTORY_USER_SCRIPT_PLUGINS,
+            action: "notify",
+            message: `Custom action triggered with data: ${actionData}`,
           },
           id: request.id,
         })
       );
       break;
-    default:
-      // Unknown action
+
+    // For built-in actions, you can optionally add logic here
+    // For example, logging when clipboard action is triggered:
+    case "copy-to-clipboard":
+      // Built-in action is already handled by Wox, this is just a hook
+      // You can add additional logic here if needed
       console.log(
         JSON.stringify({
           jsonrpc: "2.0",
-          error: {
-            code: -32000,
-            message: "Unknown action",
-            data: `Action '${actionId}' not supported`,
-          },
+          result: {},
+          id: request.id,
+        })
+      );
+      break;
+
+    default:
+      // Return empty result for built-in actions or unknown actions
+      console.log(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          result: {},
           id: request.id,
         })
       );
