@@ -446,8 +446,13 @@ class _WoxSettingPluginTableUpdateState extends State<WoxSettingPluginTableUpdat
       case PluginSettingValueType.pluginSettingValueTableColumnTypeSelect:
         return Expanded(
           child: Builder(builder: (context) {
+            final currentValue = getValue(column.key);
+            // Ensure the current value exists in selectOptions, otherwise use first option or null
+            final valueExists = column.selectOptions.any((e) => e.value == currentValue);
+            final effectiveValue = valueExists ? currentValue : (column.selectOptions.isNotEmpty ? column.selectOptions.first.value : null);
+
             return WoxDropdownButton<String>(
-              value: getValue(column.key),
+              value: effectiveValue,
               isExpanded: true,
               fontSize: 13,
               underline: Container(
