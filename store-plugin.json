@@ -185,5 +185,19 @@
     ],
     "DateCreated": "2025-08-25 21:15:00",
     "DateUpdated": "2025-08-25 21:15:00"
+  },
+  {
+    "Id": "25cb95b8-af4c-4ccb-82d6-38843a9999c1",
+    "Name": "UUID Generator",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "script",
+    "Description": "Generate various types of UUIDs",
+    "IconEmoji": "🆔",
+    "Website": "https://gist.githubusercontent.com/qianlifeng/82a2f748177ce47a900b4c4da3abfd28",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/82a2f748177ce47a900b4c4da3abfd28/raw/550e024164713aed2fc3bde3aef140bfa15409a3/Wox.Plugin.Script.UUID",
+    "DateCreated": "2025-11-15 23:15:00",
+    "DateUpdated": "2025-11-15 23:15:00"
   }
 ]

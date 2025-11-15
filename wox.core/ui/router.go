@@ -143,7 +143,12 @@ func handlePluginStore(w http.ResponseWriter, r *http.Request) {
 		pluginInstance, isInstalled := lo.Find(plugin.GetPluginManager().GetPluginInstances(), func(item *plugin.Instance) bool {
 			return item.Metadata.Id == storePlugin.Id
 		})
-		plugins[i].Icon = common.NewWoxImageUrl(manifests[i].IconUrl)
+		// Support both IconUrl and IconEmoji, prefer IconEmoji if both are present
+		if manifests[i].IconEmoji != "" {
+			plugins[i].Icon = common.NewWoxImageEmoji(manifests[i].IconEmoji)
+		} else if manifests[i].IconUrl != "" {
+			plugins[i].Icon = common.NewWoxImageUrl(manifests[i].IconUrl)
+		}
 		plugins[i].IsInstalled = isInstalled
 		plugins[i] = convertPluginDto(getCtx, plugins[i], pluginInstance)
 	}

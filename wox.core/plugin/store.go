@@ -33,6 +33,7 @@ type StorePluginManifest struct {
 	Runtime        Runtime
 	Description    string
 	IconUrl        string
+	IconEmoji      string
 	Website        string
 	DownloadUrl    string
 	ScreenshotUrls []string

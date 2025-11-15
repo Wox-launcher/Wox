@@ -716,11 +716,21 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 		}
 		pluginDetailJSON, _ := json.Marshal(pluginDetailData)
 
+		// Support both IconUrl and IconEmoji, prefer IconEmoji if both are present
+		var icon common.WoxImage
+		if pluginManifest.IconEmoji != "" {
+			icon = common.NewWoxImageEmoji(pluginManifest.IconEmoji)
+		} else if pluginManifest.IconUrl != "" {
+			icon = common.NewWoxImageUrl(pluginManifest.IconUrl)
+		} else {
+			icon = wpmIcon
+		}
+
 		results = append(results, plugin.QueryResult{
 			Id:       uuid.NewString(),
 			Title:    pluginManifest.Name,
 			SubTitle: pluginManifest.Description,
-			Icon:     common.NewWoxImageUrl(pluginManifest.IconUrl),
+			Icon:     icon,
 			Tails:    tails,
 			Preview: plugin.WoxPreview{
 				PreviewType: plugin.WoxPreviewTypePluginDetail,
