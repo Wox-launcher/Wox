@@ -52,7 +52,8 @@
 				"source.organizeImports": "explicit"
 			},
 			"editor.defaultFormatter": "charliermarsh.ruff"
-		}
+		},
+		"makefile.configureOnOpen": false
 	},
 	"extensions": {
 		"recommendations": [

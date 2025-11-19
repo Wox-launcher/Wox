@@ -69,8 +69,26 @@ host:
 	$(MAKE) -C wox.plugin.host.nodejs build
 	$(MAKE) -C wox.plugin.host.python build
 
-test: dev
-	$(MAKE) test-isolated
+# Ensure required resource directories exist with dummy files for go:embed
+ensure-resources:
+	@mkdir -p wox.core/resource/ui/flutter
+	@touch wox.core/resource/ui/flutter/placeholder
+	@mkdir -p wox.core/resource/hosts
+	@touch wox.core/resource/hosts/placeholder
+	@mkdir -p wox.core/resource/others
+	@touch wox.core/resource/others/placeholder
+	@mkdir -p wox.core/resource/script_plugin_templates
+	@touch wox.core/resource/script_plugin_templates/placeholder
+
+clean-resources:
+	@rm -f wox.core/resource/ui/flutter/placeholder
+	@rm -f wox.core/resource/hosts/placeholder
+	@rm -f wox.core/resource/others/placeholder
+	@rm -f wox.core/resource/script_plugin_templates/placeholder
+
+# Test without rebuilding dependencies (fast)
+test: ensure-resources
+	@trap '$(MAKE) clean-resources' EXIT; $(MAKE) test-isolated
 
 # Test with custom environment
 test-isolated:

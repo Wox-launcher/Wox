@@ -55,21 +55,38 @@ func isOperator(char rune) bool {
 }
 
 func numberPrefix(chars []rune, i *int, n int) (float64, error) {
-	val := 0.0
-	len := 0
-	for *i < n {
-		curr, err := strconv.ParseFloat(string(chars[*i-len:*i+1]), 64)
-		if err != nil {
-			break
+	start := *i
+	current := *i
+
+	// Consume digits
+	for current < n && (chars[current] >= '0' && chars[current] <= '9') {
+		current++
+	}
+
+	// Consume dot and subsequent digits
+	if current < n && chars[current] == '.' {
+		current++
+		for current < n && (chars[current] >= '0' && chars[current] <= '9') {
+			current++
 		}
-		val = curr
-		len++
-		*i++
 	}
-	if len > 0 {
-		return val, nil
+
+	if current == start {
+		return 0, errors.New("expected a number")
 	}
-	return 0, errors.New("expected a number")
+
+	candidate := string(chars[start:current])
+	if candidate == "." {
+		return 0, errors.New("expected a number")
+	}
+
+	val, err := strconv.ParseFloat(candidate, 64)
+	if err != nil {
+		return 0, err
+	}
+
+	*i = current
+	return val, nil
 }
 
 func isAlpha(char rune) bool {

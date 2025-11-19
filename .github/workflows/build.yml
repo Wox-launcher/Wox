@@ -6,12 +6,12 @@ on:
       - master
 
 jobs:
-  # test:
-  #   runs-on: [self-hosted, macOS, ARM64]
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #     - name: Test
-  #       run: make test
+  test:
+    runs-on: [self-hosted, macOS, ARM64]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Test
+        run: make test
 
   build:
     name: Build ${{ matrix.os }} ${{ matrix.arch }}

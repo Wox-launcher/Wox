@@ -140,7 +140,14 @@ func (p *parser) consume(s string) bool {
 }
 
 func (p *parser) parse() (*node, error) {
-	return p.add()
+	n, err := p.add()
+	if err != nil {
+		return nil, err
+	}
+	if p.tokens[p.i].kind != eosToken {
+		return nil, fmt.Errorf("unexpected token: %s", p.tokens[p.i].str)
+	}
+	return n, nil
 }
 
 func (p *parser) insert(n *node, f func() (*node, error), kind nodeKind) (*node, error) {

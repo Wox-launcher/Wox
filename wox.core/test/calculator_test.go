@@ -38,6 +38,48 @@ func TestCalculatorBasic(t *testing.T) {
 			ExpectedTitle:  "3.3333333333333333",
 			ExpectedAction: "Copy result",
 		},
+		{
+			Name:           "Leading dot decimal addition",
+			Query:          "1 + .5",
+			ExpectedTitle:  "1.5",
+			ExpectedAction: "Copy result",
+		},
+		{
+			Name:           "Leading dot decimal multiplication",
+			Query:          "1 * .1",
+			ExpectedTitle:  "0.1",
+			ExpectedAction: "Copy result",
+		},
+		{
+			Name:           "Leading dot both sides addition",
+			Query:          ".1 + .2",
+			ExpectedTitle:  "0.3",
+			ExpectedAction: "Copy result",
+		},
+		{
+			Name:           "Leading dot multiplication",
+			Query:          ".5 * .5",
+			ExpectedTitle:  "0.25",
+			ExpectedAction: "Copy result",
+		},
+		{
+			Name:           "Leading dot with unary minus",
+			Query:          "-.5 + 1",
+			ExpectedTitle:  "0.5",
+			ExpectedAction: "Copy result",
+		},
+		{
+			Name:           "Leading dot inside parentheses",
+			Query:          "(.5 + .25) * 2",
+			ExpectedTitle:  "1.5",
+			ExpectedAction: "Copy result",
+		},
+		{
+			Name:           "Leading dot in divisor",
+			Query:          "1 / .5",
+			ExpectedTitle:  "2",
+			ExpectedAction: "Copy result",
+		},
 	}
 
 	suite.RunQueryTests(tests)
