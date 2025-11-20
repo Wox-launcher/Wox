@@ -1,0 +1,13 @@
+:root {
+  --vp-c-brand-1: #646cff;
+  --vp-c-brand-2: #747bff;
+  --vp-c-brand-3: #535bf2;
+}
+
+.VPImage.image-src {
+  border-radius: 8px;
+}
+
+.VPHero .text {
+  white-space: nowrap;
+}

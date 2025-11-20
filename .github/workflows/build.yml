@@ -15,7 +15,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.os }} ${{ matrix.arch }}
-    # needs: test
+    needs: test
     strategy:
       matrix:
         include:
