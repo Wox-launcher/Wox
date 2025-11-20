@@ -13,9 +13,10 @@ This feature allows you to automatically generate a commit message using Wox AI 
    - Query `aicommand` in Wox and select `Open AI Commands settings`
    - In the Settings tab, click on the `Add` button
    - Add the following information:
+
      - **Name**: `git commit msg`
      - **Query**: `commit`
-     - **Model**: <your choice>
+     - **Model**: `<your choice>`
      - **Prompt**:
 
        ```
@@ -29,7 +30,7 @@ This feature allows you to automatically generate a commit message using Wox AI 
 
      - **Vision**: No
 
-   ![AI git msg setting](/images/ai_auto_git_msg_setting.png)
+   ![AI git msg setting](../../data/images/ai_auto_git_msg_setting.png)
 
 2. **Config bash scripts**
    To use this feature, you can add the following script to your `.bashrc` or `.zshrc` file:
@@ -50,4 +51,4 @@ git diff | commit
 
 This command will automatically call Wox and generate a commit message for you.
 
-![AI git msg](/images/ai_auto_git_msg.png)
+![AI git msg](../../data/images/ai_auto_git_msg.png)

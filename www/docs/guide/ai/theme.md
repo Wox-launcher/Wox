@@ -16,4 +16,4 @@ The AI will then generate a theme that matches the macaroon color scheme.
 
 This feature provides a quick and easy way to create unique and personalized themes for your Wox launcher. Enjoy the flexibility and creativity that comes with AI-powered theme creation.
 
-![AI Theme](/images/ai_theme.jpg)
+![AI Theme](../../data/images/ai_theme.jpg)
