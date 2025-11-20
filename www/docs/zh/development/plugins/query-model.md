@@ -1,50 +1,47 @@
 # 查询模型
 
-让我们以 `wpm install wox` 为例，`wpm` 是触发关键字，`install` 是命令，`wox` 是搜索词。
+Wox 会把用户的每次输入或选择整理为一个 `Query` 对象发送给插件。理解分段方式可以让插件行为更可控。
 
-## 触发关键字 (Trigger Keyword)
+## 查询类型
 
-触发关键字可用于触发插件。一个插件必须至少有一个触发关键字。
+- `input`：普通文本输入，例如 `wpm install wox`。
+- `selection`：选中/拖拽的数据（文本/文件/图片）。仅当插件在 `Features` 中声明 `querySelection` 时才会送达。
 
-```json
-{
-  "TriggerKeywords": ["wpm", "p"]
-}
-```
+## 查询结构
 
-有一个特殊的触发关键字 `*`，这意味着插件将由任何查询词触发。我们称之为 **全局触发关键字**。
+| 字段 | 说明 |
+| --- | --- |
+| `RawQuery` | 用户原始输入，包含触发关键字。 |
+| `TriggerKeyword` | `plugin.json` 中声明的关键字之一。`"*"` 表示全局触发，空值代表全局查询（注册了 `*` 时）。 |
+| `Command` | 触发关键字后的命令段，来源于 `plugin.json` 的 `Commands`。 |
+| `Search` | 去掉触发关键字和命令后的剩余部分。 |
+| `Selection` | `Type=selection` 时携带，含 `Type`、`Text`、`FilePaths`，仅在启用 `querySelection` 时提供。 |
+| `Env` | 额外环境信息（活动窗口标题/进程/图标、浏览器 URL 等），仅在启用 `queryEnv` 时提供。 |
 
-```json
-{
-  "TriggerKeywords": ["*"]
-}
-```
+`wpm install wox` 拆分示例：
 
-## 命令 (Command)
+- `TriggerKeyword`：`wpm` 
+- `Command`：`install`
+- `Search`：`wox`
+- `RawQuery`：`wpm install wox`
 
-命令可用于告诉用户插件提供什么功能。一个插件可以有零个或多个命令，这些命令可以在 plugin.json 中预定义。
+## 查询环境 (`queryEnv` 功能)
 
-```json
-{
-  "Commands": [
-    {
-      "Name": "install",
-      "Description": "Install plugin"
-    },
-    {
-      "Name": "remove",
-      "Description": "Remove plugin"
-    }
-  ]
-}
-```
+当 `Features` 包含 `queryEnv` 时，Wox 会附加：
 
-```json
-{
-  "Commands": []
-}
-```
+- `ActiveWindowTitle`
+- `ActiveWindowPid`
+- `ActiveWindowIcon`（WoxImage）
+- `ActiveBrowserUrl`（需要安装 Wox Chrome 扩展且浏览器为活动窗口）
 
-## 搜索词 (Search Term)
+可以通过 feature 参数声明只需要的字段（见 [规范](./specification.md)）。
 
-除 `触发关键字` 和 `命令` 之外的所有其他词都被视为搜索词。搜索词是插件进行实际工作的输入。
+## 特殊查询变量
+
+Wox 在把查询交给插件前会展开以下占位符：
+
+- `{wox:selected_text}`
+- `{wox:active_browser_url}`
+- `{wox:file_explorer_path}`
+
+适合用来把当前选中文本或文件管理器路径作为搜索种子传给插件。

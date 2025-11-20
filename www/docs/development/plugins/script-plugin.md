@@ -245,10 +245,12 @@ Your script should respond via stdout:
         "title": "Result: 4",
         "subtitle": "2 + 2 = 4",
         "score": 100,
-        "action": {
-          "id": "copy-result",
-          "data": "4"
-        }
+        "actions": [
+          {
+            "id": "copy-result",
+            "data": "4"
+          }
+        ]
       }
     ]
   },
@@ -277,6 +279,12 @@ Handles user selection of a result item.
 
 - `id` - The action ID from the result item
 - `data` - The action data from the result item
+
+## Capabilities and limitations
+
+- Script plugins receive only `search`, `trigger_keyword`, `command`, and `raw_query`. Selection payloads and query environment data are not passed to scripts.
+- Each invocation is a fresh process with a 10s timeout; cache to disk if you need reuse.
+- Previews, tails, MRU restoration, and result updates are reserved for full-featured plugins.
 
 ## Environment Variables
 
@@ -426,13 +434,9 @@ def handle_action(params, request_id):
 
     if action_id == "my-custom-action":
         # Handle your custom action
-        # You can return a built-in action as the result
         return {
             "jsonrpc": "2.0",
-            "result": {
-                "action": "notify",
-                "message": f"Custom action executed with: {action_data}"
-            },
+            "result": {},
             "id": request_id
         }
 
@@ -479,10 +483,12 @@ def handle_query(params, request_id):
                         "title": f"Result: {result}",
                         "subtitle": f"{search} = {result}",
                         "score": 100,
-                        "action": {
-                            "id": "copy-result",
-                            "data": str(result)
-                        }
+                        "actions": [
+                            {
+                                "id": "copy-result",
+                                "data": str(result)
+                            }
+                        ]
                     }]
                 },
                 "id": request_id

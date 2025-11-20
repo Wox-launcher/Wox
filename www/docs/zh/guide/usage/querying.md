@@ -22,6 +22,13 @@ Wox 中的查询通常由三部分组成：
 
 某些插件支持全局触发 `*`，这意味着它们可以被任何不匹配其他特定关键字的查询触发。这通常用于文件搜索或应用程序启动。
 
+## 内置 Everything 文件搜索（Windows）
+
+Wox 内置文件插件（触发关键字：`f`）在 Windows 上使用 Everything 引擎。使用条件：
+
+- 安装并运行 [Everything](https://www.voidtools.com/)，让其服务处于运行并完成索引。
+- 保持 Everything 在后台运行，Wox 将调用其 API 返回即时文件结果。
+
 ## 快捷键
 
 Wox 支持各种快捷键以提高您的效率：

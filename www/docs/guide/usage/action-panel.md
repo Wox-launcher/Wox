@@ -5,7 +5,7 @@ The Action Panel provides additional actions for a selected result. It allows yo
 ## Accessing Action Panel
 
 1. Select a result in the main query window.
-2. Press `Ctrl + Enter` (or `Cmd + Enter` on macOS) or click the action button on the right side of the result.
+2. Press `Alt + J` (or `Cmd + J` on macOS).
 
 ## Common Actions
 

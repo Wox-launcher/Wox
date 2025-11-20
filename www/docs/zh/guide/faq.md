@@ -28,6 +28,10 @@
 
 使用 `wpm update` 命令更新所有插件或特定插件。
 
+### Everything 插件?
+
+Wox 内置文件插件（触发 `f`）依赖 Everything 引擎。请安装并运行 [Everything](https://www.voidtools.com/)，确保其服务已启动并完成索引；让 Everything 在后台运行，Wox 会调用其 API 进行查询。
+
 ## 自定义
 
 ### 如何更改主题？

@@ -22,6 +22,13 @@ Example: `wpm install wox`
 
 Some plugins support a global trigger `*`, meaning they can be triggered by any query that doesn't match other specific keywords. This is commonly used for file search or application launching.
 
+## Built-in Everything file search (Windows)
+
+Wox ships a built-in file plugin (trigger keyword: `f`) that uses the Everything engine on Windows. To use it:
+
+- Install and run [Everything](https://www.voidtools.com/) so its service is active and indexed.
+- Leave Everything running in the background; Wox calls its APIs for instant file results.
+
 ## Shortcuts
 
 Wox supports various shortcuts to improve your efficiency:

@@ -1,50 +1,47 @@
 # Query Model
 
-Let's take `wpm install wox` as an example, `wpm` is the trigger keyword, `install` is the command, `wox` is the search term.
+Wox normalizes every user interaction into a `Query` object that is sent to plugins. Understanding how it is split helps you write predictable plugins and validation.
 
-## Trigger Keyword
+## Query types
 
-Trigger keyword can be used to trigger a plugin. A plugin must have at least one trigger keyword.
+- `input` – standard text input such as `wpm install wox`.
+- `selection` – selection/drag-drop payloads (text/files/images). Only delivered when the plugin declares the `querySelection` feature.
 
-```json
-{
-  "TriggerKeywords": ["wpm", "p"]
-}
-```
+## Query shape
 
-There is one special trigger keyword `*`, which means the plugin will be triggered by any query term. We called this **Global trigger keyword**.
+| Field | Notes |
+| --- | --- |
+| `RawQuery` | Original text the user typed, including the trigger keyword if present. |
+| `TriggerKeyword` | One of the keywords declared in `plugin.json`. `"*"` means global trigger. Empty means a global query for plugins that registered `*`. |
+| `Command` | Optional command segment following the trigger keyword. Comes from `Commands` in `plugin.json`. |
+| `Search` | Remainder of the query after trigger keyword + command. |
+| `Selection` | When `Type=selection`, includes `Type`, `Text`, `FilePaths`. Available only with `querySelection`. |
+| `Env` | Optional environment data such as active window info or browser URL. Available only with the `queryEnv` feature. |
 
-```json
-{
-  "TriggerKeywords": ["*"]
-}
-```
+Example split for `wpm install wox`:
 
-## Command
+- `TriggerKeyword`: `wpm`
+- `Command`: `install`
+- `Search`: `wox`
+- `RawQuery`: `wpm install wox`
 
-Command can be used to tell user what functionality the plugin provides. A plugin can have zero or multiple commands, which can be predefined in the plugin.json.
+## Environment context (`queryEnv` feature)
 
-```json
-{
-  "Commands": [
-    {
-      "Name": "install",
-      "Description": "Install plugin"
-    },
-    {
-      "Name": "remove",
-      "Description": "Remove plugin"
-    }
-  ]
-}
-```
+When `Features` includes `queryEnv`, Wox will attach:
 
-```json
-{
-  "Commands": []
-}
-```
+- `ActiveWindowTitle`
+- `ActiveWindowPid`
+- `ActiveWindowIcon` (as `WoxImage`)
+- `ActiveBrowserUrl` (when the Wox Chrome extension is installed and the browser is active)
 
-## Search Term
+Use feature params to only request the fields you need (see [Specification](./specification.md)).
 
-All other terms besides of `Trigger Keyword` and `Command` are considered as search term. Search term is the input for the plugin to do the actual work.
+## Special query variables
+
+Wox expands the following placeholders in user queries before sending them to plugins:
+
+- `{wox:selected_text}`
+- `{wox:active_browser_url}`
+- `{wox:file_explorer_path}`
+
+These are useful for plugins that want to seed searches from the current selection or file manager context.

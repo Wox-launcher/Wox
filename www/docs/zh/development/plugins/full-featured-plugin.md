@@ -1,40 +1,21 @@
 # 全功能插件开发指南
 
-全功能插件是综合性插件，在专用宿主进程中运行，并通过 WebSocket 与 Wox 通信。它们通过丰富的 API、持久状态和高级功能提供 Wox 插件系统的全部能力。
+全功能插件在专用宿主进程（Python/Node.js）中常驻运行，通过 WebSocket 与 Go 核心通信。它们可以保留状态、使用完整 API（AI、预览、MRU、设置 UI、深度链接等），适合复杂需求。
 
-## 概览
+## 快速开始
 
-全功能插件专为需要以下功能的复杂应用程序设计：
+- 在 `~/.wox/plugins/<你的插件 id>/` 下创建插件目录。
+- 添加 `plugin.json`（见[规范](./specification.md)）和入口文件（如 `main.py`、`index.js`）。
+- 安装 SDK：Python ≥ 3.8 用 `uv add wox-plugin`，Node.js ≥ 16 用 `pnpm add @wox-launcher/wox-plugin`。
+- 重启 Wox 或在设置里禁用/启用插件以重新加载。
 
-- 持久状态管理
-- 高性能查询处理
-- 高级 Wox API 集成（AI、设置、预览）
-- 复杂的异步操作
-- 专业级插件开发
+## 最小示例
 
-## 支持语言
-
-### Python 插件
-
-**要求：**
-
-- Python >= 3.8 (推荐 Python 3.12)
-- `wox-plugin` SDK
-
-**安装：**
-
-```bash
-# Using pip
-pip install wox-plugin
-
-# Using uv (recommended)
-uv add wox-plugin
-```
-
-**基本结构：**
+### Python
 
 ```python
 from wox_plugin import Plugin, Query, Result, Context, PluginInitParams
+from wox_plugin.models.image import WoxImage
 
 class MyPlugin(Plugin):
     async def init(self, ctx: Context, params: PluginInitParams) -> None:
@@ -42,45 +23,26 @@ class MyPlugin(Plugin):
         self.plugin_dir = params.plugin_directory
 
     async def query(self, ctx: Context, query: Query) -> list[Result]:
-        # Your plugin logic here
-        results = []
-        results.append(
+        return [
             Result(
                 title="Hello Wox",
-                subtitle="This is a sample result",
-                icon="path/to/icon.png",
-                score=100
+                sub_title="示例结果",
+                icon=WoxImage.new_emoji("👋"),
+                score=100,
             )
-        )
-        return results
+        ]
 
-# MUST HAVE! The plugin class will be automatically loaded by Wox
 plugin = MyPlugin()
 ```
 
-### Node.js 插件
+### Node.js
 
-**要求：**
-
-- Node.js >= 16
-- `@wox-launcher/wox-plugin` SDK
-
-**安装：**
-
-```bash
-npm install @wox-launcher/wox-plugin
-# or
-pnpm add @wox-launcher/wox-plugin
-```
-
-**基本结构：**
-
-```javascript
-import { Plugin, Query, Result, Context, PluginInitParams } from '@wox-launcher/wox-plugin'
+```typescript
+import { Plugin, Query, Result, Context, PluginInitParams } from "@wox-launcher/wox-plugin"
 
 class MyPlugin implements Plugin {
-  private api: any
-  private pluginDir: string
+  private api!: any
+  private pluginDir = ""
 
   async init(ctx: Context, params: PluginInitParams): Promise<void> {
     this.api = params.API
@@ -88,284 +50,76 @@ class MyPlugin implements Plugin {
   }
 
   async query(ctx: Context, query: Query): Promise<Result[]> {
-    // Your plugin logic here
     return [
       {
         Title: "Hello Wox",
-        SubTitle: "This is a sample result",
-        Icon: "path/to/icon.png",
-        Score: 100
-      }
+        SubTitle: "示例结果",
+        Icon: { ImageType: "emoji", ImageData: "👋" },
+        Score: 100,
+      },
     ]
   }
 }
 
-// MUST HAVE! Export the plugin instance
 export const plugin = new MyPlugin()
 ```
 
-## 插件架构
+## plugin.json 关键点
 
-### 插件宿主系统
+- 按 [规范](./specification.md) 填写字段、能力开关和设置。
+- `Runtime` 取 `PYTHON` 或 `NODEJS`，`Entry` 指向构建后的文件（TypeScript 请指向编译产物）。
+- 需要选择查询、查询环境、AI、MRU、预览宽度控制、深度链接等能力时，在 `Features` 中声明。
 
-全功能插件在专用宿主进程中运行：
-
-- **Python Host**: `wox.plugin.host.python` 管理 Python 插件
-- **Node.js Host**: `wox.plugin.host.nodejs` 管理 Node.js 插件
-
-### 通信流程
-
-1. **Wox Core** ↔ **Plugin Host** (WebSocket)
-2. **Plugin Host** ↔ **Plugin Instance** (直接方法调用)
-
-### 插件生命周期
-
-1. **Load**: 插件宿主加载插件模块
-2. **Init**: 插件初始化，获取 API 访问权限
-3. **Query**: 处理用户查询（多次）
-4. **Unload**: 禁用/卸载时清理插件
-
-## 丰富 API 功能
-
-### 核心 API
-
-```python
-# Change query
-await self.api.change_query(ctx, ChangeQueryParam(query="new query"))
-
-# Show/hide app
-await self.api.show_app(ctx)
-await self.api.hide_app(ctx)
-
-# Notifications
-await self.api.notify(ctx, "Hello from plugin!")
-
-# Logging
-await self.api.log(ctx, "info", "Plugin message")
-
-# Settings
-value = await self.api.get_setting(ctx, "setting_key")
-
-# Translations
-text = await self.api.get_translation(ctx, "i18n_key")
-```
-
-### AI 集成
-
-```python
-# Chat with AI
-conversation = [
-    ai_message("You are a helpful assistant"),
-    user_message("What is 2+2?")
-]
-
-async def stream_callback(data):
-    # Handle streaming response
-    print(data.content)
-
-response = await self.api.ai_chat(ctx, conversation, stream_callback)
-```
-
-### 高级结果功能
-
-```python
-# Result with preview
-Result(
-    title="Document",
-    subtitle="Click to preview",
-    preview=WoxPreview(
-        preview_type=WoxPreviewType.TEXT,
-        preview_data="Document content here..."
-    )
-)
-
-# Result with custom actions
-Result(
-    title="File",
-    subtitle="Multiple actions available",
-    actions=[
-        ResultAction(name="Open", action=self.open_file),
-        ResultAction(name="Delete", action=self.delete_file)
-    ]
-)
-```
-
-## 插件配置
-
-### plugin.json
+示例：
 
 ```json
 {
   "Id": "my-awesome-plugin",
   "Name": "My Awesome Plugin",
-  "Author": "Your Name",
+  "Description": "Do awesome things",
+  "Author": "You",
   "Version": "1.0.0",
   "MinWoxVersion": "2.0.0",
-  "Runtime": "Python",
-  "Entry": "main.py",
+  "Runtime": "NODEJS",
+  "Entry": "dist/index.js",
   "TriggerKeywords": ["awesome", "ap"],
-  "Commands": [
-    {
-      "Command": "config",
-      "Description": "Configure plugin settings"
-    }
-  ],
-  "Settings": [
+  "Features": [{ "Name": "querySelection" }, { "Name": "ai" }],
+  "SettingDefinitions": [
     {
       "Type": "textbox",
-      "Key": "api_key",
-      "Title": "API Key",
-      "Description": "Enter your API key"
+      "Value": { "Key": "api_key", "Label": "API Key", "DefaultValue": "" }
     }
   ]
 }
 ```
 
-### 设置定义
+## 处理查询
 
-```python
-from wox_plugin import PluginSettingDefinitionItem
+- `Query.Type` 可能是 `input` 或 `selection`，只有声明 `querySelection` 才会收到 selection。
+- `Query.Env`（活动窗口标题/进程/图标、浏览器 URL）只有启用 `queryEnv` 才会赋值。
+- 查看 [查询模型](./query-model.md) 了解 `TriggerKeyword`、`Command`、`Search` 的拆分。
 
-settings = [
-    PluginSettingDefinitionItem(
-        type="textbox",
-        key="api_key",
-        title="API Key",
-        description="Enter your API key",
-        value=""
-    ),
-    PluginSettingDefinitionItem(
-        type="checkbox",
-        key="enable_cache",
-        title="Enable Cache",
-        description="Cache results for better performance",
-        value="true"
-    )
-]
-```
+## 构建结果
 
-## 性能优化
+- 使用 `Result` 可附加 `Preview`（markdown/text/image/url/file/remote）、`Tails`（文本或图片徽标）、`Group`/`GroupScore`、`Actions`。
+- `ResultAction` 支持 `Hotkey`、`IsDefault`、`PreventHideAfterAction`、自定义 `ContextData`。
+- 通过 `UpdateResult`/`UpdateResultAction`（使用 `ActionContext` 提供的 id）可以更新正在展示的结果。
+- 如果需要更宽的预览区，可以开启 `resultPreviewWidthRatio` 特性。
 
-### 异步操作
+## 设置
 
-```python
-import asyncio
-import aiohttp
+- 在 `plugin.json` 里用 `SettingDefinitions` 定义 UI（textbox/checkbox/select/selectAIModel/table/dynamic/head/label/newline）。
+- 值会在初始化参数中传入，可用 `GetSetting`/`SaveSetting` 读写（支持区分平台）。
+- 动态设置可通过 API 运行时替换，用于依赖插件数据的下拉或表格。
 
-async def query(self, ctx: Context, query: Query) -> list[Result]:
-    # Concurrent API calls
-    async with aiohttp.ClientSession() as session:
-        tasks = [
-            self.fetch_data(session, url1),
-            self.fetch_data(session, url2),
-            self.fetch_data(session, url3)
-        ]
-        results = await asyncio.gather(*tasks)
+## AI、深度链接、MRU
 
-    return self.process_results(results)
-```
+- 使用 AI API 需在 `Features` 中声明 `ai`，请求会经由用户配置的模型/秘钥。
+- 需要深度链接时先添加 `deepLink` 特性，再注册回调。
+- 希望按最近使用排序时，添加 `mru` 并实现 `OnMRURestore`，从存储的 MRU 数据恢复结果。
 
-### 缓存
+## 本地测试技巧
 
-```python
-from functools import lru_cache
-import time
-
-class MyPlugin(Plugin):
-    def __init__(self):
-        self.cache = {}
-        self.cache_ttl = 300  # 5 minutes
-
-    async def query(self, ctx: Context, query: Query) -> list[Result]:
-        cache_key = f"query:{query.search}"
-
-        # Check cache
-        if cache_key in self.cache:
-            data, timestamp = self.cache[cache_key]
-            if time.time() - timestamp < self.cache_ttl:
-                return data
-
-        # Fetch new data
-        results = await self.fetch_results(query.search)
-
-        # Update cache
-        self.cache[cache_key] = (results, time.time())
-
-        return results
-```
-
-## 错误处理
-
-```python
-from wox_plugin import WoxPluginError, APIError
-
-async def query(self, ctx: Context, query: Query) -> list[Result]:
-    try:
-        # Your plugin logic
-        return await self.process_query(query)
-    except APIError as e:
-        await self.api.log(ctx, "error", f"API error: {e}")
-        return [Result(
-            title="API Error",
-            subtitle="Please check your settings",
-            score=0
-        )]
-    except Exception as e:
-        await self.api.log(ctx, "error", f"Unexpected error: {e}")
-        return []
-```
-
-## 测试
-
-### 单元测试
-
-```python
-import pytest
-from unittest.mock import AsyncMock
-from your_plugin import MyPlugin
-
-@pytest.mark.asyncio
-async def test_query():
-    plugin = MyPlugin()
-
-    # Mock API
-    mock_api = AsyncMock()
-    await plugin.init(mock_context, PluginInitParams(
-        api=mock_api,
-        plugin_directory="/test"
-    ))
-
-    # Test query
-    results = await plugin.query(mock_context, Query(search="test"))
-
-    assert len(results) > 0
-    assert results[0].title == "Expected Title"
-```
-
-## 最佳实践
-
-1. **使用 Async/Await**：利用异步操作获得更好的性能
-2. **优雅地处理错误**：始终捕获并记录异常
-3. **实现缓存**：在适当的时候缓存昂贵的操作
-4. **提供良好的 UX**：使用有意义的标题、副标题和图标
-5. **遵循命名约定**：使用清晰、描述性的名称
-6. **记录您的代码**：添加文档字符串和注释
-7. **彻底测试**：为您的插件逻辑编写单元测试
-
-## 从脚本插件迁移
-
-如果您的脚本插件需要更多功能：
-
-1. **创建插件结构**：使用 `plugin.json` 设置正确的插件目录
-2. **安装 SDK**：添加适当的 SDK 依赖项
-3. **转换逻辑**：将您的脚本逻辑移动到插件类
-4. **添加状态管理**：如果需要，利用持久状态
-5. **增强 API**：添加 AI、设置或其他高级功能
-6. **优化性能**：实现缓存和异步操作
-
-## 发布
-
-1. **本地测试**：确保您的插件正常工作
-2. **创建包**：遵循插件打包指南
-3. **提交到商店**：使用插件提交流程
-4. **维护**：保持插件更新并响应用户反馈
+- 插件目录放在 `~/.wox/plugins/`（或在此位置做符号链接）。
+- 修改 `plugin.json` 或重新构建后，禁用/启用插件或重启 Wox 以重新加载。
+- 使用 SDK 类型做单元测试，`query` 内保持快速，尽量异步并缓存。

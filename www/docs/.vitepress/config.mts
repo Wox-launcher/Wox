@@ -77,8 +77,8 @@ export default defineConfig({
           ],
         },
         footer: {
-          message: "Released under the MIT License.",
-          copyright: "Copyright © 2024-present Wox Launcher",
+          message: "Released under the GPL-3.0 License.",
+          copyright: "Copyright © 2013-present Wox Launcher",
         },
       },
     },
@@ -153,8 +153,8 @@ export default defineConfig({
           ],
         },
         footer: {
-          message: "基于 MIT 许可发布",
-          copyright: "版权所有 © 2024-至今 Wox Launcher",
+          message: "基于 GPL-3.0 许可发布",
+          copyright: "版权所有 © 2013-至今 Wox Launcher",
         },
         docFooter: {
           prev: "上一页",

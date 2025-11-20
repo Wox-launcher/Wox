@@ -24,6 +24,10 @@ Delete the user data directory:
 - Ensure you have the required runtime (Python/Node.js) installed if the plugin requires it.
 - Check the logs for detailed error messages.
 
+### Everything plugin?
+
+Wox ships a built-in file plugin (`f`) that depends on the Everything engine. Install and run [Everything](https://www.voidtools.com/) so its service is active and indexed; keep it running in the background so Wox can query it.
+
 ### How to update plugins?
 
 Use the `wpm update` command to update all plugins or a specific plugin.

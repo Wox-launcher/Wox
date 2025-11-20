@@ -245,10 +245,12 @@ Wox 通过 stdin 向您的脚本发送请求：
         "title": "Result: 4",
         "subtitle": "2 + 2 = 4",
         "score": 100,
-        "action": {
-          "id": "copy-result",
-          "data": "4"
-        }
+        "actions": [
+          {
+            "id": "copy-result",
+            "data": "4"
+          }
+        ]
       }
     ]
   },
@@ -277,6 +279,12 @@ Wox 通过 stdin 向您的脚本发送请求：
 
 - `id` - 结果项中的操作 ID
 - `data` - 结果项中的操作数据
+
+## 能力与限制
+
+- `query` 仅收到 `search`、`trigger_keyword`、`command`、`raw_query`，不会包含 selection 或查询环境数据。
+- 每次调用都会启动全新进程，超时 10 秒；如需复用请自行落盘缓存。
+- 预览、tails、MRU 恢复、结果动态更新等功能仅在全功能插件中提供。
 
 ## 环境变量
 
@@ -426,13 +434,9 @@ def handle_action(params, request_id):
 
     if action_id == "my-custom-action":
         # Handle your custom action
-        # You can return a built-in action as the result
         return {
             "jsonrpc": "2.0",
-            "result": {
-                "action": "notify",
-                "message": f"Custom action executed with: {action_data}"
-            },
+            "result": {},
             "id": request_id
         }
 
@@ -479,10 +483,12 @@ def handle_query(params, request_id):
                         "title": f"Result: {result}",
                         "subtitle": f"{search} = {result}",
                         "score": 100,
-                        "action": {
-                            "id": "copy-result",
-                            "data": str(result)
-                        }
+                        "actions": [
+                            {
+                                "id": "copy-result",
+                                "data": str(result)
+                            }
+                        ]
                     }]
                 },
                 "id": request_id
