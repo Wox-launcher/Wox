@@ -118,7 +118,6 @@
 
 - 加入 [Wox Discussions](https://github.com/Wox-launcher/Wox/discussions) 提问和获取帮助
 - 尊重并体谅他人
-- 遵循 [行为准则](CODE_OF_CONDUCT.md)
 
 ## 报告问题
 

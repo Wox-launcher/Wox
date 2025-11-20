@@ -118,7 +118,6 @@ When creating a pull request, please:
 
 - Join the [Wox Discussions](https://github.com/Wox-launcher/Wox/discussions) to ask questions and get help
 - Be respectful and considerate of others
-- Follow the [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## Reporting Issues
 
