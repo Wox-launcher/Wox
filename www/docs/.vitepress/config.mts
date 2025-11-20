@@ -1,6 +1,7 @@
 import { defineConfig } from "vitepress";
 
 export default defineConfig({
+  base: "/Wox/",
   title: "Wox",
   description: "A cross-platform quick launcher",
 
