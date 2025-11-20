@@ -138,7 +138,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
                             controller.activePlugin.value = plugin;
                           },
                           child: ListTile(
-                            contentPadding: const EdgeInsets.only(left: 6, right: 0),
+                            contentPadding: const EdgeInsets.only(left: 6, right: 6),
                             leading: WoxImageView(woxImage: plugin.icon, width: 32),
                             title: Text(plugin.name,
                                 maxLines: 1,
@@ -197,37 +197,31 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
 
     // Script tag (non-system script plugins)
     if (!plugin.isSystem && WoxPluginRuntimeEnum.equals(plugin.runtime, WoxPluginRuntimeEnum.SCRIPT)) {
-      rightItems.add(Padding(
-        padding: const EdgeInsets.only(right: 6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(3),
-            border: Border.all(color: borderColor, width: 0.5),
-          ),
-          child: Text(
-            controller.tr('ui_setting_plugin_script_tag'),
-            style: TextStyle(color: borderColor, fontSize: 11, height: 1.1),
-          ),
+      rightItems.add(Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(3),
+          border: Border.all(color: borderColor, width: 0.5),
+        ),
+        child: Text(
+          controller.tr('ui_setting_plugin_script_tag'),
+          style: TextStyle(color: borderColor, fontSize: 11, height: 1.1),
         ),
       ));
     }
 
     // System tag
     if (plugin.isSystem) {
-      rightItems.add(Padding(
-        padding: const EdgeInsets.only(right: 6),
-        child: Container(
-          margin: const EdgeInsets.only(left: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(3),
-            border: Border.all(color: borderColor, width: 0.5),
-          ),
-          child: Text(
-            controller.tr('ui_setting_plugin_system_tag'),
-            style: TextStyle(color: borderColor, fontSize: 11, height: 1.1),
-          ),
+      rightItems.add(Container(
+        margin: const EdgeInsets.only(left: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(3),
+          border: Border.all(color: borderColor, width: 0.5),
+        ),
+        child: Text(
+          controller.tr('ui_setting_plugin_system_tag'),
+          style: TextStyle(color: borderColor, fontSize: 11, height: 1.1),
         ),
       ));
     }
@@ -508,7 +502,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
   Widget pluginTabSetting() {
     return Obx(() {
       var plugin = controller.activePlugin.value;
-      
+
       // Show empty state if no settings
       if (plugin.settingDefinitions.isEmpty) {
         return Padding(
@@ -521,7 +515,7 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
           ),
         );
       }
-      
+
       return Padding(
         padding: const EdgeInsets.all(16.0),
         child: SingleChildScrollView(

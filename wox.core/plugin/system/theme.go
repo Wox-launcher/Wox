@@ -10,6 +10,7 @@ import (
 	"wox/resource"
 	"wox/setting"
 	"wox/setting/definition"
+	"wox/ui"
 	"wox/util"
 
 	"github.com/google/uuid"
@@ -44,11 +45,11 @@ func (c *ThemePlugin) GetMetadata() plugin.Metadata {
 		Commands: []plugin.MetadataCommand{
 			{
 				Command:     "ai",
-				Description: "Generate a new theme with AI",
+				Description: "i18n:plugin_theme_ai_command_description",
 			},
 			{
 				Command:     "restore",
-				Description: "Remove all custom themes and restore to default",
+				Description: "i18n:plugin_theme_restore_command_description",
 			},
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
@@ -56,8 +57,8 @@ func (c *ThemePlugin) GetMetadata() plugin.Metadata {
 				Type: definition.PluginSettingDefinitionTypeSelectAIModel,
 				Value: &definition.PluginSettingValueSelectAIModel{
 					Key:     "model",
-					Label:   "AI model",
-					Tooltip: `AI model to use for generating theme.`,
+					Label:   "i18n:plugin_theme_setting_ai_model_label",
+					Tooltip: `i18n:plugin_theme_setting_ai_model_tooltip`,
 				},
 			},
 		},
@@ -86,8 +87,18 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 		return c.queryRestore(ctx, query)
 	}
 
-	ui := plugin.GetPluginManager().GetUI()
-	return lo.FilterMap(ui.GetAllThemes(ctx), func(theme common.Theme, _ int) (plugin.QueryResult, bool) {
+	uiManager := plugin.GetPluginManager().GetUI()
+	installedThemes := uiManager.GetAllThemes(ctx)
+	changeThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_change_theme")
+	uninstallThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_uninstall_theme")
+	currentGroup := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_group_current")
+	availableGroup := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_group_available")
+	storeGroup := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_group_store")
+	storeSubTitleFormat := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_store_install_by")
+	installThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_install_theme")
+	systemTagText := i18n.GetI18nManager().TranslateWox(ctx, "ui_setting_theme_system_tag")
+
+	results := lo.FilterMap(installedThemes, func(theme common.Theme, _ int) (plugin.QueryResult, bool) {
 		match, _ := IsStringMatchScore(ctx, theme.ThemeName, query.Search)
 		if match {
 			result := plugin.QueryResult{
@@ -95,10 +106,10 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 				Icon:  common.NewWoxImageTheme(theme),
 				Actions: []plugin.QueryResultAction{
 					{
-						Name:                   "Change theme",
+						Name:                   changeThemeText,
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-							ui.ChangeTheme(ctx, theme)
+							uiManager.ChangeTheme(ctx, theme)
 						},
 					},
 				},
@@ -106,14 +117,14 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 			if theme.IsSystem {
 				result.Tails = append(result.Tails, plugin.QueryResultTail{
 					Type: plugin.QueryResultTailTypeText,
-					Text: "System",
+					Text: systemTagText,
 				})
 			} else {
 				result.Actions = append(result.Actions, plugin.QueryResultAction{
-					Name:                   "Uninstall theme",
+					Name:                   uninstallThemeText,
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						ui.UninstallTheme(ctx, theme)
+						uiManager.UninstallTheme(ctx, theme)
 						c.api.ChangeQuery(ctx, common.PlainQuery{
 							QueryType: plugin.QueryTypeInput,
 							QueryText: fmt.Sprintf("%s ", query.TriggerKeyword),
@@ -123,10 +134,10 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 			}
 			currentThemeId := setting.GetSettingManager().GetWoxSetting(ctx).ThemeId.Get()
 			if currentThemeId == theme.ThemeId {
-				result.Group = "Current"
+				result.Group = currentGroup
 				result.GroupScore = 100
 			} else {
-				result.Group = "Available"
+				result.Group = availableGroup
 				result.GroupScore = 50
 			}
 
@@ -135,6 +146,45 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 			return plugin.QueryResult{}, false
 		}
 	})
+
+	// Add store themes
+	storeThemes := ui.GetStoreManager().GetThemes()
+	installedThemeIds := lo.Map(installedThemes, func(t common.Theme, _ int) string { return t.ThemeId })
+
+	storeResults := lo.FilterMap(storeThemes, func(theme common.Theme, _ int) (plugin.QueryResult, bool) {
+		// Skip if already installed
+		if lo.Contains(installedThemeIds, theme.ThemeId) {
+			return plugin.QueryResult{}, false
+		}
+
+		match, _ := IsStringMatchScore(ctx, theme.ThemeName, query.Search)
+		if match {
+			result := plugin.QueryResult{
+				Title: theme.ThemeName,
+				SubTitle: fmt.Sprintf(
+					storeSubTitleFormat,
+					theme.ThemeName,
+					theme.ThemeAuthor,
+				),
+				Icon:       common.NewWoxImageTheme(theme),
+				Group:      storeGroup,
+				GroupScore: 0,
+				Actions: []plugin.QueryResultAction{
+					{
+						Name:                   installThemeText,
+						PreventHideAfterAction: true,
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+							uiManager.InstallTheme(ctx, theme)
+						},
+					},
+				},
+			}
+			return result, true
+		}
+		return plugin.QueryResult{}, false
+	})
+
+	return append(results, storeResults...)
 }
 
 func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -142,11 +192,11 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 	if modelStr == "" {
 		return []plugin.QueryResult{
 			{
-				Title: "Please select an AI model in theme settings",
+				Title: i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_select_model"),
 				Icon:  themeIcon,
 				Actions: []plugin.QueryResultAction{
 					{
-						Name:                   "Open theme settings",
+						Name:                   i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_open_setting"),
 						PreventHideAfterAction: true,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{
@@ -165,7 +215,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 		c.api.Notify(ctx, unmarshalErr.Error())
 		return []plugin.QueryResult{
 			{
-				Title:    "Failed to unmarshal model",
+				Title:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_unmarshal_failed"),
 				SubTitle: unmarshalErr.Error(),
 				Icon:     themeIcon,
 			},
@@ -175,7 +225,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 	if query.Search == "" {
 		return []plugin.QueryResult{
 			{
-				Title: "Please describe the theme you want to generate",
+				Title: i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_input_hint"),
 				Icon:  themeIcon,
 			},
 		}
@@ -185,7 +235,7 @@ func (c *ThemePlugin) queryAI(ctx context.Context, query plugin.Query) []plugin.
 	if len(embedThemes) == 0 {
 		return []plugin.QueryResult{
 			{
-				Title: "No embed theme found",
+				Title: i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_no_embed_theme"),
 				Icon:  themeIcon,
 			},
 		}
@@ -219,13 +269,13 @@ Please directly output the JSON configuration, do not add any other content.
 
 	result := plugin.QueryResult{
 		Id:       uuid.NewString(),
-		Title:    "Generate theme with ai",
-		SubTitle: "Enter to generate",
+		Title:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_generate_title"),
+		SubTitle: i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_generate_subtitle"),
 		Icon:     themeIcon,
 		Preview:  plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeMarkdown, PreviewData: ""},
 		Actions: []plugin.QueryResultAction{
 			{
-				Name:                   "Apply",
+				Name:                   i18n.GetI18nManager().TranslateWox(ctx, "ui_setting_theme_apply"),
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					util.Go(ctx, "theme ai stream", func() {
@@ -276,7 +326,7 @@ Please directly output the JSON configuration, do not add any other content.
 								util.Go(ctx, "theme generated", func() {
 									group := util.FindRegexGroup(`(?ms){(?P<json>.*?)}`, themeJson)
 									if len(group) == 0 {
-										c.api.Notify(ctx, "Failed to extract json")
+										c.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_ai_extract_failed"))
 										return
 									}
 
@@ -327,11 +377,11 @@ Please directly output the JSON configuration, do not add any other content.
 func (c *ThemePlugin) queryRestore(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	return []plugin.QueryResult{
 		{
-			Title: "Remove all custom themes and restore to default",
+			Title: i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_restore_title"),
 			Icon:  themeIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name:                   "Restore",
+					Name:                   i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_restore_action"),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						plugin.GetPluginManager().GetUI().RestoreTheme(ctx)

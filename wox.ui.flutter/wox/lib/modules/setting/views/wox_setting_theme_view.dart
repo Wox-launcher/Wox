@@ -62,6 +62,7 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                             controller.activeTheme.value = theme;
                           },
                           child: ListTile(
+                            contentPadding: const EdgeInsets.only(left: 6, right: 6),
                             leading: WoxThemeIconView(theme: theme, width: 32, height: 32),
                             title: Text(theme.themeName,
                                 maxLines: 1,
@@ -93,29 +94,9 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
                                     fontSize: 12,
                                   ),
                                 ),
-                                if (theme.isSystem) ...[
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(3),
-                                      border: Border.all(
-                                        color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
-                                        width: 0.5,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      controller.tr('ui_setting_theme_system_tag'),
-                                      style: TextStyle(
-                                        color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
-                                        fontSize: 11,
-                                        height: 1.1,
-                                      ),
-                                    ),
-                                  ),
-                                ],
                               ],
                             ),
+                            trailing: themeTrailIcon(theme, isActive),
                           ),
                         ),
                       );
@@ -128,6 +109,40 @@ class WoxSettingThemeView extends GetView<WoxSettingController> {
         ),
       ],
     );
+  }
+
+  Widget themeTrailIcon(WoxTheme theme, bool isActive) {
+    if (controller.isStoreThemeList.value) {
+      if (theme.isInstalled) {
+        return Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: Icon(Icons.check_circle, size: 20, color: isActive ? getThemeActionItemActiveColor() : Colors.green),
+        );
+      }
+    } else {
+      if (theme.isSystem) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(
+              color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
+              width: 0.5,
+            ),
+          ),
+          child: Text(
+            controller.tr('ui_setting_theme_system_tag'),
+            style: TextStyle(
+              color: isActive ? getThemeActionItemActiveColor() : getThemeSubTextColor(),
+              fontSize: 11,
+              height: 1.1,
+            ),
+          ),
+        );
+      }
+    }
+
+    return const SizedBox();
   }
 
   Widget themeDetail() {

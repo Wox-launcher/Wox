@@ -36,15 +36,30 @@ const filteredThemes = computed(() => {
                 borderRadius: (theme.QueryBoxBorderRadius || 4) + 'px',
               }"
             >
-              > wox
+              > {{ theme.ThemeName.toLowerCase().substring(0, 10) }}
             </div>
-            <div
-              class="preview-result"
-              :style="{
-                color: theme.ResultItemTitleColor,
-              }"
-            >
-              Result Item
+            <div class="preview-results">
+              <div
+                class="preview-result active"
+                :style="{
+                  backgroundColor: theme.ResultItemActiveBackgroundColor,
+                  borderRadius: (theme.ResultItemBorderRadius || 0) + 'px',
+                }"
+              >
+                <div class="preview-icon"></div>
+                <div class="preview-text" :style="{ color: theme.ResultItemActiveTitleColor }">
+                  {{ theme.ThemeName }}
+                </div>
+              </div>
+              <div
+                class="preview-result"
+                :style="{
+                  borderRadius: (theme.ResultItemBorderRadius || 0) + 'px',
+                }"
+              >
+                <div class="preview-icon inactive"></div>
+                <div class="preview-text" :style="{ color: theme.ResultItemTitleColor }">Another Theme</div>
+              </div>
             </div>
           </div>
         </div>
@@ -55,6 +70,15 @@ const filteredThemes = computed(() => {
           </div>
           <p class="author">by {{ theme.ThemeAuthor }}</p>
           <p class="description">{{ theme.Description }}</p>
+          <div class="color-palette">
+            <div class="swatches">
+              <div class="color-swatch" :style="{ backgroundColor: theme.AppBackgroundColor }" title="Background"></div>
+              <div class="color-swatch" :style="{ backgroundColor: theme.ResultItemActiveBackgroundColor }" title="Accent"></div>
+              <div class="color-swatch" :style="{ backgroundColor: theme.ResultItemTitleColor }" title="Text"></div>
+              <div class="color-swatch" :style="{ backgroundColor: theme.QueryBoxBackgroundColor }" title="Query Box"></div>
+            </div>
+            <a :href="`wox://query?q=theme ${theme.ThemeName}`" class="install-btn" @click.stop>Install</a>
+          </div>
         </div>
       </div>
     </div>
@@ -109,29 +133,57 @@ const filteredThemes = computed(() => {
 }
 
 .preview {
-  height: 120px;
+  height: 140px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 16px;
 }
 
 .preview-content {
   width: 100%;
-  max-width: 200px;
+  max-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .preview-query {
-  padding: 8px 12px;
+  padding: 6px 10px;
   font-family: monospace;
-  font-size: 12px;
-  margin-bottom: 8px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+}
+
+.preview-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .preview-result {
-  padding: 4px 12px;
-  font-size: 12px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background-color: currentColor;
   opacity: 0.8;
+}
+
+.preview-icon.inactive {
+  opacity: 0.4;
+}
+
+.preview-text {
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .card-body {
@@ -144,8 +196,29 @@ const filteredThemes = computed(() => {
 .header {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.actions {
+  display: flex;
   align-items: center;
-  margin-bottom: 4px;
+  gap: 8px;
+}
+
+.install-btn {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--vp-c-brand);
+  text-decoration: none;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background-color: var(--vp-c-brand-dimm);
+  transition: background-color 0.2s;
+}
+
+.install-btn:hover {
+  background-color: var(--vp-c-brand-soft);
 }
 
 .name {
@@ -170,13 +243,33 @@ const filteredThemes = computed(() => {
 }
 
 .description {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--vp-c-text-2);
-  margin: 0;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  margin: 0 0 16px 0;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.color-palette {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--vp-c-divider);
+}
+
+.swatches {
+  display: flex;
+  gap: 8px;
+}
+
+.color-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 </style>

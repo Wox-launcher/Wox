@@ -41,7 +41,7 @@ const openLink = (url) => {
         <p class="description">{{ plugin.Description }}</p>
         <div class="footer">
           <span class="version">v{{ plugin.Version }}</span>
-          <a :href="plugin.DownloadUrl" class="download-btn" @click.stop>Download</a>
+          <a :href="`wox://query?q=wpm install ${plugin.DownloadUrl}`" class="download-btn" @click.stop>Install</a>
         </div>
       </div>
     </div>
