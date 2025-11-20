@@ -6,6 +6,8 @@ Script plugins are lightweight, single-file plugins that provide a simple way to
 
 Script plugins communicate with Wox using JSON-RPC over stdin/stdout. Each script is executed on-demand when a query is made, making them ideal for simple, stateless operations.
 
+For a ready-to-use example, see this gist: https://gist.github.com/qianlifeng/82a2f748177ce47a900b4c4da3abfd28
+
 ## Getting Started
 
 ### Creating a Script Plugin

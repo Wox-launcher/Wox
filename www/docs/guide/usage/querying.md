@@ -2,7 +2,7 @@
 
 ## Basic Usage
 
-Wox is triggered by a hotkey (default `Alt + Space`). Once opened, you can type to search for applications, files, bookmarks, and more.
+Wox is triggered by a hotkey (defaults vary by platform). Once opened, you can type to search for applications, files, bookmarks, and more.
 
 ## Query Structure
 
@@ -26,15 +26,16 @@ Some plugins support a global trigger `*`, meaning they can be triggered by any 
 
 Wox supports various shortcuts to improve your efficiency:
 
-| Shortcut       | Description                                    |
-| -------------- | ---------------------------------------------- |
-| `Alt + Space`  | Toggle Wox visibility                          |
-| `Esc`          | Hide Wox                                       |
-| `Up` / `Down`  | Navigate through results                       |
-| `Enter`        | Execute the selected result's default action   |
-| `Ctrl + Enter` | Open the result's context menu (Action Panel)  |
-| `Tab`          | Autocomplete the query or select the next item |
-| `Shift + Tab`  | Select the previous item                       |
+| Shortcut                   | Description                                                    |
+| -------------------------- | -------------------------------------------------------------- |
+| Windows: `Alt + Space`     | Toggle Wox visibility (default)                               |
+| macOS: `Cmd + Space`       | Toggle Wox visibility (default)                               |
+| Linux: `Ctrl + Space`      | Toggle Wox visibility (default)                               |
+| `Esc`                      | Hide Wox                                                       |
+| `Up` / `Down`              | Navigate through results                                       |
+| `Enter`                    | Execute the selected result's default action                   |
+| `Alt/Cmd + J`              | Open the result's context menu (Action Panel)                  |
+| `Tab`                      | Autocomplete the query                                         |
 
 ## Hotkeys
 

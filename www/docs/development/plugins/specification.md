@@ -2,6 +2,8 @@
 
 ## Plugin.json
 
+`plugin.json` sits at the root of every plugin and tells Wox how to load it: the metadata is read by the core and the runtime hosts (Node.js/Python/.NET) to register trigger keywords/commands, locate the entry file/icon, and validate compatibility (versions, supported OS). Keep it up to date—Wox relies on these fields to decide whether a plugin can be loaded on the current platform.
+
 | Key             | Required | Description                                                  | Value Type | Value Example                                              |
 | --------------- | -------- | ------------------------------------------------------------ | ---------- | ---------------------------------------------------------- |
 | Id              | true     | Identity for plugin                                          | string     | "CEA0FDFC6D3B4085823D60DC76F28855"                         |

@@ -96,9 +96,9 @@ Wox 的开发工作流通过 Makefile 管理：
 
 Wox 设计为跨平台，具体注意事项如下：
 
-- **Windows**: 使用 UPX 进行可执行文件压缩
-- **macOS**: 使用 create-dmg 进行打包
-- **Linux**: 使用 UPX 进行可执行文件压缩
+- **Windows**: 使用 `make publish` 生成标准构建产物（不再使用 UPX 压缩）
+- **macOS**: 使用 create-dmg 对应用进行打包
+- **Linux**: 使用 `make publish` 生成标准构建产物（不再使用 UPX 压缩）
 
 ## 数据流
 

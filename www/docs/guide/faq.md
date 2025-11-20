@@ -6,14 +6,14 @@
 
 Check the log file at:
 
-- Windows: `%APPDATA%\Wox\Logs`
+- Windows: `%USERPROFILE%\\.wox\\log`
 - macOS/Linux: `~/.wox/log`
 
 ### How to reset Wox?
 
 Delete the user data directory:
 
-- Windows: `%APPDATA%\Wox`
+- Windows: `%USERPROFILE%\\.wox`
 - macOS/Linux: `~/.wox`
 
 ## Plugins

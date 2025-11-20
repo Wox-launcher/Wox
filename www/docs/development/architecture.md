@@ -96,9 +96,9 @@ The development workflow for Wox is managed through the Makefile:
 
 Wox is designed to be cross-platform, with specific considerations for:
 
-- **Windows**: Uses UPX for executable compression
-- **macOS**: Uses create-dmg for packaging
-- **Linux**: Uses UPX for executable compression
+- **Windows**: Standard build artifacts from `make publish` (no UPX compression)
+- **macOS**: Uses create-dmg for packaging the app bundle
+- **Linux**: Standard build artifacts from `make publish` (no UPX compression)
 
 ## Data Flow
 

@@ -6,14 +6,14 @@
 
 检查日志文件：
 
-- Windows: `%APPDATA%\Wox\Logs`
+- Windows: `%USERPROFILE%\\.wox\\log`
 - macOS/Linux: `~/.wox/log`
 
 ### 如何重置 Wox？
 
 删除用户数据目录：
 
-- Windows: `%APPDATA%\Wox`
+- Windows: `%USERPROFILE%\\.wox`
 - macOS/Linux: `~/.wox`
 
 ## 插件
