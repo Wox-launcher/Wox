@@ -318,7 +318,7 @@ class WoxLauncherController extends GetxController {
     // Handle start page: show content when query is empty (works in both modes)
     if (!isInputWithText && !isSelectionQuery) {
       if (lastStartPage == WoxStartPageEnum.WOX_START_PAGE_MRU.code) {
-        queryMRU(traceId);
+        await queryMRU(traceId);
       } else {
         // Blank page - clear results
         await clearQueryResults(traceId);
@@ -837,9 +837,9 @@ class WoxLauncherController extends GetxController {
 
   Future<void> resizeHeight() async {
     final maxResultCount = WoxSettingUtil.instance.currentSetting.maxResultCount;
-    double resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(
-      resultListViewController.items.length > maxResultCount ? maxResultCount : resultListViewController.items.length,
-    );
+    final actualResultCount = resultListViewController.items.length > maxResultCount ? maxResultCount : resultListViewController.items.length;
+    double resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(actualResultCount);
+
     if (isShowActionPanel.value || isShowPreviewPanel.value) {
       resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(maxResultCount);
     }
@@ -865,7 +865,6 @@ class WoxLauncherController extends GetxController {
       totalHeight -= WoxThemeUtil.instance.currentTheme.value.appPaddingBottom;
     }
 
-    if (LoggerSwitch.enableSizeAndPositionLog) Logger.instance.debug(const UuidV4().generate(), "Resize: window height to $totalHeight");
     await windowManager.setSize(Size(WoxSettingUtil.instance.currentSetting.appWidth.toDouble(), totalHeight.toDouble()));
     windowFlickerDetector.recordResize(totalHeight.toInt());
   }

@@ -12,11 +12,11 @@ class AppDelegate: FlutterAppDelegate {
     // NSLog("WoxApp: \(message)")
   }
 
-  override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+  override func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
     return false
   }
 
-  override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
+  override func applicationSupportsSecureRestorableState(_: NSApplication) -> Bool {
     return true
   }
 
@@ -44,7 +44,7 @@ class AppDelegate: FlutterAppDelegate {
 
   // Setup notification for window blur event
   private func setupWindowBlurNotification() {
-    guard let window = self.mainFlutterWindow else { return }
+    guard let window = mainFlutterWindow else { return }
 
     NotificationCenter.default.addObserver(
       self,
@@ -55,7 +55,7 @@ class AppDelegate: FlutterAppDelegate {
   }
 
   // Handle window loss of focus
-  @objc private func windowDidResignKey(_ notification: Notification) {
+  @objc private func windowDidResignKey(_: Notification) {
     log("Window did resign key (blur)")
     // Notify Flutter about the window blur event
     DispatchQueue.main.async {
@@ -64,7 +64,7 @@ class AppDelegate: FlutterAppDelegate {
   }
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
-    let controller = self.mainFlutterWindow?.contentViewController as! FlutterViewController
+    let controller = mainFlutterWindow?.contentViewController as! FlutterViewController
 
     // Try to make Flutter view background transparent
     let flutterView = controller.view
@@ -73,15 +73,16 @@ class AppDelegate: FlutterAppDelegate {
 
     let channel = FlutterMethodChannel(
       name: "com.wox.macos_window_manager",
-      binaryMessenger: controller.engine.binaryMessenger)
+      binaryMessenger: controller.engine.binaryMessenger
+    )
 
     // Store window event channel for use in window events
-    self.windowEventChannel = channel
+    windowEventChannel = channel
 
     // Setup window blur notification
     setupWindowBlurNotification()
 
-    channel.setMethodCallHandler { [weak self] (call, result) in
+    channel.setMethodCallHandler { [weak self] call, result in
       guard let window = self?.mainFlutterWindow else {
         result(FlutterError(code: "NO_WINDOW", message: "No window found", details: nil))
         return
@@ -100,7 +101,8 @@ class AppDelegate: FlutterAppDelegate {
           } else {
             result(
               FlutterError(
-                code: "INVALID_ARGS", message: "Invalid arguments for setSize", details: nil))
+                code: "INVALID_ARGS", message: "Invalid arguments for setSize", details: nil
+              ))
           }
 
         case "getPosition":
@@ -116,18 +118,53 @@ class AppDelegate: FlutterAppDelegate {
             let x = args["x"] as? Double,
             let y = args["y"] as? Double
           {
-            // Choose the target screen that contains the requested point (global bottom-left coords)
-            let point = NSPoint(x: x, y: y)
-            let targetScreen = NSScreen.screens.first { $0.frame.contains(point) } ?? window.screen ?? NSScreen.main
-            let screenFrame = targetScreen?.frame ?? NSRect.zero
-            // Convert from global bottom-left to AppKit's coordinate space. Include screen's origin.y for multi-monitor.
-            let flippedY = (screenFrame.origin.y + screenFrame.height) - y - window.frame.height
+            // Find the target screen based on X coordinate
+            // Note: We use X coordinate only because Y coordinate from Go (top-left origin)
+            // is incompatible with AppKit's frame.contains() which expects bottom-left origin
+            let targetScreen =
+              NSScreen.screens.first { screen in
+                let frame = screen.frame
+                return x >= frame.origin.x && x < frame.origin.x + frame.width
+              } ?? window.screen ?? NSScreen.main
+
+            let frame = targetScreen?.frame ?? NSRect.zero
+
+            // COORDINATE SYSTEM CONVERSION: Top-left (Go) -> Bottom-left (AppKit)
+            //
+            // Go backend returns (x, y) in top-left origin coordinate system:
+            // - X: distance from left edge of virtual desktop
+            // - Y: distance from top edge of physical screen
+            //
+            // AppKit uses bottom-left origin with Y-axis pointing up
+            //
+            // Conversion steps:
+            // 1. Calculate screen top position in AppKit coordinates
+            //    screenTopInAppKit = frame.origin.y + frame.height
+            //    (e.g., for Dell at offset (2048, 72): 72 + 1080 = 1152)
+            //
+            // 2. Calculate window top position in AppKit coordinates
+            //    windowTopInAppKit = screenTopInAppKit - y
+            //    (e.g., if y=200 from screen top: 1152 - 200 = 952)
+            //
+            // 3. Convert to window origin (bottom-left corner of window)
+            //    flippedY = windowTopInAppKit - window.frame.height
+            //    (e.g., if window height=705: 952 - 705 = 247)
+            //
+            // This ensures the window appears at the correct position regardless of:
+            // - Multi-monitor setup with different offsets
+            // - Different screen resolutions
+            // - Menu bar height (already accounted for in Go's Y calculation)
+            let screenTopInAppKit = frame.origin.y + frame.height
+            let windowTopInAppKit = screenTopInAppKit - y
+            let flippedY = windowTopInAppKit - window.frame.height
+
             window.setFrameOrigin(NSPoint(x: x, y: flippedY))
             result(nil)
           } else {
             result(
               FlutterError(
-                code: "INVALID_ARGS", message: "Invalid arguments for setPosition", details: nil))
+                code: "INVALID_ARGS", message: "Invalid arguments for setPosition", details: nil
+              ))
           }
 
         case "center":
@@ -202,7 +239,8 @@ class AppDelegate: FlutterAppDelegate {
           } else {
             result(
               FlutterError(
-                code: "INVALID_ARGS", message: "Invalid arguments for setAlwaysOnTop", details: nil)
+                code: "INVALID_ARGS", message: "Invalid arguments for setAlwaysOnTop", details: nil
+              )
             )
           }
 
@@ -240,6 +278,7 @@ class AppDelegate: FlutterAppDelegate {
           }
 
           result(nil)
+
         default:
           result(FlutterMethodNotImplemented)
         }
