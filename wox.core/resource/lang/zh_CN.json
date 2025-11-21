@@ -525,6 +525,7 @@
   "plugin_theme_group_store": "商店",
   "plugin_theme_install_theme": "安装主题",
   "plugin_theme_no_embed_theme": "未找到内置主题",
+  "plugin_theme_open_containing_folder": "打开主题所在目录",
   "plugin_theme_open_setting": "打开主题设置",
   "plugin_theme_restore_action": "恢复",
   "plugin_theme_restore_command_description": "移除所有自定义主题并恢复默认",

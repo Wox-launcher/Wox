@@ -519,6 +519,7 @@
   "plugin_theme_group_store": "Магазин",
   "plugin_theme_install_theme": "Установить тему",
   "plugin_theme_no_embed_theme": "Встроенные темы не найдены",
+  "plugin_theme_open_containing_folder": "Открыть папку темы",
   "plugin_theme_open_setting": "Открыть настройки темы",
   "plugin_theme_restore_action": "Восстановить",
   "plugin_theme_restore_command_description": "Удалить все пользовательские темы и восстановить по умолчанию",

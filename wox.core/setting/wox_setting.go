@@ -71,7 +71,7 @@ const (
 )
 
 const (
-	DefaultThemeId = "e4006bd3-6bfe-4020-8d1c-4c32a8e567e5"
+	DefaultThemeId = "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03"
 )
 
 type QueryShortcut struct {

@@ -525,6 +525,7 @@
   "plugin_theme_group_store": "Store",
   "plugin_theme_install_theme": "Install theme",
   "plugin_theme_no_embed_theme": "No embed theme found",
+  "plugin_theme_open_containing_folder": "Open theme folder",
   "plugin_theme_open_setting": "Open theme settings",
   "plugin_theme_restore_action": "Restore",
   "plugin_theme_restore_command_description": "Remove all custom themes and restore to default",

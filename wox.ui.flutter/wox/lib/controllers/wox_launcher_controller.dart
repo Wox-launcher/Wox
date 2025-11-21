@@ -691,6 +691,7 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "ChangeTheme") {
       final theme = WoxTheme.fromJson(msg.data);
       WoxThemeUtil.instance.changeTheme(theme);
+      resizeHeight(); // Theme height maybe changed, so we need to resize height
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "PickFiles") {
       final pickFilesParams = FileSelectorParams.fromJson(msg.data);

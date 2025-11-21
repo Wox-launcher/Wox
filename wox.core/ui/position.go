@@ -63,21 +63,16 @@ func NewLastLocationPosition(x, y int) Position {
 
 func getWindowMouseScreenLocation(windowWidth int) (int, int) {
 	size := screen.GetMouseScreen()
-	// Center horizontally: monitor's left edge + (monitor width - window width) / 2
-	x := size.X + (size.Width-windowWidth)/2
-	// Position vertically: monitor's top edge + 1/7 of monitor height
-	// CRITICAL: Must include size.Y (monitor's top offset) for multi-monitor setups
-	// Example: Monitor at physical offset (5120,1080) with 100% DPI
-	//   → logical offset (5120,1080), height 1080
-	//   → y = 1080 + 1080/7 = 1234 (correct position on that monitor)
-	//   → Without size.Y: y = 1080/7 = 154 (wrong! outside monitor bounds)
-	y := size.Y + size.Height/7
-	return x, y
+	return getCenterLocation(size, windowWidth)
 }
 
 func getWindowActiveScreenLocation(windowWidth int) (int, int) {
 	size := screen.GetActiveScreen()
+	return getCenterLocation(size, windowWidth)
+}
+
+func getCenterLocation(size screen.Size, windowWidth int) (int, int) {
 	x := size.X + (size.Width-windowWidth)/2
-	y := size.Y + size.Height/7 // Same logic as above
+	y := size.Y + size.Height/8
 	return x, y
 }

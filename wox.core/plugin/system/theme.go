@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
@@ -12,6 +13,7 @@ import (
 	"wox/setting/definition"
 	"wox/ui"
 	"wox/util"
+	"wox/util/shell"
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
@@ -97,10 +99,12 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 	storeSubTitleFormat := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_store_install_by")
 	installThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_install_theme")
 	systemTagText := i18n.GetI18nManager().TranslateWox(ctx, "ui_setting_theme_system_tag")
+	openThemeFolderText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_open_containing_folder")
 
 	results := lo.FilterMap(installedThemes, func(theme common.Theme, _ int) (plugin.QueryResult, bool) {
 		match, _ := IsStringMatchScore(ctx, theme.ThemeName, query.Search)
 		if match {
+			themePath := filepath.Join(util.GetLocation().GetThemeDirectory(), fmt.Sprintf("%s.json", theme.ThemeId))
 			result := plugin.QueryResult{
 				Title: theme.ThemeName,
 				Icon:  common.NewWoxImageTheme(theme),
@@ -120,6 +124,15 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 					Text: systemTagText,
 				})
 			} else {
+				result.Actions = append(result.Actions, plugin.QueryResultAction{
+					Name: openThemeFolderText,
+					Icon: plugin.OpenContainingFolderIcon,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						if err := shell.OpenFileInFolder(themePath); err != nil {
+							c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open theme folder %s: %s", themePath, err.Error()))
+						}
+					},
+				})
 				result.Actions = append(result.Actions, plugin.QueryResultAction{
 					Name:                   uninstallThemeText,
 					PreventHideAfterAction: true,

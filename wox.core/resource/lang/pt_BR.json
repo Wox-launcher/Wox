@@ -520,6 +520,7 @@
   "plugin_theme_group_store": "Loja",
   "plugin_theme_install_theme": "Instalar tema",
   "plugin_theme_no_embed_theme": "Nenhum tema incorporado encontrado",
+  "plugin_theme_open_containing_folder": "Abrir pasta do tema",
   "plugin_theme_open_setting": "Abrir configurações do tema",
   "plugin_theme_restore_action": "Restaurar",
   "plugin_theme_restore_command_description": "Remover todos os temas personalizados e restaurar o padrão",
