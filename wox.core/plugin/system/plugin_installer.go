@@ -1,9 +1,13 @@
 package system
 
 import (
+	"archive/zip"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"path"
 	"strings"
 	"wox/common"
 	"wox/plugin"
@@ -116,15 +120,17 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 	}
 	pluginDetailJSON, _ := json.Marshal(pluginDetailData)
 
+	pluginIcon := resolvePluginIcon(filePath, pluginMetadata)
+
 	// create result for plugin installation
 	results = append(results, plugin.QueryResult{
 		Title:    fmt.Sprintf("%s: %s", actionTitle, pluginMetadata.Name),
 		SubTitle: fmt.Sprintf("Version: %s, Author: %s\nDescription: %s", pluginMetadata.Version, pluginMetadata.Author, pluginMetadata.Description),
-		Icon:     plugin.WoxIcon,
+		Icon:     pluginIcon,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   actionButtonName,
-				Icon:                   plugin.WoxIcon,
+				Icon:                   pluginIcon,
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					util.Go(ctx, "install plugin from local", func() {
@@ -185,4 +191,51 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 	})
 
 	return results
+}
+
+func resolvePluginIcon(filePath string, metadata plugin.Metadata) common.WoxImage {
+	icon := common.ParseWoxImageOrDefault(metadata.Icon, plugin.WoxIcon)
+	if icon.ImageType != common.WoxImageTypeRelativePath {
+		return icon
+	}
+
+	iconBytes, err := readFileFromZip(filePath, icon.ImageData)
+	if err != nil {
+		return plugin.WoxIcon
+	}
+
+	iconDataURL := fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(iconBytes))
+	return common.NewWoxImageBase64(iconDataURL)
+}
+
+func readFileFromZip(filePath string, target string) ([]byte, error) {
+	reader, err := zip.OpenReader(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+
+	targetPath := strings.TrimPrefix(path.Clean(target), "/")
+
+	for _, file := range reader.File {
+		candidate := strings.TrimPrefix(path.Clean(file.Name), "/")
+		if candidate != targetPath {
+			continue
+		}
+
+		rc, err := file.Open()
+		if err != nil {
+			return nil, err
+		}
+
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		return data, nil
+	}
+
+	return nil, fmt.Errorf("file %s not found in archive", targetPath)
 }

@@ -48,12 +48,22 @@ class PluginAPI(PublicAPI):
                 f"<{self.plugin_name}> start invoke method to Wox: {method}, id: {request_id}",
             )
 
+        # Core expects all params as strings; serialize non-string values to JSON strings.
+        serialized_params: Dict[str, str] = {}
+        for key, value in params.items():
+            if value is None:
+                continue
+            if isinstance(value, str):
+                serialized_params[key] = value
+            else:
+                serialized_params[key] = json.dumps(value)
+
         request = {
             "TraceId": trace_id,
             "Id": request_id,
             "Method": method,
             "Type": PLUGIN_JSONRPC_TYPE_REQUEST,
-            "Params": params,
+            "Params": serialized_params,
             "PluginId": self.plugin_id,
             "PluginName": self.plugin_name,
         }
@@ -229,7 +239,7 @@ class PluginAPI(PublicAPI):
                     if action.action is not None:
                         plugin_instance.actions[action.id] = action.action
 
-        response = await self.invoke_method(ctx, "UpdateResult", {"result": json.loads(result.to_json())})
+        response = await self.invoke_method(ctx, "UpdateResult", {"result": result.to_json()})
         return bool(response) if response is not None else False
 
     async def update_result_action(self, ctx: Context, action: "UpdatableResultAction") -> bool:
@@ -242,7 +252,7 @@ class PluginAPI(PublicAPI):
             if plugin_instance:
                 plugin_instance.actions[action.action_id] = action.action
 
-        response = await self.invoke_method(ctx, "UpdateResultAction", {"action": json.loads(action.to_json())})
+        response = await self.invoke_method(ctx, "UpdateResultAction", {"action": action.to_json()})
         return bool(response) if response is not None else False
 
     async def refresh_query(self, ctx: Context, param: RefreshQueryParam) -> None:

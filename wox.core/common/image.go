@@ -100,7 +100,12 @@ func (w *WoxImage) ToImage() (image.Image, error) {
 		return imaging.Open(w.ImageData)
 	}
 	if w.ImageType == WoxImageTypeBase64 {
-		data := strings.Split(w.ImageData, ",")[1]
+		parts := strings.SplitN(w.ImageData, ",", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid base64 image data")
+		}
+
+		data := parts[1]
 		decodedData, base64DecodeErr := base64.StdEncoding.DecodeString(data)
 		if base64DecodeErr != nil {
 			return nil, base64DecodeErr

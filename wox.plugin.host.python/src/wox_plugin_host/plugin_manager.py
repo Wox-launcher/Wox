@@ -8,7 +8,8 @@ from wox_plugin import PublicAPI, Plugin, ActionContext
 class PluginInstance:
     plugin: Plugin
     api: Optional[PublicAPI]
-    module_path: str
+    plugin_dir: str
+    module_name: str
     actions: Dict[str, Callable[[ActionContext], Awaitable[None]]]
 
 

@@ -60,10 +60,9 @@ plugins:
 	cd ci && go run plugin.go
 
 dev: _check_deps
-	# Build hosts and flutter
+	$(MAKE) ensure-resources
 	$(MAKE) -C wox.core woxmr-build
 	$(MAKE) host
-	$(MAKE) -C wox.ui.flutter/wox build
 
 host:
 	$(MAKE) -C wox.plugin.host.nodejs build

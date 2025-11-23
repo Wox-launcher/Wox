@@ -75,11 +75,11 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
         try:
             # Convert entry path to module path
             # e.g., "replaceme_with_projectname/main.py" -> "replaceme_with_projectname.main"
-            module_path = entry.replace(".py", "").replace("/", ".")
-            await logger.info(ctx.get_trace_id(), f"module_path: {module_path}")
+            module_name = entry.replace(".py", "").replace("/", ".")
+            await logger.info(ctx.get_trace_id(), f"module_path: {module_name}")
 
             # Import the module
-            module = importlib.import_module(module_path)
+            module = importlib.import_module(module_name)
 
             if not hasattr(module, "plugin"):
                 raise AttributeError("Plugin module does not have a 'plugin' attribute")
@@ -87,7 +87,8 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
             plugin_instances[plugin_id] = PluginInstance(
                 plugin=module.plugin,
                 api=None,
-                module_path=plugin_directory,
+                plugin_dir=plugin_directory,
+                module_name=module_name,
                 actions={},
             )
 
@@ -239,6 +240,13 @@ async def action(ctx: Context, request: Dict[str, Any]) -> None:
         raise e
 
 
+def _remove_module(module_name: str) -> None:
+    """Remove a module and its children from sys.modules"""
+    for name in list(sys.modules.keys()):
+        if name == module_name or name.startswith(f"{module_name}."):
+            sys.modules.pop(name, None)
+
+
 async def unload_plugin(ctx: Context, request: Dict[str, Any]) -> None:
     """Unload a plugin"""
     plugin_id = request.get("PluginId", "")
@@ -251,10 +259,17 @@ async def unload_plugin(ctx: Context, request: Dict[str, Any]) -> None:
         # Remove plugin from instances
         del plugin_instances[plugin_id]
 
-        # Remove plugin directory from Python path
-        plugin_dir = path.dirname(plugin_instance.module_path)
-        if plugin_dir in sys.path:
-            sys.path.remove(plugin_dir)
+        # Remove imported module cache to allow reloading updated code
+        _remove_module(plugin_instance.module_name)
+        root_package = plugin_instance.module_name.split(".", 1)[0]
+        _remove_module(root_package)
+
+        # Remove plugin directory and dependencies from Python path
+        if plugin_instance.plugin_dir in sys.path:
+            sys.path.remove(plugin_instance.plugin_dir)
+        deps_dir = path.join(plugin_instance.plugin_dir, "dependencies")
+        if deps_dir in sys.path:
+            sys.path.remove(deps_dir)
 
         await logger.info(ctx.get_trace_id(), f"<{plugin_name}> unload plugin successfully")
     except Exception as e:
