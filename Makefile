@@ -59,8 +59,7 @@ clean:
 plugins:
 	cd ci && go run plugin.go
 
-dev: _check_deps
-	$(MAKE) ensure-resources
+dev: _check_deps ensure-resources
 	$(MAKE) -C wox.core woxmr-build
 	$(MAKE) host
 
@@ -70,6 +69,7 @@ host:
 
 # Ensure required resource directories exist with dummy files for go:embed
 ensure-resources:
+	@echo "Ensuring required resource directories exist..."
 	@mkdir -p wox.core/resource/ui/flutter
 	@touch wox.core/resource/ui/flutter/placeholder
 	@mkdir -p wox.core/resource/hosts
@@ -107,6 +107,7 @@ test-debug:
 
 
 build: clean dev
+	    $(MAKE) -C wox.ui.flutter/wox build
 		$(MAKE) -C wox.core build
 		
 ifeq ($(PLATFORM),macos)
