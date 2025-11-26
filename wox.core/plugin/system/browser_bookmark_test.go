@@ -285,3 +285,6 @@ func (m *mockAPI) GetUpdatableResult(ctx context.Context, resultId string) *plug
 func (m *mockAPI) IsVisible(ctx context.Context) bool {
 	return false
 }
+
+func (e *mockAPI) RefreshQuery(ctx context.Context, params plugin.RefreshQueryParam) {
+}

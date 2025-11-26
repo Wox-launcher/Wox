@@ -94,38 +94,87 @@ func (m *Manager) TranslateWoxEnUs(ctx context.Context, key string) string {
 	return originKey
 }
 
-func (m *Manager) TranslatePlugin(ctx context.Context, key string, pluginDirectory string) string {
-	cacheKey := fmt.Sprintf("%s:%s", pluginDirectory, m.currentLangCode)
-	if v, ok := m.pluginLangJsonMap.Load(cacheKey); ok {
-		return m.translatePluginFromJson(ctx, key, v)
-	}
-
-	jsonPath := path.Join(pluginDirectory, "lang", fmt.Sprintf("%s.json", m.currentLangCode))
-	if _, err := os.Stat(jsonPath); os.IsNotExist(err) {
-		return key
-	}
-
-	json, err := os.ReadFile(jsonPath)
-	if err != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("error reading lang file(%s): %s", jsonPath, err.Error()))
-		return key
-	}
-
-	m.pluginLangJsonMap.Store(cacheKey, string(json))
-	return m.translatePluginFromJson(ctx, key, string(json))
-}
-
-func (m *Manager) translatePluginFromJson(ctx context.Context, key string, langJson string) string {
+// TranslatePlugin translates a key using inline i18n config from plugin.json or lang files.
+// Priority:
+// 1. Inline i18n config for current language
+// 2. Lang file for current language (lang/{langCode}.json)
+// 3. Inline i18n config for en_US (fallback)
+// 4. Lang file for en_US (fallback)
+// 5. Return original key
+func (m *Manager) TranslatePlugin(ctx context.Context, key string, pluginDirectory string, inlineI18n map[string]map[string]string) string {
 	originKey := key
 
 	if strings.HasPrefix(key, "i18n:") {
 		key = key[5:]
 	}
 
-	result := gjson.Get(langJson, key)
-	if result.Exists() {
-		return result.String()
+	// 1. Try inline i18n for current language
+	if translated := m.translateFromInlineI18n(key, string(m.currentLangCode), inlineI18n); translated != "" {
+		return translated
+	}
+
+	// 2. Try lang file for current language
+	if translated := m.translateFromLangFile(ctx, key, pluginDirectory, string(m.currentLangCode)); translated != "" {
+		return translated
+	}
+
+	// 3. Try inline i18n for en_US (fallback)
+	if m.currentLangCode != LangCodeEnUs {
+		if translated := m.translateFromInlineI18n(key, string(LangCodeEnUs), inlineI18n); translated != "" {
+			return translated
+		}
+
+		// 4. Try lang file for en_US (fallback)
+		if translated := m.translateFromLangFile(ctx, key, pluginDirectory, string(LangCodeEnUs)); translated != "" {
+			return translated
+		}
 	}
 
 	return originKey
+}
+
+// translateFromInlineI18n looks up a key in the inline i18n map
+func (m *Manager) translateFromInlineI18n(key string, langCode string, inlineI18n map[string]map[string]string) string {
+	if inlineI18n == nil {
+		return ""
+	}
+	if langMap, ok := inlineI18n[langCode]; ok {
+		if translated, ok := langMap[key]; ok {
+			return translated
+		}
+	}
+	return ""
+}
+
+// translateFromLangFile looks up a key in the lang file (with caching)
+func (m *Manager) translateFromLangFile(ctx context.Context, key string, pluginDirectory string, langCode string) string {
+	cacheKey := fmt.Sprintf("%s:%s", pluginDirectory, langCode)
+	if v, ok := m.pluginLangJsonMap.Load(cacheKey); ok {
+		result := gjson.Get(v, key)
+		if result.Exists() {
+			return result.String()
+		}
+		return ""
+	}
+
+	jsonPath := path.Join(pluginDirectory, "lang", fmt.Sprintf("%s.json", langCode))
+	if _, err := os.Stat(jsonPath); os.IsNotExist(err) {
+		// Cache empty string to avoid repeated file checks
+		m.pluginLangJsonMap.Store(cacheKey, "")
+		return ""
+	}
+
+	jsonContent, err := os.ReadFile(jsonPath)
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("error reading lang file(%s): %s", jsonPath, err.Error()))
+		m.pluginLangJsonMap.Store(cacheKey, "")
+		return ""
+	}
+
+	m.pluginLangJsonMap.Store(cacheKey, string(jsonContent))
+	result := gjson.Get(string(jsonContent), key)
+	if result.Exists() {
+		return result.String()
+	}
+	return ""
 }

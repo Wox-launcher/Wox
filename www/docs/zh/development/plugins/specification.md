@@ -21,6 +21,7 @@
 | `SupportedOS`        | ✅   | `Windows`/`Linux`/`Macos`，脚本插件留空时默认全部        | `["Windows","Macos"]`                                     |
 | `Features`           | ⭕   | 可选能力开关（见下方）                                   | `[{"Name":"debounce","Params":{"IntervalMs":"200"}}]`     |
 | `SettingDefinitions` | ⭕   | 设置表单定义                                             | `[...]`                                                   |
+| `I18n`               | ⭕   | 内联翻译（见 [国际化](#国际化)）                         | `{"en_US":{"key":"value"}}`                               |
 
 ### Icon 格式
 
@@ -194,16 +195,16 @@ class MyPlugin(Plugin):
 Node.js（SDK）：
 
 ```typescript
-import { Plugin, Context, PluginInitParams, PluginSettingDefinitionItem } from "@wox-launcher/wox-plugin"
+import { Plugin, Context, PluginInitParams, PluginSettingDefinitionItem } from "@wox-launcher/wox-plugin";
 
 class MyPlugin implements Plugin {
-  private api: any
+  private api: any;
 
   async init(ctx: Context, params: PluginInitParams): Promise<void> {
-    this.api = params.API
+    this.api = params.API;
 
     await this.api.OnGetDynamicSetting(ctx, (key: string): PluginSettingDefinitionItem | null => {
-      if (key !== "runtime_options") return null
+      if (key !== "runtime_options") return null;
       return {
         Type: "select",
         Value: {
@@ -212,13 +213,122 @@ class MyPlugin implements Plugin {
           DefaultValue: "a",
           Options: [
             { Label: "Option A", Value: "a" },
-            { Label: "Option B", Value: "b" }
-          ]
-        }
-      }
-    })
+            { Label: "Option B", Value: "b" },
+          ],
+        },
+      };
+    });
   }
 }
 ```
 
 > 提示：动态设置会在打开设置页面时按需获取。请保持回调快速且可预期，如需远程数据请做好缓存，避免拖慢 UI。
+
+## 国际化
+
+Wox 支持插件国际化（i18n），让你的插件可以根据用户的语言偏好显示不同的文本。有两种方式提供翻译：
+
+### 方式一：在 plugin.json 中内联配置（推荐脚本插件使用）
+
+直接在 `plugin.json` 中使用 `I18n` 字段定义翻译。这对于没有目录结构的脚本插件特别有用：
+
+```json
+{
+  "Id": "my-plugin-id",
+  "Name": "My Plugin",
+  "Description": "i18n:plugin_description",
+  "TriggerKeywords": ["mp"],
+  "I18n": {
+    "en_US": {
+      "plugin_description": "A useful plugin",
+      "result_title": "Result: {0}",
+      "action_copy": "Copy to clipboard"
+    },
+    "zh_CN": {
+      "plugin_description": "一个有用的插件",
+      "result_title": "结果: {0}",
+      "action_copy": "复制到剪贴板"
+    }
+  }
+}
+```
+
+### 方式二：语言文件（推荐全功能插件使用）
+
+在插件根目录创建 `lang/` 目录，存放以语言代码命名的 JSON 文件：
+
+```
+my-plugin/
+├── plugin.json
+├── main.py
+└── lang/
+    ├── en_US.json
+    └── zh_CN.json
+```
+
+每个语言文件包含扁平的键值对：
+
+```json
+// lang/en_US.json
+{
+  "plugin_description": "A useful plugin",
+  "result_title": "Result: {0}",
+  "action_copy": "Copy to clipboard"
+}
+```
+
+```json
+// lang/zh_CN.json
+{
+  "plugin_description": "一个有用的插件",
+  "result_title": "结果: {0}",
+  "action_copy": "复制到剪贴板"
+}
+```
+
+### 使用翻译
+
+要使用翻译，在文本前加上 `i18n:` 前缀，后跟翻译键：
+
+```python
+# Python 示例
+result = Result(
+    title="i18n:result_title",
+    sub_title="i18n:action_copy"
+)
+
+# 或使用 API 程序化获取翻译文本
+translated = await api.get_translation(ctx, "i18n:result_title")
+```
+
+```typescript
+// Node.js 示例
+const result: Result = {
+  Title: "i18n:result_title",
+  SubTitle: "i18n:action_copy",
+};
+
+// 或使用 API
+const translated = await api.GetTranslation(ctx, "i18n:result_title");
+```
+
+### 翻译优先级
+
+Wox 按以下顺序查找翻译：
+
+1. plugin.json 中的内联 `I18n`（当前语言）
+2. `lang/{当前语言}.json` 文件
+3. plugin.json 中的内联 `I18n`（en_US 回退）
+4. `lang/en_US.json` 文件（回退）
+5. 如果都未找到，返回原始键
+
+### 支持的语言
+
+| 代码    | 语言             |
+| ------- | ---------------- |
+| `en_US` | 英语（美国）     |
+| `zh_CN` | 简体中文         |
+| `pt_BR` | 葡萄牙语（巴西） |
+| `ru_RU` | 俄语             |
+
+> 提示：始终提供 `en_US` 翻译作为回退语言。

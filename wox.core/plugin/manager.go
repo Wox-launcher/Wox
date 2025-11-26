@@ -1492,8 +1492,8 @@ func (m *Manager) translatePlugin(ctx context.Context, pluginInstance *Instance,
 	if pluginInstance.IsSystemPlugin {
 		return i18n.GetI18nManager().TranslateWox(ctx, key)
 	} else {
-		// Try plugin translation first
-		translated := i18n.GetI18nManager().TranslatePlugin(ctx, key, pluginInstance.PluginDirectory)
+		// Try plugin translation first (with inline i18n from plugin.json)
+		translated := i18n.GetI18nManager().TranslatePlugin(ctx, key, pluginInstance.PluginDirectory, pluginInstance.Metadata.I18n)
 		// If translation failed, fallback to system translation
 		// This handles cases where third-party plugins have system actions (like "Pin to current query")
 		if key == translated {

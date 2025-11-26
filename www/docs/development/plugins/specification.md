@@ -21,6 +21,7 @@
 | `SupportedOS`        | ✅       | Any of `Windows`, `Linux`, `Macos`. Empty defaults to all for script plugins.               | `["Windows","Macos"]`                                     |
 | `Features`           | ⭕       | Optional feature flags with parameters (see below)                                          | `[{"Name":"debounce","Params":{"IntervalMs":"200"}}]`     |
 | `SettingDefinitions` | ⭕       | Settings schema rendered in Wox settings                                                    | `[...]`                                                   |
+| `I18n`               | ⭕       | Inline translations (see [Internationalization](#internationalization))                     | `{"en_US":{"key":"value"}}`                               |
 
 ### Icon formats
 
@@ -194,16 +195,16 @@ class MyPlugin(Plugin):
 Node.js (SDK types):
 
 ```typescript
-import { Plugin, Context, PluginInitParams, PluginSettingDefinitionItem } from "@wox-launcher/wox-plugin"
+import { Plugin, Context, PluginInitParams, PluginSettingDefinitionItem } from "@wox-launcher/wox-plugin";
 
 class MyPlugin implements Plugin {
-  private api: any
+  private api: any;
 
   async init(ctx: Context, params: PluginInitParams): Promise<void> {
-    this.api = params.API
+    this.api = params.API;
 
     await this.api.OnGetDynamicSetting(ctx, (key: string): PluginSettingDefinitionItem | null => {
-      if (key !== "runtime_options") return null
+      if (key !== "runtime_options") return null;
       return {
         Type: "select",
         Value: {
@@ -212,13 +213,122 @@ class MyPlugin implements Plugin {
           DefaultValue: "a",
           Options: [
             { Label: "Option A", Value: "a" },
-            { Label: "Option B", Value: "b" }
-          ]
-        }
-      }
-    })
+            { Label: "Option B", Value: "b" },
+          ],
+        },
+      };
+    });
   }
 }
 ```
 
 > Heads-up: dynamic settings are fetched on demand when the settings page is opened. Keep callbacks fast and deterministic; cache remote data if needed to avoid slowing the UI.
+
+## Internationalization
+
+Wox supports plugin internationalization (i18n) so your plugin can display text in the user's preferred language. There are two ways to provide translations:
+
+### Method 1: Inline I18n in plugin.json (Recommended for Script Plugins)
+
+Define translations directly in `plugin.json` using the `I18n` field. This is especially useful for script plugins that don't have a directory structure:
+
+```json
+{
+  "Id": "my-plugin-id",
+  "Name": "My Plugin",
+  "Description": "i18n:plugin_description",
+  "TriggerKeywords": ["mp"],
+  "I18n": {
+    "en_US": {
+      "plugin_description": "A useful plugin",
+      "result_title": "Result: {0}",
+      "action_copy": "Copy to clipboard"
+    },
+    "zh_CN": {
+      "plugin_description": "一个有用的插件",
+      "result_title": "结果: {0}",
+      "action_copy": "复制到剪贴板"
+    }
+  }
+}
+```
+
+### Method 2: Language Files (Recommended for Full-Featured Plugins)
+
+Create a `lang/` directory in your plugin root with JSON files named by language code:
+
+```
+my-plugin/
+├── plugin.json
+├── main.py
+└── lang/
+    ├── en_US.json
+    └── zh_CN.json
+```
+
+Each language file contains a flat key-value map:
+
+```json
+// lang/en_US.json
+{
+  "plugin_description": "A useful plugin",
+  "result_title": "Result: {0}",
+  "action_copy": "Copy to clipboard"
+}
+```
+
+```json
+// lang/zh_CN.json
+{
+  "plugin_description": "一个有用的插件",
+  "result_title": "结果: {0}",
+  "action_copy": "复制到剪贴板"
+}
+```
+
+### Using Translations
+
+To use a translation, prefix your text with `i18n:` followed by the key:
+
+```python
+# Python example
+result = Result(
+    title="i18n:result_title",
+    sub_title="i18n:action_copy"
+)
+
+# Or use the API to get translated text programmatically
+translated = await api.get_translation(ctx, "i18n:result_title")
+```
+
+```typescript
+// Node.js example
+const result: Result = {
+  Title: "i18n:result_title",
+  SubTitle: "i18n:action_copy",
+};
+
+// Or use the API
+const translated = await api.GetTranslation(ctx, "i18n:result_title");
+```
+
+### Translation Priority
+
+Wox looks up translations in this order:
+
+1. Inline `I18n` in plugin.json (current language)
+2. `lang/{current_lang}.json` file
+3. Inline `I18n` in plugin.json (en_US fallback)
+4. `lang/en_US.json` file (fallback)
+5. Return the original key if no translation found
+
+### Supported Languages
+
+| Code    | Language             |
+| ------- | -------------------- |
+| `en_US` | English (US)         |
+| `zh_CN` | Chinese (Simplified) |
+| `pt_BR` | Portuguese (Brazil)  |
+| `ru_RU` | Russian              |
+
+> Tip: Always provide `en_US` translations as the fallback language.

@@ -61,6 +61,11 @@ type Metadata struct {
 	SupportedOS        []string
 	Features           []MetadataFeature
 	SettingDefinitions definition.PluginSettingDefinitions
+
+	// I18n holds inline translations for the plugin.
+	// Map structure: langCode -> key -> translatedValue
+	// Example: {"en_US": {"title": "Hello"}, "zh_CN": {"title": "你好"}}
+	I18n map[string]map[string]string
 }
 
 func (m *Metadata) GetIconOrDefault(pluginDirectory string, defaultImage common.WoxImage) common.WoxImage {
