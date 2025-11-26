@@ -289,6 +289,15 @@ func (c *BrowserBookmarkPlugin) handleMRURestore(mruData plugin.MRUData) (*plugi
 		return nil, fmt.Errorf("bookmark no longer exists: %s", contextData.Name)
 	}
 
+	if !mruData.Icon.IsValid() {
+		// default icon, overlay cached favicon if exists (no network)
+		icon := browserBookmarkIcon
+		if cachedIcon, ok := getWebsiteIconFromCacheOnly(context.Background(), contextData.Url); ok {
+			icon = cachedIcon.Overlay(browserBookmarkIcon, 0.4, 0.6, 0.6)
+		}
+		mruData.Icon = icon
+	}
+
 	result := &plugin.QueryResult{
 		Title:       contextData.Name,
 		SubTitle:    contextData.Url,

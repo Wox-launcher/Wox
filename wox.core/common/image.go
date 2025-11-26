@@ -153,6 +153,21 @@ func (w *WoxImage) ToImage() (image.Image, error) {
 	return nil, fmt.Errorf("unsupported image type: %s", w.ImageType)
 }
 
+func (w *WoxImage) IsValid() bool {
+	if w.ImageData == "" {
+		return false
+	}
+
+	// check absolute path exists
+	if w.ImageType == WoxImageTypeAbsolutePath {
+		if _, err := os.Stat(w.ImageData); err != nil {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (w *WoxImage) Hash() string {
 	return util.Md5([]byte(w.ImageType + w.ImageData))
 }

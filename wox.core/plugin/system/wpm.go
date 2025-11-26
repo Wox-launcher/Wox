@@ -92,6 +92,7 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 		Entry:         "",
 		TriggerKeywords: []string{
 			"wpm",
+			"store",
 		},
 		Features: []plugin.MetadataFeature{
 			{

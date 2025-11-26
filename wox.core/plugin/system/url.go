@@ -243,6 +243,16 @@ func (r *UrlPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResul
 		url = "https://" + url
 	}
 
+	// user may have cleared icon cache, so we need to get icon again
+	if !mruData.Icon.IsValid() {
+		icon, err := getWebsiteIconWithCache(context.Background(), url)
+		if err != nil {
+			r.api.Log(context.Background(), plugin.LogLevelError, fmt.Sprintf("get url icon error: %s", err.Error()))
+			icon = urlIcon
+		}
+		mruData.Icon = icon
+	}
+
 	result := &plugin.QueryResult{
 		Title:       contextData.Url,
 		SubTitle:    contextData.Title,
