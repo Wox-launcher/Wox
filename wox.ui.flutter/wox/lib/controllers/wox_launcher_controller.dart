@@ -692,6 +692,10 @@ class WoxLauncherController extends GetxController {
       final theme = WoxTheme.fromJson(msg.data);
       WoxThemeUtil.instance.changeTheme(theme);
       resizeHeight(); // Theme height maybe changed, so we need to resize height
+      // Theme change triggers widget rebuild which may lose focus, so we need to restore focus after rebuild
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        focusQueryBox();
+      });
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "PickFiles") {
       final pickFilesParams = FileSelectorParams.fromJson(msg.data);

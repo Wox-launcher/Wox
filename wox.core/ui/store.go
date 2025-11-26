@@ -68,8 +68,8 @@ func (s *Store) GetStoreThemes(ctx context.Context) []common.Theme {
 		}
 
 		for _, manifest := range themeManifest {
-			_, found := lo.Find(storeThemeManifests, func(manifest common.Theme) bool {
-				return manifest.ThemeId == manifest.ThemeId
+			_, found := lo.Find(storeThemeManifests, func(m common.Theme) bool {
+				return manifest.ThemeId == m.ThemeId
 			})
 			if found {
 				//skip duplicated theme
