@@ -202,5 +202,22 @@
     ],
     "DateCreated": "2025-11-15 23:15:00",
     "DateUpdated": "2025-11-15 23:15:00"
+  },
+  {
+    "Id": "36fa2371-144c-4f53-98bb-874f77b21849",
+    "Name": "Mole",
+    "Author": "qianlifeng",
+    "Version": "0.0.1",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "python",
+    "Description": "Dig deep like a mole to optimize you Mac",
+    "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Mole/main/image/app.png",
+    "Website": "https://github.com/qianlifeng/Wox.Plugin.Mole",
+    "DownloadUrl": "https://github.com/qianlifeng/Wox.Plugin.Mole/releases/latest/download/Wox.Plugin.Mole.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Mole/main/image/demo.png"
+    ],
+    "DateCreated": "2025-11-26 22:15:00",
+    "DateUpdated": "2025-11-26 22:15:00"
   }
 ]
