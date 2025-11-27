@@ -37,6 +37,7 @@ type StorePluginManifest struct {
 	Website        string
 	DownloadUrl    string
 	ScreenshotUrls []string
+	SupportedOS    []string
 	DateCreated    string
 	DateUpdated    string
 }
@@ -154,6 +155,10 @@ func (s *Store) GetStorePluginManifestById(ctx context.Context, id string) (Stor
 
 func (s *Store) Search(ctx context.Context, keyword string) []StorePluginManifest {
 	return lo.Filter(s.pluginManifests, func(manifest StorePluginManifest, _ int) bool {
+		if !IsSupportedOSAny(manifest.SupportedOS) {
+			return false
+		}
+
 		if keyword == "" {
 			return true
 		}

@@ -13,6 +13,11 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Obsidian/main/images/app.png"
     ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
     "DateCreated": "2023-08-29 00:00:00",
     "DateUpdated": "2024-06-20 23:02:08"
   },
@@ -29,6 +34,11 @@
     "DownloadUrl": "https://github.com/Wox-launcher/Wox.Plugin.Emoji/releases/latest/download/Wox.Plugin.Emoji.wox",
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Emoji/main/snapshot/snapshot.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
     ],
     "DateCreated": "2024-01-02 20:00:00",
     "DateUpdated": "2024-03-01 19:01:54"
@@ -47,6 +57,11 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Selection.Sum/main/assets/snipaste.png"
     ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
     "DateCreated": "2024-02-03 15:49:00",
     "DateUpdated": "2024-03-02 09:57:37"
   },
@@ -63,6 +78,11 @@
     "DownloadUrl": "https://github.com/Wox-launcher/Wox.Plugin.DeepL/releases/latest/download/Wox.Plugin.DeepL.wox",
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.DeepL/main/assets/snapshot.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
     ],
     "DateCreated": "2024-02-23 19:09:00",
     "DateUpdated": "2025-11-15 20:03:30"
@@ -81,6 +101,9 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Arc/main/assets/snapshot.png"
     ],
+    "SupportedOS": [
+      "Darwin"
+    ],
     "DateCreated": "2024-05-07 13:02:00",
     "DateUpdated": "2024-05-21 22:51:11"
   },
@@ -97,6 +120,9 @@
     "DownloadUrl": "https://github.com/lylwx/Wox.Plugin.OSXVolumeControl/releases/latest/download/Wox.Plugin.OSXVolumeControl.wox",
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/lylwx/Wox.Plugin.OSXVolumeControl/main/snapshot.jpg"
+    ],
+    "SupportedOS": [
+      "Darwin"
     ],
     "DateCreated": "2024-05-21 15:50:00",
     "DateUpdated": "2025-11-13 16:25:10"
@@ -115,6 +141,11 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Moodist/main/snipaste.png"
     ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
     "DateCreated": "2024-06-06 23:51:00",
     "DateUpdated": "2024-06-06 23:51:00"
   },
@@ -131,6 +162,11 @@
     "DownloadUrl": "https://github.com/Wox-launcher/Wox.Plugin.Spotify/releases/latest/download/Wox.Plugin.Spotify.wox",
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Spotify/main/prev.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
     ],
     "DateCreated": "2024-07-05 15:00:00",
     "DateUpdated": "2024-07-05 15:00:00"
@@ -149,6 +185,11 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.RSSReader/main/prev.png"
     ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
     "DateCreated": "2024-08-07 14:00:00",
     "DateUpdated": "2025-05-22 22:50:49"
   },
@@ -165,6 +206,11 @@
     "DownloadUrl": "https://github.com/sachadvr/Wox.Custom.Commands.Plugin/releases/latest/download/CustomCommands.wox",
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/sachadvr/Wox.Custom.Commands.Plugin/main/images/screenshot.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
     ],
     "DateCreated": "2025-04-17 11:00:00",
     "DateUpdated": "2025-04-17 23:02:38"
@@ -183,6 +229,11 @@
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.60s/refs/heads/main/screenshot.png"
     ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
     "DateCreated": "2025-08-25 21:15:00",
     "DateUpdated": "2025-08-25 21:15:00"
   },
@@ -200,6 +251,11 @@
     "ScreenshotUrls": [
       "https://gist.github.com/user-attachments/assets/4a93ab0f-9496-4b5d-94a8-d8c2b6fb129a"
     ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
     "DateCreated": "2025-11-15 23:15:00",
     "DateUpdated": "2025-11-15 23:15:00"
   },
@@ -216,6 +272,9 @@
     "DownloadUrl": "https://github.com/qianlifeng/Wox.Plugin.Mole/releases/latest/download/Wox.Plugin.Mole.wox",
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Mole/main/image/demo.png"
+    ],
+    "SupportedOS": [
+      "Darwin"
     ],
     "DateCreated": "2025-11-26 22:15:00",
     "DateUpdated": "2025-11-26 22:15:00"
