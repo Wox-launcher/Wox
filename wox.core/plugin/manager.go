@@ -965,7 +965,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		}
 		if result.Actions[actionIndex].Icon.IsEmpty() {
 			// set default action icon if not present
-			result.Actions[actionIndex].Icon = common.DefaultActionIcon
+			result.Actions[actionIndex].Icon = common.ExecuteRunIcon
 		}
 	}
 
@@ -1133,7 +1133,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 				actions[actionIndex].Id = uuid.NewString()
 			}
 			if actions[actionIndex].Icon.IsEmpty() {
-				actions[actionIndex].Icon = common.DefaultActionIcon
+				actions[actionIndex].Icon = common.ExecuteRunIcon
 			}
 		}
 

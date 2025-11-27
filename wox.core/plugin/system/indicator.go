@@ -174,7 +174,7 @@ func (i *IndicatorPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.Quer
 		Id:          uuid.NewString(),
 		Title:       contextData.TriggerKeyword,
 		SubTitle:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(context.Background(), "plugin_indicator_activate_plugin"), pluginInstance.Metadata.Name),
-		Icon:        mruData.Icon,
+		Icon:        pluginInstance.Metadata.GetIconOrDefault(pluginInstance.PluginDirectory, indicatorIcon),
 		ContextData: mruData.ContextData,
 		Actions: []plugin.QueryResultAction{
 			{

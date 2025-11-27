@@ -2,13 +2,14 @@ package system
 
 import (
 	"context"
+	"wox/common"
 	"wox/plugin"
 	"wox/util/menus"
 
 	"github.com/samber/lo"
 )
 
-var menusIcon = plugin.PluginMenusIcon
+var menusIcon = common.PluginMenusIcon
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &MenusPlugin{})
