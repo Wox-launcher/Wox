@@ -71,12 +71,13 @@ ScreenInfo getMouseScreenSize() {
     MONITORINFO mi;
     mi.cbSize = sizeof(MONITORINFO);
     if (GetMonitorInfo(hMonitor, &mi)) {
-        // GetMonitorInfo returns physical pixel coordinates
-        // Example: On a 5120x2880 monitor, rcMonitor = {0,0,5120,2880}
-        int physicalWidth = mi.rcMonitor.right - mi.rcMonitor.left;
-        int physicalHeight = mi.rcMonitor.bottom - mi.rcMonitor.top;
-        int physicalX = mi.rcMonitor.left;
-        int physicalY = mi.rcMonitor.top;
+        // Use rcWork instead of rcMonitor to exclude taskbar and other app bars
+        // rcWork = the work area (available area excluding taskbar)
+        // rcMonitor = the full monitor area
+        int physicalWidth = mi.rcWork.right - mi.rcWork.left;
+        int physicalHeight = mi.rcWork.bottom - mi.rcWork.top;
+        int physicalX = mi.rcWork.left;
+        int physicalY = mi.rcWork.top;
 
         // Get DPI for this monitor
         // Example: 216 DPI = 225% scaling (216/96 = 2.25)
@@ -106,11 +107,11 @@ ScreenInfo getActiveScreenSize() {
         MONITORINFO mi;
         mi.cbSize = sizeof(MONITORINFO);
         if (GetMonitorInfo(hMonitor, &mi)) {
-            // Get physical dimensions
-            int physicalWidth = mi.rcMonitor.right - mi.rcMonitor.left;
-            int physicalHeight = mi.rcMonitor.bottom - mi.rcMonitor.top;
-            int physicalX = mi.rcMonitor.left;
-            int physicalY = mi.rcMonitor.top;
+            // Use rcWork instead of rcMonitor to exclude taskbar and other app bars
+            int physicalWidth = mi.rcWork.right - mi.rcWork.left;
+            int physicalHeight = mi.rcWork.bottom - mi.rcWork.top;
+            int physicalX = mi.rcWork.left;
+            int physicalY = mi.rcWork.top;
 
             // Get DPI for this monitor
             UINT dpi = GetDpiForMonitorCompat(hMonitor);

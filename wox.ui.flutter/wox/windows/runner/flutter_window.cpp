@@ -580,11 +580,13 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       int scaledWidth = static_cast<int>(width * dpiScale);
       int scaledHeight = static_cast<int>(height * dpiScale);
 
-      // Get monitor work area (physical coordinates)
-      int monitorLeft = monitorInfo.rcMonitor.left;
-      int monitorTop = monitorInfo.rcMonitor.top;
-      int monitorWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
-      int monitorHeight = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
+      // Get monitor work area (physical coordinates), excluding taskbar
+      // rcWork = the work area (available area excluding taskbar)
+      // rcMonitor = the full monitor area
+      int monitorLeft = monitorInfo.rcWork.left;
+      int monitorTop = monitorInfo.rcWork.top;
+      int monitorWidth = monitorInfo.rcWork.right - monitorInfo.rcWork.left;
+      int monitorHeight = monitorInfo.rcWork.bottom - monitorInfo.rcWork.top;
 
       // Calculate center position on the mouse's monitor
       int x = monitorLeft + (monitorWidth - scaledWidth) / 2;
