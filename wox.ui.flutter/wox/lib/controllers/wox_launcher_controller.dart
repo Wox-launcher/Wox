@@ -683,6 +683,7 @@ class WoxLauncherController extends GetxController {
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "ChangeQuery") {
       onQueryChanged(msg.traceId, PlainQuery.fromJson(msg.data), "receive change query from wox", moveCursorToEnd: true);
+      focusQueryBox();
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "RefreshQuery") {
       final preserveSelectedIndex = msg.data['preserveSelectedIndex'] as bool? ?? false;
