@@ -1,3 +1,4 @@
+import 'package:chinese_font_library/chinese_font_library.dart';
 import 'package:flutter/material.dart';
 import 'package:wox/utils/colors.dart';
 
@@ -155,10 +156,10 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
                             controller: _filterController,
                             focusNode: _filterFocusNode,
                             autofocus: true,
-                            style: TextStyle(color: activeTextColor, fontSize: widget.fontSize),
+                            style: TextStyle(color: activeTextColor, fontSize: widget.fontSize).useSystemChineseFont(),
                             decoration: InputDecoration(
                               hintText: 'Filter...',
-                              hintStyle: TextStyle(color: activeTextColor.withValues(alpha: 0.5), fontSize: widget.fontSize),
+                              hintStyle: TextStyle(color: activeTextColor.withValues(alpha: 0.5), fontSize: widget.fontSize).useSystemChineseFont(),
                               border: InputBorder.none,
                               isDense: true,
                               contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -185,7 +186,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                   color: isSelected ? activeTextColor.withValues(alpha: 0.1) : null,
                                   child: DefaultTextStyle(
-                                    style: TextStyle(color: activeTextColor, fontSize: widget.fontSize),
+                                    style: TextStyle(color: activeTextColor, fontSize: widget.fontSize).useSystemChineseFont(),
                                     child: _buildDropdownMenuItem(item, activeTextColor),
                                   ),
                                 ),
@@ -229,7 +230,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
   Widget _buildSelectedItem(WoxDropdownItem<T> item, Color textColor) {
     return Align(
       alignment: widget.alignment,
-      child: Text(item.label, style: TextStyle(color: textColor, fontSize: widget.fontSize)),
+      child: Text(item.label, style: TextStyle(color: textColor, fontSize: widget.fontSize).useSystemChineseFont()),
     );
   }
 
@@ -256,7 +257,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
           value: widget.value,
           onChanged: widget.onChanged,
           isExpanded: widget.isExpanded,
-          style: TextStyle(color: activeTextColor, fontSize: widget.fontSize),
+          style: TextStyle(color: activeTextColor, fontSize: widget.fontSize).useSystemChineseFont(),
           selectedItemBuilder: (BuildContext context) {
             return widget.items.map<Widget>((item) {
               return _buildSelectedItem(item, textColor);
@@ -315,7 +316,7 @@ class _WoxDropdownButtonState<T> extends State<WoxDropdownButton<T>> {
                 children: [
                   Expanded(
                     child: DefaultTextStyle(
-                      style: TextStyle(color: textColor, fontSize: widget.fontSize),
+                      style: TextStyle(color: textColor, fontSize: widget.fontSize).useSystemChineseFont(),
                       child: widget.value != null ? Text(selectedItem.label) : (widget.hint ?? const SizedBox.shrink()),
                     ),
                   ),
