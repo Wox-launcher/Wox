@@ -31,14 +31,6 @@ class WoxListItemView extends StatelessWidget {
     required this.listViewType,
   });
 
-  double getImageSize(WoxImage img, double defaultSize) {
-    if (img.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
-      return defaultSize - 4;
-    } else {
-      return defaultSize;
-    }
-  }
-
   Widget buildQuickSelectNumber() {
     return Padding(
       padding: const EdgeInsets.only(left: 10.0, right: 5.0),
@@ -109,8 +101,8 @@ class WoxListItemView extends StatelessWidget {
                     child: WoxImageView(
                       key: ValueKey('${tail.image!.imageType}_${tail.image!.imageData}'),
                       woxImage: tail.image!,
-                      width: getImageSize(tail.image!, 20),
-                      height: getImageSize(tail.image!, 20),
+                      width: 20,
+                      height: 20,
                     ),
                   ),
             ],
@@ -182,11 +174,15 @@ class WoxListItemView extends StatelessWidget {
               ? const SizedBox()
               : Padding(
                   padding: const EdgeInsets.only(left: 5.0, right: 10.0),
-                  child: WoxImageView(
-                    key: ValueKey('${item.icon.imageType}_${item.icon.imageData}'),
-                    woxImage: item.icon,
-                    width: getImageSize(item.icon, 30),
-                    height: getImageSize(item.icon, 30),
+                  child: SizedBox(
+                    width: 30,
+                    height: 30,
+                    child: WoxImageView(
+                      key: ValueKey('${item.icon.imageType}_${item.icon.imageData}'),
+                      woxImage: item.icon,
+                      width: 30,
+                      height: 30,
+                    ),
                   ),
                 ),
           Expanded(
