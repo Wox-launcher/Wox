@@ -38,6 +38,12 @@ func (n *NodejsHost) Start(ctx context.Context) error {
 	return n.websocketHost.StartHost(ctx, n.findNodejsPath(ctx), path.Join(util.GetLocation().GetHostDirectory(), "node-host.js"), nil)
 }
 
+// FindNodejsPath finds the best available Node.js interpreter path
+// It checks custom path first, then auto-detects from common installation locations
+func FindNodejsPath(ctx context.Context) string {
+	return (&NodejsHost{}).findNodejsPath(ctx)
+}
+
 func (n *NodejsHost) findNodejsPath(ctx context.Context) string {
 	util.GetLogger().Debug(ctx, "start finding nodejs path")
 

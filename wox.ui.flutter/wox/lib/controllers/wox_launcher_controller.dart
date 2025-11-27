@@ -498,8 +498,19 @@ class WoxLauncherController extends GetxController {
     if (!preventHideAfterAction) {
       hideApp(traceId);
     }
+
     if (isShowActionPanel.value) {
       hideActionPanel(traceId);
+    } else {
+      if (Platform.isWindows) {
+        // Windows-specific workaround: On Windows, when an async function awaits,
+        // the event loop processes pending platform events which may include IME-related
+        // focus changes. This causes the TextField to unexpectedly lose focus.
+        // We restore focus after all UI updates are done.
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          focusQueryBox();
+        });
+      }
     }
   }
 

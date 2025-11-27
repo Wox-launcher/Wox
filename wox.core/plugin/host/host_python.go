@@ -38,6 +38,12 @@ func (n *PythonHost) Start(ctx context.Context) error {
 	return n.websocketHost.StartHost(ctx, n.findPythonPath(ctx), path.Join(util.GetLocation().GetHostDirectory(), "python-host.pyz"), []string{"SHIV_ROOT=" + util.GetLocation().GetCacheDirectory()})
 }
 
+// FindPythonPath finds the best available Python interpreter path
+// It checks custom path first, then auto-detects from common installation locations
+func FindPythonPath(ctx context.Context) string {
+	return (&PythonHost{}).findPythonPath(ctx)
+}
+
 func (n *PythonHost) findPythonPath(ctx context.Context) string {
 	util.GetLogger().Debug(ctx, "start finding python path")
 

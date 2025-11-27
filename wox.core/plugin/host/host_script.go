@@ -12,7 +12,6 @@ import (
 	"time"
 	"wox/common"
 	"wox/plugin"
-	"wox/setting"
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/shell"
@@ -439,19 +438,9 @@ func (s *ScriptPlugin) getInterpreter(ctx context.Context) (string, error) {
 func (s *ScriptPlugin) getInterpreterFromExtension(ctx context.Context, ext string) (string, error) {
 	switch ext {
 	case ".py":
-		// Check if user has configured a custom Python path
-		customPath := setting.GetSettingManager().GetWoxSetting(ctx).CustomPythonPath.Get()
-		if customPath != "" && util.IsFileExists(customPath) {
-			return customPath, nil
-		}
-		return "python3", nil
+		return FindPythonPath(ctx), nil
 	case ".js":
-		// Check if user has configured a custom Node.js path
-		customPath := setting.GetSettingManager().GetWoxSetting(ctx).CustomNodejsPath.Get()
-		if customPath != "" && util.IsFileExists(customPath) {
-			return customPath, nil
-		}
-		return "node", nil
+		return FindNodejsPath(ctx), nil
 	case ".sh":
 		return "bash", nil
 	case ".rb":
@@ -524,28 +513,20 @@ func (s *ScriptPlugin) getInterpreterFromShebang(ctx context.Context) (string, e
 	return interpreterPath, nil
 }
 
-// mapInterpreterWithCustomPath maps interpreter names to custom paths if configured
+// mapInterpreterWithCustomPath maps interpreter names to the best available path
+// It reuses the same path detection logic from host_python.go and host_nodejs.go
 func (s *ScriptPlugin) mapInterpreterWithCustomPath(ctx context.Context, interpreter string) string {
 	// Normalize interpreter name
 	interpreter = strings.ToLower(interpreter)
 
-	// Check for Python interpreters
+	// Check for Python interpreters - use the same logic as host_python.go
 	if strings.HasPrefix(interpreter, "python") {
-		customPath := setting.GetSettingManager().GetWoxSetting(ctx).CustomPythonPath.Get()
-		if customPath != "" && util.IsFileExists(customPath) {
-			return customPath
-		}
-		// Normalize to python3
-		return "python3"
+		return FindPythonPath(ctx)
 	}
 
-	// Check for Node.js interpreters
+	// Check for Node.js interpreters - use the same logic as host_nodejs.go
 	if interpreter == "node" || interpreter == "nodejs" {
-		customPath := setting.GetSettingManager().GetWoxSetting(ctx).CustomNodejsPath.Get()
-		if customPath != "" && util.IsFileExists(customPath) {
-			return customPath
-		}
-		return "node"
+		return FindNodejsPath(ctx)
 	}
 
 	// Return as-is for other interpreters (bash, ruby, perl, etc.)
