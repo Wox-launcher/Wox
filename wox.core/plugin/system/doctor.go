@@ -2,10 +2,11 @@ package system
 
 import (
 	"context"
+	"wox/common"
 	"wox/plugin"
 )
 
-var doctorIcon = plugin.PluginDoctorIcon
+var doctorIcon = common.PluginDoctorIcon
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &DoctorPlugin{})
@@ -44,9 +45,9 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) (results [
 	checkResults := plugin.RunDoctorChecks(ctx)
 
 	for _, check := range checkResults {
-		icon := plugin.ErrorIcon
+		icon := common.ErrorIcon
 		if check.Passed {
-			icon = plugin.CorrectIcon
+			icon = common.CorrectIcon
 		}
 
 		result := plugin.QueryResult{

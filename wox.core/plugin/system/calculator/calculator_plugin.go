@@ -13,7 +13,7 @@ import (
 	"wox/util/clipboard"
 )
 
-var calculatorIcon = plugin.PluginCalculatorIcon
+var calculatorIcon = common.PluginCalculatorIcon
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &CalculatorPlugin{})

@@ -36,7 +36,7 @@ func (i *PluginInstallerPlugin) GetMetadata() plugin.Metadata {
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
 		Description:   "Install Wox plugins",
-		Icon:          plugin.WoxIcon.String(),
+		Icon:          common.WoxIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
 			"*",
@@ -194,14 +194,14 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 }
 
 func resolvePluginIcon(filePath string, metadata plugin.Metadata) common.WoxImage {
-	icon := common.ParseWoxImageOrDefault(metadata.Icon, plugin.WoxIcon)
+	icon := common.ParseWoxImageOrDefault(metadata.Icon, common.WoxIcon)
 	if icon.ImageType != common.WoxImageTypeRelativePath {
 		return icon
 	}
 
 	iconBytes, err := readFileFromZip(filePath, icon.ImageData)
 	if err != nil {
-		return plugin.WoxIcon
+		return common.WoxIcon
 	}
 
 	iconDataURL := fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(iconBytes))

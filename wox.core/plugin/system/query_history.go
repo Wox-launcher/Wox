@@ -3,12 +3,13 @@ package system
 import (
 	"context"
 	"strings"
+	"wox/common"
 	"wox/plugin"
 	"wox/setting"
 	"wox/util"
 )
 
-var queryHistoryIcon = plugin.PluginQueryHistoryIcon
+var queryHistoryIcon = common.PluginQueryHistoryIcon
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &QueryHistoryPlugin{})

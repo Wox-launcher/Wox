@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"wox/common"
 	"wox/plugin"
 	"wox/plugin/system/converter/core"
 	"wox/plugin/system/converter/modules"
@@ -33,7 +34,7 @@ func (c *Converter) GetMetadata() plugin.Metadata {
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
 		Description:   "Calculator for Wox",
-		Icon:          plugin.PluginConverterIcon.String(),
+		Icon:          common.PluginConverterIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
 			"*",
@@ -344,7 +345,7 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 	return []plugin.QueryResult{
 		{
 			Title: result.DisplayValue,
-			Icon:  plugin.PluginConverterIcon,
+			Icon:  common.PluginConverterIcon,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_calculator_copy_result",

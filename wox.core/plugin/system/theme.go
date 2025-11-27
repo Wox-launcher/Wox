@@ -19,7 +19,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var themeIcon = plugin.PluginThemeIcon
+var themeIcon = common.PluginThemeIcon
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ThemePlugin{})
@@ -126,7 +126,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 			} else {
 				result.Actions = append(result.Actions, plugin.QueryResultAction{
 					Name: openThemeFolderText,
-					Icon: plugin.OpenContainingFolderIcon,
+					Icon: common.OpenContainingFolderIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						if err := shell.OpenFileInFolder(themePath); err != nil {
 							c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open theme folder %s: %s", themePath, err.Error()))

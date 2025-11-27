@@ -20,7 +20,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-var aiChatIcon = plugin.PluginAIChatIcon
+var aiChatIcon = common.PluginAIChatIcon
 var aiChatsSettingKey = "ai_chats"
 
 func init() {
@@ -742,7 +742,7 @@ func (r *AIChatPlugin) Query(ctx context.Context, query plugin.Query) (results [
 				},
 				{
 					Name:                   "Delete Chat",
-					Icon:                   plugin.TrashIcon,
+					Icon:                   common.TrashIcon,
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						// delete chat

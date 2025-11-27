@@ -22,7 +22,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var wpmIcon = plugin.PluginWPMIcon
+var wpmIcon = common.PluginWPMIcon
 var localPluginDirectoriesKey = "local_plugin_directories"
 var pluginTemplates = []pluginTemplate{
 	{
@@ -457,7 +457,7 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 func (w *WPMPlugin) createInstallAction(pluginManifest plugin.StorePluginManifest) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name:                   "i18n:plugin_wpm_install",
-		Icon:                   common.NewWoxImageEmoji("⬇️"),
+		Icon:                   common.InstallIcon,
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			util.Go(ctx, "install plugin", func() {
@@ -533,7 +533,7 @@ func (w *WPMPlugin) createInstallAction(pluginManifest plugin.StorePluginManifes
 func (w *WPMPlugin) createUninstallAction(pluginManifest plugin.StorePluginManifest) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name:                   "i18n:plugin_wpm_uninstall",
-		Icon:                   common.NewWoxImageEmoji("🗑️"),
+		Icon:                   common.TrashIcon,
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			instances := plugin.GetPluginManager().GetPluginInstances()
@@ -622,7 +622,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 
 				actions = append(actions, plugin.QueryResultAction{
 					Name:                   "i18n:plugin_wpm_upgrade",
-					Icon:                   plugin.UpdateIcon,
+					Icon:                   common.UpdateIcon,
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						// notify starting

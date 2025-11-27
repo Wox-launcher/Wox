@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
 	"wox/util"
 )
 
-var backupIcon = plugin.PluginBackupIcon
+var backupIcon = common.PluginBackupIcon
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &BackupPlugin{})

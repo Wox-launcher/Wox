@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting/definition"
@@ -19,7 +20,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var browserIcon = plugin.PluginBrowserIcon
+var browserIcon = common.PluginBrowserIcon
 var browserWebsocketPortSettingKey = "browserWebsocketPort"
 
 func init() {
@@ -140,9 +141,9 @@ func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) (results 
 			continue
 		}
 
-		icon := plugin.ChromeIcon
+		icon := common.ChromeIcon
 		if tabIcon, err := getWebsiteIconWithCache(ctx, tab.Url); err == nil {
-			icon = plugin.ChromeIcon.Overlay(tabIcon, 0.4, 0.6, 0.6)
+			icon = common.ChromeIcon.Overlay(tabIcon, 0.4, 0.6, 0.6)
 		}
 
 		results = append(results, plugin.QueryResult{

@@ -18,7 +18,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-var aiCommandIcon = plugin.PluginAICommandIcon
+var aiCommandIcon = common.PluginAICommandIcon
 
 type commandSetting struct {
 	Name    string `json:"name"`
@@ -439,7 +439,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: "i18n:plugin_ai_command_copy",
-				Icon: plugin.CopyIcon,
+				Icon: common.CopyIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					_, content := processAIThinking(contextData)
 					clipboard.WriteText(content)

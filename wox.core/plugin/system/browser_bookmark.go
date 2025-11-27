@@ -14,7 +14,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 )
 
-var browserBookmarkIcon = plugin.PluginBookmarkIcon
+var browserBookmarkIcon = common.PluginBookmarkIcon
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &BrowserBookmarkPlugin{})

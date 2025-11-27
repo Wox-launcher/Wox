@@ -18,7 +18,7 @@ import (
 
 var webSearchesSettingKey = "webSearches"
 
-var webSearchIcon = plugin.PluginWebsearchIcon
+var webSearchIcon = common.PluginWebsearchIcon
 
 var defaultWebSearchAddedKey = "defaultWebSearchAdded"
 
@@ -178,7 +178,7 @@ func (r *WebSearchPlugin) indexIcons(ctx context.Context) {
 func (r *WebSearchPlugin) indexWebSearchIcon(ctx context.Context, search webSearch) common.WoxImage {
 	// if search url is google, return google icon
 	if strings.Contains(search.Urls[0], "google.com") {
-		return plugin.GoogleIcon
+		return common.GoogleIcon
 	}
 
 	//sort urls, so that we can get the same icon between different runs
@@ -205,7 +205,7 @@ func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []we
 					Keyword:    "g",
 					IsFallback: true,
 					Enabled:    true,
-					Icon:       plugin.GoogleIcon,
+					Icon:       common.GoogleIcon,
 				},
 			}
 			if marshal, err := json.Marshal(webSearches); err == nil {
@@ -249,7 +249,7 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) (result
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "Search",
-						Icon: plugin.SearchIcon,
+						Icon: common.SearchIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							util.Go(ctx, "open urls", func() {
 								for _, url := range search.Urls {
@@ -283,7 +283,7 @@ func (r *WebSearchPlugin) QueryFallback(ctx context.Context, query plugin.Query)
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Search",
-					Icon: plugin.SearchIcon,
+					Icon: common.SearchIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						for _, url := range search.Urls {
 							shell.Open(r.replaceVariables(ctx, url, query.RawQuery))
@@ -315,7 +315,7 @@ func (r *WebSearchPlugin) querySelection(ctx context.Context, query plugin.Query
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "Search",
-					Icon: plugin.SearchIcon,
+					Icon: common.SearchIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						for _, url := range search.Urls {
 							shell.Open(r.replaceVariables(ctx, url, query.Selection.Text))

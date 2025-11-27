@@ -14,7 +14,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var urlIcon = plugin.PluginUrlIcon
+var urlIcon = common.PluginUrlIcon
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &UrlPlugin{})
@@ -119,7 +119,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_url_open",
-						Icon: plugin.OpenIcon,
+						Icon: common.OpenIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							openErr := shell.Open(history.Url)
 							if openErr != nil {
@@ -129,7 +129,7 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 					},
 					{
 						Name: "i18n:plugin_url_remove",
-						Icon: plugin.TrashIcon,
+						Icon: common.TrashIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							r.removeRecentUrl(ctx, history.Url)
 						},
@@ -277,7 +277,7 @@ func (r *UrlPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResul
 		result.Actions = []plugin.QueryResultAction{
 			{
 				Name: "i18n:plugin_url_open",
-				Icon: plugin.OpenIcon,
+				Icon: common.OpenIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					openErr := shell.Open(url)
 					if openErr != nil {
@@ -287,13 +287,14 @@ func (r *UrlPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResul
 			},
 			{
 				Name: "i18n:plugin_url_remove",
-				Icon: plugin.TrashIcon,
+				Icon: common.TrashIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					r.removeRecentUrl(ctx, contextData.Url)
 				},
 			},
 		}
 	} else {
+		result.Icon = common.OpenIcon
 		result.SubTitle = "i18n:plugin_url_open_in_browser"
 		result.Actions = []plugin.QueryResultAction{
 			{

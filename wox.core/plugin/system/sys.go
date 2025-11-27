@@ -16,7 +16,7 @@ import (
 	"wox/util/shell"
 )
 
-var sysIcon = plugin.PluginSysIcon
+var sysIcon = common.PluginSysIcon
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &SysPlugin{})
@@ -75,7 +75,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		{
 			ID:    "lock_computer",
 			Title: "i18n:plugin_sys_lock_computer",
-			Icon:  plugin.LockIcon,
+			Icon:  common.LockIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if util.IsMacOS() {
 					shell.Run("osascript", "-e", "tell application \"System Events\" to keystroke \"q\" using {control down, command down}")
@@ -88,7 +88,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		{
 			ID:    "empty_trash",
 			Title: "i18n:plugin_sys_empty_trash",
-			Icon:  plugin.TrashIcon,
+			Icon:  common.TrashIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if util.IsMacOS() {
 					shell.Run("osascript", "-e", "tell application \"Finder\" to empty trash")
@@ -101,7 +101,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		{
 			ID:    "quit_wox",
 			Title: "i18n:plugin_sys_quit_wox",
-			Icon:  plugin.ExitIcon,
+			Icon:  common.ExitIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				ui.GetUIManager().ExitApp(ctx)
 			},
@@ -110,7 +110,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 			ID:                     "open_wox_settings",
 			Title:                  "i18n:plugin_sys_open_wox_settings",
 			PreventHideAfterAction: true,
-			Icon:                   plugin.WoxIcon,
+			Icon:                   common.WoxIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.DefaultSettingWindowContext)
 			},
@@ -118,7 +118,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		{
 			ID:    "open_system_settings",
 			Title: "i18n:plugin_sys_open_system_settings",
-			Icon:  plugin.SettingIcon,
+			Icon:  common.SettingIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if util.IsMacOS() {
 					shell.Run("open", "-a", "System Preferences")
@@ -134,7 +134,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		r.commands = append(r.commands, SysCommand{
 			ID:    "cpu_profiling",
 			Title: "i18n:plugin_sys_performance_cpu_profiling",
-			Icon:  plugin.CPUProfileIcon,
+			Icon:  common.CPUProfileIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				cpuProfPath := path.Join(util.GetLocation().GetWoxDataDirectory(), "cpu.prof")
 				f, err := os.Create(cpuProfPath)
@@ -160,7 +160,7 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 		r.commands = append(r.commands, SysCommand{
 			ID:    "memory_profiling",
 			Title: "i18n:plugin_sys_performance_memory_profiling",
-			Icon:  plugin.CPUProfileIcon,
+			Icon:  common.CPUProfileIcon,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				memoryProfPath := path.Join(util.GetLocation().GetWoxDataDirectory(), "memory.prof")
 				f, err := os.Create(memoryProfPath)
@@ -236,6 +236,7 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   "i18n:plugin_sys_execute",
+						Icon:                   common.ExecuteRunIcon,
 						Action:                 command.Action,
 						PreventHideAfterAction: command.PreventHideAfterAction,
 					},
@@ -250,7 +251,7 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 		if len(instance.Metadata.SettingDefinitions) > 0 {
 			if match, score := IsStringMatchScore(ctx, instance.Metadata.Name, query.Search); match {
 				// load icon
-				pluginIcon := plugin.SettingIcon
+				pluginIcon := common.SettingIcon
 				iconImg, parseErr := common.ParseWoxImage(instance.Metadata.Icon)
 				if parseErr == nil {
 					pluginIcon = common.ConvertRelativePathToAbsolutePath(ctx, iconImg, instance.PluginDirectory)
@@ -263,6 +264,7 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) (results []pl
 					Actions: []plugin.QueryResultAction{
 						{
 							Name: "i18n:plugin_sys_execute",
+							Icon: common.ExecuteRunIcon,
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{
 									Path:  "/plugin/setting",

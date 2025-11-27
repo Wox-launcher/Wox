@@ -22,7 +22,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var clipboardIcon = plugin.PluginClipboardIcon
+var clipboardIcon = common.PluginClipboardIcon
 var isKeepTextHistorySettingKey = "is_keep_text_history"
 var textHistoryDaysSettingKey = "text_history_days"
 var isKeepImageHistorySettingKey = "is_keep_image_history"
@@ -485,7 +485,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	actions := []plugin.QueryResultAction{
 		{
 			Name:      "Copy",
-			Icon:      plugin.CopyIcon,
+			Icon:      common.CopyIcon,
 			IsDefault: primaryActionValueCopy == primaryActionCode,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				c.moveRecordToTop(ctx, record.ID)
@@ -506,7 +506,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	if !record.IsFavorite {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "Mark as favorite",
-			Icon:                   plugin.PinIcon,
+			Icon:                   common.PinIcon,
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := c.markAsFavorite(ctx, record); err != nil {
@@ -520,7 +520,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	} else {
 		actions = append(actions, plugin.QueryResultAction{
 			Name:                   "Cancel favorite",
-			Icon:                   plugin.UnpinIcon,
+			Icon:                   common.UnpinIcon,
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := c.cancelFavorite(ctx, record.ID); err != nil {
@@ -536,7 +536,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	// Delete action (works for both history and favorites)
 	actions = append(actions, plugin.QueryResultAction{
 		Name:                   "Delete",
-		Icon:                   plugin.TrashIcon,
+		Icon:                   common.TrashIcon,
 		PreventHideAfterAction: true,
 		Hotkey:                 "Ctrl+D",
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -625,7 +625,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 			},
 			{
 				Name:                   "Delete",
-				Icon:                   plugin.TrashIcon,
+				Icon:                   common.TrashIcon,
 				PreventHideAfterAction: true,
 				Hotkey:                 "Ctrl+D",
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -704,7 +704,7 @@ func (c *ClipboardPlugin) getResultGroup(ctx context.Context, record ClipboardRe
 
 // getDefaultTextIcon returns the default text icon
 func (c *ClipboardPlugin) getDefaultTextIcon() common.WoxImage {
-	return plugin.TextIcon
+	return common.TextIcon
 }
 
 // generateImagePreviewAndIcon generates preview and icon for image records
@@ -734,7 +734,7 @@ func (c *ClipboardPlugin) generateImagePreviewAndIcon(ctx context.Context, recor
 	if sourceImage == nil {
 		// Return default icons if image is not available
 		previewImage := c.getDefaultTextIcon()
-		iconImage := plugin.PreviewIcon
+		iconImage := common.PreviewIcon
 		return previewImage, iconImage
 	}
 
@@ -751,7 +751,7 @@ func (c *ClipboardPlugin) generateImagePreviewAndIcon(ctx context.Context, recor
 		}
 		iconImage, iconErr := common.NewWoxImage(compressedIconImg)
 		if iconErr != nil {
-			iconImage = plugin.PreviewIcon
+			iconImage = common.PreviewIcon
 		}
 		return previewImage, iconImage
 	}
@@ -765,7 +765,7 @@ func (c *ClipboardPlugin) generateImagePreviewAndIcon(ctx context.Context, recor
 		}
 		iconImage, iconErr := common.NewWoxImage(compressedIconImg)
 		if iconErr != nil {
-			iconImage = plugin.PreviewIcon
+			iconImage = common.PreviewIcon
 		}
 		return previewImage, iconImage
 	}

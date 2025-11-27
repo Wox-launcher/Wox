@@ -245,7 +245,7 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 		actions = append(actions, plugin.QueryResultAction{
 			Id:                     "reexecute",
 			Name:                   "i18n:plugin_shell_reexecute",
-			Icon:                   plugin.UpdateIcon,
+			Icon:                   common.UpdateIcon,
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				// Toggle: if running then stop; otherwise re-execute
@@ -281,7 +281,7 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string) []pl
 			actions = append(actions, plugin.QueryResultAction{
 				Id:                     "stop",
 				Name:                   "i18n:plugin_shell_stop",
-				Icon:                   plugin.TerminateAppIcon,
+				Icon:                   common.TerminateAppIcon,
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					if stateVal, ok := s.executionStates.Load(actionContext.ResultId); ok {
@@ -354,7 +354,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 				{
 					Id:                     "execute",
 					Name:                   "i18n:plugin_shell_execute",
-					Icon:                   plugin.CorrectIcon,
+					Icon:                   common.CorrectIcon,
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						executionState := &shellExecutionState{}
@@ -367,7 +367,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 				{
 					Id:                     "execute_background",
 					Name:                   "i18n:plugin_shell_execute_background",
-					Icon:                   plugin.OpenIcon,
+					Icon:                   common.OpenIcon,
 					PreventHideAfterAction: false,
 					Hotkey:                 "ctrl+enter",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -379,7 +379,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 				{
 					Id:                     "stop",
 					Name:                   "i18n:plugin_shell_stop",
-					Icon:                   plugin.TerminateAppIcon,
+					Icon:                   common.TerminateAppIcon,
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						if stateVal, ok := s.executionStates.Load(actionContext.ResultId); ok {
@@ -397,7 +397,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 				{
 					Id:                     "reexecute",
 					Name:                   "i18n:plugin_shell_reexecute",
-					Icon:                   plugin.UpdateIcon,
+					Icon:                   common.UpdateIcon,
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						executionState := &shellExecutionState{}
@@ -625,7 +625,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 
 				// Build action name and icon (Stop action)
 				actionName := i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_stop")
-				actionIcon := plugin.TerminateAppIcon
+				actionIcon := common.TerminateAppIcon
 
 				// Update UI - if it fails, just stop updating UI but let the command continue
 				if !updateUI(
@@ -757,7 +757,7 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 
 	// Build final action name and icon (Re-execute action)
 	actionName := i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_reexecute")
-	actionIcon := plugin.UpdateIcon
+	actionIcon := common.UpdateIcon
 
 	// Final UI update
 	updateUI(

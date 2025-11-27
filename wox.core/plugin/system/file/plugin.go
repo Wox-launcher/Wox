@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"wox/common"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util/fileicon"
@@ -13,7 +14,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var fileIcon = plugin.PluginFileIcon
+var fileIcon = common.PluginFileIcon
 var EverythingNotRunningError = errors.New("Everything is not running")
 
 func init() {
@@ -101,7 +102,7 @@ func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryRe
 		icon := fileIcon
 		if info, err := os.Stat(item.Path); err == nil {
 			if info.IsDir() {
-				icon = plugin.FolderIcon
+				icon = common.FolderIcon
 			} else {
 				if img, err := fileicon.GetFileTypeIconByPath(ctx, item.Path); err == nil {
 					icon = img
@@ -118,14 +119,14 @@ func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryRe
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_file_open",
-					Icon: plugin.PreviewIcon,
+					Icon: common.PreviewIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						shell.Open(item.Path)
 					},
 				},
 				{
 					Name: "i18n:plugin_file_open_containing_folder",
-					Icon: plugin.OpenContainingFolderIcon,
+					Icon: common.OpenContainingFolderIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						shell.OpenFileInFolder(item.Path)
 					},
@@ -133,7 +134,7 @@ func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryRe
 				},
 				{
 					Name: "i18n:plugin_file_show_context_menu",
-					Icon: plugin.PluginMenusIcon,
+					Icon: common.PluginMenusIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						c.api.Log(ctx, plugin.LogLevelInfo, "Showing context menu for: "+item.Path)
 						err := nativecontextmenu.ShowContextMenu(item.Path)

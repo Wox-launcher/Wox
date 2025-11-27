@@ -25,7 +25,7 @@ import (
 	"github.com/tidwall/pretty"
 )
 
-var appIcon = plugin.PluginAppIcon
+var appIcon = common.PluginAppIcon
 
 type AppType = string
 
@@ -238,7 +238,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_app_open",
-						Icon: plugin.OpenIcon,
+						Icon: common.OpenIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							runErr := shell.Open(info.Path)
 							if runErr != nil {
@@ -249,7 +249,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 					},
 					{
 						Name: "i18n:plugin_app_open_containing_folder",
-						Icon: plugin.OpenContainingFolderIcon,
+						Icon: common.OpenContainingFolderIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							if err := a.retriever.OpenAppFolder(ctx, info); err != nil {
 								a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening folder: %s", err.Error()))
@@ -258,7 +258,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 					},
 					{
 						Name: "i18n:plugin_app_copy_path",
-						Icon: plugin.CopyIcon,
+						Icon: common.CopyIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							clipboard.WriteText(info.Path)
 						},
@@ -682,7 +682,7 @@ func (a *ApplicationPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.Qu
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: "i18n:plugin_app_open",
-				Icon: plugin.OpenIcon,
+				Icon: common.OpenIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					runErr := shell.Open(appInfo.Path)
 					if runErr != nil {
@@ -693,7 +693,7 @@ func (a *ApplicationPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.Qu
 			},
 			{
 				Name: "i18n:plugin_app_open_containing_folder",
-				Icon: plugin.OpenContainingFolderIcon,
+				Icon: common.OpenContainingFolderIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					if err := a.retriever.OpenAppFolder(ctx, *appInfo); err != nil {
 						a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening folder: %s", err.Error()))
@@ -702,7 +702,7 @@ func (a *ApplicationPlugin) handleMRURestore(mruData plugin.MRUData) (*plugin.Qu
 			},
 			{
 				Name: "i18n:plugin_app_copy_path",
-				Icon: plugin.CopyIcon,
+				Icon: common.CopyIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					clipboard.WriteText(appInfo.Path)
 				},
@@ -775,7 +775,7 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 				currentAppPid := appInfo.Pid
 				*updatableResult.Actions = append(*updatableResult.Actions, plugin.QueryResultAction{
 					Name:        "i18n:plugin_app_terminate",
-					Icon:        plugin.TerminateAppIcon,
+					Icon:        common.TerminateAppIcon,
 					ContextData: "app.terminate",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						// peacefully kill the process

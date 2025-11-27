@@ -868,7 +868,7 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 	if setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, title, subTitle) {
 		defaultActions = append(defaultActions, QueryResultAction{
 			Name:                   "i18n:plugin_manager_unpin_in_query",
-			Icon:                   UnpinIcon,
+			Icon:                   common.UnpinIcon,
 			IsSystemAction:         true,
 			PreventHideAfterAction: true,
 			Action:                 removeFromFavoriteAction,
@@ -876,7 +876,7 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 	} else {
 		defaultActions = append(defaultActions, QueryResultAction{
 			Name:                   "i18n:plugin_manager_pin_in_query",
-			Icon:                   PinIcon,
+			Icon:                   common.PinIcon,
 			IsSystemAction:         true,
 			PreventHideAfterAction: true,
 			Action:                 addToFavoriteAction,
@@ -965,7 +965,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		}
 		if result.Actions[actionIndex].Icon.IsEmpty() {
 			// set default action icon if not present
-			result.Actions[actionIndex].Icon = DefaultActionIcon
+			result.Actions[actionIndex].Icon = common.DefaultActionIcon
 		}
 	}
 
@@ -1095,7 +1095,7 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 		if !hasFavoriteTail {
 			result.Tails = append(result.Tails, QueryResultTail{
 				Type:         QueryResultTailTypeImage,
-				Image:        PinIcon,
+				Image:        common.PinIcon,
 				ContextData:  favoriteTailContextData, // Use ContextData to identify favorite tail
 				IsSystemTail: true,                    // Mark as system tail so it will be filtered out in GetUpdatableResult
 			})
@@ -1133,7 +1133,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 				actions[actionIndex].Id = uuid.NewString()
 			}
 			if actions[actionIndex].Icon.IsEmpty() {
-				actions[actionIndex].Icon = DefaultActionIcon
+				actions[actionIndex].Icon = common.DefaultActionIcon
 			}
 		}
 
@@ -1252,7 +1252,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			if !hasFavoriteTail {
 				tails = append(tails, QueryResultTail{
 					Type:         QueryResultTailTypeImage,
-					Image:        PinIcon,
+					Image:        common.PinIcon,
 					ContextData:  favoriteTailContextData, // Use ContextData to identify favorite tail
 					IsSystemTail: true,                    // Mark as system tail so it will be filtered out in GetUpdatableResult
 				})
@@ -1839,7 +1839,7 @@ func (m *Manager) QueryMRU(ctx context.Context) []QueryResultUI {
 			removeMRUAction := QueryResultAction{
 				Id:   uuid.NewString(),
 				Name: i18n.GetI18nManager().TranslateWox(ctx, "mru_remove_action"),
-				Icon: common.NewWoxImageEmoji("🗑️"),
+				Icon: common.TrashIcon,
 				Action: func(ctx context.Context, actionContext ActionContext) {
 					err := setting.GetSettingManager().RemoveMRUItem(ctx, item.PluginID, item.Title, item.SubTitle)
 					if err != nil {

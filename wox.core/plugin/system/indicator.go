@@ -12,7 +12,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var indicatorIcon = plugin.PluginIndicatorIcon
+var indicatorIcon = common.PluginIndicatorIcon
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &IndicatorPlugin{})

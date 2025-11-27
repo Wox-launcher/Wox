@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var mediaIcon = plugin.PluginMediaPlayerIcon
+var mediaIcon = common.PluginMediaPlayerIcon
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &MediaPlayerPlugin{})
@@ -145,7 +145,7 @@ func (m *MediaPlayerPlugin) formatSubTitle(mediaInfo *MediaInfo) string {
 
 func (m *MediaPlayerPlugin) formatIcon(mediaInfo *MediaInfo) common.WoxImage {
 	if mediaInfo.State == PlaybackStatePlaying {
-		return plugin.MediaPlayingIcon
+		return common.MediaPlayingIcon
 	} else {
 		return mediaIcon
 	}
