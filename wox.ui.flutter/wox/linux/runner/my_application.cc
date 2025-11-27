@@ -13,7 +13,8 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
-struct _MyApplication {
+struct _MyApplication
+{
   GtkApplication parent_instance;
   char **dart_entrypoint_arguments;
   GtkWindow *window; // Store reference to the main window
@@ -24,7 +25,8 @@ static FlMethodChannel *g_method_channel = nullptr;
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
-static void log(const char *format, ...) {
+static void log(const char *format, ...)
+{
   // va_list args;
   // va_start(args, format);
   // g_logv(G_LOG_DOMAIN, G_LOG_LEVEL_MESSAGE, format, args);
@@ -34,7 +36,8 @@ static void log(const char *format, ...) {
 // Function to draw rounded rectangle
 static void cairo_rounded_rectangle(cairo_t *cr, double x, double y,
                                     double width, double height,
-                                    double radius) {
+                                    double radius)
+{
   cairo_new_sub_path(
       cr); // Fix function name: cairo_new_subpath -> cairo_new_sub_path
   cairo_arc(cr, x + radius, y + radius, radius, M_PI, 3 * M_PI / 2);
@@ -47,9 +50,11 @@ static void cairo_rounded_rectangle(cairo_t *cr, double x, double y,
   cairo_close_path(cr);
 }
 
-static void set_window_shape(GtkWindow *window) {
+static void set_window_shape(GtkWindow *window)
+{
   GdkWindow *gdk_window = gtk_widget_get_window(GTK_WIDGET(window));
-  if (!gdk_window) {
+  if (!gdk_window)
+  {
     return;
   }
 
@@ -76,17 +81,20 @@ static void set_window_shape(GtkWindow *window) {
 
 // Callback function to handle window size changes
 static void on_size_allocate(GtkWidget *widget, GdkRectangle *allocation,
-                             gpointer user_data) {
+                             gpointer user_data)
+{
   set_window_shape(GTK_WINDOW(user_data));
 }
 
 // Callback function to handle window focus-out event
 static gboolean on_window_focus_out(GtkWidget *widget, GdkEventFocus *event,
-                                    gpointer user_data) {
+                                    gpointer user_data)
+{
   log("FLUTTER: Window lost focus");
 
   // Notify Flutter through method channel
-  if (g_method_channel != nullptr) {
+  if (g_method_channel != nullptr)
+  {
     g_autoptr(FlValue) args = fl_value_new_null();
     fl_method_channel_invoke_method(g_method_channel, "onWindowBlur", args,
                                     nullptr, nullptr, nullptr);
@@ -98,15 +106,18 @@ static gboolean on_window_focus_out(GtkWidget *widget, GdkEventFocus *event,
 
 // Method channel handler
 static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
-                           gpointer user_data) {
+                           gpointer user_data)
+{
   MyApplication *self = MY_APPLICATION(user_data);
   GtkWindow *window = self->window;
   const gchar *method = fl_method_call_get_name(method_call);
   FlValue *args = fl_method_call_get_args(method_call);
   g_autoptr(FlMethodResponse) response = nullptr;
 
-  if (strcmp(method, "setSize") == 0) {
-    if (fl_value_get_type(args) == FL_VALUE_TYPE_MAP) {
+  if (strcmp(method, "setSize") == 0)
+  {
+    if (fl_value_get_type(args) == FL_VALUE_TYPE_MAP)
+    {
       double width = fl_value_get_float(fl_value_lookup_string(args, "width"));
       double height =
           fl_value_get_float(fl_value_lookup_string(args, "height"));
@@ -114,15 +125,20 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
       response = FL_METHOD_RESPONSE(
           fl_method_success_response_new(fl_value_new_null()));
     }
-  } else if (strcmp(method, "getPosition") == 0) {
+  }
+  else if (strcmp(method, "getPosition") == 0)
+  {
     int x, y;
     gtk_window_get_position(window, &x, &y);
     g_autoptr(FlValue) result = fl_value_new_map();
     fl_value_set_string_take(result, "x", fl_value_new_int(x));
     fl_value_set_string_take(result, "y", fl_value_new_int(y));
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
-  } else if (strcmp(method, "setPosition") == 0) {
-    if (fl_value_get_type(args) == FL_VALUE_TYPE_MAP) {
+  }
+  else if (strcmp(method, "setPosition") == 0)
+  {
+    if (fl_value_get_type(args) == FL_VALUE_TYPE_MAP)
+    {
       double x = fl_value_get_float(fl_value_lookup_string(args, "x"));
       double y = fl_value_get_float(fl_value_lookup_string(args, "y"));
       gtk_window_move(window, (int)x, (int)y);
@@ -130,36 +146,55 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
       response = FL_METHOD_RESPONSE(
           fl_method_success_response_new(fl_value_new_null()));
     }
-  } else if (strcmp(method, "center") == 0) {
+  }
+  else if (strcmp(method, "center") == 0)
+  {
     // 获取窗口尺寸，优先使用传入的参数
     int window_width, window_height;
 
-    if (fl_value_get_type(args) == FL_VALUE_TYPE_MAP) {
+    if (fl_value_get_type(args) == FL_VALUE_TYPE_MAP)
+    {
       FlValue *width_value = fl_value_lookup_string(args, "width");
       FlValue *height_value = fl_value_lookup_string(args, "height");
 
       if (width_value != nullptr &&
           fl_value_get_type(width_value) == FL_VALUE_TYPE_FLOAT &&
           height_value != nullptr &&
-          fl_value_get_type(height_value) == FL_VALUE_TYPE_FLOAT) {
+          fl_value_get_type(height_value) == FL_VALUE_TYPE_FLOAT)
+      {
         // 使用传入的尺寸
         window_width = (int)fl_value_get_float(width_value);
         window_height = (int)fl_value_get_float(height_value);
 
         // 调整窗口大小
         gtk_window_resize(window, window_width, window_height);
-      } else {
+      }
+      else
+      {
         // 使用当前窗口尺寸
         gtk_window_get_size(window, &window_width, &window_height);
       }
-    } else {
+    }
+    else
+    {
       // 使用当前窗口尺寸
       gtk_window_get_size(window, &window_width, &window_height);
     }
 
-    // 获取屏幕尺寸 (使用非弃用的 API)
+    // 获取鼠标所在的屏幕
     GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(window));
-    GdkMonitor *monitor = gdk_display_get_primary_monitor(display);
+    GdkSeat *seat = gdk_display_get_default_seat(display);
+    GdkDevice *pointer = gdk_seat_get_pointer(seat);
+
+    int mouse_x, mouse_y;
+    gdk_device_get_position(pointer, NULL, &mouse_x, &mouse_y);
+
+    GdkMonitor *monitor = gdk_display_get_monitor_at_point(display, mouse_x, mouse_y);
+    if (monitor == NULL)
+    {
+      monitor = gdk_display_get_primary_monitor(display);
+    }
+
     GdkRectangle workarea;
     gdk_monitor_get_workarea(monitor, &workarea);
 
@@ -167,29 +202,39 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
     int x = workarea.x + (workarea.width - window_width) / 2;
     int y = workarea.y + (workarea.height - window_height) / 2;
 
+    log("FLUTTER: center, window to %d,%d on monitor at %d,%d", x, y, workarea.x, workarea.y);
+
     // 设置窗口位置
     gtk_window_move(window, x, y);
 
     response =
         FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
-  } else if (strcmp(method, "show") == 0) {
+  }
+  else if (strcmp(method, "show") == 0)
+  {
     gtk_widget_show(GTK_WIDGET(window));
     response =
         FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
-  } else if (strcmp(method, "hide") == 0) {
+  }
+  else if (strcmp(method, "hide") == 0)
+  {
     gtk_widget_hide(GTK_WIDGET(window));
     response =
         FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
-  } else if (strcmp(method, "focus") == 0) {
+  }
+  else if (strcmp(method, "focus") == 0)
+  {
     log("FLUTTER: focus - attempting to focus window");
 
     GdkWindow *gdk_window = gtk_widget_get_window(GTK_WIDGET(window));
-    if (gdk_window) {
+    if (gdk_window)
+    {
       gdk_window_raise(gdk_window);
       gdk_window_focus(gdk_window, GDK_CURRENT_TIME);
 
 #ifdef GDK_WINDOWING_X11
-      if (GDK_IS_X11_WINDOW(gdk_window)) {
+      if (GDK_IS_X11_WINDOW(gdk_window))
+      {
         Display *display =
             GDK_DISPLAY_XDISPLAY(gdk_window_get_display(gdk_window));
         Window xid = GDK_WINDOW_XID(gdk_window);
@@ -202,7 +247,8 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
         // 使用简化的_NET_ACTIVE_WINDOW消息
         Atom net_active_window =
             XInternAtom(display, "_NET_ACTIVE_WINDOW", False);
-        if (net_active_window != None) {
+        if (net_active_window != None)
+        {
           XEvent xev;
           memset(&xev, 0, sizeof(xev));
           xev.type = ClientMessage;
@@ -228,33 +274,44 @@ static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
     log("FLUTTER: focus - all focus operations completed");
     response =
         FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
-  } else if (strcmp(method, "isVisible") == 0) {
+  }
+  else if (strcmp(method, "isVisible") == 0)
+  {
     gboolean visible = gtk_widget_get_visible(GTK_WIDGET(window));
     response = FL_METHOD_RESPONSE(
         fl_method_success_response_new(fl_value_new_bool(visible)));
-  } else if (strcmp(method, "setAlwaysOnTop") == 0) {
+  }
+  else if (strcmp(method, "setAlwaysOnTop") == 0)
+  {
     gboolean always_on_top = FALSE;
-    if (fl_value_get_type(args) == FL_VALUE_TYPE_BOOL) {
+    if (fl_value_get_type(args) == FL_VALUE_TYPE_BOOL)
+    {
       always_on_top = fl_value_get_bool(args);
     }
     gtk_window_set_keep_above(window, always_on_top);
     response =
         FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
-  } else if (strcmp(method, "waitUntilReadyToShow") == 0) {
+  }
+  else if (strcmp(method, "waitUntilReadyToShow") == 0)
+  {
     response =
         FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
-  } else {
+  }
+  else
+  {
     response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
   }
 
   g_autoptr(GError) error = nullptr;
-  if (!fl_method_call_respond(method_call, response, &error)) {
+  if (!fl_method_call_respond(method_call, response, &error))
+  {
     g_warning("Failed to send response: %s", error->message);
   }
 }
 
 // Implements GApplication::activate.
-static void my_application_activate(GApplication *application) {
+static void my_application_activate(GApplication *application)
+{
   MyApplication *self = MY_APPLICATION(application);
   GtkWindow *window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
@@ -275,20 +332,25 @@ static void my_application_activate(GApplication *application) {
   gboolean use_header_bar = TRUE;
 #ifdef GDK_WINDOWING_X11
   GdkScreen *screen = gtk_window_get_screen(window);
-  if (GDK_IS_X11_SCREEN(screen)) {
+  if (GDK_IS_X11_SCREEN(screen))
+  {
     const gchar *wm_name = gdk_x11_screen_get_window_manager_name(screen);
-    if (g_strcmp0(wm_name, "GNOME Shell") != 0) {
+    if (g_strcmp0(wm_name, "GNOME Shell") != 0)
+    {
       use_header_bar = FALSE;
     }
   }
 #endif
-  if (use_header_bar) {
+  if (use_header_bar)
+  {
     GtkHeaderBar *header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
     gtk_header_bar_set_title(header_bar, "Wox");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
-  } else {
+  }
+  else
+  {
     gtk_window_set_title(window, "Wox");
   }
 
@@ -350,13 +412,15 @@ static void my_application_activate(GApplication *application) {
 // Implements GApplication::local_command_line.
 static gboolean my_application_local_command_line(GApplication *application,
                                                   gchar ***arguments,
-                                                  int *exit_status) {
+                                                  int *exit_status)
+{
   MyApplication *self = MY_APPLICATION(application);
   // Strip out the first argument as it is the binary name.
   self->dart_entrypoint_arguments = g_strdupv(*arguments + 1);
 
   g_autoptr(GError) error = nullptr;
-  if (!g_application_register(application, nullptr, &error)) {
+  if (!g_application_register(application, nullptr, &error))
+  {
     g_warning("Failed to register: %s", error->message);
     *exit_status = 1;
     return TRUE;
@@ -365,7 +429,8 @@ static gboolean my_application_local_command_line(GApplication *application,
   g_application_activate(application);
 
   // hide at startup
-  if (self->window != NULL) {
+  if (self->window != NULL)
+  {
     gtk_widget_hide(GTK_WIDGET(self->window));
   }
 
@@ -375,22 +440,26 @@ static gboolean my_application_local_command_line(GApplication *application,
 }
 
 // Implements GApplication::startup.
-static void my_application_startup(GApplication *application) {
+static void my_application_startup(GApplication *application)
+{
   G_APPLICATION_CLASS(my_application_parent_class)->startup(application);
 }
 
 // Implements GApplication::shutdown.
-static void my_application_shutdown(GApplication *application) {
+static void my_application_shutdown(GApplication *application)
+{
   G_APPLICATION_CLASS(my_application_parent_class)->shutdown(application);
 }
 
 // Implements GObject::dispose.
-static void my_application_dispose(GObject *object) {
+static void my_application_dispose(GObject *object)
+{
   MyApplication *self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
 
   // Clear method channel reference
-  if (g_method_channel != nullptr) {
+  if (g_method_channel != nullptr)
+  {
     g_object_remove_weak_pointer(G_OBJECT(g_method_channel),
                                  (gpointer *)&g_method_channel);
     g_method_channel = nullptr;
@@ -399,7 +468,8 @@ static void my_application_dispose(GObject *object) {
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
-static void my_application_class_init(MyApplicationClass *klass) {
+static void my_application_class_init(MyApplicationClass *klass)
+{
   G_APPLICATION_CLASS(klass)->activate = my_application_activate;
   G_APPLICATION_CLASS(klass)->local_command_line =
       my_application_local_command_line;
@@ -410,7 +480,8 @@ static void my_application_class_init(MyApplicationClass *klass) {
 
 static void my_application_init(MyApplication *self) { self->window = NULL; }
 
-MyApplication *my_application_new() {
+MyApplication *my_application_new()
+{
   g_set_prgname(APPLICATION_ID);
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID, "flags",

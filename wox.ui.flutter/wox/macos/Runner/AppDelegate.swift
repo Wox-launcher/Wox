@@ -168,7 +168,17 @@ class AppDelegate: FlutterAppDelegate {
           }
 
         case "center":
-          let screenFrame = window.screen?.frame ?? NSScreen.main?.frame ?? NSRect.zero
+          // Get the screen where the mouse cursor is located
+          let mouseLocation = NSEvent.mouseLocation
+          var targetScreen: NSScreen? = nil
+          for screen in NSScreen.screens {
+            if screen.frame.contains(mouseLocation) {
+              targetScreen = screen
+              break
+            }
+          }
+          let screenFrame = targetScreen?.frame ?? NSScreen.main?.frame ?? NSRect.zero
+
           var windowWidth: CGFloat = window.frame.width
           var windowHeight: CGFloat = window.frame.height
           if let args = call.arguments as? [String: Any] {
@@ -183,6 +193,7 @@ class AppDelegate: FlutterAppDelegate {
           let x = (screenFrame.width - windowWidth) / 2 + screenFrame.minX
           let y = (screenFrame.height - windowHeight) / 2 + screenFrame.minY
 
+          self?.log("Center: window to \(x),\(y) on screen at \(screenFrame.minX),\(screenFrame.minY)")
           let newFrame = NSRect(x: x, y: y, width: windowWidth, height: windowHeight)
           window.setFrame(newFrame, display: true)
           result(nil)

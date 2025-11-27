@@ -557,22 +557,40 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       double width = std::get<double>(width_it->second);
       double height = std::get<double>(height_it->second);
 
-      // Get DPI scale factor
-      float dpiScale = GetDpiScale(hwnd);
+      // Get cursor position to determine which monitor to center on
+      POINT cursorPos;
+      GetCursorPos(&cursorPos);
+
+      // Get the monitor where the cursor is located
+      HMONITOR hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
+      MONITORINFO monitorInfo;
+      monitorInfo.cbSize = sizeof(MONITORINFO);
+
+      if (!GetMonitorInfo(hMonitor, &monitorInfo))
+      {
+        result->Error("MONITOR_ERROR", "Failed to get monitor info");
+        return;
+      }
+
+      // Get DPI scale factor for the target monitor
+      UINT dpi = FlutterDesktopGetDpiForMonitor(hMonitor);
+      float dpiScale = dpi / 96.0f;
 
       // Apply DPI scaling to get physical pixels
       int scaledWidth = static_cast<int>(width * dpiScale);
       int scaledHeight = static_cast<int>(height * dpiScale);
 
-      // Get system metrics for the primary monitor
-      int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-      int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+      // Get monitor work area (physical coordinates)
+      int monitorLeft = monitorInfo.rcMonitor.left;
+      int monitorTop = monitorInfo.rcMonitor.top;
+      int monitorWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
+      int monitorHeight = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
 
-      // Calculate center position
-      int x = (screenWidth - scaledWidth) / 2;
-      int y = (screenHeight - scaledHeight) / 2;
+      // Calculate center position on the mouse's monitor
+      int x = monitorLeft + (monitorWidth - scaledWidth) / 2;
+      int y = monitorTop + (monitorHeight - scaledHeight) / 2;
 
-      Log("Center: window to " + std::to_string(x) + "," + std::to_string(y) + " with " + std::to_string(scaledWidth) + "," + std::to_string(scaledHeight));
+      Log("Center: window to " + std::to_string(x) + "," + std::to_string(y) + " with " + std::to_string(scaledWidth) + "," + std::to_string(scaledHeight) + " on monitor at " + std::to_string(monitorLeft) + "," + std::to_string(monitorTop));
       SetWindowPos(hwnd, nullptr, x, y, scaledWidth, scaledHeight, SWP_NOZORDER);
       result->Success();
     }
