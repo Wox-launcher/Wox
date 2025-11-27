@@ -852,6 +852,11 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> resizeHeight() async {
+    // Don't resize when in setting view, setting view has its own fixed size (1200x800)
+    if (isInSettingView.value) {
+      return;
+    }
+
     final maxResultCount = WoxSettingUtil.instance.currentSetting.maxResultCount;
     final actualResultCount = resultListViewController.items.length > maxResultCount ? maxResultCount : resultListViewController.items.length;
     double resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(actualResultCount);
