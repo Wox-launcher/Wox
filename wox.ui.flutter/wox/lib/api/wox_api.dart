@@ -112,14 +112,8 @@ class WoxApi {
     await WoxHttpUtil.instance.postData("/on/hide", {});
   }
 
-  Future<WoxImage> getQueryIcon(PlainQuery query) async {
-    return await WoxHttpUtil.instance.postData("/query/icon", {
-      "query": query.toJson(),
-    });
-  }
-
-  Future<double> getResultPreviewWidthRatio(PlainQuery query) async {
-    return await WoxHttpUtil.instance.postData("/query/ratio", {
+  Future<QueryMetadata> getQueryMetadata(PlainQuery query) async {
+    return await WoxHttpUtil.instance.postData("/query/metadata", {
       "query": query.toJson(),
     });
   }

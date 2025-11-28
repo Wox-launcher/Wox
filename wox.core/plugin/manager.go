@@ -1021,6 +1021,8 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 	if result.Preview.PreviewType == WoxPreviewTypeText || result.Preview.PreviewType == WoxPreviewTypeMarkdown {
 		result.Preview.PreviewData = m.translatePlugin(ctx, pluginInstance, result.Preview.PreviewData)
 	}
+	// translate group name
+	result.Group = m.translatePlugin(ctx, pluginInstance, result.Group)
 
 	// set first action as default if no default action is set
 	defaultActionCount := lo.CountBy(result.Actions, func(item QueryResultAction) bool {

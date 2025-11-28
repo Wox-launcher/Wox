@@ -41,6 +41,11 @@ const (
 	// enable this feature to support MRU (Most Recently Used) functionality
 	// plugin must implement OnMRURestore callback to restore results from MRU data
 	MetadataFeatureMRU MetadataFeatureName = "mru"
+
+	// enable this feature to display results in a grid layout instead of list
+	// useful for plugins that display visual items like emoji, icons, colors, etc.
+	// params see MetadataFeatureParamsGridLayout
+	MetadataFeatureGridLayout MetadataFeatureName = "gridLayout"
 )
 
 // Metadata parsed from plugin.json, see `Plugin.json.md` for more detail
@@ -204,4 +209,51 @@ type MetadataFeatureParamsQueryEnv struct {
 
 type MetadataFeatureParamsResultPreviewWidthRatio struct {
 	WidthRatio float64 // [0-1]
+}
+
+// MetadataFeatureParamsGridLayout contains parameters for grid layout feature
+type MetadataFeatureParamsGridLayout struct {
+	Columns     int  // number of columns per row, default 8
+	ShowTitle   bool // whether to show title below icon, default false
+	ItemPadding int  // padding inside each item, default 12
+	ItemMargin  int  // margin outside each item (all sides), default 6
+}
+
+func (m *Metadata) GetFeatureParamsForGridLayout() (MetadataFeatureParamsGridLayout, bool) {
+	for _, feature := range m.Features {
+		if strings.EqualFold(feature.Name, MetadataFeatureGridLayout) {
+			params := MetadataFeatureParamsGridLayout{
+				Columns:     8,
+				ShowTitle:   false,
+				ItemPadding: 12,
+				ItemMargin:  6,
+			}
+
+			if v, ok := feature.Params["Columns"]; ok {
+				if columns, err := strconv.Atoi(v); err == nil && columns > 0 {
+					params.Columns = columns
+				}
+			}
+
+			if v, ok := feature.Params["ShowTitle"]; ok {
+				params.ShowTitle = v == "true"
+			}
+
+			if v, ok := feature.Params["ItemPadding"]; ok {
+				if padding, err := strconv.Atoi(v); err == nil && padding >= 0 {
+					params.ItemPadding = padding
+				}
+			}
+
+			if v, ok := feature.Params["ItemMargin"]; ok {
+				if margin, err := strconv.Atoi(v); err == nil && margin >= 0 {
+					params.ItemMargin = margin
+				}
+			}
+
+			return params, true
+		}
+	}
+
+	return MetadataFeatureParamsGridLayout{}, false
 }

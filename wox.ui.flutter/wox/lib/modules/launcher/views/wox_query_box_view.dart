@@ -194,6 +194,18 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         case LogicalKeyboardKey.arrowUp:
                           controller.handleQueryBoxArrowUp();
                           return KeyEventResult.handled;
+                        case LogicalKeyboardKey.arrowLeft:
+                          if (controller.isInGridMode()) {
+                            controller.handleQueryBoxArrowLeft();
+                            return KeyEventResult.handled;
+                          }
+                          break;
+                        case LogicalKeyboardKey.arrowRight:
+                          if (controller.isInGridMode()) {
+                            controller.handleQueryBoxArrowRight();
+                            return KeyEventResult.handled;
+                          }
+                          break;
                         case LogicalKeyboardKey.tab:
                           controller.autoCompleteQuery(const UuidV4().generate());
                           return KeyEventResult.handled;
@@ -214,6 +226,18 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                         case LogicalKeyboardKey.arrowUp:
                           controller.handleQueryBoxArrowUp();
                           return KeyEventResult.handled;
+                        case LogicalKeyboardKey.arrowLeft:
+                          if (controller.isInGridMode()) {
+                            controller.handleQueryBoxArrowLeft();
+                            return KeyEventResult.handled;
+                          }
+                          break;
+                        case LogicalKeyboardKey.arrowRight:
+                          if (controller.isInGridMode()) {
+                            controller.handleQueryBoxArrowRight();
+                            return KeyEventResult.handled;
+                          }
+                          break;
                       }
                     }
                   }

@@ -353,3 +353,53 @@ class UpdatableResult {
     }
   }
 }
+
+class QueryMetadata {
+  late WoxImage icon;
+  late double resultPreviewWidthRatio;
+  late bool isGridLayout;
+  late GridLayoutParams gridLayoutParams;
+
+  QueryMetadata({
+    required this.icon,
+    required this.resultPreviewWidthRatio,
+    required this.isGridLayout,
+    required this.gridLayoutParams,
+  });
+
+  QueryMetadata.fromJson(Map<String, dynamic> json) {
+    icon = WoxImage.fromJson(json['Icon']);
+    resultPreviewWidthRatio = json['ResultPreviewWidthRatio'] ?? 0.5;
+    isGridLayout = json['IsGridLayout'] ?? false;
+    gridLayoutParams = GridLayoutParams.fromJson(json['GridLayoutParams'] ?? {});
+  }
+}
+
+/// Parameters for grid layout display
+class GridLayoutParams {
+  late int columns; // number of columns per row
+  late bool showTitle; // whether to show title below icon
+  late double itemPadding; // padding inside each item
+  late double itemMargin; // margin outside each item (all sides)
+
+  GridLayoutParams({
+    required this.columns,
+    required this.showTitle,
+    required this.itemPadding,
+    required this.itemMargin,
+  });
+
+  GridLayoutParams.fromJson(Map<String, dynamic> json) {
+    columns = json['Columns'] ?? 8;
+    showTitle = json['ShowTitle'] ?? false;
+    itemPadding = (json['ItemPadding'] ?? 12).toDouble();
+    itemMargin = (json['ItemMargin'] ?? 6).toDouble();
+  }
+
+  GridLayoutParams.empty() {
+    columns = 0;
+    showTitle = false;
+    itemPadding = 12;
+    itemMargin = 6;
+  }
+}

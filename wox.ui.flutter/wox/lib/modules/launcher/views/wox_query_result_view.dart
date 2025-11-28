@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:uuid/v4.dart';
+import 'package:wox/components/wox_grid_view.dart';
 import 'package:wox/components/wox_list_view.dart';
 import 'package:wox/components/wox_preview_view.dart';
 import 'package:wox/controllers/wox_launcher_controller.dart';
@@ -79,15 +80,27 @@ class WoxQueryResultView extends GetView<WoxLauncherController> {
         bottom: WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingBottom.toDouble(),
         left: WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingLeft.toDouble(),
       ),
-      child: WoxListView<WoxQueryResult>(
-        controller: controller.resultListViewController,
-        listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code,
-        showFilter: false,
-        maxHeight: WoxThemeUtil.instance.getMaxResultListViewHeight(),
-        onItemTapped: () {
-          controller.hideActionPanel(const UuidV4().generate());
-        },
-      ),
+      child: Obx(() {
+        if (controller.isGridLayout.value) {
+          return WoxGridView(
+            controller: controller.resultGridViewController,
+            maxHeight: WoxThemeUtil.instance.getMaxResultListViewHeight(),
+            onItemTapped: () {
+              controller.hideActionPanel(const UuidV4().generate());
+            },
+          );
+        }
+
+        return WoxListView<WoxQueryResult>(
+          controller: controller.resultListViewController,
+          listViewType: WoxListViewTypeEnum.WOX_LIST_VIEW_TYPE_RESULT.code,
+          showFilter: false,
+          maxHeight: WoxThemeUtil.instance.getMaxResultListViewHeight(),
+          onItemTapped: () {
+            controller.hideActionPanel(const UuidV4().generate());
+          },
+        );
+      }),
     );
   }
 

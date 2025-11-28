@@ -2,7 +2,9 @@ typedef WoxDirection = String;
 
 enum WoxDirectionEnum {
   WOX_DIRECTION_UP("up", "up"),
-  WOX_DIRECTION_DOWN("down", "down");
+  WOX_DIRECTION_DOWN("down", "down"),
+  WOX_DIRECTION_LEFT("left", "left"),
+  WOX_DIRECTION_RIGHT("right", "right");
 
   final String code;
   final String value;

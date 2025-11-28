@@ -43,6 +43,8 @@ import (
 	_ "wox/plugin/system/mediaplayer"
 
 	_ "wox/plugin/system/shell"
+
+	_ "wox/plugin/system/emoji"
 )
 
 func main() {

@@ -90,8 +90,7 @@ var routers = map[string]func(w http.ResponseWriter, r *http.Request){
 	"/backup/all":       handleBackupAll,
 	"/backup/folder":    handleBackupFolder,
 	"/hotkey/available": handleHotkeyAvailable,
-	"/query/icon":       handleQueryIcon,
-	"/query/ratio":      handleQueryRatio,
+	"/query/metadata":   handleQueryMetadata,
 	"/query/mru":        handleQueryMRU,
 	"/deeplink":         handleDeeplink,
 	"/version":          handleVersion,
@@ -847,8 +846,16 @@ func handleOnHide(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, "")
 }
 
-func handleQueryIcon(w http.ResponseWriter, r *http.Request) {
+func handleQueryMetadata(w http.ResponseWriter, r *http.Request) {
 	ctx := util.NewTraceContext()
+
+	type metadataResponse struct {
+		Icon             common.WoxImage
+		WidthRatio       float64
+		IsGridLayout     bool
+		GridLayoutParams plugin.MetadataFeatureParamsGridLayout
+	}
+	var metadata metadataResponse
 
 	body, _ := io.ReadAll(r.Body)
 	queryResult := gjson.GetBytes(body, "query")
@@ -868,25 +875,39 @@ func handleQueryIcon(w http.ResponseWriter, r *http.Request) {
 	_, pluginInstance, err := plugin.GetPluginManager().NewQuery(ctx, plainQuery)
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to new query: %s", err.Error()))
-		writeSuccessResponse(w, common.WoxImage{})
+		writeSuccessResponse(w, metadataResponse{})
 		return
 	}
 
 	if pluginInstance == nil {
 		// this query is not for any plugin (now a global query)
-		writeSuccessResponse(w, common.WoxImage{})
+		writeSuccessResponse(w, metadataResponse{})
 		return
 	}
 
 	iconImg, parseErr := common.ParseWoxImage(pluginInstance.Metadata.Icon)
-	if parseErr != nil {
+	if parseErr == nil {
+		metadata.Icon = common.ConvertIcon(ctx, iconImg, pluginInstance.PluginDirectory)
+	} else {
 		logger.Error(ctx, fmt.Sprintf("failed to parse icon: %s", parseErr.Error()))
-		writeSuccessResponse(w, common.WoxImage{})
-		return
 	}
 
-	iconImage := common.ConvertIcon(ctx, iconImg, pluginInstance.PluginDirectory)
-	writeSuccessResponse(w, iconImage)
+	featureParams, err := pluginInstance.Metadata.GetFeatureParamsForResultPreviewWidthRatio()
+	if err == nil {
+		metadata.WidthRatio = featureParams.WidthRatio
+	} else {
+		logger.Error(ctx, fmt.Sprintf("failed to get feature params for result preview width ratio: %s", err.Error()))
+	}
+
+	featureParamsGridLayout, ok := pluginInstance.Metadata.GetFeatureParamsForGridLayout()
+	if ok {
+		metadata.IsGridLayout = true
+		metadata.GridLayoutParams = featureParamsGridLayout
+	} else {
+		logger.Error(ctx, fmt.Sprintf("failed to get feature params for grid layout: %s", err.Error()))
+	}
+
+	writeSuccessResponse(w, metadata)
 }
 
 func handleQueryRatio(w http.ResponseWriter, r *http.Request) {

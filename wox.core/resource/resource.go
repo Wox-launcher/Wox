@@ -170,6 +170,10 @@ func GetLangJson(ctx context.Context, langCode string) ([]byte, error) {
 	return LangFS.ReadFile(langJsonPath)
 }
 
+func GetEmojiJson(ctx context.Context) ([]byte, error) {
+	return OthersFS.ReadFile("others/emoji-en-US.json")
+}
+
 func GetEmbedThemes(ctx context.Context) []string {
 	return embedThemes
 }
