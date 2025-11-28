@@ -887,13 +887,23 @@ class WoxLauncherController extends GetxController {
     }
 
     final maxResultCount = WoxSettingUtil.instance.currentSetting.maxResultCount;
+    final maxHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(maxResultCount);
     final itemCount = activeResultViewController.items.length;
-    final actualResultCount = itemCount > maxResultCount ? maxResultCount : itemCount;
-    double resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(actualResultCount);
+    double resultHeight;
 
+    if (isInGridMode()) {
+      resultHeight = resultGridViewController.calculateGridHeight();
+    } else {
+      resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(itemCount);
+    }
+
+    if (resultHeight > maxHeight) {
+      resultHeight = maxHeight;
+    }
     if (isShowActionPanel.value || isShowPreviewPanel.value) {
       resultHeight = WoxThemeUtil.instance.getResultListViewHeightByCount(maxResultCount);
     }
+
     if (itemCount > 0) {
       resultHeight += WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingTop + WoxThemeUtil.instance.currentTheme.value.resultContainerPaddingBottom;
     }

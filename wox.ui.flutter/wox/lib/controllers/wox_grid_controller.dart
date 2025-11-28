@@ -27,6 +27,38 @@ class WoxGridController<T> extends WoxBaseListController<T> {
     rowHeight = height;
   }
 
+  /// Calculate total height needed for grid view content
+  /// Returns the height for all rows and group headers, capped at maxRowCount
+  double calculateGridHeight() {
+    if (items.isEmpty || gridLayoutParams.columns <= 0 || rowHeight <= 0) {
+      return 0;
+    }
+
+    const groupHeaderHeight = 32.0;
+    double totalHeight = 0;
+    int i = 0;
+
+    while (i < items.length) {
+      if (items[i].value.isGroup) {
+        totalHeight += groupHeaderHeight;
+        i++;
+      } else {
+        // Count items in this row (same group, up to columns count)
+        final currentGroup = _getItemGroup(items[i].value);
+        int itemsInRow = 0;
+        while (i < items.length && !items[i].value.isGroup && _getItemGroup(items[i].value) == currentGroup && itemsInRow < gridLayoutParams.columns) {
+          itemsInRow++;
+          i++;
+        }
+        if (itemsInRow > 0) {
+          totalHeight += rowHeight;
+        }
+      }
+    }
+
+    return totalHeight;
+  }
+
   @override
   void updateActiveIndexByDirection(String traceId, WoxDirection direction) {
     Logger.instance.debug(traceId, "updateActiveIndexByDirection start, direction: $direction, columns: ${gridLayoutParams.columns}, current activeIndex: ${activeIndex.value}");
