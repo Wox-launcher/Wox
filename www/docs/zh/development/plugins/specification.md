@@ -74,6 +74,7 @@
 - `deepLink`：插件自定义深度链接。
 - `resultPreviewWidthRatio`：控制结果列表与预览区宽度比例，`WidthRatio` 取 0~1。
 - `mru`：启用最近使用（MRU），插件需实现 `OnMRURestore`。
+- `gridLayout`：以网格布局展示结果，适合展示表情、图标、颜色等视觉元素。详见 [网格布局](#网格布局)。
 
 ## SettingDefinitions
 
@@ -332,3 +333,106 @@ Wox 按以下顺序查找翻译：
 | `ru_RU` | 俄语             |
 
 > 提示：始终提供 `en_US` 翻译作为回退语言。
+
+## 网格布局
+
+`gridLayout` 功能可将结果以网格形式展示，替代默认的垂直列表。适用于展示表情符号、图标、颜色或图片缩略图等视觉元素的插件。
+
+### 配置
+
+在 `plugin.json` 中添加 `gridLayout` 功能：
+
+```json
+{
+  "Features": [
+    {
+      "Name": "gridLayout",
+      "Params": {
+        "Columns": "8",
+        "ShowTitle": "false",
+        "ItemPadding": "12",
+        "ItemMargin": "6"
+      }
+    }
+  ]
+}
+```
+
+### 参数
+
+| 参数          | 类型   | 默认值    | 描述                                            |
+| ------------- | ------ | --------- | ----------------------------------------------- |
+| `Columns`     | string | `"8"`     | 每行列数                                        |
+| `ShowTitle`   | string | `"false"` | 是否在图标下方显示标题（`"true"` 或 `"false"`） |
+| `ItemPadding` | string | `"12"`    | 网格项内边距（像素）                            |
+| `ItemMargin`  | string | `"6"`     | 网格项外边距（像素）                            |
+
+### 结果结构
+
+使用网格布局时，每个结果应包含：
+
+- **Icon**：网格单元格中显示的主要视觉元素（必需）
+- **Title**：如果 `ShowTitle` 为 `"true"`，则显示在图标下方（过长时省略号截断）
+- **Group**：可选分组，用于将项目组织成带标题的分区
+
+### 示例：表情选择器插件
+
+```json
+{
+  "Id": "emoji-picker-plugin",
+  "Name": "Emoji Picker",
+  "TriggerKeywords": ["emoji"],
+  "Features": [
+    {
+      "Name": "gridLayout",
+      "Params": {
+        "Columns": "12",
+        "ShowTitle": "false",
+        "ItemPadding": "12",
+        "ItemMargin": "6"
+      }
+    }
+  ]
+}
+```
+
+```python
+from wox_plugin import Plugin, Context, Query, Result
+
+class EmojiPlugin(Plugin):
+    async def query(self, ctx: Context, query: Query) -> list[Result]:
+        emojis = ["😀", "😃", "😄", "😁", "😅", "😂", "🤣", "😊"]
+        return [
+            Result(
+                title=emoji,
+                icon=f"emoji:{emoji}",
+                group="笑脸"
+            )
+            for emoji in emojis
+        ]
+```
+
+### 分组项目
+
+使用 `group` 字段将网格项目组织成分区。具有相同 group 值的项目会显示在同一个分组标题下：
+
+```python
+results = [
+    Result(title="😀", icon="emoji:😀", group="笑脸"),
+    Result(title="😃", icon="emoji:😃", group="笑脸"),
+    Result(title="❤️", icon="emoji:❤️", group="爱心"),
+    Result(title="💙", icon="emoji:💙", group="爱心"),
+]
+```
+
+这会生成带有"笑脸"和"爱心"分区标题的布局，每个分区下是对应的表情网格。
+
+### 布局计算
+
+网格会根据以下规则自动计算项目尺寸：
+
+1. 可用宽度 ÷ 列数 = 单元格宽度
+2. 图标尺寸 = 单元格宽度 - (ItemPadding + ItemMargin) × 2
+3. 单元格高度 = 单元格宽度 + 标题高度（如果启用 ShowTitle）
+
+调整 `ItemPadding` 和 `ItemMargin` 可控制项目间距。较大的值会增加留白空间，较小的值可在屏幕上容纳更多项目。

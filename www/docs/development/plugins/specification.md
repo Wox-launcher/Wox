@@ -74,6 +74,7 @@ Add items to `Features` when your plugin needs extra capabilities:
 - `deepLink` – enables custom deep links exposed by the plugin.
 - `resultPreviewWidthRatio` – control result list vs preview width. Params: `WidthRatio` between 0 and 1.
 - `mru` – enable Most Recently Used support; implement `OnMRURestore` in your plugin.
+- `gridLayout` – display results in a grid layout instead of a list. Useful for visual items like emoji, icons, or colors. See [Grid Layout](#grid-layout) for details.
 
 ## SettingDefinitions
 
@@ -332,3 +333,106 @@ Wox looks up translations in this order:
 | `ru_RU` | Russian              |
 
 > Tip: Always provide `en_US` translations as the fallback language.
+
+## Grid Layout
+
+The `gridLayout` feature enables displaying results in a grid format instead of the default vertical list. This is ideal for plugins that display visual items such as emoji, icons, colors, or image thumbnails.
+
+### Configuration
+
+Add the `gridLayout` feature to your `plugin.json`:
+
+```json
+{
+  "Features": [
+    {
+      "Name": "gridLayout",
+      "Params": {
+        "Columns": "8",
+        "ShowTitle": "false",
+        "ItemPadding": "12",
+        "ItemMargin": "6"
+      }
+    }
+  ]
+}
+```
+
+### Parameters
+
+| Parameter     | Type   | Default   | Description                                                        |
+| ------------- | ------ | --------- | ------------------------------------------------------------------ |
+| `Columns`     | string | `"8"`     | Number of columns per row                                          |
+| `ShowTitle`   | string | `"false"` | Whether to show title text below each icon (`"true"` or `"false"`) |
+| `ItemPadding` | string | `"12"`    | Padding inside each grid item (in pixels)                          |
+| `ItemMargin`  | string | `"6"`     | Margin around each grid item (in pixels)                           |
+
+### Result Structure
+
+When using grid layout, each result should have:
+
+- **Icon**: The main visual element displayed in the grid cell (required)
+- **Title**: Shown below the icon if `ShowTitle` is `"true"` (truncated with ellipsis if too long)
+- **Group**: Optional grouping to organize items into sections with headers
+
+### Example: Emoji Picker Plugin
+
+```json
+{
+  "Id": "emoji-picker-plugin",
+  "Name": "Emoji Picker",
+  "TriggerKeywords": ["emoji"],
+  "Features": [
+    {
+      "Name": "gridLayout",
+      "Params": {
+        "Columns": "12",
+        "ShowTitle": "false",
+        "ItemPadding": "12",
+        "ItemMargin": "6"
+      }
+    }
+  ]
+}
+```
+
+```python
+from wox_plugin import Plugin, Context, Query, Result
+
+class EmojiPlugin(Plugin):
+    async def query(self, ctx: Context, query: Query) -> list[Result]:
+        emojis = ["😀", "😃", "😄", "😁", "😅", "😂", "🤣", "😊"]
+        return [
+            Result(
+                title=emoji,
+                icon=f"emoji:{emoji}",
+                group="Smileys"
+            )
+            for emoji in emojis
+        ]
+```
+
+### Grouping Items
+
+Use the `group` field to organize grid items into sections. Items with the same group value will be displayed together under a group header:
+
+```python
+results = [
+    Result(title="😀", icon="emoji:😀", group="Smileys"),
+    Result(title="😃", icon="emoji:😃", group="Smileys"),
+    Result(title="❤️", icon="emoji:❤️", group="Hearts"),
+    Result(title="💙", icon="emoji:💙", group="Hearts"),
+]
+```
+
+This produces a layout with "Smileys" and "Hearts" section headers, each followed by their respective emoji in a grid.
+
+### Layout Calculation
+
+The grid automatically calculates item sizes based on:
+
+1. Available width divided by number of columns = cell width
+2. Icon size = cell width - (ItemPadding + ItemMargin) × 2
+3. Cell height = cell width + title height (if ShowTitle is enabled)
+
+Adjust `ItemPadding` and `ItemMargin` to control spacing between items. Larger values create more breathing room; smaller values fit more items on screen.
