@@ -457,6 +457,7 @@
   "plugin_calculator_recalculate": "重新计算",
   "plugin_calculator_input_expression": "输入表达式进行计算",
   "plugin_emoji_copy": "复制表情",
+  "plugin_emoji_copy_large": "复制大图标",
   "plugin_emoji_frequently_used": "常用",
   "plugin_emoji_all": "全部表情",
   "plugin_file_open": "打开",

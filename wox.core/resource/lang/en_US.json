@@ -456,6 +456,7 @@
   "plugin_calculator_recalculate": "Recalculate",
   "plugin_calculator_input_expression": "Input expression to calculate",
   "plugin_emoji_copy": "Copy emoji",
+  "plugin_emoji_copy_large": "Copy large icon",
   "plugin_emoji_frequently_used": "Frequently Used",
   "plugin_emoji_all": "Emojis",
   "plugin_file_open": "Open",

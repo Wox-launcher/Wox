@@ -453,6 +453,7 @@
   "plugin_calculator_recalculate": "Recalcular",
   "plugin_calculator_input_expression": "Digite a expressão para calcular",
   "plugin_emoji_copy": "Copiar emoji",
+  "plugin_emoji_copy_large": "Copiar ícone grande",
   "plugin_emoji_frequently_used": "Usados frequentemente",
   "plugin_emoji_all": "Emojis",
   "plugin_file_open": "Abrir",

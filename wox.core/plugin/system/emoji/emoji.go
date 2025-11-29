@@ -209,6 +209,26 @@ func (e *EmojiPlugin) createEmojiResult(ctx context.Context, entry EmojiData) pl
 					e.recordUsage(ctx, emoji)
 				},
 			},
+			{
+				Name:   "i18n:plugin_emoji_copy_large",
+				Icon:   common.NewWoxImageEmoji("🖼️"),
+				Hotkey: "ctrl+enter",
+				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+					img, err := getNativeEmojiImage(emoji, 200)
+					if err != nil {
+						e.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to build emoji image: %v", err))
+						e.api.Notify(ctx, fmt.Sprintf("Failed to build emoji image: %v", err))
+						return
+					}
+
+					if err := clipboard.Write(&clipboard.ImageData{Image: img}); err != nil {
+						e.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to copy emoji image: %v", err))
+						return
+					}
+
+					e.recordUsage(ctx, emoji)
+				},
+			},
 		},
 	}
 }
