@@ -555,5 +555,9 @@
   "selection_preview": "Предпросмотр",
   "selection_created_at": "Создано",
   "selection_modified_at": "Изменено",
-  "selection_size": "Размер"
+  "selection_size": "Размер",
+  "plugin_emoji_add_description": "Добавить описание",
+  "plugin_emoji_add_description_label": "Описание",
+  "ui_not_supported_field": "Тип поля не поддерживается",
+  "plugin_emoji_add_description_hint": "Добавьте свои описания для этого эмодзи, разделяйте запятыми."
 }

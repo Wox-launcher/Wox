@@ -4,11 +4,13 @@ import (
 	"context"
 	"strings"
 	"wox/common"
+	"wox/setting/definition"
 	"wox/util/selection"
 
 	"github.com/samber/lo"
 )
 
+type QueryResultActionType = string
 type QueryType = string
 type QueryVariable = string
 type QueryResultTailType = string
@@ -16,6 +18,11 @@ type QueryResultTailType = string
 const (
 	QueryTypeInput     QueryType = "input"     // user input query
 	QueryTypeSelection QueryType = "selection" // user selection query
+)
+
+const (
+	QueryResultActionTypeExecute QueryResultActionType = "execute"
+	QueryResultActionTypeForm    QueryResultActionType = "form"
 )
 
 const (
@@ -149,6 +156,8 @@ func NewQueryResultTailTexts(texts ...string) []QueryResultTail {
 type QueryResultAction struct {
 	// Action id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
 	Id string
+	// Action type, use QueryResultActionTypeExecute for immediate execution and QueryResultActionTypeForm for form submission
+	Type QueryResultActionType
 	// Name support i18n
 	Name string
 	Icon common.WoxImage
@@ -157,7 +166,6 @@ type QueryResultAction struct {
 	IsDefault bool
 	// If true, Wox will not hide after user select this result
 	PreventHideAfterAction bool
-	Action                 func(ctx context.Context, actionContext ActionContext) `json:"-"` // Exclude from JSON serialization
 	// Hotkey to trigger this action. E.g. "ctrl+Shift+Space", "Ctrl+1", "Command+K"
 	// Case insensitive, space insensitive
 	// If IsDefault is true, Hotkey will be set to enter key by default
@@ -165,6 +173,13 @@ type QueryResultAction struct {
 	Hotkey string
 	// Additional data associate with this action, can be retrieved later
 	ContextData string
+
+	// For execute action
+	Action func(ctx context.Context, actionContext ActionContext) `json:"-"` // Exclude from JSON serialization
+
+	// For form action
+	Form     definition.PluginSettingDefinitions
+	OnSubmit func(ctx context.Context, actionContext FormActionContext) `json:"-"` // Exclude from JSON serialization
 
 	// internal use
 	IsSystemAction bool
@@ -185,6 +200,11 @@ type ActionContext struct {
 	ContextData string
 }
 
+type FormActionContext struct {
+	ActionContext
+	Values map[string]string
+}
+
 func (q *QueryResult) ToUI() QueryResultUI {
 	return QueryResultUI{
 		Id:          q.Id,
@@ -198,13 +218,19 @@ func (q *QueryResult) ToUI() QueryResultUI {
 		Tails:       q.Tails,
 		ContextData: q.ContextData,
 		Actions: lo.Map(q.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
+			actionType := action.Type
+			if actionType == "" {
+				actionType = QueryResultActionTypeExecute
+			}
 			return QueryResultActionUI{
 				Id:                     action.Id,
+				Type:                   actionType,
 				Name:                   action.Name,
 				Icon:                   action.Icon,
 				IsDefault:              action.IsDefault,
 				PreventHideAfterAction: action.PreventHideAfterAction,
 				Hotkey:                 action.Hotkey,
+				Form:                   action.Form,
 				IsSystemAction:         action.IsSystemAction,
 			}
 		}),
@@ -228,11 +254,13 @@ type QueryResultUI struct {
 
 type QueryResultActionUI struct {
 	Id                     string
+	Type                   QueryResultActionType
 	Name                   string
 	Icon                   common.WoxImage
 	IsDefault              bool
 	PreventHideAfterAction bool
 	Hotkey                 string
+	Form                   definition.PluginSettingDefinitions
 
 	// internal use
 	IsSystemAction bool

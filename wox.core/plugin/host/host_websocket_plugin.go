@@ -41,6 +41,23 @@ func (w *WebsocketPlugin) CreateActionProxy(actionId string) func(context.Contex
 	}
 }
 
+// CreateFormActionProxy creates a proxy callback for a form action that will invoke the host's formAction method
+func (w *WebsocketPlugin) CreateFormActionProxy(actionId string) func(context.Context, plugin.FormActionContext) {
+	return func(ctx context.Context, actionContext plugin.FormActionContext) {
+		valuesJson, _ := json.Marshal(actionContext.Values)
+		_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "formAction", map[string]string{
+			"ResultId":       actionContext.ResultId,
+			"ActionId":       actionId,
+			"ResultActionId": actionContext.ResultActionId,
+			"ContextData":    actionContext.ContextData,
+			"Values":         string(valuesJson),
+		})
+		if actionErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] form action failed: %s", w.metadata.Name, actionErr.Error()))
+		}
+	}
+}
+
 func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	selectionJson, marshalErr := json.Marshal(query.Selection)
 	if marshalErr != nil {
@@ -85,14 +102,30 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) []plugi
 	for i, r := range results {
 		result := r
 		for j, action := range result.Actions {
-			result.Actions[j].Action = func(ctx context.Context, actionContext plugin.ActionContext) {
-				_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "action", map[string]string{
-					"ResultId":    actionContext.ResultId,
-					"ActionId":    action.Id,
-					"ContextData": actionContext.ContextData,
-				})
-				if actionErr != nil {
-					util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", w.metadata.Name, actionErr.Error()))
+			capturedAction := action
+			if capturedAction.Type == plugin.QueryResultActionTypeForm {
+				result.Actions[j].OnSubmit = func(ctx context.Context, actionContext plugin.FormActionContext) {
+					valuesJson, _ := json.Marshal(actionContext.Values)
+					_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "formAction", map[string]string{
+						"ResultId":    actionContext.ResultId,
+						"ActionId":    capturedAction.Id,
+						"ContextData": actionContext.ContextData,
+						"Values":      string(valuesJson),
+					})
+					if actionErr != nil {
+						util.GetLogger().Error(ctx, fmt.Sprintf("[%s] form action failed: %s", w.metadata.Name, actionErr.Error()))
+					}
+				}
+			} else {
+				result.Actions[j].Action = func(ctx context.Context, actionContext plugin.ActionContext) {
+					_, actionErr := w.websocketHost.invokeMethod(ctx, w.metadata, "action", map[string]string{
+						"ResultId":    actionContext.ResultId,
+						"ActionId":    capturedAction.Id,
+						"ContextData": actionContext.ContextData,
+					})
+					if actionErr != nil {
+						util.GetLogger().Error(ctx, fmt.Sprintf("[%s] action failed: %s", w.metadata.Name, actionErr.Error()))
+					}
 				}
 			}
 		}

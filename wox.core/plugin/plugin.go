@@ -25,6 +25,12 @@ type ActionProxyCreator interface {
 	CreateActionProxy(actionId string) func(context.Context, ActionContext)
 }
 
+// FormActionProxyCreator is implemented by plugins that need to create proxy callbacks for form actions
+// This is used by external plugins (Node.js/Python) to create callbacks that invoke the host
+type FormActionProxyCreator interface {
+	CreateFormActionProxy(actionId string) func(context.Context, FormActionContext)
+}
+
 type InitParams struct {
 	API             API
 	PluginDirectory string

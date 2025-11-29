@@ -260,6 +260,8 @@ func onUIWebsocketRequest(ctx context.Context, request WebsocketMsg) {
 		handleWebsocketQuery(ctx, request)
 	case "Action":
 		handleWebsocketAction(ctx, request)
+	case "FormAction":
+		handleWebsocketFormAction(ctx, request)
 	}
 }
 
@@ -456,6 +458,35 @@ func handleWebsocketAction(ctx context.Context, request WebsocketMsg) {
 	responseUISuccess(ctx, request)
 }
 
+func handleWebsocketFormAction(ctx context.Context, request WebsocketMsg) {
+	resultId, idErr := getWebsocketMsgParameter(ctx, request, "resultId")
+	if idErr != nil {
+		logger.Error(ctx, idErr.Error())
+		responseUIError(ctx, request, idErr.Error())
+		return
+	}
+	actionId, actionIdErr := getWebsocketMsgParameter(ctx, request, "actionId")
+	if actionIdErr != nil {
+		logger.Error(ctx, actionIdErr.Error())
+		responseUIError(ctx, request, actionIdErr.Error())
+		return
+	}
+	values, valuesErr := getWebsocketMsgParameterMap(ctx, request, "values")
+	if valuesErr != nil {
+		logger.Error(ctx, valuesErr.Error())
+		responseUIError(ctx, request, valuesErr.Error())
+		return
+	}
+
+	executeErr := plugin.GetPluginManager().SubmitFormAction(ctx, resultId, actionId, values)
+	if executeErr != nil {
+		responseUIError(ctx, request, executeErr.Error())
+		return
+	}
+
+	responseUISuccess(ctx, request)
+}
+
 func getWebsocketMsgParameter(ctx context.Context, msg WebsocketMsg, key string) (string, error) {
 	jsonData, marshalErr := json.Marshal(msg.Data)
 	if marshalErr != nil {
@@ -468,4 +499,26 @@ func getWebsocketMsgParameter(ctx context.Context, msg WebsocketMsg, key string)
 	}
 
 	return paramterData.String(), nil
+}
+
+func getWebsocketMsgParameterMap(ctx context.Context, msg WebsocketMsg, key string) (map[string]string, error) {
+	jsonData, marshalErr := json.Marshal(msg.Data)
+	if marshalErr != nil {
+		return nil, marshalErr
+	}
+
+	paramterData := gjson.GetBytes(jsonData, key)
+	if !paramterData.Exists() {
+		return nil, fmt.Errorf("%s parameter not found", key)
+	}
+	if !paramterData.IsObject() {
+		return nil, fmt.Errorf("%s parameter must be an object", key)
+	}
+
+	var values map[string]string
+	if unmarshalErr := json.Unmarshal([]byte(paramterData.Raw), &values); unmarshalErr != nil {
+		return nil, unmarshalErr
+	}
+
+	return values, nil
 }

@@ -556,5 +556,9 @@
   "selection_preview": "Visualizar",
   "selection_created_at": "Criado em",
   "selection_modified_at": "Modificado em",
-  "selection_size": "Tamanho"
+  "selection_size": "Tamanho",
+  "plugin_emoji_add_description": "Adicionar descrição",
+  "plugin_emoji_add_description_label": "Descrição",
+  "ui_not_supported_field": "Tipo de campo não suportado",
+  "plugin_emoji_add_description_hint": "Adicione descrições personalizadas para este emoji, separadas por vírgulas."
 }

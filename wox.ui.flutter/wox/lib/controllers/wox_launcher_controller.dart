@@ -10,14 +10,17 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:uuid/v4.dart';
-import 'package:wox/controllers/wox_base_list_controller.dart';
-import 'package:wox/controllers/wox_list_controller.dart';
-import 'package:wox/controllers/wox_grid_controller.dart';
+import 'package:wox/components/wox_form_action_view.dart';
 import 'package:wox/controllers/query_box_text_editing_controller.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
+import 'package:wox/controllers/wox_base_list_controller.dart';
+import 'package:wox/controllers/wox_grid_controller.dart';
+import 'package:wox/controllers/wox_list_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
 import 'package:wox/entity/wox_list_item.dart';
+import 'package:wox/entity/wox_plugin_setting.dart';
 import 'package:wox/models/doctor_check_result.dart';
+import 'package:wox/utils/wox_theme_util.dart';
 import 'package:wox/utils/windows/window_manager.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/entity/wox_hotkey.dart';
@@ -80,6 +83,12 @@ class WoxLauncherController extends GetxController {
   // action related variables
   late final WoxListController<WoxResultAction> actionListViewController;
   final isShowActionPanel = false.obs;
+
+  // form action related variables
+  final isShowFormActionPanel = false.obs;
+  final activeFormAction = Rxn<WoxResultAction>();
+  final activeFormResultId = "".obs;
+  final formActionValues = <String, String>{}.obs;
 
   /// The timer to clear query results.
   /// On every query changed, it will reset the timer and will clear the query results after N ms.
@@ -440,6 +449,31 @@ class WoxLauncherController extends GetxController {
     resizeHeight();
   }
 
+  void showFormActionPanel(WoxResultAction action, String resultId) {
+    activeFormAction.value = action;
+    activeFormResultId.value = resultId;
+    formActionValues.clear();
+    for (final item in action.form) {
+      final key = (item.value as dynamic).key as String?;
+      if (key != null) {
+        final defaultValue = (item.value as dynamic).defaultValue as String? ?? "";
+        formActionValues[key] = defaultValue;
+      }
+    }
+    isShowFormActionPanel.value = true;
+    isShowActionPanel.value = false;
+    resizeHeight();
+  }
+
+  void hideFormActionPanel(String traceId) {
+    activeFormAction.value = null;
+    activeFormResultId.value = "";
+    formActionValues.clear();
+    isShowFormActionPanel.value = false;
+    focusQueryBox();
+    resizeHeight();
+  }
+
   void focusQueryBox({bool selectAll = false}) {
     // request focus to action query box since it will lose focus when tap
     queryBoxFocusNode.requestFocus();
@@ -508,15 +542,20 @@ class WoxLauncherController extends GetxController {
     var preventHideAfterAction = action.preventHideAfterAction;
     Logger.instance.debug(traceId, "execute action: ${action.name}, prevent hide after action: $preventHideAfterAction");
 
-    await WoxWebsocketMsgUtil.instance.sendMessage(
-      WoxWebsocketMsg(
-        requestId: const UuidV4().generate(),
-        traceId: traceId,
-        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
-        method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
-        data: {"resultId": result.id, "actionId": action.id},
-      ),
-    );
+    if (action.type == "form") {
+      showFormActionPanel(action, result.id);
+      return;
+    } else {
+      await WoxWebsocketMsgUtil.instance.sendMessage(
+        WoxWebsocketMsg(
+          requestId: const UuidV4().generate(),
+          traceId: traceId,
+          type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+          method: WoxMsgMethodEnum.WOX_MSG_METHOD_ACTION.code,
+          data: {"resultId": result.id, "actionId": action.id},
+        ),
+      );
+    }
 
     // clear the search text after action is executed
     actionListViewController.clearFilter(traceId);
@@ -527,6 +566,9 @@ class WoxLauncherController extends GetxController {
 
     if (isShowActionPanel.value) {
       hideActionPanel(traceId);
+    }
+    if (isShowFormActionPanel.value) {
+      hideFormActionPanel(traceId);
     } else {
       if (Platform.isWindows) {
         // Windows-specific workaround: On Windows, when an async function awaits,
@@ -538,6 +580,27 @@ class WoxLauncherController extends GetxController {
         });
       }
     }
+  }
+
+  Future<void> submitFormAction(String traceId) async {
+    final action = activeFormAction.value;
+    final resultId = activeFormResultId.value;
+    if (action == null || resultId.isEmpty) {
+      hideFormActionPanel(traceId);
+      return;
+    }
+
+    await WoxWebsocketMsgUtil.instance.sendMessage(
+      WoxWebsocketMsg(
+        requestId: const UuidV4().generate(),
+        traceId: traceId,
+        type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+        method: WoxMsgMethodEnum.WOX_MSG_METHOD_FORM_ACTION.code,
+        data: {"resultId": resultId, "actionId": action.id, "values": formActionValues},
+      ),
+    );
+
+    hideFormActionPanel(traceId);
   }
 
   Future<void> autoCompleteQuery(String traceId) async {

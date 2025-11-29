@@ -1,5 +1,6 @@
 import 'package:wox/entity/wox_image.dart';
 import 'package:wox/entity/wox_list_item.dart';
+import 'package:wox/entity/wox_plugin_setting.dart';
 import 'package:wox/entity/wox_preview.dart';
 import 'package:wox/enums/wox_position_type_enum.dart';
 import 'package:wox/enums/wox_query_type_enum.dart';
@@ -188,6 +189,7 @@ class WoxQueryResult {
 
 class WoxResultAction {
   late String id;
+  late String type;
   late String name;
   late WoxImage icon;
   late bool isDefault;
@@ -196,9 +198,11 @@ class WoxResultAction {
   late bool isSystemAction;
   late String resultId;
   late String contextData;
+  late List<PluginSettingDefinitionItem> form;
 
   WoxResultAction({
     required this.id,
+    required this.type,
     required this.name,
     required this.icon,
     required this.isDefault,
@@ -207,10 +211,12 @@ class WoxResultAction {
     required this.isSystemAction,
     required this.resultId,
     required this.contextData,
+    required this.form,
   });
 
   WoxResultAction.fromJson(Map<String, dynamic> json) {
     id = json['Id'];
+    type = json['Type'] ?? "execute";
     name = json['Name'];
     icon = (json['Icon'] != null ? WoxImage.fromJson(json['Icon']) : null)!;
     isDefault = json['IsDefault'];
@@ -221,11 +227,17 @@ class WoxResultAction {
     isSystemAction = json['IsSystemAction'];
     resultId = json['ResultId'] ?? "";
     contextData = json['ContextData'] ?? "";
+    if (json['Form'] != null) {
+      form = (json['Form'] as List<dynamic>).map((e) => PluginSettingDefinitionItem.fromJson(e)).toList();
+    } else {
+      form = [];
+    }
   }
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
     data['Id'] = id;
+    data['Type'] = type;
     data['Name'] = name;
     data['Icon'] = icon.toJson();
     data['IsDefault'] = isDefault;
@@ -234,12 +246,30 @@ class WoxResultAction {
     data['IsSystemAction'] = isSystemAction;
     data['ResultId'] = resultId;
     data['ContextData'] = contextData;
+    data['Form'] = form
+        .map((e) => {
+              "Type": e.type,
+              "Value": e.value,
+              "DisabledInPlatforms": e.disabledInPlatforms,
+              "IsPlatformSpecific": e.isPlatformSpecific,
+            })
+        .toList();
     return data;
   }
 
   static WoxResultAction empty() {
     return WoxResultAction(
-        id: "", name: "", icon: WoxImage.empty(), isDefault: false, preventHideAfterAction: false, hotkey: "", isSystemAction: false, resultId: "", contextData: "");
+        id: "",
+        type: "execute",
+        name: "",
+        icon: WoxImage.empty(),
+        isDefault: false,
+        preventHideAfterAction: false,
+        hotkey: "",
+        isSystemAction: false,
+        resultId: "",
+        contextData: "",
+        form: []);
   }
 }
 

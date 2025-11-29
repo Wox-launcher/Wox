@@ -10,6 +10,7 @@ import (
 	"wox/common"
 	"wox/plugin"
 	"wox/setting"
+	"wox/setting/definition"
 	"wox/util/clipboard"
 
 	"github.com/tidwall/gjson"
@@ -40,6 +41,9 @@ type emojiUsage struct {
 type EmojiPlugin struct {
 	api    plugin.API
 	emojis []EmojiData
+
+	// emoji -> custom descriptions added by user
+	customDescriptions map[string][]string
 }
 
 func (e *EmojiPlugin) GetMetadata() plugin.Metadata {
@@ -79,6 +83,8 @@ func (e *EmojiPlugin) GetMetadata() plugin.Metadata {
 
 func (e *EmojiPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	e.api = initParams.API
+	e.customDescriptions = make(map[string][]string)
+	e.loadCustomDescriptions(ctx)
 	e.loadEmojis(ctx)
 }
 
@@ -134,6 +140,7 @@ func (e *EmojiPlugin) loadEmojis(ctx context.Context) {
 		return true
 	})
 
+	e.applyCustomDescriptions(ctx)
 	e.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Loaded %d emojis", len(e.emojis)))
 }
 
@@ -231,6 +238,45 @@ func (e *EmojiPlugin) createEmojiResult(ctx context.Context, entry EmojiData, is
 			},
 		},
 	}
+
+	existingDescriptions := strings.Join(e.customDescriptions[emoji], ", ")
+
+	result.Actions = append(result.Actions, plugin.QueryResultAction{
+		Name:                   "i18n:plugin_emoji_add_description",
+		Icon:                   common.AirdropIcon,
+		Type:                   plugin.QueryResultActionTypeForm,
+		PreventHideAfterAction: true,
+		Form: definition.PluginSettingDefinitions{
+			{
+				Type: definition.PluginSettingDefinitionTypeTextBox,
+				Value: &definition.PluginSettingValueTextBox{
+					Key:          "description",
+					Label:        "i18n:plugin_emoji_add_description_label",
+					DefaultValue: existingDescriptions,
+					Tooltip:      "i18n:plugin_emoji_add_description_hint",
+					MaxLines:     2,
+				},
+			},
+		},
+		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
+			raw := strings.TrimSpace(actionContext.Values["description"])
+			if raw == "" {
+				return
+			}
+			parts := strings.Split(raw, ",")
+			var descriptions []string
+			for _, p := range parts {
+				if trimmed := strings.TrimSpace(p); trimmed != "" {
+					descriptions = append(descriptions, trimmed)
+				}
+			}
+			if len(descriptions) == 0 {
+				return
+			}
+			e.addCustomDescriptions(ctx, emoji, descriptions)
+			e.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+		},
+	})
 
 	if isFrequentlyUsed {
 		result.Actions = append(result.Actions, plugin.QueryResultAction{
@@ -354,7 +400,109 @@ func (e *EmojiPlugin) matchEmoji(entry EmojiData, search string) bool {
 		}
 	}
 
+	// Match custom descriptions
+	if extras, ok := e.customDescriptions[entry.Emoji]; ok {
+		for _, desc := range extras {
+			if strings.Contains(strings.ToLower(desc), search) {
+				return true
+			}
+		}
+	}
+
 	return false
+}
+
+func (e *EmojiPlugin) loadCustomDescriptions(ctx context.Context) {
+	data := e.api.GetSetting(ctx, "customDescriptions")
+	if strings.TrimSpace(data) == "" {
+		return
+	}
+	var saved map[string][]string
+	if err := json.Unmarshal([]byte(data), &saved); err != nil {
+		e.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to parse custom descriptions: %v", err))
+		return
+	}
+	e.customDescriptions = saved
+}
+
+func (e *EmojiPlugin) addCustomDescriptions(ctx context.Context, emoji string, descriptions []string) {
+	var cleaned []string
+	for _, desc := range descriptions {
+		trimmed := strings.TrimSpace(desc)
+		if trimmed == "" {
+			continue
+		}
+		cleaned = append(cleaned, trimmed)
+	}
+	if len(cleaned) == 0 {
+		return
+	}
+
+	values := e.customDescriptions[emoji]
+	for _, v := range cleaned {
+		duplicate := false
+		for _, exist := range values {
+			if strings.EqualFold(strings.TrimSpace(exist), v) {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			values = append(values, v)
+		}
+	}
+	e.customDescriptions[emoji] = values
+
+	e.applyCustomDescriptions(ctx)
+
+	data, err := json.Marshal(e.customDescriptions)
+	if err != nil {
+		e.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to serialize custom descriptions: %v", err))
+		return
+	}
+	e.api.SaveSetting(ctx, "customDescriptions", string(data), false)
+}
+
+func (e *EmojiPlugin) applyCustomDescriptions(ctx context.Context) {
+	if len(e.customDescriptions) == 0 {
+		return
+	}
+
+	custom := make(map[string][]string)
+	for k, v := range e.customDescriptions {
+		for _, item := range v {
+			trimmed := strings.ToLower(strings.TrimSpace(item))
+			if trimmed == "" {
+				continue
+			}
+			custom[k] = append(custom[k], trimmed)
+		}
+	}
+
+	for i := range e.emojis {
+		terms := e.emojis[i].SearchTerms
+		if extra, ok := custom[e.emojis[i].Emoji]; ok {
+			terms = append(terms, extra...)
+		}
+		e.emojis[i].SearchTerms = uniqueLower(terms)
+	}
+}
+
+func uniqueLower(inputs []string) []string {
+	seen := make(map[string]bool)
+	var out []string
+	for _, v := range inputs {
+		l := strings.ToLower(strings.TrimSpace(v))
+		if l == "" {
+			continue
+		}
+		if seen[l] {
+			continue
+		}
+		seen[l] = true
+		out = append(out, l)
+	}
+	return out
 }
 
 func buildSearchTerms(maps ...map[string]string) []string {

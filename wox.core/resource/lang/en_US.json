@@ -560,5 +560,9 @@
   "selection_preview": "Preview",
   "selection_created_at": "Created At",
   "selection_modified_at": "Modified At",
-  "selection_size": "Size"
+  "selection_size": "Size",
+  "plugin_emoji_add_description": "Add description",
+  "plugin_emoji_add_description_label": "Description",
+  "ui_not_supported_field": "Field type not supported",
+  "plugin_emoji_add_description_hint": "Your custom description(s) for this emoji, separate multiple with commas."
 }
