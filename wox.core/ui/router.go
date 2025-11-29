@@ -899,8 +899,8 @@ func handleQueryMetadata(w http.ResponseWriter, r *http.Request) {
 		logger.Error(ctx, fmt.Sprintf("failed to get feature params for result preview width ratio: %s", err.Error()))
 	}
 
-	featureParamsGridLayout, ok := pluginInstance.Metadata.GetFeatureParamsForGridLayout()
-	if ok {
+	featureParamsGridLayout, err := pluginInstance.Metadata.GetFeatureParamsForGridLayout()
+	if err == nil {
 		metadata.IsGridLayout = true
 		metadata.GridLayoutParams = featureParamsGridLayout
 	} else {

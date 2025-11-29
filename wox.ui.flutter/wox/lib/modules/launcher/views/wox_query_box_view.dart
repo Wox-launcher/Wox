@@ -297,20 +297,21 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
             onDragEnd: () {
               controller.focusQueryBox();
             },
-            child: Container(
+            child: SizedBox(
               width: 55,
               height: 55,
-              color: Colors.transparent,
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: MouseRegion(
-                  cursor: controller.queryIcon.value.action != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
-                  child: GestureDetector(
-                    onTap: () {
-                      controller.queryIcon.value.action?.call();
-                      controller.focusQueryBox();
-                    },
-                    child: WoxImageView(woxImage: controller.queryIcon.value.icon, width: 24, height: 24),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: MouseRegion(
+                    cursor: controller.queryIcon.value.action != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+                    child: GestureDetector(
+                      onTap: () {
+                        controller.queryIcon.value.action?.call();
+                        controller.focusQueryBox();
+                      },
+                      child: WoxImageView(woxImage: controller.queryIcon.value.icon, width: 30, height: 30),
+                    ),
                   ),
                 ),
               ),

@@ -219,7 +219,7 @@ type MetadataFeatureParamsGridLayout struct {
 	ItemMargin  int  // margin outside each item (all sides), default 6
 }
 
-func (m *Metadata) GetFeatureParamsForGridLayout() (MetadataFeatureParamsGridLayout, bool) {
+func (m *Metadata) GetFeatureParamsForGridLayout() (MetadataFeatureParamsGridLayout, error) {
 	for _, feature := range m.Features {
 		if strings.EqualFold(feature.Name, MetadataFeatureGridLayout) {
 			params := MetadataFeatureParamsGridLayout{
@@ -230,8 +230,10 @@ func (m *Metadata) GetFeatureParamsForGridLayout() (MetadataFeatureParamsGridLay
 			}
 
 			if v, ok := feature.Params["Columns"]; ok {
-				if columns, err := strconv.Atoi(v); err == nil && columns > 0 {
+				if columns, err := strconv.Atoi(v); err == nil {
 					params.Columns = columns
+				} else {
+					return MetadataFeatureParamsGridLayout{}, fmt.Errorf("gridLayout feature Columns param is not a valid number: %s", err.Error())
 				}
 			}
 
@@ -240,20 +242,24 @@ func (m *Metadata) GetFeatureParamsForGridLayout() (MetadataFeatureParamsGridLay
 			}
 
 			if v, ok := feature.Params["ItemPadding"]; ok {
-				if padding, err := strconv.Atoi(v); err == nil && padding >= 0 {
+				if padding, err := strconv.Atoi(v); err == nil {
 					params.ItemPadding = padding
+				} else {
+					return MetadataFeatureParamsGridLayout{}, fmt.Errorf("gridLayout feature ItemPadding param is not a valid number: %s", err.Error())
 				}
 			}
 
 			if v, ok := feature.Params["ItemMargin"]; ok {
-				if margin, err := strconv.Atoi(v); err == nil && margin >= 0 {
+				if margin, err := strconv.Atoi(v); err == nil {
 					params.ItemMargin = margin
+				} else {
+					return MetadataFeatureParamsGridLayout{}, fmt.Errorf("gridLayout feature ItemMargin param is not a valid number: %s", err.Error())
 				}
 			}
 
-			return params, true
+			return params, nil
 		}
 	}
 
-	return MetadataFeatureParamsGridLayout{}, false
+	return MetadataFeatureParamsGridLayout{}, errors.New("plugin does not support gridLayout feature")
 }

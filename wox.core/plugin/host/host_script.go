@@ -109,9 +109,8 @@ func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Q
 	if err != nil {
 		requestJSON, _ := json.Marshal(request)
 		util.GetLogger().Error(ctx, fmt.Sprintf("script plugin query failed for %s: %s, raw request: %s", s.metadata.Name, err.Error(), requestJSON))
-		return []plugin.QueryResult{
-			plugin.GetPluginManager().GetResultForFailedQuery(ctx, s.metadata, query, err),
-		}
+		s.api.Notify(ctx, err.Error())
+		return []plugin.QueryResult{}
 	}
 
 	return results
