@@ -454,6 +454,7 @@
   "plugin_calculator_input_expression": "Введите выражение для вычисления",
   "plugin_emoji_copy": "Копировать эмодзи",
   "plugin_emoji_copy_large": "Копировать большой значок",
+  "plugin_emoji_remove_frequently_used": "Удалить из часто используемых",
   "plugin_emoji_frequently_used": "Часто используемые",
   "plugin_emoji_all": "Эмодзи",
   "plugin_file_open": "Открыть",

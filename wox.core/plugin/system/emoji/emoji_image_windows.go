@@ -99,8 +99,9 @@ func getNativeEmojiImage(emoji string, size int) (image.Image, error) {
 	setTextColor.Call(dc, 0x00FFFFFF) // white; color fonts ignore this
 
 	textPtr := utf16PtrFromString(emoji)
+	textLen := int32(-1) // null-terminated
 	var textRect rect
-	drawTextW.Call(dc, uintptr(unsafe.Pointer(textPtr)), -1, uintptr(unsafe.Pointer(&textRect)), dtCalcRect|dtSingleLine)
+	drawTextW.Call(dc, uintptr(unsafe.Pointer(textPtr)), uintptr(textLen), uintptr(unsafe.Pointer(&textRect)), dtCalcRect|dtSingleLine)
 
 	width := textRect.Right - textRect.Left
 	height := textRect.Bottom - textRect.Top
@@ -134,7 +135,7 @@ func getNativeEmojiImage(emoji string, size int) (image.Image, error) {
 	var drawRect rect
 	drawRect.Right = width
 	drawRect.Bottom = height
-	drawTextW.Call(dc, uintptr(unsafe.Pointer(textPtr)), -1, uintptr(unsafe.Pointer(&drawRect)), dtNoClip|dtCenter|dtVCenter|dtSingleLine)
+	drawTextW.Call(dc, uintptr(unsafe.Pointer(textPtr)), uintptr(textLen), uintptr(unsafe.Pointer(&drawRect)), dtNoClip|dtCenter|dtVCenter|dtSingleLine)
 
 	// copy pixels into Go image (bitmap is BGRA)
 	stride := int(width) * 4

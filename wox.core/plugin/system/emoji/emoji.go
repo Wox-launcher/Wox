@@ -159,7 +159,7 @@ func (e *EmojiPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 			continue
 		}
 
-		result := e.createEmojiResult(ctx, *entry)
+		result := e.createEmojiResult(ctx, *entry, true)
 		result.Group = "i18n:plugin_emoji_frequently_used"
 		result.GroupScore = 100
 		results = append(results, result)
@@ -175,7 +175,7 @@ func (e *EmojiPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 		}
 
 		if e.matchEmoji(entry, search) {
-			result := e.createEmojiResult(ctx, entry)
+			result := e.createEmojiResult(ctx, entry, false)
 			result.Group = e.getCategoryName(ctx, entry)
 			result.GroupScore = 50
 			results = append(results, result)
@@ -190,12 +190,12 @@ func (e *EmojiPlugin) Query(ctx context.Context, query plugin.Query) []plugin.Qu
 	return results
 }
 
-func (e *EmojiPlugin) createEmojiResult(ctx context.Context, entry EmojiData) plugin.QueryResult {
+func (e *EmojiPlugin) createEmojiResult(ctx context.Context, entry EmojiData, isFrequentlyUsed bool) plugin.QueryResult {
 	emoji := entry.Emoji
 	title := e.getDisplayName(ctx, entry)
 	subTitle := e.getSecondaryName(title, entry)
 
-	return plugin.QueryResult{
+	result := plugin.QueryResult{
 		Title:    title,
 		SubTitle: subTitle,
 		Icon:     common.NewWoxImageEmoji(emoji),
@@ -231,6 +231,20 @@ func (e *EmojiPlugin) createEmojiResult(ctx context.Context, entry EmojiData) pl
 			},
 		},
 	}
+
+	if isFrequentlyUsed {
+		result.Actions = append(result.Actions, plugin.QueryResultAction{
+			Name:                   "i18n:plugin_emoji_remove_frequently_used",
+			Icon:                   common.TrashIcon,
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				e.removeUsage(ctx, emoji)
+				e.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+			},
+		})
+	}
+
+	return result
 }
 
 func (e *EmojiPlugin) findEmoji(emoji string) *EmojiData {
@@ -295,6 +309,27 @@ func (e *EmojiPlugin) recordUsage(ctx context.Context, emoji string) {
 	}
 
 	data, err := json.Marshal(usages)
+	if err != nil {
+		e.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to serialize frequently used data: %v", err))
+		return
+	}
+	e.api.SaveSetting(ctx, "frequentlyUsed", string(data), false)
+}
+
+func (e *EmojiPlugin) removeUsage(ctx context.Context, emoji string) {
+	usages := e.getFrequentlyUsed(ctx)
+	if len(usages) == 0 {
+		return
+	}
+
+	filtered := usages[:0]
+	for _, usage := range usages {
+		if usage.Emoji != emoji {
+			filtered = append(filtered, usage)
+		}
+	}
+
+	data, err := json.Marshal(filtered)
 	if err != nil {
 		e.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to serialize frequently used data: %v", err))
 		return
