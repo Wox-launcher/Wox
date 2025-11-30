@@ -1,260 +1,358 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
-import 'package:wox/components/plugin/wox_setting_plugin_checkbox_view.dart';
-import 'package:wox/components/plugin/wox_setting_plugin_head_view.dart';
-import 'package:wox/components/plugin/wox_setting_plugin_label_view.dart';
-import 'package:wox/components/plugin/wox_setting_plugin_newline_view.dart';
-import 'package:wox/components/plugin/wox_setting_plugin_select_ai_model_view.dart';
-import 'package:wox/components/plugin/wox_setting_plugin_select_view.dart';
-import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
-import 'package:wox/components/plugin/wox_setting_plugin_textbox_view.dart';
+import 'package:flutter/services.dart';
+import 'package:wox/components/wox_button.dart';
+import 'package:wox/components/wox_checkbox.dart';
+import 'package:wox/components/wox_dropdown_button.dart';
+import 'package:wox/components/wox_textfield.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_checkbox.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_head.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_label.dart';
-import 'package:wox/entity/setting/wox_plugin_setting_newline.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_select.dart';
-import 'package:wox/entity/setting/wox_plugin_setting_select_ai_model.dart';
-import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_textbox.dart';
 import 'package:wox/entity/wox_plugin_setting.dart';
 import 'package:wox/entity/wox_query.dart';
-import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/colors.dart';
-import 'package:wox/utils/wox_theme_util.dart';
 
+/// A form panel for collecting form action values
 class WoxFormActionView extends StatefulWidget {
   final WoxResultAction action;
   final Map<String, String> initialValues;
   final String Function(String key) translate;
+  final void Function(Map<String, String> values) onSave;
+  final VoidCallback onCancel;
 
   const WoxFormActionView({
     super.key,
     required this.action,
     required this.initialValues,
     required this.translate,
+    required this.onSave,
+    required this.onCancel,
   });
-
-  static Future<Map<String, String>?> collectValues({
-    required WoxResultAction action,
-    required String Function(String key) translate,
-  }) async {
-    // Nothing to collect
-    if (action.form.isEmpty) {
-      return {};
-    }
-
-    final initialValues = <String, String>{};
-    for (final item in action.form) {
-      final key = _getItemKey(item);
-      if (key != null) {
-        final defaultValue = _getDefaultValue(item);
-        initialValues[key] = defaultValue;
-      }
-    }
-
-    final overlayCtx = Get.overlayContext ?? Get.context ?? Get.key.currentContext;
-    if (overlayCtx == null) {
-      return null;
-    }
-
-    return await showDialog<Map<String, String>?>(
-      context: overlayCtx,
-      barrierDismissible: true,
-      builder: (_) => WoxFormActionView(
-        action: action,
-        initialValues: initialValues,
-        translate: translate,
-      ),
-    );
-  }
 
   @override
   State<WoxFormActionView> createState() => _WoxFormActionViewState();
-
-  static String _getDefaultValue(PluginSettingDefinitionItem item) {
-    switch (item.type) {
-      case "checkbox":
-        return (item.value as PluginSettingValueCheckBox).defaultValue;
-      case "textbox":
-        return (item.value as PluginSettingValueTextBox).defaultValue;
-      case "select":
-        return (item.value as PluginSettingValueSelect).defaultValue;
-      case "selectAIModel":
-        return (item.value as PluginSettingValueSelectAIModel).defaultValue;
-      case "table":
-        return (item.value as PluginSettingValueTable).defaultValue;
-      default:
-        return "";
-    }
-  }
-
-  static String? _getItemKey(PluginSettingDefinitionItem item) {
-    switch (item.type) {
-      case "checkbox":
-        return (item.value as PluginSettingValueCheckBox).key;
-      case "textbox":
-        return (item.value as PluginSettingValueTextBox).key;
-      case "select":
-        return (item.value as PluginSettingValueSelect).key;
-      case "selectAIModel":
-        return (item.value as PluginSettingValueSelectAIModel).key;
-      case "table":
-        return (item.value as PluginSettingValueTable).key;
-      default:
-        return null;
-    }
-  }
 }
 
 class _WoxFormActionViewState extends State<WoxFormActionView> {
-  late Map<String, String> values;
+  final FocusNode _firstFocusNode = FocusNode();
+  int _firstFocusableIndex = -1;
+  late Map<String, String> _values;
+  final Map<String, TextEditingController> _textControllers = {};
+  double _maxLabelWidth = 60;
 
   @override
   void initState() {
     super.initState();
-    values = Map<String, String>.from(widget.initialValues);
+    _values = Map<String, String>.from(widget.initialValues);
+
+    // Find first focusable control, init text controllers, and calculate max label width
+    for (int i = 0; i < widget.action.form.length; i++) {
+      final item = widget.action.form[i];
+      if (item.type == "textbox") {
+        if (_firstFocusableIndex == -1) {
+          _firstFocusableIndex = i;
+        }
+        final textbox = item.value as PluginSettingValueTextBox;
+        _textControllers[textbox.key] = TextEditingController(
+          text: _values[textbox.key] ?? textbox.defaultValue,
+        );
+        if (textbox.style.labelWidth > _maxLabelWidth) {
+          _maxLabelWidth = textbox.style.labelWidth.toDouble();
+        }
+      } else if (item.type == "select") {
+        final select = item.value as PluginSettingValueSelect;
+        if (select.style.labelWidth > _maxLabelWidth) {
+          _maxLabelWidth = select.style.labelWidth.toDouble();
+        }
+      }
+    }
+
+    // Request focus on the first focusable control after build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _firstFocusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _firstFocusNode.dispose();
+    for (var controller in _textControllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  void _handleSave() {
+    widget.onSave(_values);
+  }
+
+  void _updateValue(String key, String value) {
+    setState(() {
+      _values[key] = value;
+    });
+  }
+
+  Color get _textColor => getThemeTextColor();
+
+  String _tr(String key) {
+    return widget.translate(key);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.appBackgroundColor),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 520),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Flexible(
-                    child: Text(
-                      widget.action.name,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    color: getThemeTextColor(),
-                    onPressed: () => Navigator.of(context).pop(null),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Wrap(
-                    runSpacing: 8,
-                    spacing: 8,
-                    children: widget.action.form.map(_buildField).toList(),
-                  ),
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter, control: true): _handleSave,
+        const SingleActivator(LogicalKeyboardKey.escape): widget.onCancel,
+      },
+      child: Focus(
+        autofocus: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ...widget.action.form.asMap().entries.map((entry) => _buildField(entry.key, entry.value)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                WoxButton.secondary(
+                  text: "${_tr("ui_cancel")} (Esc)",
+                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                  onPressed: widget.onCancel,
                 ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(null),
-                    child: Text(widget.translate("ui_cancel")),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(values),
-                    child: Text(widget.translate("ui_save")),
-                  ),
-                ],
-              ),
-            ],
-          ),
+                const SizedBox(width: 12),
+                WoxButton.primary(
+                  text: "${_tr("ui_save")} (Ctrl+Enter)",
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                  onPressed: _handleSave,
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildField(PluginSettingDefinitionItem item) {
+  Widget _buildField(int index, PluginSettingDefinitionItem item) {
+    final isFirstFocusable = index == _firstFocusableIndex;
+
     switch (item.type) {
       case "checkbox":
         final checkbox = item.value as PluginSettingValueCheckBox;
-        return WoxSettingPluginCheckbox(
-          value: values[checkbox.key] ?? "",
-          item: checkbox,
-          onUpdate: (key, value) {
-            setState(() {
-              values[key] = value;
-            });
-          },
-        );
+        return _buildCheckbox(checkbox);
       case "textbox":
         final textbox = item.value as PluginSettingValueTextBox;
-        return WoxSettingPluginTextBox(
-          value: values[textbox.key] ?? "",
-          item: textbox,
-          onUpdate: (key, value) {
-            setState(() {
-              values[key] = value;
-            });
-          },
-        );
+        return _buildTextbox(textbox, isFirstFocusable);
       case "select":
         final select = item.value as PluginSettingValueSelect;
-        return WoxSettingPluginSelect(
-          value: values[select.key] ?? "",
-          item: select,
-          onUpdate: (key, value) {
-            setState(() {
-              values[key] = value;
-            });
-          },
-        );
-      case "selectAIModel":
-        final select = item.value as PluginSettingValueSelectAIModel;
-        return WoxSettingPluginSelectAIModel(
-          value: values[select.key] ?? "",
-          item: select,
-          onUpdate: (key, value) {
-            setState(() {
-              values[key] = value;
-            });
-          },
-        );
-      case "table":
-        final table = item.value as PluginSettingValueTable;
-        return WoxSettingPluginTable(
-          value: values[table.key] ?? "",
-          item: table,
-          onUpdate: (key, value) {
-            setState(() {
-              values[key] = value;
-            });
-          },
-        );
+        return _buildSelect(select);
       case "head":
-        return WoxSettingPluginHead(
-          value: "",
-          item: item.value as PluginSettingValueHead,
-          onUpdate: (_, __) {},
-        );
+        final head = item.value as PluginSettingValueHead;
+        return _buildHead(head);
       case "label":
-        return WoxSettingPluginLabel(
-          value: "",
-          item: item.value as PluginSettingValueLabel,
-          onUpdate: (_, __) {},
-        );
+        final label = item.value as PluginSettingValueLabel;
+        return _buildLabel(label);
       case "newline":
-        return WoxSettingPluginNewLine(
-          value: "",
-          item: item.value as PluginSettingValueNewLine,
-          onUpdate: (_, __) {},
-        );
+        return const SizedBox(height: 8);
       default:
-        return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            widget.translate("ui_not_supported_field"),
+            style: TextStyle(color: getThemeTextColor(), fontSize: 12),
+          ),
+        );
     }
+  }
+
+  Widget _buildCheckbox(PluginSettingValueCheckBox item) {
+    final currentValue = _values[item.key] ?? item.defaultValue;
+    final isChecked = currentValue == "true";
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: _maxLabelWidth,
+                child: Text(
+                  _tr(item.label),
+                  style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(width: 10),
+              WoxCheckbox(
+                value: isChecked,
+                onChanged: (value) {
+                  _updateValue(item.key, value.toString());
+                },
+              ),
+            ],
+          ),
+          if (item.tooltip.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(top: 4, left: _maxLabelWidth + 10),
+              child: Text(
+                _tr(item.tooltip),
+                style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTextbox(PluginSettingValueTextBox item, bool isFirstFocusable) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: _maxLabelWidth,
+                child: Text(
+                  _tr(item.label),
+                  style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: WoxTextField(
+                  controller: _textControllers[item.key],
+                  focusNode: isFirstFocusable ? _firstFocusNode : null,
+                  maxLines: item.maxLines > 0 ? item.maxLines : 1,
+                  onChanged: (value) {
+                    _updateValue(item.key, value);
+                  },
+                ),
+              ),
+              if (item.suffix.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                Text(
+                  _tr(item.suffix),
+                  style: TextStyle(color: _textColor, fontSize: 13),
+                ),
+              ],
+            ],
+          ),
+          if (item.tooltip.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(top: 4, left: _maxLabelWidth + 10),
+              child: Text(
+                _tr(item.tooltip),
+                style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelect(PluginSettingValueSelect item) {
+    final currentValue = _values[item.key] ?? item.defaultValue;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: _maxLabelWidth,
+                child: Text(
+                  _tr(item.label),
+                  style: TextStyle(color: _textColor.withValues(alpha: 0.92), fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: WoxDropdownButton<String>(
+                  value: currentValue,
+                  isExpanded: true,
+                  fontSize: 13,
+                  onChanged: (value) {
+                    if (value != null) {
+                      _updateValue(item.key, value);
+                    }
+                  },
+                  items: item.options.map((option) {
+                    return WoxDropdownItem(
+                      value: option.value,
+                      label: _tr(option.label),
+                    );
+                  }).toList(),
+                ),
+              ),
+              if (item.suffix.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                Text(
+                  _tr(item.suffix),
+                  style: TextStyle(color: _textColor, fontSize: 13),
+                ),
+              ],
+            ],
+          ),
+          if (item.tooltip.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(top: 4, left: _maxLabelWidth + 10),
+              child: Text(
+                _tr(item.tooltip),
+                style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHead(PluginSettingValueHead item) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, top: 8),
+      child: Text(
+        _tr(item.content),
+        style: TextStyle(
+          color: _textColor,
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLabel(PluginSettingValueLabel item) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(left: _maxLabelWidth + 10),
+            child: Text(
+              _tr(item.content),
+              style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12),
+            ),
+          ),
+          if (item.tooltip.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(top: 4, left: _maxLabelWidth + 10),
+              child: Text(
+                _tr(item.tooltip),
+                style: TextStyle(color: _textColor.withValues(alpha: 0.6), fontSize: 12),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }

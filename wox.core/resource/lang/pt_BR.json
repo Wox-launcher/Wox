@@ -557,8 +557,8 @@
   "selection_created_at": "Criado em",
   "selection_modified_at": "Modificado em",
   "selection_size": "Tamanho",
-  "plugin_emoji_add_description": "Adicionar descrição",
-  "plugin_emoji_add_description_label": "Descrição",
-  "ui_not_supported_field": "Tipo de campo não suportado",
-  "plugin_emoji_add_description_hint": "Adicione descrições personalizadas para este emoji, separadas por vírgulas."
+  "plugin_emoji_add_keyword": "Adicionar palavra-chave",
+  "plugin_emoji_add_keyword_label": "Palavra-chave",
+  "plugin_emoji_add_keyword_hint": "Adicione palavras-chave personalizadas para encontrar este emoji mais rápido, separadas por vírgulas.",
+  "ui_not_supported_field": "Tipo de campo não suportado"
 }

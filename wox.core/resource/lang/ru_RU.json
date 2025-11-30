@@ -556,8 +556,8 @@
   "selection_created_at": "Создано",
   "selection_modified_at": "Изменено",
   "selection_size": "Размер",
-  "plugin_emoji_add_description": "Добавить описание",
-  "plugin_emoji_add_description_label": "Описание",
-  "ui_not_supported_field": "Тип поля не поддерживается",
-  "plugin_emoji_add_description_hint": "Добавьте свои описания для этого эмодзи, разделяйте запятыми."
+  "plugin_emoji_add_keyword": "Добавить ключевое слово",
+  "plugin_emoji_add_keyword_label": "Ключевое слово",
+  "plugin_emoji_add_keyword_hint": "Добавьте ключевые слова для быстрого поиска этого эмодзи, разделяйте запятыми.",
+  "ui_not_supported_field": "Тип поля не поддерживается"
 }

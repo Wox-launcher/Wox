@@ -242,7 +242,7 @@ func (e *EmojiPlugin) createEmojiResult(ctx context.Context, entry EmojiData, is
 	existingDescriptions := strings.Join(e.customDescriptions[emoji], ", ")
 
 	result.Actions = append(result.Actions, plugin.QueryResultAction{
-		Name:                   "i18n:plugin_emoji_add_description",
+		Name:                   "i18n:plugin_emoji_add_keyword",
 		Icon:                   common.AirdropIcon,
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
@@ -250,16 +250,16 @@ func (e *EmojiPlugin) createEmojiResult(ctx context.Context, entry EmojiData, is
 			{
 				Type: definition.PluginSettingDefinitionTypeTextBox,
 				Value: &definition.PluginSettingValueTextBox{
-					Key:          "description",
-					Label:        "i18n:plugin_emoji_add_description_label",
+					Key:          "keyword",
+					Label:        "i18n:plugin_emoji_add_keyword_label",
 					DefaultValue: existingDescriptions,
-					Tooltip:      "i18n:plugin_emoji_add_description_hint",
+					Tooltip:      "i18n:plugin_emoji_add_keyword_hint",
 					MaxLines:     2,
 				},
 			},
 		},
 		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
-			raw := strings.TrimSpace(actionContext.Values["description"])
+			raw := strings.TrimSpace(actionContext.Values["keyword"])
 			if raw == "" {
 				return
 			}

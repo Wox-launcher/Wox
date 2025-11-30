@@ -561,8 +561,8 @@
   "selection_created_at": "创建时间",
   "selection_modified_at": "修改时间",
   "selection_size": "大小",
-  "plugin_emoji_add_description": "添加描述",
-  "plugin_emoji_add_description_label": "描述",
-  "ui_not_supported_field": "该字段类型暂不支持",
-  "plugin_emoji_add_description_hint": "为该表情添加自定义描述，多个描述用逗号分隔。"
+  "plugin_emoji_add_keyword": "添加关键字",
+  "plugin_emoji_add_keyword_label": "关键字",
+  "plugin_emoji_add_keyword_hint": "添加自定义关键字，帮助您更快搜索到该表情，多个关键字用逗号分隔。",
+  "ui_not_supported_field": "该字段类型暂不支持"
 }

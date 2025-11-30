@@ -182,6 +182,7 @@ class WoxLauncherController extends GetxController {
       if (queryBoxFocusNode.hasFocus) {
         var traceId = const UuidV4().generate();
         hideActionPanel(traceId);
+        hideFormActionPanel(traceId);
 
         // Call API when query box gains focus
         WoxApi.instance.onQueryBoxFocus();
@@ -389,10 +390,12 @@ class WoxLauncherController extends GetxController {
       currentQuery.value = PlainQuery.emptyInput();
       queryBoxTextFieldController.clear();
       hideActionPanel(traceId);
+      hideFormActionPanel(traceId);
       await clearQueryResults(traceId);
     }
 
     hideActionPanel(traceId);
+    hideFormActionPanel(traceId);
 
     // Clean up quick select state
     if (isQuickSelectMode.value) {
@@ -582,7 +585,7 @@ class WoxLauncherController extends GetxController {
     }
   }
 
-  Future<void> submitFormAction(String traceId) async {
+  Future<void> submitFormAction(String traceId, Map<String, String> values) async {
     final action = activeFormAction.value;
     final resultId = activeFormResultId.value;
     if (action == null || resultId.isEmpty) {
@@ -596,7 +599,7 @@ class WoxLauncherController extends GetxController {
         traceId: traceId,
         type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
         method: WoxMsgMethodEnum.WOX_MSG_METHOD_FORM_ACTION.code,
-        data: {"resultId": resultId, "actionId": action.id, "values": formActionValues},
+        data: {"resultId": resultId, "actionId": action.id, "values": values},
       ),
     );
 
