@@ -619,15 +619,17 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       DWORD fgTid = 0;
       if (fg)
       {
-        GetWindowThreadProcessId(fg, &fgTid);
+        // GetWindowThreadProcessId returns the thread ID, second param is for process ID (optional)
+        fgTid = GetWindowThreadProcessId(fg, nullptr);
       }
 
       bool attached = false;
-      if (fg && fgTid != curTid)
+      if (fg && fgTid != 0 && fgTid != curTid)
       {
         attached = AttachThreadInput(fgTid, curTid, TRUE);
       }
 
+      // Try to set foreground window after attaching thread input
       SetForegroundWindow(hwnd);
       SetFocus(hwnd);
       BringWindowToTop(hwnd);
@@ -659,9 +661,29 @@ void FlutterWindow::HandleWindowManagerMethodCall(
       pInputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
 
       SendInput(2, pInputs, sizeof(INPUT));
-      SetForegroundWindow(hwnd);
 
-      Log("Focus: use Alt key injection");
+      // Small delay to allow the system to process the Alt key
+      Sleep(10);
+
+      SetForegroundWindow(hwnd);
+      SetFocus(hwnd);
+      BringWindowToTop(hwnd);
+
+      if (GetForegroundWindow() == hwnd)
+      {
+        Log("Focus: use Alt key injection");
+        result->Success();
+        return;
+      }
+
+      // 3. Last resort: Use AllowSetForegroundWindow approach
+      // This happens when both methods above fail
+      Log("Focus: both methods failed, trying AllowSetForegroundWindow");
+      AllowSetForegroundWindow(ASFW_ANY);
+      SetForegroundWindow(hwnd);
+      SetFocus(hwnd);
+
+      Log("Focus: final attempt completed");
       result->Success();
     }
     else if (method_name == "isVisible")
