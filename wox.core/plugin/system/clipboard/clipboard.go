@@ -64,6 +64,7 @@ type ClipboardDBInterface interface {
 	Insert(ctx context.Context, record ClipboardRecord) error
 	Update(ctx context.Context, record ClipboardRecord) error
 	UpdateTimestamp(ctx context.Context, id string, timestamp int64) error
+	UpdateContent(ctx context.Context, id string, content string) error
 	Delete(ctx context.Context, id string) error
 	GetRecent(ctx context.Context, limit, offset int) ([]ClipboardRecord, error)
 	SearchText(ctx context.Context, searchTerm string, limit int) ([]ClipboardRecord, error)
@@ -484,7 +485,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 
 	actions := []plugin.QueryResultAction{
 		{
-			Name:      "Copy",
+			Name:      "i18n:plugin_clipboard_copy",
 			Icon:      common.CopyIcon,
 			IsDefault: primaryActionValueCopy == primaryActionCode,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -505,7 +506,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 
 	if !record.IsFavorite {
 		actions = append(actions, plugin.QueryResultAction{
-			Name:                   "Mark as favorite",
+			Name:                   "i18n:plugin_clipboard_mark_favorite",
 			Icon:                   common.PinIcon,
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -519,7 +520,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 		})
 	} else {
 		actions = append(actions, plugin.QueryResultAction{
-			Name:                   "Cancel favorite",
+			Name:                   "i18n:plugin_clipboard_cancel_favorite",
 			Icon:                   common.UnpinIcon,
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -535,7 +536,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 
 	// Delete action (works for both history and favorites)
 	actions = append(actions, plugin.QueryResultAction{
-		Name:                   "Delete",
+		Name:                   "i18n:plugin_clipboard_delete",
 		Icon:                   common.TrashIcon,
 		PreventHideAfterAction: true,
 		Hotkey:                 "Ctrl+D",
@@ -546,6 +547,57 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 			}
 			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("deleted clipboard record: %s", record.ID))
 			c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+		},
+	})
+
+	// add edit action to edit text content
+	actions = append(actions, plugin.QueryResultAction{
+		Name:                   "i18n:plugin_clipboard_edit_text",
+		Icon:                   common.CopyIcon,
+		Type:                   plugin.QueryResultActionTypeForm,
+		PreventHideAfterAction: true,
+		Form: definition.PluginSettingDefinitions{
+			{
+				Type: definition.PluginSettingDefinitionTypeTextBox,
+				Value: &definition.PluginSettingValueTextBox{
+					Key:          "content",
+					Label:        "i18n:plugin_clipboard_edit_text_label",
+					DefaultValue: record.Content,
+					Tooltip:      "i18n:plugin_clipboard_edit_text_hint",
+					MaxLines:     5,
+				},
+			},
+		},
+		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
+			raw := actionContext.Values["content"]
+			if raw == "" {
+				return
+			}
+
+			isUpdateSuccess := false
+			// if record is favorite, update in settings, else update in database
+			if record.IsFavorite {
+				if err := c.updateFavoriteContent(ctx, record.ID, raw); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update favorite content: %s", err.Error()))
+					c.api.Notify(ctx, "Failed to update favorite content: "+err.Error())
+				} else {
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated favorite record content: %s", record.ID))
+					isUpdateSuccess = true
+				}
+			} else {
+				if err := c.db.UpdateContent(ctx, record.ID, raw); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update content: %s", err.Error()))
+					c.api.Notify(ctx, "Failed to update clipboard content: "+err.Error())
+				} else {
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated clipboard record content: %s", record.ID))
+					isUpdateSuccess = true
+				}
+			}
+
+			if isUpdateSuccess {
+				// Refresh query to update all result data including form default values and action closures
+				c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+			}
 		},
 	})
 
@@ -1143,6 +1195,22 @@ func (c *ClipboardPlugin) cancelFavorite(ctx context.Context, id string) error {
 	}
 
 	return nil
+}
+
+func (c *ClipboardPlugin) updateFavoriteContent(ctx context.Context, id string, newContent string) error {
+	favorites, err := c.getFavoriteItems(ctx)
+	if err != nil {
+		return err
+	}
+
+	for i := range favorites {
+		if favorites[i].ID == id {
+			favorites[i].Content = newContent
+			return c.saveFavoriteItems(ctx, favorites)
+		}
+	}
+
+	return fmt.Errorf("favorite item not found: %s", id)
 }
 
 // updateRecordTimestamp updates the timestamp of a record in the appropriate storage

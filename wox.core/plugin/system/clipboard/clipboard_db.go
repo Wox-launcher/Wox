@@ -167,6 +167,13 @@ func (c *ClipboardDB) UpdateTimestamp(ctx context.Context, id string, timestamp 
 	return err
 }
 
+// UpdateContent updates the content of a record
+func (c *ClipboardDB) UpdateContent(ctx context.Context, id string, content string) error {
+	updateSQL := `UPDATE clipboard_history SET content = ? WHERE id = ?`
+	_, err := c.db.ExecContext(ctx, updateSQL, content, id)
+	return err
+}
+
 // Delete removes a record by ID
 func (c *ClipboardDB) Delete(ctx context.Context, id string) error {
 	deleteSQL := `DELETE FROM clipboard_history WHERE id = ?`
