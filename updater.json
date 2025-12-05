@@ -1,12 +1,10 @@
 {
-  "Version": "2.0.0-beta.3",
-  "MacArm64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.0-beta.3/wox-mac-arm64.dmg",
-  "MacArm64Checksum": "0ded8c099b6c9fa4d43c9b0ab5d48b67",
-  "MacAmd64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.0-beta.3/wox-mac-amd64.dmg",
-  "MacAmd64Checksum": "b47c0b2c3cd3ad2d3f6cb87ee199d44c",
-  "WindowsDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.0-beta.3/wox-windows-amd64.exe",
-  "WindowsChecksum": "6e6455b23ab7f43e03be4e9771afa2ca",
-  "LinuxDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.0-beta.3/wox-linux-amd64",
-  "LinuxChecksum": "4b972f060ea2cebe2ba85320a3dab983",
-  "ReleaseNotes": "1. Fix issue where Windows sometimes cannot gain focus #4198. \n 2. [Chat plugin], support multiple tool calls executed simultaneously in a single request. \n 3. [Chat plugin], support custom agents. \n 4. Support ScriptPlugin"
+  "Version": "2.0.0-beta.6",
+  "MacArm64DownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.0-beta.6/wox-mac-arm64.dmg",
+  "MacArm64Checksum": "f65c56aebaa26eaf4053bba251f0698b",
+  "WindowsDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.0-beta.6/wox-windows-amd64.exe",
+  "WindowsChecksum": "5904573e84514034fc093aef70a3332c",
+  "LinuxDownloadUrl": "https://github.com/Wox-launcher/Wox/releases/download/v2.0.0-beta.6/wox-linux-amd64",
+  "LinuxChecksum": "8d6f10103b27c680cd0c495d56ac790e",
+  "ReleaseNotes": "1. Add emoji plugin. \n 2. Add Launch Mode and Start Page setting"
 }
