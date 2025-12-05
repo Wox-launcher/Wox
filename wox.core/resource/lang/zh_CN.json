@@ -278,6 +278,7 @@
   "plugin_clipboard_edit_alias_hint": "为此项设置自定义别名",
   "plugin_indicator_activate": "激活",
   "plugin_indicator_activate_plugin": "激活%s插件",
+  "plugin_paste_to_window": "粘贴到%s",
   "plugin_sys_empty_trash": "清空回收站",
   "plugin_sys_lock_computer": "锁定电脑",
   "plugin_sys_execute": "执行",

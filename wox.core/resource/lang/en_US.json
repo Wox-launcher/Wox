@@ -277,6 +277,7 @@
   "plugin_clipboard_edit_alias_hint": "Set a custom alias for this item",
   "plugin_indicator_activate": "Activate",
   "plugin_indicator_activate_plugin": "Activate the %s plugin",
+  "plugin_paste_to_window": "Paste to %s",
   "plugin_sys_empty_trash": "Empty Trash",
   "plugin_sys_lock_computer": "Lock PC",
   "plugin_sys_execute": "Execute",

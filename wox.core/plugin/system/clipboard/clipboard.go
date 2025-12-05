@@ -729,7 +729,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 		Score: record.Timestamp,
 		Actions: []plugin.QueryResultAction{
 			{
-				Name: "Copy to clipboard",
+				Name: "i18n:plugin_clipboard_primary_action_copy_to_clipboard",
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					c.moveRecordToTop(ctx, record.ID)
 					// Load image from disk and copy to clipboard
@@ -741,7 +741,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 				},
 			},
 			{
-				Name:                   "Delete",
+				Name:                   "i18n:plugin_clipboard_delete",
 				Icon:                   common.TrashIcon,
 				PreventHideAfterAction: true,
 				Hotkey:                 "Ctrl+D",

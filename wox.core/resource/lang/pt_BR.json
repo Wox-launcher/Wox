@@ -272,6 +272,7 @@
   "plugin_clipboard_edit_text_hint": "Editar conteúdo de texto da área de transferência",
   "plugin_indicator_activate": "Ativar",
   "plugin_indicator_activate_plugin": "Ativar o plugin %s",
+  "plugin_paste_to_window": "Colar em %s",
   "plugin_sys_empty_trash": "Esvaziar lixeira",
   "plugin_sys_lock_computer": "Bloquear PC",
   "plugin_sys_execute": "Executar",

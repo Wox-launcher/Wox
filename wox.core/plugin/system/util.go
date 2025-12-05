@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 	"wox/common"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
 	"wox/util"
@@ -220,7 +221,7 @@ func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, actionCal
 		windowIconImage, err := common.NewWoxImage(windowIcon)
 		if err == nil {
 			return plugin.QueryResultAction{
-				Name:      "Paste to " + windowName,
+				Name:      fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_paste_to_window"), windowName),
 				Icon:      windowIconImage,
 				IsDefault: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {

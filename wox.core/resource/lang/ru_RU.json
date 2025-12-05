@@ -272,6 +272,7 @@
   "plugin_clipboard_edit_text_hint": "Редактировать текстовое содержимое буфера обмена",
   "plugin_indicator_activate": "Активировать",
   "plugin_indicator_activate_plugin": "Активировать плагин %s",
+  "plugin_paste_to_window": "Вставить в %s",
   "plugin_sys_empty_trash": "Очистить корзину",
   "plugin_sys_lock_computer": "Заблокировать ПК",
   "plugin_sys_execute": "Выполнить",
