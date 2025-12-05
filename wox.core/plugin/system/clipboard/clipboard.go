@@ -55,6 +55,7 @@ type FavoriteClipboardItem struct {
 	Width     *int    `json:"width,omitempty"`
 	Height    *int    `json:"height,omitempty"`
 	FileSize  *int64  `json:"fileSize,omitempty"`
+	Alias     *string `json:"alias,omitempty"`
 	Timestamp int64   `json:"timestamp"`
 	CreatedAt int64   `json:"createdAt"`
 }
@@ -65,6 +66,7 @@ type ClipboardDBInterface interface {
 	Update(ctx context.Context, record ClipboardRecord) error
 	UpdateTimestamp(ctx context.Context, id string, timestamp int64) error
 	UpdateContent(ctx context.Context, id string, content string) error
+	UpdateAlias(ctx context.Context, id string, alias *string) error
 	Delete(ctx context.Context, id string) error
 	GetRecent(ctx context.Context, limit, offset int) ([]ClipboardRecord, error)
 	SearchText(ctx context.Context, searchTerm string, limit int) ([]ClipboardRecord, error)
@@ -553,7 +555,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	// add edit action to edit text content
 	actions = append(actions, plugin.QueryResultAction{
 		Name:                   "i18n:plugin_clipboard_edit_text",
-		Icon:                   common.CopyIcon,
+		Icon:                   common.EditIcon,
 		Type:                   plugin.QueryResultActionTypeForm,
 		PreventHideAfterAction: true,
 		Form: definition.PluginSettingDefinitions{
@@ -564,7 +566,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 					Label:        "i18n:plugin_clipboard_edit_text_label",
 					DefaultValue: record.Content,
 					Tooltip:      "i18n:plugin_clipboard_edit_text_hint",
-					MaxLines:     5,
+					MaxLines:     10,
 				},
 			},
 		},
@@ -601,6 +603,61 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 		},
 	})
 
+	// add edit alias action
+	aliasDefaultValue := ""
+	if record.Alias != nil {
+		aliasDefaultValue = *record.Alias
+	}
+	actions = append(actions, plugin.QueryResultAction{
+		Name:                   "i18n:plugin_clipboard_edit_alias",
+		Icon:                   common.EditIcon,
+		Type:                   plugin.QueryResultActionTypeForm,
+		PreventHideAfterAction: true,
+		Form: definition.PluginSettingDefinitions{
+			{
+				Type: definition.PluginSettingDefinitionTypeTextBox,
+				Value: &definition.PluginSettingValueTextBox{
+					Key:          "alias",
+					Label:        "i18n:plugin_clipboard_edit_alias_label",
+					DefaultValue: aliasDefaultValue,
+					Tooltip:      "i18n:plugin_clipboard_edit_alias_hint",
+				},
+			},
+		},
+		OnSubmit: func(ctx context.Context, actionContext plugin.FormActionContext) {
+			raw := actionContext.Values["alias"]
+			var aliasPtr *string
+			if raw != "" {
+				aliasPtr = &raw
+			}
+
+			isUpdateSuccess := false
+			// if record is favorite, update in settings, else update in database
+			if record.IsFavorite {
+				if err := c.updateFavoriteAlias(ctx, record.ID, aliasPtr); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update favorite alias: %s", err.Error()))
+					c.api.Notify(ctx, "Failed to update favorite alias: "+err.Error())
+				} else {
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated favorite record alias: %s", record.ID))
+					isUpdateSuccess = true
+				}
+			} else {
+				if err := c.db.UpdateAlias(ctx, record.ID, aliasPtr); err != nil {
+					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update alias: %s", err.Error()))
+					c.api.Notify(ctx, "Failed to update clipboard alias: "+err.Error())
+				} else {
+					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated clipboard record alias: %s", record.ID))
+					isUpdateSuccess = true
+				}
+			}
+
+			if isUpdateSuccess {
+				// Refresh query to update all result data including form default values and action closures
+				c.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+			}
+		},
+	})
+
 	group, groupScore := c.getResultGroup(ctx, record)
 
 	// Use stored icon data if available, otherwise use default text icon
@@ -611,8 +668,16 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 		}
 	}
 
+	// Determine title: use alias if set, otherwise use content
+	var title string
+	if record.Alias != nil && *record.Alias != "" {
+		title = *record.Alias
+	} else {
+		title = strings.TrimSpace(ellipsis.Centering(record.Content, 80))
+	}
+
 	return plugin.QueryResult{
-		Title:      strings.TrimSpace(ellipsis.Centering(record.Content, 80)),
+		Title:      title,
 		Icon:       icon,
 		Group:      group,
 		GroupScore: groupScore,
@@ -1104,6 +1169,7 @@ func (c *ClipboardPlugin) addToFavorites(ctx context.Context, record ClipboardRe
 		Width:     record.Width,
 		Height:    record.Height,
 		FileSize:  record.FileSize,
+		Alias:     record.Alias,
 		Timestamp: record.Timestamp,
 		CreatedAt: record.CreatedAt.Unix(),
 	}
@@ -1141,6 +1207,7 @@ func (c *ClipboardPlugin) convertFavoriteToRecord(item FavoriteClipboardItem) Cl
 		Width:      item.Width,
 		Height:     item.Height,
 		FileSize:   item.FileSize,
+		Alias:      item.Alias,
 		Timestamp:  item.Timestamp,
 		IsFavorite: true,
 		CreatedAt:  time.Unix(item.CreatedAt, 0),
@@ -1206,6 +1273,22 @@ func (c *ClipboardPlugin) updateFavoriteContent(ctx context.Context, id string, 
 	for i := range favorites {
 		if favorites[i].ID == id {
 			favorites[i].Content = newContent
+			return c.saveFavoriteItems(ctx, favorites)
+		}
+	}
+
+	return fmt.Errorf("favorite item not found: %s", id)
+}
+
+func (c *ClipboardPlugin) updateFavoriteAlias(ctx context.Context, id string, alias *string) error {
+	favorites, err := c.getFavoriteItems(ctx)
+	if err != nil {
+		return err
+	}
+
+	for i := range favorites {
+		if favorites[i].ID == id {
+			favorites[i].Alias = alias
 			return c.saveFavoriteItems(ctx, favorites)
 		}
 	}

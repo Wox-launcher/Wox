@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:wox/utils/color_util.dart';
 import 'package:wox/utils/colors.dart';
+import 'package:wox/utils/wox_theme_util.dart';
 
 class WoxTextField extends StatelessWidget {
   final TextEditingController? controller;
@@ -53,6 +55,7 @@ class WoxTextField extends StatelessWidget {
       autofocus: autofocus,
       focusNode: focusNode,
       textAlignVertical: TextAlignVertical.center,
+      cursorColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxCursorColor),
       style: style ?? TextStyle(color: textColor, fontSize: 13),
       decoration: InputDecoration(
         hintText: hintText,
@@ -75,7 +78,12 @@ class WoxTextField extends StatelessWidget {
           border: Border.all(color: borderColor),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: textField,
+        child: TextSelectionTheme(
+          data: TextSelectionThemeData(
+            selectionColor: safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxTextSelectionBackgroundColor),
+          ),
+          child: textField,
+        ),
       ),
     );
   }

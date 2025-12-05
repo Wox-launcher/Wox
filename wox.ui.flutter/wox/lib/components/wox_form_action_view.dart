@@ -112,7 +112,16 @@ class _WoxFormActionViewState extends State<WoxFormActionView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            ...widget.action.form.asMap().entries.map((entry) => _buildField(entry.key, entry.value)),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: widget.action.form.asMap().entries.map((entry) => _buildField(entry.key, entry.value)).toList(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
