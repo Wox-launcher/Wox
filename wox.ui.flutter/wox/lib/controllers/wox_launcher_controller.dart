@@ -355,7 +355,7 @@ class WoxLauncherController extends GetxController {
     // Handle start page: show content when query is empty (works in both modes)
     if (!isInputWithText && !isSelectionQuery) {
       if (lastStartPage == WoxStartPageEnum.WOX_START_PAGE_MRU.code) {
-        await queryMRU(traceId);
+        queryMRU(traceId);
       } else {
         // Blank page - clear results
         await clearQueryResults(traceId);
@@ -643,13 +643,30 @@ class WoxLauncherController extends GetxController {
   }
 
   Future<void> queryMRU(String traceId) async {
+    var startTime = DateTime.now().millisecondsSinceEpoch;
     var queryId = const UuidV4().generate();
     currentQuery.value = PlainQuery.emptyInput();
     currentQuery.value.queryId = queryId;
     updatePluginMetadataOnQueryChanged(traceId, currentQuery.value);
 
     try {
-      final results = await WoxApi.instance.queryMRU(traceId);
+      final response = await WoxWebsocketMsgUtil.instance.sendMessage(
+        WoxWebsocketMsg(
+          requestId: const UuidV4().generate(),
+          traceId: traceId,
+          type: WoxMsgTypeEnum.WOX_MSG_TYPE_REQUEST.code,
+          method: WoxMsgMethodEnum.WOX_MSG_METHOD_QUERY_MRU.code,
+          data: {},
+        ),
+      );
+
+      if (response == null || response is! List) {
+        Logger.instance.debug(traceId, "no MRU results");
+        clearQueryResults(traceId);
+        return;
+      }
+
+      final results = response.map((item) => WoxQueryResult.fromJson(item)).toList();
       if (results.isEmpty) {
         Logger.instance.debug(traceId, "no MRU results");
         clearQueryResults(traceId);
@@ -660,6 +677,8 @@ class WoxLauncherController extends GetxController {
         result.queryId = queryId;
       }
       onReceivedQueryResults(traceId, results);
+      var endTime = DateTime.now().millisecondsSinceEpoch;
+      Logger.instance.debug(traceId, "queryMRU via websocket took ${endTime - startTime} ms");
     } catch (e) {
       Logger.instance.error(traceId, "Failed to query MRU: $e");
       clearQueryResults(traceId);

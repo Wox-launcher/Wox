@@ -3,6 +3,7 @@ typedef WoxMsgMethod = String;
 enum WoxMsgMethodEnum {
   WOX_MSG_METHOD_Log("Log", "Log"),
   WOX_MSG_METHOD_QUERY("Query", "Query"),
+  WOX_MSG_METHOD_QUERY_MRU("QueryMRU", "Query MRU"),
   WOX_MSG_METHOD_ACTION("Action", "Action"),
   WOX_MSG_METHOD_FORM_ACTION("FormAction", "Form action"),
   WOX_MSG_METHOD_VISIBILITY_CHANGED("VisibilityChanged", "Visibility changed");

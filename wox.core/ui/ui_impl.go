@@ -258,6 +258,8 @@ func onUIWebsocketRequest(ctx context.Context, request WebsocketMsg) {
 		handleWebsocketLog(ctx, request)
 	case "Query":
 		handleWebsocketQuery(ctx, request)
+	case "QueryMRU":
+		handleWebsocketQueryMRU(ctx, request)
 	case "Action":
 		handleWebsocketAction(ctx, request)
 	case "FormAction":
@@ -485,6 +487,12 @@ func handleWebsocketFormAction(ctx context.Context, request WebsocketMsg) {
 	}
 
 	responseUISuccess(ctx, request)
+}
+
+func handleWebsocketQueryMRU(ctx context.Context, request WebsocketMsg) {
+	mruResults := plugin.GetPluginManager().QueryMRU(ctx)
+	logger.Info(ctx, fmt.Sprintf("found %d MRU results via websocket", len(mruResults)))
+	responseUISuccessWithData(ctx, request, mruResults)
 }
 
 func getWebsocketMsgParameter(ctx context.Context, msg WebsocketMsg, key string) (string, error) {
