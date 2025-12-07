@@ -1,8 +1,14 @@
 # Changelog
 
-## v2.0.0-beta.6 — 2025-??-??
+## v2.0.0-beta.6 — 2025-12-06
+
+- Add
+
+  - Add Emoji plugin
+  - Add Launch Mode and Start Page setting
 
 - Improve
+
   - UI now uses safe color parsing (`safeFromCssColor`) to fall back gracefully when theme colors are invalid, preventing crashes and highlighting misconfigured themes.
 
 ---

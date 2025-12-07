@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app plugins help dev test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps
+.PHONY: build clean host _bundle_mac_app plugins help dev test test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release
 
 # Determine the current platform
 ifeq ($(OS),Windows_NT)
@@ -34,6 +34,7 @@ help:
 	@echo "  plugins    Update plugin store"
 	@echo "  clean      Clean release directory"
 	@echo "  host       Build plugin hosts"
+	@echo "  release    Create a new release (reads version from CHANGELOG.md)"
 
 _check_deps:
 	@echo "Checking required dependencies..."
@@ -55,9 +56,6 @@ endif
 
 clean:
 	rm -rf $(RELEASE_DIR)
-
-plugins:
-	cd ci && go run plugin.go
 
 dev: _check_deps ensure-resources
 	$(MAKE) -C wox.core woxmr-build
@@ -139,3 +137,9 @@ _bundle_mac_app:
 		--app-drop-link 600 185 \
 		Wox.dmg Wox.app
 	mv "Wox.dmg" $(APP_NAME).dmg
+
+release:
+	cd ci && go run . release
+
+plugins:
+	cd ci && go run . plugin

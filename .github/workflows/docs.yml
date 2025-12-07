@@ -1,11 +1,11 @@
-name: Deploy Docs
+name: Docs
 
 on:
   push:
     branches: [master]
     paths:
       - "www/**"
-      - ".github/workflows/deploy-docs.yml"
+      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 permissions:

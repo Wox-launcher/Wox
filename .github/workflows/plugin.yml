@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-macos-arm64:
-    runs-on: [ self-hosted, macOS, ARM64 ]
+    runs-on: [self-hosted, macOS, ARM64]
     steps:
       - uses: actions/checkout@v3
       - name: Check plugin updates

@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }} ${{ matrix.arch }}
+    strategy:
+      matrix:
+        include:
+          - os: macOS
+            arch: ARM64
+            runner: [self-hosted, macOS, ARM64]
+            asset_path: ./release/wox-mac-arm64.dmg
+            asset_name: wox-mac-arm64.dmg
+            content_type: application/x-apple-diskimage
+            needs_keychain: true
+          - os: Windows
+            arch: AMD64
+            runner: [self-hosted, Windows]
+            asset_path: ./release/wox-windows-amd64.exe
+            asset_name: wox-windows-amd64.exe
+            content_type: application/x-msdownload
+          - os: Linux
+            arch: AMD64
+            runner: [self-hosted, Linux]
+            asset_path: ./release/wox-linux-amd64
+            asset_name: wox-linux-amd64
+            content_type: application/octet-stream
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build
+        run: make build
+        env:
+          KEYCHAINPWD: ${{ matrix.needs_keychain && secrets.KEYCHAINPWD || '' }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_path }}
+          retention-days: 10
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-files
+          find artifacts -type f -exec cp {} release-files/ \;
+          ls -la release-files/
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Extract changelog
+        id: changelog
+        run: |
+          # Extract changelog for current version from CHANGELOG.md
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          # Get content between current version header and next --- separator
+          CHANGELOG=$(sed -n "/^## v${VERSION}/,/^---$/p" CHANGELOG.md | head -n -1 | tail -n +2)
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "release-files/*"
+          tag: ${{ github.ref_name }}
+          name: "Wox ${{ github.ref_name }}"
+          body: ${{ steps.changelog.outputs.CHANGELOG }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+

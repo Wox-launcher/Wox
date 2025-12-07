@@ -29,7 +29,7 @@ type storePluginManifest struct {
 	DateUpdated    string
 }
 
-func main() {
+func runPlugin() {
 	err := checkPluginNewVersion()
 	if err != nil {
 		fmt.Println("Check plugin new version err: " + err.Error())
