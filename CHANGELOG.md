@@ -1,6 +1,18 @@
 # Changelog
 
-## v2.0.0-beta.6 — 2025-12-06
+## v2.0.0-beta.7 — ???
+
+- Add
+
+  - Add MCP Server for Wox plugin development (default enabled on port 29867, can be configured in settings)
+
+- Fix
+
+  - fix working directory issues, adding getWorkingDirectory function for command execution context, close [#4161]
+
+---
+
+## v2.0.0-beta.6 — 2025-12-05
 
 - Add
 
