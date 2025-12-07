@@ -268,6 +268,7 @@ class WoxAIChatConversation {
   late String id;
   late WoxAIChatConversationRole role;
   late String text;
+  late String reasoning; // Reasoning content from models that support reasoning (e.g., DeepSeek, OpenAI o1, qwen3)
   late List<WoxImage> images;
   late int timestamp;
   late ToolCallInfo toolCallInfo;
@@ -276,6 +277,7 @@ class WoxAIChatConversation {
     required this.id,
     required this.role,
     required this.text,
+    required this.reasoning,
     required this.images,
     required this.timestamp,
     required this.toolCallInfo,
@@ -298,6 +300,7 @@ class WoxAIChatConversation {
       id: json['Id'],
       role: json['Role'],
       text: json['Text'],
+      reasoning: json['Reasoning'] ?? '',
       images: images,
       timestamp: json['Timestamp'],
       toolCallInfo: toolCallInfo,
@@ -309,6 +312,7 @@ class WoxAIChatConversation {
       'Id': id,
       'Role': WoxAIChatConversationRoleEnum.getValue(role),
       'Text': text,
+      'Reasoning': reasoning,
       'Images': images.map((e) => e.toJson()).toList(),
       'Timestamp': timestamp,
       'ToolCallInfo': toolCallInfo.toJson(),

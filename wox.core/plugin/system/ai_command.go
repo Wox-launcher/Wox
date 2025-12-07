@@ -211,7 +211,6 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						util.Go(ctx, "ai command stream", func() {
-							var contextData string
 							var startAnsweringTime int64
 
 							// Show preparing state
@@ -236,13 +235,10 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 
 								switch streamResult.Status {
 								case common.ChatStreamStatusStreaming:
-									contextData = streamResult.Data
-									thinking, content := processAIThinking(contextData)
-									previewData := convertAIThinkingToMarkdown(thinking, content)
 									subTitle := "i18n:plugin_ai_command_answering"
 									preview := plugin.WoxPreview{
 										PreviewType:    plugin.WoxPreviewTypeMarkdown,
-										PreviewData:    previewData,
+										PreviewData:    streamResult.ToMarkdown(),
 										ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 									}
 									updatable.SubTitle = &subTitle
@@ -250,25 +246,22 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 									c.api.UpdateResult(ctx, *updatable)
 
 								case common.ChatStreamStatusFinished:
-									contextData = streamResult.Data
-									thinking, content := processAIThinking(contextData)
-									previewData := convertAIThinkingToMarkdown(thinking, content)
 									subTitle := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_answered_cost"), util.GetSystemTimestamp()-startAnsweringTime)
 									preview := plugin.WoxPreview{
 										PreviewType:    plugin.WoxPreviewTypeMarkdown,
-										PreviewData:    previewData,
+										PreviewData:    streamResult.ToMarkdown(),
 										ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 									}
 									actions := []plugin.QueryResultAction{
 										{
 											Name: "i18n:plugin_ai_command_copy",
 											Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-												clipboard.WriteText(content)
+												clipboard.WriteText(streamResult.Data)
 											},
 										},
 									}
 									pasteToActiveWindowAction, pasteToActiveWindowErr := GetPasteToActiveWindowAction(ctx, c.api, func() {
-										clipboard.WriteText(content)
+										clipboard.WriteText(streamResult.Data)
 									})
 									if pasteToActiveWindowErr == nil {
 										actions = append(actions, pasteToActiveWindowAction)
@@ -441,8 +434,8 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 				Name: "i18n:plugin_ai_command_copy",
 				Icon: common.CopyIcon,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					_, content := processAIThinking(contextData)
-					clipboard.WriteText(content)
+					// contextData is pure content (Reasoning is separated)
+					clipboard.WriteText(contextData)
 				},
 			},
 		},
@@ -450,8 +443,8 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 
 	// paste to active window
 	pasteToActiveWindowAction, pasteToActiveWindowErr := GetPasteToActiveWindowAction(ctx, c.api, func() {
-		_, content := processAIThinking(contextData)
-		clipboard.WriteText(content)
+		// contextData is pure content (Reasoning is separated)
+		clipboard.WriteText(contextData)
 	})
 	if pasteToActiveWindowErr == nil {
 		result.Actions = append(result.Actions, pasteToActiveWindowAction)
@@ -468,11 +461,9 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 			switch streamResult.Status {
 			case common.ChatStreamStatusStreaming:
 				contextData = streamResult.Data
-				thinking, _ := processAIThinking(contextData)
-				previewData := convertAIThinkingToMarkdown(thinking, contextData)
 				preview := plugin.WoxPreview{
 					PreviewType:    plugin.WoxPreviewTypeMarkdown,
-					PreviewData:    previewData,
+					PreviewData:    streamResult.ToMarkdown(),
 					ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 				}
 				updatable.Preview = &preview
@@ -480,11 +471,9 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 
 			case common.ChatStreamStatusFinished:
 				contextData = streamResult.Data
-				thinking, _ := processAIThinking(contextData)
-				previewData := convertAIThinkingToMarkdown(thinking, contextData)
 				preview := plugin.WoxPreview{
 					PreviewType:    plugin.WoxPreviewTypeMarkdown,
-					PreviewData:    previewData,
+					PreviewData:    streamResult.ToMarkdown(),
 					ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
 				}
 				updatable.Preview = &preview

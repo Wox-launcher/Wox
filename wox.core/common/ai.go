@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/tmc/langchaingo/jsonschema"
 )
@@ -46,7 +47,9 @@ type ChatStreamFunc func(result ChatStreamData)
 type ChatStreamData struct {
 	Status ChatStreamDataStatus
 	// Aggregated data, E.g. Data is streamed by 3 chunks, then Data1 = chunk1, Data2 = chunk1 + chunk2, Data3 = chunk1 + chunk2 + chunk3
-	Data      string
+	Data string
+	// Reasoning content from models that support reasoning (e.g., DeepSeek, OpenAI o1). Separate from Data for clean processing.
+	Reasoning string
 	ToolCalls []ToolCallInfo
 }
 
@@ -71,6 +74,24 @@ func (c *ChatStreamData) IsAllToolCallsSucceeded() bool {
 	return true
 }
 
+func (c *ChatStreamData) ToMarkdown() string {
+	content := c.Data
+	thinking := c.Reasoning
+
+	if thinking == "" {
+		return content
+	}
+
+	// everyline in thinking should be prefixed with "> "
+	thinkingLines := strings.Split(thinking, "\n")
+	for i, line := range thinkingLines {
+		thinkingLines[i] = "> " + line
+	}
+	thinking = strings.Join(thinkingLines, "\n")
+
+	return thinking + "\n\n" + content
+}
+
 type ToolCallInfo struct {
 	Id        string
 	Name      string
@@ -89,6 +110,7 @@ type Conversation struct {
 	Id           string
 	Role         ConversationRole
 	Text         string
+	Reasoning    string // Reasoning content from models that support reasoning (e.g., DeepSeek, OpenAI o1, qwen3)
 	Images       []WoxImage
 	ToolCallInfo ToolCallInfo
 	Timestamp    int64

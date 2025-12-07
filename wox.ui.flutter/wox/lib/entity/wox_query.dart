@@ -399,7 +399,7 @@ class QueryMetadata {
 
   QueryMetadata.fromJson(Map<String, dynamic> json) {
     icon = WoxImage.fromJson(json['Icon']);
-    resultPreviewWidthRatio = json['ResultPreviewWidthRatio'] ?? 0.5;
+    resultPreviewWidthRatio = json['WidthRatio'] ?? 0.5;
     isGridLayout = json['IsGridLayout'] ?? false;
     gridLayoutParams = GridLayoutParams.fromJson(json['GridLayoutParams'] ?? {});
   }

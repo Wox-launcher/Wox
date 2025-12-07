@@ -497,6 +497,7 @@ class WoxAIChatController extends GetxController {
       id: const UuidV4().generate(),
       role: WoxAIChatConversationRoleEnum.WOX_AIChat_CONVERSATION_ROLE_USER.value,
       text: text,
+      reasoning: '',
       images: [],
       timestamp: DateTime.now().millisecondsSinceEpoch,
       toolCallInfo: ToolCallInfo.empty(),

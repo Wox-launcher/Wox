@@ -414,7 +414,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
                       if (isTool && message.toolCallInfo.id.isNotEmpty) _buildToolCallBadge(message),
                       if (!isTool)
                         WoxMarkdownView(
-                          data: message.text,
+                          data: _formatMessageWithReasoning(message),
                           fontColor: fontColor,
                         ),
                       if (message.images.isNotEmpty) ...[
@@ -764,5 +764,20 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
         ),
       ),
     );
+  }
+
+  String _formatMessageWithReasoning(WoxAIChatConversation message) {
+    final content = message.text;
+    final reasoning = message.reasoning;
+
+    if (reasoning.isEmpty) {
+      return content;
+    }
+
+    // Format reasoning as markdown blockquote (each line prefixed with "> ")
+    final reasoningLines = reasoning.split('\n');
+    final formattedReasoning = reasoningLines.map((line) => '> $line').join('\n');
+
+    return '$formattedReasoning\n\n$content';
   }
 }

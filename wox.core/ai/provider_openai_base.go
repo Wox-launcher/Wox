@@ -195,30 +195,14 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 			}
 		}
 
-		// Combine reasoning and content for final message
+		// Keep reasoning and content separate
 		finalContent := s.acc.Choices[0].Message.Content
-		if s.accumulatedReason != "" {
-			// Format reasoning as markdown blockquote
-			reasoningLines := strings.Split(s.accumulatedReason, "\n")
-			var formattedReasoning strings.Builder
-			for _, line := range reasoningLines {
-				formattedReasoning.WriteString("> ")
-				formattedReasoning.WriteString(line)
-				formattedReasoning.WriteString("\n")
-			}
-
-			// Combine reasoning and content
-			if finalContent != "" {
-				finalContent = formattedReasoning.String() + "\n" + finalContent
-			} else {
-				finalContent = formattedReasoning.String()
-			}
-		}
 
 		util.GetLogger().Debug(ctx, "AI: Stream ended, final message received"+finalContent)
 		return common.ChatStreamData{
 			Status:    common.ChatStreamStatusStreamed,
 			Data:      finalContent,
+			Reasoning: s.accumulatedReason,
 			ToolCalls: toolCallInfos,
 		}, nil
 	}
@@ -271,30 +255,11 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 		return common.ChatStreamData{}, ChatStreamNoContentErr
 	}
 
-	// Combine reasoning and content for display
-	// Format reasoning as markdown quote (similar to <think> tag handling)
-	displayContent := currentContent
-	if s.accumulatedReason != "" {
-		// Format reasoning as markdown blockquote
-		reasoningLines := strings.Split(s.accumulatedReason, "\n")
-		var formattedReasoning strings.Builder
-		for _, line := range reasoningLines {
-			formattedReasoning.WriteString("> ")
-			formattedReasoning.WriteString(line)
-			formattedReasoning.WriteString("\n")
-		}
-
-		// Combine reasoning and content
-		if currentContent != "" {
-			displayContent = formattedReasoning.String() + "\n" + currentContent
-		} else {
-			displayContent = formattedReasoning.String()
-		}
-	}
-
+	// Keep reasoning and content separate in ChatStreamData
 	streamData := common.ChatStreamData{
-		Status: common.ChatStreamStatusStreaming,
-		Data:   displayContent,
+		Status:    common.ChatStreamStatusStreaming,
+		Data:      currentContent,
+		Reasoning: s.accumulatedReason,
 	}
 	var totalToolCallCount = len(s.acc.Choices[0].Message.ToolCalls)
 	if totalToolCallCount > 0 {

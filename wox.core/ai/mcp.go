@@ -3,67 +3,53 @@ package ai
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 	"wox/common"
 	"wox/util"
 
 	"github.com/google/uuid"
-	"github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/tmc/langchaingo/jsonschema"
 )
 
-var mcpClients = util.NewHashMap[string, client.MCPClient]()
+var mcpSessions = util.NewHashMap[string, *mcp.ClientSession]()
 var mcpTools = util.NewHashMap[string, []common.MCPTool]()
 
-func getMCPClient(ctx context.Context, config common.AIChatMCPServerConfig) (c client.MCPClient, err error) {
-	if client, ok := mcpClients.Load(config.Name); ok {
-		return client, nil
+func getMCPSession(ctx context.Context, config common.AIChatMCPServerConfig) (*mcp.ClientSession, error) {
+	if session, ok := mcpSessions.Load(config.Name); ok {
+		return session, nil
 	}
 
-	var mcpClient client.MCPClient
+	client := mcp.NewClient(&mcp.Implementation{
+		Name:    "Wox",
+		Version: "2.0.0",
+	}, nil)
+
+	var transport mcp.Transport
 	if config.Type == common.AIChatMCPServerTypeSTDIO {
 		command, args := parseCommandArgs(config.Command)
-		stdioClient, newErr := client.NewStdioMCPClient(command, config.EnvironmentVariables, args...)
-		if newErr != nil {
-			return nil, newErr
-		}
-		mcpClient = stdioClient
+		cmd := exec.Command(command, args...)
+		// Set environment variables (each entry is already in "key=value" format)
+		cmd.Env = append(cmd.Env, config.EnvironmentVariables...)
+		transport = &mcp.CommandTransport{Command: cmd}
 	}
 	if config.Type == common.AIChatMCPServerTypeSSE {
-		sseClient, newErr := client.NewSSEMCPClient(config.Url)
-		if newErr != nil {
-			return nil, newErr
-		}
-
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		if err := sseClient.Start(timeoutCtx); err != nil {
-			return nil, err
-		}
-
-		mcpClient = sseClient
+		transport = &mcp.SSEClientTransport{Endpoint: config.Url}
 	}
-	if mcpClient == nil {
+	if transport == nil {
 		return nil, fmt.Errorf("unsupported MCP server type: %s", config.Type)
 	}
 
-	// Initialize the client
-	initRequest := mcp.InitializeRequest{}
-	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	initRequest.Params.ClientInfo = mcp.Implementation{
-		Name:    "Wox",
-		Version: "2.0.0",
-	}
-	_, initializeErr := mcpClient.Initialize(ctx, initRequest)
-	if initializeErr != nil {
-		return nil, initializeErr
+	// Connect to the server (handles initialization automatically)
+	session, err := client.Connect(ctx, transport, nil)
+	if err != nil {
+		return nil, err
 	}
 
-	mcpClients.Store(config.Name, mcpClient)
-	return mcpClient, nil
+	mcpSessions.Store(config.Name, session)
+	return session, nil
 }
 
 // MCPListTools lists the tools for a given MCP server config with timeout protection
@@ -99,21 +85,14 @@ func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) ([]c
 		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
-		client, err := getMCPClient(timeoutCtx, config)
-		if err != nil {
-			resultChan <- listToolsResult{tools: nil, err: err}
-			return
-		}
-
-		// List Tools
-		tools, err := client.ListTools(timeoutCtx, mcp.ListToolsRequest{})
+		session, err := getMCPSession(timeoutCtx, config)
 		if err != nil {
 			resultChan <- listToolsResult{tools: nil, err: err}
 			return
 		}
 
 		// Process tools and send result
-		processedTools, processErr := processToolsResponse(timeoutCtx, tools, config, client)
+		processedTools, processErr := processToolsFromSession(timeoutCtx, session, config)
 		resultChan <- listToolsResult{tools: processedTools, err: processErr}
 	}()
 
@@ -134,124 +113,140 @@ func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) ([]c
 	}
 }
 
-// processToolsResponse processes the tools response and converts to MCPTool format
-func processToolsResponse(ctx context.Context, tools *mcp.ListToolsResult, config common.AIChatMCPServerConfig, client client.MCPClient) ([]common.MCPTool, error) {
+// processToolsFromSession processes tools from a session and converts to MCPTool format
+func processToolsFromSession(ctx context.Context, session *mcp.ClientSession, config common.AIChatMCPServerConfig) ([]common.MCPTool, error) {
 	var toolsList []common.MCPTool
-	for _, tool := range tools.Tools {
 
-		var parameters = jsonschema.Definition{
-			Type:       jsonschema.Object,
-			Properties: make(map[string]jsonschema.Definition),
-			Required:   tool.InputSchema.Required,
+	// Use the Tools iterator to get all tools
+	for tool, err := range session.Tools(ctx, nil) {
+		if err != nil {
+			return nil, fmt.Errorf("error iterating tools: %w", err)
 		}
 
-		for name, property := range tool.InputSchema.Properties {
-			if propertyMap, ok := property.(map[string]any); ok {
-				propertyTypeRaw := propertyMap["type"]
-				propertyDescriptionRaw := propertyMap["description"]
-				if propertyTypeRaw != nil && propertyDescriptionRaw != nil {
-					propertyType := propertyTypeRaw.(string)
-					propertyDescription := propertyDescriptionRaw.(string)
+		parameters := jsonschema.Definition{
+			Type:       jsonschema.Object,
+			Properties: make(map[string]jsonschema.Definition),
+		}
 
-					switch propertyType {
-					case "string":
-						parameters.Properties[name] = jsonschema.Definition{
-							Type:        jsonschema.String,
-							Description: propertyDescription,
+		// Process InputSchema if available (InputSchema is of type any, need to parse)
+		if tool.InputSchema != nil {
+			if schemaMap, ok := tool.InputSchema.(map[string]any); ok {
+				// Extract required fields
+				if requiredRaw, hasRequired := schemaMap["required"]; hasRequired {
+					if requiredSlice, ok := requiredRaw.([]any); ok {
+						for _, r := range requiredSlice {
+							if s, ok := r.(string); ok {
+								parameters.Required = append(parameters.Required, s)
+							}
 						}
-					case "integer":
-						parameters.Properties[name] = jsonschema.Definition{
-							Type:        jsonschema.Integer,
-							Description: propertyDescription,
-						}
-					case "boolean":
-						parameters.Properties[name] = jsonschema.Definition{
-							Type:        jsonschema.Boolean,
-							Description: propertyDescription,
-						}
-					case "array":
-						var itemsDefinition *jsonschema.Definition
+					}
+				}
 
-						if itemsRaw, hasItems := propertyMap["items"]; hasItems {
-							if itemsMap, ok := itemsRaw.(map[string]any); ok {
-								itemTypeRaw, hasType := itemsMap["type"]
-								if hasType {
-									itemType, isString := itemTypeRaw.(string)
-									if isString {
-										switch itemType {
-										case "string":
-											itemsDefinition = &jsonschema.Definition{Type: jsonschema.String}
-										case "integer":
-											itemsDefinition = &jsonschema.Definition{Type: jsonschema.Integer}
-										case "boolean":
-											itemsDefinition = &jsonschema.Definition{Type: jsonschema.Boolean}
-										default:
-											// 默认使用字符串类型
-											itemsDefinition = &jsonschema.Definition{Type: jsonschema.String}
+				// Extract properties
+				if propertiesRaw, hasProps := schemaMap["properties"]; hasProps {
+					if propertiesMap, ok := propertiesRaw.(map[string]any); ok {
+						for name, property := range propertiesMap {
+							if propertyMap, ok := property.(map[string]any); ok {
+								propTypeRaw := propertyMap["type"]
+								propDescriptionRaw := propertyMap["description"]
+
+								propType := ""
+								propDescription := ""
+								if propTypeRaw != nil {
+									propType, _ = propTypeRaw.(string)
+								}
+								if propDescriptionRaw != nil {
+									propDescription, _ = propDescriptionRaw.(string)
+								}
+
+								switch propType {
+								case "string":
+									parameters.Properties[name] = jsonschema.Definition{
+										Type:        jsonschema.String,
+										Description: propDescription,
+									}
+								case "integer", "number":
+									parameters.Properties[name] = jsonschema.Definition{
+										Type:        jsonschema.Integer,
+										Description: propDescription,
+									}
+								case "boolean":
+									parameters.Properties[name] = jsonschema.Definition{
+										Type:        jsonschema.Boolean,
+										Description: propDescription,
+									}
+								case "array":
+									itemsDefinition := &jsonschema.Definition{Type: jsonschema.String}
+									if itemsRaw, hasItems := propertyMap["items"]; hasItems {
+										if itemsMap, ok := itemsRaw.(map[string]any); ok {
+											if itemTypeRaw, hasType := itemsMap["type"]; hasType {
+												if itemType, ok := itemTypeRaw.(string); ok {
+													switch itemType {
+													case "string":
+														itemsDefinition = &jsonschema.Definition{Type: jsonschema.String}
+													case "integer", "number":
+														itemsDefinition = &jsonschema.Definition{Type: jsonschema.Integer}
+													case "boolean":
+														itemsDefinition = &jsonschema.Definition{Type: jsonschema.Boolean}
+													}
+												}
+											}
 										}
+									}
+									parameters.Properties[name] = jsonschema.Definition{
+										Type:        jsonschema.Array,
+										Description: propDescription,
+										Items:       itemsDefinition,
 									}
 								}
 							}
-						}
-
-						if itemsDefinition == nil {
-							itemsDefinition = &jsonschema.Definition{Type: jsonschema.String}
-						}
-
-						parameters.Properties[name] = jsonschema.Definition{
-							Type:        jsonschema.Array,
-							Description: propertyDescription,
-							Items:       itemsDefinition,
 						}
 					}
 				}
 			}
 		}
 
+		// Capture tool name for closure
+		toolName := tool.Name
+		toolDescription := tool.Description
+
 		toolsList = append(toolsList, common.MCPTool{
-			Name:        tool.Name,
-			Description: tool.Description,
+			Name:        toolName,
+			Description: toolDescription,
 			Parameters:  parameters,
 			Callback: func(ctx context.Context, args map[string]any) (common.Conversation, error) {
-				util.GetLogger().Debug(ctx, fmt.Sprintf("MCP: Tool call: %s, args: %v", tool.Name, args))
+				util.GetLogger().Debug(ctx, fmt.Sprintf("MCP: Tool call: %s, args: %v", toolName, args))
 
-				request := mcp.CallToolRequest{
-					Request: mcp.Request{
-						Method: "tools/call",
-					},
-				}
-				request.Params.Name = tool.Name
-				request.Params.Arguments = args
-
-				result, err := client.CallTool(ctx, request)
+				result, err := session.CallTool(ctx, &mcp.CallToolParams{
+					Name:      toolName,
+					Arguments: args,
+				})
 				if err != nil {
-					util.GetLogger().Error(ctx, fmt.Sprintf("MCP: Tool call: %s, error: %s", tool.Name, err))
+					util.GetLogger().Error(ctx, fmt.Sprintf("MCP: Tool call: %s, error: %s", toolName, err))
 					return common.Conversation{}, err
 				}
 
 				if result.IsError {
-					errMsg := "unkown error"
+					errMsg := "unknown error"
 					if len(result.Content) > 0 {
 						errMsg = fmt.Sprintf("%v", result.Content[0])
 					}
-
-					return common.Conversation{}, fmt.Errorf("MCP: Tool call ended with error: %s ", errMsg)
+					return common.Conversation{}, fmt.Errorf("MCP: Tool call ended with error: %s", errMsg)
 				}
 
-				content := result.Content
-				if len(content) == 0 {
-					return common.Conversation{}, fmt.Errorf("MCP: Tool call: %s, no content", tool.Name)
+				if len(result.Content) == 0 {
+					return common.Conversation{}, fmt.Errorf("MCP: Tool call: %s, no content", toolName)
 				}
 
-				if v, ok := content[0].(mcp.TextContent); ok {
+				if v, ok := result.Content[0].(*mcp.TextContent); ok {
 					return common.Conversation{
 						Id:   uuid.New().String(),
 						Role: common.ConversationRoleAssistant,
 						Text: v.Text,
 					}, nil
-				} else {
-					return common.Conversation{}, fmt.Errorf("MCP: Tool call: %s, unsupported content type: %T", tool.Name, content[0])
 				}
+
+				return common.Conversation{}, fmt.Errorf("MCP: Tool call: %s, unsupported content type: %T", toolName, result.Content[0])
 			},
 			ServerConfig: &config,
 		})

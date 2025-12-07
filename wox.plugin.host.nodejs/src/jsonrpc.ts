@@ -172,15 +172,20 @@ async function onLLMStream(ctx: Context, request: PluginJsonRpcRequest) {
   }
 
   const callbackId = request.Params.CallbackId
-  const streamType = request.Params.StreamType
+  const streamType = request.Params.StreamType as AI.ChatStreamDataType
   const data = request.Params.Data
+  const reasoning = request.Params.Reasoning ?? ""
   const callbackFunc = plugin.API.llmStreamCallbacks.get(callbackId)
   if (callbackFunc === undefined || callbackFunc === null) {
     logger.error(ctx, `llm stream callback not found: ${callbackId}`)
     throw new Error(`llm stream callback not found: ${callbackId}`)
   }
 
-  callbackFunc(<AI.ChatStreamDataType>streamType, data)
+  callbackFunc({
+    Status: streamType,
+    Data: data,
+    Reasoning: reasoning
+  })
 }
 
 async function query(ctx: Context, request: PluginJsonRpcRequest) {

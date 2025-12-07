@@ -20,7 +20,25 @@ class ChatStreamDataType(str, Enum):
     ERROR = "error"  # Error occurred
 
 
-ChatStreamCallback = Callable[[ChatStreamDataType, str], None]
+@dataclass
+class ChatStreamData:
+    """Chat stream data containing status, content and reasoning"""
+
+    status: ChatStreamDataType
+    data: str  # Aggregated content data
+    reasoning: str = ""  # Reasoning content from models that support reasoning (e.g., DeepSeek, OpenAI o1)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ChatStreamData":
+        """Create from dictionary"""
+        return cls(
+            status=ChatStreamDataType(data.get("Status", "streaming")),
+            data=data.get("Data", ""),
+            reasoning=data.get("Reasoning", ""),
+        )
+
+
+ChatStreamCallback = Callable[[ChatStreamData], None]
 
 
 @dataclass

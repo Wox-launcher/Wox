@@ -553,11 +553,12 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat stream receiving data, status: %s, data: %s", streamResult.Status, streamResult.Data))
 
 		// update conversations and sync to UI
-		if streamResult.Data != "" {
+		if streamResult.Data != "" || streamResult.Reasoning != "" {
 			r.appendOrUpdateConversation(&aiChatData, common.Conversation{
 				Id:        responseId,
 				Role:      common.ConversationRoleAssistant,
 				Text:      streamResult.Data,
+				Reasoning: streamResult.Reasoning,
 				Timestamp: util.GetSystemTimestamp(),
 			})
 		}
@@ -804,10 +805,8 @@ func (r *AIChatPlugin) summarizeChat(ctx context.Context, chat common.AIChatData
 	r.api.AIChatStream(ctx, chat.Model, conversations, common.EmptyChatOptions, func(streamResult common.ChatStreamData) {
 		r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: chat summarize stream data: %s", streamResult.Data))
 		if streamResult.Status == common.ChatStreamStatusFinished {
+			// Use Data directly since Reasoning is now separated
 			title := streamResult.Data
-
-			// remove the thinking tags
-			_, title = processAIThinking(title)
 			title = strings.ReplaceAll(title, "\n", "")
 
 			r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Summarized chat title: %s", title))

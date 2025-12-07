@@ -10,6 +10,8 @@ from typing import Any, Dict
 import websockets
 from wox_plugin import (
     ActionContext,
+    ChatStreamData,
+    ChatStreamDataType,
     Context,
     MRUData,
     PluginInitParams,
@@ -40,6 +42,8 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: web
         return await unload_plugin(ctx, request)
     elif method == "onMRURestore":
         return await on_mru_restore(ctx, request)
+    elif method == "onLLMStream":
+        return await on_llm_stream(ctx, request)
     else:
         await logger.info(ctx.get_trace_id(), f"unknown method handler: {method}")
         raise Exception(f"unknown method handler: {method}")
@@ -325,3 +329,40 @@ async def on_mru_restore(ctx: Context, request: Dict[str, Any]) -> Any:
     except Exception as e:
         await logger.error(ctx.get_trace_id(), f"MRU restore callback error: {str(e)}")
         raise e
+
+
+async def on_llm_stream(ctx: Context, request: Dict[str, Any]) -> None:
+    """Handle LLM stream callback"""
+    plugin_id = request.get("PluginId")
+    if not plugin_id:
+        raise Exception("PluginId is required")
+
+    params = request.get("Params", {})
+    callback_id = params.get("CallbackId")
+    stream_type = params.get("StreamType", "streaming")
+    data = params.get("Data", "")
+    reasoning = params.get("Reasoning", "")
+
+    plugin_instance = plugin_instances.get(plugin_id)
+    if not plugin_instance:
+        raise Exception(f"plugin instance not found: {plugin_id}")
+
+    if not plugin_instance.api:
+        raise Exception(f"plugin API not found: {plugin_id}")
+
+    api = plugin_instance.api
+    if not isinstance(api, PluginAPI):
+        raise Exception(f"Invalid API type for plugin: {plugin_id}")
+
+    callback = api.llm_stream_callbacks.get(callback_id)
+    if not callback:
+        await logger.error(ctx.get_trace_id(), f"LLM stream callback not found: {callback_id}")
+        raise Exception(f"LLM stream callback not found: {callback_id}")
+
+    # Create ChatStreamData and call the callback
+    stream_data = ChatStreamData(
+        status=ChatStreamDataType(stream_type),
+        data=data,
+        reasoning=reasoning,
+    )
+    callback(stream_data)

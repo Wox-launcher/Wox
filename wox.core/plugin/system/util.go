@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"strings"
 	"time"
 	"wox/common"
 	"wox/i18n"
@@ -243,53 +242,4 @@ func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, actionCal
 	}
 
 	return plugin.QueryResultAction{}, fmt.Errorf("no active window")
-}
-
-// processThinking parse the text to get the thinking and content
-func processAIThinking(text string) (thinking string, content string) {
-	const thinkStart = "<think>"
-	const thinkEnd = "</think>"
-
-	// Trim leading newlines for tag detection
-	trimmedText := strings.TrimLeft(text, "\n")
-
-	// Check if the text starts with the thinking tag after trimming newlines
-	if len(trimmedText) >= len(thinkStart) && trimmedText[:len(thinkStart)] == thinkStart {
-		// Calculate the offset to maintain original indices
-		offset := len(text) - len(trimmedText)
-
-		// Find the end tag in the original text
-		endIndex := strings.Index(text, thinkEnd)
-		if endIndex != -1 {
-			// Extract thinking content (without the tags)
-			thinking = text[offset+len(thinkStart) : endIndex]
-			// Extract the remaining content after the thinking tag
-			if endIndex+len(thinkEnd) < len(text) {
-				content = text[endIndex+len(thinkEnd):]
-			}
-		} else {
-			// If there's no end tag, the entire text is considered thinking
-			thinking = text[offset+len(thinkStart):]
-		}
-	} else {
-		// If there's no thinking tag at the beginning, the entire text is content
-		content = text
-	}
-
-	return thinking, content
-}
-
-func convertAIThinkingToMarkdown(thinking string, content string) string {
-	if thinking == "" {
-		return content
-	}
-
-	// everyline in thinking should be prefixed with "> "
-	thinkingLines := strings.Split(thinking, "\n")
-	for i, line := range thinkingLines {
-		thinkingLines[i] = "> " + line
-	}
-	thinking = strings.Join(thinkingLines, "\n")
-
-	return thinking + "\n\n" + content
 }

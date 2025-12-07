@@ -566,6 +566,7 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 				"CallbackId": callbackId,
 				"StreamType": string(streamResult.Status),
 				"Data":       streamResult.Data,
+				"Reasoning":  streamResult.Reasoning,
 			})
 		})
 		if llmErr != nil {

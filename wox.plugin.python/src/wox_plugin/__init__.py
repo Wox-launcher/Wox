@@ -9,6 +9,7 @@ from typing import List
 from .api import ChatStreamCallback, PublicAPI
 from .models.ai import (
     AIModel,
+    ChatStreamData,
     ChatStreamDataType,
     Conversation,
     ConversationRole,
@@ -75,6 +76,7 @@ __all__: List[str] = [
     "PluginSettingValueStyle",
     # AI
     "AIModel",
+    "ChatStreamData",
     "Conversation",
     "ConversationRole",
     "ChatStreamDataType",

@@ -8,5 +8,14 @@ export namespace AI {
     Timestamp: number
   }
 
-  export type ChatStreamFunc = (dataType: ChatStreamDataType, data: string) => void
+  export interface ChatStreamData {
+    /** Stream status */
+    Status: ChatStreamDataType
+    /** Aggregated content data */
+    Data: string
+    /** Reasoning content from models that support reasoning (e.g., DeepSeek, OpenAI o1). Separate from Data for clean processing. */
+    Reasoning: string
+  }
+
+  export type ChatStreamFunc = (streamData: ChatStreamData) => void
 }

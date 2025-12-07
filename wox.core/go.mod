@@ -16,13 +16,13 @@ require (
 	github.com/gotk3/gotk3 v0.6.5-0.20240618185848-ff349ae13f56
 	github.com/jinzhu/copier v0.4.0
 	github.com/lxn/win v0.0.0-20210218163916-a377121e959e
-	github.com/mark3labs/mcp-go v0.38.0
 	github.com/mat/besticon v0.0.0-20231103204413-ee089084f347
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/mitchellh/go-homedir v1.1.0
+	github.com/modelcontextprotocol/go-sdk v1.1.0
 	github.com/mozillazg/go-pinyin v0.21.0
 	github.com/olahol/melody v1.3.0
-	github.com/openai/openai-go v1.12.0
+	github.com/openai/openai-go/v3 v3.8.1
 	github.com/otiai10/copy v1.14.1
 	github.com/petermattis/goid v0.0.0-20250813065127-a731cc31b4fe
 	github.com/robotn/gohook v0.42.2
@@ -49,33 +49,26 @@ require (
 )
 
 require (
-	github.com/akavel/rsrc v0.10.2 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
-	github.com/bahlo/generic-list-go v0.2.0 // indirect
-	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
-	github.com/invopop/jsonschema v0.13.0 // indirect
+	github.com/google/jsonschema-go v0.3.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
-	github.com/josephspurrier/goversioninfo v1.5.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
-	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/openai/openai-go/v3 v3.8.1 // indirect
 	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/saracen/zipextra v0.0.0-20250129175152-f1aa42d25216 // indirect
-	github.com/spf13/cast v1.7.1 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/vcaesar/keycode v0.10.1 // indirect
-	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.design/x/mainthread v0.3.0 // indirect
 	golang.org/x/net v0.43.0 // indirect
+	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
