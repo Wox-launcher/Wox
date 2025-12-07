@@ -35,8 +35,8 @@ func getMCPSession(ctx context.Context, config common.AIChatMCPServerConfig) (*m
 		cmd.Env = append(cmd.Env, config.EnvironmentVariables...)
 		transport = &mcp.CommandTransport{Command: cmd}
 	}
-	if config.Type == common.AIChatMCPServerTypeSSE {
-		transport = &mcp.SSEClientTransport{Endpoint: config.Url}
+	if config.Type == common.AIChatMCPServerTypeStreamableHTTP {
+		transport = &mcp.StreamableClientTransport{Endpoint: config.Url}
 	}
 	if transport == nil {
 		return nil, fmt.Errorf("unsupported MCP server type: %s", config.Type)

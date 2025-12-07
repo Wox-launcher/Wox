@@ -485,6 +485,9 @@ func handleSettingWox(w http.ResponseWriter, r *http.Request) {
 	settingDto.CustomPythonPath = woxSetting.CustomPythonPath.Get()
 	settingDto.CustomNodejsPath = woxSetting.CustomNodejsPath.Get()
 
+	settingDto.EnableMCPServer = woxSetting.EnableMCPServer.Get()
+	settingDto.MCPServerPort = woxSetting.MCPServerPort.Get()
+
 	settingDto.AppWidth = woxSetting.AppWidth.Get()
 	settingDto.MaxResultCount = woxSetting.MaxResultCount.Get()
 	settingDto.ThemeId = woxSetting.ThemeId.Get()
@@ -585,6 +588,10 @@ func handleSettingWoxUpdate(w http.ResponseWriter, r *http.Request) {
 		woxSetting.MaxResultCount.Set(int(vf))
 	case "ThemeId":
 		woxSetting.ThemeId.Set(vs)
+	case "EnableMCPServer":
+		woxSetting.EnableMCPServer.Set(vb)
+	case "MCPServerPort":
+		woxSetting.MCPServerPort.Set(int(vf))
 	default:
 		writeErrorResponse(w, "unknown setting key: "+kv.Key)
 		return

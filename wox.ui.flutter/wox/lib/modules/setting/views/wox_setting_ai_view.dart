@@ -1,11 +1,15 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:get/get_state_manager/src/rx_flutter/rx_obx_widget.dart';
+import 'package:flutter/services.dart';
+import 'package:get/get.dart';
 import 'package:wox/api/wox_api.dart';
 import 'package:wox/components/plugin/wox_setting_plugin_table_view.dart';
+import 'package:wox/components/wox_switch.dart';
 import 'package:wox/entity/setting/wox_plugin_setting_table.dart';
 import 'package:wox/modules/setting/views/wox_setting_base.dart';
+import 'package:wox/utils/wox_theme_util.dart';
+import 'package:wox/utils/color_util.dart';
 
 class WoxSettingAIView extends WoxSettingBaseView {
   const WoxSettingAIView({super.key});
@@ -72,6 +76,58 @@ class WoxSettingAIView extends WoxSettingBaseView {
                     }
                     return null;
                   },
+                );
+              }),
+            ),
+            formField(
+              label: controller.tr("ui_ai_mcp_server_enable"),
+              tips: controller.tr("ui_ai_mcp_server_enable_tips"),
+              child: Obx(() {
+                return WoxSwitch(
+                  value: controller.woxSetting.value.enableMCPServer,
+                  onChanged: (bool value) {
+                    controller.updateConfig("EnableMCPServer", value.toString());
+                  },
+                );
+              }),
+            ),
+            formField(
+              label: controller.tr("ui_ai_mcp_server_port"),
+              tips: controller.tr("ui_ai_mcp_server_port_tips"),
+              child: Obx(() {
+                final textColor = safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.resultItemTitleColor);
+                final borderColor = textColor.withValues(alpha: 0.3);
+                final focusBorderColor = safeFromCssColor(WoxThemeUtil.instance.currentTheme.value.queryBoxCursorColor);
+                return SizedBox(
+                  width: 100,
+                  child: TextField(
+                    controller: TextEditingController(text: controller.woxSetting.value.mcpServerPort.toString()),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    style: TextStyle(color: textColor, fontSize: 14),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        borderSide: BorderSide(color: borderColor),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        borderSide: BorderSide(color: borderColor),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        borderSide: BorderSide(color: focusBorderColor),
+                      ),
+                    ),
+                    onSubmitted: (value) {
+                      final port = int.tryParse(value);
+                      if (port != null && port > 0 && port < 65536) {
+                        controller.updateConfig("MCPServerPort", value);
+                      }
+                    },
+                  ),
                 );
               }),
             ),

@@ -16,6 +16,8 @@ class WoxSetting {
   late String startPage;
   late String showPosition;
   late List<AIProvider> aiProviders;
+  late bool enableMCPServer;
+  late int mcpServerPort;
   late int appWidth;
   late int maxResultCount;
   late String themeId;
@@ -42,6 +44,8 @@ class WoxSetting {
     required this.startPage,
     required this.showPosition,
     required this.aiProviders,
+    required this.enableMCPServer,
+    required this.mcpServerPort,
     required this.appWidth,
     required this.maxResultCount,
     required this.themeId,
@@ -95,6 +99,9 @@ class WoxSetting {
       aiProviders = <AIProvider>[];
     }
 
+    enableMCPServer = json['EnableMCPServer'] ?? false;
+    mcpServerPort = json['MCPServerPort'] ?? 9867;
+
     appWidth = json['AppWidth'];
     maxResultCount = json['MaxResultCount'];
     themeId = json['ThemeId'];
@@ -123,6 +130,8 @@ class WoxSetting {
     data['StartPage'] = startPage;
     data['ShowPosition'] = showPosition;
     data['AIProviders'] = aiProviders;
+    data['EnableMCPServer'] = enableMCPServer;
+    data['MCPServerPort'] = mcpServerPort;
     data['AppWidth'] = appWidth;
     data['MaxResultCount'] = maxResultCount;
     data['ThemeId'] = themeId;

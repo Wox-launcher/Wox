@@ -180,12 +180,12 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 							Tooltip: "i18n:plugin_ai_chat_mcp_server_type_tooltip",
 							SelectOptions: []definition.PluginSettingValueSelectOption{
 								{
-									Label: "STUDIO",
+									Label: "STDIO",
 									Value: string(common.AIChatMCPServerTypeSTDIO),
 								},
 								{
-									Label: "SSE",
-									Value: string(common.AIChatMCPServerTypeSSE),
+									Label: "Streamable HTTP",
+									Value: string(common.AIChatMCPServerTypeStreamableHTTP),
 								},
 							},
 							Validators: []validator.PluginSettingValidator{

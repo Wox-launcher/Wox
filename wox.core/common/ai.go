@@ -15,8 +15,8 @@ type ChatStreamDataStatus string
 type AIChatMCPServerType string
 
 const (
-	AIChatMCPServerTypeSTDIO AIChatMCPServerType = "stdio"
-	AIChatMCPServerTypeSSE   AIChatMCPServerType = "sse"
+	AIChatMCPServerTypeSTDIO          AIChatMCPServerType = "stdio"
+	AIChatMCPServerTypeStreamableHTTP AIChatMCPServerType = "streamable-http"
 )
 
 var (
@@ -182,6 +182,6 @@ type AIChatMCPServerConfig struct {
 	Command              string
 	EnvironmentVariables []string //key=value
 
-	// for sse server
+	// for streamable http server
 	Url string
 }

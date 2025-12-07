@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"wox/ai"
 	"wox/database"
 	"wox/migration"
 
@@ -174,6 +175,14 @@ func main() {
 
 	// Start auto update checker if enabled
 	updater.StartAutoUpdateChecker(ctx)
+
+	// Start MCP Server if enabled
+	if woxSetting.EnableMCPServer.Get() {
+		mcpPort := woxSetting.MCPServerPort.Get()
+		if mcpErr := ai.StartMCPServer(ctx, mcpPort); mcpErr != nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start MCP server: %s", mcpErr.Error()))
+		}
+	}
 
 	// hotkey must be registered in main thread
 	mainthread.Init(func() {
