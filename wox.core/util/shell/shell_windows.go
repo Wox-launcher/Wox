@@ -23,6 +23,7 @@ func RunWithEnv(name string, envs []string, arg ...string) (*exec.Cmd, error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true} // Hide the window
 	cmd.Stdout = util.GetLogger().GetWriter()
 	cmd.Stderr = util.GetLogger().GetWriter()
+	cmd.Dir = getWorkingDirectory(name)
 	if len(envs) == 0 {
 		cmd.Env = os.Environ()
 	} else {

@@ -26,6 +26,7 @@ func RunWithEnv(name string, envs []string, arg ...string) (*exec.Cmd, error) {
 	cmd := exec.Command(name, arg...)
 	cmd.Stdout = util.GetLogger().GetWriter()
 	cmd.Stderr = util.GetLogger().GetWriter()
+	cmd.Dir = getWorkingDirectory(name)
 	if len(envs) == 0 {
 		cmd.Env = os.Environ()
 	} else {
