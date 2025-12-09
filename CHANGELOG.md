@@ -10,6 +10,7 @@
 
   - Fix working directory issues, adding getWorkingDirectory function for command execution context, close [#4161]
   - Fix command line window display issue when executing Script Plugin
+  - Fix a render issue in `AI Chat` plugin
 
 ---
 

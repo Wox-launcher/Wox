@@ -19,13 +19,11 @@ class WoxSettingPluginSelectAIModel extends WoxSettingPluginItem {
         if (item.tooltip != "") WoxTooltipView(tooltip: item.tooltip, paddingLeft: 0, color: getThemeTextColor()),
         Padding(
           padding: const EdgeInsets.only(top: 6),
-          child: Expanded(
-            child: WoxAIModelSelectorView(
-              initialValue: value,
-              onModelSelected: (modelJson) {
-                updateConfig(item.key, modelJson);
-              },
-            ),
+          child: WoxAIModelSelectorView(
+            initialValue: value,
+            onModelSelected: (modelJson) {
+              updateConfig(item.key, modelJson);
+            },
           ),
         ),
         suffix(item.suffix),
