@@ -6,12 +6,13 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"golang.org/x/image/bmp"
 	"image"
 	"image/png"
 	"syscall"
 	"unicode/utf16"
 	"unsafe"
+
+	"golang.org/x/image/bmp"
 )
 
 var (
@@ -23,6 +24,7 @@ var (
 	setClipboardData           = user32.MustFindProc("SetClipboardData")
 	isClipboardFormatAvailable = user32.MustFindProc("IsClipboardFormatAvailable")
 	getClipboardSequenceNumber = user32.MustFindProc("GetClipboardSequenceNumber")
+	registerClipboardFormat    = user32.MustFindProc("RegisterClipboardFormatW")
 
 	kernel32 = syscall.NewLazyDLL("kernel32")
 	gLock    = kernel32.NewProc("GlobalLock")
@@ -167,7 +169,8 @@ func writeTextData(text string) error {
 
 func writeImageData(img image.Image) error {
 	const (
-		cFmtDIB = 8
+		cFmtDIB       = 8
+		fileHeaderLen = 14 // BMP file header length to skip
 	)
 
 	r, _, err := openClipboard.Call(0)
@@ -181,13 +184,40 @@ func writeImageData(img image.Image) error {
 		return fmt.Errorf("failed to clear clipboard: %w", err)
 	}
 
+	// Write PNG format for transparency support
+	pngBuf := new(bytes.Buffer)
+	if err := png.Encode(pngBuf, img); err == nil {
+		pngFormatName, _ := syscall.UTF16PtrFromString("PNG")
+		pngFormat, _, _ := registerClipboardFormat.Call(uintptr(unsafe.Pointer(pngFormatName)))
+		if pngFormat != 0 {
+			pngData := pngBuf.Bytes()
+			hMemPng, _, _ := gAlloc.Call(gmemMoveable, uintptr(len(pngData)))
+			if hMemPng != 0 {
+				pMemPng, _, _ := gLock.Call(hMemPng)
+				if pMemPng != 0 {
+					memMove.Call(pMemPng, uintptr(unsafe.Pointer(&pngData[0])), uintptr(len(pngData)))
+					gUnlock.Call(hMemPng)
+					setClipboardData.Call(pngFormat, hMemPng)
+				}
+			}
+		}
+	}
+
+	// Also write DIB format for compatibility with apps that don't support PNG
 	buf := new(bytes.Buffer)
 	err = bmp.Encode(buf, img)
 	if err != nil {
 		return fmt.Errorf("failed to encode image: %w", err)
 	}
 
-	hMem, _, err := gAlloc.Call(gmemMoveable, uintptr(buf.Len()))
+	// CF_DIB format expects DIB data without the BMP file header (14 bytes)
+	bmpData := buf.Bytes()
+	if len(bmpData) <= fileHeaderLen {
+		return fmt.Errorf("invalid BMP data: too short")
+	}
+	dibData := bmpData[fileHeaderLen:]
+
+	hMem, _, err := gAlloc.Call(gmemMoveable, uintptr(len(dibData)))
 	if hMem == 0 {
 		return fmt.Errorf("failed to allocate global memory: %w", err)
 	}
@@ -197,12 +227,12 @@ func writeImageData(img image.Image) error {
 		gFree.Call(hMem)
 		return fmt.Errorf("failed to lock global memory: %w", err)
 	}
-	defer gUnlock.Call(hMem)
 
-	memMove.Call(pMem, uintptr(unsafe.Pointer(&buf.Bytes()[0])), uintptr(buf.Len()))
+	memMove.Call(pMem, uintptr(unsafe.Pointer(&dibData[0])), uintptr(len(dibData)))
+	gUnlock.Call(hMem)
 
-	_, _, err = setClipboardData.Call(cFmtDIB, hMem)
-	if err != nil {
+	ret, _, err := setClipboardData.Call(cFmtDIB, hMem)
+	if ret == 0 {
 		gFree.Call(hMem)
 		return fmt.Errorf("failed to set clipboard data: %w", err)
 	}
