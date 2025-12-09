@@ -6,6 +6,10 @@
 
   - Add MCP Server for Wox plugin development (default enabled on port 29867, can be configured in settings)
 
+- Improve
+
+  - Improve fuzzy match based on fzf algorithm
+
 - Fix
 
   - Fix working directory issues, adding getWorkingDirectory function for command execution context, close `#4161`

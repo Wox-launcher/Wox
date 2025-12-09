@@ -2,8 +2,6 @@ package util
 
 import (
 	"strings"
-
-	"github.com/sahilm/fuzzy"
 )
 
 // PadChar left-pads s with the rune r, to length n.
@@ -39,59 +37,27 @@ func EllipsisMiddle(s string, maxLen int) string {
 
 }
 
+// IsStringMatch performs fuzzy string matching between term and subTerm.
+// It uses a multi-factor scoring algorithm similar to fzf, with support for:
+// - Diacritics normalization (é -> e, ü -> u, etc.)
+// - Chinese pinyin matching (when usePinYin is true)
+// - CamelCase and boundary matching bonuses
+// - Consecutive character matching bonuses
 func IsStringMatch(term string, subTerm string, usePinYin bool) bool {
-	isMatch, _ := IsStringMatchScore(term, subTerm, usePinYin)
-	return isMatch
+	result := FuzzyMatch(term, subTerm, usePinYin)
+	return result.IsMatch
 }
 
+// IsStringMatchScore performs fuzzy string matching and returns both match status and score.
+// Higher scores indicate better matches. The scoring considers:
+// - Exact matches (highest score)
+// - Prefix matches (high score)
+// - Boundary matches (CamelCase, after delimiters)
+// - Consecutive character matches
+// - Gap penalties for non-consecutive matches
 func IsStringMatchScore(term string, subTerm string, usePinYin bool) (isMatch bool, score int64) {
-	term = strings.ToLower(term)
-	subTerm = strings.ToLower(subTerm)
-
-	match, s := isStringMatchScoreFuzzy(term, subTerm, usePinYin)
-	if match {
-		return true, s
-	}
-
-	// fuzzy match is not good enough, E.g. term = 我爱摄影, subTerm = 摄, isStringMatchScoreFuzzy will return negative score
-	// So we need to check if subTerm is a substring of term if fuzzy match failed
-	if strings.Contains(term, subTerm) {
-		return true, int64(len(subTerm))
-	}
-
-	return false, 0
-}
-
-func isStringMatchScoreFuzzy(term string, subTerm string, usePinYin bool) (isMatch bool, score int64) {
-	var minMatchScore int64 = 0
-
-	if usePinYin {
-		var matchScore int64 = -100000000
-		pyTerms := getPinYin(term)
-		pyTerms = append(pyTerms, term) // add original term
-		for _, newTerm := range pyTerms {
-			matches := fuzzy.Find(subTerm, []string{newTerm})
-			if len(matches) == 0 {
-				continue
-			}
-
-			if int64(matches[0].Score) > matchScore {
-				matchScore = int64(matches[0].Score)
-			}
-		}
-
-		if matchScore == -100000000 {
-			return false, 0
-		}
-
-		return matchScore >= minMatchScore, matchScore
-	} else {
-		matches := fuzzy.Find(subTerm, []string{term})
-		if len(matches) == 0 {
-			return false, 0
-		}
-		return int64(matches[0].Score) >= minMatchScore, int64(matches[0].Score)
-	}
+	result := FuzzyMatch(term, subTerm, usePinYin)
+	return result.IsMatch, result.Score
 }
 
 // UniqueStrings removes empty entries and de-duplicates while preserving order.
