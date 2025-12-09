@@ -57,3 +57,8 @@ func OpenFileInFolder(path string) error {
 	_, err = Run("powershell.exe", "-Command", powershellCmd)
 	return err
 }
+
+// HideWindowCmd sets the SysProcAttr to hide the console window on Windows
+func HideWindowCmd(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+}

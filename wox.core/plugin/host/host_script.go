@@ -271,6 +271,9 @@ func (s *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string]
 		util.GetLogger().Debug(ctx, fmt.Sprintf("Executing command: %s", s.scriptPath))
 	}
 
+	// Hide console window on Windows
+	shell.HideWindowCmd(cmd)
+
 	// Set up environment variables for script plugins
 	envVars := []string{
 		"WOX_DIRECTORY_USER_SCRIPT_PLUGINS=" + util.GetLocation().GetUserScriptPluginsDirectory(),

@@ -52,3 +52,8 @@ func RunOutput(name string, arg ...string) ([]byte, error) {
 func OpenFileInFolder(path string) error {
 	return exec.Command("xdg-open", path).Start()
 }
+
+// HideWindowCmd is a no-op on Linux as there's no console window to hide
+func HideWindowCmd(cmd *exec.Cmd) {
+	// No-op on Linux
+}
