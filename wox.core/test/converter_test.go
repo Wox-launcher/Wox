@@ -14,7 +14,7 @@ func TestConverterCrypto(t *testing.T) {
 			Name:           "BTC shows equivalent value",
 			Query:          "1BTC",
 			ExpectedTitle:  "",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				return len(title) > 1 && (strings.Contains(title, "$") || strings.Contains(title, "¥") || strings.Contains(title, "€") || strings.Contains(title, "£"))
 			},
@@ -26,7 +26,7 @@ func TestConverterCrypto(t *testing.T) {
 			Name:           "BTC to USD",
 			Query:          "1BTC in USD",
 			ExpectedTitle:  "$",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				return len(title) > 1 && strings.HasPrefix(title, "$") && title[1] >= '0' && title[1] <= '9'
 			},
@@ -38,7 +38,7 @@ func TestConverterCrypto(t *testing.T) {
 			Name:           "BTC plus USD",
 			Query:          "1BTC + 1 USD",
 			ExpectedTitle:  "",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				// Should convert to user's default currency when crypto is involved
 				return len(title) > 1 && (strings.Contains(title, "$") || strings.Contains(title, "¥") || strings.Contains(title, "€"))
@@ -51,7 +51,7 @@ func TestConverterCrypto(t *testing.T) {
 			Name:           "ETH to USD",
 			Query:          "1 ETH to USD",
 			ExpectedTitle:  "$",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				return len(title) > 1 && strings.HasPrefix(title, "$") && title[1] >= '0' && title[1] <= '9'
 			},
@@ -63,7 +63,7 @@ func TestConverterCrypto(t *testing.T) {
 			Name:           "BTC + ETH uses default currency",
 			Query:          "1BTC + 1ETH",
 			ExpectedTitle:  "",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				// Should convert to user's default currency when crypto is involved
 				return len(title) > 1 && (strings.Contains(title, "$") || strings.Contains(title, "¥") || strings.Contains(title, "€"))
@@ -101,7 +101,7 @@ func TestConverterCurrency(t *testing.T) {
 			Name:           "Single Currency",
 			Query:          "100USD",
 			ExpectedTitle:  "",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				return len(title) > 1 && (strings.Contains(title, "$") || strings.Contains(title, "¥") || strings.Contains(title, "€") || strings.Contains(title, "£"))
 			},
@@ -113,7 +113,7 @@ func TestConverterCurrency(t *testing.T) {
 			Name:           "USD to EUR",
 			Query:          "100 USD in EUR",
 			ExpectedTitle:  "€",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				return len(title) > 1 && strings.HasPrefix(title, "€") && title[len("€")] >= '0' && title[len("€")] <= '9'
 			},
@@ -125,7 +125,7 @@ func TestConverterCurrency(t *testing.T) {
 			Name:           "EUR to USD",
 			Query:          "50 EUR = ? USD",
 			ExpectedTitle:  "$",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				return len(title) > 1 && strings.HasPrefix(title, "$") && title[1] >= '0' && title[1] <= '9'
 			},
@@ -137,7 +137,7 @@ func TestConverterCurrency(t *testing.T) {
 			Name:           "USD to CNY",
 			Query:          "100 USD to CNY",
 			ExpectedTitle:  "¥",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				return len(title) > 1 && strings.HasPrefix(title, "¥") && title[len("¥")] >= '0' && title[len("¥")] <= '9'
 			},
@@ -149,7 +149,7 @@ func TestConverterCurrency(t *testing.T) {
 			Name:           "complex convert",
 			Query:          "12% of $321 in jpy",
 			ExpectedTitle:  "",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				return len(title) > 1 && (strings.Contains(title, "$") || strings.Contains(title, "¥") || strings.Contains(title, "€") || strings.Contains(title, "£"))
 			},
@@ -162,7 +162,7 @@ func TestConverterCurrency(t *testing.T) {
 		// 	Name:           "complex crypto convert",
 		// 	Query:          "12% of 1btc in jpy",
 		// 	ExpectedTitle:  "",
-		// 	ExpectedAction: "Copy result",
+		// 	ExpectedAction: "Copy",
 		// 	TitleCheck: func(title string) bool {
 		// 		return len(title) > 1 && strings.Contains(title, "¥")
 		// 	},
