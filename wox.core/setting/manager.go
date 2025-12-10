@@ -176,8 +176,8 @@ func (m *Manager) GetMRUItems(ctx context.Context, limit int) ([]MRUItem, error)
 	return m.mruManager.GetMRUItems(ctx, limit)
 }
 
-func (m *Manager) RemoveMRUItem(ctx context.Context, pluginID, title, subTitle string) error {
-	return m.mruManager.RemoveMRUItem(ctx, pluginID, title, subTitle)
+func (m *Manager) RemoveMRUItem(ctx context.Context, hash string) error {
+	return m.mruManager.RemoveMRUItem(ctx, hash)
 }
 
 func (m *Manager) CleanupOldMRUItems(ctx context.Context, keepCount int) error {

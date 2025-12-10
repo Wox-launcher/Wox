@@ -16,6 +16,7 @@ import (
 
 // MRUItem represents a Most Recently Used item
 type MRUItem struct {
+	Hash        string          `json:"hash"`
 	PluginID    string          `json:"pluginId"`
 	Title       string          `json:"title"`
 	SubTitle    string          `json:"subTitle"`
@@ -37,8 +38,6 @@ func NewMRUManager(db *gorm.DB) *MRUManager {
 
 // AddMRUItem adds or updates an MRU item
 func (m *MRUManager) AddMRUItem(ctx context.Context, item MRUItem) error {
-	hash := NewResultHash(item.PluginID, item.Title, item.SubTitle)
-
 	// Serialize icon to JSON
 	iconData, err := json.Marshal(item.Icon)
 	if err != nil {
@@ -50,12 +49,12 @@ func (m *MRUManager) AddMRUItem(ctx context.Context, item MRUItem) error {
 
 	// Check if record exists
 	var existingRecord database.MRURecord
-	err = m.db.Where("hash = ?", string(hash)).First(&existingRecord).Error
+	err = m.db.Where("hash = ?", item.Hash).First(&existingRecord).Error
 
 	if err == gorm.ErrRecordNotFound {
 		// Create new record
 		record := database.MRURecord{
-			Hash:        string(hash),
+			Hash:        item.Hash,
 			PluginID:    item.PluginID,
 			Title:       item.Title,
 			SubTitle:    item.SubTitle,
@@ -130,6 +129,7 @@ func (m *MRUManager) GetMRUItems(ctx context.Context, limit int) ([]MRUItem, err
 		}
 
 		items = append(items, MRUItem{
+			Hash:        record.Hash,
 			PluginID:    record.PluginID,
 			Title:       record.Title,
 			SubTitle:    record.SubTitle,
@@ -144,9 +144,8 @@ func (m *MRUManager) GetMRUItems(ctx context.Context, limit int) ([]MRUItem, err
 }
 
 // RemoveMRUItem removes an MRU item by hash
-func (m *MRUManager) RemoveMRUItem(ctx context.Context, pluginID, title, subTitle string) error {
-	hash := NewResultHash(pluginID, title, subTitle)
-	result := m.db.Where("hash = ?", string(hash)).Delete(&database.MRURecord{})
+func (m *MRUManager) RemoveMRUItem(ctx context.Context, hash string) error {
+	result := m.db.Where("hash = ?", hash).Delete(&database.MRURecord{})
 	if result.Error != nil {
 		return fmt.Errorf("failed to remove MRU item: %w", result.Error)
 	}

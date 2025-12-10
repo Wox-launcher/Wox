@@ -1721,17 +1721,39 @@ func (m *Manager) SubmitFormAction(ctx context.Context, resultId string, actionI
 
 func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResultCache) {
 	// Add actioned result for statistics
-	setting.GetSettingManager().AddActionedResult(ctx, resultCache.PluginInstance.Metadata.Id, resultCache.Result.Title, resultCache.Result.SubTitle, resultCache.Query.RawQuery)
+	meta := resultCache.PluginInstance.Metadata
+	setting.GetSettingManager().AddActionedResult(ctx, meta.Id, resultCache.Result.Title, resultCache.Result.SubTitle, resultCache.Query.RawQuery)
 
 	// Add to MRU if plugin supports it
-	if resultCache.PluginInstance.Metadata.IsSupportFeature(MetadataFeatureMRU) {
+	if meta.IsSupportFeature(MetadataFeatureMRU) {
 		mruItem := setting.MRUItem{
-			PluginID:    resultCache.PluginInstance.Metadata.Id,
+			PluginID:    meta.Id,
 			Title:       resultCache.Result.Title,
 			SubTitle:    resultCache.Result.SubTitle,
 			Icon:        resultCache.Result.Icon,
 			ContextData: resultCache.Result.ContextData,
 		}
+
+		// Decide MRU identity hash based on plugin metadata feature params
+		hashTitle := mruItem.Title
+		hashSubTitle := mruItem.SubTitle
+		if params, err := meta.GetFeatureParamsForMRU(); err == nil {
+			switch params.HashBy {
+			case "rawquery":
+				if resultCache.Query.RawQuery != "" {
+					hashTitle = resultCache.Query.RawQuery
+					hashSubTitle = ""
+				}
+			case "search":
+				if resultCache.Query.Search != "" {
+					hashTitle = resultCache.Query.Search
+					hashSubTitle = ""
+				}
+			default:
+				// "title" or unknown: keep default Title/SubTitle based hash
+			}
+		}
+		mruItem.Hash = string(setting.NewResultHash(meta.Id, hashTitle, hashSubTitle))
 		if err := setting.GetSettingManager().AddMRUItem(ctx, mruItem); err != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to add MRU item: %s", err.Error()))
 		}
@@ -1921,7 +1943,7 @@ func (m *Manager) QueryMRU(ctx context.Context) []QueryResultUI {
 				Name: i18n.GetI18nManager().TranslateWox(ctx, "mru_remove_action"),
 				Icon: common.TrashIcon,
 				Action: func(ctx context.Context, actionContext ActionContext) {
-					err := setting.GetSettingManager().RemoveMRUItem(ctx, item.PluginID, item.Title, item.SubTitle)
+					err := setting.GetSettingManager().RemoveMRUItem(ctx, item.Hash)
 					if err != nil {
 						util.GetLogger().Error(ctx, fmt.Sprintf("failed to remove MRU item: %s", err.Error()))
 					} else {

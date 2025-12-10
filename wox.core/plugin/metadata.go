@@ -136,6 +136,28 @@ func (m *Metadata) GetFeatureParamsForResultPreviewWidthRatio() (MetadataFeature
 	return MetadataFeatureParamsResultPreviewWidthRatio{}, errors.New("plugin does not support resultPreviewWidthRatio feature")
 }
 
+type MetadataFeatureParamsMRU struct {
+	// HashBy controls how MRU identity hash is calculated for this plugin.
+	// Supported values:
+	//   - "title"    (default): use result Title + SubTitle (backward compatible)
+	//   - "rawQuery": use original Query.RawQuery as identity
+	//   - "search":  use Query.Search as identity
+	HashBy string
+}
+
+func (m *Metadata) GetFeatureParamsForMRU() (MetadataFeatureParamsMRU, error) {
+	for _, feature := range m.Features {
+		if strings.EqualFold(feature.Name, MetadataFeatureMRU) {
+			params := MetadataFeatureParamsMRU{HashBy: "title"}
+			if v, ok := feature.Params["HashBy"]; ok && v != "" {
+				params.HashBy = strings.ToLower(v)
+			}
+			return params, nil
+		}
+	}
+	return MetadataFeatureParamsMRU{}, errors.New("plugin does not support mru feature")
+}
+
 func (m *Metadata) GetFeatureParamsForQueryEnv() (MetadataFeatureParamsQueryEnv, error) {
 	for _, feature := range m.Features {
 		if strings.EqualFold(feature.Name, MetadataFeatureQueryEnv) {

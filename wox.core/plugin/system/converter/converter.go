@@ -2,6 +2,7 @@ package converter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"wox/common"
@@ -22,6 +23,10 @@ type Converter struct {
 	api       plugin.API
 	registry  *core.ModuleRegistry
 	tokenizer *core.Tokenizer
+}
+
+type converterContextData struct {
+	Query string `json:"query"`
 }
 
 func (c *Converter) GetMetadata() plugin.Metadata {
@@ -45,6 +50,14 @@ func (c *Converter) GetMetadata() plugin.Metadata {
 			"Windows",
 			"Macos",
 			"Linux",
+		},
+		Features: []plugin.MetadataFeature{
+			{
+				Name: plugin.MetadataFeatureMRU,
+				Params: map[string]string{
+					"HashBy": "rawQuery",
+				},
+			},
 		},
 	}
 }
@@ -70,6 +83,8 @@ func (c *Converter) Init(ctx context.Context, initParams plugin.InitParams) {
 	tokenizer := core.NewTokenizer(registry.GetTokenPatterns())
 	c.registry = registry
 	c.tokenizer = tokenizer
+
+	c.api.OnMRURestore(ctx, c.handleMRURestore)
 }
 
 // parseExpression parses a complex expression like "1btc + 100usd"
@@ -342,10 +357,16 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 		c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Calculation result: displayValue=%s, rawValue=%s, unit=%s", result.DisplayValue, result.RawValue.String(), result.Unit.Name))
 	}
 
+	contextData := converterContextData{
+		Query: query.Search,
+	}
+	contextDataJson, _ := json.Marshal(contextData)
+
 	return []plugin.QueryResult{
 		{
-			Title: result.DisplayValue,
-			Icon:  common.PluginConverterIcon,
+			Title:       result.DisplayValue,
+			Icon:        common.PluginConverterIcon,
+			ContextData: string(contextDataJson),
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_converter_copy_result",
@@ -356,4 +377,33 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 			},
 		},
 	}
+}
+
+func (c *Converter) handleMRURestore(mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	var contextData converterContextData
+	if err := json.Unmarshal([]byte(mruData.ContextData), &contextData); err != nil {
+		return nil, fmt.Errorf("failed to parse context data: %w", err)
+	}
+
+	if contextData.Query == "" {
+		return nil, fmt.Errorf("empty converter query in context data")
+	}
+
+	// Recalculate using the original query
+	query := plugin.Query{
+		Type:     plugin.QueryTypeInput,
+		RawQuery: contextData.Query,
+		Search:   contextData.Query,
+	}
+
+	results := c.Query(context.Background(), query)
+	if len(results) == 0 {
+		return nil, fmt.Errorf("no result for query: %s", contextData.Query)
+	}
+
+	restored := results[0]
+	restored.Title = fmt.Sprintf("%s: %s", contextData.Query, restored.Title)
+	restored.ContextData = mruData.ContextData
+
+	return &restored, nil
 }
