@@ -193,14 +193,7 @@ class _WoxPreviewViewState extends State<WoxPreviewView> {
     } else if (widget.woxPreview.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
       var previewChatData = WoxAIChatData.fromJson(jsonDecode(widget.woxPreview.previewData));
       var chatController = Get.find<WoxAIChatController>();
-      var launcherController = Get.find<WoxLauncherController>();
       chatController.aiChatData.value = previewChatData;
-
-      // If hasPendingAutoFocusToChatInput is true, focus to chat input after the UI has been built
-      if (launcherController.hasPendingAutoFocusToChatInput) {
-        chatController.focusToChatInput(const UuidV4().generate());
-        launcherController.hasPendingAutoFocusToChatInput = false;
-      }
 
       // Handle scroll position for chat view
       if (widget.woxPreview.scrollPosition == WoxPreviewScrollPositionEnum.WOX_PREVIEW_SCROLL_POSITION_BOTTOM.code) {

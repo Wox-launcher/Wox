@@ -97,9 +97,6 @@ class WoxLauncherController extends GetxController {
   int clearQueryResultDelay = 100; // adaptive between 100-200ms based on flicker detection
   final windowFlickerDetector = WindowFlickerDetector(minDelay: 100, maxDelay: 200);
 
-  // ai chat related variables
-  bool hasPendingAutoFocusToChatInput = false;
-
   /// This flag is used to control whether the user can arrow up to show history when the app is first shown.
   var canArrowUpHistory = true;
   final latestQueryHistories = <QueryHistory>[]; // the latest query histories
@@ -378,7 +375,10 @@ class WoxLauncherController extends GetxController {
     focusQueryBox(selectAll: params.selectAll);
 
     if (params.autoFocusToChatInput) {
-      hasPendingAutoFocusToChatInput = true;
+      Logger.instance.debug(traceId, "need to auto focus to chat input on show app");
+      if (isShowPreviewPanel.value && currentPreview.value.previewType == WoxPreviewTypeEnum.WOX_PREVIEW_TYPE_CHAT.code) {
+        Get.find<WoxAIChatController>().focusToChatInput(traceId);
+      }
     }
 
     WoxApi.instance.onShow();
@@ -567,22 +567,8 @@ class WoxLauncherController extends GetxController {
       hideApp(traceId);
     }
 
-    if (isShowActionPanel.value) {
-      hideActionPanel(traceId);
-    }
-    if (isShowFormActionPanel.value) {
-      hideFormActionPanel(traceId);
-    } else {
-      if (Platform.isWindows) {
-        // Windows-specific workaround: On Windows, when an async function awaits,
-        // the event loop processes pending platform events which may include IME-related
-        // focus changes. This causes the TextField to unexpectedly lose focus.
-        // We restore focus after all UI updates are done.
-        SchedulerBinding.instance.addPostFrameCallback((_) {
-          focusQueryBox();
-        });
-      }
-    }
+    hideActionPanel(traceId);
+    hideFormActionPanel(traceId);
   }
 
   Future<void> submitFormAction(String traceId, Map<String, String> values) async {
@@ -767,7 +753,7 @@ class WoxLauncherController extends GetxController {
 
     // Set longer delay for clearing results to avoid flicker
     // since refresh query usually returns similar results
-    clearQueryResultDelay = 250;
+    clearQueryResultDelay = 400;
 
     // Get current query and create a new query with the same content but new ID
     final currentQueryValue = currentQuery.value;
@@ -834,7 +820,7 @@ class WoxLauncherController extends GetxController {
     } else if (msg.method == "GetCurrentQuery") {
       responseWoxWebsocketRequest(msg, true, currentQuery.value.toJson());
     } else if (msg.method == "FocusToChatInput") {
-      focusToChatInput(msg.traceId);
+      Get.find<WoxAIChatController>().focusToChatInput(msg.traceId);
       responseWoxWebsocketRequest(msg, true, null);
     } else if (msg.method == "SendChatResponse") {
       handleChatResponse(msg.traceId, WoxAIChatData.fromJson(msg.data));
@@ -1292,11 +1278,6 @@ class WoxLauncherController extends GetxController {
     }
 
     executeAction(traceId, activeResult.data, actionToExecute);
-  }
-
-  void focusToChatInput(String traceId) {
-    Logger.instance.info(traceId, "focus to chat input");
-    Get.find<WoxAIChatController>().focusToChatInput(traceId);
   }
 
   void handleChatResponse(String traceId, WoxAIChatData data) {

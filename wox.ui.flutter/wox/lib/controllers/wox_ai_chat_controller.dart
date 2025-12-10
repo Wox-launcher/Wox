@@ -305,6 +305,10 @@ class WoxAIChatController extends GetxController {
 
     Logger.instance.debug(const UuidV4().generate(), "AI: Updating chat select list with ${items.length} items");
     chatSelectListController.updateItems(const UuidV4().generate(), items);
+
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      chatSelectListController.filterBoxFocusNode.requestFocus();
+    });
   }
 
   // Show chat select panel
@@ -313,9 +317,6 @@ class WoxAIChatController extends GetxController {
     isShowChatSelectPanel.value = true;
     currentChatSelectCategory.value = "";
     updateChatSelectItems();
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      chatSelectListController.filterBoxFocusNode.requestFocus();
-    });
   }
 
   // Show models panel directly
@@ -323,10 +324,6 @@ class WoxAIChatController extends GetxController {
     showChatSelectPanel();
     currentChatSelectCategory.value = "models";
     updateChatSelectItems();
-
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      chatSelectListController.filterBoxFocusNode.requestFocus();
-    });
   }
 
   // Show tools panel directly
@@ -334,10 +331,6 @@ class WoxAIChatController extends GetxController {
     showChatSelectPanel();
     currentChatSelectCategory.value = "tools";
     updateChatSelectItems();
-
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      chatSelectListController.filterBoxFocusNode.requestFocus();
-    });
   }
 
   // Show agents panel directly
@@ -345,17 +338,13 @@ class WoxAIChatController extends GetxController {
     showChatSelectPanel();
     currentChatSelectCategory.value = "agents";
     updateChatSelectItems();
-
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      chatSelectListController.filterBoxFocusNode.requestFocus();
-    });
   }
 
   // Hide chat select panel
   void hideChatSelectPanel() {
     isShowChatSelectPanel.value = false;
     chatSelectListController.clearFilter(const UuidV4().generate());
-    aiChatFocusNode.requestFocus();
+    focusToChatInput(const UuidV4().generate());
   }
 
   // Scroll to bottom of AI chat
@@ -601,10 +590,7 @@ class WoxAIChatController extends GetxController {
       aiChatData.value.conversations.removeLast();
     }
 
-    // Focus on the text input
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      aiChatFocusNode.requestFocus();
-    });
+    focusToChatInput(const UuidV4().generate());
   }
 
   @override

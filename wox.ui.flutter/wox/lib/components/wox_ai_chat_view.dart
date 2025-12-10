@@ -6,6 +6,7 @@ import 'package:wox/components/wox_chat_toolcall_duration.dart';
 import 'package:wox/components/wox_image_view.dart';
 import 'package:wox/components/wox_list_view.dart';
 import 'package:wox/components/wox_markdown.dart';
+import 'package:wox/components/wox_platform_focus.dart';
 import 'package:wox/controllers/wox_ai_chat_controller.dart';
 import 'package:wox/controllers/wox_setting_controller.dart';
 import 'package:wox/entity/wox_ai.dart';
@@ -152,7 +153,7 @@ class WoxAIChatView extends GetView<WoxAIChatController> {
               ),
             ),
             // Input box and controls area
-            Focus(
+            WoxPlatformFocus(
               onKeyEvent: (FocusNode node, KeyEvent event) {
                 if (event is KeyDownEvent) {
                   switch (event.logicalKey) {

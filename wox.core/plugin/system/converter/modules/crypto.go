@@ -204,8 +204,6 @@ func (m *CryptoModule) handleToConversion(ctx context.Context, matches []string)
 }
 
 func (m *CryptoModule) fetchCryptoPrices(ctx context.Context) (map[string]float64, error) {
-	util.GetLogger().Info(ctx, "Starting to fetch crypto prices from CoinGecko")
-
 	body, err := util.HttpGet(ctx, "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether,binancecoin&vs_currencies=usd")
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch prices: %w", err)
@@ -222,6 +220,5 @@ func (m *CryptoModule) fetchCryptoPrices(ctx context.Context) (map[string]float6
 	prices["usdt"] = response.Tether.Usd
 	prices["bnb"] = response.BinanceCoin.Usd
 
-	util.GetLogger().Info(ctx, fmt.Sprintf("Successfully fetched crypto prices: %v", prices))
 	return prices, nil
 }
