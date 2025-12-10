@@ -11,6 +11,8 @@ import (
 	"wox/setting"
 	"wox/util"
 	"wox/util/clipboard"
+
+	"github.com/shopspring/decimal"
 )
 
 var calculatorIcon = common.PluginCalculatorIcon
@@ -31,6 +33,61 @@ type CalculatorPlugin struct {
 	lastQueryText    string
 	debounceTimer    *time.Timer
 	debounceInterval time.Duration
+}
+
+// formatWithThousandsSeparator formats a decimal number with thousands separators
+// e.g., 56335258.87 -> "56,335,258.87"
+func formatWithThousandsSeparator(val decimal.Decimal) string {
+	valStr := val.String()
+	parts := strings.Split(valStr, ".")
+
+	intPart := parts[0]
+	// Handle negative numbers
+	negative := false
+	if strings.HasPrefix(intPart, "-") {
+		negative = true
+		intPart = intPart[1:]
+	}
+
+	// Add thousands separators
+	formattedInt := addThousandsSeparator(intPart)
+
+	if negative {
+		formattedInt = "-" + formattedInt
+	}
+
+	if len(parts) == 2 {
+		return formattedInt + "." + parts[1]
+	}
+
+	return formattedInt
+}
+
+// addThousandsSeparator adds comma separators to an integer string
+// e.g., "56335258" -> "56,335,258"
+func addThousandsSeparator(s string) string {
+	n := len(s)
+	if n <= 3 {
+		return s
+	}
+
+	// Calculate how many commas we need
+	numCommas := (n - 1) / 3
+	result := make([]byte, n+numCommas)
+
+	// Fill from right to left
+	j := len(result) - 1
+	for i := n - 1; i >= 0; i-- {
+		result[j] = s[i]
+		j--
+		// Add comma every 3 digits, but not at the beginning
+		if (n-i)%3 == 0 && i > 0 {
+			result[j] = ','
+			j--
+		}
+	}
+
+	return string(result)
 }
 
 func (c *CalculatorPlugin) GetMetadata() plugin.Metadata {
@@ -79,16 +136,18 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 			return []plugin.QueryResult{}
 		}
 		result := val.String()
+		formattedResult := formatWithThousandsSeparator(val)
 
 		// Add to query history with debounce when calculation is successful
 		c.addQueryHistoryDebounced(ctx, query.Search, result)
 
 		results = append(results, plugin.QueryResult{
-			Title: result,
+			Title: formattedResult,
 			Icon:  calculatorIcon,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name: "i18n:plugin_calculator_copy_result",
+					Icon: common.CopyIcon,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						c.histories = append(c.histories, CalculatorHistory{
 							Expression: query.Search,
@@ -96,6 +155,19 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 							AddDate:    util.FormatDateTime(util.GetSystemTime()),
 						})
 						clipboard.WriteText(result)
+					},
+				},
+				{
+					Name:      "i18n:plugin_calculator_copy_result_with_thousands_separator",
+					IsDefault: true,
+					Icon:      common.CopyIcon,
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						c.histories = append(c.histories, CalculatorHistory{
+							Expression: query.Search,
+							Result:     result,
+							AddDate:    util.FormatDateTime(util.GetSystemTime()),
+						})
+						clipboard.WriteText(formattedResult)
 					},
 				},
 			},
@@ -107,19 +179,28 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 		val, err := Calculate(query.Search)
 		if err == nil {
 			result := val.String()
+			formattedResult := formatWithThousandsSeparator(val)
 
 			// Add to query history with debounce when calculation is successful
 			c.addQueryHistoryDebounced(ctx, query.Search, result)
 
 			results = append(results, plugin.QueryResult{
-				Title: result,
+				Title: formattedResult,
 				Icon:  calculatorIcon,
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_calculator_copy_result",
+						Icon: common.CopyIcon,
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-
 							clipboard.WriteText(result)
+						},
+					},
+					{
+						Name:      "i18n:plugin_calculator_copy_result_with_thousands_separator",
+						IsDefault: true,
+						Icon:      common.CopyIcon,
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+							clipboard.WriteText(formattedResult)
 						},
 					},
 				},
@@ -137,16 +218,31 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) []plug
 			}
 
 			if strings.Contains(h.Expression, query.Search) || strings.Contains(h.Result, query.Search) {
+				// Try to parse history result to format with thousands separator
+				historyVal, parseErr := decimal.NewFromString(h.Result)
+				formattedHistoryResult := h.Result
+				if parseErr == nil {
+					formattedHistoryResult = formatWithThousandsSeparator(historyVal)
+				}
+
 				results = append(results, plugin.QueryResult{
 					Title:    h.Expression,
-					SubTitle: h.Result,
+					SubTitle: formattedHistoryResult,
 					Icon:     calculatorIcon,
 					Actions: []plugin.QueryResultAction{
 						{
-							Name:      "i18n:plugin_calculator_copy_result",
-							IsDefault: true,
+							Name: "i18n:plugin_calculator_copy_result",
+							Icon: common.CopyIcon,
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								clipboard.WriteText(h.Result)
+							},
+						},
+						{
+							Name:      "i18n:plugin_calculator_copy_result_with_thousands_separator",
+							IsDefault: true,
+							Icon:      common.CopyIcon,
+							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+								clipboard.WriteText(formattedHistoryResult)
 							},
 						},
 						{
