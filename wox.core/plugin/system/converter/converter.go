@@ -348,15 +348,9 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) []plugin.Quer
 			Icon:  common.PluginConverterIcon,
 			Actions: []plugin.QueryResultAction{
 				{
-					Name: "i18n:plugin_calculator_copy_result",
+					Name: "i18n:plugin_converter_copy_result",
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						clipboard.WriteText(result.DisplayValue)
-					},
-				},
-				{
-					Name: "i18n:plugin_calculator_add_to_favorite",
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						// Handle add to favorite action
 					},
 				},
 			},

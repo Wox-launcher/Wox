@@ -59,6 +59,9 @@ func formatDurationValue(duration time.Duration) string {
 }
 
 var timeZoneAliases = map[string]string{
+	// UTC
+	"utc": "UTC",
+
 	// Asia
 	"shanghai":  "Asia/Shanghai",
 	"beijing":   "Asia/Shanghai",

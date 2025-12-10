@@ -470,6 +470,7 @@
   "plugin_emoji_remove_frequently_used": "Удалить из часто используемых",
   "plugin_emoji_frequently_used": "Часто используемые",
   "plugin_emoji_all": "Эмодзи",
+  "plugin_converter_copy_result": "Копировать",
   "plugin_file_open": "Открыть",
   "plugin_file_open_containing_folder": "Открыть содержащую папку",
   "plugin_file_show_context_menu": "Показать системное контекстное меню",

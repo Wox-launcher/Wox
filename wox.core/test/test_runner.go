@@ -64,14 +64,14 @@ func ExampleTestWithIsolatedEnvironment(t *testing.T) {
 	runner.RunWithCleanup(t, func(t *testing.T) {
 		// Your test code here
 		suite := NewTestSuite(t)
-		
+
 		test := QueryTest{
 			Name:           "Example test",
 			Query:          "1+1",
 			ExpectedTitle:  "2",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 		}
-		
+
 		if !suite.RunQueryTest(test) {
 			t.Errorf("Example test failed")
 		}
@@ -93,20 +93,20 @@ func CleanupTestEnvironmentFromEnv() error {
 // ValidateTestEnvironment checks if the test environment is properly configured
 func ValidateTestEnvironment(t *testing.T) error {
 	config := GetTestConfig()
-	
+
 	// Check if directories exist
 	if _, err := os.Stat(config.TestDataDirectory); os.IsNotExist(err) {
 		return fmt.Errorf("test data directory does not exist: %s", config.TestDataDirectory)
 	}
-	
+
 	if _, err := os.Stat(config.TestLogDirectory); os.IsNotExist(err) {
 		return fmt.Errorf("test log directory does not exist: %s", config.TestLogDirectory)
 	}
-	
+
 	if _, err := os.Stat(config.TestUserDirectory); os.IsNotExist(err) {
 		return fmt.Errorf("test user directory does not exist: %s", config.TestUserDirectory)
 	}
-	
+
 	t.Logf("Test environment validation passed")
 	return nil
 }

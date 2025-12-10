@@ -42,7 +42,7 @@ func TestCalculatorTime(t *testing.T) {
 			Name:           "Time in location",
 			Query:          "time in Shanghai",
 			ExpectedTitle:  expectedTime,
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				// More flexible time check - should contain time format
 				return strings.Contains(title, "AM") || strings.Contains(title, "PM") || strings.Contains(title, ":")
@@ -52,7 +52,7 @@ func TestCalculatorTime(t *testing.T) {
 			Name:           "Weekday in future",
 			Query:          "monday in 10 days",
 			ExpectedTitle:  expectedMonday,
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				// Should contain date and Monday
 				return strings.Contains(title, "Monday") && strings.Contains(title, "-")
@@ -62,7 +62,7 @@ func TestCalculatorTime(t *testing.T) {
 			Name:           "Days until Christmas",
 			Query:          "days until 25 Dec 2025",
 			ExpectedTitle:  expectedDaysUntil,
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				// Should contain "days"
 				return strings.Contains(title, "days")
@@ -72,7 +72,7 @@ func TestCalculatorTime(t *testing.T) {
 			Name:           "Specific time in location",
 			Query:          "3:30 pm in tokyo",
 			ExpectedTitle:  "",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				// Should contain time format
 				return strings.Contains(title, "PM") || strings.Contains(title, "AM") || strings.Contains(title, ":")
@@ -82,13 +82,13 @@ func TestCalculatorTime(t *testing.T) {
 			Name:           "Simple time unit",
 			Query:          "100ms",
 			ExpectedTitle:  "100 milliseconds",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 		},
 		{
 			Name:           "Time conversion",
 			Query:          "1h",
 			ExpectedTitle:  "1.00 hours",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 		},
 	}
 
@@ -103,7 +103,7 @@ func TestTimeZoneConversions(t *testing.T) {
 			Name:           "UTC time",
 			Query:          "time in UTC",
 			ExpectedTitle:  "",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				return strings.Contains(title, ":") && (strings.Contains(title, "AM") || strings.Contains(title, "PM"))
 			},
@@ -112,7 +112,7 @@ func TestTimeZoneConversions(t *testing.T) {
 			Name:           "London time",
 			Query:          "time in London",
 			ExpectedTitle:  "",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				return strings.Contains(title, ":") && (strings.Contains(title, "AM") || strings.Contains(title, "PM"))
 			},
@@ -121,7 +121,7 @@ func TestTimeZoneConversions(t *testing.T) {
 			Name:           "New York time",
 			Query:          "time in New York",
 			ExpectedTitle:  "",
-			ExpectedAction: "Copy result",
+			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
 				return strings.Contains(title, ":") && (strings.Contains(title, "AM") || strings.Contains(title, "PM"))
 			},

@@ -470,6 +470,7 @@
   "plugin_emoji_remove_frequently_used": "Remover dos frequentes",
   "plugin_emoji_frequently_used": "Usados frequentemente",
   "plugin_emoji_all": "Emojis",
+  "plugin_converter_copy_result": "Copiar",
   "plugin_file_open": "Abrir",
   "plugin_file_open_containing_folder": "Abrir pasta contendo",
   "plugin_file_show_context_menu": "Mostrar menu de contexto do sistema",
