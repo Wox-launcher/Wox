@@ -137,7 +137,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		UsePinYin:            NewWoxSettingValue(store, "UsePinYin", usePinYin),
 		SwitchInputMethodABC: NewWoxSettingValue(store, "SwitchInputMethodABC", switchInputMethodABC),
 		ShowTray:             NewWoxSettingValue(store, "ShowTray", true),
-		HideOnLostFocus:      NewWoxSettingValue(store, "HideOnLostFocus", true),
+		HideOnLostFocus:      NewWoxSettingValue(store, "HideOnLostFocus", false),
 		HideOnStart:          NewWoxSettingValue(store, "HideOnStart", false),
 		LangCode: NewWoxSettingValueWithValidator(store, "LangCode", defaultLangCode, func(code i18n.LangCode) bool {
 			return i18n.IsSupportedLangCode(string(code))

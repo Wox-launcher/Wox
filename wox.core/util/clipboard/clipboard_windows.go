@@ -248,34 +248,93 @@ func readBmpImage() (image.Image, error) {
 		cFmtDIB       = 8
 	)
 
-	r, _, err := openClipboard.Call(0)
-	if r == 0 {
-		return nil, fmt.Errorf("failed to open clipboard: %w", err)
-	}
-	defer closeClipboard.Call()
+	// First, quickly read clipboard data into local memory, then close clipboard immediately
+	// to avoid blocking other applications from accessing the clipboard during image processing
+	var dibDataCopy []byte
+	var headerCopy bitmapHeader
 
-	hClipDat, _, err := getClipboardData.Call(cFmtDIB)
-	if err != nil && hClipDat == 0 {
-		return nil, errors.New("not dib format data: " + err.Error())
-	}
-	if hClipDat == 0 {
-		return nil, errors.New("getClipboardData returned 0")
+	err := func() error {
+		r, _, err := openClipboard.Call(0)
+		if r == 0 {
+			return fmt.Errorf("failed to open clipboard: %w", err)
+		}
+		defer closeClipboard.Call()
+
+		hClipDat, _, err := getClipboardData.Call(cFmtDIB)
+		if err != nil && hClipDat == 0 {
+			return errors.New("not dib format data: " + err.Error())
+		}
+		if hClipDat == 0 {
+			return errors.New("getClipboardData returned 0")
+		}
+
+		pMemBlk, _, err := gLock.Call(hClipDat)
+		if pMemBlk == 0 {
+			return errors.New("failed to call global lock: " + err.Error())
+		}
+		defer gUnlock.Call(hClipDat)
+
+		// Copy header first
+		headerCopy = *(*bitmapHeader)(unsafe.Pointer(pMemBlk))
+
+		// Calculate the total size of DIB data we need to copy
+		var dibSize uint32
+		if headerCopy.BitCount == 32 {
+			// For 32-bit images, calculate size based on dimensions
+			width := int(headerCopy.Width)
+			height := int(headerCopy.Height)
+			if height < 0 {
+				height = -height
+			}
+			headerOffset := headerCopy.Size
+			if headerCopy.Compression == 3 && headerCopy.Size == 40 {
+				headerOffset += 12
+			}
+			dibSize = headerOffset + uint32(width*height*4)
+		} else {
+			// For other bit depths, calculate using standard BMP formula
+			imageSize := headerCopy.SizeImage
+			if imageSize == 0 && headerCopy.Compression == 0 {
+				stride := (int(headerCopy.Width)*int(headerCopy.BitCount) + 31) / 32 * 4
+				h := headerCopy.Height
+				if h < 0 {
+					h = -h
+				}
+				imageSize = uint32(stride * int(h))
+			}
+			offset := headerCopy.Size
+			if headerCopy.Compression == 3 && headerCopy.Size == 40 {
+				offset += 12
+			}
+			if headerCopy.BitCount <= 8 {
+				colors := headerCopy.ClrUsed
+				if colors == 0 {
+					colors = 1 << headerCopy.BitCount
+				}
+				offset += colors * 4
+			}
+			dibSize = offset + imageSize
+		}
+
+		// Copy all DIB data to local memory
+		srcData := (*[1 << 30]byte)(unsafe.Pointer(pMemBlk))[:dibSize:dibSize]
+		dibDataCopy = make([]byte, dibSize)
+		copy(dibDataCopy, srcData)
+
+		return nil
+	}()
+
+	if err != nil {
+		return nil, err
 	}
 
-	pMemBlk, _, err := gLock.Call(hClipDat)
-	if pMemBlk == 0 {
-		return nil, errors.New("failed to call global lock: " + err.Error())
-	}
-	defer gUnlock.Call(hClipDat)
-
-	// DIB data starts with the header
-	bmpHeader := (*bitmapHeader)(unsafe.Pointer(pMemBlk))
+	// Now process the copied data without holding the clipboard open
 
 	// Manual Decoder for 32-bit Images (Common in modern Windows apps like Chrome/Edge)
 	// The standard Go bmp.Decode often fails with "unsupported BMP image" for these.
-	if bmpHeader.BitCount == 32 {
-		width := int(bmpHeader.Width)
-		height := int(bmpHeader.Height)
+	if headerCopy.BitCount == 32 {
+		width := int(headerCopy.Width)
+		height := int(headerCopy.Height)
 		isTopDown := height < 0
 		if isTopDown {
 			height = -height
@@ -287,26 +346,22 @@ func readBmpImage() (image.Image, error) {
 		}
 
 		// Calculate offset to pixel data
-		headerSize := bmpHeader.Size
+		headerSize := headerCopy.Size
 		offset := headerSize
 
 		// Handle BI_BITFIELDS (Compression=3) with BITMAPINFOHEADER (Size=40)
 		// In this case, 3 DWORD color masks follow the header.
-		if bmpHeader.Compression == 3 && headerSize == 40 {
+		if headerCopy.Compression == 3 && headerSize == 40 {
 			offset += 12
 		}
-
-		// Pointer to pixel data
-		pixelsAddr := uintptr(unsafe.Pointer(pMemBlk)) + uintptr(offset)
 
 		img := image.NewNRGBA(image.Rect(0, 0, width, height))
 
 		// 32bpp stride is always width * 4
 		stride := width * 4
 
-		// Construct slice for pixel data (careful with bounds)
-		dataSize := stride * height
-		pixelData := (*[1 << 30]byte)(unsafe.Pointer(pixelsAddr))[:dataSize:dataSize]
+		// Use the copied data instead of direct memory access
+		pixelData := dibDataCopy[offset:]
 
 		for y := 0; y < height; y++ {
 			// DIBs are usually bottom-up
@@ -340,25 +395,25 @@ func readBmpImage() (image.Image, error) {
 	// Re-implementing the BMP file construction for fallback.
 
 	// Get the total size of the DIB data (including header, palette, and pixel data)
-	imageSize := bmpHeader.SizeImage
-	if imageSize == 0 && bmpHeader.Compression == 0 { // BI_RGB
-		stride := (int(bmpHeader.Width)*int(bmpHeader.BitCount) + 31) / 32 * 4
-		imageSize = uint32(stride * int(map[bool]int32{true: bmpHeader.Height, false: -bmpHeader.Height}[bmpHeader.Height > 0]))
+	imageSize := headerCopy.SizeImage
+	if imageSize == 0 && headerCopy.Compression == 0 { // BI_RGB
+		stride := (int(headerCopy.Width)*int(headerCopy.BitCount) + 31) / 32 * 4
+		imageSize = uint32(stride * int(map[bool]int32{true: headerCopy.Height, false: -headerCopy.Height}[headerCopy.Height > 0]))
 	}
 
 	// Offset Calculation Logic for File Header
-	offset := uint32(fileHeaderLen) + bmpHeader.Size
+	offset := uint32(fileHeaderLen) + headerCopy.Size
 
 	// + Palette/Masks:
-	if bmpHeader.Compression == 3 && bmpHeader.Size == 40 {
+	if headerCopy.Compression == 3 && headerCopy.Size == 40 {
 		offset += 12
 	}
 
 	// If BitCount <= 8, a color table follows.
-	if bmpHeader.BitCount <= 8 {
-		colors := bmpHeader.ClrUsed
+	if headerCopy.BitCount <= 8 {
+		colors := headerCopy.ClrUsed
 		if colors == 0 {
-			colors = 1 << bmpHeader.BitCount
+			colors = 1 << headerCopy.BitCount
 		}
 		offset += colors * 4
 	}
@@ -366,17 +421,19 @@ func readBmpImage() (image.Image, error) {
 	// Total file size
 	fileSize := offset + imageSize
 
-	// Construct BMP file in memory
+	// Construct BMP file in memory using the copied data
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, uint16('B')|(uint16('M')<<8)) // bfType
 	binary.Write(buf, binary.LittleEndian, uint32(fileSize))             // bfSize
 	binary.Write(buf, binary.LittleEndian, uint32(0))                    // bfReserved1, bfReserved2
 	binary.Write(buf, binary.LittleEndian, uint32(offset))               // bfOffBits
 
-	// Write the rest of the DIB data
+	// Write the DIB data from our local copy
 	dibSize := fileSize - fileHeaderLen
-	dibData := (*[1 << 30]byte)(unsafe.Pointer(pMemBlk))[:dibSize:dibSize]
-	buf.Write(dibData)
+	if int(dibSize) > len(dibDataCopy) {
+		dibSize = uint32(len(dibDataCopy))
+	}
+	buf.Write(dibDataCopy[:dibSize])
 
 	return bmp.Decode(buf)
 }
