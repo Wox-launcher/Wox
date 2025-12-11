@@ -37,49 +37,16 @@ var (
 	dragQueryFile = shell32.NewProc("DragQueryFileW")
 )
 
-// BITMAPV5Header structure, see:
-// https://docs.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapv5header
-type bitmapV5Header struct {
+type bitmapHeader struct {
 	Size          uint32
 	Width         int32
 	Height        int32
-	Planes        uint16
+	PLanes        uint16
 	BitCount      uint16
 	Compression   uint32
 	SizeImage     uint32
 	XPelsPerMeter int32
 	YPelsPerMeter int32
-	ClrUsed       uint32
-	ClrImportant  uint32
-	RedMask       uint32
-	GreenMask     uint32
-	BlueMask      uint32
-	AlphaMask     uint32
-	CSType        uint32
-	Endpoints     struct {
-		CiexyzRed, CiexyzGreen, CiexyzBlue struct {
-			CiexyzX, CiexyzY, CiexyzZ int32 // FXPT2DOT30
-		}
-	}
-	GammaRed    uint32
-	GammaGreen  uint32
-	GammaBlue   uint32
-	Intent      uint32
-	ProfileData uint32
-	ProfileSize uint32
-	Reserved    uint32
-}
-
-type bitmapHeader struct {
-	Size          uint32
-	Width         uint32
-	Height        uint32
-	PLanes        uint16
-	BitCount      uint16
-	Compression   uint32
-	SizeImage     uint32
-	XPelsPerMeter uint32
-	YPelsPerMeter uint32
 	ClrUsed       uint32
 	ClrImportant  uint32
 }
@@ -278,56 +245,140 @@ func readImage() (image.Image, error) {
 func readBmpImage() (image.Image, error) {
 	const (
 		fileHeaderLen = 14
-		infoHeaderLen = 40
 		cFmtDIB       = 8
 	)
 
+	r, _, err := openClipboard.Call(0)
+	if r == 0 {
+		return nil, fmt.Errorf("failed to open clipboard: %w", err)
+	}
+	defer closeClipboard.Call()
+
 	hClipDat, _, err := getClipboardData.Call(cFmtDIB)
-	if err != nil {
+	if err != nil && hClipDat == 0 {
 		return nil, errors.New("not dib format data: " + err.Error())
 	}
+	if hClipDat == 0 {
+		return nil, errors.New("getClipboardData returned 0")
+	}
+
 	pMemBlk, _, err := gLock.Call(hClipDat)
 	if pMemBlk == 0 {
 		return nil, errors.New("failed to call global lock: " + err.Error())
 	}
 	defer gUnlock.Call(hClipDat)
 
+	// DIB data starts with the header
 	bmpHeader := (*bitmapHeader)(unsafe.Pointer(pMemBlk))
-	dataSize := bmpHeader.SizeImage + fileHeaderLen + infoHeaderLen
 
-	if bmpHeader.SizeImage == 0 && bmpHeader.Compression == 0 {
-		iSizeImage := bmpHeader.Height * ((bmpHeader.Width*uint32(bmpHeader.BitCount)/8 + 3) &^ 3)
-		dataSize += iSizeImage
+	// Manual Decoder for 32-bit Images (Common in modern Windows apps like Chrome/Edge)
+	// The standard Go bmp.Decode often fails with "unsupported BMP image" for these.
+	if bmpHeader.BitCount == 32 {
+		width := int(bmpHeader.Width)
+		height := int(bmpHeader.Height)
+		isTopDown := height < 0
+		if isTopDown {
+			height = -height
+		}
+
+		// Validation: prevent unreasonable dimensions
+		if width <= 0 || height <= 0 || width > 32768 || height > 32768 {
+			return nil, fmt.Errorf("invalid image dimensions: %dx%d", width, height)
+		}
+
+		// Calculate offset to pixel data
+		headerSize := bmpHeader.Size
+		offset := headerSize
+
+		// Handle BI_BITFIELDS (Compression=3) with BITMAPINFOHEADER (Size=40)
+		// In this case, 3 DWORD color masks follow the header.
+		if bmpHeader.Compression == 3 && headerSize == 40 {
+			offset += 12
+		}
+
+		// Pointer to pixel data
+		pixelsAddr := uintptr(unsafe.Pointer(pMemBlk)) + uintptr(offset)
+
+		img := image.NewNRGBA(image.Rect(0, 0, width, height))
+
+		// 32bpp stride is always width * 4
+		stride := width * 4
+
+		// Construct slice for pixel data (careful with bounds)
+		dataSize := stride * height
+		pixelData := (*[1 << 30]byte)(unsafe.Pointer(pixelsAddr))[:dataSize:dataSize]
+
+		for y := 0; y < height; y++ {
+			// DIBs are usually bottom-up
+			destY := y
+			if !isTopDown {
+				destY = height - 1 - y
+			}
+
+			srcRow := y * stride
+			destRow := destY * img.Stride
+
+			for x := 0; x < width; x++ {
+				// Input is BGRA or BGRX
+				b := pixelData[srcRow+x*4+0]
+				g := pixelData[srcRow+x*4+1]
+				r := pixelData[srcRow+x*4+2]
+				a := pixelData[srcRow+x*4+3]
+
+				// Set to NRGBA
+				img.Pix[destRow+x*4+0] = r
+				img.Pix[destRow+x*4+1] = g
+				img.Pix[destRow+x*4+2] = b
+				img.Pix[destRow+x*4+3] = a
+			}
+		}
+		return img, nil
 	}
+
+	// Fallback for non-32bpp images (e.g. 24bpp) where standard decoder might still work,
+	// or properly constructing the file header for them.
+	// Re-implementing the BMP file construction for fallback.
+
+	// Get the total size of the DIB data (including header, palette, and pixel data)
+	imageSize := bmpHeader.SizeImage
+	if imageSize == 0 && bmpHeader.Compression == 0 { // BI_RGB
+		stride := (int(bmpHeader.Width)*int(bmpHeader.BitCount) + 31) / 32 * 4
+		imageSize = uint32(stride * int(map[bool]int32{true: bmpHeader.Height, false: -bmpHeader.Height}[bmpHeader.Height > 0]))
+	}
+
+	// Offset Calculation Logic for File Header
+	offset := uint32(fileHeaderLen) + bmpHeader.Size
+
+	// + Palette/Masks:
+	if bmpHeader.Compression == 3 && bmpHeader.Size == 40 {
+		offset += 12
+	}
+
+	// If BitCount <= 8, a color table follows.
+	if bmpHeader.BitCount <= 8 {
+		colors := bmpHeader.ClrUsed
+		if colors == 0 {
+			colors = 1 << bmpHeader.BitCount
+		}
+		offset += colors * 4
+	}
+
+	// Total file size
+	fileSize := offset + imageSize
+
+	// Construct BMP file in memory
 	buf := new(bytes.Buffer)
-	binary.Write(buf, binary.LittleEndian, uint16('B')|(uint16('M')<<8))
-	binary.Write(buf, binary.LittleEndian, uint32(dataSize))
-	binary.Write(buf, binary.LittleEndian, uint32(0))
-	const sizeofColorbar = 0
-	binary.Write(buf, binary.LittleEndian, uint32(fileHeaderLen+infoHeaderLen+sizeofColorbar))
-	j := 0
-	for i := fileHeaderLen; i < int(dataSize); i++ {
-		binary.Write(buf, binary.BigEndian, *(*byte)(unsafe.Pointer(pMemBlk + uintptr(j))))
-		j++
-	}
-	return bmpToPng(buf)
-}
+	binary.Write(buf, binary.LittleEndian, uint16('B')|(uint16('M')<<8)) // bfType
+	binary.Write(buf, binary.LittleEndian, uint32(fileSize))             // bfSize
+	binary.Write(buf, binary.LittleEndian, uint32(0))                    // bfReserved1, bfReserved2
+	binary.Write(buf, binary.LittleEndian, uint32(offset))               // bfOffBits
 
-func bmpToPng(bmpBuf *bytes.Buffer) (image.Image, error) {
-	var f bytes.Buffer
-	originalImage, err := bmp.Decode(bmpBuf)
-	if err != nil {
-		return nil, err
-	}
-	err = png.Encode(&f, originalImage)
-	if err != nil {
-		return nil, err
-	}
-	newImage, err := png.Decode(&f)
-	if err != nil {
-		return nil, err
-	}
-	return newImage, nil
+	// Write the rest of the DIB data
+	dibSize := fileSize - fileHeaderLen
+	dibData := (*[1 << 30]byte)(unsafe.Pointer(pMemBlk))[:dibSize:dibSize]
+	buf.Write(dibData)
+
+	return bmp.Decode(buf)
 }
 
 func isClipboardChanged() bool {

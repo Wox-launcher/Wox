@@ -17,6 +17,7 @@
   - Fix command line window display issue when executing Script Plugin
   - [`AI Chat`] Fix a render issue
   - [`Emoji`] Fix copy large image not working on windows
+  - [`Clipboard`] Fix clipboard image paste issue on windows
 
 ---
 
