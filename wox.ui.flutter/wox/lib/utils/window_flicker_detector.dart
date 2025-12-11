@@ -30,13 +30,13 @@ class WindowFlickerDetector {
   int step;
 
   WindowFlickerDetector({
-    this.flickerWindowMs = 200,
+    this.flickerWindowMs = 300,
     this.flickerMinEvents = 2,
     this.flickerMinDirectionChanges = 1,
-    this.stableDecreaseRequired = 5,
+    this.stableDecreaseRequired = 10,
     this.minDelay = 100,
-    this.maxDelay = 200,
-    this.step = 10,
+    this.maxDelay = 300,
+    this.step = 25,
   });
 
   void recordResize(int height) {
@@ -104,7 +104,7 @@ class WindowFlickerDetector {
     }
 
     final int swingPx = maxH - minH;
-    final int magnitudeThreshold = (RESULT_ITEM_BASE_HEIGHT * 3).toInt();
+    final int magnitudeThreshold = (RESULT_ITEM_BASE_HEIGHT * 2).toInt();
 
     if (directionReversals >= flickerMinDirectionChanges && swingPx >= magnitudeThreshold) {
       return FlickerStatus(true, "direction_change", recent.length);

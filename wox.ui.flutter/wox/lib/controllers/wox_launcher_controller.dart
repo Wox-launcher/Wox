@@ -94,8 +94,8 @@ class WoxLauncherController extends GetxController {
   /// On every query changed, it will reset the timer and will clear the query results after N ms.
   /// If there is no this delay mechanism, the window will flicker for fast typing.
   Timer clearQueryResultsTimer = Timer(const Duration(), () => {});
-  int clearQueryResultDelay = 100; // adaptive between 100-200ms based on flicker detection
-  final windowFlickerDetector = WindowFlickerDetector(minDelay: 100, maxDelay: 200);
+  int clearQueryResultDelay = 100; // adaptive based on flicker detection
+  final windowFlickerDetector = WindowFlickerDetector();
 
   /// This flag is used to control whether the user can arrow up to show history when the app is first shown.
   var canArrowUpHistory = true;
