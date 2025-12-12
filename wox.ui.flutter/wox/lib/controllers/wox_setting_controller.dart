@@ -47,6 +47,7 @@ class WoxSettingController extends GetxController {
   var langMap = <String, String>{}.obs;
 
   final isInstallingPlugin = false.obs;
+  final pluginInstallError = ''.obs;
   final FocusNode settingFocusNode = FocusNode();
 
   @override
@@ -284,19 +285,15 @@ class WoxSettingController extends GetxController {
 
   Future<void> installPlugin(PluginDetail plugin) async {
     try {
+      pluginInstallError.value = '';
       isInstallingPlugin.value = true;
       Logger.instance.info(const UuidV4().generate(), 'installing plugin: ${plugin.name}');
       await WoxApi.instance.installPlugin(plugin.id);
       await refreshPlugin(plugin.id, "add");
     } catch (e) {
-      Get.snackbar(
-        'Installation Failed',
-        e.toString(),
-        snackPosition: SnackPosition.TOP,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 5),
-      );
+      final traceId = const UuidV4().generate();
+      Logger.instance.error(traceId, 'Failed to install plugin ${plugin.name}: $e');
+      pluginInstallError.value = e.toString();
     } finally {
       isInstallingPlugin.value = false;
     }

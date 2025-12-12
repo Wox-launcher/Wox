@@ -388,6 +388,40 @@ class WoxSettingPluginView extends GetView<WoxSettingController> {
               ],
             ),
           ),
+          Obx(() {
+            if (controller.pluginInstallError.value.isNotEmpty) {
+              return Container(
+                margin: const EdgeInsets.only(left: 16, right: 16, top: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        controller.pluginInstallError.value,
+                        style: TextStyle(color: Colors.red, fontSize: 13),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, size: 18, color: Colors.red),
+                      padding: EdgeInsets.zero,
+                      constraints: BoxConstraints(),
+                      onPressed: () {
+                        controller.pluginInstallError.value = '';
+                      },
+                    ),
+                  ],
+                ),
+              );
+            }
+            return const SizedBox.shrink();
+          }),
           Expanded(
             child: dt.DynamicTabBarWidget(
               isScrollable: true,
