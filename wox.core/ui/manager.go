@@ -599,7 +599,7 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 	logger.Info(ctx, fmt.Sprintf("start processing deeplink: %s", deeplink))
 
 	parts := strings.SplitN(deeplink, "?", 2)
-	command := strings.TrimPrefix(parts[0], "wox://")
+	command := strings.TrimSuffix(strings.TrimPrefix(parts[0], "wox://"), "/")
 
 	arguments := make(map[string]string)
 	if len(parts) == 2 {
