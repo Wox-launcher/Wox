@@ -47,7 +47,9 @@ func startMCPServerInternal(ctx context.Context, port int) error {
 	// Create HTTP handler using NewStreamableHTTPHandler
 	handler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		return mcpPluginDevServer
-	}, nil)
+	}, &mcp.StreamableHTTPOptions{
+		Stateless: true,
+	})
 
 	// Create HTTP mux
 	mux := http.NewServeMux()
@@ -130,6 +132,16 @@ func IsMCPServerRunning() bool {
 
 func registerMCPTools(ctx context.Context) {
 	util.GetLogger().Info(ctx, "MCP: Registering tools")
+
+	// Tool: plugin_overview
+	mcpPluginDevServer.AddTool(&mcp.Tool{
+		Name:        "plugin_overview",
+		Description: "Overview of Wox plugin types and how the plugin system works",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{},
+		},
+	}, handlePluginOverview)
 
 	// Tool: get_plugin_sdk_docs
 	mcpPluginDevServer.AddTool(&mcp.Tool{

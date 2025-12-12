@@ -1,13 +1,13 @@
 #!/bin/bash
 # {
-#   "Id": "bash-script-template",
-#   "Name": "Bash Script Template",
+#   "Id": "{{.PluginID}}",
+#   "Name": "{{.Name}}",
 #   "Author": "Wox Team",
 #   "Version": "1.0.0",
 #   "MinWoxVersion": "2.0.0",
-#   "Description": "A Bash template for Wox script plugins",
+#   "Description": "{{.Description}}",
 #   "Icon": "emoji:🐚",
-#   "TriggerKeywords": ["bst"],
+#   "TriggerKeywords": {{.TriggerKeywordsJSON}},
 #   "SettingDefinitions": [
 #     {
 #       "Type": "textbox",

@@ -8,16 +8,15 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"wox/common"
 )
 
 // getFileTypeIconImpl tries to resolve a themed icon PNG for the file's MIME type and cache it.
 // Best-effort: look up MIME via extension, then search common icon-theme locations (hicolor/Adwaita) for 48px PNG.
-func getFileTypeIconImpl(ctx context.Context, ext string) (common.WoxImage, error) {
+func getFileTypeIconImpl(ctx context.Context, ext string) (string, error) {
 	const size = 48
 	cachePath := buildCachePath(ext, size)
 	if _, err := os.Stat(cachePath); err == nil {
-		return common.NewWoxImageAbsolutePath(cachePath), nil
+		return cachePath, nil
 	}
 
 	mime := mimeFromExt(ext)
@@ -45,9 +44,10 @@ func getFileTypeIconImpl(ctx context.Context, ext string) (common.WoxImage, erro
 				if _, err := os.Stat(p); err == nil {
 					// Copy to cache to avoid scanning next time
 					if copyFile(p, cachePath) == nil {
-						return common.NewWoxImageAbsolutePath(cachePath), nil
+						return cachePath, nil
 					}
-					return common.NewWoxImageAbsolutePath(p), nil
+
+					return p, nil
 				}
 			}
 		}
@@ -56,9 +56,9 @@ func getFileTypeIconImpl(ctx context.Context, ext string) (common.WoxImage, erro
 			p := filepath.Join(root, "mimetypes", name+".png")
 			if _, err := os.Stat(p); err == nil {
 				if copyFile(p, cachePath) == nil {
-					return common.NewWoxImageAbsolutePath(cachePath), nil
+					return cachePath, nil
 				}
-				return common.NewWoxImageAbsolutePath(p), nil
+				return p, nil
 			}
 		}
 	}
@@ -70,12 +70,12 @@ func getFileTypeIconImpl(ctx context.Context, ext string) (common.WoxImage, erro
 			if _, err := os.Stat(p); err == nil {
 				// We can't reliably rasterize here without GTK/cairo; return absolute path directly
 				// If the UI can't load path to SVG, this will be ignored by caller's fallback
-				return common.NewWoxImageAbsolutePath(p), nil
+				return p, nil
 			}
 		}
 	}
 
-	return common.WoxImage{}, errors.New("no themed icon found")
+	return "", errors.New("no themed icon found")
 }
 
 func mimeFromExt(ext string) string {

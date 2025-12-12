@@ -4,13 +4,12 @@ import (
 	"context"
 	"path/filepath"
 	"strings"
-	"wox/common"
 	"wox/util"
 )
 
 // GetFileTypeIconByPath returns a WoxImage representing the OS file-type icon for the given path.
 // It caches by file extension to the image cache directory for performance.
-func GetFileTypeIconByPath(ctx context.Context, filePath string) (common.WoxImage, error) {
+func GetFileTypeIconByPath(ctx context.Context, filePath string) (string, error) {
 	ext := strings.ToLower(strings.TrimSpace(filepath.Ext(filePath)))
 	if ext == "" {
 		// Unknown extension – treat as generic
@@ -21,7 +20,7 @@ func GetFileTypeIconByPath(ctx context.Context, filePath string) (common.WoxImag
 
 // GetFileTypeIcon returns a WoxImage representing the OS file-type icon for the given extension.
 // The ext can be with or without leading dot.
-func GetFileTypeIcon(ctx context.Context, ext string) (common.WoxImage, error) {
+func GetFileTypeIcon(ctx context.Context, ext string) (string, error) {
 	if ext == "" {
 		ext = ".__unknown"
 	}

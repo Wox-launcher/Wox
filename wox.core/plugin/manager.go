@@ -1321,6 +1321,8 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 
 	// Update icon in cache if present
 	if result.Icon != nil {
+		convertedIcon := common.ConvertIcon(ctx, *result.Icon, pluginInstance.PluginDirectory)
+		result.Icon = &convertedIcon
 		resultCache.Result.Icon = *result.Icon
 	}
 

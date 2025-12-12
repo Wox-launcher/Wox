@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // {
-//   "Id": "script-plugin-template",
-//   "Name": "Script Plugin Template",
+//   "Id": "{{.PluginID}}",
+//   "Name": "{{.Name}}",
 //   "Author": "Wox Team",
 //   "Version": "1.0.0",
 //   "MinWoxVersion": "2.0.0",
-//   "Description": "A template for Wox script plugins",
+//   "Description": "{{.Description}}",
 //   "Icon": "emoji:📝",
-//   "TriggerKeywords": ["spt"],
+//   "TriggerKeywords": {{.TriggerKeywordsJSON}},
 //   "SettingDefinitions": [
 //     {
 //       "Type": "textbox",

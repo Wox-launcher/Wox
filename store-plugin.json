@@ -256,5 +256,25 @@
     ],
     "DateCreated": "2025-11-26 22:15:00",
     "DateUpdated": "2025-11-26 22:15:00"
+  },
+    {
+    "Id": "d4cf7d41-5cc2-4c21-8ee6-fbd6ca950c6a",
+    "Name": "Recent Files",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "script",
+    "Description": "List recently used files",
+    "IconEmoji": "🕘",
+    "Website": "https://gist.github.com/qianlifeng/43e8f545017fddea69e1198468d76776",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/43e8f545017fddea69e1198468d76776/raw/65bed72f52e9bc9d094b7d37ba2fabbcf6577e72/Wox.Plugin.Script.RecentFile.py",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/da42e6f5-470d-41cf-8796-0684209df0c9"
+    ],
+    "SupportedOS": [
+      "windows"
+    ],
+    "DateCreated": "2025-12-12 21:06:00",
+    "DateUpdated": "2025-12-12 21:06:00"
   }
 ]

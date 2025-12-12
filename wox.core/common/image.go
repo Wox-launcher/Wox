@@ -13,6 +13,7 @@ import (
 	"path"
 	"strings"
 	"wox/util"
+	"wox/util/fileicon"
 
 	"github.com/disintegration/imaging"
 	"github.com/forPelevin/gomoji"
@@ -35,6 +36,7 @@ const (
 	WoxImageTypeEmoji        = "emoji"
 	WoxImageTypeUrl          = "url"
 	WoxImageTypeTheme        = "theme"
+	WoxImageTypeFileIcon     = "fileicon" // system associated file icon for given file absolute path
 )
 
 type WoxImage struct {
@@ -243,6 +245,13 @@ func NewWoxImageAbsolutePath(path string) WoxImage {
 	}
 }
 
+func NewWoxImageFileIcon(filePath string) WoxImage {
+	return WoxImage{
+		ImageType: WoxImageTypeFileIcon,
+		ImageData: filePath,
+	}
+}
+
 func NewWoxImageBase64(data string) WoxImage {
 	return WoxImage{
 		ImageType: WoxImageTypeBase64,
@@ -336,12 +345,19 @@ func ParseWoxImage(image string) (WoxImage, error) {
 	if imageType == WoxImageTypeEmoji {
 		return NewWoxImageEmoji(imageData), nil
 	}
+	if imageType == WoxImageTypeLottie {
+		return NewWoxImageLottie(imageData), nil
+	}
+	if imageType == WoxImageTypeFileIcon {
+		return NewWoxImageFileIcon(imageData), nil
+	}
 
 	return WoxImage{}, fmt.Errorf("unsupported image type: %s", imageType)
 }
 
 func ConvertIcon(ctx context.Context, image WoxImage, pluginDirectory string) (newImage WoxImage) {
-	newImage = ConvertRelativePathToAbsolutePath(ctx, image, pluginDirectory)
+	newImage = ConvertFileIconToAbsolutePath(ctx, image)
+	newImage = ConvertRelativePathToAbsolutePath(ctx, newImage, pluginDirectory)
 	newImage = cropPngTransparentPaddings(ctx, newImage)
 	newImage = resizeImage(ctx, newImage, 40)
 	return
@@ -467,6 +483,20 @@ func ConvertRelativePathToAbsolutePath(ctx context.Context, image WoxImage, plug
 	if image.ImageType == WoxImageTypeRelativePath {
 		newImage.ImageType = WoxImageTypeAbsolutePath
 		newImage.ImageData = path.Join(pluginDirectory, image.ImageData)
+	}
+
+	return newImage
+}
+
+func ConvertFileIconToAbsolutePath(ctx context.Context, image WoxImage) (newImage WoxImage) {
+	newImage = image
+
+	if image.ImageType == WoxImageTypeFileIcon {
+		absPath, err := fileicon.GetFileTypeIconByPath(ctx, image.ImageData)
+		if err == nil {
+			newImage.ImageType = WoxImageTypeAbsolutePath
+			newImage.ImageData = absPath
+		}
 	}
 
 	return newImage

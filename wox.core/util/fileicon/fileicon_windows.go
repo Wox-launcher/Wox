@@ -11,7 +11,6 @@ import (
 	"strings"
 	"syscall"
 	"unsafe"
-	"wox/common"
 
 	"github.com/disintegration/imaging"
 	win "github.com/lxn/win"
@@ -154,13 +153,13 @@ func getIconFromSHGetFileInfo(ext string) (win.HICON, error) {
 	return shfi.HIcon, nil
 }
 
-func getFileTypeIconImpl(ctx context.Context, ext string) (common.WoxImage, error) {
+func getFileTypeIconImpl(ctx context.Context, ext string) (string, error) {
 	const size = 48
 	cachePath := buildCachePath(ext, size)
 
 	// Check cache first
 	if _, err := os.Stat(cachePath); err == nil {
-		return common.NewWoxImageAbsolutePath(cachePath), nil
+		return cachePath, nil
 	}
 
 	// Try registry method first (more accurate for associated file types)
@@ -172,7 +171,7 @@ func getFileTypeIconImpl(ctx context.Context, ext string) (common.WoxImage, erro
 		// Fallback to SHGetFileInfo
 		hIcon, err = getIconFromSHGetFileInfo(ext)
 		if err != nil {
-			return common.WoxImage{}, errors.New("failed to get file type icon for " + ext + ": " + err.Error())
+			return "", errors.New("failed to get file type icon for " + ext + ": " + err.Error())
 		}
 	}
 	defer win.DestroyIcon(hIcon)
@@ -180,20 +179,20 @@ func getFileTypeIconImpl(ctx context.Context, ext string) (common.WoxImage, erro
 	// Convert HICON to image
 	img, convErr := convertIconToImage(ctx, hIcon)
 	if convErr != nil {
-		return common.WoxImage{}, errors.New("failed to convert icon to image for " + ext + ": " + convErr.Error())
+		return "", errors.New("failed to convert icon to image for " + ext + ": " + convErr.Error())
 	}
 
 	// Ensure cache dir exists and save
 	cacheDir := filepath.Dir(cachePath)
 	if mkdirErr := os.MkdirAll(cacheDir, 0o755); mkdirErr != nil {
-		return common.WoxImage{}, errors.New("failed to create cache dir: " + mkdirErr.Error())
+		return "", errors.New("failed to create cache dir: " + mkdirErr.Error())
 	}
 
 	if saveErr := imaging.Save(img, cachePath); saveErr != nil {
-		return common.WoxImage{}, errors.New("failed to save icon to cache for " + ext + ": " + saveErr.Error())
+		return "", errors.New("failed to save icon to cache for " + ext + ": " + saveErr.Error())
 	}
 
-	return common.NewWoxImageAbsolutePath(cachePath), nil
+	return cachePath, nil
 }
 
 func convertIconToImage(ctx context.Context, hIcon win.HICON) (image.Image, error) {

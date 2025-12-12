@@ -7,7 +7,6 @@ import (
 	"wox/common"
 	"wox/plugin"
 	"wox/setting/definition"
-	"wox/util/fileicon"
 	"wox/util/nativecontextmenu"
 	"wox/util/shell"
 
@@ -104,11 +103,7 @@ func (c *Plugin) Query(ctx context.Context, query plugin.Query) []plugin.QueryRe
 			if info.IsDir() {
 				icon = common.FolderIcon
 			} else {
-				if img, err := fileicon.GetFileTypeIconByPath(ctx, item.Path); err == nil {
-					icon = img
-				} else {
-					c.api.Log(ctx, plugin.LogLevelDebug, "Failed to get file type icon for "+item.Path+": "+err.Error())
-				}
+				icon = common.NewWoxImageFileIcon(item.Path)
 			}
 		}
 

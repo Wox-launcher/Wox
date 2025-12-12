@@ -31,6 +31,9 @@ var OthersFS embed.FS
 //go:embed script_plugin_templates
 var ScriptPluginTemplatesFS embed.FS
 
+//go:embed prompts
+var PromptsFS embed.FS
+
 var embedThemes = []string{}
 
 func Extract(ctx context.Context) error {

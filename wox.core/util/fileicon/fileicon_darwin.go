@@ -16,17 +16,16 @@ import (
 	"image/png"
 	"os"
 	"unsafe"
-	"wox/common"
 
 	"github.com/disintegration/imaging"
 )
 
-func getFileTypeIconImpl(ctx context.Context, ext string) (common.WoxImage, error) {
+func getFileTypeIconImpl(ctx context.Context, ext string) (string, error) {
 	const size = 48
 	cachePath := buildCachePath(ext, size)
 
 	if _, err := os.Stat(cachePath); err == nil {
-		return common.NewWoxImageAbsolutePath(cachePath), nil
+		return cachePath, nil
 	}
 
 	cext := C.CString(ext)
@@ -35,20 +34,19 @@ func getFileTypeIconImpl(ctx context.Context, ext string) (common.WoxImage, erro
 	var length C.size_t
 	bytesPtr := C.GetFileTypeIconBytes(cext, &length)
 	if bytesPtr == nil || length == 0 {
-		return common.WoxImage{}, errors.New("no icon")
+		return "", errors.New("no icon")
 	}
 	defer C.free(unsafe.Pointer(bytesPtr))
 
 	data := C.GoBytes(unsafe.Pointer(bytesPtr), C.int(length))
 	img, err := png.Decode(bytes.NewReader(data))
 	if err != nil {
-		return common.WoxImage{}, err
+		return "", err
 	}
 
 	if err := imaging.Save(img, cachePath); err != nil {
-		// Fallback to embed base64
-		wimg, _ := common.NewWoxImage(img)
-		return wimg, nil
+		return "", err
 	}
-	return common.NewWoxImageAbsolutePath(cachePath), nil
+
+	return cachePath, nil
 }
