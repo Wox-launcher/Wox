@@ -2,9 +2,11 @@
 layout: home
 
 hero:
-  name: "Wox"
-  text: "Cross-platform Launcher"
-  tagline: "Efficient, Extensible, Beautiful"
+  name: "Wox Launcher"
+  tagline: "Cross-platform, Efficient, Extensible, Beautiful"
+  image:
+    src: "/data/images/screenshot.png"
+    alt: "Wox app screenshot"
   actions:
     - theme: brand
       text: "Get Started"

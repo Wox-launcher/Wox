@@ -5,9 +5,36 @@
 }
 
 .VPImage.image-src {
-  border-radius: 8px;
+  border-radius: 12px;
+  width: clamp(220px, 32vw, 520px);
+  max-width: 100%;
+  height: auto;
+  margin-left: clamp(0px, 4vw, 40px);
+  margin-top: clamp(12px, 3vw, 40px);
 }
 
-.VPHero .text {
-  white-space: nowrap;
+@media (max-width: 980px) {
+  .VPImage.image-src {
+    width: min(420px, 80%);
+    margin: 16px auto 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .VPImage.image-src {
+    width: min(320px, 90%);
+    margin: 12px auto 0;
+  }
+}
+
+/* Allow hero text to wrap on smaller screens for better balance */
+@media (max-width: 1280px) {
+  .VPHero .text {
+    white-space: normal;
+  }
+}
+
+
+.VPHomeFeatures {
+  margin-top:20px;
 }
