@@ -17,6 +17,7 @@ import (
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/nativecontextmenu"
 	"wox/util/shell"
 
 	"github.com/fsnotify/fsnotify"
@@ -262,6 +263,20 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) []plu
 						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 							clipboard.WriteText(info.Path)
 						},
+					},
+					{
+						Name: "i18n:plugin_file_show_context_menu",
+						Icon: common.PluginMenusIcon,
+						Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+							a.api.Log(ctx, plugin.LogLevelInfo, "Showing context menu for: "+info.Path)
+							err := nativecontextmenu.ShowContextMenu(info.Path)
+							if err != nil {
+								a.api.Log(ctx, plugin.LogLevelError, err.Error())
+								a.api.Notify(ctx, err.Error())
+							}
+						},
+						Hotkey:                 "ctrl+m",
+						PreventHideAfterAction: true,
 					},
 				},
 			}
