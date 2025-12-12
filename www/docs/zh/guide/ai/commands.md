@@ -30,7 +30,7 @@ Wox 允许您将 AI 能力直接集成到您的工作流中。
 
      - **Vision**: No
 
-   ![AI git msg setting](..//images/ai_auto_git_msg_setting.png)
+   ![AI git msg setting](/images/ai_auto_git_msg_setting.png)
 
 2. **配置 Bash 脚本**
    要使用此功能，您可以将以下脚本添加到您的 `.bashrc` 或 `.zshrc` 文件中：
@@ -51,4 +51,4 @@ git diff | commit
 
 此命令将自动调用 Wox 并为您生成提交信息。
 
-![AI git msg](..//images/ai_auto_git_msg.png)
+![AI git msg](/images/ai_auto_git_msg.png)

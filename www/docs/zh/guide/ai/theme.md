@@ -16,4 +16,4 @@ AI 随后将生成一个匹配马卡龙配色的主题。
 
 此功能提供了一种快速简便的方法来为您的 Wox 启动器创建独特且个性化的主题。享受 AI 驱动的主题创作带来的灵活性和创造力。
 
-![AI Theme](..//images/ai_theme.jpg)
+![AI Theme](/images/ai_theme.jpg)
