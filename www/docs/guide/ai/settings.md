@@ -15,7 +15,7 @@ To use Wox's AI features (such as AI theme generation and automatic Git commit m
 
 5. Click "Confirm" to save the settings
 
-![AI Settings](../../data/images/ai_setting.png)
+![AI Settings](/images/ai_setting.png)
 
 ## Getting API Keys
 

@@ -15,7 +15,7 @@
 
 5. 点击 "Confirm" 保存设置
 
-![AI Settings](../../../data/images/ai_setting.png)
+![AI Settings](..//images/ai_setting.png)
 
 ## 获取 API 密钥
 

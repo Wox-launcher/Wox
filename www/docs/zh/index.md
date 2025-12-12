@@ -5,7 +5,7 @@ hero:
   name: "Wox - 快速启动器"
   tagline: "跨平台、高效、可扩展、美观"
   image:
-    src: "/data/images/screenshot.png"
+    src: "/images/screenshot.png"
     alt: "Wox 应用截图"
   actions:
     - theme: brand

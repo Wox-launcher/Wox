@@ -5,7 +5,7 @@ hero:
   name: "Wox Launcher"
   tagline: "Cross-platform, Efficient, Extensible, Beautiful"
   image:
-    src: "/data/images/screenshot.png"
+    src: "/images/screenshot.png"
     alt: "Wox app screenshot"
   actions:
     - theme: brand
