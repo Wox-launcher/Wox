@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/stale@v8
         with:
-          stale-issue-message: "This issue is stale because it has been open 15 days with no activity. Remove stale label or comment or this will be closed in 5 days."
+          stale-issue-message: "This issue is stale because it has been open 15 days with no activity. Remove stale label or comment or this will be closed in 5 days. If you are still using version v1, please switch to v2 and check if the issue persists. If it does, please reopen the issue. Thank you."
           days-before-stale: 15
           days-before-close: 5
           days-before-pr-close: -1
