@@ -1,6 +1,6 @@
 # For more information, see:
 # https://github.com/actions/stale
-name: Mark stale issues and pull requests
+name: Mark stale issues
 
 on:
   schedule:
@@ -27,3 +27,4 @@ jobs:
           exempt-issue-labels: "keep-fresh"
           exempt-pr-labels: "keep-fresh,awaiting-approval,work-in-progress"
           ascending: true
+          operations-per-run: 60
