@@ -283,6 +283,7 @@ func (s *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string]
 		"WOX_DIRECTORY_THEMES=" + util.GetLocation().GetThemeDirectory(),
 		"WOX_PLUGIN_ID=" + s.metadata.Id,
 		"WOX_PLUGIN_NAME=" + s.metadata.Name,
+		"PYTHONIOENCODING=utf-8",
 	}
 
 	// Add plugin settings as environment variables
