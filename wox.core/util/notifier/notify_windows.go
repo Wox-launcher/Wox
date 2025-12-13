@@ -1,7 +1,7 @@
 package notifier
 
 /*
-#cgo LDFLAGS: -luser32 -lgdi32
+#cgo LDFLAGS: -luser32 -lgdi32 -ldwmapi -luxtheme -lmsimg32
 #include <stdlib.h>
 
 void showNotification(const char* message);
