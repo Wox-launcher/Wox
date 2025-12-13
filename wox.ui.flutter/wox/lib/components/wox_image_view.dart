@@ -80,7 +80,11 @@ class WoxImageView extends StatelessWidget {
         imageWidget = Image.file(File(woxImage.imageData), width: width, height: height);
       }
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code) {
-      imageWidget = SvgPicture.string(woxImage.imageData, width: width, height: height);
+      imageWidget = SizedBox(
+        width: width,
+        height: height,
+        child: SvgPicture.string(woxImage.imageData),
+      );
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_EMOJI.code) {
       // on windows, the emoji has default padding, so we need to offset it a bit
       var offset = const Offset(0, 0);
@@ -88,11 +92,15 @@ class WoxImageView extends StatelessWidget {
         offset = const Offset(-6, -2);
       }
 
-      imageWidget = Transform.translate(
-        offset: offset,
-        child: Transform.scale(
-          scale: 1.03,
-          child: Text(woxImage.imageData, style: TextStyle(fontSize: width, height: 1.0)),
+      imageWidget = SizedBox(
+        width: width,
+        height: height,
+        child: Transform.translate(
+          offset: offset,
+          child: Transform.scale(
+            scale: 1.03,
+            child: Text(woxImage.imageData, style: TextStyle(fontSize: width, height: 1.0)),
+          ),
         ),
       );
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_LOTTIE.code) {
