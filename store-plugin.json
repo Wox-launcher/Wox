@@ -203,7 +203,7 @@
     "Description": "基于 https://60s.viki.moe/v2/60s 的每日新闻展示",
     "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.60s/refs/heads/main/icon.jpeg",
     "Website": "https://gist.github.com/qianlifeng/419f2198519caeb8fd0b06b76c6bbc9c",
-    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/419f2198519caeb8fd0b06b76c6bbc9c/raw/9c96511072910197af956a0c7c6206e842a8dd31/Wox.Plugin.Script.60s.py",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/419f2198519caeb8fd0b06b76c6bbc9c/raw/Wox.Plugin.Script.60s.py",
     "ScreenshotUrls": [
       "https://gist.github.com/user-attachments/assets/26f4c4de-f8fa-49af-8a3e-75ca99ef9a6d"
     ],
@@ -225,7 +225,7 @@
     "Description": "Generate various types of UUIDs",
     "IconEmoji": "🆔",
     "Website": "https://gist.githubusercontent.com/qianlifeng/82a2f748177ce47a900b4c4da3abfd28",
-    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/82a2f748177ce47a900b4c4da3abfd28/raw/550e024164713aed2fc3bde3aef140bfa15409a3/Wox.Plugin.Script.UUID",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/82a2f748177ce47a900b4c4da3abfd28/raw/Wox.Plugin.Script.UUID",
     "ScreenshotUrls": [
       "https://gist.github.com/user-attachments/assets/4a93ab0f-9496-4b5d-94a8-d8c2b6fb129a"
     ],
@@ -267,7 +267,7 @@
     "Description": "List recently used files",
     "IconEmoji": "🕘",
     "Website": "https://gist.github.com/qianlifeng/43e8f545017fddea69e1198468d76776",
-    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/43e8f545017fddea69e1198468d76776/raw/8d011ce76220b410ff32c6ebb82462a690150eb5/Wox.Plugin.Script.RecentFile.py",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/43e8f545017fddea69e1198468d76776/raw/Wox.Plugin.Script.RecentFile.py",
     "ScreenshotUrls": [
       "https://gist.github.com/user-attachments/assets/da42e6f5-470d-41cf-8796-0684209df0c9"
     ],

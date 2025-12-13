@@ -51,27 +51,37 @@ func checkPluginNewVersion() error {
 
 	hasUpdate := false
 	for index, plugin := range plugins {
-		// only check plugins that hosted on github
-		if !strings.HasPrefix(plugin.Website, "https://github.com") && !strings.HasPrefix(plugin.Website, "https://www.github.com") {
-			fmt.Println(fmt.Sprintf("[%s] is not hosted on github", plugin.Name))
-			continue
-		}
+		var newVersion string
+		var versionErr error
 
-		newVersion, versionErr := getLatestReleaseVersion(plugin.Website)
-		if versionErr != nil {
-			fmt.Println(fmt.Sprintf("[%s] Get latest release version err: %s", plugin.Name, versionErr.Error()))
+		// check if it's a gist-hosted plugin
+		if strings.Contains(plugin.DownloadUrl, "gist.githubusercontent.com") || strings.Contains(plugin.Website, "gist.github.com") {
+			newVersion, versionErr = getLatestGistVersion(plugin.DownloadUrl)
+			if versionErr != nil {
+				fmt.Printf("[%s] Get latest gist version err: %s\n", plugin.Name, versionErr.Error())
+				continue
+			}
+		} else if strings.HasPrefix(plugin.DownloadUrl, "https://github.com") || strings.HasPrefix(plugin.DownloadUrl, "https://www.github.com") {
+			// check plugins that hosted on github repo
+			newVersion, versionErr = getLatestReleaseVersion(plugin.Website)
+			if versionErr != nil {
+				fmt.Printf("[%s] Get latest release version err: %s\n", plugin.Name, versionErr.Error())
+				continue
+			}
+		} else {
+			fmt.Printf("[%s] is not hosted on github or gist\n", plugin.Name)
 			continue
 		}
 
 		existVersion, existVersionErr := semver.NewVersion(plugin.Version)
 		if existVersionErr != nil {
-			fmt.Println(fmt.Sprintf("[%s] Parse exist version err: %s", plugin.Name, existVersionErr.Error()))
+			fmt.Printf("[%s] Parse exist version err: %s", plugin.Name, existVersionErr.Error())
 			continue
 		}
 
 		currentVersion, currentVersionErr := semver.NewVersion(newVersion)
 		if currentVersionErr != nil {
-			fmt.Println(fmt.Sprintf("[%s] Parse new version err: %s", plugin.Name, currentVersionErr.Error()))
+			fmt.Printf("[%s] Parse new version err: %s", plugin.Name, currentVersionErr.Error())
 			continue
 		}
 
@@ -79,9 +89,9 @@ func checkPluginNewVersion() error {
 			plugins[index].Version = currentVersion.String()
 			plugins[index].DateUpdated = time.Now().Format("2006-01-02 15:04:05")
 			hasUpdate = true
-			fmt.Println(fmt.Sprintf("[%s] Exist version: %s, New version: %s, update found", plugin.Name, existVersion, currentVersion))
+			fmt.Printf("[%s] Exist version: %s, New version: %s, update found\n", plugin.Name, existVersion, currentVersion)
 		} else {
-			fmt.Println(fmt.Sprintf("[%s] Exist version: %s, New version: %s", plugin.Name, existVersion, currentVersion))
+			fmt.Printf("[%s] Exist version: %s, New version: %s\n", plugin.Name, existVersion, currentVersion)
 		}
 	}
 
@@ -94,6 +104,33 @@ func checkPluginNewVersion() error {
 	}
 
 	return nil
+}
+
+func getLatestGistVersion(downloadUrl string) (string, error) {
+	if downloadUrl == "" {
+		return "", fmt.Errorf("downloadUrl is empty")
+	}
+
+	// Fetch the latest gist content
+	result, err := req.Get(downloadUrl)
+	if err != nil {
+		return "", err
+	}
+
+	content := result.String()
+	// Only read the first 20 lines and match "Version": "x.y.z"
+	lines := strings.Split(content, "\n")
+	if len(lines) > 20 {
+		lines = lines[:20]
+	}
+	head := strings.Join(lines, "\n")
+
+	groups := findRegexGroups(`(?m)"Version"\s*:\s*"(?P<version>\d+\.\d+\.\d+)"`, head)
+	if len(groups) > 0 {
+		return strings.TrimSpace(groups[0]["version"]), nil
+	}
+
+	return "", fmt.Errorf("can not find Version in gist content head")
 }
 
 func getLatestReleaseVersion(website string) (string, error) {

@@ -93,6 +93,14 @@
 				"request": "launch",
 				"type": "dart",
 				// "flutterMode": "release"
+			},
+			{
+				"name": "Run CI",
+				"type": "go",
+				"request": "launch",
+				"mode": "auto",
+				"program": "${workspaceFolder:wox}/ci",
+				"args": ["plugin"]
 			}
 		],
 		"compounds": [
