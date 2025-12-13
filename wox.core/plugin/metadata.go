@@ -97,14 +97,20 @@ func (m *Metadata) GetFeatureParamsForDebounce() (MetadataFeatureParamsDebounce,
 			if v, ok := feature.Params["IntervalMs"]; !ok {
 				return MetadataFeatureParamsDebounce{}, errors.New("debounce feature does not have intervalMs param")
 			} else {
-				timeInMilliseconds, convertErr := strconv.Atoi(v)
-				if convertErr != nil {
-					return MetadataFeatureParamsDebounce{}, fmt.Errorf("debounce feature intervalMs param is not a valid number: %s", convertErr.Error())
+				if seconds, ok := v.(string); ok {
+					timeInMilliseconds, convertErr := strconv.Atoi(seconds)
+					if convertErr != nil {
+						return MetadataFeatureParamsDebounce{}, fmt.Errorf("debounce feature intervalMs param is not a valid number: %s", convertErr.Error())
+					}
+					return MetadataFeatureParamsDebounce{
+						IntervalMs: timeInMilliseconds,
+					}, nil
 				}
-
-				return MetadataFeatureParamsDebounce{
-					IntervalMs: timeInMilliseconds,
-				}, nil
+				if milliseconds, ok := v.(int); ok {
+					return MetadataFeatureParamsDebounce{
+						IntervalMs: milliseconds,
+					}, nil
+				}
 			}
 		}
 	}
@@ -118,12 +124,27 @@ func (m *Metadata) GetFeatureParamsForResultPreviewWidthRatio() (MetadataFeature
 			if v, ok := feature.Params["WidthRatio"]; !ok {
 				return MetadataFeatureParamsResultPreviewWidthRatio{}, errors.New("resultPreviewWidthRatio feature does not have widthRatio param")
 			} else {
-				widthRatio, convertErr := strconv.ParseFloat(v, 64)
-				if convertErr != nil {
-					return MetadataFeatureParamsResultPreviewWidthRatio{}, fmt.Errorf("resultPreviewWidthRatio feature widthRatio param is not a valid number: %s", convertErr.Error())
+				parsed := false
+				widthRatio := 0.0
+
+				if parsedWidthRatio, ok := v.(float64); ok {
+					widthRatio = parsedWidthRatio
+					parsed = true
 				}
+				if parsedWidthRatioString, ok := v.(string); ok {
+					convertedWidthRatio, convertErr := strconv.ParseFloat(parsedWidthRatioString, 64)
+					if convertErr != nil {
+						return MetadataFeatureParamsResultPreviewWidthRatio{}, fmt.Errorf("resultPreviewWidthRatio feature widthRatio param is not a valid number: %s", convertErr.Error())
+					}
+					widthRatio = convertedWidthRatio
+					parsed = true
+				}
+				if !parsed {
+					return MetadataFeatureParamsResultPreviewWidthRatio{}, fmt.Errorf("resultPreviewWidthRatio feature widthRatio param is not a valid number")
+				}
+
 				if widthRatio < 0 || widthRatio > 1 {
-					return MetadataFeatureParamsResultPreviewWidthRatio{}, fmt.Errorf("resultPreviewWidthRatio feature widthRatio param is not a valid number: %s", convertErr.Error())
+					return MetadataFeatureParamsResultPreviewWidthRatio{}, fmt.Errorf("resultPreviewWidthRatio feature widthRatio param is not a valid number: %s", "must be between 0 and 1")
 				}
 
 				return MetadataFeatureParamsResultPreviewWidthRatio{
@@ -150,7 +171,9 @@ func (m *Metadata) GetFeatureParamsForMRU() (MetadataFeatureParamsMRU, error) {
 		if strings.EqualFold(feature.Name, MetadataFeatureMRU) {
 			params := MetadataFeatureParamsMRU{HashBy: "title"}
 			if v, ok := feature.Params["HashBy"]; ok && v != "" {
-				params.HashBy = strings.ToLower(v)
+				if hashby, ok := v.(string); ok {
+					params.HashBy = strings.ToLower(hashby)
+				}
 			}
 			return params, nil
 		}
@@ -169,26 +192,43 @@ func (m *Metadata) GetFeatureParamsForQueryEnv() (MetadataFeatureParamsQueryEnv,
 			}
 
 			if v, ok := feature.Params["requireActiveWindowName"]; ok {
-				if v == "true" {
-					params.RequireActiveWindowName = true
+				if vString, ok := v.(string); ok {
+					if vString == "true" {
+						params.RequireActiveWindowName = true
+					}
 				}
 			}
 
 			if v, ok := feature.Params["requireActiveWindowPid"]; ok {
-				if v == "true" {
-					params.RequireActiveWindowPid = true
+				if vString, ok := v.(string); ok {
+					if vString == "true" {
+						params.RequireActiveWindowPid = true
+					}
+				}
+				if vBool, ok := v.(bool); ok {
+					params.RequireActiveWindowPid = vBool
 				}
 			}
 
 			if v, ok := feature.Params["requireActiveWindowIcon"]; ok {
-				if v == "true" {
-					params.RequireActiveWindowIcon = true
+				if vString, ok := v.(string); ok {
+					if vString == "true" {
+						params.RequireActiveWindowIcon = true
+					}
+				}
+				if vBool, ok := v.(bool); ok {
+					params.RequireActiveWindowIcon = vBool
 				}
 			}
 
 			if v, ok := feature.Params["requireActiveBrowserUrl"]; ok {
-				if v == "true" {
-					params.RequireActiveBrowserUrl = true
+				if vString, ok := v.(string); ok {
+					if vString == "true" {
+						params.RequireActiveBrowserUrl = true
+					}
+				}
+				if vBool, ok := v.(bool); ok {
+					params.RequireActiveBrowserUrl = vBool
 				}
 			}
 
@@ -201,7 +241,7 @@ func (m *Metadata) GetFeatureParamsForQueryEnv() (MetadataFeatureParamsQueryEnv,
 
 type MetadataFeature struct {
 	Name   MetadataFeatureName
-	Params map[string]string
+	Params map[string]any
 }
 
 type MetadataCommand struct {
@@ -234,11 +274,16 @@ type MetadataFeatureParamsResultPreviewWidthRatio struct {
 }
 
 // MetadataFeatureParamsGridLayout contains parameters for grid layout feature
+// Commands behavior:
+//   - Empty: grid enabled for all commands
+//   - "!cmd1,cmd2": exclusion mode - grid enabled for all except cmd1,cmd2 (commands starting with ! are excluded)
+//   - "cmd1,cmd2": inclusion mode - grid enabled only for cmd1,cmd2
 type MetadataFeatureParamsGridLayout struct {
-	Columns     int  // number of columns per row, default 8
-	ShowTitle   bool // whether to show title below icon, default false
-	ItemPadding int  // padding inside each item, default 12
-	ItemMargin  int  // margin outside each item (all sides), default 6
+	Columns     int      // number of columns per row, default 8
+	ShowTitle   bool     // whether to show title below icon, default false
+	ItemPadding int      // padding inside each item, default 12
+	ItemMargin  int      // margin outside each item (all sides), default 6
+	Commands    []string // commands to enable grid layout for, empty means all commands
 }
 
 func (m *Metadata) GetFeatureParamsForGridLayout() (MetadataFeatureParamsGridLayout, error) {
@@ -249,33 +294,72 @@ func (m *Metadata) GetFeatureParamsForGridLayout() (MetadataFeatureParamsGridLay
 				ShowTitle:   false,
 				ItemPadding: 12,
 				ItemMargin:  6,
+				Commands:    []string{},
 			}
 
 			if v, ok := feature.Params["Columns"]; ok {
-				if columns, err := strconv.Atoi(v); err == nil {
-					params.Columns = columns
-				} else {
-					return MetadataFeatureParamsGridLayout{}, fmt.Errorf("gridLayout feature Columns param is not a valid number: %s", err.Error())
+				if columnsString, ok := v.(string); ok {
+					if columns, err := strconv.Atoi(columnsString); err == nil {
+						params.Columns = columns
+					} else {
+						return MetadataFeatureParamsGridLayout{}, fmt.Errorf("gridLayout feature Columns param is not a valid number: %s", err.Error())
+					}
+				}
+				if columnInt, ok := v.(int); ok {
+					params.Columns = columnInt
 				}
 			}
 
 			if v, ok := feature.Params["ShowTitle"]; ok {
-				params.ShowTitle = v == "true"
+				if vString, ok := v.(string); ok {
+					params.ShowTitle = vString == "true"
+				}
+				if vBool, ok := v.(bool); ok {
+					params.ShowTitle = vBool
+				}
 			}
 
 			if v, ok := feature.Params["ItemPadding"]; ok {
-				if padding, err := strconv.Atoi(v); err == nil {
-					params.ItemPadding = padding
-				} else {
-					return MetadataFeatureParamsGridLayout{}, fmt.Errorf("gridLayout feature ItemPadding param is not a valid number: %s", err.Error())
+				if vInt, ok := v.(int); ok {
+					params.ItemPadding = vInt
+				}
+				if vString, ok := v.(string); ok {
+					if padding, err := strconv.Atoi(vString); err == nil {
+						params.ItemPadding = padding
+					} else {
+						return MetadataFeatureParamsGridLayout{}, fmt.Errorf("gridLayout feature ItemPadding param is not a valid number: %s", err.Error())
+					}
 				}
 			}
 
 			if v, ok := feature.Params["ItemMargin"]; ok {
-				if margin, err := strconv.Atoi(v); err == nil {
-					params.ItemMargin = margin
-				} else {
-					return MetadataFeatureParamsGridLayout{}, fmt.Errorf("gridLayout feature ItemMargin param is not a valid number: %s", err.Error())
+				if vString, ok := v.(string); ok {
+					if margin, err := strconv.Atoi(vString); err == nil {
+						params.ItemMargin = margin
+					} else {
+						return MetadataFeatureParamsGridLayout{}, fmt.Errorf("gridLayout feature ItemMargin param is not a valid number: %s", err.Error())
+					}
+				}
+				if vInt, ok := v.(int); ok {
+					params.ItemMargin = vInt
+				}
+			}
+
+			if v, ok := feature.Params["Commands"]; ok {
+				if vString, ok := v.(string); ok {
+					if vString != "" {
+						params.Commands = strings.Split(vString, ",")
+						for i := range params.Commands {
+							params.Commands[i] = strings.TrimSpace(params.Commands[i])
+						}
+					}
+				}
+				if vArray, ok := v.([]any); ok {
+					for _, item := range vArray {
+						if itemString, ok := item.(string); ok {
+							params.Commands = append(params.Commands, itemString)
+						}
+					}
 				}
 			}
 

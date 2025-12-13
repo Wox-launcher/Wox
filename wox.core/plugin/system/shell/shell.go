@@ -78,8 +78,8 @@ func (s *ShellPlugin) GetMetadata() plugin.Metadata {
 		Features: []plugin.MetadataFeature{
 			{
 				Name: plugin.MetadataFeatureResultPreviewWidthRatio,
-				Params: map[string]string{
-					"WidthRatio": "0.25",
+				Params: map[string]any{
+					"WidthRatio": 0.25,
 				},
 			},
 			{

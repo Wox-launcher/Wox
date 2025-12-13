@@ -879,7 +879,7 @@ func handleQueryMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, pluginInstance, err := plugin.GetPluginManager().NewQuery(ctx, plainQuery)
+	query, pluginInstance, err := plugin.GetPluginManager().NewQuery(ctx, plainQuery)
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to new query: %s", err.Error()))
 		writeSuccessResponse(w, metadataResponse{})
@@ -908,57 +908,42 @@ func handleQueryMetadata(w http.ResponseWriter, r *http.Request) {
 
 	featureParamsGridLayout, err := pluginInstance.Metadata.GetFeatureParamsForGridLayout()
 	if err == nil {
-		metadata.IsGridLayout = true
-		metadata.GridLayoutParams = featureParamsGridLayout
+		// Check if current command is in the allowed commands list
+		currentCommand := query.Command
+
+		shouldEnableGrid := true
+		if len(featureParamsGridLayout.Commands) > 0 {
+			// Check if first element starts with "!" to determine mode
+			if strings.HasPrefix(featureParamsGridLayout.Commands[0], "!") {
+				// Exclusion mode: grid enabled for all commands except those starting with "!"
+				shouldEnableGrid = true
+				for _, cmd := range featureParamsGridLayout.Commands {
+					if strings.TrimPrefix(cmd, "!") == currentCommand {
+						shouldEnableGrid = false
+						break
+					}
+				}
+			} else {
+				// Inclusion mode: grid enabled only for commands in the list
+				shouldEnableGrid = false
+				for _, cmd := range featureParamsGridLayout.Commands {
+					if cmd == currentCommand {
+						shouldEnableGrid = true
+						break
+					}
+				}
+			}
+		}
+
+		if shouldEnableGrid {
+			metadata.IsGridLayout = true
+			metadata.GridLayoutParams = featureParamsGridLayout
+		}
 	} else {
 		logger.Error(ctx, fmt.Sprintf("failed to get feature params for grid layout: %s", err.Error()))
 	}
 
 	writeSuccessResponse(w, metadata)
-}
-
-func handleQueryRatio(w http.ResponseWriter, r *http.Request) {
-	ctx := util.NewTraceContext()
-
-	body, _ := io.ReadAll(r.Body)
-	queryResult := gjson.GetBytes(body, "query")
-	if !queryResult.Exists() {
-		writeErrorResponse(w, "query is empty")
-		return
-	}
-
-	var plainQuery common.PlainQuery
-	unmarshalErr := json.Unmarshal([]byte(queryResult.String()), &plainQuery)
-	if unmarshalErr != nil {
-		logger.Error(ctx, unmarshalErr.Error())
-		writeErrorResponse(w, unmarshalErr.Error())
-		return
-	}
-
-	defaultRatio := 0.5
-
-	_, pluginInstance, err := plugin.GetPluginManager().NewQuery(ctx, plainQuery)
-	if err != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to new query: %s", err.Error()))
-		writeSuccessResponse(w, defaultRatio)
-		return
-	}
-
-	if pluginInstance == nil {
-		// this query is not for any plugin (now a global query)
-		writeSuccessResponse(w, defaultRatio)
-		return
-	}
-
-	metadata := pluginInstance.Metadata
-	featureParams, err := metadata.GetFeatureParamsForResultPreviewWidthRatio()
-	if err != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to get feature params for result preview width ratio: %s", err.Error()))
-		writeSuccessResponse(w, defaultRatio)
-		return
-	}
-
-	writeSuccessResponse(w, featureParams.WidthRatio)
 }
 
 func handleDeeplink(w http.ResponseWriter, r *http.Request) {

@@ -70,11 +70,11 @@ func (e *EmojiPlugin) GetMetadata() plugin.Metadata {
 		Features: []plugin.MetadataFeature{
 			{
 				Name: plugin.MetadataFeatureGridLayout,
-				Params: map[string]string{
-					"Columns":     "12",
-					"ItemPadding": "12",
-					"ItemMargin":  "6",
-					"ShowTitle":   "false",
+				Params: map[string]any{
+					"Columns":     12,
+					"ItemPadding": 12,
+					"ItemMargin":  6,
+					"ShowTitle":   false,
 				},
 			},
 		},

@@ -420,12 +420,14 @@ class GridLayoutParams {
   late bool showTitle; // whether to show title below icon
   late double itemPadding; // padding inside each item
   late double itemMargin; // margin outside each item (all sides)
+  late List<String> commands; // commands to enable grid layout for, empty means all
 
   GridLayoutParams({
     required this.columns,
     required this.showTitle,
     required this.itemPadding,
     required this.itemMargin,
+    required this.commands,
   });
 
   GridLayoutParams.fromJson(Map<String, dynamic> json) {
@@ -433,6 +435,7 @@ class GridLayoutParams {
     showTitle = json['ShowTitle'] ?? false;
     itemPadding = (json['ItemPadding'] ?? 12).toDouble();
     itemMargin = (json['ItemMargin'] ?? 6).toDouble();
+    commands = json['Commands'] != null ? List<String>.from(json['Commands']) : [];
   }
 
   GridLayoutParams.empty() {
@@ -440,5 +443,6 @@ class GridLayoutParams {
     showTitle = false;
     itemPadding = 12;
     itemMargin = 6;
+    commands = [];
   }
 }

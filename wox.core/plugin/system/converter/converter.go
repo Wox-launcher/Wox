@@ -54,7 +54,7 @@ func (c *Converter) GetMetadata() plugin.Metadata {
 		Features: []plugin.MetadataFeature{
 			{
 				Name: plugin.MetadataFeatureMRU,
-				Params: map[string]string{
+				Params: map[string]any{
 					"HashBy": "rawQuery",
 				},
 			},

@@ -74,7 +74,7 @@ func (c *BrowserPlugin) GetMetadata() plugin.Metadata {
 		Features: []plugin.MetadataFeature{
 			{
 				Name: plugin.MetadataFeatureQueryEnv,
-				Params: map[string]string{
+				Params: map[string]any{
 					"requireActiveWindowName": "true",
 					"requireActiveBrowserUrl": "true",
 				},

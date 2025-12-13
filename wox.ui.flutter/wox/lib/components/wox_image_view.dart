@@ -77,7 +77,7 @@ class WoxImageView extends StatelessWidget {
       if (!File(woxImage.imageData).existsSync()) {
         imageWidget = const SizedBox(width: 24, height: 24);
       } else {
-        imageWidget = Image.file(File(woxImage.imageData), width: width, height: height);
+        imageWidget = Image.file(File(woxImage.imageData), width: width, height: height, fit: BoxFit.contain);
       }
     } else if (woxImage.imageType == WoxImageTypeEnum.WOX_IMAGE_TYPE_SVG.code) {
       imageWidget = SizedBox(
