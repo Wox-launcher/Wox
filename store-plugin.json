@@ -276,5 +276,28 @@
     ],
     "DateCreated": "2025-12-12 21:06:00",
     "DateUpdated": "2025-12-12 21:06:00"
+  },
+  {
+    "Id": "8b8a1b35-3d9e-4d7d-9f2e-3b1d0b7f9e10",
+    "Name": "IP Geolocation",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "script",
+    "Description": "Show local/public IPs and query geolocation via ip-api.com",
+    "IconEmoji": "📍",
+    "Website": "https://gist.github.com/qianlifeng/8caa20ae71e0c2ec2c3c787485890668",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/8caa20ae71e0c2ec2c3c787485890668/raw/Wox.Plugin.Script.IPGeolocation.py",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/06dc6d7e-1cb2-41e5-aa1d-d2d1bc42984b",
+      "https://gist.github.com/user-attachments/assets/07958add-c6dd-42d0-bcbe-7108724dcfc8"
+    ],
+    "SupportedOS": [
+      "windows",
+      "darwin",
+      "linux"
+    ],
+    "DateCreated": "2025-12-13 15:12:00",
+    "DateUpdated": "2025-12-13 15:12:00"
   }
 ]
