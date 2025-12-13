@@ -194,18 +194,18 @@
     "DateUpdated": "2025-04-17 23:02:38"
   },
   {
-    "Id": "9425e183-c7ab-4c61-86eb-98174c6388db",
+    "Id": "6f920562-1570-4e63-991b-0b39e7d4a2e9",
     "Name": "每日60秒新闻",
     "Author": "qianlifeng",
-    "Version": "1.0.0",
+    "Version": "1.0.1",
     "MinWoxVersion": "2.0.0",
     "Runtime": "script",
     "Description": "基于 https://60s.viki.moe/v2/60s 的每日新闻展示",
     "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.60s/refs/heads/main/icon.jpeg",
-    "Website": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.60s",
-    "DownloadUrl": "https://github.com/qianlifeng/Wox.Plugin.60s/releases/download/v1.0.0/60s.py",
+    "Website": "https://gist.github.com/qianlifeng/419f2198519caeb8fd0b06b76c6bbc9c",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/419f2198519caeb8fd0b06b76c6bbc9c/raw/9c96511072910197af956a0c7c6206e842a8dd31/Wox.Plugin.Script.60s.py",
     "ScreenshotUrls": [
-      "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.60s/refs/heads/main/screenshot.png"
+      "https://gist.github.com/user-attachments/assets/26f4c4de-f8fa-49af-8a3e-75ca99ef9a6d"
     ],
     "SupportedOS": [
       "Windows",
@@ -213,7 +213,7 @@
       "Linux"
     ],
     "DateCreated": "2025-08-25 21:15:00",
-    "DateUpdated": "2025-08-25 21:15:00"
+    "DateUpdated": "2025-12-13 13:55:00"
   },
   {
     "Id": "25cb95b8-af4c-4ccb-82d6-38843a9999c1",
