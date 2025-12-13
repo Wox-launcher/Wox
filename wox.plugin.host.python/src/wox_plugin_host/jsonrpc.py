@@ -13,6 +13,7 @@ from wox_plugin import (
     ChatStreamData,
     ChatStreamDataType,
     Context,
+    FormActionContext,
     MRUData,
     PluginInitParams,
     Query,
@@ -38,6 +39,8 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: web
         return await query(ctx, request)
     elif method == "action":
         return await action(ctx, request)
+    elif method == "formAction":
+        return await form_action(ctx, request)
     elif method == "unloadPlugin":
         return await unload_plugin(ctx, request)
     elif method == "onMRURestore":
@@ -94,6 +97,7 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
                 plugin_dir=plugin_directory,
                 module_name=module_name,
                 actions={},
+                form_actions={},
             )
 
             await logger.info(ctx.get_trace_id(), f"<{plugin_name}> load plugin successfully")
@@ -154,6 +158,7 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list[dict[str, Any]]:
     try:
         # Clear action cache before query
         plugin_instance.actions.clear()
+        plugin_instance.form_actions.clear()
 
         params: Dict[str, str] = request.get("Params", {})
         results = await plugin_instance.plugin.query(ctx, Query.from_json(json.dumps(params)))
@@ -165,11 +170,16 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list[dict[str, Any]]:
                     result.id = str(uuid.uuid4())
                 if result.actions:
                     for action in result.actions:
-                        if action.action:
-                            if not action.id:
-                                action.id = str(uuid.uuid4())
-                            # Cache action
-                            plugin_instance.actions[action.id] = action.action
+                        if not action.id:
+                            action.id = str(uuid.uuid4())
+
+                        action_type = str(getattr(action, "type", "execute"))
+                        if action_type == "form":
+                            if getattr(action, "on_submit", None):
+                                plugin_instance.form_actions[action.id] = action.on_submit
+                        else:
+                            if getattr(action, "action", None):
+                                plugin_instance.actions[action.id] = action.action
 
         # to avoid json serialization error, convert Result to dict and omit functions
         return [
@@ -181,11 +191,17 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list[dict[str, Any]]:
                 "Actions": [
                     {
                         "Id": action.id,
+                        "Type": str(getattr(action, "type", "execute")),
                         "Name": action.name,
                         "Icon": json.loads(action.icon.to_json()),
                         "IsDefault": action.is_default,
                         "PreventHideAfterAction": action.prevent_hide_after_action,
                         "Hotkey": action.hotkey,
+                        "ContextData": action.context_data,
+                        "Form": [
+                            item.to_dict() if hasattr(item, "to_dict") else item
+                            for item in (getattr(action, "form", None) or [])
+                        ],
                     }
                     for action in result.actions
                 ],
@@ -240,6 +256,49 @@ async def action(ctx: Context, request: Dict[str, Any]) -> None:
         await logger.error(
             ctx.get_trace_id(),
             f"<{plugin_name}> action failed: {str(e)}\nStack trace:\n{error_stack}",
+        )
+        raise e
+
+
+async def form_action(ctx: Context, request: Dict[str, Any]) -> None:
+    """Handle form action request"""
+    plugin_id = request.get("PluginId", "")
+    plugin_name = request.get("PluginName", "")
+    plugin_instance = plugin_instances.get(plugin_id)
+    if not plugin_instance:
+        raise Exception(f"plugin not found: {plugin_name}, forget to load plugin?")
+
+    try:
+        params: Dict[str, str] = request.get("Params", {})
+        result_id = params.get("ResultId", "")
+        action_id = params.get("ActionId", "")
+        result_action_id = params.get("ResultActionId", "")
+        context_data = params.get("ContextData", "")
+        values = json.loads(params.get("Values", "{}"))
+
+        action_func = plugin_instance.form_actions.get(action_id)
+        if action_func:
+            result = action_func(
+                FormActionContext(
+                    result_id=result_id,
+                    result_action_id=result_action_id or action_id,
+                    context_data=context_data,
+                    values=values,
+                )
+            )
+            if asyncio.iscoroutine(result):
+                asyncio.create_task(result)
+        else:
+            await logger.error(
+                ctx.get_trace_id(),
+                f"<{plugin_name}> plugin form action not found: {action_id}",
+            )
+
+    except Exception as e:
+        error_stack = traceback.format_exc()
+        await logger.error(
+            ctx.get_trace_id(),
+            f"<{plugin_name}> form action failed: {str(e)}\nStack trace:\n{error_stack}",
         )
         raise e
 

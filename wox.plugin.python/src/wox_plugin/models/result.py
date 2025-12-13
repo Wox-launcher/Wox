@@ -5,6 +5,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from .image import WoxImage
 from .preview import WoxPreview
+from .setting import PluginSettingDefinitionItem
 
 
 class ResultTailType(str, Enum):
@@ -12,6 +13,13 @@ class ResultTailType(str, Enum):
 
     TEXT = "text"  # string type
     IMAGE = "image"  # WoxImage type
+
+
+class ResultActionType(str, Enum):
+    """Result action type enum for Wox"""
+
+    EXECUTE = "execute"
+    FORM = "form"
 
 
 @dataclass
@@ -86,12 +94,44 @@ class ActionContext:
 
 
 @dataclass
+class FormActionContext(ActionContext):
+    """Context for form actions"""
+
+    values: Dict[str, str] = field(default_factory=dict)
+
+    def to_json(self) -> str:
+        """Convert to JSON string with camelCase naming"""
+        return json.dumps(
+            {
+                "ResultId": self.result_id,
+                "ResultActionId": self.result_action_id,
+                "ContextData": self.context_data,
+                "Values": self.values,
+            }
+        )
+
+    @classmethod
+    def from_json(cls, json_str: str) -> "FormActionContext":
+        """Create from JSON string with camelCase naming"""
+        data = json.loads(json_str)
+        return cls(
+            result_id=data.get("ResultId", ""),
+            result_action_id=data.get("ResultActionId", ""),
+            context_data=data.get("ContextData", ""),
+            values=data.get("Values", {}) or {},
+        )
+
+
+@dataclass
 class ResultAction:
     """Action model for Wox results"""
 
     name: str
     action: Optional[Callable[[ActionContext], Awaitable[None]]] = None
+    on_submit: Optional[Callable[[FormActionContext], Awaitable[None]]] = None
     id: str = field(default="")
+    type: ResultActionType = field(default=ResultActionType.EXECUTE)
+    form: List[PluginSettingDefinitionItem] = field(default_factory=list)
     icon: WoxImage = field(default_factory=WoxImage)
     is_default: bool = field(default=False)
     prevent_hide_after_action: bool = field(default=False)
@@ -100,25 +140,37 @@ class ResultAction:
 
     def to_json(self) -> str:
         """Convert to JSON string with camelCase naming"""
-        return json.dumps(
-            {
-                "Name": self.name,
-                "Id": self.id,
-                "IsDefault": self.is_default,
-                "PreventHideAfterAction": self.prevent_hide_after_action,
-                "Hotkey": self.hotkey,
-                "Icon": json.loads(self.icon.to_json()),
-                "ContextData": self.context_data,
-            }
-        )
+        data: Dict[str, Any] = {
+            "Name": self.name,
+            "Id": self.id,
+            "Type": self.type,
+            "IsDefault": self.is_default,
+            "PreventHideAfterAction": self.prevent_hide_after_action,
+            "Hotkey": self.hotkey,
+            "Icon": json.loads(self.icon.to_json()),
+            "ContextData": self.context_data,
+        }
+
+        if self.type == ResultActionType.FORM:
+            data["Form"] = [item.to_dict() for item in self.form]
+
+        return json.dumps(data)
 
     @classmethod
     def from_json(cls, json_str: str) -> "ResultAction":
         """Create from JSON string with camelCase naming"""
         data = json.loads(json_str)
+
+        action_type = ResultActionType(data.get("Type", ResultActionType.EXECUTE))
+        form: List[PluginSettingDefinitionItem] = []
+        if action_type == ResultActionType.FORM and data.get("Form"):
+            form = [PluginSettingDefinitionItem.from_dict(item) for item in data.get("Form", [])]
+
         return cls(
             name=data.get("Name", ""),
             id=data.get("Id", ""),
+            type=action_type,
+            form=form,
             icon=WoxImage.from_json(json.dumps(data.get("Icon", {}))),
             is_default=data.get("IsDefault", False),
             prevent_hide_after_action=data.get("PreventHideAfterAction", False),

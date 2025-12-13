@@ -1,7 +1,7 @@
 import { logger } from "./logger"
 import path from "path"
 import { PluginAPI } from "./pluginAPI"
-import { Context, MapString, Plugin, PluginInitParams, Query, QueryEnv, Result, ResultAction, Selection, MRUData, ActionContext } from "@wox-launcher/wox-plugin"
+import { ActionContext, Context, FormActionContext, MapString, Plugin, PluginInitParams, Query, QueryEnv, Result, ResultAction, Selection, MRUData } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { AI } from "@wox-launcher/wox-plugin/types/ai"
@@ -27,6 +27,8 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
       return query(ctx, request)
     case "action":
       return action(ctx, request)
+    case "formAction":
+      return formAction(ctx, request)
     case "unloadPlugin":
       return unloadPlugin(ctx, request)
     case "onPluginSettingChange":
@@ -63,7 +65,8 @@ async function loadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
     Plugin: module["plugin"] as Plugin,
     API: {} as PluginAPI,
     ModulePath: modulePath,
-    Actions: new Map<Result["Id"], ResultAction["Action"]>()
+    Actions: new Map<Result["Id"], (actionContext: ActionContext) => Promise<void>>(),
+    FormActions: new Map<Result["Id"], (actionContext: FormActionContext) => Promise<void>>()
   })
 }
 
@@ -199,6 +202,7 @@ async function query(ctx: Context, request: PluginJsonRpcRequest) {
 
   //clean action cache for current plugin
   plugin.Actions.clear()
+  plugin.FormActions.clear()
 
   const results = await query(ctx, {
     Type: request.Params.Type,
@@ -225,7 +229,19 @@ async function query(ctx: Context, request: PluginJsonRpcRequest) {
         if (action.Id === undefined || action.Id === null) {
           action.Id = crypto.randomUUID()
         }
-        plugin.Actions.set(action.Id, action.Action)
+
+        const actionType = action.Type ?? "execute"
+        if (actionType === "form") {
+          const submit = (action as Extract<ResultAction, { Type: "form" }>).OnSubmit
+          if (submit) {
+            plugin.FormActions.set(action.Id, submit)
+          }
+        } else {
+          const exec = (action as Extract<ResultAction, { Type?: "execute" }>).Action
+          if (exec) {
+            plugin.Actions.set(action.Id, exec)
+          }
+        }
       })
     }
   })
@@ -248,10 +264,41 @@ async function action(ctx: Context, request: PluginJsonRpcRequest) {
 
   const actionContext: ActionContext = {
     ResultId: request.Params.ResultId,
-    ResultActionId: request.Params.ResultActionId,
+    ResultActionId: request.Params.ResultActionId ?? request.Params.ActionId,
     ContextData: request.Params.ContextData
   }
-  pluginAction(actionContext)
+
+  pluginAction(actionContext).catch(err => {
+    logger.error(ctx, `<${request.PluginName}> plugin action failed: ${String(err)}`)
+  })
+
+  return
+}
+
+async function formAction(ctx: Context, request: PluginJsonRpcRequest) {
+  const plugin = pluginInstances.get(request.PluginId)
+  if (plugin === undefined || plugin === null) {
+    logger.error(ctx, `plugin not found: ${request.PluginName}, forget to load plugin?`)
+    throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
+  }
+
+  const pluginAction = plugin.FormActions.get(request.Params.ActionId)
+  if (pluginAction === undefined || pluginAction === null) {
+    logger.error(ctx, `<${request.PluginName}> plugin form action not found: ${request.Params.ActionId}`)
+    return
+  }
+
+  const values = JSON.parse(request.Params.Values ?? "{}") as Record<string, string>
+  const actionContext: FormActionContext = {
+    ResultId: request.Params.ResultId,
+    ResultActionId: request.Params.ResultActionId ?? request.Params.ActionId,
+    ContextData: request.Params.ContextData,
+    Values: values ?? {}
+  }
+
+  pluginAction(actionContext).catch(err => {
+    logger.error(ctx, `<${request.PluginName}> plugin form action failed: ${String(err)}`)
+  })
 
   return
 }

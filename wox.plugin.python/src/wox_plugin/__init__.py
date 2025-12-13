@@ -30,8 +30,10 @@ from .models.query import (
 )
 from .models.result import (
     ActionContext,
+    FormActionContext,
     Result,
     ResultAction,
+    ResultActionType,
     ResultTail,
     ResultTailType,
     UpdatableResult,
@@ -69,6 +71,8 @@ __all__: List[str] = [
     "ResultTail",
     "ResultAction",
     "ActionContext",
+    "FormActionContext",
+    "ResultActionType",
     "UpdatableResult",
     "UpdatableResultAction",
     "MetadataCommand",

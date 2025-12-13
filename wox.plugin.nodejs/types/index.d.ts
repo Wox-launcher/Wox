@@ -190,11 +190,16 @@ export interface UpdatableResultAction {
   Action?: (actionContext: ActionContext) => Promise<void>
 }
 
-export interface ResultAction {
+export type ResultActionType = "execute" | "form"
+
+export type ResultAction = ExecuteResultAction | FormResultAction
+
+export interface ExecuteResultAction {
   /**
    * Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
    */
   Id?: string
+  Type?: "execute"
   Name: string
   Icon?: WoxImage
   /**
@@ -207,6 +212,38 @@ export interface ResultAction {
    */
   PreventHideAfterAction?: boolean
   Action: (actionContext: ActionContext) => Promise<void>
+  /**
+   * Hotkey to trigger this action. E.g. "ctrl+Shift+Space", "Ctrl+1", "Command+K"
+   * Case insensitive, space insensitive
+   *
+   * If IsDefault is true, Hotkey will be set to enter key by default
+   */
+  Hotkey?: string
+  /**
+   * Additional data associate with this action, can be retrieved later
+   */
+  ContextData?: string
+}
+
+export interface FormResultAction {
+  /**
+   * Result id, should be unique. It's optional, if you don't set it, Wox will assign a random id for you
+   */
+  Id?: string
+  Type: "form"
+  Name: string
+  Icon?: WoxImage
+  /**
+   * If true, Wox will use this action as default action. There can be only one default action in results
+   * This can be omitted, if you don't set it, Wox will use the first action as default action
+   */
+  IsDefault?: boolean
+  /**
+   * If true, Wox will not hide after user select this result
+   */
+  PreventHideAfterAction?: boolean
+  Form: PluginSettingDefinitionItem[]
+  OnSubmit: (actionContext: FormActionContext) => Promise<void>
   /**
    * Hotkey to trigger this action. E.g. "ctrl+Shift+Space", "Ctrl+1", "Command+K"
    * Case insensitive, space insensitive
@@ -237,6 +274,10 @@ export interface ActionContext {
    * Additional data associated with this result
    */
   ContextData: string
+}
+
+export interface FormActionContext extends ActionContext {
+  Values: Record<string, string>
 }
 
 export interface MRUData {
