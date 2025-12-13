@@ -280,10 +280,15 @@ class WoxQueryBoxView extends GetView<WoxLauncherController> {
                     // On macOS, Shortcuts interferes with Focus.onKeyEvent, so we skip it
                     child: Platform.isWindows
                         ? Shortcuts(
-                            shortcuts: const <ShortcutActivator, Intent>{
+                            shortcuts: <ShortcutActivator, Intent>{
                               // Prevent arrow up/down from moving cursor in TextField
                               SingleActivator(LogicalKeyboardKey.arrowUp): DoNothingIntent(),
                               SingleActivator(LogicalKeyboardKey.arrowDown): DoNothingIntent(),
+                              if (controller.isInGridMode())
+                                ...{
+                                  SingleActivator(LogicalKeyboardKey.arrowLeft): DoNothingIntent(),
+                                  SingleActivator(LogicalKeyboardKey.arrowRight): DoNothingIntent(),
+                                }
                             },
                             child: _buildTextField(currentTheme),
                           )
