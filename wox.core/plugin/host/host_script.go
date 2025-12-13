@@ -372,8 +372,9 @@ func (s *ScriptPlugin) handleBuiltInAction(ctx context.Context, actionId string,
 	case "open-url":
 		url := getStringFromMap(actionData, "url")
 		if url != "" {
-			// TODO: Implement URL opening functionality
-			util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s requested to open URL: %s", s.metadata.Name, url))
+			if err := shell.Open(url); err != nil {
+				util.GetLogger().Error(ctx, fmt.Sprintf("Script plugin %s failed to open URL %s: %s", s.metadata.Name, url, err.Error()))
+			}
 		}
 		return true
 
@@ -392,8 +393,7 @@ func (s *ScriptPlugin) handleBuiltInAction(ctx context.Context, actionId string,
 	case "notify":
 		message := getStringFromMap(actionData, "message")
 		if message != "" {
-			// TODO: Implement notification functionality
-			util.GetLogger().Info(ctx, fmt.Sprintf("Script plugin %s notification: %s", s.metadata.Name, message))
+			s.api.Notify(ctx, message)
 		}
 		return true
 
