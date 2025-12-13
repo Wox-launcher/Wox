@@ -1,4 +1,4 @@
-import { ChangeQueryParam, Context, MapString, PublicAPI, RefreshQueryParam, Result, ResultAction, UpdatableResult, UpdatableResultAction } from "@wox-launcher/wox-plugin"
+import { ChangeQueryParam, Context, MapString, PublicAPI, RefreshQueryParam, Result, ResultAction, UpdatableResult } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
 import { waitingForResponse } from "./index"
@@ -188,27 +188,17 @@ export class PluginAPI implements PublicAPI {
             action.Id = crypto.randomUUID()
           }
 
-          if (action.Action) {
+          if (action.Type === "execute") {
             pluginInstance.Actions.set(action.Id, action.Action)
+          }
+          if (action.Type === "form") {
+            pluginInstance.FormActions.set(action.Id, action.OnSubmit)
           }
         }
       }
     }
 
     const response = await this.invokeMethod(ctx, "UpdateResult", { result: JSON.stringify(result) })
-    return response === true
-  }
-
-  async UpdateResultAction(ctx: Context, action: UpdatableResultAction): Promise<boolean> {
-    // Cache the action callback if present
-    if (action.Action) {
-      const pluginInstance = pluginInstances.get(this.pluginId)
-      if (pluginInstance) {
-        pluginInstance.Actions.set(action.ActionId, action.Action)
-      }
-    }
-
-    const response = await this.invokeMethod(ctx, "UpdateResultAction", { action: JSON.stringify(action) })
     return response === true
   }
 

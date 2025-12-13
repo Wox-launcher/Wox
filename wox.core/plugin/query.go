@@ -193,7 +193,7 @@ type ActionContext struct {
 
 	// The ID of the action that was triggered
 	// This is automatically set by Wox when the action is invoked
-	// Useful for calling UpdateResultAction API to update this specific action's UI
+	// Useful for calling UpdateResul API to update this specific action's UI
 	ResultActionId string
 
 	// Additional data associate with this result

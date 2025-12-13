@@ -128,10 +128,10 @@ class ResultAction:
 
     name: str
     action: Optional[Callable[[ActionContext], Awaitable[None]]] = None
-    on_submit: Optional[Callable[[FormActionContext], Awaitable[None]]] = None
     id: str = field(default="")
     type: ResultActionType = field(default=ResultActionType.EXECUTE)
     form: List[PluginSettingDefinitionItem] = field(default_factory=list)
+    on_submit: Optional[Callable[[FormActionContext], Awaitable[None]]] = None
     icon: WoxImage = field(default_factory=WoxImage)
     is_default: bool = field(default=False)
     prevent_hide_after_action: bool = field(default=False)
@@ -287,56 +287,5 @@ class UpdatableResult:
             data["Preview"] = json.loads(self.preview.to_json())
         if self.actions is not None:
             data["Actions"] = [json.loads(action.to_json()) for action in self.actions]
-
-        return json.dumps(data)
-
-
-@dataclass
-class UpdatableResultAction:
-    """
-    Action that can be updated directly in the UI.
-
-    This allows updating a single action's UI (name, icon, action callback) without replacing the entire actions array.
-    All fields except result_id and action_id are optional. Only non-None fields will be updated.
-
-    Example usage:
-        # Update only the action name
-        success = await api.update_result_action(ctx, UpdatableResultAction(
-            result_id=action_context.result_id,
-            action_id=action_context.result_action_id,
-            name="Remove from favorite"
-        ))
-
-        # Update name, icon and action callback
-        async def new_action(action_context: ActionContext):
-            # New action logic
-            pass
-
-        success = await api.update_result_action(ctx, UpdatableResultAction(
-            result_id=action_context.result_id,
-            action_id=action_context.result_action_id,
-            name="Add to favorite",
-            icon=WoxImage(image_type="emoji", image_data="⭐"),
-            action=new_action
-        ))
-    """
-
-    result_id: str
-    action_id: str
-    name: Optional[str] = None
-    icon: Optional[WoxImage] = None
-    action: Optional[Callable[[ActionContext], Awaitable[None]]] = None
-
-    def to_json(self) -> str:
-        """Convert to JSON string with camelCase naming"""
-        data: Dict[str, Any] = {
-            "ResultId": self.result_id,
-            "ActionId": self.action_id,
-        }
-
-        if self.name is not None:
-            data["Name"] = self.name
-        if self.icon is not None:
-            data["Icon"] = json.loads(self.icon.to_json())
 
         return json.dumps(data)

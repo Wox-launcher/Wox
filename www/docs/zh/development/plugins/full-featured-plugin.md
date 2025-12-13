@@ -103,7 +103,7 @@ export const plugin = new MyPlugin()
 
 - 使用 `Result` 可附加 `Preview`（markdown/text/image/url/file/remote）、`Tails`（文本或图片徽标）、`Group`/`GroupScore`、`Actions`。
 - `ResultAction` 支持 `Hotkey`、`IsDefault`、`PreventHideAfterAction`、自定义 `ContextData`。
-- 通过 `UpdateResult`/`UpdateResultAction`（使用 `ActionContext` 提供的 id）可以更新正在展示的结果。
+- 通过 `UpdateResult`（使用 `ActionContext` 提供的 id）可以更新正在展示的结果。
 - 如果需要更宽的预览区，可以开启 `resultPreviewWidthRatio` 特性。
 
 ## 设置

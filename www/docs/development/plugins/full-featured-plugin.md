@@ -103,7 +103,7 @@ Example:
 
 - Use `Result` with optional `Preview` (markdown/text/image/url/file/remote), `Tails` (text or image badges), `Group`/`GroupScore`, and `Actions`.
 - `ResultAction` supports `Hotkey`, `IsDefault`, `PreventHideAfterAction`, and custom `ContextData`.
-- You can update existing items via `UpdateResult`/`UpdateResultAction` using `ActionContext` ids.
+- You can update existing items via `UpdateResult` using `ActionContext` ids.
 - Enable `resultPreviewWidthRatio` feature if you want a wider preview area for your plugin results.
 
 ## Settings

@@ -17,7 +17,6 @@ from wox_plugin import (
     RefreshQueryParam,
     Result,
     UpdatableResult,
-    UpdatableResultAction,
 )
 
 from . import logger
@@ -240,19 +239,6 @@ class PluginAPI(PublicAPI):
                         plugin_instance.actions[action.id] = action.action
 
         response = await self.invoke_method(ctx, "UpdateResult", {"result": result.to_json()})
-        return bool(response) if response is not None else False
-
-    async def update_result_action(self, ctx: Context, action: "UpdatableResultAction") -> bool:
-        """Update a single action within a query result that is currently displayed in the UI"""
-        # Cache the action callback if present
-        if action.action is not None:
-            from .plugin_manager import plugin_instances
-
-            plugin_instance = plugin_instances.get(self.plugin_id)
-            if plugin_instance:
-                plugin_instance.actions[action.action_id] = action.action
-
-        response = await self.invoke_method(ctx, "UpdateResultAction", {"action": action.to_json()})
         return bool(response) if response is not None else False
 
     async def refresh_query(self, ctx: Context, param: RefreshQueryParam) -> None:

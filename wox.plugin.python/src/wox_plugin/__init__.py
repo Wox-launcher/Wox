@@ -37,7 +37,6 @@ from .models.result import (
     ResultTail,
     ResultTailType,
     UpdatableResult,
-    UpdatableResultAction,
 )
 from .models.setting import (
     PluginSettingDefinitionItem,
@@ -74,7 +73,6 @@ __all__: List[str] = [
     "FormActionContext",
     "ResultActionType",
     "UpdatableResult",
-    "UpdatableResultAction",
     "MetadataCommand",
     "PluginSettingDefinitionItem",
     "PluginSettingValueStyle",

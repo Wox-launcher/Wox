@@ -175,11 +175,13 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list[dict[str, Any]]:
 
                         action_type = str(getattr(action, "type", "execute"))
                         if action_type == "form":
-                            if getattr(action, "on_submit", None):
-                                plugin_instance.form_actions[action.id] = action.on_submit
+                            on_submit = getattr(action, "on_submit", None)
+                            if on_submit is not None:
+                                plugin_instance.form_actions[action.id] = on_submit
                         else:
-                            if getattr(action, "action", None):
-                                plugin_instance.actions[action.id] = action.action
+                            action_func = getattr(action, "action", None)
+                            if action_func is not None:
+                                plugin_instance.actions[action.id] = action_func
 
         # to avoid json serialization error, convert Result to dict and omit functions
         return [
@@ -198,10 +200,7 @@ async def query(ctx: Context, request: Dict[str, Any]) -> list[dict[str, Any]]:
                         "PreventHideAfterAction": action.prevent_hide_after_action,
                         "Hotkey": action.hotkey,
                         "ContextData": action.context_data,
-                        "Form": [
-                            item.to_dict() if hasattr(item, "to_dict") else item
-                            for item in (getattr(action, "form", None) or [])
-                        ],
+                        "Form": [item.to_dict() if hasattr(item, "to_dict") else item for item in (getattr(action, "form", None) or [])],
                     }
                     for action in result.actions
                 ],
